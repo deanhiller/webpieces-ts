@@ -1,5 +1,4 @@
 import { injectable } from 'inversify';
-import { XPromise } from '@webpieces/core-future';
 import { RemoteApi, FetchValueRequest, FetchValueResponse } from './RemoteApi';
 
 /**
@@ -11,11 +10,11 @@ import { RemoteApi, FetchValueRequest, FetchValueResponse } from './RemoteApi';
  */
 @injectable()
 export class RemoteServiceSimulator implements RemoteApi {
-  fetchValue(request: FetchValueRequest): XPromise<FetchValueResponse> {
+  async fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
     const response = new FetchValueResponse();
     response.value = `Simulated response for: ${request.name}`;
     response.timestamp = Date.now();
 
-    return XPromise.resolve(response);
+    return response;
   }
 }

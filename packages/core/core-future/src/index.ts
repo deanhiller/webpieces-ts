@@ -1,1 +1,0 @@
-export { XPromise } from './XPromise';

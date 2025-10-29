@@ -1,0 +1,20 @@
+{
+  "name": "http-filters",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/http/http-filters/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/http/http-filters",
+        "main": "packages/http/http-filters/src/index.ts",
+        "tsConfig": "packages/http/http-filters/tsconfig.lib.json",
+        "assets": []
+      },
+      "dependsOn": ["core-context:build"]
+    }
+  },
+  "tags": []
+}

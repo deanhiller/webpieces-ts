@@ -1,0 +1,19 @@
+{
+  "name": "core-meta",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/core/core-meta/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/core/core-meta",
+        "main": "packages/core/core-meta/src/index.ts",
+        "tsConfig": "packages/core/core-meta/tsconfig.lib.json",
+        "assets": []
+      }
+    }
+  },
+  "tags": []
+}

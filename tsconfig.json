@@ -1,32 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "composite": true,
-    "declaration": true,
-    "declarationMap": true
-  },
   "files": [],
-  "references": [
-    {
-      "path": "./packages/core/core-context"
-    },
-    {
-      "path": "./packages/core/core-future"
-    },
-    {
-      "path": "./packages/core/core-meta"
-    },
-    {
-      "path": "./packages/http/http-routing"
-    },
-    {
-      "path": "./packages/http/http-filters"
-    },
-    {
-      "path": "./packages/http/http-server"
-    },
-    {
-      "path": "./apps/example-app"
-    }
-  ]
+  "include": [],
+  "references": []
 }

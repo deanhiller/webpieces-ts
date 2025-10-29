@@ -1,7 +1,6 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
-    "rootDir": ".",
     "sourceMap": true,
     "declaration": false,
     "moduleResolution": "node",
@@ -18,9 +17,7 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@webpieces/core-di": ["packages/core/core-di/src/index.ts"],
       "@webpieces/core-context": ["packages/core/core-context/src/index.ts"],
-      "@webpieces/core-future": ["packages/core/core-future/src/index.ts"],
       "@webpieces/core-meta": ["packages/core/core-meta/src/index.ts"],
       "@webpieces/http-routing": ["packages/http/http-routing/src/index.ts"],
       "@webpieces/http-filters": ["packages/http/http-filters/src/index.ts"],

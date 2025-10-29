@@ -1,5 +1,3 @@
-import { XPromise } from '@webpieces/core-future';
-
 /**
  * Request to remote service.
  */
@@ -19,9 +17,12 @@ export class FetchValueResponse {
  * Remote service API interface.
  * In production, this would call an external service.
  * In tests, this is mocked.
+ *
+ * Uses native Promise - AsyncLocalStorage automatically propagates
+ * context across all async operations!
  */
 export interface RemoteApi {
-  fetchValue(request: FetchValueRequest): XPromise<FetchValueResponse>;
+  fetchValue(request: FetchValueRequest): Promise<FetchValueResponse>;
 }
 
 /**

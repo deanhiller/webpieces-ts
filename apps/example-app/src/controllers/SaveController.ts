@@ -1,6 +1,5 @@
 import { injectable, inject } from 'inversify';
 import { Controller } from '@webpieces/http-routing';
-import { XPromise } from '@webpieces/core-future';
 import { Context } from '@webpieces/core-context';
 import { SaveApi } from '../api/SaveApi';
 import { SaveRequest } from '../api/SaveRequest';

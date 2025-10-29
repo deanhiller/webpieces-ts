@@ -1,5 +1,3 @@
-import { XPromise } from '@webpieces/core-future';
-
 /**
  * Metadata about the method being invoked.
  * Passed to filters and contains request information.

@@ -38,7 +38,6 @@ npm run build
 packages/
 ├── core/
 │   ├── core-context/      # AsyncLocalStorage-based context management
-│   ├── core-future/       # Context-preserving Promises (XPromise)
 │   └── core-meta/         # WebAppMeta, Routes interfaces
 ├── http/
 │   ├── http-routing/      # @Post, @Path decorators, RESTApiRoutes
@@ -80,7 +79,6 @@ Define your API contract using TypeScript interfaces and decorators:
 
 ```typescript
 import { ApiInterface, Post, Path } from '@webpieces/http-routing';
-import { XPromise } from '@webpieces/core-future';
 
 // Interface for type safety
 export interface SaveApi {
@@ -92,7 +90,7 @@ export interface SaveApi {
 export class SaveApiMeta {
   @Post()
   @Path('/search/item')
-  static save(request: SaveRequest): XPromise<SaveResponse> {
+  static save(request: SaveRequest): Promise<SaveResponse> {
     throw new Error('Interface method - not called');
   }
 }
@@ -188,22 +186,31 @@ const requestId = Context.get('REQUEST_ID');  // Still available!
 
 Uses Node.js `AsyncLocalStorage` under the hood.
 
-### 7. XPromise - Context-Preserving Promises
+### 7. Automatic Context Propagation with AsyncLocalStorage
 
-XPromise is a Promise wrapper that preserves context across async operations:
+**Unlike Java's ThreadLocal**, Node.js `AsyncLocalStorage` automatically propagates context across ALL async boundaries - no wrapper needed!
 
 ```typescript
-import { XPromise } from '@webpieces/core-future';
+import { Context } from '@webpieces/core-context';
 
+// In a filter or controller
 Context.put('USER_ID', '123');
+Context.put('REQUEST_ID', 'abc-def');
 
-const result = await XPromise.resolve(fetchData())
-  .thenApply(data => processData(data))
-  .thenApply(processed => {
-    const userId = Context.get('USER_ID');  // Context preserved!
-    return saveData(processed, userId);
-  });
+// Call async functions - context automatically flows!
+const data = await fetchData();
+const processed = await processData(data);
+const saved = await saveData(processed);
+
+// Context is STILL available in any nested async call
+function async saveData(data: any) {
+  const userId = Context.get('USER_ID');     // ✅ Works!
+  const requestId = Context.get('REQUEST_ID'); // ✅ Works!
+  // ...
+}
 ```
+
+**Why no XPromise?** In Java, ThreadLocal doesn't propagate across `CompletableFuture` boundaries, so WebPieces needed `XFuture` to manually copy context. In TypeScript, `AsyncLocalStorage` handles this automatically for **all** Promises, callbacks, and async/await. Just use native Promise!
 
 ## Testing Without HTTP
 
@@ -269,16 +276,16 @@ npm test
 
 ## Comparison with Java WebPieces
 
-| Java WebPieces | TypeScript WebPieces |
-|----------------|----------------------|
-| `ProdServerMeta` | `ProdServerMeta` (same!) |
-| `@POST @Path` (JAX-RS) | `@Post() @Path()` decorators |
-| `XFuture<T>` | `XPromise<T>` |
-| Guice modules | Inversify ContainerModules |
-| `new RESTApiRoutes(SaveApi.class, SaveController.class)` | `new RESTApiRoutes(SaveApiMeta, SaveController)` |
-| `RouteFilter` | `Filter` interface |
-| ThreadLocal context | AsyncLocalStorage context |
-| JPA entities | (Not implemented - ORM is plugin) |
+| Java WebPieces | TypeScript WebPieces | Notes |
+|----------------|----------------------|-------|
+| `ProdServerMeta` | `ProdServerMeta` | Same pattern! |
+| `@POST @Path` (JAX-RS) | `@Post() @Path()` | Same decorator approach |
+| `XFuture<T>` | `Promise<T>` | ⭐ No wrapper needed! AsyncLocalStorage propagates automatically |
+| Guice modules | Inversify ContainerModules | Same DI patterns |
+| `new RESTApiRoutes(SaveApi.class, SaveController.class)` | `new RESTApiRoutes(SaveApiMeta, SaveController)` | Same auto-wiring |
+| `RouteFilter` | `Filter` interface | Same filter chain pattern |
+| ThreadLocal context | AsyncLocalStorage context | ⭐ Better in TypeScript - auto-propagates! |
+| JPA entities | (Not implemented) | ORM will be a plugin |
 
 ## Key Design Principles
 
