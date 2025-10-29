@@ -1,0 +1,39 @@
+{
+  "name": "webpieces-ts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "tsc --build",
+    "start": "ts-node apps/example-app/src/server.ts",
+    "clean": "rm -rf dist coverage .nx"
+  },
+  "repository": {
+    "type": "git",
+    "url": "personal:deanhiller/webpieces-ts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nx/jest": "^22.0.2",
+    "@nx/js": "^22.0.2",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.9.2",
+    "jest": "^30.2.0",
+    "nx": "^22.0.2",
+    "ts-jest": "^29.4.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "inversify": "^7.10.4",
+    "reflect-metadata": "^0.2.2"
+  }
+}

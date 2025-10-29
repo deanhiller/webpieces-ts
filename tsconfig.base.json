@@ -1,0 +1,31 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2021",
+    "module": "commonjs",
+    "lib": ["ES2021"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@webpieces/core-di": ["packages/core/core-di/src/index.ts"],
+      "@webpieces/core-context": ["packages/core/core-context/src/index.ts"],
+      "@webpieces/core-future": ["packages/core/core-future/src/index.ts"],
+      "@webpieces/core-meta": ["packages/core/core-meta/src/index.ts"],
+      "@webpieces/http-routing": ["packages/http/http-routing/src/index.ts"],
+      "@webpieces/http-filters": ["packages/http/http-filters/src/index.ts"],
+      "@webpieces/http-server": ["packages/http/http-server/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}
