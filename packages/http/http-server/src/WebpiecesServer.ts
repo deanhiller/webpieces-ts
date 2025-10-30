@@ -1,3 +1,4 @@
+import express, { Express, Request, Response, NextFunction } from 'express';
 import { Container } from 'inversify';
 import { WebAppMeta, RouteDefinition, FilterDefinition } from '@webpieces/core-meta';
 import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-filters';
@@ -40,6 +41,9 @@ export class WebpiecesServer {
   private routes: Map<string, RegisteredRoute> = new Map();
   private filters: Filter[] = [];
   private initialized = false;
+  private app?: Express;
+  private server?: any;
+  private port: number = 8080;
 
   constructor(meta: WebAppMeta) {
     this.meta = meta;
@@ -101,21 +105,122 @@ export class WebpiecesServer {
   }
 
   /**
-   * Start the HTTP server (not implemented in this MVP).
-   * For now, this just initializes the server.
+   * Start the HTTP server with Express.
    */
-  start(): void {
+  start(port: number = 8080): void {
+    this.port = port;
     this.initialize();
-    console.log('[WebpiecesServer] Server initialized (HTTP server not implemented yet)');
-    console.log(`[WebpiecesServer] Registered ${this.routes.size} routes`);
-    console.log(`[WebpiecesServer] Registered ${this.filters.length} filters`);
+
+    // Create Express app
+    this.app = express();
+
+    // Middleware
+    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: true }));
+
+    // Register routes
+    this.registerExpressRoutes();
+
+    // Start listening
+    this.server = this.app.listen(this.port, () => {
+      console.log(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
+      console.log(`[WebpiecesServer] Registered ${this.routes.size} routes`);
+      console.log(`[WebpiecesServer] Registered ${this.filters.length} filters`);
+    });
+  }
+
+  /**
+   * Register all routes with Express.
+   */
+  private registerExpressRoutes(): void {
+    if (!this.app) {
+      throw new Error('Express app not initialized');
+    }
+
+    for (const [key, route] of this.routes.entries()) {
+      const method = route.method.toLowerCase();
+      const path = route.path;
+
+      console.log(`[WebpiecesServer] Registering route: ${method.toUpperCase()} ${path}`);
+
+      // Create Express route handler
+      const handler = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+          // Create method metadata
+          const meta: MethodMeta = {
+            httpMethod: route.method,
+            path: route.path,
+            methodName: key,
+            params: [req.body],
+            request: {
+              body: req.body,
+              query: req.query,
+              params: req.params,
+              headers: req.headers,
+            },
+            metadata: new Map(),
+          };
+
+          // Create filter chain
+          const filterChain = new FilterChain(this.filters);
+
+          // Execute the filter chain
+          const action = await filterChain.execute(meta, async () => {
+            // Final handler: invoke the controller method
+            const result = await route.handler({
+              container: this.container,
+              params: [req.body],
+              request: meta.request,
+            });
+
+            // Wrap result in a JSON action
+            return jsonAction(result);
+          });
+
+          // Send response
+          if (action.type === 'json') {
+            res.json(action.data);
+          } else if (action.type === 'error') {
+            res.status(500).json({ error: action.data });
+          }
+        } catch (error: any) {
+          console.error('[WebpiecesServer] Error handling request:', error);
+          res.status(500).json({ error: error.message });
+        }
+      };
+
+      // Register with Express
+      switch (method) {
+        case 'get':
+          this.app.get(path, handler);
+          break;
+        case 'post':
+          this.app.post(path, handler);
+          break;
+        case 'put':
+          this.app.put(path, handler);
+          break;
+        case 'delete':
+          this.app.delete(path, handler);
+          break;
+        case 'patch':
+          this.app.patch(path, handler);
+          break;
+        default:
+          console.warn(`[WebpiecesServer] Unknown HTTP method: ${method}`);
+      }
+    }
   }
 
   /**
    * Stop the HTTP server.
    */
   stop(): void {
-    console.log('[WebpiecesServer] Server stopped');
+    if (this.server) {
+      this.server.close(() => {
+        console.log('[WebpiecesServer] Server stopped');
+      });
+    }
   }
 
   /**

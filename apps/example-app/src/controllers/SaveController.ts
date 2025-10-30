@@ -1,7 +1,7 @@
 import { injectable, inject } from 'inversify';
 import { Controller } from '@webpieces/http-routing';
 import { Context } from '@webpieces/core-context';
-import { SaveApi } from '../api/SaveApi';
+import { SaveApi, SaveApiPrototype, ValidateImplementation } from '../api/SaveApi';
 import { SaveRequest } from '../api/SaveRequest';
 import { SaveResponse, TheMatch } from '../api/SaveResponse';
 import { RemoteApi, FetchValueRequest, TYPES } from '../remote/RemoteApi';
@@ -31,18 +31,29 @@ export class SimpleCounter implements Counter {
 }
 
 /**
- * SaveController - Implements SaveApi.
+ * SaveController - Extends SaveApiPrototype and implements SaveApi.
  * Similar to Java SaveController.
+ *
+ * Pattern:
+ * - Extends SaveApiPrototype: Inherits routing decorators (@Post, @Path)
+ * - Implements SaveApi: Type-safe contract enforcement
+ * - Validator: Compile-time check that all interface methods are overridden
  *
  * Responsibilities:
  * 1. Receive SaveRequest (deserialized by JsonFilter)
  * 2. Call remote service to fetch data
  * 3. Transform response into SaveResponse
  * 4. Return response (will be serialized by JsonFilter)
+ *
+ * The __validator field ensures that if SaveApi adds a new method,
+ * this controller MUST implement it or compilation will fail.
  */
 @injectable()
 @Controller()
-export class SaveController implements SaveApi {
+export class SaveController extends SaveApiPrototype implements SaveApi {
+  // Compile-time validator: Ensures all SaveApi methods are implemented
+  // If you remove or don't override a method from SaveApi, you'll get a compile error here
+  private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
   private counter: Counter;
   private remoteService: RemoteApi;
 
@@ -50,11 +61,12 @@ export class SaveController implements SaveApi {
     @inject(TYPES.Counter) counter: Counter,
     @inject(TYPES.RemoteApi) remoteService: RemoteApi
   ) {
+    super();
     this.counter = counter;
     this.remoteService = remoteService;
   }
 
-  async save(request: SaveRequest): Promise<SaveResponse> {
+  override async save(request: SaveRequest): Promise<SaveResponse> {
     // Increment counter
     this.counter.inc();
 

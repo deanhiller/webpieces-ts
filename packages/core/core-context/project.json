@@ -11,7 +11,7 @@
         "outputPath": "dist/packages/core/core-context",
         "main": "packages/core/core-context/src/index.ts",
         "tsConfig": "packages/core/core-context/tsconfig.lib.json",
-        "assets": []
+        "assets": ["packages/core/core-context/package.json"]
       }
     }
   },

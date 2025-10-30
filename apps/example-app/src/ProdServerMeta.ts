@@ -3,7 +3,7 @@ import { ContainerModule } from 'inversify';
 import { GuiceModule } from './modules/GuiceModule';
 import { FilterRoutes } from './routes/FilterRoutes';
 import { RESTApiRoutes } from '@webpieces/http-routing';
-import { SaveApiMeta } from './api/SaveApi';
+import { SaveApiPrototype } from './api/SaveApi';
 import { SaveController } from './controllers/SaveController';
 
 /**
@@ -39,8 +39,10 @@ export class ProdServerMeta implements WebAppMeta {
       // Register filters first
       new FilterRoutes(),
 
-      // Auto-wire SaveApi to SaveController
-      new RESTApiRoutes(SaveApiMeta, SaveController),
+      // Auto-wire SaveApiPrototype to SaveController
+      // SaveApiPrototype is an abstract class with decorators (@Post, @Path)
+      // SaveController extends SaveApiPrototype and implements SaveApi interface
+      new RESTApiRoutes(SaveApiPrototype, SaveController),
     ];
   }
 }

@@ -11,7 +11,7 @@
         "outputPath": "dist/packages/http/http-server",
         "main": "packages/http/http-server/src/index.ts",
         "tsConfig": "packages/http/http-server/tsconfig.lib.json",
-        "assets": []
+        "assets": ["packages/http/http-server/package.json"]
       },
       "dependsOn": ["core-meta:build", "http-routing:build", "http-filters:build"]
     }

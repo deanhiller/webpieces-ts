@@ -11,7 +11,7 @@
         "outputPath": "dist/packages/http/http-filters",
         "main": "packages/http/http-filters/src/index.ts",
         "tsConfig": "packages/http/http-filters/tsconfig.lib.json",
-        "assets": []
+        "assets": ["packages/http/http-filters/package.json"]
       },
       "dependsOn": ["core-context:build"]
     }

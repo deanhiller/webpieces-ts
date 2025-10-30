@@ -3,39 +3,72 @@ import { SaveRequest } from './SaveRequest';
 import { SaveResponse } from './SaveResponse';
 
 /**
- * SaveApi interface.
- * This is the contract that the controller must implement.
+ * SaveApi - Pure interface defining the API contract.
  *
- * Similar to Java:
- * ```java
- * public interface SaveApi {
- *   @POST
- *   @Path("/search/item")
- *   public XFuture<SaveResponse> save(SaveRequest request);
- * }
- * ```
- *
- * Note: In TypeScript, we use native Promise instead of XPromise/XFuture.
- * Unlike Java's ThreadLocal, Node.js AsyncLocalStorage automatically propagates
- * context across ALL async boundaries (promises, callbacks, async/await).
- * No manual context management needed!
+ * This is the type-safe contract that both server and client must follow.
+ * Controllers implement this interface to ensure they provide all required methods.
  */
 export interface SaveApi {
   save(request: SaveRequest): Promise<SaveResponse>;
 }
 
 /**
- * SaveApiMeta - API interface with routing decorators.
- * This class defines the routing metadata using decorators.
+ * SaveApiPrototype - Abstract class with routing decorators.
  *
- * RESTApiRoutes will reflect over this class to extract route information.
+ * This class serves as the single source of truth for routing metadata:
+ * 1. Server-side: RESTApiRoutes reads decorators to bind routes to controllers
+ * 2. Client-side: Client generator reads decorators to create HTTP client proxies
+ *
+ * Pattern:
+ * ```typescript
+ * // 1. Define interface (contract)
+ * interface SaveApi { ... }
+ *
+ * // 2. Define prototype with decorators (metadata)
+ * abstract class SaveApiPrototype { ... }
+ *
+ * // 3. Controller extends prototype AND implements interface
+ * class SaveController extends SaveApiPrototype implements SaveApi {
+ *   // MUST override all methods from SaveApi
+ *   // TypeScript will error if any are missing
+ * }
+ * ```
+ *
+ * Benefits:
+ * - Decorators live on the prototype, not the implementation
+ * - Interface enforces that all methods are implemented
+ * - Same metadata used for server routing and client generation
+ * - Compile error if controller doesn't implement a method
+ * - Type-safe contract between client and server
+ *
+ * Note: Methods throw by default to catch runtime errors if not overridden.
  */
 @ApiInterface()
-export class SaveApiMeta {
+export abstract class SaveApiPrototype {
   @Post()
   @Path('/search/item')
-  static save(request: SaveRequest): Promise<SaveResponse> {
-    // This method is never called - it exists only to hold metadata
-    throw new Error('Interface method should not be called');
+  save(request: SaveRequest): Promise<SaveResponse> {
+    throw new Error('Method save() must be implemented by subclass');
   }
 }
+
+/**
+ * Type-level validator to ensure a class implements all methods from an interface.
+ * Usage: Add to controller class declaration:
+ *
+ * ```typescript
+ * export class SaveController extends SaveApiPrototype implements SaveApi {
+ *   // Compile-time check: ensures all SaveApi methods are implemented
+ *   private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
+ * }
+ * ```
+ *
+ * This will cause a compile error if SaveController is missing any methods from SaveApi.
+ */
+export type ValidateImplementation<TImpl, TInterface> = {
+  [K in keyof TInterface]: K extends keyof TImpl
+    ? TImpl[K] extends TInterface[K]
+      ? TInterface[K]
+      : never
+    : never;
+};

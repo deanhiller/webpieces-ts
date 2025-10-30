@@ -1,6 +1,12 @@
 {
   "name": "webpieces-ts",
   "version": "1.0.0",
+  "packageManager": "npm@10.8.1",
+  "workspaces": [
+    "packages/core/*",
+    "packages/http/*",
+    "apps/*"
+  ],
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -8,7 +14,6 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "build": "nx build example-app",
-    "start": "nx serve example-app",
     "clean": "rm -rf dist coverage .nx"
   },
   "repository": {
@@ -22,17 +27,20 @@
   "devDependencies": {
     "@nx/jest": "^22.0.2",
     "@nx/js": "^22.0.2",
+    "@types/express": "^5.0.5",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.9.2",
     "jest": "^30.2.0",
     "nx": "^22.0.2",
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "express": "^5.1.0",
     "inversify": "^7.10.4",
     "reflect-metadata": "^0.2.2"
   }
