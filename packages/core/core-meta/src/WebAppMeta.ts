@@ -1,4 +1,4 @@
-import { ContainerModule } from 'inversify';
+import { ContainerModule, Container } from 'inversify';
 
 /**
  * Represents a route configuration that can be registered with the router.
@@ -39,9 +39,33 @@ export interface FilterDefinition {
 }
 
 /**
- * Handler function for routes.
+ * Request data passed to route handlers.
  */
-export type RouteHandler = (context: any) => Promise<any>;
+export interface RouteRequest {
+  body?: any;
+  query?: Record<string, any>;
+  params?: Record<string, any>;
+  headers?: Record<string, any>;
+}
+
+/**
+ * Context passed to route handlers.
+ * Contains DI container, request data, and extracted parameters.
+ */
+export interface RouteContext {
+  /** DI container for resolving dependencies */
+  container: Container;
+  /** Extracted parameters (e.g., from request body, path params) */
+  params: any[];
+  /** Original request data */
+  request?: RouteRequest;
+}
+
+/**
+ * Handler function for routes.
+ * Takes a RouteContext and returns the controller method result.
+ */
+export type RouteHandler = (context: RouteContext) => Promise<any>;
 
 /**
  * Main application metadata interface.

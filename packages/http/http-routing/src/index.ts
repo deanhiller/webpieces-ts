@@ -14,4 +14,4 @@ export {
   METADATA_KEYS,
 } from './decorators';
 
-export { RESTApiRoutes } from './RESTApiRoutes';
+export { RESTApiRoutes, ClassType } from './RESTApiRoutes';

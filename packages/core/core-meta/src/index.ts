@@ -5,4 +5,6 @@ export {
   RouteDefinition,
   FilterDefinition,
   RouteHandler,
+  RouteContext,
+  RouteRequest,
 } from './WebAppMeta';

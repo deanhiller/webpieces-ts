@@ -42,7 +42,8 @@ export class ProdServerMeta implements WebAppMeta {
       // Auto-wire SaveApiPrototype to SaveController
       // SaveApiPrototype is an abstract class with decorators (@Post, @Path)
       // SaveController extends SaveApiPrototype and implements SaveApi interface
-      new RESTApiRoutes<SaveApi>(SaveApiPrototype, SaveController),
+      // Type-safe: RESTApiRoutes<SaveApiPrototype, SaveController>
+      new RESTApiRoutes(SaveApiPrototype, SaveController),
     ];
   }
 }

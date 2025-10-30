@@ -1,5 +1,10 @@
-import { Routes, RouteBuilder } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, RouteHandler, RouteContext } from '@webpieces/core-meta';
 import { getRoutes, isApiInterface, RouteMetadata } from './decorators';
+
+/**
+ * Type representing a class constructor (abstract or concrete).
+ */
+export type ClassType<T = any> = Function & { prototype: T };
 
 /**
  * RESTApiRoutes - Automatically wire API interfaces to controllers.
@@ -14,7 +19,7 @@ import { getRoutes, isApiInterface, RouteMetadata } from './decorators';
  * // In your ServerMeta:
  * getRoutes(): Routes[] {
  *   return [
- *     new RESTApiRoutes(SaveApiMeta, SaveController),
+ *     new RESTApiRoutes(SaveApiPrototype, SaveController),
  *     // ... more routes
  *   ];
  * }
@@ -25,25 +30,30 @@ import { getRoutes, isApiInterface, RouteMetadata } from './decorators';
  * - Methods have @Post()/@Get()/etc and @Path() decorators
  * - Controller class implements the same interface
  * - Controller class has @Controller() decorator
+ *
+ * Type Parameters:
+ * - TApi: The API prototype class type (abstract class with decorators)
+ * - TController: The controller class type (must extend TApi)
  */
-export class RESTApiRoutes<T> implements Routes {
-  private apiMetaClass: any;
-  private controllerClass: any;
+export class RESTApiRoutes<TApi = any, TController extends TApi = any> implements Routes {
+  private apiMetaClass: ClassType<TApi>;
+  private controllerClass: ClassType<TController>;
 
   /**
    * Create a new RESTApiRoutes.
    *
-   * @param apiMetaClass - The API interface class with decorators (e.g., SaveApiMeta)
+   * @param apiMetaClass - The API interface class with decorators (e.g., SaveApiPrototype)
    * @param controllerClass - The controller class that implements the API (e.g., SaveController)
    */
-  constructor(apiMetaClass: T, controllerClass: T) {
+  constructor(apiMetaClass: ClassType<TApi>, controllerClass: ClassType<TController>) {
     this.apiMetaClass = apiMetaClass;
     this.controllerClass = controllerClass;
 
     // Validate that apiMetaClass is marked as @ApiInterface
     if (!isApiInterface(apiMetaClass)) {
+      const className = (apiMetaClass as any).name || 'Unknown';
       throw new Error(
-        `Class ${apiMetaClass.name} must be decorated with @ApiInterface()`
+        `Class ${className} must be decorated with @ApiInterface()`
       );
     }
 
@@ -61,8 +71,10 @@ export class RESTApiRoutes<T> implements Routes {
       const controllerPrototype = this.controllerClass.prototype;
 
       if (typeof controllerPrototype[route.methodName] !== 'function') {
+        const controllerName = (this.controllerClass as any).name || 'Unknown';
+        const apiName = (this.apiMetaClass as any).name || 'Unknown';
         throw new Error(
-          `Controller ${this.controllerClass.name} must implement method ${route.methodName} from API ${this.apiMetaClass.name}`
+          `Controller ${controllerName} must implement method ${route.methodName} from API ${apiName}`
         );
       }
     }
@@ -84,40 +96,51 @@ export class RESTApiRoutes<T> implements Routes {
    */
   private registerRoute(routeBuilder: RouteBuilder, route: RouteMetadata): void {
     if (!route.httpMethod || !route.path) {
+      const apiName = (this.apiMetaClass as any).name || 'Unknown';
       throw new Error(
-        `Method ${route.methodName} in ${this.apiMetaClass.name} must have both @HttpMethod and @Path decorators`
+        `Method ${route.methodName} in ${apiName} must have both @HttpMethod and @Path decorators`
       );
     }
+
+    // Create typed route handler
+    const routeHandler: RouteHandler = this.createRouteHandler(route);
 
     routeBuilder.addRoute({
       method: route.httpMethod,
       path: route.path,
-      handler: async (context: any) => {
-        // The handler will be invoked by the WebpiecesServer
-        // context will contain:
-        // - container: DI container to resolve controller
-        // - request: incoming request data
-        // - params: extracted parameters
-
-        const { container, params } = context;
-
-        // Resolve controller instance from DI container
-        const controller = container.get(this.controllerClass);
-
-        // Invoke the controller method
-        const method = controller[route.methodName];
-        if (typeof method !== 'function') {
-          throw new Error(
-            `Method ${route.methodName} not found on controller ${this.controllerClass.name}`
-          );
-        }
-
-        // Call the method with parameters
-        const result = await method.apply(controller, params);
-
-        return result;
-      },
+      handler: routeHandler,
     });
+  }
+
+  /**
+   * Create a typed route handler for a specific route.
+   *
+   * The handler:
+   * 1. Resolves the controller from the DI container
+   * 2. Invokes the controller method with extracted parameters
+   * 3. Returns the controller method result
+   */
+  private createRouteHandler(route: RouteMetadata): RouteHandler {
+    return async (context: RouteContext): Promise<any> => {
+      const { container, params } = context;
+
+      // Resolve controller instance from DI container
+      const controller = container.get(this.controllerClass) as TController;
+
+      // Get the controller method
+      const method = (controller as any)[route.methodName];
+      if (typeof method !== 'function') {
+        const controllerName = (this.controllerClass as any).name || 'Unknown';
+        throw new Error(
+          `Method ${route.methodName} not found on controller ${controllerName}`
+        );
+      }
+
+      // Invoke the method with parameters
+      const result = await method.apply(controller, params);
+
+      return result;
+    };
   }
 
   /**

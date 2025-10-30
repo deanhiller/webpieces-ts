@@ -1,6 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Container } from 'inversify';
-import { WebAppMeta, RouteDefinition, FilterDefinition } from '@webpieces/core-meta';
+import { WebAppMeta, RouteDefinition, FilterDefinition, RouteContext } from '@webpieces/core-meta';
 import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-filters';
 import { getRoutes, RouteMetadata } from '@webpieces/http-routing';
 
@@ -166,12 +166,15 @@ export class WebpiecesServer {
 
           // Execute the filter chain
           const action = await filterChain.execute(meta, async () => {
-            // Final handler: invoke the controller method
-            const result = await route.handler({
+            // Create typed route context
+            const routeContext: RouteContext = {
               container: this.container,
               params: [req.body],
               request: meta.request,
-            });
+            };
+
+            // Final handler: invoke the controller method via route handler
+            const result = await route.handler(routeContext);
 
             // Wrap result in a JSON action
             return jsonAction(result);
@@ -282,12 +285,15 @@ export class WebpiecesServer {
 
     // Execute the filter chain
     const action = await filterChain.execute(meta, async () => {
-      // Final handler: invoke the controller method
-      const result = await registeredRoute.handler({
+      // Create typed route context
+      const routeContext: RouteContext = {
         container: this.container,
         params: meta.params,
         request: meta.request,
-      });
+      };
+
+      // Final handler: invoke the controller method via route handler
+      const result = await registeredRoute.handler(routeContext);
 
       // Wrap result in a JSON action
       return jsonAction(result);
