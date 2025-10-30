@@ -1,23 +1,20 @@
 import { ContainerModule } from 'inversify';
 import { SaveController, Counter, SimpleCounter } from '../controllers/SaveController';
+import { SaveApiToken } from '../api/SaveApi';
 import { RemoteApi, TYPES } from '../remote/RemoteApi';
 import { RemoteServiceSimulator } from '../remote/RemoteServiceSimulator';
 import { ContextFilter, JsonFilter } from '@webpieces/http-filters';
 
 /**
  * GuiceModule - DI configuration module.
- * Similar to Java Guice Module.
+ * Similar to Java Guice Module and trytami's inversify.ts.
  *
- * This module binds:
- * - Controllers
- * - Services
- * - Filters
- * - External dependencies
+ * All bindings use .inSingletonScope() to ensure ONE instance per application
+ * (unlike @injectable() default which is transient - new instance every time).
  */
-export const GuiceModule = new ContainerModule((options) => {
-  const { bind } = options;
-
-  // Bind controllers
+export const GuiceModule = new ContainerModule((bind) => {
+  // Bind controllers to their API interfaces
+  bind(SaveApiToken).to(SaveController).inSingletonScope();
   bind(SaveController).toSelf().inSingletonScope();
 
   // Bind services

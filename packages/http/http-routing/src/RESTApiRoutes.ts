@@ -26,7 +26,7 @@ import { getRoutes, isApiInterface, RouteMetadata } from './decorators';
  * - Controller class implements the same interface
  * - Controller class has @Controller() decorator
  */
-export class RESTApiRoutes implements Routes {
+export class RESTApiRoutes<T> implements Routes {
   private apiMetaClass: any;
   private controllerClass: any;
 
@@ -36,7 +36,7 @@ export class RESTApiRoutes implements Routes {
    * @param apiMetaClass - The API interface class with decorators (e.g., SaveApiMeta)
    * @param controllerClass - The controller class that implements the API (e.g., SaveController)
    */
-  constructor(apiMetaClass: any, controllerClass: any) {
+  constructor(apiMetaClass: T, controllerClass: T) {
     this.apiMetaClass = apiMetaClass;
     this.controllerClass = controllerClass;
 

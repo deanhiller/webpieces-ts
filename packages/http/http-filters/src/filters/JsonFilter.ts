@@ -1,4 +1,4 @@
-import { injectable } from 'inversify';
+import { injectable, unmanaged } from 'inversify';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { Filter, MethodMeta, Action, NextFilter, jsonAction, errorAction } from '../Filter';
@@ -38,7 +38,7 @@ export interface JsonFilterConfig {
 export class JsonFilter implements Filter {
   priority = 60;
 
-  constructor(private config: JsonFilterConfig = {}) {
+  constructor(@unmanaged() private config: JsonFilterConfig = {}) {
     this.config = {
       validationEnabled: true,
       loggingEnabled: false,

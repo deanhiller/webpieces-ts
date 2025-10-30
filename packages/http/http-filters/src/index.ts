@@ -16,3 +16,5 @@ export {
   ValidationException,
   HttpException,
 } from './filters/JsonFilter';
+
+export { provideSingleton, provideTransient } from './util/decorators';

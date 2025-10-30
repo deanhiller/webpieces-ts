@@ -3,6 +3,12 @@ import { SaveRequest } from './SaveRequest';
 import { SaveResponse } from './SaveResponse';
 
 /**
+ * DI token for SaveApi.
+ * Used to register and resolve the SaveApi implementation in the DI container.
+ */
+export const SaveApiToken = Symbol.for('SaveApi');
+
+/**
  * SaveApi - Pure interface defining the API contract.
  *
  * This is the type-safe contract that both server and client must follow.
@@ -44,7 +50,7 @@ export interface SaveApi {
  * Note: Methods throw by default to catch runtime errors if not overridden.
  */
 @ApiInterface()
-export abstract class SaveApiPrototype {
+export abstract class SaveApiPrototype implements SaveApi {
   @Post()
   @Path('/search/item')
   save(request: SaveRequest): Promise<SaveResponse> {

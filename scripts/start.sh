@@ -57,9 +57,9 @@ echo "✅ Symlinks created successfully"
 # Create tmp directory for logs
 mkdir -p tmp
 
-# Run the production build
+# Run the production build (with reflect-metadata loaded first)
 echo "Starting server..."
-NODE_ENV=development PORT=$PORT node dist/apps/example-app/src/server.js > $LOG_FILE 2>&1 &
+NODE_ENV=development PORT=$PORT node -r reflect-metadata dist/apps/example-app/src/server.js > $LOG_FILE 2>&1 &
 SERVER_PID=$!
 
 # Save PID

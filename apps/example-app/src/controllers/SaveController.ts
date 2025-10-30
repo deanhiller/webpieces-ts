@@ -1,7 +1,7 @@
 import { injectable, inject } from 'inversify';
 import { Controller } from '@webpieces/http-routing';
 import { Context } from '@webpieces/core-context';
-import { SaveApi, SaveApiPrototype, ValidateImplementation } from '../api/SaveApi';
+import { SaveApi, SaveApiPrototype, ValidateImplementation, SaveApiToken } from '../api/SaveApi';
 import { SaveRequest } from '../api/SaveRequest';
 import { SaveResponse, TheMatch } from '../api/SaveResponse';
 import { RemoteApi, FetchValueRequest, TYPES } from '../remote/RemoteApi';

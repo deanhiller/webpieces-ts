@@ -41,7 +41,8 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "express": "^5.1.0",
-    "inversify": "^7.10.4",
+    "inversify": "^6.2.2",
+    "inversify-binding-decorators": "^4.0.0",
     "reflect-metadata": "^0.2.2"
   }
 }
