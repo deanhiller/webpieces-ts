@@ -22,7 +22,7 @@ export class ContextFilter implements Filter {
       Context.put('HTTP_METHOD', meta.httpMethod);
 
       try {
-        return await next();
+        return await next.execute();
       } finally {
         // Clean up context (AsyncLocalStorage handles this automatically,
         // but we can explicitly clear if needed)

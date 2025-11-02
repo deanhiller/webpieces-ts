@@ -52,9 +52,17 @@ export interface Action {
 }
 
 /**
- * Next filter function type.
+ * Next filter class.
+ * This is a class instead of a function type to make it easier to trace
+ * who is calling what in the debugger/IDE.
  */
-export type NextFilter = () => Promise<Action>;
+export abstract class NextFilter {
+  /**
+   * Execute the next filter in the chain.
+   * @returns Promise of the action
+   */
+  abstract execute(): Promise<Action>;
+}
 
 /**
  * Filter interface.
@@ -71,7 +79,7 @@ export type NextFilter = () => Promise<Action>;
  *
  *   async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {
  *     console.log(`Request: ${meta.httpMethod} ${meta.path}`);
- *     const action = await next();
+ *     const action = await next.execute();
  *     console.log(`Response: ${action.statusCode}`);
  *     return action;
  *   }
@@ -97,7 +105,7 @@ export interface Filter {
    * Filter method that wraps the next filter/controller.
    *
    * @param meta - Metadata about the method being invoked
-   * @param next - Function to invoke the next filter in the chain
+   * @param next - NextFilter instance to invoke the next filter in the chain
    * @returns Promise of the action to return
    */
   filter(meta: MethodMeta, next: NextFilter): Promise<Action>;

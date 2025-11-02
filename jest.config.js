@@ -10,6 +10,7 @@ module.exports = {
     '^@webpieces/http-routing$': '<rootDir>/packages/http/http-routing/src/index.ts',
     '^@webpieces/http-filters$': '<rootDir>/packages/http/http-filters/src/index.ts',
     '^@webpieces/http-server$': '<rootDir>/packages/http/http-server/src/index.ts',
+    '^@webpieces/http-client$': '<rootDir>/packages/http/http-client/src/index.ts',
   },
   collectCoverageFrom: [
     'packages/**/*.ts',

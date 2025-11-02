@@ -1,0 +1,11 @@
+{
+  "name": "@webpieces/http-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "dependencies": {
+    "@webpieces/http-api": "0.1.0"
+  }
+}

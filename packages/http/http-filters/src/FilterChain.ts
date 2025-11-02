@@ -29,18 +29,21 @@ export class FilterChain {
     finalHandler: () => Promise<Action>
   ): Promise<Action> {
     let index = 0;
+    const filters = this.filters;
 
-    const next: NextFilter = async () => {
-      if (index < this.filters.length) {
-        const filter = this.filters[index++];
-        return filter.filter(meta, next);
-      } else {
-        // All filters have been executed, now execute the controller
-        return finalHandler();
+    const next: NextFilter = new class extends NextFilter {
+      async execute(): Promise<Action> {
+        if (index < filters.length) {
+          const filter = filters[index++];
+          return filter.filter(meta, next);
+        } else {
+          // All filters have been executed, now execute the controller
+          return finalHandler();
+        }
       }
     };
 
-    return next();
+    return next.execute();
   }
 
   /**

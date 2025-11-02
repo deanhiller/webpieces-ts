@@ -126,27 +126,31 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
    * from the method signature on the API interface.
    */
   private createRouteHandler<TResult = unknown>(route: RouteMetadata): RouteHandler<TResult> {
-    return async (context: RouteContext): Promise<TResult> => {
-      const { container, params } = context;
+    const controllerClass = this.controllerClass;
 
-      // Resolve controller instance from DI container
-      const controller = container.get(this.controllerClass) as TController;
+    return new class extends RouteHandler<TResult> {
+      async execute(context: RouteContext): Promise<TResult> {
+        const { container, params } = context;
 
-      // Get the controller method
-      const method = (controller as any)[route.methodName];
-      if (typeof method !== 'function') {
-        const controllerName = (this.controllerClass as any).name || 'Unknown';
-        throw new Error(
-          `Method ${route.methodName} not found on controller ${controllerName}`
-        );
+        // Resolve controller instance from DI container
+        const controller = container.get(controllerClass) as TController;
+
+        // Get the controller method
+        const method = (controller as any)[route.methodName];
+        if (typeof method !== 'function') {
+          const controllerName = (controllerClass as any).name || 'Unknown';
+          throw new Error(
+            `Method ${route.methodName} not found on controller ${controllerName}`
+          );
+        }
+
+        // Invoke the method with parameters and return the result
+        // TypeScript trusts that the method returns Promise<TResult> based on
+        // the interface definition (e.g., SaveApi.save returns Promise<SaveResponse>)
+        const result: TResult = await method.apply(controller, params);
+
+        return result;
       }
-
-      // Invoke the method with parameters and return the result
-      // TypeScript trusts that the method returns Promise<TResult> based on
-      // the interface definition (e.g., SaveApi.save returns Promise<SaveResponse>)
-      const result: TResult = await method.apply(controller, params);
-
-      return result;
     };
   }
 

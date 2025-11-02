@@ -220,7 +220,7 @@ export class WebpiecesServer {
             };
 
             // Final handler: invoke the controller method via route handler
-            const result = await route.handler(routeContext);
+            const result = await route.handler.execute(routeContext);
 
             // Wrap result in a JSON action
             return jsonAction(result);
@@ -340,7 +340,7 @@ export class WebpiecesServer {
       };
 
       // Final handler: invoke the controller method via route handler
-      const result = await registeredRoute.handler(routeContext);
+      const result = await registeredRoute.handler.execute(routeContext);
 
       // Wrap result in a JSON action
       return jsonAction(result);
@@ -371,19 +371,5 @@ export class WebpiecesServer {
     return this.webpiecesContainer;
   }
 
-  /**
-   * Get all registered routes (for testing).
-   */
-  getRoutes(): Map<string, RegisteredRoute<any>> {
-    this.initialize();
-    return this.routes;
-  }
 
-  /**
-   * Get all registered filters (for testing).
-   */
-  getFilters(): Filter[] {
-    this.initialize();
-    return this.filters;
-  }
 }

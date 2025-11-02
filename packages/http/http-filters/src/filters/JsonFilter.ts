@@ -56,7 +56,7 @@ export class JsonFilter implements Filter {
       }
 
       // Execute next filter/controller
-      const action = await next();
+      const action = await next.execute();
 
       if (this.config.loggingEnabled) {
         this.logResponse(action);
