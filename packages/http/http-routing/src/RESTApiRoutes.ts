@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, RouteHandler, RouteContext } from '@webpieces/core-meta';
-import { getRoutes, isApiInterface, RouteMetadata } from './decorators';
+import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
 
 /**
  * Type representing a class constructor (abstract or concrete).
@@ -103,7 +103,8 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
     }
 
     // Create typed route handler
-    const routeHandler: RouteHandler = this.createRouteHandler(route);
+    // The handler's return type is inferred from the controller method's return type
+    const routeHandler: RouteHandler<unknown> = this.createRouteHandler(route);
 
     routeBuilder.addRoute({
       method: route.httpMethod,
@@ -119,9 +120,13 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
    * 1. Resolves the controller from the DI container
    * 2. Invokes the controller method with extracted parameters
    * 3. Returns the controller method result
+   *
+   * Type parameter TResult represents the return type of the controller method.
+   * At runtime, we can't enforce this statically, but TypeScript will infer it
+   * from the method signature on the API interface.
    */
-  private createRouteHandler(route: RouteMetadata): RouteHandler {
-    return async (context: RouteContext): Promise<any> => {
+  private createRouteHandler<TResult = unknown>(route: RouteMetadata): RouteHandler<TResult> {
+    return async (context: RouteContext): Promise<TResult> => {
       const { container, params } = context;
 
       // Resolve controller instance from DI container
@@ -136,8 +141,10 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
         );
       }
 
-      // Invoke the method with parameters
-      const result = await method.apply(controller, params);
+      // Invoke the method with parameters and return the result
+      // TypeScript trusts that the method returns Promise<TResult> based on
+      // the interface definition (e.g., SaveApi.save returns Promise<SaveResponse>)
+      const result: TResult = await method.apply(controller, params);
 
       return result;
     };

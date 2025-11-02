@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { WebpiecesServer } from '@webpieces/http-server';
 import { ProdServerMeta } from '../src/ProdServerMeta';
-import { SaveApi, SaveApiMeta } from '../src/api/SaveApi';
+import { SaveApi, SaveApiPrototype } from '../src/api/SaveApi';
 import { SaveRequest } from '../src/api/SaveRequest';
 import { SearchMeta } from '../src/api/SaveRequest';
 import { SaveResponse } from '../src/api/SaveResponse';
@@ -34,7 +34,7 @@ describe('SaveApi Feature Tests', () => {
 
     // Create API client proxy (no HTTP!)
     // This routes calls through filter chain → controller
-    saveApi = server.createApiClient<SaveApi>(SaveApiMeta);
+    saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
   });
 
   afterEach(() => {

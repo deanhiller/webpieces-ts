@@ -1,0 +1,19 @@
+{
+  "name": "http-api",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/http/http-api/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/http/http-api",
+        "main": "packages/http/http-api/src/index.ts",
+        "tsConfig": "packages/http/http-api/tsconfig.lib.json",
+        "assets": ["packages/http/http-api/package.json"]
+      }
+    }
+  },
+  "tags": []
+}

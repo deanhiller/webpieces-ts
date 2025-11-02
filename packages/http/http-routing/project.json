@@ -13,7 +13,7 @@
         "tsConfig": "packages/http/http-routing/tsconfig.lib.json",
         "assets": ["packages/http/http-routing/package.json"]
       },
-      "dependsOn": ["core-meta:build"]
+      "dependsOn": ["core-meta:build", "http-api:build"]
     }
   },
   "tags": []

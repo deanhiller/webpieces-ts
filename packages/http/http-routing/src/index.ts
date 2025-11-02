@@ -1,6 +1,6 @@
+// Re-export API decorators from http-api for convenience
 export {
   ApiInterface,
-  Controller,
   Get,
   Post,
   Put,
@@ -9,9 +9,18 @@ export {
   Path,
   getRoutes,
   isApiInterface,
-  isController,
   RouteMetadata,
   METADATA_KEYS,
+  ValidateImplementation,
+} from '@webpieces/http-api';
+
+// Server-side routing decorators and utilities
+export {
+  Controller,
+  isController,
+  provideSingleton,
+  provideTransient,
+  ROUTING_METADATA_KEYS,
 } from './decorators';
 
 export { RESTApiRoutes, ClassType } from './RESTApiRoutes';

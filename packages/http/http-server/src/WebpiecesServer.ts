@@ -1,23 +1,25 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Container } from 'inversify';
-import { WebAppMeta, RouteDefinition, FilterDefinition, RouteContext } from '@webpieces/core-meta';
+import { WebAppMeta, RouteContext } from '@webpieces/core-meta';
 import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-filters';
 import { getRoutes, RouteMetadata } from '@webpieces/http-routing';
-
-/**
- * Route registry entry.
- */
-interface RegisteredRoute extends RouteDefinition {
-  routeMetadata?: RouteMetadata;
-  controllerClass?: any;
-}
+import { RouteBuilderImpl, RegisteredRoute } from './RouteBuilderImpl';
 
 /**
  * WebpiecesServer - Main bootstrap class for WebPieces applications.
  *
- * This class:
- * 1. Initializes the DI container from WebAppMeta.getDIModules()
- * 2. Registers routes from WebAppMeta.getRoutes()
+ * This class uses a two-container pattern similar to Java WebPieces:
+ * 1. webpiecesContainer: Core WebPieces framework bindings
+ * 2. appContainer: User's application bindings (child of webpiecesContainer)
+ *
+ * This separation allows:
+ * - Clean separation of concerns
+ * - Better testability
+ * - Ability to override framework bindings in tests
+ *
+ * The server:
+ * 1. Initializes both DI containers from WebAppMeta.getDIModules()
+ * 2. Registers routes using explicit RouteBuilderImpl
  * 3. Creates filter chains
  * 4. Supports both HTTP server mode and testing mode (no HTTP)
  *
@@ -25,7 +27,7 @@ interface RegisteredRoute extends RouteDefinition {
  * ```typescript
  * const server = new WebpiecesServer(new ProdServerMeta());
  * server.initialize();
- * const saveApi = server.createApiClient<SaveApi>(SaveApiMeta);
+ * const saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
  * const response = await saveApi.save(request);
  * ```
  *
@@ -37,9 +39,35 @@ interface RegisteredRoute extends RouteDefinition {
  */
 export class WebpiecesServer {
   private meta: WebAppMeta;
-  private container: Container;
-  private routes: Map<string, RegisteredRoute> = new Map();
+
+  /**
+   * WebPieces container: Core WebPieces framework bindings.
+   * This includes framework-level services like filters, routing infrastructure,
+   * logging, metrics, etc. Similar to Java WebPieces platform container.
+   */
+  private webpiecesContainer: Container;
+
+  /**
+   * Application container: User's application bindings.
+   * This is a child container of webpiecesContainer, so it can access
+   * framework bindings while keeping app bindings separate.
+   */
+  private appContainer: Container;
+
+  /**
+   * Routes registry: Maps "METHOD:path" -> RegisteredRoute
+   * Example: "POST:/search/item" -> { method: "POST", path: "/search/item", handler: ... }
+   *
+   * We use unknown instead of any for type safety - each route has its own return type,
+   * but we can't have different generic types in the same Map.
+   */
+  private routes: Map<string, RegisteredRoute<unknown>> = new Map();
+
+  /**
+   * Registered filters, sorted by priority (higher priority first).
+   */
   private filters: Filter[] = [];
+
   private initialized = false;
   private app?: Express;
   private server?: any;
@@ -47,7 +75,14 @@ export class WebpiecesServer {
 
   constructor(meta: WebAppMeta) {
     this.meta = meta;
-    this.container = new Container();
+
+    // Create WebPieces container for framework-level bindings
+    this.webpiecesContainer = new Container();
+
+    // Create application container as a child of WebPieces container
+    // This allows app container to access framework bindings
+    this.appContainer = new Container();
+    this.appContainer.parent = this.webpiecesContainer;
   }
 
   /**
@@ -70,35 +105,45 @@ export class WebpiecesServer {
 
   /**
    * Load DI modules from WebAppMeta.
+   *
+   * Currently, all user modules are loaded into the application container.
+   * In the future, we could separate:
+   * - WebPieces framework modules -> webpiecesContainer
+   * - Application modules -> appContainer
+   *
+   * For now, everything goes into appContainer which has access to webpiecesContainer.
    */
   private loadDIModules(): void {
     const modules = this.meta.getDIModules();
 
+    // Load all modules into application container
+    // (webpiecesContainer is currently empty, reserved for future framework bindings)
     for (const module of modules) {
-      this.container.load(module);
+      this.appContainer.load(module);
     }
   }
 
   /**
    * Register routes from WebAppMeta.
+   *
+   * Creates an explicit RouteBuilderImpl instead of an anonymous object.
+   * This improves:
+   * - Traceability: Can Cmd+Click on addRoute to see implementation
+   * - Debugging: Explicit class shows up in stack traces
+   * - Understanding: Clear class name vs anonymous object
    */
   private registerRoutes(): void {
     const routeConfigs = this.meta.getRoutes();
 
-    // Create a simple RouteBuilder implementation
-    const routeBuilder = {
-      addRoute: (route: RouteDefinition) => {
-        const key = `${route.method}:${route.path}`;
-        this.routes.set(key, route);
-      },
-      addFilter: (filterDef: FilterDefinition) => {
-        // Resolve filter instance from DI container
-        const filter = this.container.get<Filter>(filterDef.filterClass);
-        this.filters.push(filter);
-      },
-    };
+    // Create explicit RouteBuilder implementation
+    // Filters are resolved from appContainer (which has access to platformContainer too)
+    const routeBuilder = new RouteBuilderImpl(
+      this.routes,
+      this.filters,
+      this.appContainer
+    );
 
-    // Configure routes
+    // Configure routes using the explicit RouteBuilder
     for (const routeConfig of routeConfigs) {
       routeConfig.configure(routeBuilder);
     }
@@ -167,8 +212,9 @@ export class WebpiecesServer {
           // Execute the filter chain
           const action = await filterChain.execute(meta, async () => {
             // Create typed route context
+            // Use appContainer which has access to both app and framework bindings
             const routeContext: RouteContext = {
-              container: this.container,
+              container: this.appContainer,
               params: [req.body],
               request: meta.request,
             };
@@ -286,8 +332,9 @@ export class WebpiecesServer {
     // Execute the filter chain
     const action = await filterChain.execute(meta, async () => {
       // Create typed route context
+      // Use appContainer which has access to both app and framework bindings
       const routeContext: RouteContext = {
-        container: this.container,
+        container: this.appContainer,
         params: meta.params,
         request: meta.request,
       };
@@ -308,17 +355,26 @@ export class WebpiecesServer {
   }
 
   /**
-   * Get the DI container (for testing).
+   * Get the application DI container (for testing).
+   * Returns appContainer which has access to both app and framework bindings.
    */
   getContainer(): Container {
     this.initialize();
-    return this.container;
+    return this.appContainer;
+  }
+
+  /**
+   * Get the WebPieces framework container (for advanced testing/debugging).
+   */
+  getWebpiecesContainer(): Container {
+    this.initialize();
+    return this.webpiecesContainer;
   }
 
   /**
    * Get all registered routes (for testing).
    */
-  getRoutes(): Map<string, RegisteredRoute> {
+  getRoutes(): Map<string, RegisteredRoute<any>> {
     this.initialize();
     return this.routes;
   }

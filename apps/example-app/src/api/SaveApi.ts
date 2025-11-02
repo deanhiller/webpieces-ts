@@ -1,4 +1,4 @@
-import { ApiInterface, Post, Path } from '@webpieces/http-routing';
+import { ApiInterface, Post, Path, ValidateImplementation } from '@webpieces/http-routing';
 import { SaveRequest } from './SaveRequest';
 import { SaveResponse } from './SaveResponse';
 
@@ -58,23 +58,3 @@ export abstract class SaveApiPrototype implements SaveApi {
   }
 }
 
-/**
- * Type-level validator to ensure a class implements all methods from an interface.
- * Usage: Add to controller class declaration:
- *
- * ```typescript
- * export class SaveController extends SaveApiPrototype implements SaveApi {
- *   // Compile-time check: ensures all SaveApi methods are implemented
- *   private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
- * }
- * ```
- *
- * This will cause a compile error if SaveController is missing any methods from SaveApi.
- */
-export type ValidateImplementation<TImpl, TInterface> = {
-  [K in keyof TInterface]: K extends keyof TImpl
-    ? TImpl[K] extends TInterface[K]
-      ? TInterface[K]
-      : never
-    : never;
-};

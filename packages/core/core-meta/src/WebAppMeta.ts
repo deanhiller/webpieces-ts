@@ -16,17 +16,20 @@ export interface Routes {
  * Will be implemented in http-routing package.
  */
 export interface RouteBuilder {
-  addRoute(route: RouteDefinition): void;
+  addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void;
   addFilter(filter: FilterDefinition): void;
 }
 
 /**
  * Definition of a single route.
+ *
+ * Generic type parameter TResult represents the return type of the route handler.
+ * This provides type safety for the entire request/response cycle.
  */
-export interface RouteDefinition {
+export interface RouteDefinition<TResult = unknown> {
   method: string;
   path: string;
-  handler: RouteHandler;
+  handler: RouteHandler<TResult>;
 }
 
 /**
@@ -64,8 +67,14 @@ export interface RouteContext {
 /**
  * Handler function for routes.
  * Takes a RouteContext and returns the controller method result.
+ *
+ * Generic type parameter TResult represents the return type of the controller method.
+ * Example: RouteHandler<SaveResponse> for a method that returns Promise<SaveResponse>
+ *
+ * Using unknown as default instead of any forces type safety - consumers must
+ * handle the result appropriately rather than assuming any type.
  */
-export type RouteHandler = (context: RouteContext) => Promise<any>;
+export type RouteHandler<TResult = unknown> = (context: RouteContext) => Promise<TResult>;
 
 /**
  * Main application metadata interface.

@@ -20,6 +20,7 @@
     "paths": {
       "@webpieces/core-context": ["packages/core/core-context/src/index.ts"],
       "@webpieces/core-meta": ["packages/core/core-meta/src/index.ts"],
+      "@webpieces/http-api": ["packages/http/http-api/src/index.ts"],
       "@webpieces/http-routing": ["packages/http/http-routing/src/index.ts"],
       "@webpieces/http-filters": ["packages/http/http-filters/src/index.ts"],
       "@webpieces/http-server": ["packages/http/http-server/src/index.ts"]

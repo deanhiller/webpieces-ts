@@ -6,6 +6,7 @@
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "dependencies": {
-    "@webpieces/core-meta": "0.1.0"
+    "@webpieces/core-meta": "0.1.0",
+    "@webpieces/http-api": "0.1.0"
   }
 }

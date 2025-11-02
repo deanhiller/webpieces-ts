@@ -6,6 +6,7 @@ module.exports = {
   moduleNameMapper: {
     '^@webpieces/core-context$': '<rootDir>/packages/core/core-context/src/index.ts',
     '^@webpieces/core-meta$': '<rootDir>/packages/core/core-meta/src/index.ts',
+    '^@webpieces/http-api$': '<rootDir>/packages/http/http-api/src/index.ts',
     '^@webpieces/http-routing$': '<rootDir>/packages/http/http-routing/src/index.ts',
     '^@webpieces/http-filters$': '<rootDir>/packages/http/http-filters/src/index.ts',
     '^@webpieces/http-server$': '<rootDir>/packages/http/http-server/src/index.ts',

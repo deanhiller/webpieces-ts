@@ -1,7 +1,7 @@
 import { injectable, inject } from 'inversify';
-import { Controller } from '@webpieces/http-routing';
+import { Controller, provideSingleton, ValidateImplementation } from '@webpieces/http-routing';
 import { Context } from '@webpieces/core-context';
-import { SaveApi, SaveApiPrototype, ValidateImplementation, SaveApiToken } from '../api/SaveApi';
+import { SaveApi, SaveApiPrototype, SaveApiToken } from '../api/SaveApi';
 import { SaveRequest } from '../api/SaveRequest';
 import { SaveResponse, TheMatch } from '../api/SaveResponse';
 import { RemoteApi, FetchValueRequest, TYPES } from '../remote/RemoteApi';
@@ -48,7 +48,7 @@ export class SimpleCounter implements Counter {
  * The __validator field ensures that if SaveApi adds a new method,
  * this controller MUST implement it or compilation will fail.
  */
-@injectable()
+@provideSingleton()
 @Controller()
 export class SaveController extends SaveApiPrototype implements SaveApi {
   // Compile-time validator: Ensures all SaveApi methods are implemented
