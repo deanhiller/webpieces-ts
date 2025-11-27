@@ -1,8 +1,23 @@
 {
   "name": "@webpieces/core-meta",
   "version": "0.1.0",
-  "private": true,
+  "description": "Core metadata interfaces for WebPieces framework",
   "type": "commonjs",
   "main": "./src/index.js",
-  "types": "./src/index.d.ts"
+  "types": "./src/index.d.ts",
+  "author": "Dean Hiller",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deanhiller/webpieces-ts.git",
+    "directory": "packages/core/core-meta"
+  },
+  "keywords": [
+    "webpieces",
+    "framework",
+    "metadata"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

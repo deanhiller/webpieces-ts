@@ -1,10 +1,25 @@
 {
   "name": "@webpieces/http-client",
   "version": "0.1.0",
-  "private": true,
+  "description": "HTTP client for WebPieces framework",
   "type": "commonjs",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
+  "author": "Dean Hiller",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deanhiller/webpieces-ts.git",
+    "directory": "packages/http/http-client"
+  },
+  "keywords": [
+    "webpieces",
+    "http",
+    "client"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@webpieces/http-api": "0.1.0"
   }
