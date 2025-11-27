@@ -27,6 +27,9 @@
   "devDependencies": {
     "@nx/jest": "^22.0.2",
     "@nx/js": "^22.0.2",
+    "@swc-node/register": "~1.9.1",
+    "@swc/core": "~1.5.7",
+    "@swc/helpers": "~0.5.11",
     "@types/express": "^5.0.5",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.9.2",
@@ -35,6 +38,7 @@
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tslib": "^2.3.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {

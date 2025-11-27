@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npx nx run-many --target=build --all
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          # Check if there are any changes since last release
+          if git describe --tags --abbrev=0 2>/dev/null; then
+            LAST_TAG=$(git describe --tags --abbrev=0)
+            CHANGES=$(git diff --name-only $LAST_TAG HEAD -- packages/)
+            if [ -z "$CHANGES" ]; then
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "No package changes since last release"
+            else
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "Changes detected: $CHANGES"
+            fi
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "First release - no previous tags found"
+          fi
+
+      - name: Determine version bump
+        id: version_bump
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "bump=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Auto-detect version bump from commit messages
+            COMMITS=$(git log --format=%B -n 20 HEAD)
+            if echo "$COMMITS" | grep -qiE '^(BREAKING CHANGE|feat!|fix!):'; then
+              echo "bump=major" >> $GITHUB_OUTPUT
+            elif echo "$COMMITS" | grep -qiE '^feat(\(.+\))?:'; then
+              echo "bump=minor" >> $GITHUB_OUTPUT
+            else
+              echo "bump=patch" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Version and publish packages
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Determine if this is first release
+          if git describe --tags --abbrev=0 2>/dev/null; then
+            # Subsequent release
+            npx nx release ${{ steps.version_bump.outputs.bump }} --yes
+          else
+            # First release
+            npx nx release --first-release --yes
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Create GitHub Release
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.release_version.outputs.version }}
+          release_name: Release ${{ steps.release_version.outputs.version }}
+          body: |
+            Released packages to npm with Nx Release
+
+            See package pages on npm for details:
+            - [@webpieces/core-context](https://www.npmjs.com/package/@webpieces/core-context)
+            - [@webpieces/core-meta](https://www.npmjs.com/package/@webpieces/core-meta)
+            - [@webpieces/http-api](https://www.npmjs.com/package/@webpieces/http-api)
+            - [@webpieces/http-filters](https://www.npmjs.com/package/@webpieces/http-filters)
+            - [@webpieces/http-routing](https://www.npmjs.com/package/@webpieces/http-routing)
+            - [@webpieces/http-client](https://www.npmjs.com/package/@webpieces/http-client)
+            - [@webpieces/http-server](https://www.npmjs.com/package/@webpieces/http-server)
+          draft: false
+          prerelease: false
+        continue-on-error: true
+
+      - name: No changes detected
+        if: steps.check_changes.outputs.has_changes == 'false'
+        run: echo "Skipping release - no package changes detected since last release"

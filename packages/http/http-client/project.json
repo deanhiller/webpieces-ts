@@ -11,7 +11,10 @@
         "outputPath": "dist/packages/http/http-client",
         "main": "packages/http/http-client/src/index.ts",
         "tsConfig": "packages/http/http-client/tsconfig.lib.json",
-        "assets": ["packages/http/http-client/package.json"]
+        "assets": [
+          "packages/http/http-client/package.json",
+          "packages/http/http-client/README.md"
+        ]
       },
       "dependsOn": ["http-api:build"]
     }

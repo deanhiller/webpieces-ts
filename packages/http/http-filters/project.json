@@ -11,7 +11,10 @@
         "outputPath": "dist/packages/http/http-filters",
         "main": "packages/http/http-filters/src/index.ts",
         "tsConfig": "packages/http/http-filters/tsconfig.lib.json",
-        "assets": ["packages/http/http-filters/package.json"]
+        "assets": [
+          "packages/http/http-filters/package.json",
+          "packages/http/http-filters/README.md"
+        ]
       },
       "dependsOn": ["core-context:build"]
     }
