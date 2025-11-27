@@ -1,6 +1,6 @@
 {
   "name": "@webpieces/http-api",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "HTTP API decorators for defining REST APIs",
   "type": "commonjs",
   "main": "./src/index.js",
