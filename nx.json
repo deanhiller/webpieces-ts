@@ -1,26 +1,6 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
-  "release": {
-    "projects": [
-      "packages/core/*",
-      "packages/http/*"
-    ],
-    "version": {
-      "conventionalCommits": false,
-      "manifestRootsToUpdate": [
-        "{projectRoot}",
-        {
-          "path": "dist/{projectRoot}",
-          "preserveLocalDependencyProtocols": false
-        }
-      ]
-    },
-    "changelog": {
-      "workspaceChangelog": false,
-      "projectChangelogs": false
-    }
-  },
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
@@ -71,11 +51,6 @@
         "{workspaceRoot}/.eslintrc.json"
       ],
       "cache": true
-    },
-    "nx-release-publish": {
-      "options": {
-        "packageRoot": "dist/{projectRoot}"
-      }
     }
   },
   "plugins": [

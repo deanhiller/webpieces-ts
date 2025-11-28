@@ -1,6 +1,6 @@
 {
   "name": "@webpieces/core-meta",
-  "version": "0.1.0",
+  "version": "0.0.0-dev",
   "description": "Core metadata interfaces for WebPieces framework",
   "type": "commonjs",
   "main": "./src/index.js",
