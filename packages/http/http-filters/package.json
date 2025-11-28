@@ -1,6 +1,6 @@
 {
   "name": "@webpieces/http-filters",
-  "version": "0.1.0",
+  "version": "0.0.0-dev",
   "description": "Filter chain infrastructure for cross-cutting concerns",
   "type": "commonjs",
   "main": "./src/index.js",
@@ -21,6 +21,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@webpieces/core-context": "0.1.0"
+    "@webpieces/core-context": "0.0.0-dev"
   }
 }
