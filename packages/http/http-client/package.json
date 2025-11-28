@@ -1,6 +1,6 @@
 {
   "name": "@webpieces/http-client",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "HTTP client for WebPieces framework",
   "type": "commonjs",
   "main": "./src/index.js",
@@ -21,6 +21,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@webpieces/http-api": "0.1.1"
+    "@webpieces/http-api": "0.1.0"
   }
 }

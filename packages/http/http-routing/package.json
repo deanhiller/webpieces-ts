@@ -1,6 +1,6 @@
 {
   "name": "@webpieces/http-routing",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Decorator-based routing with auto-wiring for WebPieces",
   "type": "commonjs",
   "main": "./src/index.js",
@@ -21,7 +21,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@webpieces/core-meta": "0.1.1",
-    "@webpieces/http-api": "0.1.1"
+    "@webpieces/core-meta": "0.1.0",
+    "@webpieces/http-api": "0.1.0"
   }
 }

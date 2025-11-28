@@ -1,6 +1,6 @@
 {
   "name": "@webpieces/http-server",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "WebPieces server with filter chain and dependency injection",
   "type": "commonjs",
   "main": "./src/index.js",
@@ -22,8 +22,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@webpieces/core-meta": "0.1.1",
-    "@webpieces/http-routing": "0.1.1",
-    "@webpieces/http-filters": "0.1.1"
+    "@webpieces/core-meta": "0.1.0",
+    "@webpieces/http-routing": "0.1.0",
+    "@webpieces/http-filters": "0.1.0"
   }
 }
