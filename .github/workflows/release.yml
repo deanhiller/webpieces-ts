@@ -42,6 +42,9 @@ jobs:
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
@@ -92,16 +95,18 @@ jobs:
       - name: Version and publish packages
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
+          # Verify npm version for trusted publishing
+          npm --version
+
           # Determine if this is first release
           if git describe --tags --abbrev=0 2>/dev/null; then
             # Subsequent release
-            npx nx release ${{ steps.version_bump.outputs.bump }} --yes
+            npx nx release ${{ steps.version_bump.outputs.bump }}
           else
-            # First release
-            npx nx release --first-release --yes
+            # First release - explicitly specify version
+            npx nx release --first-release 0.1.0
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
       - name: Create GitHub Release
