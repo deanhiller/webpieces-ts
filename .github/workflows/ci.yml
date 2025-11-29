@@ -10,20 +10,16 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '22.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -35,8 +31,7 @@ jobs:
       - name: Build all packages
         run: npx nx run-many --target=build --all
 
-      - name: Upload coverage (Node 20 only)
-        if: matrix.node-version == '20.x'
+      - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage/lcov.info
