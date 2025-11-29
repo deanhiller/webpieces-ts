@@ -14,7 +14,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "build": "nx build example-app",
-    "clean": "rm -rf dist coverage .nx"
+    "clean": "rm -rf dist coverage .nx",
+    "setup:npm-publishers": "ts-node scripts/setup-npm-trusted-publishers.ts"
   },
   "repository": {
     "type": "git",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@nx/jest": "^22.0.2",
     "@nx/js": "^22.0.2",
+    "@playwright/test": "^1.57.0",
     "@swc-node/register": "~1.9.1",
     "@swc/core": "~1.5.7",
     "@swc/helpers": "~0.5.11",
