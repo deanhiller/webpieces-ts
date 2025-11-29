@@ -4,6 +4,13 @@
 
 Part of the [WebPieces TypeScript](https://github.com/deanhiller/webpieces-ts) framework.
 
+## Features
+
+- 🔄 Request-scoped data storage using Node.js AsyncLocalStorage
+- 🎯 Type-safe context management
+- 🚀 Zero dependencies beyond Node.js built-ins
+- ✨ Simple, intuitive API
+
 ## Installation
 
 ```bash
