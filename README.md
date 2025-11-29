@@ -2,6 +2,8 @@
 
 A TypeScript port of the [WebPieces](https://github.com/deanhiller/webpieces) framework, bringing enterprise-grade microservice patterns to Node.js/TypeScript.
 
+**Now available on npm!** Install with: `npm install @webpieces/http-server`
+
 ## Overview
 
 WebPieces-TS is a TypeScript framework for building testable, maintainable microservices. Inspired by the Java WebPieces framework, it provides:
