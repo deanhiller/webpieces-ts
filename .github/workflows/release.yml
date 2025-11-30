@@ -8,6 +8,8 @@ on:
       - 'VERSION'
       - 'nx.json'
       - 'package.json'
+      - 'tsconfig.base.json'
+      - 'apps/**/tsconfig*.json'
   workflow_dispatch:
     inputs:
       build_number:
