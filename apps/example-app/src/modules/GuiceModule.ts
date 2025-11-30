@@ -12,7 +12,8 @@ import { ContextFilter, JsonFilter } from '@webpieces/http-filters';
  * All bindings use .inSingletonScope() to ensure ONE instance per application
  * (unlike @injectable() default which is transient - new instance every time).
  */
-export const GuiceModule = new ContainerModule((bind) => {
+export const GuiceModule = new ContainerModule((options) => {
+  const { bind } = options;
   // Bind controllers to their API interfaces
   bind(SaveApiToken).to(SaveController).inSingletonScope();
   bind(SaveController).toSelf().inSingletonScope();
