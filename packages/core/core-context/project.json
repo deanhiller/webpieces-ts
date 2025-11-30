@@ -13,12 +13,7 @@
         "tsConfig": "packages/core/core-context/tsconfig.lib.json",
         "assets": [
           "packages/core/core-context/package.json",
-          "packages/core/core-context/README.md",
-          {
-            "input": "packages/core/core-context/src",
-            "glob": "**/*.ts",
-            "output": "src"
-          }
+          "packages/core/core-context/README.md"
         ]
       }
     }

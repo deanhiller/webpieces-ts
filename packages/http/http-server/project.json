@@ -13,12 +13,7 @@
         "tsConfig": "packages/http/http-server/tsconfig.lib.json",
         "assets": [
           "packages/http/http-server/package.json",
-          "packages/http/http-server/README.md",
-          {
-            "input": "packages/http/http-server/src",
-            "glob": "**/*.ts",
-            "output": "src"
-          }
+          "packages/http/http-server/README.md"
         ]
       },
       "dependsOn": ["core-meta:build", "http-routing:build", "http-filters:build"]

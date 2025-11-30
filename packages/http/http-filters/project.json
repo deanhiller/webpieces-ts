@@ -13,12 +13,7 @@
         "tsConfig": "packages/http/http-filters/tsconfig.lib.json",
         "assets": [
           "packages/http/http-filters/package.json",
-          "packages/http/http-filters/README.md",
-          {
-            "input": "packages/http/http-filters/src",
-            "glob": "**/*.ts",
-            "output": "src"
-          }
+          "packages/http/http-filters/README.md"
         ]
       },
       "dependsOn": ["core-context:build"]
