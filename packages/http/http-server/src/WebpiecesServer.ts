@@ -1,9 +1,10 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Container } from 'inversify';
-import { WebAppMeta, RouteContext } from '@webpieces/core-meta';
+import { WebAppMeta, RouteContext, FilterDefinition } from '@webpieces/core-meta';
 import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-filters';
 import { getRoutes, RouteMetadata } from '@webpieces/http-routing';
 import { RouteBuilderImpl, RegisteredRoute } from './RouteBuilderImpl';
+import { FilterMatcher } from './FilterMatcher';
 
 /**
  * WebpiecesServer - Main bootstrap class for WebPieces applications.
@@ -64,9 +65,10 @@ export class WebpiecesServer {
   private routes: Map<string, RegisteredRoute<unknown>> = new Map();
 
   /**
-   * Registered filters, sorted by priority (higher priority first).
+   * Registered filters with their definitions.
+   * Used by FilterMatcher to match filters to routes based on filepath patterns.
    */
-  private filters: Filter[] = [];
+  private filterRegistry: Array<{ filter: Filter; definition: FilterDefinition }> = [];
 
   private initialized = false;
   private app?: Express;
@@ -138,7 +140,7 @@ export class WebpiecesServer {
     // Filters are resolved from appContainer (which has access to platformContainer too)
     const routeBuilder = new RouteBuilderImpl(
       this.routes,
-      this.filters,
+      this.filterRegistry,
       this.appContainer
     );
 
@@ -169,7 +171,7 @@ export class WebpiecesServer {
     this.server = this.app.listen(this.port, () => {
       console.log(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
       console.log(`[WebpiecesServer] Registered ${this.routes.size} routes`);
-      console.log(`[WebpiecesServer] Registered ${this.filters.length} filters`);
+      console.log(`[WebpiecesServer] Registered ${this.filterRegistry.length} filters`);
     });
   }
 
@@ -186,6 +188,12 @@ export class WebpiecesServer {
       const path = route.path;
 
       console.log(`[WebpiecesServer] Registering route: ${method.toUpperCase()} ${path}`);
+
+      // Find matching filters for this route
+      const matchingFilters = FilterMatcher.findMatchingFilters(
+        route.controllerFilepath,
+        this.filterRegistry
+      );
 
       // Create Express route handler
       const handler = async (req: Request, res: Response, next: NextFunction) => {
@@ -205,8 +213,8 @@ export class WebpiecesServer {
             metadata: new Map(),
           };
 
-          // Create filter chain
-          const filterChain = new FilterChain(this.filters);
+          // Create filter chain with matched filters
+          const filterChain = new FilterChain(matchingFilters);
 
           // Execute the filter chain
           const action = await filterChain.execute(meta, async () => {
@@ -313,6 +321,12 @@ export class WebpiecesServer {
       throw new Error(`Route not found: ${key}`);
     }
 
+    // Find matching filters for this route
+    const matchingFilters = FilterMatcher.findMatchingFilters(
+      registeredRoute.controllerFilepath,
+      this.filterRegistry
+    );
+
     // Create method metadata
     const meta: MethodMeta = {
       httpMethod: route.httpMethod,
@@ -325,8 +339,8 @@ export class WebpiecesServer {
       metadata: new Map(),
     };
 
-    // Create filter chain
-    const filterChain = new FilterChain(this.filters);
+    // Create filter chain with matched filters
+    const filterChain = new FilterChain(matchingFilters);
 
     // Execute the filter chain
     const action = await filterChain.execute(meta, async () => {

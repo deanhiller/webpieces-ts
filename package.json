@@ -34,6 +34,7 @@
     "@swc/helpers": "~0.5.11",
     "@types/express": "^5.0.5",
     "@types/jest": "^30.0.0",
+    "@types/minimatch": "^5.1.0",
     "@types/node": "^24.9.2",
     "jest": "^30.2.0",
     "nx": "^22.0.2",
@@ -49,6 +50,7 @@
     "express": "^5.1.0",
     "inversify": "^7.10.4",
     "@inversifyjs/binding-decorators": "^1.1.5",
+    "minimatch": "^9.0.0",
     "reflect-metadata": "^0.2.2"
   }
 }

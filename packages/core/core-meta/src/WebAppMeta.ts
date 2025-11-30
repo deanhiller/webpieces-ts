@@ -30,6 +30,7 @@ export interface RouteDefinition<TResult = unknown> {
   method: string;
   path: string;
   handler: RouteHandler<TResult>;
+  controllerFilepath?: string;
 }
 
 /**
@@ -38,7 +39,23 @@ export interface RouteDefinition<TResult = unknown> {
 export interface FilterDefinition {
   priority: number;
   filterClass: any;
+
+  /**
+   * @deprecated - Reserved for future package-based matching
+   */
   packageRegex?: RegExp;
+
+  /**
+   * Glob pattern to match controller file paths.
+   *
+   * Examples:
+   *   - 'src/controllers/admin/**' + '/*.ts' - All admin controllers
+   *   - '**' + '/admin/**' - Any file in admin directories
+   *   - '**' + '/UserController.ts' - Specific controller file
+   *
+   * If not specified, defaults to '*' (matches all controllers).
+   */
+  filepathPattern?: string;
 }
 
 /**

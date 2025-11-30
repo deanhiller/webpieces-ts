@@ -7,6 +7,7 @@ import { provide } from '@inversifyjs/binding-decorators';
  */
 export const ROUTING_METADATA_KEYS = {
   CONTROLLER: 'webpieces:controller',
+  SOURCE_FILEPATH: 'webpieces:source-filepath',
 };
 
 /**
@@ -33,6 +34,29 @@ export function Controller(): ClassDecorator {
  */
 export function isController(controllerClass: any): boolean {
   return Reflect.getMetadata(ROUTING_METADATA_KEYS.CONTROLLER, controllerClass) === true;
+}
+
+/**
+ * SourceFile decorator to explicitly set the source filepath for a controller.
+ * This is used by filter matching to determine which filters apply to the controller.
+ *
+ * If not specified, the system will use a heuristic based on class name.
+ *
+ * Usage:
+ * @SourceFile('src/controllers/admin/UserController.ts')
+ * @Controller()
+ * export class UserController implements UserApi
+ *
+ * @param filepath - The source filepath of the controller
+ */
+export function SourceFile(filepath: string): ClassDecorator {
+  return (target: any) => {
+    Reflect.defineMetadata(
+      ROUTING_METADATA_KEYS.SOURCE_FILEPATH,
+      filepath,
+      target
+    );
+  };
 }
 
 /**
