@@ -1,21 +1,27 @@
-import { createClient } from '@webpieces/http-client';
+import { createClient, ClientConfig } from '@webpieces/http-client';
 import { SaveApiPrototype } from '../src/api/SaveApi';
 import { SaveRequest } from '../src/api/SaveRequest';
 import { SaveResponse } from '../src/api/SaveResponse';
 
 describe('SaveApi HTTP Client Tests', () => {
   let mockFetch: jest.Mock;
+  let originalFetch: typeof fetch;
 
   beforeEach(() => {
-    // Create a mock fetch function
+    // Save original fetch and create a mock
+    originalFetch = global.fetch;
     mockFetch = jest.fn();
+    global.fetch = mockFetch as any;
+  });
+
+  afterEach(() => {
+    // Restore original fetch
+    global.fetch = originalFetch;
   });
 
   it('should create a client from API prototype', () => {
-    const client = createClient(SaveApiPrototype, {
-      baseUrl: 'http://localhost:3000',
-      fetch: mockFetch,
-    });
+    const config = new ClientConfig('http://localhost:3000');
+    const client = createClient(SaveApiPrototype, config);
 
     expect(client).toBeDefined();
     expect(typeof client.save).toBe('function');
@@ -41,10 +47,8 @@ describe('SaveApi HTTP Client Tests', () => {
     });
 
     // Create client
-    const client = createClient(SaveApiPrototype, {
-      baseUrl: 'http://localhost:3000',
-      fetch: mockFetch,
-    });
+    const config = new ClientConfig('http://localhost:3000');
+    const client = createClient(SaveApiPrototype, config);
 
     // Make request
     const request: SaveRequest = {
@@ -72,35 +76,6 @@ describe('SaveApi HTTP Client Tests', () => {
     expect(response.matches).toHaveLength(1);
   });
 
-  it('should include custom headers in request', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true, searchTime: 5, matches: [] }),
-    });
-
-    const client = createClient(SaveApiPrototype, {
-      baseUrl: 'http://localhost:3000',
-      headers: {
-        'Authorization': 'Bearer token123',
-        'X-Custom-Header': 'custom-value',
-      },
-      fetch: mockFetch,
-    });
-
-    await client.save({ query: 'test' });
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3000/search/item',
-      expect.objectContaining({
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer token123',
-          'X-Custom-Header': 'custom-value',
-        },
-      })
-    );
-  });
-
   it('should throw error on HTTP error response', async () => {
     mockFetch.mockResolvedValue({
       ok: false,
@@ -109,10 +84,8 @@ describe('SaveApi HTTP Client Tests', () => {
       text: async () => 'Server error details',
     });
 
-    const client = createClient(SaveApiPrototype, {
-      baseUrl: 'http://localhost:3000',
-      fetch: mockFetch,
-    });
+    const config = new ClientConfig('http://localhost:3000');
+    const client = createClient(SaveApiPrototype, config);
 
     await expect(client.save({ query: 'test' })).rejects.toThrow(
       'HTTP 500: Internal Server Error'
@@ -129,10 +102,8 @@ describe('SaveApi HTTP Client Tests', () => {
       }),
     });
 
-    const client = createClient(SaveApiPrototype, {
-      baseUrl: 'http://localhost:3000',
-      fetch: mockFetch,
-    });
+    const config = new ClientConfig('http://localhost:3000');
+    const client = createClient(SaveApiPrototype, config);
 
     // TypeScript should enforce correct types
     const request: SaveRequest = {
@@ -158,10 +129,8 @@ describe('SaveApi HTTP Client Tests', () => {
     }
 
     expect(() => {
-      createClient(InvalidApi as any, {
-        baseUrl: 'http://localhost:3000',
-        fetch: mockFetch,
-      });
+      const config = new ClientConfig('http://localhost:3000');
+      createClient(InvalidApi as any, config);
     }).toThrow('must be decorated with @ApiInterface()');
   });
 });

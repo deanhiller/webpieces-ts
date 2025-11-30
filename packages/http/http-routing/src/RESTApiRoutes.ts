@@ -1,5 +1,6 @@
-import { Routes, RouteBuilder, RouteHandler, RouteContext } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, RouteHandler, RouteContext, RouteDefinition } from '@webpieces/core-meta';
 import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
+import { ROUTING_METADATA_KEYS } from './decorators';
 
 /**
  * Type representing a class constructor (abstract or concrete).
@@ -102,15 +103,21 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
       );
     }
 
+    // Extract controller filepath for filter matching
+    const controllerFilepath = this.getControllerFilepath();
+
     // Create typed route handler
     // The handler's return type is inferred from the controller method's return type
     const routeHandler: RouteHandler<unknown> = this.createRouteHandler(route);
 
-    routeBuilder.addRoute({
-      method: route.httpMethod,
-      path: route.path,
-      handler: routeHandler,
-    });
+    routeBuilder.addRoute(
+      new RouteDefinition(
+        route.httpMethod,
+        route.path,
+        routeHandler,
+        controllerFilepath
+      )
+    );
   }
 
   /**
@@ -152,6 +159,30 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
         return result;
       }
     };
+  }
+
+  /**
+   * Get the filepath of the controller source file.
+   * Uses a heuristic based on the controller class name.
+   *
+   * Since TypeScript doesn't provide source file paths at runtime,
+   * we use the class name to create a pattern that filters can match against.
+   *
+   * @returns Filepath pattern or undefined
+   */
+  private getControllerFilepath(): string | undefined {
+    // Check for explicit @SourceFile decorator metadata
+    const filepath = Reflect.getMetadata(
+      ROUTING_METADATA_KEYS.SOURCE_FILEPATH,
+      this.controllerClass
+    );
+    if (filepath) {
+      return filepath;
+    }
+
+    // Fallback to class name pattern
+    const className = (this.controllerClass as any).name;
+    return className ? `**/${className}.ts` : undefined;
   }
 
   /**

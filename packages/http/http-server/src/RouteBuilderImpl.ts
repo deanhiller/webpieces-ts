@@ -16,6 +16,7 @@ import {RouteMetadata} from "@webpieces/http-api";
 export interface RegisteredRoute<TResult = unknown> extends RouteDefinition<TResult> {
   routeMetadata?: RouteMetadata;
   controllerClass?: any;
+  controllerFilepath?: string;
 }
 
 /**
@@ -32,23 +33,23 @@ export interface RegisteredRoute<TResult = unknown> extends RouteDefinition<TRes
  */
 export class RouteBuilderImpl implements RouteBuilder {
   private routes: Map<string, RegisteredRoute<unknown>>;
-  private filters: Filter[];
+  private filterRegistry: Array<{ filter: Filter; definition: FilterDefinition }>;
   private container: Container;
 
   /**
    * Create a new RouteBuilder.
    *
    * @param routes - Map to store registered routes (keyed by "METHOD:path")
-   * @param filters - Array to store registered filters
+   * @param filterRegistry - Array to store registered filters with their definitions
    * @param container - DI container for resolving filter instances
    */
   constructor(
     routes: Map<string, RegisteredRoute<unknown>>,
-    filters: Filter[],
+    filterRegistry: Array<{ filter: Filter; definition: FilterDefinition }>,
     container: Container
   ) {
     this.routes = routes;
-    this.filters = filters;
+    this.filterRegistry = filterRegistry;
     this.container = container;
   }
 
@@ -71,10 +72,11 @@ export class RouteBuilderImpl implements RouteBuilder {
   /**
    * Register a filter with the filter chain.
    *
-   * Filters are resolved from the DI container and added to the filter array.
-   * They will be executed in priority order (higher priority first).
+   * Filters are resolved from the DI container and stored with their definitions.
+   * The definition includes pattern information used for route-specific filtering.
+   * Filters will be matched and executed in priority order (higher priority first).
    *
-   * @param filterDef - Filter definition with priority and filter class
+   * @param filterDef - Filter definition with priority, filter class, and optional filepath pattern
    */
   addFilter(filterDef: FilterDefinition): void {
     // Resolve filter instance from DI container
@@ -83,7 +85,7 @@ export class RouteBuilderImpl implements RouteBuilder {
     // Set priority on the filter instance
     filter.priority = filterDef.priority;
 
-    // Add to filters array (will be sorted by priority later)
-    this.filters.push(filter);
+    // Store both filter instance and definition for pattern matching
+    this.filterRegistry.push({ filter, definition: filterDef });
   }
 }

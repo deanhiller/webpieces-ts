@@ -29,7 +29,7 @@ export class SimpleCounter implements Counter {
     return this.count;
   }
 }
-import { createClient } from '@webpieces/http-client';
+import { createClient, ClientConfig } from '@webpieces/http-client';
 
 /**
  * SaveController - Extends SaveApiPrototype and implements SaveApi.
@@ -63,7 +63,8 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
     @inject(TYPES.RemoteApi) remoteService: RemoteApi
   ) {
     super();
-    createClient(SaveApiPrototype, { baseUrl: 'http://localhost:8080'});
+    const config = new ClientConfig('http://localhost:8080');
+    createClient(SaveApiPrototype, config);
 
     this.counter = counter;
     this.remoteService = remoteService;

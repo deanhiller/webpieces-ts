@@ -3,13 +3,13 @@ import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
 /**
  * Configuration options for HTTP client.
  */
-export interface ClientConfig {
+export class ClientConfig {
   /** Base URL for all requests (e.g., 'http://localhost:3000') */
   baseUrl: string;
-  /** Optional headers to include in all requests */
-  headers?: Record<string, string>;
-  /** Optional fetch implementation (defaults to global fetch) */
-  fetch?: typeof fetch;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
 }
 
 /**
@@ -21,12 +21,13 @@ export interface ClientConfig {
  *
  * Usage:
  * ```typescript
- * const client = createClient(SaveApiPrototype, { baseUrl: 'http://localhost:3000' });
+ * const config = new ClientConfig('http://localhost:3000');
+ * const client = createClient(SaveApiPrototype, config);
  * const response = await client.save({ query: 'test' }); // Type-safe!
  * ```
  *
  * @param apiPrototype - The API prototype class with decorators (e.g., SaveApiPrototype)
- * @param config - Client configuration (baseUrl, headers, etc.)
+ * @param config - Client configuration with baseUrl
  * @returns A proxy object that implements the API interface
  */
 export function createClient<T extends object>(
@@ -50,9 +51,6 @@ export function createClient<T extends object>(
     routeMap.set(route.methodName, route);
   }
 
-  // Use fetch implementation from config or global
-  const fetchImpl = config.fetch || fetch;
-
   // Create a proxy that intercepts method calls and makes HTTP requests
   return new Proxy({} as T, {
     get(target, prop: string | symbol) {
@@ -69,7 +67,7 @@ export function createClient<T extends object>(
 
       // Return a function that makes the HTTP request
       return async (...args: any[]) => {
-        return makeRequest(fetchImpl, config, route, args);
+        return makeRequest(config, route, args);
       };
     },
   });
@@ -79,7 +77,6 @@ export function createClient<T extends object>(
  * Make an HTTP request based on route metadata and arguments.
  */
 async function makeRequest(
-  fetchImpl: typeof fetch,
   config: ClientConfig,
   route: RouteMetadata,
   args: any[]
@@ -92,7 +89,6 @@ async function makeRequest(
   // Build headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...config.headers,
   };
 
   // Build request options
@@ -107,7 +103,7 @@ async function makeRequest(
   }
 
   // Make the HTTP request
-  const response = await fetchImpl(url, options);
+  const response = await fetch(url, options);
 
   // Check for HTTP errors
   if (!response.ok) {
