@@ -20,12 +20,11 @@
  *
  * Usage:
  * ```typescript
- * import { createClient } from '@webpieces/http-client';
+ * import { createClient, ClientConfig } from '@webpieces/http-client';
  * import { SaveApiPrototype } from './api/SaveApi';
  *
- * const client = createClient(SaveApiPrototype, {
- *   baseUrl: 'http://localhost:3000'
- * });
+ * const config = new ClientConfig('http://localhost:3000');
+ * const client = createClient(SaveApiPrototype, config);
  *
  * const response = await client.save({ query: 'test' });
  * ```

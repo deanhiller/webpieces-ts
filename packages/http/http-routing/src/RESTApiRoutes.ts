@@ -1,4 +1,4 @@
-import { Routes, RouteBuilder, RouteHandler, RouteContext } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, RouteHandler, RouteContext, RouteDefinition } from '@webpieces/core-meta';
 import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
 import { ROUTING_METADATA_KEYS } from './decorators';
 
@@ -110,12 +110,14 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
     // The handler's return type is inferred from the controller method's return type
     const routeHandler: RouteHandler<unknown> = this.createRouteHandler(route);
 
-    routeBuilder.addRoute({
-      method: route.httpMethod,
-      path: route.path,
-      handler: routeHandler,
-      controllerFilepath: controllerFilepath,
-    });
+    routeBuilder.addRoute(
+      new RouteDefinition(
+        route.httpMethod,
+        route.path,
+        routeHandler,
+        controllerFilepath
+      )
+    );
   }
 
   /**

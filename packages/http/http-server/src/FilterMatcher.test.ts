@@ -20,8 +20,8 @@ describe('FilterMatcher', () => {
       const filter2 = new MockFilter(50);
 
       const registry = [
-        { filter: filter1, definition: { priority: 100, filterClass: MockFilter } },
-        { filter: filter2, definition: { priority: 50, filterClass: MockFilter } },
+        { filter: filter1, definition: new FilterDefinition(100, MockFilter, '*') },
+        { filter: filter2, definition: new FilterDefinition(50, MockFilter, '*') },
       ];
 
       const result = FilterMatcher.findMatchingFilters(
@@ -39,15 +39,11 @@ describe('FilterMatcher', () => {
       const registry = [
         {
           filter: adminFilter,
-          definition: {
-            priority: 100,
-            filterClass: MockFilter,
-            filepathPattern: 'src/controllers/admin/**/*.ts',
-          },
+          definition: new FilterDefinition(100, MockFilter, 'src/controllers/admin/**/*.ts'),
         },
         {
           filter: globalFilter,
-          definition: { priority: 50, filterClass: MockFilter },
+          definition: new FilterDefinition(50, MockFilter, '*'),
         },
       ];
 
@@ -72,11 +68,7 @@ describe('FilterMatcher', () => {
       const registry = [
         {
           filter: specificFilter,
-          definition: {
-            priority: 100,
-            filterClass: MockFilter,
-            filepathPattern: '**/SaveController.ts',
-          },
+          definition: new FilterDefinition(100, MockFilter, '**/SaveController.ts'),
         },
       ];
 
@@ -94,11 +86,7 @@ describe('FilterMatcher', () => {
       const registry = [
         {
           filter: wildcardFilter,
-          definition: {
-            priority: 100,
-            filterClass: MockFilter,
-            filepathPattern: '**/admin/**',
-          },
+          definition: new FilterDefinition(100, MockFilter, '**/admin/**'),
         },
       ];
 
@@ -129,9 +117,9 @@ describe('FilterMatcher', () => {
       const filter3 = new MockFilter(75);
 
       const registry = [
-        { filter: filter1, definition: { priority: 50, filterClass: MockFilter } },
-        { filter: filter2, definition: { priority: 100, filterClass: MockFilter } },
-        { filter: filter3, definition: { priority: 75, filterClass: MockFilter } },
+        { filter: filter1, definition: new FilterDefinition(50, MockFilter, '*') },
+        { filter: filter2, definition: new FilterDefinition(100, MockFilter, '*') },
+        { filter: filter3, definition: new FilterDefinition(75, MockFilter, '*') },
       ];
 
       const result = FilterMatcher.findMatchingFilters(
@@ -147,14 +135,10 @@ describe('FilterMatcher', () => {
       const specificFilter = new MockFilter(50);
 
       const registry = [
-        { filter: globalFilter, definition: { priority: 100, filterClass: MockFilter } },
+        { filter: globalFilter, definition: new FilterDefinition(100, MockFilter, '*') },
         {
           filter: specificFilter,
-          definition: {
-            priority: 50,
-            filterClass: MockFilter,
-            filepathPattern: 'src/**/*.ts',
-          },
+          definition: new FilterDefinition(50, MockFilter, 'src/**/*.ts'),
         },
       ];
 
@@ -172,27 +156,15 @@ describe('FilterMatcher', () => {
       const registry = [
         {
           filter: wildcardFilter1,
-          definition: {
-            priority: 100,
-            filterClass: MockFilter,
-            filepathPattern: '*',
-          },
+          definition: new FilterDefinition(100, MockFilter, '*'),
         },
         {
           filter: wildcardFilter2,
-          definition: {
-            priority: 90,
-            filterClass: MockFilter,
-            filepathPattern: '**/*',
-          },
+          definition: new FilterDefinition(90, MockFilter, '**/*'),
         },
         {
           filter: specificFilter,
-          definition: {
-            priority: 50,
-            filterClass: MockFilter,
-            filepathPattern: 'src/**/*.ts',
-          },
+          definition: new FilterDefinition(50, MockFilter, 'src/**/*.ts'),
         },
       ];
 

@@ -1,4 +1,4 @@
-import { Routes, RouteBuilder } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, FilterDefinition } from '@webpieces/core-meta';
 import { ContextFilter, JsonFilter } from '@webpieces/http-filters';
 
 /**
@@ -16,33 +16,25 @@ import { ContextFilter, JsonFilter } from '@webpieces/http-filters';
  */
 export class FilterRoutes implements Routes {
   configure(routeBuilder: RouteBuilder): void {
-    // Global filter - applies to all controllers (no filepathPattern)
-    routeBuilder.addFilter({
-      priority: 140,
-      filterClass: ContextFilter,
-      // No filepathPattern = matches all controllers
-    });
+    // Global filter - applies to all controllers (pattern '*' matches all)
+    routeBuilder.addFilter(
+      new FilterDefinition(140, ContextFilter, '*')
+    );
 
     // Scoped filter - applies to all controllers in src/controllers
-    routeBuilder.addFilter({
-      priority: 60,
-      filterClass: JsonFilter,
-      filepathPattern: 'src/controllers/**/*.ts',
-    });
+    routeBuilder.addFilter(
+      new FilterDefinition(60, JsonFilter, 'src/controllers/**/*.ts')
+    );
 
     // Example: Admin-only filter (uncomment if you have an AdminAuthFilter)
-    // routeBuilder.addFilter({
-    //   priority: 100,
-    //   filterClass: AdminAuthFilter,
-    //   filepathPattern: 'src/controllers/admin/**/*.ts',
-    // });
+    // routeBuilder.addFilter(
+    //   new FilterDefinition(100, AdminAuthFilter, 'src/controllers/admin/**/*.ts')
+    // );
 
     // Example: Specific controller filter
-    // routeBuilder.addFilter({
-    //   priority: 80,
-    //   filterClass: SpecialFilter,
-    //   filepathPattern: '**/SaveController.ts',
-    // });
+    // routeBuilder.addFilter(
+    //   new FilterDefinition(80, SpecialFilter, '**/SaveController.ts')
+    // );
   }
 }
 

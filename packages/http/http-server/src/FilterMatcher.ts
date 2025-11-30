@@ -30,17 +30,17 @@ export class FilterMatcher {
     const matchingFilters: Array<{ filter: Filter; priority: number }> = [];
 
     for (const { filter, definition } of allFilters) {
-      // If no pattern specified, match all controllers
-      if (!definition.filepathPattern) {
+      const pattern = definition.filepathPattern;
+
+      // Special case: '*' matches all controllers (global filter)
+      if (pattern === '*') {
         matchingFilters.push({ filter, priority: filter.priority });
         continue;
       }
 
-      const pattern = definition.filepathPattern;
-
       // If no filepath available, only match wildcard patterns
       if (!controllerFilepath) {
-        if (pattern === '*' || pattern === '**/*') {
+        if (pattern === '**/*') {
           matchingFilters.push({ filter, priority: filter.priority });
         }
         continue;

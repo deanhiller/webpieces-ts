@@ -1,6 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Container } from 'inversify';
-import { WebAppMeta, RouteContext, FilterDefinition } from '@webpieces/core-meta';
+import { WebAppMeta, RouteContext, RouteRequest, FilterDefinition } from '@webpieces/core-meta';
 import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-filters';
 import { getRoutes, RouteMetadata } from '@webpieces/http-routing';
 import { RouteBuilderImpl, RegisteredRoute } from './RouteBuilderImpl';
@@ -204,12 +204,7 @@ export class WebpiecesServer {
             path: route.path,
             methodName: key,
             params: [req.body],
-            request: {
-              body: req.body,
-              query: req.query,
-              params: req.params,
-              headers: req.headers,
-            },
+            request: new RouteRequest(req.body, req.query, req.params, req.headers),
             metadata: new Map(),
           };
 
@@ -220,11 +215,11 @@ export class WebpiecesServer {
           const action = await filterChain.execute(meta, async () => {
             // Create typed route context
             // Use appContainer which has access to both app and framework bindings
-            const routeContext: RouteContext = {
-              container: this.appContainer,
-              params: [req.body],
-              request: meta.request,
-            };
+            const routeContext = new RouteContext(
+              this.appContainer,
+              [req.body],
+              meta.request
+            );
 
             // Final handler: invoke the controller method via route handler
             const result = await route.handler.execute(routeContext);
@@ -333,9 +328,7 @@ export class WebpiecesServer {
       path: route.path,
       methodName: route.methodName,
       params: [...args],
-      request: {
-        body: args[0], // Assume first arg is the request body
-      },
+      request: new RouteRequest(args[0]), // Assume first arg is the request body
       metadata: new Map(),
     };
 
@@ -346,11 +339,11 @@ export class WebpiecesServer {
     const action = await filterChain.execute(meta, async () => {
       // Create typed route context
       // Use appContainer which has access to both app and framework bindings
-      const routeContext: RouteContext = {
-        container: this.appContainer,
-        params: meta.params,
-        request: meta.request,
-      };
+      const routeContext = new RouteContext(
+        this.appContainer,
+        meta.params,
+        meta.request
+      );
 
       // Final handler: invoke the controller method via route handler
       const result = await registeredRoute.handler.execute(routeContext);

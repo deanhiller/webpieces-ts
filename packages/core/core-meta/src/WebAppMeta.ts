@@ -26,59 +26,99 @@ export interface RouteBuilder {
  * Generic type parameter TResult represents the return type of the route handler.
  * This provides type safety for the entire request/response cycle.
  */
-export interface RouteDefinition<TResult = unknown> {
+export class RouteDefinition<TResult = unknown> {
   method: string;
   path: string;
   handler: RouteHandler<TResult>;
   controllerFilepath?: string;
+
+  constructor(
+    method: string,
+    path: string,
+    handler: RouteHandler<TResult>,
+    controllerFilepath?: string
+  ) {
+    this.method = method;
+    this.path = path;
+    this.handler = handler;
+    this.controllerFilepath = controllerFilepath;
+  }
 }
 
 /**
  * Definition of a filter with priority.
+ *
+ * Use filepathPattern to scope filters to specific controllers:
+ *   - 'src/controllers/admin/**' + '/*.ts' - All admin controllers
+ *   - '**' + '/admin/**' - Any file in admin directories
+ *   - '**' + '/UserController.ts' - Specific controller file
+ *
+ * If filepathPattern is not specified, the filter matches all controllers.
  */
-export interface FilterDefinition {
+export class FilterDefinition {
   priority: number;
   filterClass: any;
 
   /**
-   * @deprecated - Reserved for future package-based matching
-   */
-  packageRegex?: RegExp;
-
-  /**
    * Glob pattern to match controller file paths.
-   *
-   * Examples:
-   *   - 'src/controllers/admin/**' + '/*.ts' - All admin controllers
-   *   - '**' + '/admin/**' - Any file in admin directories
-   *   - '**' + '/UserController.ts' - Specific controller file
-   *
-   * If not specified, defaults to '*' (matches all controllers).
+   * If not specified, defaults to matching all controllers.
    */
-  filepathPattern?: string;
+  filepathPattern: string;
+
+  constructor(
+    priority: number,
+    filterClass: any,
+    filepathPattern: string,
+  ) {
+    this.priority = priority;
+    this.filterClass = filterClass;
+    this.filepathPattern = filepathPattern;
+  }
 }
 
 /**
  * Request data passed to route handlers.
  */
-export interface RouteRequest {
+export class RouteRequest {
   body?: any;
   query?: Record<string, any>;
   params?: Record<string, any>;
   headers?: Record<string, any>;
+
+  constructor(
+    body?: any,
+    query?: Record<string, any>,
+    params?: Record<string, any>,
+    headers?: Record<string, any>
+  ) {
+    this.body = body;
+    this.query = query;
+    this.params = params;
+    this.headers = headers;
+  }
 }
 
 /**
  * Context passed to route handlers.
  * Contains DI container, request data, and extracted parameters.
  */
-export interface RouteContext {
+export class RouteContext {
   /** DI container for resolving dependencies */
   container: Container;
   /** Extracted parameters (e.g., from request body, path params) */
   params: any[];
   /** Original request data */
   request?: RouteRequest;
+
+  constructor(
+    container: Container,
+    params: any[],
+    request?: RouteRequest
+  ) {
+    this.container = container;
+    this.params = params;
+    this.request = request;
+  }
 }
 
 /**
