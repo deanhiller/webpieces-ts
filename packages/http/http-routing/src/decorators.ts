@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { fluentProvide, provide } from 'inversify-binding-decorators';
+import { provide } from '@inversifyjs/binding-decorators';
 
 /**
  * Metadata keys for server-side routing.
@@ -52,7 +52,7 @@ export function isController(controllerClass: any): boolean {
  */
 export function provideSingleton() {
   return (target: any) => {
-    return fluentProvide(target).inSingletonScope().done()(target);
+    return provide(target, (bind) => bind.inSingletonScope())(target);
   };
 }
 

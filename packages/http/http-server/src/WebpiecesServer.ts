@@ -81,8 +81,7 @@ export class WebpiecesServer {
 
     // Create application container as a child of WebPieces container
     // This allows app container to access framework bindings
-    this.appContainer = new Container();
-    this.appContainer.parent = this.webpiecesContainer;
+    this.appContainer = new Container({ parent: this.webpiecesContainer });
   }
 
   /**
