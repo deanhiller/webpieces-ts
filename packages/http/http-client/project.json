@@ -13,7 +13,12 @@
         "tsConfig": "packages/http/http-client/tsconfig.lib.json",
         "assets": [
           "packages/http/http-client/package.json",
-          "packages/http/http-client/README.md"
+          "packages/http/http-client/README.md",
+          {
+            "input": "packages/http/http-client/src",
+            "glob": "**/*.ts",
+            "output": "src"
+          }
         ]
       },
       "dependsOn": ["http-api:build"]
