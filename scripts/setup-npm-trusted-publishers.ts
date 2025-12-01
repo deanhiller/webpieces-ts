@@ -3,6 +3,7 @@ import { chromium } from '@playwright/test';
 const packages = [
   '@webpieces/core-context',
   '@webpieces/core-meta',
+  '@webpieces/core-util',
   '@webpieces/http-api',
   '@webpieces/http-filters',
   '@webpieces/http-routing',

@@ -105,6 +105,7 @@ jobs:
           # Publish in dependency order
           npm publish dist/packages/core/core-context --access public --provenance
           npm publish dist/packages/core/core-meta --access public --provenance
+          npm publish dist/packages/core/core-util --access public --provenance
           npm publish dist/packages/http/http-api --access public --provenance
           npm publish dist/packages/http/http-filters --access public --provenance
           npm publish dist/packages/http/http-routing --access public --provenance
@@ -140,6 +141,7 @@ jobs:
             ## Packages Published:
             - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
             - [@webpieces/core-meta@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-meta/v/${{ steps.version.outputs.full_version }})
+            - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})
             - [@webpieces/http-api@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-api/v/${{ steps.version.outputs.full_version }})
             - [@webpieces/http-filters@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-filters/v/${{ steps.version.outputs.full_version }})
             - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
