@@ -1,7 +1,7 @@
 import { Container } from 'inversify';
-import { RouteBuilder, RouteDefinition, FilterDefinition } from '@webpieces/core-meta';
+import { RouteBuilder, RouteDefinition, FilterDefinition, RouteHandler } from '@webpieces/core-meta';
 import { Filter } from '@webpieces/http-filters';
-import {RouteMetadata} from "@webpieces/http-api";
+import { RouteMetadata } from '@webpieces/http-api';
 
 /**
  * Registered route entry in the route registry.
@@ -13,10 +13,22 @@ import {RouteMetadata} from "@webpieces/http-api";
  * Each route has its own TResult type, but we can't store different
  * generic types in the same Map, so we use unknown as a type-safe escape hatch.
  */
-export interface RegisteredRoute<TResult = unknown> extends RouteDefinition<TResult> {
+export class RegisteredRoute<TResult = unknown> extends RouteDefinition<TResult> {
   routeMetadata?: RouteMetadata;
   controllerClass?: any;
-  controllerFilepath?: string;
+
+  constructor(
+    method: string,
+    path: string,
+    handler: RouteHandler<TResult>,
+    controllerFilepath?: string,
+    routeMetadata?: RouteMetadata,
+    controllerClass?: any
+  ) {
+    super(method, path, handler, controllerFilepath);
+    this.routeMetadata = routeMetadata;
+    this.controllerClass = controllerClass;
+  }
 }
 
 /**

@@ -2,7 +2,7 @@
  * Metadata about the method being invoked.
  * Passed to filters and contains request information.
  */
-export interface MethodMeta {
+export class MethodMeta {
   /**
    * The HTTP method (GET, POST, etc.)
    */
@@ -38,17 +38,47 @@ export interface MethodMeta {
    * Additional metadata
    */
   metadata?: Map<string, any>;
+
+  constructor(
+    httpMethod: string,
+    path: string,
+    methodName: string,
+    params: any[],
+    request?: any,
+    response?: any,
+    metadata?: Map<string, any>
+  ) {
+    this.httpMethod = httpMethod;
+    this.path = path;
+    this.methodName = methodName;
+    this.params = params;
+    this.request = request;
+    this.response = response;
+    this.metadata = metadata;
+  }
 }
 
 /**
  * Action returned by filters and controllers.
  * Can represent different types of responses.
  */
-export interface Action {
+export class Action {
   type: 'json' | 'html' | 'redirect' | 'error';
   data?: any;
   statusCode?: number;
   headers?: Record<string, string>;
+
+  constructor(
+    type: 'json' | 'html' | 'redirect' | 'error',
+    data?: any,
+    statusCode?: number,
+    headers?: Record<string, string>
+  ) {
+    this.type = type;
+    this.data = data;
+    this.statusCode = statusCode;
+    this.headers = headers;
+  }
 }
 
 /**
@@ -115,11 +145,7 @@ export interface Filter {
  * Helper to create a JSON action response.
  */
 export function jsonAction(data: any, statusCode: number = 200): Action {
-  return {
-    type: 'json',
-    data,
-    statusCode,
-  };
+  return new Action('json', data, statusCode);
 }
 
 /**
@@ -129,11 +155,11 @@ export function errorAction(
   error: Error | string,
   statusCode: number = 500
 ): Action {
-  return {
-    type: 'error',
-    data: {
+  return new Action(
+    'error',
+    {
       error: typeof error === 'string' ? error : error.message,
     },
-    statusCode,
-  };
+    statusCode
+  );
 }
