@@ -21,13 +21,10 @@ export class ContextFilter implements Filter {
       Context.put('REQUEST_PATH', meta.path);
       Context.put('HTTP_METHOD', meta.httpMethod);
 
-      try {
         return await next.execute();
-      } finally {
-        // Clean up context (AsyncLocalStorage handles this automatically,
-        // but we can explicitly clear if needed)
-        Context.clear();
-      }
+        //NO NEED for finally block
+        // Clean up context
+          // (AsyncLocalStorage handles clear automatically,
     });
   }
 }

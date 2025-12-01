@@ -1,0 +1,48 @@
+{
+  "name": "@webpieces/dev-config",
+  "version": "0.0.0-dev",
+  "description": "Development configuration, scripts, and patterns for WebPieces projects",
+  "type": "commonjs",
+  "bin": {
+    "wp-start": "./bin/start.sh",
+    "wp-stop": "./bin/stop.sh",
+    "wp-set-version": "./bin/set-version.sh",
+    "wp-use-local": "./bin/use-local-webpieces.sh",
+    "wp-use-published": "./bin/use-published-webpieces.sh",
+    "wp-setup-patterns": "./bin/setup-claude-patterns.sh"
+  },
+  "exports": {
+    "./eslint": "./config/eslint/base.mjs",
+    "./eslint-plugin": "./eslint-plugin/index.js",
+    "./jest": "./config/jest/preset.js",
+    "./tsconfig": "./config/typescript/tsconfig.base.json"
+  },
+  "files": [
+    "bin/**/*",
+    "config/**/*",
+    "eslint-plugin/**/*",
+    "patterns/**/*",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "eslint": ">=8.0.0"
+  },
+  "keywords": [
+    "webpieces",
+    "config",
+    "eslint",
+    "scripts",
+    "typescript",
+    "jest"
+  ],
+  "author": "Dean Hiller",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deanhiller/webpieces-ts.git",
+    "directory": "packages/tooling/dev-config"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

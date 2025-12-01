@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { Filter, MethodMeta, Action, NextFilter, jsonAction, errorAction } from '../Filter';
 import { Context } from '@webpieces/core-context';
+import { toError } from '@webpieces/core-util';
 
 /**
  * Configuration for JsonFilter.
@@ -72,7 +73,8 @@ export class JsonFilter implements Filter {
       }
 
       return action;
-    } catch (error) {
+    } catch (err: any) {
+      const error = toError(err);
       // Translate error to JSON response
       return this.handleError(error, meta);
     }

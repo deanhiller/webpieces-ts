@@ -1,0 +1,30 @@
+{
+  "name": "core-util",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/core/core-util/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/core/core-util",
+        "main": "packages/core/core-util/src/index.ts",
+        "tsConfig": "packages/core/core-util/tsconfig.lib.json",
+        "assets": [
+          "packages/core/core-util/package.json",
+          "packages/core/core-util/README.md"
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "jest.config.js",
+        "passWithNoTests": false
+      }
+    }
+  },
+  "tags": ["type:util"]
+}

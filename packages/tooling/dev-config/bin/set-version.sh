@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+# Set version script for webpieces packages
+# Path-agnostic version that works from both workspace and node_modules
+
+# Detect project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/dev-config"* ]]; then
+  # Running in consumer project
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+else
+  # Running in webpieces-ts workspace
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+fi
+
+cd "$PROJECT_ROOT" || exit 1
+
 # Read base version from VERSION file
 BASE_VERSION=$(cat VERSION | tr -d '[:space:]')
 
