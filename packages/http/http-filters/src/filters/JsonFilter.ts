@@ -1,12 +1,31 @@
-import { injectable, unmanaged } from 'inversify';
+import { injectable, inject } from 'inversify';
+import { provideSingleton } from '@webpieces/http-routing';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { Filter, MethodMeta, Action, NextFilter, jsonAction, errorAction } from '../Filter';
-import { Context } from '@webpieces/core-context';
+import { RequestContext } from '@webpieces/core-context';
+
+/**
+ * DI tokens for http-filters.
+ */
+export const FILTER_TYPES = {
+  JsonFilterConfig: Symbol.for('JsonFilterConfig'),
+};
 
 /**
  * Configuration for JsonFilter.
+ * Register this in your DI container to customize JsonFilter behavior.
+ *
+ * Example:
+ * ```typescript
+ * export const MyModule = new ContainerModule((bind) => {
+ *   bind(FILTER_TYPES.JsonFilterConfig).toConstantValue(
+ *     new JsonFilterConfig(true, true) // validation enabled, logging enabled
+ *   );
+ * });
+ * ```
  */
+@injectable()
 export class JsonFilterConfig {
   /**
    * Whether to enable validation using class-validator.
@@ -41,13 +60,19 @@ export class JsonFilterConfig {
  * 3. Execute next filter/controller
  * 4. Serialize response to JSON
  * 5. Handle errors and translate to JSON error responses
+ *
+ * Configuration:
+ * JsonFilter uses constructor injection to receive JsonFilterConfig.
+ * The default config has validation enabled and logging disabled.
+ * To customize, bind JsonFilterConfig in your DI module.
  */
+@provideSingleton()
 @injectable()
 export class JsonFilter implements Filter {
   priority = 60;
 
-  constructor(@unmanaged() private config: JsonFilterConfig = new JsonFilterConfig()) {
-    // Config is now a class with defaults already set in constructor
+  constructor(@inject(FILTER_TYPES.JsonFilterConfig) private config: JsonFilterConfig) {
+    // Config is injected from DI container
   }
 
   async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {

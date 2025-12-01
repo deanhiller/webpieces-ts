@@ -121,4 +121,4 @@ class ContextManager {
  * Global singleton instance of ContextManager.
  * Use this throughout your application.
  */
-export const Context = new ContextManager();
+export const RequestContext = new ContextManager();

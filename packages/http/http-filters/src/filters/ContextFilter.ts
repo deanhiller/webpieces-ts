@@ -1,5 +1,6 @@
 import { injectable } from 'inversify';
-import { Context } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/http-routing';
+import { RequestContext } from '@webpieces/core-context';
 import { Filter, MethodMeta, Action, NextFilter } from '../Filter';
 
 /**
@@ -9,25 +10,21 @@ import { Filter, MethodMeta, Action, NextFilter } from '../Filter';
  * This filter ensures that all subsequent filters and the controller
  * execute within a context that can store request-scoped data.
  */
+@provideSingleton()
 @injectable()
 export class ContextFilter implements Filter {
   priority = 140;
 
   async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {
     // Run the rest of the filter chain within a new context
-    return Context.run(async () => {
+    return RequestContext.run(async () => {
       // Store request metadata in context for other filters to access
-      Context.put('METHOD_META', meta);
-      Context.put('REQUEST_PATH', meta.path);
-      Context.put('HTTP_METHOD', meta.httpMethod);
+      RequestContext.put('METHOD_META', meta);
+      RequestContext.put('REQUEST_PATH', meta.path);
+      RequestContext.put('HTTP_METHOD', meta.httpMethod);
 
-      try {
         return await next.execute();
-      } finally {
-        // Clean up context (AsyncLocalStorage handles this automatically,
-        // but we can explicitly clear if needed)
-        Context.clear();
-      }
+        //RequestContext is auto cleared when done.
     });
   }
 }
