@@ -7,18 +7,26 @@ import { Context } from '@webpieces/core-context';
 /**
  * Configuration for JsonFilter.
  */
-export interface JsonFilterConfig {
+export class JsonFilterConfig {
   /**
    * Whether to enable validation using class-validator.
    * Default: true
    */
-  validationEnabled?: boolean;
+  validationEnabled: boolean;
 
   /**
    * Whether to log requests and responses.
    * Default: false
    */
-  loggingEnabled?: boolean;
+  loggingEnabled: boolean;
+
+  constructor(
+    validationEnabled: boolean = true,
+    loggingEnabled: boolean = false
+  ) {
+    this.validationEnabled = validationEnabled;
+    this.loggingEnabled = loggingEnabled;
+  }
 }
 
 /**
@@ -38,12 +46,8 @@ export interface JsonFilterConfig {
 export class JsonFilter implements Filter {
   priority = 60;
 
-  constructor(@unmanaged() private config: JsonFilterConfig = {}) {
-    this.config = {
-      validationEnabled: true,
-      loggingEnabled: false,
-      ...config,
-    };
+  constructor(@unmanaged() private config: JsonFilterConfig = new JsonFilterConfig()) {
+    // Config is now a class with defaults already set in constructor
   }
 
   async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {

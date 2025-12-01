@@ -199,14 +199,15 @@ export class WebpiecesServer {
       const handler = async (req: Request, res: Response, next: NextFunction) => {
         try {
           // Create method metadata
-          const meta: MethodMeta = {
-            httpMethod: route.method,
-            path: route.path,
-            methodName: key,
-            params: [req.body],
-            request: new RouteRequest(req.body, req.query, req.params, req.headers),
-            metadata: new Map(),
-          };
+          const meta = new MethodMeta(
+            route.method,
+            route.path,
+            key,
+            [req.body],
+            new RouteRequest(req.body, req.query, req.params, req.headers),
+            undefined,
+            new Map()
+          );
 
           // Create filter chain with matched filters
           const filterChain = new FilterChain(matchingFilters);
@@ -323,14 +324,15 @@ export class WebpiecesServer {
     );
 
     // Create method metadata
-    const meta: MethodMeta = {
-      httpMethod: route.httpMethod,
-      path: route.path,
-      methodName: route.methodName,
-      params: [...args],
-      request: new RouteRequest(args[0]), // Assume first arg is the request body
-      metadata: new Map(),
-    };
+    const meta = new MethodMeta(
+      route.httpMethod,
+      route.path,
+      route.methodName,
+      [...args],
+      new RouteRequest(args[0]), // Assume first arg is the request body
+      undefined,
+      new Map()
+    );
 
     // Create filter chain with matched filters
     const filterChain = new FilterChain(matchingFilters);

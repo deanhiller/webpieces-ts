@@ -15,11 +15,23 @@ export const METADATA_KEYS = {
  * Route metadata stored on methods.
  * Used by both server-side routing and client-side HTTP client generation.
  */
-export interface RouteMetadata {
+export class RouteMetadata {
   httpMethod: string;
   path: string;
   methodName: string;
   parameterTypes?: any[];
+
+  constructor(
+    httpMethod: string,
+    path: string,
+    methodName: string,
+    parameterTypes?: any[]
+  ) {
+    this.httpMethod = httpMethod;
+    this.path = path;
+    this.methodName = methodName;
+    this.parameterTypes = parameterTypes;
+  }
 }
 
 /**
@@ -71,11 +83,7 @@ function httpMethod(method: string): MethodDecorator {
     );
 
     if (!routeMetadata) {
-      routeMetadata = {
-        httpMethod: '',
-        path: '',
-        methodName: propertyKey as string,
-      };
+      routeMetadata = new RouteMetadata('', '', propertyKey as string);
       existingMetadata.push(routeMetadata);
     }
 
@@ -162,11 +170,7 @@ export function Path(path: string): MethodDecorator {
     );
 
     if (!routeMetadata) {
-      routeMetadata = {
-        httpMethod: '',
-        path: '',
-        methodName: propertyKey as string,
-      };
+      routeMetadata = new RouteMetadata('', '', propertyKey as string);
       existingMetadata.push(routeMetadata);
     }
 
