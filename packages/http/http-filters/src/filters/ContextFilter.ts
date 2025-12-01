@@ -23,8 +23,8 @@ export class ContextFilter implements Filter {
       RequestContext.put('REQUEST_PATH', meta.path);
       RequestContext.put('HTTP_METHOD', meta.httpMethod);
 
-        return await next.execute();
-        //RequestContext is auto cleared when done.
+      return await next.execute();
+      //RequestContext is auto cleared when done.
     });
   }
 }

@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+# Set version script for webpieces packages
+# Path-agnostic version that works from both workspace and node_modules
+
+# Detect project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/dev-config"* ]]; then
+  # Running in consumer project
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+else
+  # Running in webpieces-ts workspace
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+fi
+
+cd "$PROJECT_ROOT" || exit 1
+
 # Read base version from VERSION file
 BASE_VERSION=$(cat VERSION | tr -d '[:space:]')
 
@@ -51,7 +67,7 @@ update_package() {
 
 # Update source package.json files
 echo "📝 Updating source package.json files..."
-for pkg in packages/core/*/package.json packages/http/*/package.json packages/tooling/*/package.json packages/server/package.json packages/client/package.json packages/rules/package.json; do
+for pkg in packages/core/*/package.json packages/http/*/package.json packages/tooling/*/package.json; do
   if [ -f "$pkg" ]; then
     update_package "$pkg"
   fi
@@ -60,7 +76,7 @@ done
 # Update dist package.json files if they exist
 if [ -d "dist/packages" ]; then
   echo "📝 Updating dist package.json files..."
-  for pkg in dist/packages/core/*/package.json dist/packages/http/*/package.json dist/packages/tooling/*/package.json dist/packages/server/package.json dist/packages/client/package.json dist/packages/rules/package.json; do
+  for pkg in dist/packages/core/*/package.json dist/packages/http/*/package.json dist/packages/tooling/*/package.json; do
     if [ -f "$pkg" ]; then
       update_package "$pkg"
     fi

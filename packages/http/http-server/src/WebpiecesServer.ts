@@ -6,6 +6,7 @@ import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-fil
 import { getRoutes, RouteMetadata } from '@webpieces/http-routing';
 import { RouteBuilderImpl, RegisteredRoute } from './RouteBuilderImpl';
 import { FilterMatcher } from './FilterMatcher';
+import { toError } from '@webpieces/core-util';
 
 /**
  * WebpiecesServer - Main bootstrap class for WebPieces applications.
@@ -164,11 +165,51 @@ export class WebpiecesServer {
     // Create Express app
     this.app = express();
 
-    // Middleware
+    // Layer 1: Global Error Handler (OUTERMOST - runs FIRST)
+    // Wraps all subsequent middleware with try-catch
+    // IMPORTANT: Use async/await to catch BOTH synchronous throws AND async rejections
+    this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      console.log('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
+
+      try {
+        // await next() catches BOTH:
+        // 1. Synchronous throws from next() itself
+        // 2. Rejected promises from downstream async middleware
+        await next();
+        console.log('🔴 [Layer 1: GlobalErrorHandler] Request END (success):', req.method, req.path);
+      } catch (err: any) {
+        const error = toError(err);
+        console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
+        if (!res.headersSent) {
+          // Return HTML error page (not JSON - JsonFilter handles JSON errors)
+          res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+            <head><title>Server Error</title></head>
+            <body>
+              <h1>You hit a server error</h1>
+              <p>An unexpected error occurred while processing your request.</p>
+              <pre>${error.message}</pre>
+            </body>
+            </html>
+          `);
+        }
+        console.log('🔴 [Layer 1: GlobalErrorHandler] Request END (error):', req.method, req.path);
+      }
+    });
+
+    // Layer 2: Log Next Layer (runs SECOND)
+    this.app.use((req: Request, res: Response, next: NextFunction) => {
+      console.log('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
+      next();
+      console.log('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
+    });
+
+    // Layer 3+: Standard Express middleware
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Register routes
+    // Register routes (these become the innermost handlers)
     this.registerExpressRoutes();
 
     // Start listening
@@ -180,6 +221,67 @@ export class WebpiecesServer {
   }
 
   /**
+   * Handle an incoming HTTP request through the filter chain and controller.
+   * This is the main request processing logic.
+   *
+   * NO try-catch here - errors are handled by:
+   * 1. JsonFilter - catches and returns JSON error responses
+   * 2. GlobalErrorHandler middleware - catches any unhandled errors and returns HTML 500
+   *
+   * @param req - Express request
+   * @param res - Express response
+   * @param route - The registered route to execute
+   * @param matchingFilters - Filters that apply to this route
+   * @param key - Route key (method:path)
+   */
+  private async handleRequest(
+    req: Request,
+    res: Response,
+    route: RegisteredRoute<unknown>,
+    matchingFilters: Filter[],
+    key: string
+  ): Promise<void> {
+    // Create method metadata
+    const meta = new MethodMeta(
+      route.method,
+      route.path,
+      key,
+      [req.body],
+      new RouteRequest(req.body, req.query, req.params, req.headers),
+      undefined,
+      new Map()
+    );
+
+    // Create filter chain with matched filters
+    const filterChain = new FilterChain(matchingFilters);
+
+    // Execute the filter chain
+    // Errors thrown here are caught by JsonFilter or bubble to GlobalErrorHandler
+    const action = await filterChain.execute(meta, async () => {
+      // Create typed route context
+      // Use appContainer which has access to both app and framework bindings
+      const routeContext = new RouteContext(
+        this.appContainer,
+        [req.body],
+        meta.request
+      );
+
+      // Final handler: invoke the controller method via route handler
+      const result = await route.handler.execute(routeContext);
+
+      // Wrap result in a JSON action
+      return jsonAction(result);
+    });
+
+    // Send response
+    if (action.type === 'json') {
+      res.json(action.data);
+    } else if (action.type === 'error') {
+      res.status(500).json({ error: action.data });
+    }
+  }
+
+  /**
    * Register all routes with Express.
    */
   private registerExpressRoutes(): void {
@@ -188,83 +290,57 @@ export class WebpiecesServer {
     }
 
     for (const [key, route] of this.routes.entries()) {
-      const method = route.method.toLowerCase();
-      const path = route.path;
+      this.setupRoute(key, route);
+    }
+  }
 
-      console.log(`[WebpiecesServer] Registering route: ${method.toUpperCase()} ${path}`);
+  /**
+   * Setup a single route with Express.
+   * Finds matching filters, creates handler, and registers with Express.
+   *
+   * @param key - Route key (method:path)
+   * @param route - The registered route definition
+   */
+  private setupRoute(key: string, route: RegisteredRoute<unknown>): void {
+    if (!this.app) {
+      throw new Error('Express app not initialized');
+    }
 
-      // Find matching filters for this route
-      const matchingFilters = FilterMatcher.findMatchingFilters(
-        route.controllerFilepath,
-        this.filterRegistry
-      );
+    const method = route.method.toLowerCase();
+    const path = route.path;
 
-      // Create Express route handler
-      const handler = async (req: Request, res: Response, next: NextFunction) => {
-        try {
-          // Create method metadata
-          const meta = new MethodMeta(
-            route.method,
-            route.path,
-            key,
-            [req.body],
-            new RouteRequest(req.body, req.query, req.params, req.headers),
-            undefined,
-            new Map()
-          );
+    console.log(`[WebpiecesServer] Registering route: ${method.toUpperCase()} ${path}`);
 
-          // Create filter chain with matched filters
-          const filterChain = new FilterChain(matchingFilters);
+    // Find matching filters for this route
+    const matchingFilters = FilterMatcher.findMatchingFilters(
+      route.controllerFilepath,
+      this.filterRegistry
+    );
 
-          // Execute the filter chain
-          const action = await filterChain.execute(meta, async () => {
-            // Create typed route context
-            // Use appContainer which has access to both app and framework bindings
-            const routeContext = new RouteContext(
-              this.appContainer,
-              [req.body],
-              meta.request
-            );
+    // Create Express route handler - delegates to handleRequest
+    const handler = async (req: Request, res: Response, next: NextFunction) => {
+      await this.handleRequest(req, res, route, matchingFilters, key);
+    };
 
-            // Final handler: invoke the controller method via route handler
-            const result = await route.handler.execute(routeContext);
-
-            // Wrap result in a JSON action
-            return jsonAction(result);
-          });
-
-          // Send response
-          if (action.type === 'json') {
-            res.json(action.data);
-          } else if (action.type === 'error') {
-            res.status(500).json({ error: action.data });
-          }
-        } catch (error: any) {
-          console.error('[WebpiecesServer] Error handling request:', error);
-          res.status(500).json({ error: error.message });
-        }
-      };
-
-      // Register with Express
-      switch (method) {
-        case 'get':
-          this.app.get(path, handler);
-          break;
-        case 'post':
-          this.app.post(path, handler);
-          break;
-        case 'put':
-          this.app.put(path, handler);
-          break;
-        case 'delete':
-          this.app.delete(path, handler);
-          break;
-        case 'patch':
-          this.app.patch(path, handler);
-          break;
-        default:
-          console.warn(`[WebpiecesServer] Unknown HTTP method: ${method}`);
-      }
+    // Register with Express
+    switch (method) {
+      case 'get':
+        this.app.get(path, handler);
+        break;
+      case 'post':
+        this.app.post(path, handler);
+        break;
+      case 'put':
+        this.app.put(path, handler);
+        break;
+      case 'delete':
+        this.app.delete(path, handler);
+        break;
+      case 'patch':
+        this.app.patch(path, handler);
+        break;
+      default:
+        console.warn(`[WebpiecesServer] Unknown HTTP method: ${method}`);
     }
   }
 

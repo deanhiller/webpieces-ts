@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { Filter, MethodMeta, Action, NextFilter, jsonAction, errorAction } from '../Filter';
 import { RequestContext } from '@webpieces/core-context';
+import { toError } from '@webpieces/core-util';
 
 /**
  * DI tokens for http-filters.
@@ -97,7 +98,8 @@ export class JsonFilter implements Filter {
       }
 
       return action;
-    } catch (error) {
+    } catch (err: any) {
+      const error = toError(err);
       // Translate error to JSON response
       return this.handleError(error, meta);
     }

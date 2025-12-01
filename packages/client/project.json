@@ -1,0 +1,26 @@
+{
+  "name": "client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/client",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/client",
+        "main": "packages/client/src/index.ts",
+        "tsConfig": "packages/client/tsconfig.lib.json",
+        "assets": [
+          "packages/client/package.json",
+          "packages/client/README.md"
+        ]
+      },
+      "dependsOn": [
+        "http-client:build",
+        "http-api:build"
+      ]
+    }
+  },
+  "tags": ["umbrella"]
+}

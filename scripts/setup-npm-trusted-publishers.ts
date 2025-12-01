@@ -3,11 +3,17 @@ import { chromium } from '@playwright/test';
 const packages = [
   '@webpieces/core-context',
   '@webpieces/core-meta',
+  '@webpieces/core-util',
   '@webpieces/http-api',
   '@webpieces/http-filters',
   '@webpieces/http-routing',
   '@webpieces/http-client',
   '@webpieces/http-server',
+  '@webpieces/dev-config',
+  // Umbrella packages
+  '@webpieces/server',
+  '@webpieces/client',
+  '@webpieces/rules',
 ];
 
 const GITHUB_OWNER = 'deanhiller';

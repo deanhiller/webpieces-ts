@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "packageManager": "npm@10.8.1",
   "workspaces": [
+    "packages/server",
+    "packages/client",
+    "packages/rules",
     "packages/core/*",
     "packages/http/*",
+    "packages/tooling/*",
     "apps/*"
   ],
   "description": "",
@@ -15,6 +19,8 @@
     "test:coverage": "jest --coverage",
     "build": "nx build example-app",
     "clean": "rm -rf dist coverage .nx",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
     "setup:npm-publishers": "ts-node scripts/setup-npm-trusted-publishers.ts"
   },
   "repository": {
@@ -36,6 +42,10 @@
     "@types/jest": "^30.0.0",
     "@types/minimatch": "^5.1.0",
     "@types/node": "^24.9.2",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
+    "@webpieces/dev-config": "workspace:*",
+    "eslint": "^9.39.1",
     "jest": "^30.2.0",
     "nx": "^22.0.2",
     "ts-jest": "^29.4.5",
@@ -45,11 +55,11 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@inversifyjs/binding-decorators": "^1.1.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "express": "^5.1.0",
     "inversify": "^7.10.4",
-    "@inversifyjs/binding-decorators": "^1.1.5",
     "minimatch": "^9.0.0",
     "reflect-metadata": "^0.2.2"
   }

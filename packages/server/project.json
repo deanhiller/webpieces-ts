@@ -1,0 +1,31 @@
+{
+  "name": "server",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/server",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/server",
+        "main": "packages/server/src/index.ts",
+        "tsConfig": "packages/server/tsconfig.lib.json",
+        "assets": [
+          "packages/server/package.json",
+          "packages/server/README.md"
+        ]
+      },
+      "dependsOn": [
+        "http-server:build",
+        "http-routing:build",
+        "http-filters:build",
+        "http-api:build",
+        "core-meta:build",
+        "core-context:build",
+        "core-util:build"
+      ]
+    }
+  },
+  "tags": ["umbrella"]
+}
