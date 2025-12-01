@@ -110,6 +110,12 @@ jobs:
           npm publish dist/packages/http/http-routing --access public --provenance
           npm publish dist/packages/http/http-client --access public --provenance
           npm publish dist/packages/http/http-server --access public --provenance
+          npm publish dist/packages/tooling/dev-config --access public --provenance
+
+          # Publish umbrella packages (depend on all above)
+          npm publish dist/packages/server --access public --provenance
+          npm publish dist/packages/client --access public --provenance
+          npm publish dist/packages/rules --access public --provenance
         env:
           NPM_CONFIG_PROVENANCE: true
 
@@ -139,6 +145,12 @@ jobs:
             - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
             - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
             - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
+            - [@webpieces/dev-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/dev-config/v/${{ steps.version.outputs.full_version }})
+
+            ### Umbrella Packages (NEW!)
+            - [@webpieces/server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/server/v/${{ steps.version.outputs.full_version }}) - All server dependencies
+            - [@webpieces/client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/client/v/${{ steps.version.outputs.full_version }}) - All client dependencies
+            - [@webpieces/rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/rules/v/${{ steps.version.outputs.full_version }}) - Development tooling
 
             View all packages: https://www.npmjs.com/search?q=%40webpieces
           draft: false

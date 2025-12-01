@@ -1,6 +1,6 @@
 import { WebAppMeta, Routes } from '@webpieces/core-meta';
 import { ContainerModule } from 'inversify';
-import { GuiceModule } from './modules/GuiceModule';
+import { InversifyModule } from './modules/InversifyModule';
 import { FilterRoutes } from './routes/FilterRoutes';
 import { RESTApiRoutes } from '@webpieces/http-routing';
 import {SaveApi, SaveApiPrototype} from './api/SaveApi';
@@ -12,7 +12,7 @@ import { SaveController } from './controllers/SaveController';
  *
  * This is the entry point that WebpiecesServer calls to configure
  * the application. It defines:
- * 1. DI modules (Guice modules)
+ * 1. DI modules (Inversify modules)
  * 2. Route configurations
  *
  * Usage:
@@ -24,10 +24,10 @@ import { SaveController } from './controllers/SaveController';
 export class ProdServerMeta implements WebAppMeta {
   /**
    * Returns DI modules for dependency injection.
-   * Similar to getGuiceModules() in Java.
+   * Similar to getDIModules() in Java.
    */
   getDIModules(): ContainerModule[] {
-    return [GuiceModule];
+    return [InversifyModule];
   }
 
   /**

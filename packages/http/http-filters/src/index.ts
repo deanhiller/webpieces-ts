@@ -13,6 +13,7 @@ export { ContextFilter } from './filters/ContextFilter';
 export {
   JsonFilter,
   JsonFilterConfig,
+  FILTER_TYPES,
   ValidationException,
   HttpException,
 } from './filters/JsonFilter';

@@ -1,0 +1,31 @@
+{
+  "name": "@webpieces/server",
+  "version": "0.0.0-dev",
+  "description": "Umbrella package for WebPieces server-side dependencies",
+  "type": "commonjs",
+  "author": "Dean Hiller",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deanhiller/webpieces-ts.git",
+    "directory": "packages/server"
+  },
+  "keywords": [
+    "webpieces",
+    "server",
+    "framework",
+    "umbrella"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@webpieces/http-server": "0.0.0-dev",
+    "@webpieces/http-routing": "0.0.0-dev",
+    "@webpieces/http-filters": "0.0.0-dev",
+    "@webpieces/http-api": "0.0.0-dev",
+    "@webpieces/core-meta": "0.0.0-dev",
+    "@webpieces/core-context": "0.0.0-dev",
+    "@webpieces/core-util": "0.0.0-dev"
+  }
+}

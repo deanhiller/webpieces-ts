@@ -1,0 +1,25 @@
+{
+  "name": "rules",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/rules",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/rules",
+        "main": "packages/rules/src/index.ts",
+        "tsConfig": "packages/rules/tsconfig.lib.json",
+        "assets": [
+          "packages/rules/package.json",
+          "packages/rules/README.md"
+        ]
+      },
+      "dependsOn": [
+        "dev-config:build"
+      ]
+    }
+  },
+  "tags": ["umbrella"]
+}

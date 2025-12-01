@@ -8,6 +8,11 @@ const packages = [
   '@webpieces/http-routing',
   '@webpieces/http-client',
   '@webpieces/http-server',
+  '@webpieces/dev-config',
+  // Umbrella packages
+  '@webpieces/server',
+  '@webpieces/client',
+  '@webpieces/rules',
 ];
 
 const GITHUB_OWNER = 'deanhiller';
