@@ -1,6 +1,6 @@
 import { injectable, inject } from 'inversify';
 import { Controller, provideSingleton, ValidateImplementation } from '@webpieces/http-routing';
-import { Context } from '@webpieces/core-context';
+import { RequestContext } from '@webpieces/core-context';
 import { SaveApi, SaveApiPrototype, SaveApiToken } from '../api/SaveApi';
 import { SaveRequest } from '../api/SaveRequest';
 import { SaveResponse, TheMatch } from '../api/SaveResponse';
@@ -29,7 +29,6 @@ export class SimpleCounter implements Counter {
     return this.count;
   }
 }
-import { createClient, ClientConfig } from '@webpieces/http-client';
 
 /**
  * SaveController - Extends SaveApiPrototype and implements SaveApi.
@@ -63,19 +62,19 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
     @inject(TYPES.RemoteApi) remoteService: RemoteApi
   ) {
     super();
-    const config = new ClientConfig('http://localhost:8080');
-    createClient(SaveApiPrototype, config);
-
     this.counter = counter;
     this.remoteService = remoteService;
   }
 
   override async save(request: SaveRequest): Promise<SaveResponse> {
+    console.log('[SaveController] save() method called with request:', request);
+
     // Increment counter
     this.counter.inc();
 
     // Example: Access context (set by ContextFilter)
-    const requestPath = Context.get('REQUEST_PATH');
+    const requestPath = RequestContext.get('REQUEST_PATH');
+    console.log('[SaveController] Request path from context:', requestPath);
 
     // Build request to remote service
     const fetchReq = new FetchValueRequest();

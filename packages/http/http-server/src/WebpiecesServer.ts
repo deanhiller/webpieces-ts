@@ -1,5 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { Container } from 'inversify';
+import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { WebAppMeta, RouteContext, RouteRequest, FilterDefinition } from '@webpieces/core-meta';
 import { FilterChain, Filter, MethodMeta, jsonAction } from '@webpieces/http-filters';
 import { getRoutes, RouteMetadata } from '@webpieces/http-routing';
@@ -116,6 +117,9 @@ export class WebpiecesServer {
    */
   private loadDIModules(): void {
     const modules = this.meta.getDIModules();
+
+    // Load buildProviderModule to auto-scan for @provideSingleton decorators
+    this.appContainer.load(buildProviderModule());
 
     // Load all modules into application container
     // (webpiecesContainer is currently empty, reserved for future framework bindings)
