@@ -4,7 +4,7 @@ import { RouteMetadata2, RouteRequest } from '@webpieces/core-meta';
  * Metadata about the method being invoked.
  * Passed to filters and contains request information.
  *
- * MethodMeta is created by WebpiecesCoreServer when handling a request:
+ * MethodMeta is created by WebpiecesServerImpl when handling a request:
  * - routeMeta: Static route information (httpMethod, path, methodName)
  * - routeRequest: Express Request/Response objects
  * - requestDto: Set by JsonFilter after deserializing the request body
