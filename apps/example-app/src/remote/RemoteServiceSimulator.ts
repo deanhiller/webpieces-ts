@@ -10,11 +10,11 @@ import { RemoteApi, FetchValueRequest, FetchValueResponse } from './RemoteApi';
  */
 @injectable()
 export class RemoteServiceSimulator implements RemoteApi {
-  async fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
-    const response = new FetchValueResponse();
-    response.value = `Simulated response for: ${request.name}`;
-    response.timestamp = Date.now();
+    async fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
+        const response = new FetchValueResponse();
+        response.value = `Simulated response for: ${request.name}`;
+        response.timestamp = Date.now();
 
-    return response;
-  }
+        return response;
+    }
 }

@@ -2,15 +2,15 @@
  * Request to remote service.
  */
 export class FetchValueRequest {
-  name: string = '';
+    name: string = '';
 }
 
 /**
  * Response from remote service.
  */
 export class FetchValueResponse {
-  value: string = '';
-  timestamp: number = Date.now();
+    value: string = '';
+    timestamp: number = Date.now();
 }
 
 /**
@@ -22,13 +22,13 @@ export class FetchValueResponse {
  * context across all async operations!
  */
 export interface RemoteApi {
-  fetchValue(request: FetchValueRequest): Promise<FetchValueResponse>;
+    fetchValue(request: FetchValueRequest): Promise<FetchValueResponse>;
 }
 
 /**
  * DI token for RemoteApi.
  */
 export const TYPES = {
-  RemoteApi: Symbol.for('RemoteApi'),
-  Counter: Symbol.for('Counter'),
+    RemoteApi: Symbol.for('RemoteApi'),
+    Counter: Symbol.for('Counter'),
 };

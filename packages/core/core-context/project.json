@@ -1,22 +1,22 @@
 {
-  "name": "core-context",
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/core/core-context/src",
-  "projectType": "library",
-  "targets": {
-    "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/packages/core/core-context",
-        "main": "packages/core/core-context/src/index.ts",
-        "tsConfig": "packages/core/core-context/tsconfig.lib.json",
-        "assets": [
-          "packages/core/core-context/package.json",
-          "packages/core/core-context/README.md"
-        ]
-      }
-    }
-  },
-  "tags": []
+    "name": "core-context",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/core/core-context/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/core/core-context",
+                "main": "packages/core/core-context/src/index.ts",
+                "tsConfig": "packages/core/core-context/tsconfig.lib.json",
+                "assets": [
+                    "packages/core/core-context/package.json",
+                    "packages/core/core-context/README.md"
+                ]
+            }
+        }
+    },
+    "tags": []
 }

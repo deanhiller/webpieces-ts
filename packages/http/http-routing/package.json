@@ -1,27 +1,27 @@
 {
-  "name": "@webpieces/http-routing",
-  "version": "0.0.0-dev",
-  "description": "Decorator-based routing with auto-wiring for WebPieces",
-  "type": "commonjs",
-  "main": "./src/index.js",
-  "types": "./src/index.d.ts",
-  "author": "Dean Hiller",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/deanhiller/webpieces-ts.git",
-    "directory": "packages/http/http-routing"
-  },
-  "keywords": [
-    "webpieces",
-    "routing",
-    "decorators"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "dependencies": {
-    "@webpieces/core-meta": "0.0.0-dev",
-    "@webpieces/http-api": "0.0.0-dev"
-  }
+    "name": "@webpieces/http-routing",
+    "version": "0.0.0-dev",
+    "description": "Decorator-based routing with auto-wiring for WebPieces",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/http/http-routing"
+    },
+    "keywords": [
+        "webpieces",
+        "routing",
+        "decorators"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-meta": "0.0.0-dev",
+        "@webpieces/http-api": "0.0.0-dev"
+    }
 }

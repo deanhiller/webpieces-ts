@@ -1,10 +1,10 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "outDir": "../../../dist/out-tsc",
-    "declaration": true,
-    "types": ["node"]
-  },
-  "include": ["src/**/*.ts", "eslint-plugin/**/*.ts"],
-  "exclude": ["**/*.spec.ts", "**/*.test.ts", "eslint-plugin/__tests__/**/*.ts"]
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "../../../dist/out-tsc",
+        "declaration": true,
+        "types": ["node"]
+    },
+    "include": ["src/**/*.ts", "eslint-plugin/**/*.ts"],
+    "exclude": ["**/*.spec.ts", "**/*.test.ts", "eslint-plugin/__tests__/**/*.ts"]
 }

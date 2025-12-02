@@ -15,7 +15,7 @@ export const SaveApiToken = Symbol.for('SaveApi');
  * Controllers implement this interface to ensure they provide all required methods.
  */
 export interface SaveApi {
-  save(request: SaveRequest): Promise<SaveResponse>;
+    save(request: SaveRequest): Promise<SaveResponse>;
 }
 
 /**
@@ -51,10 +51,9 @@ export interface SaveApi {
  */
 @ApiInterface()
 export abstract class SaveApiPrototype implements SaveApi {
-  @Post()
-  @Path('/search/item')
-  save(request: SaveRequest): Promise<SaveResponse> {
-    throw new Error('Method save() must be implemented by subclass');
-  }
+    @Post()
+    @Path('/search/item')
+    save(request: SaveRequest): Promise<SaveResponse> {
+        throw new Error('Method save() must be implemented by subclass');
+    }
 }
-

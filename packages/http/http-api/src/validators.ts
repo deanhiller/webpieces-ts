@@ -37,9 +37,9 @@
  * It only exists for compile-time type checking.
  */
 export type ValidateImplementation<TImpl, TInterface> = {
-  [K in keyof TInterface]: K extends keyof TImpl
-    ? TImpl[K] extends TInterface[K]
-      ? TInterface[K]
-      : never
-    : never;
+    [K in keyof TInterface]: K extends keyof TImpl
+        ? TImpl[K] extends TInterface[K]
+            ? TInterface[K]
+            : never
+        : never;
 };

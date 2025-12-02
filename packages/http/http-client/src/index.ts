@@ -34,12 +34,12 @@ export { createClient, ClientConfig } from './ClientFactory';
 
 // Re-export API decorators for convenience (same as http-routing does)
 export {
-  ApiInterface,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Patch,
-  Path,
-  ValidateImplementation,
+    ApiInterface,
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Path,
+    ValidateImplementation,
 } from '@webpieces/http-api';

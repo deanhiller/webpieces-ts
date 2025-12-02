@@ -10,8 +10,8 @@ import { RemoteApi, FetchValueRequest, TYPES } from '../remote/RemoteApi';
  * Simple counter interface for metrics.
  */
 export interface Counter {
-  inc(): void;
-  get(): number;
+    inc(): void;
+    get(): number;
 }
 
 /**
@@ -19,15 +19,15 @@ export interface Counter {
  */
 @injectable()
 export class SimpleCounter implements Counter {
-  private count = 0;
+    private count = 0;
 
-  inc(): void {
-    this.count++;
-  }
+    inc(): void {
+        this.count++;
+    }
 
-  get(): number {
-    return this.count;
-  }
+    get(): number {
+        return this.count;
+    }
 }
 
 /**
@@ -51,60 +51,60 @@ export class SimpleCounter implements Counter {
 @provideSingleton()
 @Controller()
 export class SaveController extends SaveApiPrototype implements SaveApi {
-  // Compile-time validator: Ensures all SaveApi methods are implemented
-  // If you remove or don't override a method from SaveApi, you'll get a compile error here
-  private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
-  private counter: Counter;
-  private remoteService: RemoteApi;
+    // Compile-time validator: Ensures all SaveApi methods are implemented
+    // If you remove or don't override a method from SaveApi, you'll get a compile error here
+    private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
+    private counter: Counter;
+    private remoteService: RemoteApi;
 
-  constructor(
-    @inject(TYPES.Counter) counter: Counter,
-    @inject(TYPES.RemoteApi) remoteService: RemoteApi
-  ) {
-    super();
-    this.counter = counter;
-    this.remoteService = remoteService;
-  }
-
-  override async save(request: SaveRequest): Promise<SaveResponse> {
-    console.log('[SaveController] save() method called with request:', request);
-
-    // Increment counter
-    this.counter.inc();
-
-    // Example: Access context (set by ContextFilter)
-    const requestPath = RequestContext.get('REQUEST_PATH');
-    console.log('[SaveController] Request path from context:', requestPath);
-
-    // Build request to remote service
-    const fetchReq = new FetchValueRequest();
-    fetchReq.name = request.query;
-
-    // Call remote service (async)
-    const remoteResponse = await this.remoteService.fetchValue(fetchReq);
-
-    // Transform response
-    const response = new SaveResponse();
-    response.success = true;
-    response.searchTime = 5;
-
-    // Build matches from remote response
-    const match = new TheMatch();
-    match.title = request.query;
-    match.description = remoteResponse.value;
-    match.score = 100;
-
-    response.matches = [match];
-
-    // If metadata was provided, add more matches
-    if (request.meta?.source) {
-      const extraMatch = new TheMatch();
-      extraMatch.title = `Source: ${request.meta.source}`;
-      extraMatch.description = 'Extra match based on metadata';
-      extraMatch.score = 50;
-      response.matches.push(extraMatch);
+    constructor(
+        @inject(TYPES.Counter) counter: Counter,
+        @inject(TYPES.RemoteApi) remoteService: RemoteApi,
+    ) {
+        super();
+        this.counter = counter;
+        this.remoteService = remoteService;
     }
 
-    return response;
-  }
+    override async save(request: SaveRequest): Promise<SaveResponse> {
+        console.log('[SaveController] save() method called with request:', request);
+
+        // Increment counter
+        this.counter.inc();
+
+        // Example: Access context (set by ContextFilter)
+        const requestPath = RequestContext.get('REQUEST_PATH');
+        console.log('[SaveController] Request path from context:', requestPath);
+
+        // Build request to remote service
+        const fetchReq = new FetchValueRequest();
+        fetchReq.name = request.query;
+
+        // Call remote service (async)
+        const remoteResponse = await this.remoteService.fetchValue(fetchReq);
+
+        // Transform response
+        const response = new SaveResponse();
+        response.success = true;
+        response.searchTime = 5;
+
+        // Build matches from remote response
+        const match = new TheMatch();
+        match.title = request.query;
+        match.description = remoteResponse.value;
+        match.score = 100;
+
+        response.matches = [match];
+
+        // If metadata was provided, add more matches
+        if (request.meta?.source) {
+            const extraMatch = new TheMatch();
+            extraMatch.title = `Source: ${request.meta.source}`;
+            extraMatch.description = 'Extra match based on metadata';
+            extraMatch.score = 50;
+            response.matches.push(extraMatch);
+        }
+
+        return response;
+    }
 }

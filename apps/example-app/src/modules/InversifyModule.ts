@@ -16,13 +16,13 @@ import { JsonFilterConfig, FILTER_TYPES } from '@webpieces/http-server';
  * All bindings use .inSingletonScope() to ensure ONE instance per application.
  */
 export const InversifyModule = new ContainerModule((options) => {
-  const { bind } = options;
+    const { bind } = options;
 
-  // Bind services
-  bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
-  bind<RemoteApi>(TYPES.RemoteApi).to(RemoteServiceSimulator).inSingletonScope();
+    // Bind services
+    bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
+    bind<RemoteApi>(TYPES.RemoteApi).to(RemoteServiceSimulator).inSingletonScope();
 
-  // Bind filter configurations
-  // Create default JsonFilterConfig with validation enabled, logging disabled
-  bind(FILTER_TYPES.JsonFilterConfig).to(JsonFilterConfig).inSingletonScope();
+    // Bind filter configurations
+    // Create default JsonFilterConfig with validation enabled, logging disabled
+    bind(FILTER_TYPES.JsonFilterConfig).to(JsonFilterConfig).inSingletonScope();
 });

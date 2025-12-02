@@ -9,32 +9,32 @@
  * 2. Writing the JSON to the HTTP response body
  */
 export class WpResponse<TResult = unknown> {
-  response?: TResult;
-  statusCode: number;
-  headers: Map<string, string>;
+    response?: TResult;
+    statusCode: number;
+    headers: Map<string, string>;
 
-  constructor(response?: TResult, statusCode: number = 200) {
-    this.response = response;
-    this.statusCode = statusCode;
-    this.headers = new Map();
-  }
+    constructor(response?: TResult, statusCode: number = 200) {
+        this.response = response;
+        this.statusCode = statusCode;
+        this.headers = new Map();
+    }
 
-  /**
-   * Set a response header.
-   */
-  setHeader(name: string, value: string): WpResponse<TResult> {
-    this.headers.set(name, value);
-    return this;
-  }
+    /**
+     * Set a response header.
+     */
+    setHeader(name: string, value: string): WpResponse<TResult> {
+        this.headers.set(name, value);
+        return this;
+    }
 
-  /**
-   * Create an error response wrapper.
-   */
-  static error<T = unknown>(message: string, statusCode: number = 500): WpResponse<T> {
-    const wrapper = new WpResponse<T>(undefined, statusCode);
-    wrapper.setHeader('X-Error', message);
-    return wrapper;
-  }
+    /**
+     * Create an error response wrapper.
+     */
+    static error<T = unknown>(message: string, statusCode: number = 500): WpResponse<T> {
+        const wrapper = new WpResponse<T>(undefined, statusCode);
+        wrapper.setHeader('X-Error', message);
+        return wrapper;
+    }
 }
 
 /**
@@ -47,12 +47,12 @@ export class WpResponse<TResult = unknown> {
  * - Functional composition of filters
  */
 export interface Service<REQ, RESP> {
-  /**
-   * Invoke the service with the given metadata.
-   * @param meta - Request metadata
-   * @returns Promise of the response
-   */
-  invoke(meta: REQ): Promise<RESP>;
+    /**
+     * Invoke the service with the given metadata.
+     * @param meta - Request metadata
+     * @returns Promise of the response
+     */
+    invoke(meta: REQ): Promise<RESP>;
 }
 
 /**
@@ -70,61 +70,54 @@ export interface Service<REQ, RESP> {
  * - WpResponse<unknown>: Wraps any controller response
  */
 export abstract class Filter<REQ, RESP> {
+    //priority is determined by how it is chained only here
+    //DO NOT add priority here
 
-  //priority is determined by how it is chained only here
-  //DO NOT add priority here
+    /**
+     * Filter method that wraps the next filter/controller.
+     *
+     * @param meta - Metadata about the method being invoked
+     * @param nextFilter - Next filter/controller as a Service
+     * @returns Promise of the response
+     */
+    abstract filter(meta: REQ, nextFilter: Service<REQ, RESP>): Promise<RESP>;
 
-  /**
-   * Filter method that wraps the next filter/controller.
-   *
-   * @param meta - Metadata about the method being invoked
-   * @param nextFilter - Next filter/controller as a Service
-   * @returns Promise of the response
-   */
-  abstract filter(
-    meta: REQ,
-    nextFilter: Service<REQ, RESP>
-  ): Promise<RESP>;
+    /**
+     * Chain this filter with another filter.
+     * Returns a new Filter that composes both filters.
+     *
+     * Similar to Java: filter1.chain(filter2)
+     *
+     * @param nextFilter - The filter to execute after this one
+     * @returns Composed filter
+     */
+    chain(nextFilter: Filter<REQ, RESP>): Filter<REQ, RESP> {
+        const self = this;
 
-  /**
-   * Chain this filter with another filter.
-   * Returns a new Filter that composes both filters.
-   *
-   * Similar to Java: filter1.chain(filter2)
-   *
-   * @param nextFilter - The filter to execute after this one
-   * @returns Composed filter
-   */
-  chain(nextFilter: Filter<REQ, RESP>): Filter<REQ, RESP> {
-    const self = this;
+        return new (class extends Filter<REQ, RESP> {
+            async filter(meta: REQ, nextService: Service<REQ, RESP>): Promise<RESP> {
+                // Call outer filter, passing next filter wrapped as a Service
+                return self.filter(meta, {
+                    invoke: (m: REQ) => nextFilter.filter(m, nextService),
+                });
+            }
+        })();
+    }
 
-    return new class extends Filter<REQ, RESP> {
-      async filter(
-        meta: REQ,
-        nextService: Service<REQ, RESP>
-      ): Promise<RESP> {
-        // Call outer filter, passing next filter wrapped as a Service
-        return self.filter(meta, {
-          invoke: (m: REQ) => nextFilter.filter(m, nextService)
-        });
-      }
-    };
-  }
+    /**
+     * Chain this filter with a final service (controller).
+     * Returns a Service that can be invoked.
+     *
+     * Similar to Java: filter.chain(service)
+     *
+     * @param svc - The final service (controller) to execute
+     * @returns Service wrapping the entire filter chain
+     */
+    chainService(svc: Service<REQ, RESP>): Service<REQ, RESP> {
+        const self = this;
 
-  /**
-   * Chain this filter with a final service (controller).
-   * Returns a Service that can be invoked.
-   *
-   * Similar to Java: filter.chain(service)
-   *
-   * @param svc - The final service (controller) to execute
-   * @returns Service wrapping the entire filter chain
-   */
-  chainService(svc: Service<REQ, RESP>): Service<REQ, RESP> {
-    const self = this;
-
-    return {
-      invoke: (meta: REQ) => self.filter(meta, svc)
-    };
-  }
+        return {
+            invoke: (meta: REQ) => self.filter(meta, svc),
+        };
+    }
 }

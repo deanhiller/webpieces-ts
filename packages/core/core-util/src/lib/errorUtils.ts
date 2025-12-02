@@ -66,42 +66,42 @@
  * ```
  */
 export function toError(err: any): Error {
-  // If already an Error instance, return it directly
-  if (err instanceof Error) {
-    return err;
-  }
-
-  // If it's an object with a message property, create Error from it
-  if (err && typeof err === 'object') {
-    if ('message' in err) {
-      const error = new Error(String(err.message));
-
-      // Preserve stack trace if available
-      if ('stack' in err && typeof err.stack === 'string') {
-        error.stack = err.stack;
-      }
-
-      // Preserve error name if available
-      if ('name' in err && typeof err.name === 'string') {
-        error.name = err.name;
-      }
-
-      return error;
+    // If already an Error instance, return it directly
+    if (err instanceof Error) {
+        return err;
     }
 
-    // For objects without message, try to stringify
-    try {
-      const message = JSON.stringify(err);
-      return new Error(`Non-Error object thrown: ${message}`);
-    } catch (err: any) {
-      // eslint-disable-next-line @webpieces/catch-error-pattern
-      // NOTE: Intentionally not calling toError() here to prevent infinite recursion
-      // in error recovery path. This is the ONLY acceptable exception to the pattern.
-      return new Error('Non-Error object thrown (unable to stringify)');
-    }
-  }
+    // If it's an object with a message property, create Error from it
+    if (err && typeof err === 'object') {
+        if ('message' in err) {
+            const error = new Error(String(err.message));
 
-  // For primitives (string, number, boolean, null, undefined)
-  const message = err == null ? 'Null or undefined thrown' : String(err);
-  return new Error(message);
+            // Preserve stack trace if available
+            if ('stack' in err && typeof err.stack === 'string') {
+                error.stack = err.stack;
+            }
+
+            // Preserve error name if available
+            if ('name' in err && typeof err.name === 'string') {
+                error.name = err.name;
+            }
+
+            return error;
+        }
+
+        // For objects without message, try to stringify
+        try {
+            const message = JSON.stringify(err);
+            return new Error(`Non-Error object thrown: ${message}`);
+        } catch (err: any) {
+            // eslint-disable-next-line @webpieces/catch-error-pattern
+            // NOTE: Intentionally not calling toError() here to prevent infinite recursion
+            // in error recovery path. This is the ONLY acceptable exception to the pattern.
+            return new Error('Non-Error object thrown (unable to stringify)');
+        }
+    }
+
+    // For primitives (string, number, boolean, null, undefined)
+    const message = err == null ? 'Null or undefined thrown' : String(err);
+    return new Error(message);
 }

@@ -1,48 +1,48 @@
 {
-  "name": "dev-config",
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/tooling/dev-config",
-  "projectType": "library",
-  "targets": {
-    "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/packages/tooling/dev-config",
-        "main": "packages/tooling/dev-config/src/index.ts",
-        "tsConfig": "packages/tooling/dev-config/tsconfig.lib.json",
-        "assets": [
-          "packages/tooling/dev-config/package.json",
-          "packages/tooling/dev-config/README.md",
-          "packages/tooling/dev-config/config/jest/preset.js",
-          {
-            "input": "packages/tooling/dev-config/bin",
-            "glob": "**/*",
-            "output": "bin"
-          },
-          {
-            "input": "packages/tooling/dev-config/config/eslint",
-            "glob": "**/*",
-            "output": "config/eslint"
-          },
-          {
-            "input": "packages/tooling/dev-config/config/typescript",
-            "glob": "**/*",
-            "output": "config/typescript"
-          },
-          {
-            "input": "packages/tooling/dev-config/eslint-plugin",
-            "glob": "**/*",
-            "output": "eslint-plugin"
-          },
-          {
-            "input": "packages/tooling/dev-config/patterns",
-            "glob": "**/*",
-            "output": "patterns"
-          }
-        ]
-      }
-    }
-  },
-  "tags": ["type:tooling"]
+    "name": "dev-config",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/dev-config",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/dev-config",
+                "main": "packages/tooling/dev-config/src/index.ts",
+                "tsConfig": "packages/tooling/dev-config/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/dev-config/package.json",
+                    "packages/tooling/dev-config/README.md",
+                    "packages/tooling/dev-config/config/jest/preset.js",
+                    {
+                        "input": "packages/tooling/dev-config/bin",
+                        "glob": "**/*",
+                        "output": "bin"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/config/eslint",
+                        "glob": "**/*",
+                        "output": "config/eslint"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/config/typescript",
+                        "glob": "**/*",
+                        "output": "config/typescript"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/eslint-plugin",
+                        "glob": "**/*",
+                        "output": "eslint-plugin"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/patterns",
+                        "glob": "**/*",
+                        "output": "patterns"
+                    }
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
 }

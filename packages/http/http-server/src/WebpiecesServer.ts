@@ -18,18 +18,18 @@
  * ```
  */
 export interface WebpiecesServer {
-  /**
-   * Start the HTTP server with Express.
-   * Returns a Promise that resolves when the server is listening,
-   * or rejects if the server fails to start.
-   *
-   * @param port - The port to listen on (default: 8080)
-   * @returns Promise that resolves when server is ready
-   */
-  start(port?: number): Promise<void>;
+    /**
+     * Start the HTTP server with Express.
+     * Returns a Promise that resolves when the server is listening,
+     * or rejects if the server fails to start.
+     *
+     * @param port - The port to listen on (default: 8080)
+     * @returns Promise that resolves when server is ready
+     */
+    start(port?: number): Promise<void>;
 
-  /**
-   * Stop the HTTP server.
-   */
-  stop(): void;
+    /**
+     * Stop the HTTP server.
+     */
+    stop(): void;
 }

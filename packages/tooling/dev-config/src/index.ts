@@ -30,13 +30,13 @@ export const packageName = '@webpieces/dev-config';
  * Check if running in webpieces-ts workspace
  */
 export function isWebpiecesWorkspace(): boolean {
-  return process.cwd().includes('webpieces-ts');
+    return process.cwd().includes('webpieces-ts');
 }
 
 /**
  * Get project root directory
  */
 export function getProjectRoot(): string {
-  // This is a simple helper, actual path detection is in bash scripts
-  return process.cwd();
+    // This is a simple helper, actual path detection is in bash scripts
+    return process.cwd();
 }

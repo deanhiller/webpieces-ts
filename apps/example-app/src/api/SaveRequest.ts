@@ -6,13 +6,13 @@ import { Type } from 'class-transformer';
  * Similar to Java SearchMeta class.
  */
 export class SearchMeta {
-  @IsString()
-  @IsOptional()
-  source?: string;
+    @IsString()
+    @IsOptional()
+    source?: string;
 
-  @IsString()
-  @IsOptional()
-  filter?: string;
+    @IsString()
+    @IsOptional()
+    filter?: string;
 }
 
 /**
@@ -20,12 +20,12 @@ export class SearchMeta {
  * Similar to Java SaveRequest class.
  */
 export class SaveRequest {
-  @IsString()
-  @IsNotEmpty()
-  query: string = '';
+    @IsString()
+    @IsNotEmpty()
+    query: string = '';
 
-  @ValidateNested()
-  @Type(() => SearchMeta)
-  @IsOptional()
-  meta?: SearchMeta;
+    @ValidateNested()
+    @Type(() => SearchMeta)
+    @IsOptional()
+    meta?: SearchMeta;
 }

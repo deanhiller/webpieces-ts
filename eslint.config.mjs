@@ -9,50 +9,50 @@ import tsparser from '@typescript-eslint/parser';
 import webpiecesPlugin from './dist/packages/tooling/dev-config/eslint-plugin/index.js';
 
 export default [
-  {
-    ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx'],
-  },
-  {
-    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    plugins: {
-      '@webpieces': webpiecesPlugin,
-      '@typescript-eslint': tseslint,
+    {
+        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx'],
     },
-    languageOptions: {
-      parser: tsparser,
-      ecmaVersion: 2021,
-      sourceType: 'module',
-    },
-    rules: {
-      // WebPieces custom rules
-      '@webpieces/catch-error-pattern': 'error',
-
-      // TypeScript rules
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
+    {
+        files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+        plugins: {
+            '@webpieces': webpiecesPlugin,
+            '@typescript-eslint': tseslint,
         },
-      ],
-      '@typescript-eslint/no-empty-interface': 'off',
-      '@typescript-eslint/no-empty-function': 'off',
+        languageOptions: {
+            parser: tsparser,
+            ecmaVersion: 2021,
+            sourceType: 'module',
+        },
+        rules: {
+            // WebPieces custom rules
+            '@webpieces/catch-error-pattern': 'error',
 
-      // General code quality
-      'no-console': 'off',
-      'no-debugger': 'warn',
-      'no-var': 'error',
-      'prefer-const': 'warn',
+            // TypeScript rules
+            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/explicit-function-return-type': 'off',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                },
+            ],
+            '@typescript-eslint/no-empty-interface': 'off',
+            '@typescript-eslint/no-empty-function': 'off',
+
+            // General code quality
+            'no-console': 'off',
+            'no-debugger': 'warn',
+            'no-var': 'error',
+            'prefer-const': 'warn',
+        },
     },
-  },
-  {
-    // Test files - relaxed rules
-    files: ['**/*.spec.ts', '**/*.test.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-non-null-assertion': 'off',
+    {
+        // Test files - relaxed rules
+        files: ['**/*.spec.ts', '**/*.test.ts'],
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-non-null-assertion': 'off',
+        },
     },
-  },
 ];
