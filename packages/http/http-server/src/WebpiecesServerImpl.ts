@@ -8,9 +8,13 @@ import {RouteBuilderImpl, RouteHandlerWithMeta, FilterWithMeta} from './RouteBui
 import {FilterMatcher} from './FilterMatcher';
 import {toError} from '@webpieces/core-util';
 import {MethodMeta} from './MethodMeta';
+import {WebpiecesServer} from './WebpiecesServer';
 
 /**
- * WebpiecesCoreServer - Core server implementation with DI.
+ * WebpiecesServerImpl - Internal server implementation.
+ *
+ * This class implements the WebpiecesServer interface and contains
+ * all the actual server logic. It is created by WebpiecesFactory.create().
  *
  * This class uses a two-container pattern similar to Java WebPieces:
  * 1. webpiecesContainer: Core WebPieces framework bindings
@@ -28,11 +32,11 @@ import {MethodMeta} from './MethodMeta';
  * 4. Supports both HTTP server mode and testing mode (no HTTP)
  *
  * DI Pattern: This class is registered in webpiecesContainer via @provideSingleton()
- * and resolved by WebpiecesServer. It receives RouteBuilder via constructor injection.
+ * and resolved by WebpiecesFactory. It receives RouteBuilder via constructor injection.
  */
 @provideSingleton()
 @injectable()
-export class WebpiecesCoreServer {
+export class WebpiecesServerImpl implements WebpiecesServer {
   private meta!: WebAppMeta;
   private webpiecesContainer!: Container;
 
@@ -55,7 +59,8 @@ export class WebpiecesCoreServer {
 
   /**
    * Initialize the server (DI container, routes, filters).
-   * This is called by WebpiecesServer after resolving this class from DI.
+   * This is called by WebpiecesFactory.create() after resolving this class from DI.
+   * This method is internal and not exposed on the WebpiecesServer interface.
    *
    * @param webpiecesContainer - The framework container
    * @param meta - User-provided WebAppMeta with DI modules and routes
@@ -177,11 +182,15 @@ export class WebpiecesCoreServer {
 
   /**
    * Start the HTTP server with Express.
-   * Assumes initialize() has already been called by WebpiecesServer.
+   * Returns a Promise that resolves when the server is listening,
+   * or rejects if the server fails to start.
+   *
+   * @param port - The port to listen on (default: 8080)
+   * @returns Promise that resolves when server is ready
    */
-  start(port: number = 8080): void {
+  start(port: number = 8080): Promise<void> {
     if (!this.initialized) {
-      throw new Error('Server not initialized. Call initialize() before start().');
+      return Promise.reject(new Error('Server not initialized. Call initialize() before start().'));
     }
 
     this.port = port;
@@ -204,10 +213,18 @@ export class WebpiecesCoreServer {
 
     const routes = this.routeBuilder.getRoutes();
 
-    // Start listening
-    this.server = this.app.listen(this.port, () => {
-      console.log(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
-      console.log(`[WebpiecesServer] Registered ${routes.size} routes`);
+    // Start listening - wrap in Promise
+    return new Promise((resolve, reject) => {
+      this.server = this.app!.listen(this.port, (error?: Error) => {
+        if (error) {
+          console.error(`[WebpiecesServer] Failed to start server:`, error);
+          reject(error);
+          return;
+        }
+        console.log(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
+        console.log(`[WebpiecesServer] Registered ${routes.size} routes`);
+        resolve();
+      });
     });
   }
 

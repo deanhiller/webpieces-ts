@@ -1,6 +1,6 @@
 // @ts-nocheck - Disabled until createApiClient() and getContainer() are implemented
 import 'reflect-metadata';
-import { WebpiecesServer } from '@webpieces/http-server';
+import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
 import { ProdServerMeta } from '../src/ProdServerMeta';
 import { SaveApi, SaveApiPrototype } from '../src/api/SaveApi';
 import { SaveRequest } from '../src/api/SaveRequest';
@@ -34,7 +34,7 @@ describe.skip('SaveApi Feature Tests', () => {
 
   beforeEach(() => {
     // Create server with ProdServerMeta
-    server = new WebpiecesServer(new ProdServerMeta());
+    server = WebpiecesFactory.create(new ProdServerMeta());
 
     // Create API client proxy (no HTTP!)
     // This routes calls through filter chain → controller
