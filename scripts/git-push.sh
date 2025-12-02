@@ -17,7 +17,7 @@
 #   4. git commit with message
 #   5. Find fork point from main
 #   6. Run prettier on files changed since fork
-#   7. If prettier changed anything, amend commit
+#   7. If prettier changed anything, create separate formatting commit
 #
 # ============================================================
 
@@ -134,14 +134,14 @@ if git diff --quiet; then
 fi
 
 # ============================================================
-# Amend Commit with Prettier Changes
+# Create Separate Commit for Prettier Changes
 # ============================================================
 
 echo ""
-echo "Prettier made formatting changes. Amending commit..."
+echo "Prettier made formatting changes. Creating formatting commit..."
 git add -A
-git commit --amend --no-edit
+git commit -m "prettier: format changed files"
 
 echo ""
-echo "Done! Commit amended with formatting. Ready to push."
+echo "Done! Created separate formatting commit. Ready to push."
 echo ""
