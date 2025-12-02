@@ -2,7 +2,7 @@ export {
   Filter,
   MethodMeta,
   Action,
-  NextFilter,
+  Service,
   jsonAction,
   errorAction,
 } from './Filter';

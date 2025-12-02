@@ -1,15 +1,17 @@
 import { FilterMatcher } from './FilterMatcher';
-import { Filter, MethodMeta, Action, NextFilter } from '@webpieces/http-filters';
+import { Filter, MethodMeta, Action, Service } from '@webpieces/http-filters';
 import { FilterDefinition } from '@webpieces/core-meta';
 
 /**
  * Mock filter implementation for testing.
  */
-class MockFilter implements Filter {
-  constructor(public priority: number) {}
+class MockFilter extends Filter {
+  constructor(public priority: number) {
+    super();
+  }
 
-  async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {
-    return next.execute();
+  async filter(meta: MethodMeta, nextFilter: Service<MethodMeta, Action>): Promise<Action> {
+    return nextFilter.invoke(meta);
   }
 }
 
@@ -19,10 +21,12 @@ describe('FilterMatcher', () => {
       const filter1 = new MockFilter(100);
       const filter2 = new MockFilter(50);
 
-      const registry = [
-        { filter: filter1, definition: new FilterDefinition(100, MockFilter, '*') },
-        { filter: filter2, definition: new FilterDefinition(50, MockFilter, '*') },
-      ];
+      const def1 = new FilterDefinition(100, MockFilter, '*');
+      def1.filter = filter1;
+      const def2 = new FilterDefinition(50, MockFilter, '*');
+      def2.filter = filter2;
+
+      const registry = [def1, def2];
 
       const result = FilterMatcher.findMatchingFilters(
         'src/controllers/SaveController.ts',
@@ -36,16 +40,12 @@ describe('FilterMatcher', () => {
       const adminFilter = new MockFilter(100);
       const globalFilter = new MockFilter(50);
 
-      const registry = [
-        {
-          filter: adminFilter,
-          definition: new FilterDefinition(100, MockFilter, 'src/controllers/admin/**/*.ts'),
-        },
-        {
-          filter: globalFilter,
-          definition: new FilterDefinition(50, MockFilter, '*'),
-        },
-      ];
+      const adminDef = new FilterDefinition(100, MockFilter, 'src/controllers/admin/**/*.ts');
+      adminDef.filter = adminFilter;
+      const globalDef = new FilterDefinition(50, MockFilter, '*');
+      globalDef.filter = globalFilter;
+
+      const registry = [adminDef, globalDef];
 
       // Should match admin controller
       let result = FilterMatcher.findMatchingFilters(
@@ -65,12 +65,10 @@ describe('FilterMatcher', () => {
     it('should match specific controller file', () => {
       const specificFilter = new MockFilter(100);
 
-      const registry = [
-        {
-          filter: specificFilter,
-          definition: new FilterDefinition(100, MockFilter, '**/SaveController.ts'),
-        },
-      ];
+      const def = new FilterDefinition(100, MockFilter, '**/SaveController.ts');
+      def.filter = specificFilter;
+
+      const registry = [def];
 
       const result = FilterMatcher.findMatchingFilters(
         'src/controllers/SaveController.ts',
@@ -83,12 +81,10 @@ describe('FilterMatcher', () => {
     it('should match wildcard patterns', () => {
       const wildcardFilter = new MockFilter(100);
 
-      const registry = [
-        {
-          filter: wildcardFilter,
-          definition: new FilterDefinition(100, MockFilter, '**/admin/**'),
-        },
-      ];
+      const def = new FilterDefinition(100, MockFilter, '**/admin/**');
+      def.filter = wildcardFilter;
+
+      const registry = [def];
 
       // Should match anything in admin directory
       let result = FilterMatcher.findMatchingFilters(
@@ -116,11 +112,14 @@ describe('FilterMatcher', () => {
       const filter2 = new MockFilter(100);
       const filter3 = new MockFilter(75);
 
-      const registry = [
-        { filter: filter1, definition: new FilterDefinition(50, MockFilter, '*') },
-        { filter: filter2, definition: new FilterDefinition(100, MockFilter, '*') },
-        { filter: filter3, definition: new FilterDefinition(75, MockFilter, '*') },
-      ];
+      const def1 = new FilterDefinition(50, MockFilter, '*');
+      def1.filter = filter1;
+      const def2 = new FilterDefinition(100, MockFilter, '*');
+      def2.filter = filter2;
+      const def3 = new FilterDefinition(75, MockFilter, '*');
+      def3.filter = filter3;
+
+      const registry = [def1, def2, def3];
 
       const result = FilterMatcher.findMatchingFilters(
         'src/controllers/SaveController.ts',
@@ -134,13 +133,12 @@ describe('FilterMatcher', () => {
       const globalFilter = new MockFilter(100);
       const specificFilter = new MockFilter(50);
 
-      const registry = [
-        { filter: globalFilter, definition: new FilterDefinition(100, MockFilter, '*') },
-        {
-          filter: specificFilter,
-          definition: new FilterDefinition(50, MockFilter, 'src/**/*.ts'),
-        },
-      ];
+      const globalDef = new FilterDefinition(100, MockFilter, '*');
+      globalDef.filter = globalFilter;
+      const specificDef = new FilterDefinition(50, MockFilter, 'src/**/*.ts');
+      specificDef.filter = specificFilter;
+
+      const registry = [globalDef, specificDef];
 
       // When filepath is undefined, only wildcard patterns should match
       const result = FilterMatcher.findMatchingFilters(undefined, registry);
@@ -153,20 +151,14 @@ describe('FilterMatcher', () => {
       const wildcardFilter2 = new MockFilter(90);
       const specificFilter = new MockFilter(50);
 
-      const registry = [
-        {
-          filter: wildcardFilter1,
-          definition: new FilterDefinition(100, MockFilter, '*'),
-        },
-        {
-          filter: wildcardFilter2,
-          definition: new FilterDefinition(90, MockFilter, '**/*'),
-        },
-        {
-          filter: specificFilter,
-          definition: new FilterDefinition(50, MockFilter, 'src/**/*.ts'),
-        },
-      ];
+      const def1 = new FilterDefinition(100, MockFilter, '*');
+      def1.filter = wildcardFilter1;
+      const def2 = new FilterDefinition(90, MockFilter, '**/*');
+      def2.filter = wildcardFilter2;
+      const def3 = new FilterDefinition(50, MockFilter, 'src/**/*.ts');
+      def3.filter = specificFilter;
+
+      const registry = [def1, def2, def3];
 
       const result = FilterMatcher.findMatchingFilters(undefined, registry);
 

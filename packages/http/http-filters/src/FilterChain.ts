@@ -1,11 +1,11 @@
-import { Filter, MethodMeta, Action, NextFilter } from './Filter';
+import { Filter, MethodMeta, Action, Service } from './Filter';
 
 /**
  * FilterChain - Manages execution of filters in priority order.
  * Similar to Java servlet filter chains.
  *
  * Filters are sorted by priority (highest first) and each filter
- * calls next() to invoke the next filter in the chain.
+ * calls nextFilter.invoke() to invoke the next filter in the chain.
  *
  * The final "filter" in the chain is the controller method itself.
  */
@@ -13,8 +13,9 @@ export class FilterChain {
   private filters: Filter[];
 
   constructor(filters: Filter[]) {
-    // Sort filters by priority (highest first)
-    this.filters = [...filters].sort((a, b) => b.priority - a.priority);
+    // Filters are already sorted by priority from FilterMatcher
+    // No need to sort again (priority is in FilterDefinition, not Filter)
+    this.filters = filters;
   }
 
   /**
@@ -31,19 +32,25 @@ export class FilterChain {
     let index = 0;
     const filters = this.filters;
 
-    const next: NextFilter = new class extends NextFilter {
-      async execute(): Promise<Action> {
-        if (index < filters.length) {
-          const filter = filters[index++];
-          return filter.filter(meta, next);
-        } else {
-          // All filters have been executed, now execute the controller
-          return finalHandler();
+    // Create Service adapter that recursively calls filters
+    const createServiceForIndex = (currentIndex: number): Service<MethodMeta, Action> => {
+      return {
+        invoke: async (m: MethodMeta): Promise<Action> => {
+          if (currentIndex < filters.length) {
+            const filter = filters[currentIndex];
+            const nextService = createServiceForIndex(currentIndex + 1);
+            return filter.filter(m, nextService);
+          } else {
+            // All filters executed, now execute the controller
+            return finalHandler();
+          }
         }
-      }
+      };
     };
 
-    return next.execute();
+    // Start execution with first filter
+    const service = createServiceForIndex(0);
+    return service.invoke(meta);
   }
 
   /**

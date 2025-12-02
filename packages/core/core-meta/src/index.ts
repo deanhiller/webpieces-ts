@@ -4,7 +4,6 @@ export {
   RouteBuilder,
   RouteDefinition,
   FilterDefinition,
-  RouteHandler,
   RouteContext,
   RouteRequest,
 } from './WebAppMeta';

@@ -5,6 +5,6 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["**/*.spec.ts", "**/*.test.ts"]
+  "include": ["src/**/*.ts", "eslint-plugin/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.test.ts", "eslint-plugin/__tests__/**/*.ts"]
 }

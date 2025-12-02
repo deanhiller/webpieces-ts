@@ -2,7 +2,7 @@ import { injectable, inject } from 'inversify';
 import { provideSingleton } from '@webpieces/http-routing';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
-import { Filter, MethodMeta, Action, NextFilter, jsonAction, errorAction } from '../Filter';
+import { Filter, MethodMeta, Action, Service, jsonAction, errorAction } from '../Filter';
 import { RequestContext } from '@webpieces/core-context';
 import { toError } from '@webpieces/core-util';
 
@@ -69,14 +69,15 @@ export class JsonFilterConfig {
  */
 @provideSingleton()
 @injectable()
-export class JsonFilter implements Filter {
+export class JsonFilter extends Filter {
   priority = 60;
 
   constructor(@inject(FILTER_TYPES.JsonFilterConfig) private config: JsonFilterConfig) {
+    super();
     // Config is injected from DI container
   }
 
-  async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {
+  async filter(meta: MethodMeta, nextFilter: Service<MethodMeta, Action>): Promise<Action> {
     try {
       // Deserialize and validate request if there's a body
       await this.processRequest(meta);
@@ -86,7 +87,7 @@ export class JsonFilter implements Filter {
       }
 
       // Execute next filter/controller
-      const action = await next.execute();
+      const action = await nextFilter.invoke(meta);
 
       if (this.config.loggingEnabled) {
         this.logResponse(action);

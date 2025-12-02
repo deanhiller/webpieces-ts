@@ -25,23 +25,24 @@ export class FilterMatcher {
    */
   static findMatchingFilters(
     controllerFilepath: string | undefined,
-    allFilters: Array<{ filter: Filter; definition: FilterDefinition }>
+    allFilters: Array<FilterDefinition>
   ): Filter[] {
     const matchingFilters: Array<{ filter: Filter; priority: number }> = [];
 
-    for (const { filter, definition } of allFilters) {
+    for (const definition of allFilters) {
       const pattern = definition.filepathPattern;
+      const filter = definition.filter;
 
       // Special case: '*' matches all controllers (global filter)
       if (pattern === '*') {
-        matchingFilters.push({ filter, priority: filter.priority });
+        matchingFilters.push({ filter, priority: definition.priority });
         continue;
       }
 
       // If no filepath available, only match wildcard patterns
       if (!controllerFilepath) {
         if (pattern === '**/*') {
-          matchingFilters.push({ filter, priority: filter.priority });
+          matchingFilters.push({ filter, priority: definition.priority });
         }
         continue;
       }
@@ -51,7 +52,7 @@ export class FilterMatcher {
 
       // Match using minimatch
       if (minimatch(normalizedPath, pattern)) {
-        matchingFilters.push({ filter, priority: filter.priority });
+        matchingFilters.push({ filter, priority: definition.priority });
       }
     }
 

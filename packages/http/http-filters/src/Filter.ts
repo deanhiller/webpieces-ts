@@ -1,6 +1,8 @@
 /**
  * Metadata about the method being invoked.
  * Passed to filters and contains request information.
+ *
+ * Use withParams() to create modified copies when needed.
  */
 export class MethodMeta {
   /**
@@ -20,33 +22,33 @@ export class MethodMeta {
 
   /**
    * Parameters to pass to the controller method.
-   * Filters can modify this array (e.g., JsonFilter deserializes request body into params[0])
+   * Filters can modify this directly OR use withParams() to create a new instance.
    */
-  params: any[];
+  params: unknown[];
 
   /**
    * The original request object (if applicable)
    */
-  request?: any;
+  request?: unknown;
 
   /**
-   * The response object (if applicable)
+   * The response object (Express Response for writing)
    */
-  response?: any;
+  response?: unknown;
 
   /**
    * Additional metadata
    */
-  metadata?: Map<string, any>;
+  metadata?: Map<string, unknown>;
 
   constructor(
     httpMethod: string,
     path: string,
     methodName: string,
-    params: any[],
-    request?: any,
-    response?: any,
-    metadata?: Map<string, any>
+    params: unknown[],
+    request?: unknown,
+    response?: unknown,
+    metadata?: Map<string, unknown>
   ) {
     this.httpMethod = httpMethod;
     this.path = path;
@@ -59,107 +61,164 @@ export class MethodMeta {
 }
 
 /**
- * Action returned by filters and controllers.
- * Can represent different types of responses.
+ * ResponseWrapper - Wraps controller responses for the filter chain.
+ *
+ * Generic type parameter TResult represents the controller's return type.
+ * The filter chain uses ResponseWrapper<unknown> because it handles all response types uniformly.
+ *
+ * JsonFilter is responsible for:
+ * 1. Serializing ResponseWrapper.response to JSON
+ * 2. Writing the JSON to the HTTP response body
  */
-export class Action {
-  type: 'json' | 'html' | 'redirect' | 'error';
-  data?: any;
-  statusCode?: number;
-  headers?: Record<string, string>;
+export class ResponseWrapper<TResult = unknown> {
+  response?: TResult;
+  statusCode: number;
+  headers: Map<string, string>;
 
-  constructor(
-    type: 'json' | 'html' | 'redirect' | 'error',
-    data?: any,
-    statusCode?: number,
-    headers?: Record<string, string>
-  ) {
-    this.type = type;
-    this.data = data;
+  constructor(response?: TResult, statusCode: number = 200) {
+    this.response = response;
     this.statusCode = statusCode;
-    this.headers = headers;
+    this.headers = new Map();
+  }
+
+  /**
+   * Set a response header.
+   */
+  setHeader(name: string, value: string): ResponseWrapper<TResult> {
+    this.headers.set(name, value);
+    return this;
+  }
+
+  /**
+   * Create an error response wrapper.
+   */
+  static error<T = unknown>(message: string, statusCode: number = 500): ResponseWrapper<T> {
+    const wrapper = new ResponseWrapper<T>(undefined, statusCode);
+    wrapper.setHeader('X-Error', message);
+    return wrapper;
   }
 }
 
 /**
- * Next filter class.
- * This is a class instead of a function type to make it easier to trace
- * who is calling what in the debugger/IDE.
+ * Service interface - Similar to Java WebPieces Service<REQ, RESP>.
+ * Represents any component that can process a request and return a response.
+ *
+ * Used for:
+ * - Final controller invocation
+ * - Wrapping filters as services in the chain
+ * - Functional composition of filters
  */
-export abstract class NextFilter {
+export interface Service<REQ, RESP> {
   /**
-   * Execute the next filter in the chain.
-   * @returns Promise of the action
+   * Invoke the service with the given metadata.
+   * @param meta - Request metadata
+   * @returns Promise of the response
    */
-  abstract execute(): Promise<Action>;
+  invoke(meta: REQ): Promise<RESP>;
 }
 
 /**
- * Filter interface.
- * Similar to Java WebPieces RouteFilter.
+ * Filter abstract class - Similar to Java WebPieces Filter<REQ, RESP>.
  *
- * Filters are executed in priority order (higher priority first)
- * and can wrap the execution of subsequent filters and the controller.
+ * Filters are STATELESS and can handle N concurrent requests.
+ * They wrap the execution of subsequent filters and the controller.
+ *
+ * Key principles:
+ * - STATELESS: No instance variables for request data
+ * - Can modify meta directly OR use withParams() for immutability
+ * - COMPOSABLE: Use chain() methods for functional composition
+ *
+ * For HTTP filters, use Filter<MethodMeta, ResponseWrapper<unknown>>:
+ * - MethodMeta: Standardized request metadata
+ * - ResponseWrapper<unknown>: Wraps any controller response
  *
  * Example:
  * ```typescript
  * @injectable()
- * export class LoggingFilter implements Filter {
- *   priority = 100;
+ * export class LoggingFilter extends Filter<MethodMeta, ResponseWrapper<unknown>> {
  *
- *   async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {
+ *   async filter(
+ *     meta: MethodMeta,
+ *     nextFilter: Service<MethodMeta, ResponseWrapper<unknown>>
+ *   ): Promise<ResponseWrapper<unknown>> {
  *     console.log(`Request: ${meta.httpMethod} ${meta.path}`);
- *     const action = await next.execute();
- *     console.log(`Response: ${action.statusCode}`);
- *     return action;
+ *     const response = await nextFilter.invoke(meta);
+ *     console.log(`Response: ${response.statusCode}`);
+ *     return response;
  *   }
  * }
  * ```
+ *
+ * Composition example:
+ * ```typescript
+ * const service = contextFilter
+ *   .chain(jsonFilter)
+ *   .chain(loggingFilter)
+ *   .chainService(controller);
+ *
+ * const response = await service.invoke(meta);
+ * ```
  */
-export interface Filter {
-  /**
-   * Priority of this filter.
-   * Higher numbers execute first.
-   * Typical values:
-   * - 140: Context setup
-   * - 120: Request attributes
-   * - 90: Metrics
-   * - 80: Logging
-   * - 60: JSON serialization
-   * - 40: Transactions
-   * - 0: Controller
-   */
-  priority: number;
+export abstract class Filter<REQ, RESP> {
+
+  //priority is determined by how it is chained only here
+  //DO NOT add priority here
 
   /**
    * Filter method that wraps the next filter/controller.
    *
+   * Filters can modify meta:
+   * - Option 1: Direct mutation: `meta.params[0] = value`
+   * - Option 2: Immutable: `const newMeta = meta.withParams([value]); return nextFilter.invoke(newMeta);`
+   *
    * @param meta - Metadata about the method being invoked
-   * @param next - NextFilter instance to invoke the next filter in the chain
-   * @returns Promise of the action to return
+   * @param nextFilter - Next filter/controller as a Service
+   * @returns Promise of the response
    */
-  filter(meta: MethodMeta, next: NextFilter): Promise<Action>;
-}
+  abstract filter(
+    meta: REQ,
+    nextFilter: Service<REQ, RESP>
+  ): Promise<RESP>;
 
-/**
- * Helper to create a JSON action response.
- */
-export function jsonAction(data: any, statusCode: number = 200): Action {
-  return new Action('json', data, statusCode);
-}
+  /**
+   * Chain this filter with another filter.
+   * Returns a new Filter that composes both filters.
+   *
+   * Similar to Java: filter1.chain(filter2)
+   *
+   * @param nextFilter - The filter to execute after this one
+   * @returns Composed filter
+   */
+  chain(nextFilter: Filter<REQ, RESP>): Filter<REQ, RESP> {
+    const self = this;
 
-/**
- * Helper to create an error action response.
- */
-export function errorAction(
-  error: Error | string,
-  statusCode: number = 500
-): Action {
-  return new Action(
-    'error',
-    {
-      error: typeof error === 'string' ? error : error.message,
-    },
-    statusCode
-  );
+    return new class extends Filter<REQ, RESP> {
+      async filter(
+        meta: REQ,
+        nextService: Service<REQ, RESP>
+      ): Promise<RESP> {
+        // Call outer filter, passing next filter wrapped as a Service
+        return self.filter(meta, {
+          invoke: (m: REQ) => nextFilter.filter(m, nextService)
+        });
+      }
+    };
+  }
+
+  /**
+   * Chain this filter with a final service (controller).
+   * Returns a Service that can be invoked.
+   *
+   * Similar to Java: filter.chain(service)
+   *
+   * @param svc - The final service (controller) to execute
+   * @returns Service wrapping the entire filter chain
+   */
+  chainService(svc: Service<REQ, RESP>): Service<REQ, RESP> {
+    const self = this;
+
+    return {
+      invoke: (meta: REQ) => self.filter(meta, svc)
+    };
+  }
 }
