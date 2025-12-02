@@ -4,8 +4,9 @@
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 
-// Import webpieces base config
-import webpiecesPlugin from '@webpieces/dev-config/eslint-plugin';
+// Import webpieces plugin from dist (compiled JavaScript)
+// In workspace development, use the compiled output from dist
+import webpiecesPlugin from './dist/packages/tooling/dev-config/eslint-plugin/index.js';
 
 export default [
   {

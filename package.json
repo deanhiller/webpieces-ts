@@ -38,6 +38,7 @@
     "@swc-node/register": "~1.9.1",
     "@swc/core": "~1.5.7",
     "@swc/helpers": "~0.5.11",
+    "@types/eslint": "^9.6.1",
     "@types/express": "^5.0.5",
     "@types/jest": "^30.0.0",
     "@types/minimatch": "^5.1.0",

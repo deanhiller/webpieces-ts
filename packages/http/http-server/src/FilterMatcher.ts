@@ -1,6 +1,12 @@
-import { Filter } from '@webpieces/http-filters';
+import { Filter, WpResponse } from '@webpieces/http-filters';
+import { MethodMeta } from './MethodMeta';
 import { FilterDefinition } from '@webpieces/core-meta';
 import { minimatch } from 'minimatch';
+
+/**
+ * Type alias for HTTP filters that work with MethodMeta and ResponseWrapper.
+ */
+export type HttpFilter = Filter<MethodMeta, WpResponse<unknown>>;
 
 /**
  * FilterMatcher - Matches filters to routes based on filepath patterns.
@@ -25,23 +31,24 @@ export class FilterMatcher {
    */
   static findMatchingFilters(
     controllerFilepath: string | undefined,
-    allFilters: Array<{ filter: Filter; definition: FilterDefinition }>
-  ): Filter[] {
-    const matchingFilters: Array<{ filter: Filter; priority: number }> = [];
+    allFilters: Array<FilterDefinition>
+  ): HttpFilter[] {
+    const matchingFilters: Array<{ filter: HttpFilter; priority: number }> = [];
 
-    for (const { filter, definition } of allFilters) {
+    for (const definition of allFilters) {
       const pattern = definition.filepathPattern;
+      const filter = definition.filter as HttpFilter;
 
       // Special case: '*' matches all controllers (global filter)
       if (pattern === '*') {
-        matchingFilters.push({ filter, priority: filter.priority });
+        matchingFilters.push({ filter, priority: definition.priority });
         continue;
       }
 
       // If no filepath available, only match wildcard patterns
       if (!controllerFilepath) {
         if (pattern === '**/*') {
-          matchingFilters.push({ filter, priority: filter.priority });
+          matchingFilters.push({ filter, priority: definition.priority });
         }
         continue;
       }
@@ -51,7 +58,7 @@ export class FilterMatcher {
 
       // Match using minimatch
       if (minimatch(normalizedPath, pattern)) {
-        matchingFilters.push({ filter, priority: filter.priority });
+        matchingFilters.push({ filter, priority: definition.priority });
       }
     }
 

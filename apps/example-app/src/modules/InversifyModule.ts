@@ -2,7 +2,7 @@ import { ContainerModule } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/SaveController';
 import { RemoteApi, TYPES } from '../remote/RemoteApi';
 import { RemoteServiceSimulator } from '../remote/RemoteServiceSimulator';
-import { JsonFilterConfig, FILTER_TYPES } from '@webpieces/http-filters';
+import { JsonFilterConfig, FILTER_TYPES } from '@webpieces/http-server';
 
 /**
  * InversifyModule - DI configuration module.

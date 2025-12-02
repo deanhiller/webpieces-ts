@@ -20,6 +20,24 @@ export interface RouteBuilder {
   addFilter(filter: FilterDefinition): void;
 }
 
+export class RouteMetadata2 {
+    httpMethod: string;
+    path: string;
+    methodName: string;
+    parameterTypes?: any[];
+
+    constructor(
+        httpMethod: string,
+        path: string,
+        methodName: string,
+        parameterTypes?: any[]
+    ) {
+        this.httpMethod = httpMethod;
+        this.path = path;
+        this.methodName = methodName;
+        this.parameterTypes = parameterTypes;
+    }
+}
 /**
  * Definition of a single route.
  *
@@ -27,21 +45,12 @@ export interface RouteBuilder {
  * This provides type safety for the entire request/response cycle.
  */
 export class RouteDefinition<TResult = unknown> {
-  method: string;
-  path: string;
-  handler: RouteHandler<TResult>;
-  controllerFilepath?: string;
 
   constructor(
-    method: string,
-    path: string,
-    handler: RouteHandler<TResult>,
-    controllerFilepath?: string
+      public routeMeta: RouteMetadata2,
+    public controllerClass: any,
+    public controllerFilepath?: string
   ) {
-    this.method = method;
-    this.path = path;
-    this.handler = handler;
-    this.controllerFilepath = controllerFilepath;
   }
 }
 
@@ -58,6 +67,7 @@ export class RouteDefinition<TResult = unknown> {
 export class FilterDefinition {
   priority: number;
   filterClass: any;
+  filter?: any; // Filter instance (set by RouteBuilder when resolving from DI)
 
   /**
    * Glob pattern to match controller file paths.
@@ -73,75 +83,31 @@ export class FilterDefinition {
     this.priority = priority;
     this.filterClass = filterClass;
     this.filepathPattern = filepathPattern;
+    this.filter = undefined; // Set later by RouteBuilder
   }
 }
 
 /**
- * Request data passed to route handlers.
+ * Holds Express Request and Response objects.
+ * JsonFilter uses these to read request body and write response.
  */
 export class RouteRequest {
-  body?: any;
-  query?: Record<string, any>;
-  params?: Record<string, any>;
-  headers?: Record<string, any>;
-
-  constructor(
-    body?: any,
-    query?: Record<string, any>,
-    params?: Record<string, any>,
-    headers?: Record<string, any>
-  ) {
-    this.body = body;
-    this.query = query;
-    this.params = params;
-    this.headers = headers;
-  }
-}
-
-/**
- * Context passed to route handlers.
- * Contains DI container, request data, and extracted parameters.
- */
-export class RouteContext {
-  /** DI container for resolving dependencies */
-  container: Container;
-  /** Extracted parameters (e.g., from request body, path params) */
-  params: any[];
-  /** Original request data */
-  request?: RouteRequest;
-
-  constructor(
-    container: Container,
-    params: any[],
-    request?: RouteRequest
-  ) {
-    this.container = container;
-    this.params = params;
-    this.request = request;
-  }
-}
-
-/**
- * Handler class for routes.
- * Takes a RouteContext and returns the controller method result.
- *
- * Generic type parameter TResult represents the return type of the controller method.
- * Example: RouteHandler<SaveResponse> for a method that returns Promise<SaveResponse>
- *
- * Using unknown as default instead of any forces type safety - consumers must
- * handle the result appropriately rather than assuming any type.
- *
- * This is a class instead of a function type to make it easier to trace
- * who is calling what in the debugger/IDE.
- */
-export abstract class RouteHandler<TResult = unknown> {
   /**
-   * Execute the route handler.
-   * @param context - The route context containing DI container, params, and request
-   * @returns Promise of the controller method result
+   * Express Request object
    */
-  abstract execute(context: RouteContext): Promise<TResult>;
+  request: unknown;
+
+  /**
+   * Express Response object
+   */
+  response: unknown;
+
+  constructor(request: unknown, response: unknown) {
+    this.request = request;
+    this.response = response;
+  }
 }
+
 
 /**
  * Main application metadata interface.

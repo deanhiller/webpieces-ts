@@ -15,7 +15,7 @@ import { AsyncLocalStorage } from 'async_hooks';
  * const id = Context.get('REQUEST_ID'); // Still available!
  * ```
  */
-class ContextManager {
+class RequestContextImpl {
   private storage: AsyncLocalStorage<Map<string, any>>;
 
   constructor() {
@@ -118,7 +118,7 @@ class ContextManager {
 }
 
 /**
- * Global singleton instance of ContextManager.
+ * Global singleton instance of RequestContext.
  * Use this throughout your application.
  */
-export const RequestContext = new ContextManager();
+export const RequestContext = new RequestContextImpl();

@@ -1,4 +1,4 @@
-import { Routes, RouteBuilder, RouteHandler, RouteContext, RouteDefinition } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, RouteDefinition } from '@webpieces/core-meta';
 import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
 import { ROUTING_METADATA_KEYS } from './decorators';
 
@@ -106,59 +106,15 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
     // Extract controller filepath for filter matching
     const controllerFilepath = this.getControllerFilepath();
 
-    // Create typed route handler
-    // The handler's return type is inferred from the controller method's return type
-    const routeHandler: RouteHandler<unknown> = this.createRouteHandler(route);
-
+    // Pass controller class and method name to RouteBuilder
+    // RouteBuilder will resolve the controller from DI and create the handler
     routeBuilder.addRoute(
       new RouteDefinition(
-        route.httpMethod,
-        route.path,
-        routeHandler,
+          route,
+        this.controllerClass,
         controllerFilepath
       )
     );
-  }
-
-  /**
-   * Create a typed route handler for a specific route.
-   *
-   * The handler:
-   * 1. Resolves the controller from the DI container
-   * 2. Invokes the controller method with extracted parameters
-   * 3. Returns the controller method result
-   *
-   * Type parameter TResult represents the return type of the controller method.
-   * At runtime, we can't enforce this statically, but TypeScript will infer it
-   * from the method signature on the API interface.
-   */
-  private createRouteHandler<TResult = unknown>(route: RouteMetadata): RouteHandler<TResult> {
-    const controllerClass = this.controllerClass;
-
-    return new class extends RouteHandler<TResult> {
-      async execute(context: RouteContext): Promise<TResult> {
-        const { container, params } = context;
-
-        // Resolve controller instance from DI container
-        const controller = container.get(controllerClass) as TController;
-
-        // Get the controller method
-        const method = (controller as any)[route.methodName];
-        if (typeof method !== 'function') {
-          const controllerName = (controllerClass as any).name || 'Unknown';
-          throw new Error(
-            `Method ${route.methodName} not found on controller ${controllerName}`
-          );
-        }
-
-        // Invoke the method with parameters and return the result
-        // TypeScript trusts that the method returns Promise<TResult> based on
-        // the interface definition (e.g., SaveApi.save returns Promise<SaveResponse>)
-        const result: TResult = await method.apply(controller, params);
-
-        return result;
-      }
-    };
   }
 
   /**
