@@ -1,13 +1,8 @@
-import {MethodMeta} from "@webpieces/http-filters";
-
-export class ResponseWrapper<TResult> {
-    response?: TResult;
-
-}
+import { MethodMeta } from './MethodMeta';
 
 /**
  * Handler class for routes.
- * Takes a RouteContext and returns the controller method result.
+ * Takes a MethodMeta and returns the controller method result.
  *
  * Generic type parameter TResult represents the return type of the controller method.
  * Example: RouteHandler<SaveResponse> for a method that returns Promise<SaveResponse>
@@ -21,9 +16,8 @@ export class ResponseWrapper<TResult> {
 export abstract class RouteHandler<TResult = unknown> {
   /**
    * Execute the route handler.
-   * @param context - The route context containing DI container, params, and request
+   * @param meta - The method metadata containing request info and params
    * @returns Promise of the controller method result
    */
-  abstract execute(context: MethodMeta): Promise<TResult>;
-
+  abstract execute(meta: MethodMeta): Promise<TResult>;
 }

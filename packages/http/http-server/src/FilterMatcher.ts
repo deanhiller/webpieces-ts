@@ -1,6 +1,12 @@
-import { Filter } from '@webpieces/http-filters';
+import { Filter, WpResponse } from '@webpieces/http-filters';
+import { MethodMeta } from './MethodMeta';
 import { FilterDefinition } from '@webpieces/core-meta';
 import { minimatch } from 'minimatch';
+
+/**
+ * Type alias for HTTP filters that work with MethodMeta and ResponseWrapper.
+ */
+export type HttpFilter = Filter<MethodMeta, WpResponse<unknown>>;
 
 /**
  * FilterMatcher - Matches filters to routes based on filepath patterns.
@@ -26,12 +32,12 @@ export class FilterMatcher {
   static findMatchingFilters(
     controllerFilepath: string | undefined,
     allFilters: Array<FilterDefinition>
-  ): Filter[] {
-    const matchingFilters: Array<{ filter: Filter; priority: number }> = [];
+  ): HttpFilter[] {
+    const matchingFilters: Array<{ filter: HttpFilter; priority: number }> = [];
 
     for (const definition of allFilters) {
       const pattern = definition.filepathPattern;
-      const filter = definition.filter;
+      const filter = definition.filter as HttpFilter;
 
       // Special case: '*' matches all controllers (global filter)
       if (pattern === '*') {

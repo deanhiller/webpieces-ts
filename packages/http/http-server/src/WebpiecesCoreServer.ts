@@ -1,13 +1,13 @@
 import express, {Express, NextFunction, Request, Response} from 'express';
 import {Container, inject, injectable} from 'inversify';
 import {buildProviderModule} from '@inversifyjs/binding-decorators';
-import {RouteContext, RouteRequest, WebAppMeta} from '@webpieces/core-meta';
-import {Action, jsonAction, MethodMeta, Service} from '@webpieces/http-filters';
+import {RouteRequest, WebAppMeta} from '@webpieces/core-meta';
+import {WpResponse, Service} from '@webpieces/http-filters';
 import {provideSingleton} from '@webpieces/http-routing';
 import {RouteBuilderImpl, RouteHandlerWithMeta, FilterWithMeta} from './RouteBuilderImpl';
 import {FilterMatcher} from './FilterMatcher';
 import {toError} from '@webpieces/core-util';
-import {ResponseWrapper} from "./RouteHandler";
+import {MethodMeta} from './MethodMeta';
 
 /**
  * WebpiecesCoreServer - Core server implementation with DI.
@@ -45,7 +45,7 @@ export class WebpiecesCoreServer {
 
   private initialized = false;
   private app?: Express;
-  private server?: any;
+  private server?: ReturnType<Express['listen']>;
   private port: number = 8080;
 
   constructor(
@@ -144,7 +144,7 @@ export class WebpiecesCoreServer {
       // 2. Rejected promises from downstream async middleware
       await next();
       console.log('🔴 [Layer 1: GlobalErrorHandler] Request END (success):', req.method, req.path);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
       if (!res.headersSent) {
@@ -189,6 +189,9 @@ export class WebpiecesCoreServer {
     // Create Express app
     this.app = express();
 
+    // Parse JSON request bodies
+    this.app.use(express.json());
+
     // Layer 1: Global Error Handler (OUTERMOST - runs FIRST)
     // Catches all unhandled errors and returns HTML 500 page
     this.app.use(this.globalErrorHandler.bind(this));
@@ -207,7 +210,8 @@ export class WebpiecesCoreServer {
       console.log(`[WebpiecesServer] Registered ${routes.size} routes`);
     });
   }
-    /**
+
+  /**
    * Register all routes with Express.
    */
   private registerExpressRoutes(): void {
@@ -257,39 +261,36 @@ export class WebpiecesCoreServer {
     );
 
     // Create service that wraps the controller execution
-    const controllerService: Service<MethodMeta, ResponseWrapper> = {
-      invoke: async (meta: MethodMeta): Promise<ResponseWrapper> => {
+    const controllerService: Service<MethodMeta, WpResponse> = {
+      invoke: async (meta: MethodMeta): Promise<WpResponse> => {
         // Invoke the controller method via route handler
         const result = await routeWithMeta.handler.execute(meta);
-        const responseWrapper = new ResponseWrapper(result);
+        const responseWrapper = new WpResponse(result);
         return responseWrapper;
       }
     };
 
     // Chain filters with the controller service (reverse order for correct execution)
-      //IMPORTANT: MUST USE Filter.chain(filter) and Filter.chain(svc);
-    let filterChain = matchingFilters[ matchingFilters.length - 1 ];
+    // IMPORTANT: MUST USE Filter.chain(filter) and Filter.chainService(svc);
+    let filterChain = matchingFilters[matchingFilters.length - 1];
     for (let i = matchingFilters.length - 2; i >= 0; i--) {
-        filterChain.chain(matchingFilters[i]);
+      filterChain = filterChain.chain(matchingFilters[i]);
     }
     const svc = filterChain.chainService(controllerService);
 
-    // Create Express route handler - delegates to handleRequest
+    // Create Express route handler - delegates to filter chain
     const handler = async (req: Request, res: Response, next: NextFunction) => {
-        // Create method metadata
-        const meta = new MethodMeta(
-            route.method,
-            route.path,
-            key,
-            [req.body],
-            new RouteRequest(req.body, req.query, req.params, req.headers),
-            undefined,
-            new Map()
-        );
+      // Create RouteRequest with Express Request/Response
+      const routeRequest = new RouteRequest(req, res);
 
-        const action: Action = await svc.invoke(meta);
+      // Create MethodMeta with route info and Express Request/Response
+      const meta = new MethodMeta(
+        routeMeta,
+        routeRequest
+      );
 
-        //response written by whomeever reads the request!!!
+      // Response is written by JsonFilter - we just await completion
+      await svc.invoke(meta);
     };
 
     // Register with Express
@@ -324,5 +325,4 @@ export class WebpiecesCoreServer {
       });
     }
   }
-
 }

@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, FilterDefinition } from '@webpieces/core-meta';
-import { ContextFilter, JsonFilter } from '@webpieces/http-filters';
+import { ContextFilter, JsonFilter } from '@webpieces/http-server';
 
 /**
  * FilterRoutes - Registers filters for the application.

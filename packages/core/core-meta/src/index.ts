@@ -3,7 +3,7 @@ export {
   Routes,
   RouteBuilder,
   RouteDefinition,
+  RouteMetadata2,
   FilterDefinition,
-  RouteContext,
   RouteRequest,
 } from './WebAppMeta';

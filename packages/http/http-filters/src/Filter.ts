@@ -1,76 +1,14 @@
 /**
- * Metadata about the method being invoked.
- * Passed to filters and contains request information.
- *
- * Use withParams() to create modified copies when needed.
- */
-export class MethodMeta {
-  /**
-   * The HTTP method (GET, POST, etc.)
-   */
-  httpMethod: string;
-
-  /**
-   * The request path
-   */
-  path: string;
-
-  /**
-   * The method name being invoked on the controller
-   */
-  methodName: string;
-
-  /**
-   * Parameters to pass to the controller method.
-   * Filters can modify this directly OR use withParams() to create a new instance.
-   */
-  params: unknown[];
-
-  /**
-   * The original request object (if applicable)
-   */
-  request?: unknown;
-
-  /**
-   * The response object (Express Response for writing)
-   */
-  response?: unknown;
-
-  /**
-   * Additional metadata
-   */
-  metadata?: Map<string, unknown>;
-
-  constructor(
-    httpMethod: string,
-    path: string,
-    methodName: string,
-    params: unknown[],
-    request?: unknown,
-    response?: unknown,
-    metadata?: Map<string, unknown>
-  ) {
-    this.httpMethod = httpMethod;
-    this.path = path;
-    this.methodName = methodName;
-    this.params = params;
-    this.request = request;
-    this.response = response;
-    this.metadata = metadata;
-  }
-}
-
-/**
- * ResponseWrapper - Wraps controller responses for the filter chain.
+ * WpResponse - Wraps controller responses for the filter chain.
  *
  * Generic type parameter TResult represents the controller's return type.
- * The filter chain uses ResponseWrapper<unknown> because it handles all response types uniformly.
+ * The filter chain uses WpResponse<unknown> because it handles all response types uniformly.
  *
  * JsonFilter is responsible for:
- * 1. Serializing ResponseWrapper.response to JSON
+ * 1. Serializing WpResponse.response to JSON
  * 2. Writing the JSON to the HTTP response body
  */
-export class ResponseWrapper<TResult = unknown> {
+export class WpResponse<TResult = unknown> {
   response?: TResult;
   statusCode: number;
   headers: Map<string, string>;
@@ -84,7 +22,7 @@ export class ResponseWrapper<TResult = unknown> {
   /**
    * Set a response header.
    */
-  setHeader(name: string, value: string): ResponseWrapper<TResult> {
+  setHeader(name: string, value: string): WpResponse<TResult> {
     this.headers.set(name, value);
     return this;
   }
@@ -92,8 +30,8 @@ export class ResponseWrapper<TResult = unknown> {
   /**
    * Create an error response wrapper.
    */
-  static error<T = unknown>(message: string, statusCode: number = 500): ResponseWrapper<T> {
-    const wrapper = new ResponseWrapper<T>(undefined, statusCode);
+  static error<T = unknown>(message: string, statusCode: number = 500): WpResponse<T> {
+    const wrapper = new WpResponse<T>(undefined, statusCode);
     wrapper.setHeader('X-Error', message);
     return wrapper;
   }
@@ -125,39 +63,11 @@ export interface Service<REQ, RESP> {
  *
  * Key principles:
  * - STATELESS: No instance variables for request data
- * - Can modify meta directly OR use withParams() for immutability
  * - COMPOSABLE: Use chain() methods for functional composition
  *
- * For HTTP filters, use Filter<MethodMeta, ResponseWrapper<unknown>>:
- * - MethodMeta: Standardized request metadata
- * - ResponseWrapper<unknown>: Wraps any controller response
- *
- * Example:
- * ```typescript
- * @injectable()
- * export class LoggingFilter extends Filter<MethodMeta, ResponseWrapper<unknown>> {
- *
- *   async filter(
- *     meta: MethodMeta,
- *     nextFilter: Service<MethodMeta, ResponseWrapper<unknown>>
- *   ): Promise<ResponseWrapper<unknown>> {
- *     console.log(`Request: ${meta.httpMethod} ${meta.path}`);
- *     const response = await nextFilter.invoke(meta);
- *     console.log(`Response: ${response.statusCode}`);
- *     return response;
- *   }
- * }
- * ```
- *
- * Composition example:
- * ```typescript
- * const service = contextFilter
- *   .chain(jsonFilter)
- *   .chain(loggingFilter)
- *   .chainService(controller);
- *
- * const response = await service.invoke(meta);
- * ```
+ * For HTTP filters, use Filter<MethodMeta, WpResponse<unknown>>:
+ * - MethodMeta: Standardized request metadata (defined in http-server)
+ * - WpResponse<unknown>: Wraps any controller response
  */
 export abstract class Filter<REQ, RESP> {
 
@@ -166,10 +76,6 @@ export abstract class Filter<REQ, RESP> {
 
   /**
    * Filter method that wraps the next filter/controller.
-   *
-   * Filters can modify meta:
-   * - Option 1: Direct mutation: `meta.params[0] = value`
-   * - Option 2: Immutable: `const newMeta = meta.withParams([value]); return nextFilter.invoke(newMeta);`
    *
    * @param meta - Metadata about the method being invoked
    * @param nextFilter - Next filter/controller as a Service

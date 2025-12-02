@@ -88,24 +88,23 @@ export class FilterDefinition {
 }
 
 /**
- * Request data passed to route handlers.
+ * Holds Express Request and Response objects.
+ * JsonFilter uses these to read request body and write response.
  */
 export class RouteRequest {
-  body?: any;
-  query?: Record<string, any>;
-  params?: Record<string, any>;
-  headers?: Record<string, any>;
+  /**
+   * Express Request object
+   */
+  request: unknown;
 
-  constructor(
-    body?: any,
-    query?: Record<string, any>,
-    params?: Record<string, any>,
-    headers?: Record<string, any>
-  ) {
-    this.body = body;
-    this.query = query;
-    this.params = params;
-    this.headers = headers;
+  /**
+   * Express Response object
+   */
+  response: unknown;
+
+  constructor(request: unknown, response: unknown) {
+    this.request = request;
+    this.response = response;
   }
 }
 

@@ -1,8 +1,14 @@
 import { Container, injectable } from 'inversify';
-import { RouteBuilder, RouteDefinition, FilterDefinition, RouteContext } from '@webpieces/core-meta';
-import { Filter } from '@webpieces/http-filters';
+import { RouteBuilder, RouteDefinition, FilterDefinition } from '@webpieces/core-meta';
+import { Filter, WpResponse } from '@webpieces/http-filters';
 import { provideSingleton } from '@webpieces/http-routing';
 import { RouteHandler } from './RouteHandler';
+import { MethodMeta } from './MethodMeta';
+
+/**
+ * Type alias for HTTP filters that work with MethodMeta and ResponseWrapper.
+ */
+export type HttpFilter = Filter<MethodMeta, WpResponse<unknown>>;
 
 /**
  * FilterWithMeta - Pairs a resolved filter instance with its definition.
@@ -10,7 +16,7 @@ import { RouteHandler } from './RouteHandler';
  */
 export class FilterWithMeta {
   constructor(
-    public filter: Filter,
+    public filter: HttpFilter,
     public definition: FilterDefinition
   ) {}
 }
@@ -85,9 +91,9 @@ export class RouteBuilderImpl implements RouteBuilder {
     const controller = this.container.get(route.controllerClass);
 
     // Get the controller method
-    const method = (controller as any)[routeMeta.methodName];
+    const method = (controller as Record<string, unknown>)[routeMeta.methodName];
     if (typeof method !== 'function') {
-      const controllerName = (route.controllerClass as any).name || 'Unknown';
+      const controllerName = (route.controllerClass as { name?: string }).name || 'Unknown';
       throw new Error(
         `Method ${routeMeta.methodName} not found on controller ${controllerName}`
       );
@@ -95,10 +101,11 @@ export class RouteBuilderImpl implements RouteBuilder {
 
     // Create handler that uses the resolved controller instance
     const handler = new class extends RouteHandler<TResult> {
-      async execute(context: RouteContext): Promise<TResult> {
-        // Invoke the method with parameters from context
+      async execute(meta: MethodMeta): Promise<TResult> {
+        // Invoke the method with requestDto from meta
         // The controller is already resolved - no DI lookup on every request!
-        const result: TResult = await method.apply(controller, context.params);
+        // Pass requestDto as the single argument to the controller method
+        const result: TResult = await method.call(controller, meta.requestDto);
         return result;
       }
     };
@@ -126,7 +133,7 @@ export class RouteBuilderImpl implements RouteBuilder {
     }
 
     // Resolve filter instance from DI container
-    const filter = this.container.get<Filter>(filterDef.filterClass);
+    const filter = this.container.get<HttpFilter>(filterDef.filterClass);
 
     // Store filter with its definition
     const filterWithMeta = new FilterWithMeta(filter, filterDef);

@@ -1,7 +1,8 @@
 import { injectable } from 'inversify';
 import { provideSingleton } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { Filter, MethodMeta, Action, Service } from '../Filter';
+import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { MethodMeta } from '../MethodMeta';
 
 /**
  * ContextFilter - Sets up AsyncLocalStorage context for each request.
@@ -12,10 +13,12 @@ import { Filter, MethodMeta, Action, Service } from '../Filter';
  */
 @provideSingleton()
 @injectable()
-export class ContextFilter extends Filter {
-  priority = 140;
+export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
-  async filter(meta: MethodMeta, nextFilter: Service<MethodMeta, Action>): Promise<Action> {
+  async filter(
+    meta: MethodMeta,
+    nextFilter: Service<MethodMeta, WpResponse<unknown>>
+  ): Promise<WpResponse<unknown>> {
     // Run the rest of the filter chain within a new context
     return RequestContext.run(async () => {
       // Store request metadata in context for other filters to access

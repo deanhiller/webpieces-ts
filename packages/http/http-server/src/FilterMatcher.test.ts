@@ -1,16 +1,20 @@
-import { FilterMatcher } from './FilterMatcher';
-import { Filter, MethodMeta, Action, Service } from '@webpieces/http-filters';
+import { FilterMatcher, HttpFilter } from './FilterMatcher';
+import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { FilterDefinition } from '@webpieces/core-meta';
+import { MethodMeta } from './MethodMeta';
 
 /**
  * Mock filter implementation for testing.
  */
-class MockFilter extends Filter {
+class MockFilter extends Filter<MethodMeta, WpResponse<unknown>> {
   constructor(public priority: number) {
     super();
   }
 
-  async filter(meta: MethodMeta, nextFilter: Service<MethodMeta, Action>): Promise<Action> {
+  async filter(
+    meta: MethodMeta,
+    nextFilter: Service<MethodMeta, WpResponse<unknown>>
+  ): Promise<WpResponse<unknown>> {
     return nextFilter.invoke(meta);
   }
 }
