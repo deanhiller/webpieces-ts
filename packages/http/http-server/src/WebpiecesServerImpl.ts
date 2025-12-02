@@ -1,7 +1,7 @@
 import express, { Express, NextFunction, Request, Response } from 'express';
 import { Container, inject, injectable } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
-import { RouteRequest, WebAppMeta } from '@webpieces/core-meta';
+import { RouteRequest, WebAppMeta } from '@webpieces/http-routing';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { provideSingleton } from '@webpieces/http-routing';
 import { RouteBuilderImpl, RouteHandlerWithMeta, FilterWithMeta } from './RouteBuilderImpl';

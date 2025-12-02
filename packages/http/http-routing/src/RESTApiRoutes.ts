@@ -1,4 +1,4 @@
-import { Routes, RouteBuilder, RouteDefinition } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
 import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
 import { ROUTING_METADATA_KEYS } from './decorators';
 

@@ -1,4 +1,4 @@
-import { WebAppMeta, Routes } from '@webpieces/core-meta';
+import { WebAppMeta, Routes } from '@webpieces/http-routing';
 import { ContainerModule } from 'inversify';
 import { InversifyModule } from './modules/InversifyModule';
 import { FilterRoutes } from './routes/FilterRoutes';

@@ -1,5 +1,5 @@
 import { Container, injectable } from 'inversify';
-import { RouteBuilder, RouteDefinition, FilterDefinition } from '@webpieces/core-meta';
+import { RouteBuilder, RouteDefinition, FilterDefinition } from '@webpieces/http-routing';
 import { Filter, WpResponse } from '@webpieces/http-filters';
 import { provideSingleton } from '@webpieces/http-routing';
 import { RouteHandler } from './RouteHandler';

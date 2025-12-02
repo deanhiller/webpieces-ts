@@ -10,31 +10,11 @@
  */
 export class WpResponse<TResult = unknown> {
     response?: TResult;
-    statusCode: number;
-    headers: Map<string, string>;
 
     constructor(response?: TResult, statusCode: number = 200) {
         this.response = response;
-        this.statusCode = statusCode;
-        this.headers = new Map();
     }
 
-    /**
-     * Set a response header.
-     */
-    setHeader(name: string, value: string): WpResponse<TResult> {
-        this.headers.set(name, value);
-        return this;
-    }
-
-    /**
-     * Create an error response wrapper.
-     */
-    static error<T = unknown>(message: string, statusCode: number = 500): WpResponse<T> {
-        const wrapper = new WpResponse<T>(undefined, statusCode);
-        wrapper.setHeader('X-Error', message);
-        return wrapper;
-    }
 }
 
 /**

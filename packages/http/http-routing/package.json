@@ -21,7 +21,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/core-meta": "0.0.0-dev",
-        "@webpieces/http-api": "0.0.0-dev"
+        "@webpieces/http-api": "0.0.0-dev",
+        "inversify": "^7.10.4"
     }
 }

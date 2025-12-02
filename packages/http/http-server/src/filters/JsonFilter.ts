@@ -91,12 +91,7 @@ export class JsonFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      */
     private writeResponse(expressResponse: Response, responseWrapper: WpResponse<unknown>): void {
         // Set status code
-        expressResponse.status(responseWrapper.statusCode);
-
-        // Set headers from wrapper
-        responseWrapper.headers.forEach((value, name) => {
-            expressResponse.setHeader(name, value);
-        });
+        expressResponse.status(200);
 
         // Set content type to JSON
         expressResponse.setHeader('Content-Type', 'application/json');
@@ -123,7 +118,6 @@ export class JsonFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * Log the outgoing response.
      */
     private logResponse(responseWrapper: WpResponse<unknown>): void {
-        console.log(`[JsonFilter] Response: ${responseWrapper.statusCode}`);
         if (responseWrapper.response) {
             console.log(
                 '[JsonFilter] Response body:',

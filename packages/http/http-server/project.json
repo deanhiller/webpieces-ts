@@ -17,7 +17,6 @@
                 ]
             },
             "dependsOn": [
-                "core-meta:build",
                 "core-util:build",
                 "http-routing:build",
                 "http-filters:build"

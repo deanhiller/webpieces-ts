@@ -1,4 +1,5 @@
-import { RouteMetadata2, RouteRequest } from '@webpieces/core-meta';
+import { RouteRequest } from '@webpieces/http-routing';
+import { RouteMetadata } from '@webpieces/http-api';
 
 /**
  * Metadata about the method being invoked.
@@ -13,7 +14,7 @@ export class MethodMeta {
     /**
      * Route metadata (httpMethod, path, methodName, parameterTypes)
      */
-    routeMeta: RouteMetadata2;
+    routeMeta: RouteMetadata;
 
     /**
      * Express Request and Response objects
@@ -32,7 +33,7 @@ export class MethodMeta {
     metadata: Map<string, unknown>;
 
     constructor(
-        routeMeta: RouteMetadata2,
+        routeMeta: RouteMetadata,
         routeRequest: RouteRequest,
         requestDto?: unknown,
         metadata?: Map<string, unknown>,

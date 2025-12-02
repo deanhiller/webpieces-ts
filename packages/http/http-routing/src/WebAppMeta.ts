@@ -1,4 +1,5 @@
-import { ContainerModule, Container } from 'inversify';
+import { ContainerModule } from 'inversify';
+import {RouteMetadata} from "@webpieces/http-api";
 
 /**
  * Represents a route configuration that can be registered with the router.
@@ -13,26 +14,13 @@ export interface Routes {
 
 /**
  * Builder for registering routes.
- * Will be implemented in http-routing package.
+ * Will be implemented in http-server package.
  */
 export interface RouteBuilder {
     addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void;
     addFilter(filter: FilterDefinition): void;
 }
 
-export class RouteMetadata2 {
-    httpMethod: string;
-    path: string;
-    methodName: string;
-    parameterTypes?: any[];
-
-    constructor(httpMethod: string, path: string, methodName: string, parameterTypes?: any[]) {
-        this.httpMethod = httpMethod;
-        this.path = path;
-        this.methodName = methodName;
-        this.parameterTypes = parameterTypes;
-    }
-}
 /**
  * Definition of a single route.
  *
@@ -41,7 +29,7 @@ export class RouteMetadata2 {
  */
 export class RouteDefinition<TResult = unknown> {
     constructor(
-        public routeMeta: RouteMetadata2,
+        public routeMeta: RouteMetadata,
         public controllerClass: any,
         public controllerFilepath?: string,
     ) {}

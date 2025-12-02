@@ -1,6 +1,6 @@
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { FilterDefinition } from '@webpieces/core-meta';
+import { FilterDefinition } from '@webpieces/http-routing';
 import { MethodMeta } from './MethodMeta';
 
 /**

@@ -1,6 +1,6 @@
 import { Container } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
-import { WebAppMeta } from '@webpieces/core-meta';
+import { WebAppMeta } from '@webpieces/http-routing';
 import { WebpiecesServer } from './WebpiecesServer';
 import { WebpiecesServerImpl } from './WebpiecesServerImpl';
 

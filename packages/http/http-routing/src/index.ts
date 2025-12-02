@@ -24,3 +24,13 @@ export {
 } from './decorators';
 
 export { RESTApiRoutes, ClassType } from './RESTApiRoutes';
+
+// Core routing types (moved from core-meta)
+export {
+    WebAppMeta,
+    Routes,
+    RouteBuilder,
+    RouteDefinition,
+    FilterDefinition,
+    RouteRequest,
+} from './WebAppMeta';
