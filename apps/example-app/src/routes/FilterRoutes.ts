@@ -15,26 +15,21 @@ import { ContextFilter, JsonFilter } from '@webpieces/http-server';
  * - No pattern = matches all controllers (default behavior)
  */
 export class FilterRoutes implements Routes {
-  configure(routeBuilder: RouteBuilder): void {
-    // Global filter - applies to all controllers (pattern '*' matches all)
-    routeBuilder.addFilter(
-      new FilterDefinition(140, ContextFilter, '*')
-    );
+    configure(routeBuilder: RouteBuilder): void {
+        // Global filter - applies to all controllers (pattern '*' matches all)
+        routeBuilder.addFilter(new FilterDefinition(140, ContextFilter, '*'));
 
-    // Scoped filter - applies to all controllers in src/controllers
-    routeBuilder.addFilter(
-      new FilterDefinition(60, JsonFilter, 'src/controllers/**/*.ts')
-    );
+        // Scoped filter - applies to all controllers in src/controllers
+        routeBuilder.addFilter(new FilterDefinition(60, JsonFilter, 'src/controllers/**/*.ts'));
 
-    // Example: Admin-only filter (uncomment if you have an AdminAuthFilter)
-    // routeBuilder.addFilter(
-    //   new FilterDefinition(100, AdminAuthFilter, 'src/controllers/admin/**/*.ts')
-    // );
+        // Example: Admin-only filter (uncomment if you have an AdminAuthFilter)
+        // routeBuilder.addFilter(
+        //   new FilterDefinition(100, AdminAuthFilter, 'src/controllers/admin/**/*.ts')
+        // );
 
-    // Example: Specific controller filter
-    // routeBuilder.addFilter(
-    //   new FilterDefinition(80, SpecialFilter, '**/SaveController.ts')
-    // );
-  }
+        // Example: Specific controller filter
+        // routeBuilder.addFilter(
+        //   new FilterDefinition(80, SpecialFilter, '**/SaveController.ts')
+        // );
+    }
 }
-

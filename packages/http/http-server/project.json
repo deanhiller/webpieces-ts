@@ -1,23 +1,28 @@
 {
-  "name": "http-server",
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/http/http-server/src",
-  "projectType": "library",
-  "targets": {
-    "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/packages/http/http-server",
-        "main": "packages/http/http-server/src/index.ts",
-        "tsConfig": "packages/http/http-server/tsconfig.lib.json",
-        "assets": [
-          "packages/http/http-server/package.json",
-          "packages/http/http-server/README.md"
-        ]
-      },
-      "dependsOn": ["core-meta:build", "core-util:build", "http-routing:build", "http-filters:build"]
-    }
-  },
-  "tags": []
+    "name": "http-server",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/http/http-server/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/http/http-server",
+                "main": "packages/http/http-server/src/index.ts",
+                "tsConfig": "packages/http/http-server/tsconfig.lib.json",
+                "assets": [
+                    "packages/http/http-server/package.json",
+                    "packages/http/http-server/README.md"
+                ]
+            },
+            "dependsOn": [
+                "core-meta:build",
+                "core-util:build",
+                "http-routing:build",
+                "http-filters:build"
+            ]
+        }
+    },
+    "tags": []
 }

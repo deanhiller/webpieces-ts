@@ -8,3 +8,6 @@ node_modules/
 
 # Generated files
 *.tsbuildinfo
+
+# Markdown files
+*.md

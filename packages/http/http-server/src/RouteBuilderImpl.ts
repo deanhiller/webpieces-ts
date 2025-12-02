@@ -15,10 +15,10 @@ export type HttpFilter = Filter<MethodMeta, WpResponse<unknown>>;
  * Stores both the DI-resolved filter and the metadata needed for matching.
  */
 export class FilterWithMeta {
-  constructor(
-    public filter: HttpFilter,
-    public definition: FilterDefinition
-  ) {}
+    constructor(
+        public filter: HttpFilter,
+        public definition: FilterDefinition,
+    ) {}
 }
 
 /**
@@ -29,10 +29,10 @@ export class FilterWithMeta {
  * Type safety is maintained through the generic on RouteDefinition at registration time.
  */
 export class RouteHandlerWithMeta {
-  constructor(
-    public handler: RouteHandler<unknown>,
-    public definition: RouteDefinition<unknown>
-  ) {}
+    constructor(
+        public handler: RouteHandler<unknown>,
+        public definition: RouteDefinition<unknown>,
+    ) {}
 }
 
 /**
@@ -54,107 +54,109 @@ export class RouteHandlerWithMeta {
 @provideSingleton()
 @injectable()
 export class RouteBuilderImpl implements RouteBuilder {
-  private routes: Map<string, RouteHandlerWithMeta> = new Map();
-  private filterRegistry: Array<FilterWithMeta> = [];
-  private container?: Container;
+    private routes: Map<string, RouteHandlerWithMeta> = new Map();
+    private filterRegistry: Array<FilterWithMeta> = [];
+    private container?: Container;
 
-  /**
-   * Set the DI container used for resolving filters and controllers.
-   * Called by WebpiecesCoreServer after appContainer is created.
-   *
-   * @param container - The application DI container (appContainer)
-   */
-  setContainer(container: Container): void {
-    this.container = container;
-  }
-
-  /**
-   * Register a route with the router.
-   *
-   * Resolves the controller from DI container ONCE and creates a handler that uses
-   * the resolved controller instance. This is more efficient than resolving on every request.
-   *
-   * The route is stored with a key of "METHOD:path" (e.g., "POST:/search/item").
-   *
-   * @param route - Route definition with controller class and method name
-   */
-  addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void {
-    if (!this.container) {
-      throw new Error('Container not set. Call setContainer() before registering routes.');
+    /**
+     * Set the DI container used for resolving filters and controllers.
+     * Called by WebpiecesCoreServer after appContainer is created.
+     *
+     * @param container - The application DI container (appContainer)
+     */
+    setContainer(container: Container): void {
+        this.container = container;
     }
 
-    const routeMeta = route.routeMeta;
+    /**
+     * Register a route with the router.
+     *
+     * Resolves the controller from DI container ONCE and creates a handler that uses
+     * the resolved controller instance. This is more efficient than resolving on every request.
+     *
+     * The route is stored with a key of "METHOD:path" (e.g., "POST:/search/item").
+     *
+     * @param route - Route definition with controller class and method name
+     */
+    addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void {
+        if (!this.container) {
+            throw new Error('Container not set. Call setContainer() before registering routes.');
+        }
 
-    const key = `${routeMeta.httpMethod}:${routeMeta.path}`;
+        const routeMeta = route.routeMeta;
 
-    // Resolve controller instance from DI container ONCE (not on every request!)
-    const controller = this.container.get(route.controllerClass);
+        const key = `${routeMeta.httpMethod}:${routeMeta.path}`;
 
-    // Get the controller method
-    const method = (controller as Record<string, unknown>)[routeMeta.methodName];
-    if (typeof method !== 'function') {
-      const controllerName = (route.controllerClass as { name?: string }).name || 'Unknown';
-      throw new Error(
-        `Method ${routeMeta.methodName} not found on controller ${controllerName}`
-      );
+        // Resolve controller instance from DI container ONCE (not on every request!)
+        const controller = this.container.get(route.controllerClass);
+
+        // Get the controller method
+        const method = (controller as Record<string, unknown>)[routeMeta.methodName];
+        if (typeof method !== 'function') {
+            const controllerName = (route.controllerClass as { name?: string }).name || 'Unknown';
+            throw new Error(
+                `Method ${routeMeta.methodName} not found on controller ${controllerName}`,
+            );
+        }
+
+        // Create handler that uses the resolved controller instance
+        const handler = new (class extends RouteHandler<TResult> {
+            async execute(meta: MethodMeta): Promise<TResult> {
+                // Invoke the method with requestDto from meta
+                // The controller is already resolved - no DI lookup on every request!
+                // Pass requestDto as the single argument to the controller method
+                const result: TResult = await method.call(controller, meta.requestDto);
+                return result;
+            }
+        })();
+
+        // Store handler with route definition
+        const routeWithMeta = new RouteHandlerWithMeta(
+            handler as RouteHandler<unknown>,
+            route as RouteDefinition<unknown>,
+        );
+
+        this.routes.set(key, routeWithMeta);
     }
 
-    // Create handler that uses the resolved controller instance
-    const handler = new class extends RouteHandler<TResult> {
-      async execute(meta: MethodMeta): Promise<TResult> {
-        // Invoke the method with requestDto from meta
-        // The controller is already resolved - no DI lookup on every request!
-        // Pass requestDto as the single argument to the controller method
-        const result: TResult = await method.call(controller, meta.requestDto);
-        return result;
-      }
-    };
+    /**
+     * Register a filter with the filter chain.
+     *
+     * Resolves the filter from DI container and pairs it with the filter definition.
+     * The definition includes pattern information used for route-specific filtering.
+     *
+     * @param filterDef - Filter definition with priority, filter class, and optional filepath pattern
+     */
+    addFilter(filterDef: FilterDefinition): void {
+        if (!this.container) {
+            throw new Error('Container not set. Call setContainer() before registering filters.');
+        }
 
-    // Store handler with route definition
-    const routeWithMeta = new RouteHandlerWithMeta(
-      handler as RouteHandler<unknown>,
-      route as RouteDefinition<unknown>
-    );
+        // Resolve filter instance from DI container
+        const filter = this.container.get<HttpFilter>(filterDef.filterClass);
 
-    this.routes.set(key, routeWithMeta);
-  }
-
-  /**
-   * Register a filter with the filter chain.
-   *
-   * Resolves the filter from DI container and pairs it with the filter definition.
-   * The definition includes pattern information used for route-specific filtering.
-   *
-   * @param filterDef - Filter definition with priority, filter class, and optional filepath pattern
-   */
-  addFilter(filterDef: FilterDefinition): void {
-    if (!this.container) {
-      throw new Error('Container not set. Call setContainer() before registering filters.');
+        // Store filter with its definition
+        const filterWithMeta = new FilterWithMeta(filter, filterDef);
+        this.filterRegistry.push(filterWithMeta);
     }
 
-    // Resolve filter instance from DI container
-    const filter = this.container.get<HttpFilter>(filterDef.filterClass);
+    /**
+     * Get all registered routes.
+     *
+     * @returns Map of routes with handlers and definitions, keyed by "METHOD:path"
+     */
+    getRoutes(): Map<string, RouteHandlerWithMeta> {
+        return this.routes;
+    }
 
-    // Store filter with its definition
-    const filterWithMeta = new FilterWithMeta(filter, filterDef);
-    this.filterRegistry.push(filterWithMeta);
-  }
-
-  /**
-   * Get all registered routes.
-   *
-   * @returns Map of routes with handlers and definitions, keyed by "METHOD:path"
-   */
-  getRoutes(): Map<string, RouteHandlerWithMeta> {
-    return this.routes;
-  }
-
-  /**
-   * Get all filters sorted by priority (highest priority first).
-   *
-   * @returns Array of FilterWithMeta sorted by priority
-   */
-  getSortedFilters(): Array<FilterWithMeta> {
-    return [...this.filterRegistry].sort((a, b) => b.definition.priority - a.definition.priority);
-  }
+    /**
+     * Get all filters sorted by priority (highest priority first).
+     *
+     * @returns Array of FilterWithMeta sorted by priority
+     */
+    getSortedFilters(): Array<FilterWithMeta> {
+        return [...this.filterRegistry].sort(
+            (a, b) => b.definition.priority - a.definition.priority,
+        );
+    }
 }

@@ -1,35 +1,35 @@
 {
-  "name": "example-app",
-  "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/example-app/src",
-  "projectType": "application",
-  "targets": {
-    "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/apps/example-app",
-        "main": "apps/example-app/src/server.ts",
-        "tsConfig": "apps/example-app/tsconfig.app.json",
-        "assets": []
-      },
-      "dependsOn": [
-        "core-context:build",
-        "core-meta:build",
-        "http-routing:build",
-        "http-filters:build",
-        "http-server:build"
-      ]
+    "name": "example-app",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/example-app/src",
+    "projectType": "application",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/apps/example-app",
+                "main": "apps/example-app/src/server.ts",
+                "tsConfig": "apps/example-app/tsconfig.app.json",
+                "assets": []
+            },
+            "dependsOn": [
+                "core-context:build",
+                "core-meta:build",
+                "http-routing:build",
+                "http-filters:build",
+                "http-server:build"
+            ]
+        },
+        "serve": {
+            "continuous": true,
+            "executor": "@nx/js:node",
+            "dependsOn": ["build"],
+            "options": {
+                "buildTarget": "example-app:build",
+                "runBuildTargetDependencies": false
+            }
+        }
     },
-    "serve": {
-      "continuous": true,
-      "executor": "@nx/js:node",
-      "dependsOn": ["build"],
-      "options": {
-        "buildTarget": "example-app:build",
-        "runBuildTargetDependencies": false
-      }
-    }
-  },
-  "tags": []
+    "tags": []
 }

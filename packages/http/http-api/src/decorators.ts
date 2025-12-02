@@ -5,10 +5,10 @@ import 'reflect-metadata';
  * These keys are used by both server-side (routing) and client-side (client generation).
  */
 export const METADATA_KEYS = {
-  API_INTERFACE: 'webpieces:api-interface',
-  ROUTES: 'webpieces:routes',
-  HTTP_METHOD: 'webpieces:http-method',
-  PATH: 'webpieces:path',
+    API_INTERFACE: 'webpieces:api-interface',
+    ROUTES: 'webpieces:routes',
+    HTTP_METHOD: 'webpieces:http-method',
+    PATH: 'webpieces:path',
 };
 
 /**
@@ -16,22 +16,17 @@ export const METADATA_KEYS = {
  * Used by both server-side routing and client-side HTTP client generation.
  */
 export class RouteMetadata {
-  httpMethod: string;
-  path: string;
-  methodName: string;
-  parameterTypes?: any[];
+    httpMethod: string;
+    path: string;
+    methodName: string;
+    parameterTypes?: any[];
 
-  constructor(
-    httpMethod: string,
-    path: string,
-    methodName: string,
-    parameterTypes?: any[]
-  ) {
-    this.httpMethod = httpMethod;
-    this.path = path;
-    this.methodName = methodName;
-    this.parameterTypes = parameterTypes;
-  }
+    constructor(httpMethod: string, path: string, methodName: string, parameterTypes?: any[]) {
+        this.httpMethod = httpMethod;
+        this.path = path;
+        this.methodName = methodName;
+        this.parameterTypes = parameterTypes;
+    }
 }
 
 /**
@@ -55,14 +50,14 @@ export class RouteMetadata {
  * ```
  */
 export function ApiInterface(): ClassDecorator {
-  return (target: any) => {
-    Reflect.defineMetadata(METADATA_KEYS.API_INTERFACE, true, target);
+    return (target: any) => {
+        Reflect.defineMetadata(METADATA_KEYS.API_INTERFACE, true, target);
 
-    // Initialize routes array if not exists
-    if (!Reflect.hasMetadata(METADATA_KEYS.ROUTES, target)) {
-      Reflect.defineMetadata(METADATA_KEYS.ROUTES, [], target);
-    }
-  };
+        // Initialize routes array if not exists
+        if (!Reflect.hasMetadata(METADATA_KEYS.ROUTES, target)) {
+            Reflect.defineMetadata(METADATA_KEYS.ROUTES, [], target);
+        }
+    };
 }
 
 /**
@@ -70,33 +65,33 @@ export function ApiInterface(): ClassDecorator {
  * Used by @Get, @Post, @Put, @Delete, @Patch decorators.
  */
 function httpMethod(method: string): MethodDecorator {
-  return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-    // For static methods, target is the constructor itself
-    // For instance methods, target is the prototype
-    const metadataTarget = typeof target === 'function' ? target : target.constructor;
+    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+        // For static methods, target is the constructor itself
+        // For instance methods, target is the prototype
+        const metadataTarget = typeof target === 'function' ? target : target.constructor;
 
-    const existingMetadata = Reflect.getMetadata(METADATA_KEYS.ROUTES, metadataTarget) || [];
+        const existingMetadata = Reflect.getMetadata(METADATA_KEYS.ROUTES, metadataTarget) || [];
 
-    // Find or create route metadata for this method
-    let routeMetadata = existingMetadata.find(
-      (r: RouteMetadata) => r.methodName === propertyKey
-    );
+        // Find or create route metadata for this method
+        let routeMetadata = existingMetadata.find(
+            (r: RouteMetadata) => r.methodName === propertyKey,
+        );
 
-    if (!routeMetadata) {
-      routeMetadata = new RouteMetadata('', '', propertyKey as string);
-      existingMetadata.push(routeMetadata);
-    }
+        if (!routeMetadata) {
+            routeMetadata = new RouteMetadata('', '', propertyKey as string);
+            existingMetadata.push(routeMetadata);
+        }
 
-    routeMetadata.httpMethod = method;
+        routeMetadata.httpMethod = method;
 
-    // Get parameter types
-    const paramTypes = Reflect.getMetadata('design:paramtypes', target, propertyKey);
-    if (paramTypes) {
-      routeMetadata.parameterTypes = paramTypes;
-    }
+        // Get parameter types
+        const paramTypes = Reflect.getMetadata('design:paramtypes', target, propertyKey);
+        if (paramTypes) {
+            routeMetadata.parameterTypes = paramTypes;
+        }
 
-    Reflect.defineMetadata(METADATA_KEYS.ROUTES, existingMetadata, metadataTarget);
-  };
+        Reflect.defineMetadata(METADATA_KEYS.ROUTES, existingMetadata, metadataTarget);
+    };
 }
 
 /**
@@ -104,7 +99,7 @@ function httpMethod(method: string): MethodDecorator {
  * Usage: @Get()
  */
 export function Get(): MethodDecorator {
-  return httpMethod('GET');
+    return httpMethod('GET');
 }
 
 /**
@@ -112,7 +107,7 @@ export function Get(): MethodDecorator {
  * Usage: @Post()
  */
 export function Post(): MethodDecorator {
-  return httpMethod('POST');
+    return httpMethod('POST');
 }
 
 /**
@@ -120,7 +115,7 @@ export function Post(): MethodDecorator {
  * Usage: @Put()
  */
 export function Put(): MethodDecorator {
-  return httpMethod('PUT');
+    return httpMethod('PUT');
 }
 
 /**
@@ -128,7 +123,7 @@ export function Put(): MethodDecorator {
  * Usage: @Delete()
  */
 export function Delete(): MethodDecorator {
-  return httpMethod('DELETE');
+    return httpMethod('DELETE');
 }
 
 /**
@@ -136,7 +131,7 @@ export function Delete(): MethodDecorator {
  * Usage: @Patch()
  */
 export function Patch(): MethodDecorator {
-  return httpMethod('PATCH');
+    return httpMethod('PATCH');
 }
 
 /**
@@ -157,27 +152,27 @@ export function Patch(): MethodDecorator {
  * ```
  */
 export function Path(path: string): MethodDecorator {
-  return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-    // For static methods, target is the constructor itself
-    // For instance methods, target is the prototype
-    const metadataTarget = typeof target === 'function' ? target : target.constructor;
+    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+        // For static methods, target is the constructor itself
+        // For instance methods, target is the prototype
+        const metadataTarget = typeof target === 'function' ? target : target.constructor;
 
-    const existingMetadata = Reflect.getMetadata(METADATA_KEYS.ROUTES, metadataTarget) || [];
+        const existingMetadata = Reflect.getMetadata(METADATA_KEYS.ROUTES, metadataTarget) || [];
 
-    // Find or create route metadata for this method
-    let routeMetadata = existingMetadata.find(
-      (r: RouteMetadata) => r.methodName === propertyKey
-    );
+        // Find or create route metadata for this method
+        let routeMetadata = existingMetadata.find(
+            (r: RouteMetadata) => r.methodName === propertyKey,
+        );
 
-    if (!routeMetadata) {
-      routeMetadata = new RouteMetadata('', '', propertyKey as string);
-      existingMetadata.push(routeMetadata);
-    }
+        if (!routeMetadata) {
+            routeMetadata = new RouteMetadata('', '', propertyKey as string);
+            existingMetadata.push(routeMetadata);
+        }
 
-    routeMetadata.path = path;
+        routeMetadata.path = path;
 
-    Reflect.defineMetadata(METADATA_KEYS.ROUTES, existingMetadata, metadataTarget);
-  };
+        Reflect.defineMetadata(METADATA_KEYS.ROUTES, existingMetadata, metadataTarget);
+    };
 }
 
 /**
@@ -185,8 +180,8 @@ export function Path(path: string): MethodDecorator {
  * Used by both server-side routing and client-side client generation.
  */
 export function getRoutes(apiClass: any): RouteMetadata[] {
-  const routes = Reflect.getMetadata(METADATA_KEYS.ROUTES, apiClass);
-  return routes || [];
+    const routes = Reflect.getMetadata(METADATA_KEYS.ROUTES, apiClass);
+    return routes || [];
 }
 
 /**
@@ -194,5 +189,5 @@ export function getRoutes(apiClass: any): RouteMetadata[] {
  * Used by both server-side routing and client-side client generation.
  */
 export function isApiInterface(apiClass: any): boolean {
-  return Reflect.getMetadata(METADATA_KEYS.API_INTERFACE, apiClass) === true;
+    return Reflect.getMetadata(METADATA_KEYS.API_INTERFACE, apiClass) === true;
 }

@@ -5,10 +5,10 @@ import { ContainerModule, Container } from 'inversify';
  * Similar to Java WebPieces Routes interface.
  */
 export interface Routes {
-  /**
-   * Configure routes using the provided RouteBuilder.
-   */
-  configure(routeBuilder: RouteBuilder): void;
+    /**
+     * Configure routes using the provided RouteBuilder.
+     */
+    configure(routeBuilder: RouteBuilder): void;
 }
 
 /**
@@ -16,8 +16,8 @@ export interface Routes {
  * Will be implemented in http-routing package.
  */
 export interface RouteBuilder {
-  addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void;
-  addFilter(filter: FilterDefinition): void;
+    addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void;
+    addFilter(filter: FilterDefinition): void;
 }
 
 export class RouteMetadata2 {
@@ -26,12 +26,7 @@ export class RouteMetadata2 {
     methodName: string;
     parameterTypes?: any[];
 
-    constructor(
-        httpMethod: string,
-        path: string,
-        methodName: string,
-        parameterTypes?: any[]
-    ) {
+    constructor(httpMethod: string, path: string, methodName: string, parameterTypes?: any[]) {
         this.httpMethod = httpMethod;
         this.path = path;
         this.methodName = methodName;
@@ -45,13 +40,11 @@ export class RouteMetadata2 {
  * This provides type safety for the entire request/response cycle.
  */
 export class RouteDefinition<TResult = unknown> {
-
-  constructor(
-      public routeMeta: RouteMetadata2,
-    public controllerClass: any,
-    public controllerFilepath?: string
-  ) {
-  }
+    constructor(
+        public routeMeta: RouteMetadata2,
+        public controllerClass: any,
+        public controllerFilepath?: string,
+    ) {}
 }
 
 /**
@@ -65,26 +58,22 @@ export class RouteDefinition<TResult = unknown> {
  * If filepathPattern is not specified, the filter matches all controllers.
  */
 export class FilterDefinition {
-  priority: number;
-  filterClass: any;
-  filter?: any; // Filter instance (set by RouteBuilder when resolving from DI)
+    priority: number;
+    filterClass: any;
+    filter?: any; // Filter instance (set by RouteBuilder when resolving from DI)
 
-  /**
-   * Glob pattern to match controller file paths.
-   * If not specified, defaults to matching all controllers.
-   */
-  filepathPattern: string;
+    /**
+     * Glob pattern to match controller file paths.
+     * If not specified, defaults to matching all controllers.
+     */
+    filepathPattern: string;
 
-  constructor(
-    priority: number,
-    filterClass: any,
-    filepathPattern: string,
-  ) {
-    this.priority = priority;
-    this.filterClass = filterClass;
-    this.filepathPattern = filepathPattern;
-    this.filter = undefined; // Set later by RouteBuilder
-  }
+    constructor(priority: number, filterClass: any, filepathPattern: string) {
+        this.priority = priority;
+        this.filterClass = filterClass;
+        this.filepathPattern = filepathPattern;
+        this.filter = undefined; // Set later by RouteBuilder
+    }
 }
 
 /**
@@ -92,22 +81,21 @@ export class FilterDefinition {
  * JsonFilter uses these to read request body and write response.
  */
 export class RouteRequest {
-  /**
-   * Express Request object
-   */
-  request: unknown;
+    /**
+     * Express Request object
+     */
+    request: unknown;
 
-  /**
-   * Express Response object
-   */
-  response: unknown;
+    /**
+     * Express Response object
+     */
+    response: unknown;
 
-  constructor(request: unknown, response: unknown) {
-    this.request = request;
-    this.response = response;
-  }
+    constructor(request: unknown, response: unknown) {
+        this.request = request;
+        this.response = response;
+    }
 }
-
 
 /**
  * Main application metadata interface.
@@ -116,15 +104,15 @@ export class RouteRequest {
  * This is the entry point that WebpiecesServer calls to configure your application.
  */
 export interface WebAppMeta {
-  /**
-   * Returns the list of Inversify container modules for dependency injection.
-   * Similar to getGuiceModules() in Java.
-   */
-  getDIModules(): ContainerModule[];
+    /**
+     * Returns the list of Inversify container modules for dependency injection.
+     * Similar to getGuiceModules() in Java.
+     */
+    getDIModules(): ContainerModule[];
 
-  /**
-   * Returns the list of route configurations.
-   * Similar to getRouteModules() in Java.
-   */
-  getRoutes(): Routes[];
+    /**
+     * Returns the list of route configurations.
+     * Similar to getRouteModules() in Java.
+     */
+    getRoutes(): Routes[];
 }

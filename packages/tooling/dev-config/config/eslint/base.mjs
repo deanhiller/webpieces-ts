@@ -30,62 +30,62 @@ import webpiecesPlugin from '../../eslint-plugin/index.js';
  * ```
  */
 export default [
-  {
-    // Ignore common directories
-    ignores: [
-      '**/dist',
-      '**/out-tsc',
-      '**/tmp',
-      '**/coverage',
-      '**/node_modules',
-      '**/.nx',
-      '**/.vscode',
-      '**/.idea',
-    ],
-  },
-  {
-    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    plugins: {
-      '@webpieces': webpiecesPlugin,
+    {
+        // Ignore common directories
+        ignores: [
+            '**/dist',
+            '**/out-tsc',
+            '**/tmp',
+            '**/coverage',
+            '**/node_modules',
+            '**/.nx',
+            '**/.vscode',
+            '**/.idea',
+        ],
     },
-    languageOptions: {
-      ecmaVersion: 2021,
-      sourceType: 'module',
-    },
-    rules: {
-      // WebPieces custom rules
-      '@webpieces/catch-error-pattern': 'error',
-      // General code quality
-      'no-console': 'off', // Allow console for logging
-      'no-debugger': 'warn',
-      'no-alert': 'warn',
-      'no-var': 'error',
-      'prefer-const': 'warn',
-      'prefer-arrow-callback': 'warn',
-
-      // TypeScript rules (when @typescript-eslint is available)
-      '@typescript-eslint/no-explicit-any': 'warn', // Prefer unknown over any
-      '@typescript-eslint/explicit-function-return-type': 'off', // Allow inference
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
+    {
+        files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+        plugins: {
+            '@webpieces': webpiecesPlugin,
         },
-      ],
-      '@typescript-eslint/no-empty-interface': 'off', // WebPieces uses classes for data
-      '@typescript-eslint/no-empty-function': 'off',
+        languageOptions: {
+            ecmaVersion: 2021,
+            sourceType: 'module',
+        },
+        rules: {
+            // WebPieces custom rules
+            '@webpieces/catch-error-pattern': 'error',
+            // General code quality
+            'no-console': 'off', // Allow console for logging
+            'no-debugger': 'warn',
+            'no-alert': 'warn',
+            'no-var': 'error',
+            'prefer-const': 'warn',
+            'prefer-arrow-callback': 'warn',
 
-      // Import organization
-      'sort-imports': 'off', // Handled by IDE
+            // TypeScript rules (when @typescript-eslint is available)
+            '@typescript-eslint/no-explicit-any': 'warn', // Prefer unknown over any
+            '@typescript-eslint/explicit-function-return-type': 'off', // Allow inference
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                },
+            ],
+            '@typescript-eslint/no-empty-interface': 'off', // WebPieces uses classes for data
+            '@typescript-eslint/no-empty-function': 'off',
+
+            // Import organization
+            'sort-imports': 'off', // Handled by IDE
+        },
     },
-  },
-  {
-    // Specific rules for test files
-    files: ['**/*.spec.ts', '**/*.test.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off', // Allow any in tests
-      '@typescript-eslint/no-non-null-assertion': 'off',
+    {
+        // Specific rules for test files
+        files: ['**/*.spec.ts', '**/*.test.ts'],
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off', // Allow any in tests
+            '@typescript-eslint/no-non-null-assertion': 'off',
+        },
     },
-  },
 ];

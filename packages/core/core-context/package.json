@@ -1,24 +1,24 @@
 {
-  "name": "@webpieces/core-context",
-  "version": "0.0.0-dev",
-  "description": "AsyncLocalStorage-based context management for request-scoped data",
-  "type": "commonjs",
-  "main": "./src/index.js",
-  "types": "./src/index.d.ts",
-  "author": "Dean Hiller",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/deanhiller/webpieces-ts.git",
-    "directory": "packages/core/core-context"
-  },
-  "keywords": [
-    "webpieces",
-    "context",
-    "async",
-    "request-scoped"
-  ],
-  "publishConfig": {
-    "access": "public"
-  }
+    "name": "@webpieces/core-context",
+    "version": "0.0.0-dev",
+    "description": "AsyncLocalStorage-based context management for request-scoped data",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/core/core-context"
+    },
+    "keywords": [
+        "webpieces",
+        "context",
+        "async",
+        "request-scoped"
+    ],
+    "publishConfig": {
+        "access": "public"
+    }
 }

@@ -14,20 +14,19 @@ import { MethodMeta } from '../MethodMeta';
 @provideSingleton()
 @injectable()
 export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
+    async filter(
+        meta: MethodMeta,
+        nextFilter: Service<MethodMeta, WpResponse<unknown>>,
+    ): Promise<WpResponse<unknown>> {
+        // Run the rest of the filter chain within a new context
+        return RequestContext.run(async () => {
+            // Store request metadata in context for other filters to access
+            RequestContext.put('METHOD_META', meta);
+            RequestContext.put('REQUEST_PATH', meta.path);
+            RequestContext.put('HTTP_METHOD', meta.httpMethod);
 
-  async filter(
-    meta: MethodMeta,
-    nextFilter: Service<MethodMeta, WpResponse<unknown>>
-  ): Promise<WpResponse<unknown>> {
-    // Run the rest of the filter chain within a new context
-    return RequestContext.run(async () => {
-      // Store request metadata in context for other filters to access
-      RequestContext.put('METHOD_META', meta);
-      RequestContext.put('REQUEST_PATH', meta.path);
-      RequestContext.put('HTTP_METHOD', meta.httpMethod);
-
-      return await nextFilter.invoke(meta);
-      //RequestContext is auto cleared when done.
-    });
-  }
+            return await nextFilter.invoke(meta);
+            //RequestContext is auto cleared when done.
+        });
+    }
 }

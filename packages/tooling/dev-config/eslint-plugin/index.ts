@@ -8,7 +8,7 @@
 import catchErrorPattern from './rules/catch-error-pattern';
 
 export = {
-  rules: {
-    'catch-error-pattern': catchErrorPattern,
-  },
+    rules: {
+        'catch-error-pattern': catchErrorPattern,
+    },
 };

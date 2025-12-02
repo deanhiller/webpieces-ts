@@ -1,25 +1,24 @@
 name: Auto Approve and Merge
 
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+    pull_request_target:
+        types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
-  pull-requests: write
-  contents: write
+    pull-requests: write
+    contents: write
 
 jobs:
-  auto-approve:
-    runs-on: ubuntu-latest
+    auto-approve:
+        runs-on: ubuntu-latest
 
-    # Only auto-approve PRs from repo owner (deanhiller)
-    # Other contributors will NOT get auto-approved
-    if: github.event.pull_request.user.login == 'deanhiller'
+        # Only auto-approve PRs from repo owner (deanhiller)
+        # Other contributors will NOT get auto-approved
+        if: github.event.pull_request.user.login == 'deanhiller'
 
-    steps:
-      - name: Auto approve PR
-        uses: hmarr/auto-approve-action@v4
-        with:
-          # Use bot account PAT so approval comes from bot, not github-actions
-          github-token: ${{ secrets.BOT_PAT }}
-
+        steps:
+            - name: Auto approve PR
+              uses: hmarr/auto-approve-action@v4
+              with:
+                  # Use bot account PAT so approval comes from bot, not github-actions
+                  github-token: ${{ secrets.BOT_PAT }}

@@ -1,23 +1,23 @@
 {
-  "name": "http-routing",
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/http/http-routing/src",
-  "projectType": "library",
-  "targets": {
-    "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/packages/http/http-routing",
-        "main": "packages/http/http-routing/src/index.ts",
-        "tsConfig": "packages/http/http-routing/tsconfig.lib.json",
-        "assets": [
-          "packages/http/http-routing/package.json",
-          "packages/http/http-routing/README.md"
-        ]
-      },
-      "dependsOn": ["core-meta:build", "http-api:build"]
-    }
-  },
-  "tags": []
+    "name": "http-routing",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/http/http-routing/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/http/http-routing",
+                "main": "packages/http/http-routing/src/index.ts",
+                "tsConfig": "packages/http/http-routing/tsconfig.lib.json",
+                "assets": [
+                    "packages/http/http-routing/package.json",
+                    "packages/http/http-routing/README.md"
+                ]
+            },
+            "dependsOn": ["core-meta:build", "http-api:build"]
+        }
+    },
+    "tags": []
 }

@@ -14,10 +14,10 @@ import { MethodMeta } from './MethodMeta';
  * who is calling what in the debugger/IDE.
  */
 export abstract class RouteHandler<TResult = unknown> {
-  /**
-   * Execute the route handler.
-   * @param meta - The method metadata containing request info and params
-   * @returns Promise of the controller method result
-   */
-  abstract execute(meta: MethodMeta): Promise<TResult>;
+    /**
+     * Execute the route handler.
+     * @param meta - The method metadata containing request info and params
+     * @returns Promise of the controller method result
+     */
+    abstract execute(meta: MethodMeta): Promise<TResult>;
 }

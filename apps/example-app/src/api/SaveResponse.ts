@@ -3,9 +3,9 @@
  * Similar to Java TheMatch class.
  */
 export class TheMatch {
-  title: string = '';
-  description: string = '';
-  score: number = 0;
+    title: string = '';
+    description: string = '';
+    score: number = 0;
 }
 
 /**
@@ -13,7 +13,7 @@ export class TheMatch {
  * Similar to Java SaveResponse class.
  */
 export class SaveResponse {
-  searchTime: number = 0;
-  success: boolean = false;
-  matches: TheMatch[] = [];
+    searchTime: number = 0;
+    success: boolean = false;
+    matches: TheMatch[] = [];
 }

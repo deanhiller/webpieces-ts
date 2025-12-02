@@ -1,29 +1,29 @@
 {
-  "name": "@webpieces/core-util",
-  "version": "0.0.0-dev",
-  "description": "Utility functions for WebPieces - works in browser and Node.js",
-  "type": "commonjs",
-  "main": "./src/index.js",
-  "types": "./src/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+    "name": "@webpieces/core-util",
+    "version": "0.0.0-dev",
+    "description": "Utility functions for WebPieces - works in browser and Node.js",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.js"
+        }
+    },
+    "keywords": [
+        "webpieces",
+        "utilities",
+        "error-handling"
+    ],
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/core/core-util"
+    },
+    "publishConfig": {
+        "access": "public"
     }
-  },
-  "keywords": [
-    "webpieces",
-    "utilities",
-    "error-handling"
-  ],
-  "author": "Dean Hiller",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/deanhiller/webpieces-ts.git",
-    "directory": "packages/core/core-util"
-  },
-  "publishConfig": {
-    "access": "public"
-  }
 }

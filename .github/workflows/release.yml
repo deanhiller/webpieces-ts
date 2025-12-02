@@ -1,160 +1,160 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'packages/**'
-      - 'VERSION'
-      - 'nx.json'
-      - 'package.json'
-      - 'tsconfig.base.json'
-      - 'apps/**/tsconfig*.json'
-  workflow_dispatch:
-    inputs:
-      build_number:
-        description: 'Build number (leave empty for auto)'
-        required: false
-        type: string
+    push:
+        branches: [main]
+        paths:
+            - 'packages/**'
+            - 'VERSION'
+            - 'nx.json'
+            - 'package.json'
+            - 'tsconfig.base.json'
+            - 'apps/**/tsconfig*.json'
+    workflow_dispatch:
+        inputs:
+            build_number:
+                description: 'Build number (leave empty for auto)'
+                required: false
+                type: string
 
 permissions:
-  contents: write
-  id-token: write
-  pull-requests: write
+    contents: write
+    id-token: write
+    pull-requests: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+    release:
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-          cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22.x'
+                  cache: 'npm'
+                  registry-url: 'https://registry.npmjs.org'
 
-      - name: Cache Nx
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
-          restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-
-            nx-${{ runner.os }}-
+            - name: Cache Nx
+              uses: actions/cache@v4
+              with:
+                  path: .nx/cache
+                  key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
+                  restore-keys: |
+                      nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-
+                      nx-${{ runner.os }}-
 
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+            - name: Upgrade npm for trusted publishing
+              run: npm install -g npm@latest
 
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+            - name: Configure Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Determine version
-        id: version
-        run: |
-          BASE_VERSION=$(cat VERSION | tr -d '[:space:]')
+            - name: Determine version
+              id: version
+              run: |
+                  BASE_VERSION=$(cat VERSION | tr -d '[:space:]')
 
-          # Use manual build number if provided, otherwise use GitHub run number
-          if [ -n "${{ github.event.inputs.build_number }}" ]; then
-            BUILD_NUMBER="${{ github.event.inputs.build_number }}"
-          else
-            BUILD_NUMBER="${{ github.run_number }}"
-          fi
+                  # Use manual build number if provided, otherwise use GitHub run number
+                  if [ -n "${{ github.event.inputs.build_number }}" ]; then
+                    BUILD_NUMBER="${{ github.event.inputs.build_number }}"
+                  else
+                    BUILD_NUMBER="${{ github.run_number }}"
+                  fi
 
-          FULL_VERSION="${BASE_VERSION}.${BUILD_NUMBER}"
+                  FULL_VERSION="${BASE_VERSION}.${BUILD_NUMBER}"
 
-          echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
-          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          echo "full_version=$FULL_VERSION" >> $GITHUB_OUTPUT
+                  echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+                  echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+                  echo "full_version=$FULL_VERSION" >> $GITHUB_OUTPUT
 
-          echo "📦 Version will be: $FULL_VERSION"
-          echo "   Base: $BASE_VERSION (from VERSION file)"
-          echo "   Build: $BUILD_NUMBER"
+                  echo "📦 Version will be: $FULL_VERSION"
+                  echo "   Base: $BASE_VERSION (from VERSION file)"
+                  echo "   Build: $BUILD_NUMBER"
 
-      - name: Run tests
-        run: npm test
+            - name: Run tests
+              run: npm test
 
-      - name: Set dynamic version for all packages
-        run: |
-          BUILD_NUMBER=${{ steps.version.outputs.build_number }} ./scripts/set-version.sh
+            - name: Set dynamic version for all packages
+              run: |
+                  BUILD_NUMBER=${{ steps.version.outputs.build_number }} ./scripts/set-version.sh
 
-      - name: Build all packages
-        run: npx nx run-many --target=build --all
+            - name: Build all packages
+              run: npx nx run-many --target=build --all
 
-      - name: Verify dist versions
-        run: |
-          echo "Verifying dist package versions:"
-          grep '"version"' dist/packages/core/core-context/package.json
-          grep '"version"' dist/packages/http/http-server/package.json
+            - name: Verify dist versions
+              run: |
+                  echo "Verifying dist package versions:"
+                  grep '"version"' dist/packages/core/core-context/package.json
+                  grep '"version"' dist/packages/http/http-server/package.json
 
-      - name: Publish packages to npm
-        run: |
-          echo "📦 Publishing all packages with version ${{ steps.version.outputs.full_version }}"
+            - name: Publish packages to npm
+              run: |
+                  echo "📦 Publishing all packages with version ${{ steps.version.outputs.full_version }}"
 
-          # Publish in dependency order
-          npm publish dist/packages/core/core-context --access public --provenance
-          npm publish dist/packages/core/core-meta --access public --provenance
-          npm publish dist/packages/core/core-util --access public --provenance
-          npm publish dist/packages/http/http-api --access public --provenance
-          npm publish dist/packages/http/http-filters --access public --provenance
-          npm publish dist/packages/http/http-routing --access public --provenance
-          npm publish dist/packages/http/http-client --access public --provenance
-          npm publish dist/packages/http/http-server --access public --provenance
-          npm publish dist/packages/tooling/dev-config --access public --provenance
+                  # Publish in dependency order
+                  npm publish dist/packages/core/core-context --access public --provenance
+                  npm publish dist/packages/core/core-meta --access public --provenance
+                  npm publish dist/packages/core/core-util --access public --provenance
+                  npm publish dist/packages/http/http-api --access public --provenance
+                  npm publish dist/packages/http/http-filters --access public --provenance
+                  npm publish dist/packages/http/http-routing --access public --provenance
+                  npm publish dist/packages/http/http-client --access public --provenance
+                  npm publish dist/packages/http/http-server --access public --provenance
+                  npm publish dist/packages/tooling/dev-config --access public --provenance
 
-          # Publish umbrella packages (depend on all above)
-          npm publish dist/packages/server --access public --provenance
-          npm publish dist/packages/client --access public --provenance
-          npm publish dist/packages/rules --access public --provenance
-        env:
-          NPM_CONFIG_PROVENANCE: true
+                  # Publish umbrella packages (depend on all above)
+                  npm publish dist/packages/server --access public --provenance
+                  npm publish dist/packages/client --access public --provenance
+                  npm publish dist/packages/rules --access public --provenance
+              env:
+                  NPM_CONFIG_PROVENANCE: true
 
-      - name: Create git tag
-        run: |
-          git tag "v${{ steps.version.outputs.full_version }}"
-          git push origin "v${{ steps.version.outputs.full_version }}"
+            - name: Create git tag
+              run: |
+                  git tag "v${{ steps.version.outputs.full_version }}"
+                  git push origin "v${{ steps.version.outputs.full_version }}"
 
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.version.outputs.full_version }}
-          release_name: Release ${{ steps.version.outputs.full_version }}
-          body: |
-            🚀 Published version ${{ steps.version.outputs.full_version }} to npm
+            - name: Create GitHub Release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: v${{ steps.version.outputs.full_version }}
+                  release_name: Release ${{ steps.version.outputs.full_version }}
+                  body: |
+                      🚀 Published version ${{ steps.version.outputs.full_version }} to npm
 
-            **Base Version:** ${{ steps.version.outputs.base_version }} (from VERSION file)
-            **Build Number:** ${{ steps.version.outputs.build_number }}
+                      **Base Version:** ${{ steps.version.outputs.base_version }} (from VERSION file)
+                      **Build Number:** ${{ steps.version.outputs.build_number }}
 
-            ## Packages Published:
-            - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/core-meta@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-meta/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/http-api@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-api/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/http-filters@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-filters/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
-            - [@webpieces/dev-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/dev-config/v/${{ steps.version.outputs.full_version }})
+                      ## Packages Published:
+                      - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/core-meta@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-meta/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/http-api@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-api/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/http-filters@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-filters/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/dev-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/dev-config/v/${{ steps.version.outputs.full_version }})
 
-            ### Umbrella Packages (NEW!)
-            - [@webpieces/server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/server/v/${{ steps.version.outputs.full_version }}) - All server dependencies
-            - [@webpieces/client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/client/v/${{ steps.version.outputs.full_version }}) - All client dependencies
-            - [@webpieces/rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/rules/v/${{ steps.version.outputs.full_version }}) - Development tooling
+                      ### Umbrella Packages (NEW!)
+                      - [@webpieces/server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/server/v/${{ steps.version.outputs.full_version }}) - All server dependencies
+                      - [@webpieces/client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/client/v/${{ steps.version.outputs.full_version }}) - All client dependencies
+                      - [@webpieces/rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/rules/v/${{ steps.version.outputs.full_version }}) - Development tooling
 
-            View all packages: https://www.npmjs.com/search?q=%40webpieces
-          draft: false
-          prerelease: false
-        continue-on-error: true
+                      View all packages: https://www.npmjs.com/search?q=%40webpieces
+                  draft: false
+                  prerelease: false
+              continue-on-error: true

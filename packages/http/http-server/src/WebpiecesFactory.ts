@@ -32,33 +32,33 @@ import { WebpiecesServerImpl } from './WebpiecesServerImpl';
  * - Follows the principle of least privilege
  */
 export class WebpiecesFactory {
-  /**
-   * Create a new WebPieces server instance.
-   *
-   * This method:
-   * 1. Creates the WebPieces framework DI container
-   * 2. Loads framework bindings via buildProviderModule()
-   * 3. Resolves the server implementation from DI
-   * 4. Initializes the server with the container and meta
-   *
-   * @param meta - User-provided WebAppMeta with DI modules and routes
-   * @returns A fully initialized WebpiecesServer ready to start()
-   */
-  static create(meta: WebAppMeta): WebpiecesServer {
-    // Create WebPieces container for framework-level bindings
-    const webpiecesContainer = new Container();
+    /**
+     * Create a new WebPieces server instance.
+     *
+     * This method:
+     * 1. Creates the WebPieces framework DI container
+     * 2. Loads framework bindings via buildProviderModule()
+     * 3. Resolves the server implementation from DI
+     * 4. Initializes the server with the container and meta
+     *
+     * @param meta - User-provided WebAppMeta with DI modules and routes
+     * @returns A fully initialized WebpiecesServer ready to start()
+     */
+    static create(meta: WebAppMeta): WebpiecesServer {
+        // Create WebPieces container for framework-level bindings
+        const webpiecesContainer = new Container();
 
-    // Load buildProviderModule to auto-scan for @provideSingleton decorators
-    // This registers framework classes (WebpiecesServerImpl, RouteBuilderImpl)
-    webpiecesContainer.load(buildProviderModule());
+        // Load buildProviderModule to auto-scan for @provideSingleton decorators
+        // This registers framework classes (WebpiecesServerImpl, RouteBuilderImpl)
+        webpiecesContainer.load(buildProviderModule());
 
-    // Resolve WebpiecesServerImpl from DI container (proper DI - no 'new'!)
-    const serverImpl = webpiecesContainer.get(WebpiecesServerImpl);
+        // Resolve WebpiecesServerImpl from DI container (proper DI - no 'new'!)
+        const serverImpl = webpiecesContainer.get(WebpiecesServerImpl);
 
-    // Initialize the server (loads app DI modules, registers routes)
-    serverImpl.initialize(webpiecesContainer, meta);
+        // Initialize the server (loads app DI modules, registers routes)
+        serverImpl.initialize(webpiecesContainer, meta);
 
-    // Return as interface to hide initialize() from consumers
-    return serverImpl;
-  }
+        // Return as interface to hide initialize() from consumers
+        return serverImpl;
+    }
 }

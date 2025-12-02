@@ -6,8 +6,8 @@ import { provide } from '@inversifyjs/binding-decorators';
  * These are specific to the routing package (server-side only).
  */
 export const ROUTING_METADATA_KEYS = {
-  CONTROLLER: 'webpieces:controller',
-  SOURCE_FILEPATH: 'webpieces:source-filepath',
+    CONTROLLER: 'webpieces:controller',
+    SOURCE_FILEPATH: 'webpieces:source-filepath',
 };
 
 /**
@@ -23,9 +23,9 @@ export const ROUTING_METADATA_KEYS = {
  * ```
  */
 export function Controller(): ClassDecorator {
-  return (target: any) => {
-    Reflect.defineMetadata(ROUTING_METADATA_KEYS.CONTROLLER, true, target);
-  };
+    return (target: any) => {
+        Reflect.defineMetadata(ROUTING_METADATA_KEYS.CONTROLLER, true, target);
+    };
 }
 
 /**
@@ -33,7 +33,7 @@ export function Controller(): ClassDecorator {
  * Server-side only.
  */
 export function isController(controllerClass: any): boolean {
-  return Reflect.getMetadata(ROUTING_METADATA_KEYS.CONTROLLER, controllerClass) === true;
+    return Reflect.getMetadata(ROUTING_METADATA_KEYS.CONTROLLER, controllerClass) === true;
 }
 
 /**
@@ -50,13 +50,9 @@ export function isController(controllerClass: any): boolean {
  * @param filepath - The source filepath of the controller
  */
 export function SourceFile(filepath: string): ClassDecorator {
-  return (target: any) => {
-    Reflect.defineMetadata(
-      ROUTING_METADATA_KEYS.SOURCE_FILEPATH,
-      filepath,
-      target
-    );
-  };
+    return (target: any) => {
+        Reflect.defineMetadata(ROUTING_METADATA_KEYS.SOURCE_FILEPATH, filepath, target);
+    };
 }
 
 /**
@@ -75,9 +71,9 @@ export function SourceFile(filepath: string): ClassDecorator {
  * ```
  */
 export function provideSingleton() {
-  return (target: any) => {
-    return provide(target, (bind) => bind.inSingletonScope())(target);
-  };
+    return (target: any) => {
+        return provide(target, (bind) => bind.inSingletonScope())(target);
+    };
 }
 
 /**
@@ -96,7 +92,7 @@ export function provideSingleton() {
  * ```
  */
 export function provideTransient() {
-  return (target: any) => {
-    return provide(target)(target);
-  };
+    return (target: any) => {
+        return provide(target)(target);
+    };
 }

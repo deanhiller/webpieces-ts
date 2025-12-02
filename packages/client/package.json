@@ -1,26 +1,26 @@
 {
-  "name": "@webpieces/client",
-  "version": "0.0.0-dev",
-  "description": "Umbrella package for WebPieces client-side dependencies",
-  "type": "commonjs",
-  "author": "Dean Hiller",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/deanhiller/webpieces-ts.git",
-    "directory": "packages/client"
-  },
-  "keywords": [
-    "webpieces",
-    "client",
-    "http-client",
-    "umbrella"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "dependencies": {
-    "@webpieces/http-client": "0.0.0-dev",
-    "@webpieces/http-api": "0.0.0-dev"
-  }
+    "name": "@webpieces/client",
+    "version": "0.0.0-dev",
+    "description": "Umbrella package for WebPieces client-side dependencies",
+    "type": "commonjs",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/client"
+    },
+    "keywords": [
+        "webpieces",
+        "client",
+        "http-client",
+        "umbrella"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/http-client": "0.0.0-dev",
+        "@webpieces/http-api": "0.0.0-dev"
+    }
 }
