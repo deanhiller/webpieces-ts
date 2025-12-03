@@ -184,8 +184,8 @@ if (!fs.existsSync(docPath)) {
 
 // Verify content has AI directive
 const content = fs.readFileSync(docPath, 'utf-8');
-if (!content.includes('AI Agent: READ THE NEXT')) {
-    throw new Error('Documentation file missing AI Agent directive');
+if (!content.includes('READ THIS FILE to fix files that are too long')) {
+    throw new Error('Documentation file missing AI directive');
 }
 if (!content.includes('SINGLE COHESIVE UNIT')) {
     throw new Error('Documentation file missing single cohesive unit principle');

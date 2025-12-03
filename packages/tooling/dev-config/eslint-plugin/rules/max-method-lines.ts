@@ -150,7 +150,8 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
                     return dir;
                 }
-            } catch {
+            } catch (err: any) {
+                //const error = toError(err);
                 // Continue searching if JSON parse fails
             }
         }
@@ -164,7 +165,8 @@ function ensureDocFile(docPath: string, content: string): boolean {
         fs.mkdirSync(path.dirname(docPath), { recursive: true });
         fs.writeFileSync(docPath, content, 'utf-8');
         return true;
-    } catch (err) {
+    } catch (err: any) {
+        //const error = toError(err);
         // Graceful degradation: log warning but don't break lint
         console.warn(`[webpieces] Could not create doc file: ${docPath}`, err);
         return false;

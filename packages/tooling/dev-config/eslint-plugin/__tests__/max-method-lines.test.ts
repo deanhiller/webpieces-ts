@@ -215,7 +215,10 @@ try {
         invalid: [
             {
                 code: `function veryLongMethod() {
-${Array(100).fill(0).map((_, i) => `    const line${i} = ${i};`).join('\n')}
+${Array(100)
+    .fill(0)
+    .map((_, i) => `    const line${i} = ${i};`)
+    .join('\n')}
 }`,
                 errors: [{ messageId: 'tooLong' }],
             },
@@ -232,8 +235,8 @@ if (!fs.existsSync(docPath)) {
 
 // Verify content has AI directive
 const content = fs.readFileSync(docPath, 'utf-8');
-if (!content.includes('AI Agent: READ THE NEXT')) {
-    throw new Error('Documentation file missing AI Agent directive');
+if (!content.includes('READ THIS FILE to fix methods that are too long')) {
+    throw new Error('Documentation file missing AI directive');
 }
 if (!content.includes('TABLE OF CONTENTS')) {
     throw new Error('Documentation file missing table of contents principle');

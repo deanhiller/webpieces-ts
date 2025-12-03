@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { toError } from '@webpieces/core-util';
 
 const packages = [
     '@webpieces/core-context',
@@ -139,7 +140,8 @@ async function setupTrustedPublishers() {
             }
 
             console.log(`   ✅ Completed: ${packageName}`);
-        } catch (error) {
+        } catch (err: any) {
+            const error = toError(err);
             console.error(`   ❌ Error configuring ${packageName}:`, error);
             await page.screenshot({ path: `npm-error-${packageName.replace('/', '-')}.png` });
         }
