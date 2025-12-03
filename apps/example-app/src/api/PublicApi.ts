@@ -1,4 +1,5 @@
 import { ApiInterface, Get, Path, ValidateImplementation } from '@webpieces/http-routing';
+import { JsonObject, JsonProperty } from 'typescript-json-serializer';
 
 /**
  * DI token for PublicApi.
@@ -13,8 +14,9 @@ export const PublicApiToken = Symbol.for('PublicApi');
 /**
  * Request to get public info.
  */
+@JsonObject()
 export class PublicInfoRequest {
-    name?: string;
+    @JsonProperty() name?: string;
 }
 
 // ============================================================
@@ -24,10 +26,11 @@ export class PublicInfoRequest {
 /**
  * Response with public info.
  */
+@JsonObject()
 export class PublicInfoResponse {
-    greeting?: string;
-    serverTime?: string;
-    name?: string;
+    @JsonProperty() greeting?: string;
+    @JsonProperty() serverTime?: string;
+    @JsonProperty() name?: string;
 }
 
 // ============================================================

@@ -13,6 +13,82 @@ import { Service, WpResponse } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
 import { JsonSerializer } from 'typescript-json-serializer';
 
+export class ExpressWrapper {
+    private jsonSerializer = new JsonSerializer();
+
+    constructor(
+        private service: Service<MethodMeta, WpResponse<unknown>>,
+        private routeMeta: RouteMetadata
+    ) {
+    }
+
+    public async execute(req: Request, res: Response, next: NextFunction) {
+        try {
+            // 1. Get request DTO class from routeMeta
+            const requestDtoClass = this.routeMeta.parameterTypes?.[0];
+            if(!requestDtoClass)
+                throw new Error('No request DTO class found for route');
+
+            // 2. Deserialize req.body → DTO instance
+            const requestDto = this.jsonSerializer.deserializeObject(req.body, requestDtoClass);
+            // 3. Create MethodMeta with deserialized DTO
+            const methodMeta = new MethodMeta(this.routeMeta, requestDto);
+            // 4. Invoke the service (filter chain + controller)
+            const wpResponse = await this.service.invoke(methodMeta);
+            if(!wpResponse.response)
+                throw new Error(`Route chain(filters & all) is not returning a response.  ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`);
+
+            // 6. Serialize response → plain object
+            const responseDtoStr = this.jsonSerializer.serializeObject(wpResponse.response);
+
+            // 7. WRITE response as JSON (SYMMETRIC with reading request!)
+            res.status(200);
+            res.setHeader('Content-Type', 'application/json');
+            res.json(responseDtoStr);
+        } catch (err: unknown) {
+            // 8. Handle errors (SYMMETRIC - wrapExpress owns error handling!)
+            this.handleError(res, err);
+        }
+    }
+
+    /**
+     * Handle errors - translate to JSON ProtocolError.
+     * PUBLIC so wrapExpress can call it for symmetric error handling.
+     * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
+     */
+    public handleError(res: Response, error: unknown): void {
+        if (res.headersSent) {
+            return;
+        }
+
+        const protocolError = new ProtocolError();
+
+        if (error instanceof HttpError) {
+            protocolError.message = error.message;
+            protocolError.subType = error.subType;
+            protocolError.name = error.name;
+
+            if (error instanceof HttpBadRequestError) {
+                protocolError.field = error.field;
+                protocolError.guiAlertMessage = error.guiMessage;
+            }
+            if (error instanceof HttpVendorError) {
+                protocolError.waitSeconds = error.waitSeconds;
+            }
+            if (error instanceof HttpUserError) {
+                protocolError.errorCode = error.errorCode;
+            }
+
+            res.status(error.code).json(protocolError);
+        } else {
+            // Unknown error - 500
+            const err = toError(error);
+            protocolError.message = 'Internal Server Error';
+            console.error('[JsonTranslator] Unexpected error:', err);
+            res.status(500).json(protocolError);
+        }
+    }
+}
 /**
  * WebpiecesMiddleware - Express middleware for WebPieces server.
  *
@@ -33,7 +109,7 @@ import { JsonSerializer } from 'typescript-json-serializer';
 @provideSingleton()
 @injectable()
 export class WebpiecesMiddleware {
-    private jsonSerializer = new JsonSerializer();
+
     /**
      * Global error handler middleware - catches ALL unhandled errors.
      * Returns HTML 500 error page for any errors that escape the filter chain.
@@ -95,91 +171,17 @@ export class WebpiecesMiddleware {
     }
 
     /**
-     * Wrap a Service as an Express route handler.
-     *
-     * SYMMETRIC DESIGN: This handler owns the FULL request/response cycle:
-     * 1. Validates Content-Type
-     * 2. Deserializes req.body (plain object) → DTO class instance
-     * 3. Creates MethodMeta with deserialized DTO
-     * 4. Invokes Service (filter chain + controller)
-     * 5. Serializes response (class instance) → plain object
-     * 6. WRITES response as JSON to client (SYMMETRIC with reading request!)
-     * 7. Handles errors via handleError()
+     * Create an ExpressWrapper for a route.
+     * The wrapper handles the full request/response cycle (symmetric design).
      *
      * @param service - The service wrapping the filter chain and controller
      * @param routeMeta - Route metadata for MethodMeta and DTO type
-     * @returns Express-compatible route handler
+     * @returns ExpressWrapper instance
      */
-    wrapExpress(
+    createExpressWrapper(
         service: Service<MethodMeta, WpResponse<unknown>>,
         routeMeta: RouteMetadata,
-    ): ExpressRouteHandler {
-        return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-            try {
-                // 1. Get request DTO class from routeMeta
-                const requestDtoClass = routeMeta.parameterTypes?.[0];
-                if(!requestDtoClass)
-                    throw new Error('No request DTO class found for route');
-
-                // 2. Deserialize req.body → DTO instance
-                const requestDto = this.jsonSerializer.deserializeObject(req.body, requestDtoClass);
-                // 3. Create MethodMeta with deserialized DTO
-                const methodMeta = new MethodMeta(routeMeta, requestDto);
-                // 4. Invoke the service (filter chain + controller)
-                const wpResponse = await service.invoke(methodMeta);
-                if(!wpResponse.response)
-                    throw new Error(`Route chain(filters & all) is not returning a response.  ${routeMeta.controllerClassName}.${routeMeta.methodName}`);
-
-                // 6. Serialize response → plain object
-                const responseDtoStr = this.jsonSerializer.serializeObject(wpResponse.response);
-
-                // 7. WRITE response as JSON (SYMMETRIC with reading request!)
-                res.status(200);
-                res.setHeader('Content-Type', 'application/json');
-                res.json(responseDtoStr);
-            } catch (err: unknown) {
-                // 8. Handle errors (SYMMETRIC - wrapExpress owns error handling!)
-                this.handleError(res, err);
-            }
-        };
-    }
-
-
-    /**
-     * Handle errors - translate to JSON ProtocolError.
-     * PUBLIC so wrapExpress can call it for symmetric error handling.
-     * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
-     */
-    public handleError(res: Response, error: unknown): void {
-        if (res.headersSent) {
-            return;
-        }
-
-        const protocolError = new ProtocolError();
-
-        if (error instanceof HttpError) {
-            protocolError.message = error.message;
-            protocolError.subType = error.subType;
-            protocolError.name = error.name;
-
-            if (error instanceof HttpBadRequestError) {
-                protocolError.field = error.field;
-                protocolError.guiAlertMessage = error.guiMessage;
-            }
-            if (error instanceof HttpVendorError) {
-                protocolError.waitSeconds = error.waitSeconds;
-            }
-            if (error instanceof HttpUserError) {
-                protocolError.errorCode = error.errorCode;
-            }
-
-            res.status(error.code).json(protocolError);
-        } else {
-            // Unknown error - 500
-            const err = toError(error);
-            protocolError.message = 'Internal Server Error';
-            console.error('[JsonTranslator] Unexpected error:', err);
-            res.status(500).json(protocolError);
-        }
+    ): ExpressWrapper {
+        return new ExpressWrapper(service, routeMeta);
     }
 }

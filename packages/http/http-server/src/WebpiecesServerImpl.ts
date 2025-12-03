@@ -220,13 +220,13 @@ export class WebpiecesServerImpl implements WebpiecesServer {
             const service = this.routeBuilder.createRouteHandler(routeWithMeta);
             const routeMeta = routeWithMeta.definition.routeMeta;
 
-            // Wrap Service as Express handler (passes routeMeta for MethodMeta creation)
-            const expressHandler = this.middleware.wrapExpress(service, routeMeta);
+            // Create ExpressWrapper directly (handles full request/response cycle)
+            const wrapper = this.middleware.createExpressWrapper(service, routeMeta);
 
             this.registerHandler(
                 routeMeta.httpMethod,
                 routeMeta.path,
-                expressHandler,
+                wrapper.execute.bind(wrapper),
             );
             count++;
         }
