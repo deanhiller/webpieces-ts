@@ -1,4 +1,4 @@
-import { Routes, RouteBuilder, RouteDefinition } from '@webpieces/core-meta';
+import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
 import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
 import { ROUTING_METADATA_KEYS } from './decorators';
 
@@ -100,6 +100,9 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
                 `Method ${route.methodName} in ${apiName} must have both @HttpMethod and @Path decorators`,
             );
         }
+
+        // Set controller class name for logging
+        route.controllerClassName = (this.controllerClass as any).name;
 
         // Extract controller filepath for filter matching
         const controllerFilepath = this.getControllerFilepath();

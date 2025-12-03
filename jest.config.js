@@ -22,4 +22,7 @@ module.exports = {
     ],
     coverageDirectory: 'coverage',
     verbose: true,
+    // Setup file to replace Jest's console with Node's native console
+    // This removes the "at ..." stack traces after each console.log
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
 };

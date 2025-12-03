@@ -16,7 +16,7 @@
                     "packages/http/http-routing/README.md"
                 ]
             },
-            "dependsOn": ["core-meta:build", "http-api:build"]
+            "dependsOn": ["http-api:build"]
         }
     },
     "tags": []

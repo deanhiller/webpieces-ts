@@ -34,3 +34,29 @@ export {
 
 // Type validators
 export { ValidateImplementation } from './validators';
+
+// HTTP errors
+export {
+    ProtocolError,
+    HttpError,
+    HttpNotFoundError,
+    EndpointNotFoundError,
+    HttpBadRequestError,
+    HttpUnauthorizedError,
+    HttpForbiddenError,
+    HttpTimeoutError,
+    HttpBadGatewayError,
+    HttpGatewayTimeoutError,
+    HttpInternalServerError,
+    HttpVendorError,
+    HttpUserError,
+    // Error subtype constants
+    ENTITY_NOT_FOUND,
+    WRONG_LOGIN_TYPE,
+    WRONG_LOGIN,
+    NOT_APPROVED,
+    EMAIL_NOT_CONFIRMED,
+    WRONG_DOMAIN,
+    WRONG_COMPANY,
+    NO_REG_CODE,
+} from './errors';

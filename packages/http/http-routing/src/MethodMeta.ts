@@ -1,44 +1,40 @@
-import { RouteMetadata2, RouteRequest } from '@webpieces/core-meta';
+import { RouteMetadata } from '@webpieces/http-api';
 
 /**
  * Metadata about the method being invoked.
  * Passed to filters and contains request information.
  *
- * MethodMeta is created by WebpiecesServerImpl when handling a request:
+ * MethodMeta is DTO-only - it does NOT contain Express req/res.
+ * Express objects are handled by the Express layer (wrapExpress, jsonTranslator).
+ *
+ * Fields:
  * - routeMeta: Static route information (httpMethod, path, methodName)
- * - routeRequest: Express Request/Response objects
- * - requestDto: Set by JsonFilter after deserializing the request body
+ * - requestDto: The deserialized request body
+ * - metadata: Request-scoped data for filters to communicate
  */
 export class MethodMeta {
     /**
      * Route metadata (httpMethod, path, methodName, parameterTypes)
      */
-    routeMeta: RouteMetadata2;
-
-    /**
-     * Express Request and Response objects
-     */
-    routeRequest: RouteRequest;
+    routeMeta: RouteMetadata;
 
     /**
      * The deserialized request DTO.
-     * Set by JsonFilter after deserializing the request body.
      */
     requestDto?: unknown;
 
     /**
      * Additional metadata for storing request-scoped data.
+     * Used by filters to pass data to other filters/controllers.
      */
     metadata: Map<string, unknown>;
 
     constructor(
-        routeMeta: RouteMetadata2,
-        routeRequest: RouteRequest,
+        routeMeta: RouteMetadata,
         requestDto?: unknown,
         metadata?: Map<string, unknown>,
     ) {
         this.routeMeta = routeMeta;
-        this.routeRequest = routeRequest;
         this.requestDto = requestDto;
         this.metadata = metadata ?? new Map();
     }

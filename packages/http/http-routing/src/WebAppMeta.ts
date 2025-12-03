@@ -1,4 +1,5 @@
-import { ContainerModule, Container } from 'inversify';
+import { ContainerModule } from 'inversify';
+import {RouteMetadata} from "@webpieces/http-api";
 
 /**
  * Represents a route configuration that can be registered with the router.
@@ -13,35 +14,22 @@ export interface Routes {
 
 /**
  * Builder for registering routes.
- * Will be implemented in http-routing package.
+ * Will be implemented in http-server package.
  */
 export interface RouteBuilder {
-    addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void;
+    addRoute(route: RouteDefinition): void;
     addFilter(filter: FilterDefinition): void;
 }
 
-export class RouteMetadata2 {
-    httpMethod: string;
-    path: string;
-    methodName: string;
-    parameterTypes?: any[];
-
-    constructor(httpMethod: string, path: string, methodName: string, parameterTypes?: any[]) {
-        this.httpMethod = httpMethod;
-        this.path = path;
-        this.methodName = methodName;
-        this.parameterTypes = parameterTypes;
-    }
-}
 /**
  * Definition of a single route.
  *
  * Generic type parameter TResult represents the return type of the route handler.
  * This provides type safety for the entire request/response cycle.
  */
-export class RouteDefinition<TResult = unknown> {
+export class RouteDefinition {
     constructor(
-        public routeMeta: RouteMetadata2,
+        public routeMeta: RouteMetadata,
         public controllerClass: any,
         public controllerFilepath?: string,
     ) {}
@@ -76,26 +64,6 @@ export class FilterDefinition {
     }
 }
 
-/**
- * Holds Express Request and Response objects.
- * JsonFilter uses these to read request body and write response.
- */
-export class RouteRequest {
-    /**
-     * Express Request object
-     */
-    request: unknown;
-
-    /**
-     * Express Response object
-     */
-    response: unknown;
-
-    constructor(request: unknown, response: unknown) {
-        this.request = request;
-        this.response = response;
-    }
-}
 
 /**
  * Main application metadata interface.

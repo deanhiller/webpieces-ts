@@ -4,36 +4,16 @@
  * Generic type parameter TResult represents the controller's return type.
  * The filter chain uses WpResponse<unknown> because it handles all response types uniformly.
  *
- * JsonFilter is responsible for:
+ * The jsonTranslator middleware is responsible for:
  * 1. Serializing WpResponse.response to JSON
  * 2. Writing the JSON to the HTTP response body
+ * 3. Setting the HTTP status code from WpResponse.statusCode
  */
 export class WpResponse<TResult = unknown> {
     response?: TResult;
-    statusCode: number;
-    headers: Map<string, string>;
 
-    constructor(response?: TResult, statusCode: number = 200) {
+    constructor(response?: TResult) {
         this.response = response;
-        this.statusCode = statusCode;
-        this.headers = new Map();
-    }
-
-    /**
-     * Set a response header.
-     */
-    setHeader(name: string, value: string): WpResponse<TResult> {
-        this.headers.set(name, value);
-        return this;
-    }
-
-    /**
-     * Create an error response wrapper.
-     */
-    static error<T = unknown>(message: string, statusCode: number = 500): WpResponse<T> {
-        const wrapper = new WpResponse<T>(undefined, statusCode);
-        wrapper.setHeader('X-Error', message);
-        return wrapper;
     }
 }
 

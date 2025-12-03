@@ -1,16 +1,22 @@
+import { JsonObject, JsonProperty } from 'typescript-json-serializer';
+
 /**
  * Request to remote service.
+ * All fields optional for protocol evolution.
  */
+@JsonObject()
 export class FetchValueRequest {
-    name: string = '';
+    @JsonProperty() name?: string;
 }
 
 /**
  * Response from remote service.
+ * All fields optional for protocol evolution.
  */
+@JsonObject()
 export class FetchValueResponse {
-    value: string = '';
-    timestamp: number = Date.now();
+    @JsonProperty() value?: string;
+    @JsonProperty() timestamp?: number;
 }
 
 /**
