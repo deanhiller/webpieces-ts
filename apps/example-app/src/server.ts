@@ -11,10 +11,10 @@ async function main() {
         console.log('[Server] Starting WebPieces TypeScript server...');
         console.log('[Server] Creating server instance...');
 
-        const server = WebpiecesFactory.create(new ProdServerMeta());
+        const server = await WebpiecesFactory.create(new ProdServerMeta());
 
         console.log('[Server] Calling server.start()...');
-        server.start(8000);
+        await server.start(8000);
         console.log('Server started');
 
         // Keep the process alive - wait indefinitely

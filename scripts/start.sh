@@ -3,11 +3,10 @@
 # Start script for webpieces-ts server
 # Based on trytami's local-start.sh pattern
 
-PORT=${1:-8080}
 LOG_FILE="tmp/server.log"
 PID_FILE="/tmp/webpieces-ts-server.pid"
 
-echo "Starting webpieces-ts server on port $PORT..."
+echo "Starting webpieces-ts server..."
 echo "Logs: $LOG_FILE"
 
 # Check if already running
@@ -21,8 +20,8 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
-if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null ; then
-    echo "❌ Port $PORT is already in use"
+if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null ; then
+    echo "❌ Port 8000 is already in use"
     exit 1
 fi
 
@@ -48,6 +47,8 @@ mkdir -p node_modules/@webpieces
 # Create symlinks to dist packages
 ln -sf "$(pwd)/dist/packages/core/core-context" node_modules/@webpieces/core-context
 ln -sf "$(pwd)/dist/packages/core/core-meta" node_modules/@webpieces/core-meta
+ln -sf "$(pwd)/dist/packages/core/core-util" node_modules/@webpieces/core-util
+ln -sf "$(pwd)/dist/packages/http/http-api" node_modules/@webpieces/http-api
 ln -sf "$(pwd)/dist/packages/http/http-routing" node_modules/@webpieces/http-routing
 ln -sf "$(pwd)/dist/packages/http/http-filters" node_modules/@webpieces/http-filters
 ln -sf "$(pwd)/dist/packages/http/http-server" node_modules/@webpieces/http-server
@@ -59,7 +60,7 @@ mkdir -p tmp
 
 # Run the production build (with reflect-metadata loaded first)
 echo "Starting server..."
-NODE_ENV=development PORT=$PORT node -r reflect-metadata dist/apps/example-app/src/server.js > $LOG_FILE 2>&1 &
+NODE_ENV=development node -r reflect-metadata dist/apps/example-app/src/server.js > $LOG_FILE 2>&1 &
 SERVER_PID=$!
 
 # Save PID
@@ -71,7 +72,7 @@ echo "Waiting for server to be ready..."
 # Monitor log for ready message
 for i in {1..60}; do
     if grep -q "listening on" $LOG_FILE 2>/dev/null; then
-        echo "✅ Server is ready on port $PORT"
+        echo "✅ Server is ready on port 8000"
         echo "✅ Process PID: $SERVER_PID"
         echo "✅ Tail logs with: tail -f $LOG_FILE"
         exit 0

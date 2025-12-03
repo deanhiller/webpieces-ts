@@ -1,8 +1,7 @@
 import { injectable } from 'inversify';
-import { provideSingleton } from '@webpieces/http-routing';
+import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { MethodMeta } from '../MethodMeta';
 
 /**
  * ContextFilter - Sets up AsyncLocalStorage context for each request.

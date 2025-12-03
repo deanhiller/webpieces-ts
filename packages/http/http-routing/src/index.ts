@@ -24,3 +24,27 @@ export {
 } from './decorators';
 
 export { RESTApiRoutes, ClassType } from './RESTApiRoutes';
+
+// Core routing types (moved from core-meta)
+export {
+    WebAppMeta,
+    Routes,
+    RouteBuilder,
+    RouteDefinition,
+    FilterDefinition,
+} from './WebAppMeta';
+
+// Method metadata and route handler
+export { MethodMeta } from './MethodMeta';
+export { RouteHandler } from './RouteHandler';
+
+// Route builder implementation
+export {
+    RouteBuilderImpl,
+    RouteHandlerWithMeta,
+    FilterWithMeta,
+    ExpressRouteHandler,
+} from './RouteBuilderImpl';
+
+// Filter matching
+export { FilterMatcher, HttpFilter } from './FilterMatcher';

@@ -1,14 +1,16 @@
-import express, { Express, NextFunction, Request, Response } from 'express';
-import { Container, inject, injectable } from 'inversify';
-import { buildProviderModule } from '@inversifyjs/binding-decorators';
-import { RouteRequest, WebAppMeta } from '@webpieces/core-meta';
-import { WpResponse, Service } from '@webpieces/http-filters';
-import { provideSingleton } from '@webpieces/http-routing';
-import { RouteBuilderImpl, RouteHandlerWithMeta, FilterWithMeta } from './RouteBuilderImpl';
-import { FilterMatcher } from './FilterMatcher';
-import { toError } from '@webpieces/core-util';
-import { MethodMeta } from './MethodMeta';
-import { WebpiecesServer } from './WebpiecesServer';
+import express, {Express, NextFunction, Request, Response} from 'express';
+import {Container, ContainerModule, inject, injectable} from 'inversify';
+import {buildProviderModule} from '@inversifyjs/binding-decorators';
+import {
+    ExpressRouteHandler,
+    getRoutes,
+    MethodMeta,
+    provideSingleton,
+    RouteBuilderImpl,
+    WebAppMeta,
+} from '@webpieces/http-routing';
+import {WebpiecesServer} from './WebpiecesServer';
+import {WebpiecesMiddleware} from './WebpiecesMiddleware';
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -50,9 +52,12 @@ export class WebpiecesServerImpl implements WebpiecesServer {
     private initialized = false;
     private app?: Express;
     private server?: ReturnType<Express['listen']>;
-    private port: number = 8080;
+    private port: number = 8200;
 
-    constructor(@inject(RouteBuilderImpl) private routeBuilder: RouteBuilderImpl) {}
+    constructor(
+        @inject(RouteBuilderImpl) private routeBuilder: RouteBuilderImpl,
+        @inject(WebpiecesMiddleware) private middleware: WebpiecesMiddleware,
+    ) {}
 
     /**
      * Initialize the server (DI container, routes, filters).
@@ -61,8 +66,21 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      *
      * @param webpiecesContainer - The framework container
      * @param meta - User-provided WebAppMeta with DI modules and routes
+     * @param overrides - Optional ContainerModule for test overrides (loaded LAST)
      */
-    initialize(webpiecesContainer: Container, meta: WebAppMeta): void {
+    /**
+     * Initialize the server asynchronously.
+     * Use this when overrides module contains async operations (e.g., rebind() in new Inversify).
+     *
+     * @param webpiecesContainer - The framework container
+     * @param meta - User-provided WebAppMeta with DI modules and routes
+     * @param overrides - Optional ContainerModule for test overrides (loaded LAST)
+     */
+    async initialize(
+        webpiecesContainer: Container,
+        meta: WebAppMeta,
+        overrides?: ContainerModule
+    ): Promise<void> {
         if (this.initialized) {
             return;
         }
@@ -76,8 +94,8 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         // Set container on RouteBuilder (late binding - appContainer didn't exist in constructor)
         this.routeBuilder.setContainer(this.appContainer);
 
-        // 1. Load DI modules
-        this.loadDIModules();
+        // 1. Load DI modules asynchronously
+        await this.loadDIModules(overrides);
 
         // 2. Register routes and filters
         this.registerRoutes();
@@ -94,17 +112,24 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      * - Application modules -> appContainer
      *
      * For now, everything goes into appContainer which has access to webpiecesContainer.
+     *
+     * @param overrides - Optional ContainerModule for test overrides (loaded LAST to override bindings)
      */
-    private loadDIModules(): void {
+    private async loadDIModules(overrides?: ContainerModule): Promise<void> {
         const modules = this.meta.getDIModules();
 
         // Load buildProviderModule to auto-scan for @provideSingleton decorators
-        this.appContainer.load(buildProviderModule());
+        await this.appContainer.load(buildProviderModule());
 
         // Load all modules into application container
         // (webpiecesContainer is currently empty, reserved for future framework bindings)
         for (const module of modules) {
-            this.appContainer.load(module);
+            await this.appContainer.load(module);
+        }
+
+        // Load overrides LAST so they can override existing bindings
+        if (overrides) {
+            await this.appContainer.load(overrides);
         }
     }
 
@@ -127,65 +152,6 @@ export class WebpiecesServerImpl implements WebpiecesServer {
     }
 
     /**
-     * Global error handler middleware - catches ALL unhandled errors.
-     * Returns HTML 500 error page for any errors that escape the filter chain.
-     *
-     * This is the outermost safety net - JsonFilter catches JSON API errors,
-     * this catches everything else.
-     */
-    private async globalErrorHandler(
-        req: Request,
-        res: Response,
-        next: NextFunction,
-    ): Promise<void> {
-        console.log('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
-
-        try {
-            // await next() catches BOTH:
-            // 1. Synchronous throws from next() itself
-            // 2. Rejected promises from downstream async middleware
-            await next();
-            console.log(
-                '🔴 [Layer 1: GlobalErrorHandler] Request END (success):',
-                req.method,
-                req.path,
-            );
-        } catch (err: unknown) {
-            const error = toError(err);
-            console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
-            if (!res.headersSent) {
-                // Return HTML error page (not JSON - JsonFilter handles JSON errors)
-                res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Server Error</title></head>
-          <body>
-            <h1>You hit a server error</h1>
-            <p>An unexpected error occurred while processing your request.</p>
-            <pre>${error.message}</pre>
-          </body>
-          </html>
-        `);
-            }
-            console.log(
-                '🔴 [Layer 1: GlobalErrorHandler] Request END (error):',
-                req.method,
-                req.path,
-            );
-        }
-    }
-
-    /**
-     * Logging middleware - logs request/response flow.
-     * Demonstrates middleware execution order.
-     */
-    private logNextLayer(req: Request, res: Response, next: NextFunction): void {
-        console.log('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
-        next();
-        console.log('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
-    }
-
-    /**
      * Start the HTTP server with Express.
      * Returns a Promise that resolves when the server is listening,
      * or rejects if the server fails to start.
@@ -193,35 +159,34 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      * @param port - The port to listen on (default: 8080)
      * @returns Promise that resolves when server is ready
      */
-    start(port: number = 8080): Promise<void> {
+    async start(port: number = 8200, testMode?: boolean): Promise<void> {
         if (!this.initialized) {
-            return Promise.reject(
-                new Error('Server not initialized. Call initialize() before start().'),
-            );
+            throw new Error('Server not initialized. Call initialize() before start().');
         }
 
         this.port = port;
 
+        if(testMode) {
+            //In testMode, we eliminate express ENTIRELY and use
+            //Router, method filters and controllers so that we can test full stack
+            return;
+        }
+
         // Create Express app
         this.app = express();
 
-        // Parse JSON request bodies
-        this.app.use(express.json());
-
         // Layer 1: Global Error Handler (OUTERMOST - runs FIRST)
         // Catches all unhandled errors and returns HTML 500 page
-        this.app.use(this.globalErrorHandler.bind(this));
+        this.app.use(this.middleware.globalErrorHandler.bind(this.middleware));
 
         // Layer 2: Request/Response Logging
-        this.app.use(this.logNextLayer.bind(this));
+        this.app.use(this.middleware.logNextLayer.bind(this.middleware));
 
-        // Register routes (these become the innermost handlers)
-        this.registerExpressRoutes();
-
-        const routes = this.routeBuilder.getRoutes();
+        // Register routes
+        const routeCount = this.registerExpressRoutes();
 
         // Start listening - wrap in Promise
-        return new Promise((resolve, reject) => {
+        const promise = new Promise<void>((resolve, reject) => {
             this.server = this.app!.listen(this.port, (error?: Error) => {
                 if (error) {
                     console.error(`[WebpiecesServer] Failed to start server:`, error);
@@ -229,125 +194,158 @@ export class WebpiecesServerImpl implements WebpiecesServer {
                     return;
                 }
                 console.log(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
-                console.log(`[WebpiecesServer] Registered ${routes.size} routes`);
+                console.log(`[WebpiecesServer] Registered ${routeCount} routes`);
+                resolve();
+            });
+        });
+
+        await promise;
+    }
+
+    /**
+     * Register Express routes - the SINGLE loop over routes.
+     * For each route: createHandler (sets up filter chain) → wrapExpress → registerHandler.
+     *
+     * @returns Number of routes registered
+     */
+    private registerExpressRoutes(): number {
+        if (!this.app) {
+            throw new Error('Express app not initialized');
+        }
+
+        const routes = this.routeBuilder.getRoutes();
+        let count = 0;
+
+        for (const routeWithMeta of routes) {
+            const service = this.routeBuilder.createRouteHandler(routeWithMeta);
+            const routeMeta = routeWithMeta.definition.routeMeta;
+
+            // Create ExpressWrapper directly (handles full request/response cycle)
+            const wrapper = this.middleware.createExpressWrapper(service, routeMeta);
+
+            this.registerHandler(
+                routeMeta.httpMethod,
+                routeMeta.path,
+                wrapper.execute.bind(wrapper),
+            );
+            count++;
+        }
+
+        return count;
+    }
+
+    registerHandler(httpMethod: string, path: string, expressHandler: ExpressRouteHandler) {
+        if (!this.app) {
+            throw new Error('Express app not initialized');
+        }
+
+        switch (httpMethod.toLowerCase()) {
+            case 'get':
+                this.app.get(path, expressHandler);
+                break;
+            case 'post':
+                this.app.post(path, expressHandler);
+                break;
+            case 'put':
+                this.app.put(path, expressHandler);
+                break;
+            case 'delete':
+                this.app.delete(path, expressHandler);
+                break;
+            case 'patch':
+                this.app.patch(path, expressHandler);
+                break;
+            default:
+                console.warn(`[WebpiecesServer] Unknown HTTP method: ${httpMethod}`);
+        }
+    }
+
+    /**
+     * Stop the HTTP server.
+     * Returns a Promise that resolves when the server is stopped,
+     * or rejects if there's an error stopping the server.
+     *
+     * @returns Promise that resolves when server is stopped
+     */
+    async stop(): Promise<void> {
+        if (!this.server) {
+            return;
+        }
+
+        return new Promise<void>((resolve, reject) => {
+            this.server!.close((err?: Error) => {
+                if (err) {
+                    console.error('[WebpiecesServer] Error stopping server:', err);
+                    reject(err);
+                    return;
+                }
+                console.log('[WebpiecesServer] Server stopped');
                 resolve();
             });
         });
     }
 
     /**
-     * Register all routes with Express.
-     */
-    private registerExpressRoutes(): void {
-        if (!this.app) {
-            throw new Error('Express app not initialized');
-        }
-
-        const routes = this.routeBuilder.getRoutes();
-        const sortedFilters = this.routeBuilder.getSortedFilters();
-        for (const [key, routeWithMeta] of routes.entries()) {
-            this.setupRoute(key, routeWithMeta, sortedFilters);
-        }
-    }
-
-    /**
-     * Setup a single route with Express.
-     * Finds matching filters, creates handler, and registers with Express.
+     * Get the application DI container.
      *
-     * @param key - Route key (method:path)
-     * @param routeWithMeta - The route handler paired with its definition
-     * @param filtersWithMeta - All filters with their definitions
+     * Useful for testing to verify state or access services directly.
+     *
+     * @returns The application Container
      */
-    private setupRoute(
-        key: string,
-        routeWithMeta: RouteHandlerWithMeta,
-        filtersWithMeta: Array<FilterWithMeta>,
-    ): void {
-        if (!this.app) {
-            throw new Error('Express app not initialized');
-        }
-
-        const route = routeWithMeta.definition;
-        const routeMeta = route.routeMeta;
-        const method = routeMeta.httpMethod.toLowerCase();
-        const path = routeMeta.path;
-
-        console.log(`[WebpiecesServer] Registering route: ${method.toUpperCase()} ${path}`);
-
-        // Find matching filters for this route - FilterMatcher returns Filter[] not FilterWithMeta[]
-        // So we need to convert our FilterWithMeta[] to what FilterMatcher expects
-        const filterDefinitions = filtersWithMeta.map((fwm) => {
-            // Set the filter instance on the definition for FilterMatcher
-            const def = fwm.definition;
-            def.filter = fwm.filter;
-            return def;
-        });
-
-        const matchingFilters = FilterMatcher.findMatchingFilters(
-            route.controllerFilepath,
-            filterDefinitions,
-        );
-
-        // Create service that wraps the controller execution
-        const controllerService: Service<MethodMeta, WpResponse> = {
-            invoke: async (meta: MethodMeta): Promise<WpResponse> => {
-                // Invoke the controller method via route handler
-                const result = await routeWithMeta.handler.execute(meta);
-                const responseWrapper = new WpResponse(result);
-                return responseWrapper;
-            },
-        };
-
-        // Chain filters with the controller service (reverse order for correct execution)
-        // IMPORTANT: MUST USE Filter.chain(filter) and Filter.chainService(svc);
-        let filterChain = matchingFilters[matchingFilters.length - 1];
-        for (let i = matchingFilters.length - 2; i >= 0; i--) {
-            filterChain = filterChain.chain(matchingFilters[i]);
-        }
-        const svc = filterChain.chainService(controllerService);
-
-        // Create Express route handler - delegates to filter chain
-        const handler = async (req: Request, res: Response, next: NextFunction) => {
-            // Create RouteRequest with Express Request/Response
-            const routeRequest = new RouteRequest(req, res);
-
-            // Create MethodMeta with route info and Express Request/Response
-            const meta = new MethodMeta(routeMeta, routeRequest);
-
-            // Response is written by JsonFilter - we just await completion
-            await svc.invoke(meta);
-        };
-
-        // Register with Express
-        switch (method) {
-            case 'get':
-                this.app.get(path, handler);
-                break;
-            case 'post':
-                this.app.post(path, handler);
-                break;
-            case 'put':
-                this.app.put(path, handler);
-                break;
-            case 'delete':
-                this.app.delete(path, handler);
-                break;
-            case 'patch':
-                this.app.patch(path, handler);
-                break;
-            default:
-                console.warn(`[WebpiecesServer] Unknown HTTP method: ${method}`);
-        }
+    getContainer(): Container {
+        return this.appContainer;
     }
 
     /**
-     * Stop the HTTP server.
+     * Create an API client proxy for testing.
+     *
+     * This creates a client that routes calls through the full filter chain
+     * and controller, but WITHOUT any HTTP overhead. Perfect for testing!
+     *
+     * The client uses the ApiPrototype class to discover routes via decorators,
+     * then creates pre-configured invoker functions for each API method.
+     *
+     * IMPORTANT: This loops over the API methods (from decorators), NOT all routes.
+     * For each API method, it sets up the filter chain ONCE during proxy creation,
+     * so subsequent calls reuse the same filter chain (efficient!).
+     *
+     * @param apiPrototype - The API prototype class with routing decorators (can be abstract)
+     * @returns A proxy that implements the API interface
+     *
+     * Example:
+     * ```typescript
+     * const saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
+     * const response = await saveApi.save(request);
+     * ```
      */
-    stop(): void {
-        if (this.server) {
-            this.server.close(() => {
-                console.log('[WebpiecesServer] Server stopped');
-            });
+    createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T {
+        if (!this.initialized) {
+            throw new Error('Server not initialized. Call initialize() before createApiClient().');
         }
+
+        // Get routes from the API prototype using decorators (loops over API methods, NOT all routes)
+        const apiMethods = getRoutes(apiPrototype);
+
+        // Create proxy object
+        const proxy: Record<string, unknown> = {};
+
+        // Loop over API methods and create proxy functions
+        for (const routeMeta of apiMethods) {
+            const methodName = routeMeta.methodName;
+            const httpMethod = routeMeta.httpMethod.toUpperCase();
+            const path = routeMeta.path;
+
+            // Create invoker service ONCE (sets up filter chain once, not on every call!)
+            const service = this.routeBuilder.createRouteInvoker(httpMethod, path);
+
+            // Proxy method creates MethodMeta and calls the pre-configured service
+            proxy[methodName] = async (requestDto: unknown): Promise<unknown> => {
+                const meta = new MethodMeta(routeMeta, requestDto);
+                const responseWrapper = await service.invoke(meta);
+                return responseWrapper.response;
+            };
+        }
+
+        return proxy as T;
     }
 }

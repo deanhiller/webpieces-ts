@@ -1,18 +1,17 @@
 export { WebpiecesServer } from './WebpiecesServer';
 export { WebpiecesFactory } from './WebpiecesFactory';
+export { WebpiecesMiddleware } from './WebpiecesMiddleware';
+export { ContextFilter } from './filters/ContextFilter';
+export { LogApiFilter } from './filters/LogApiFilter';
+
+// Re-export from http-routing for backward compatibility
 export {
+    RouteHandler,
+    ExpressRouteHandler,
+    MethodMeta,
     RouteBuilderImpl,
     RouteHandlerWithMeta,
     FilterWithMeta,
     HttpFilter,
-} from './RouteBuilderImpl';
-export { RouteHandler } from './RouteHandler';
-export { MethodMeta } from './MethodMeta';
-export { ContextFilter } from './filters/ContextFilter';
-export {
-    JsonFilter,
-    JsonFilterConfig,
-    FILTER_TYPES,
-    ValidationException,
-    HttpException,
-} from './filters/JsonFilter';
+    FilterMatcher,
+} from '@webpieces/http-routing';
