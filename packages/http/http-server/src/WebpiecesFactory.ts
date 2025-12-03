@@ -66,7 +66,6 @@ export class WebpiecesFactory {
     static async create(
         meta: WebAppMeta,
         overrides?: ContainerModule,
-        testMode?: boolean
     ): Promise<WebpiecesServer> {
         // Create WebPieces container for framework-level bindings
         const webpiecesContainer = new Container();

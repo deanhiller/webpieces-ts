@@ -26,13 +26,7 @@ export {
 export { RESTApiRoutes, ClassType } from './RESTApiRoutes';
 
 // Core routing types (moved from core-meta)
-export {
-    WebAppMeta,
-    Routes,
-    RouteBuilder,
-    RouteDefinition,
-    FilterDefinition,
-} from './WebAppMeta';
+export { WebAppMeta, Routes, RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 
 // Method metadata and route handler
 export { MethodMeta } from './MethodMeta';

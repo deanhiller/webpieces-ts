@@ -2,6 +2,7 @@
  * Tests for catch-error-pattern ESLint rule
  */
 
+/* eslint-disable @webpieces/catch-error-pattern */
 import { RuleTester } from 'eslint';
 import rule from '../rules/catch-error-pattern';
 

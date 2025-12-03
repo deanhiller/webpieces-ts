@@ -1,6 +1,6 @@
-import express, {Express, NextFunction, Request, Response} from 'express';
-import {Container, ContainerModule, inject, injectable} from 'inversify';
-import {buildProviderModule} from '@inversifyjs/binding-decorators';
+import express, { Express, NextFunction, Request, Response } from 'express';
+import { Container, ContainerModule, inject, injectable } from 'inversify';
+import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import {
     ExpressRouteHandler,
     getRoutes,
@@ -9,8 +9,8 @@ import {
     RouteBuilderImpl,
     WebAppMeta,
 } from '@webpieces/http-routing';
-import {WebpiecesServer} from './WebpiecesServer';
-import {WebpiecesMiddleware} from './WebpiecesMiddleware';
+import { WebpiecesServer } from './WebpiecesServer';
+import { WebpiecesMiddleware } from './WebpiecesMiddleware';
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -79,7 +79,7 @@ export class WebpiecesServerImpl implements WebpiecesServer {
     async initialize(
         webpiecesContainer: Container,
         meta: WebAppMeta,
-        overrides?: ContainerModule
+        overrides?: ContainerModule,
     ): Promise<void> {
         if (this.initialized) {
             return;
@@ -159,18 +159,12 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      * @param port - The port to listen on (default: 8080)
      * @returns Promise that resolves when server is ready
      */
-    async start(port: number = 8200, testMode?: boolean): Promise<void> {
+    async start(port: number = 8200): Promise<void> {
         if (!this.initialized) {
             throw new Error('Server not initialized. Call initialize() before start().');
         }
 
         this.port = port;
-
-        if(testMode) {
-            //In testMode, we eliminate express ENTIRELY and use
-            //Router, method filters and controllers so that we can test full stack
-            return;
-        }
 
         // Create Express app
         this.app = express();

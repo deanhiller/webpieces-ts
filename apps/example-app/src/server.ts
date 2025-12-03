@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { WebpiecesFactory } from '@webpieces/http-server';
 import { ProdServerMeta } from './ProdServerMeta';
+import { toError } from '@webpieces/core-util';
 
 /**
  * Main entry point for the application.
@@ -29,7 +30,8 @@ async function main() {
                 resolve(undefined);
             });
         });
-    } catch (error) {
+    } catch (err: any) {
+        const error = toError(err);
         console.error('[Server] Error during startup:', error);
         process.exit(1);
     }

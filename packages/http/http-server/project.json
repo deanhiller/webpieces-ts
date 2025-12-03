@@ -16,11 +16,7 @@
                     "packages/http/http-server/README.md"
                 ]
             },
-            "dependsOn": [
-                "core-util:build",
-                "http-routing:build",
-                "http-filters:build"
-            ]
+            "dependsOn": ["core-util:build", "http-routing:build", "http-filters:build"]
         }
     },
     "tags": []

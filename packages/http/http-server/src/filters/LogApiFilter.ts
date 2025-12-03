@@ -8,6 +8,7 @@ import {
     HttpNotFoundError,
     HttpUserError,
 } from '@webpieces/http-api';
+import { toError } from '@webpieces/core-util';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.
@@ -42,7 +43,8 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             this.logSuccessResponse(classMethod, url, response);
 
             return response;
-        } catch (error: unknown) {
+        } catch (err: any) {
+            const error = toError(err);
             // Log error and re-throw (jsonTranslator will handle serialization)
             this.logException(classMethod, url, error);
             throw error;
@@ -67,7 +69,11 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     /**
      * Log successful response.
      */
-    private logSuccessResponse(classMethod: string, url: string, response: WpResponse<unknown>): void {
+    private logSuccessResponse(
+        classMethod: string,
+        url: string,
+        response: WpResponse<unknown>,
+    ): void {
         console.log(
             `[API-SVR-resp-SUCCESS] '${classMethod} ${url}' response=${JSON.stringify(response.response)}`,
         );

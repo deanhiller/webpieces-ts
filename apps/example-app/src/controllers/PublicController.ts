@@ -11,7 +11,6 @@ import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '../api/PublicA
 @provideSingleton()
 @Controller()
 export class PublicController implements PublicApi {
-
     async getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
         const response = new PublicInfoResponse();
         response.greeting = `Hello, ${request.name ?? 'World'}!`;

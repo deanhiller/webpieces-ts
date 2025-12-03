@@ -29,11 +29,7 @@ export class MethodMeta {
      */
     metadata: Map<string, unknown>;
 
-    constructor(
-        routeMeta: RouteMetadata,
-        requestDto?: unknown,
-        metadata?: Map<string, unknown>,
-    ) {
+    constructor(routeMeta: RouteMetadata, requestDto?: unknown, metadata?: Map<string, unknown>) {
         this.routeMeta = routeMeta;
         this.requestDto = requestDto;
         this.metadata = metadata ?? new Map();

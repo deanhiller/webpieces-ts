@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import {RouteMetadata} from "@webpieces/http-api";
+import { RouteMetadata } from '@webpieces/http-api';
 
 /**
  * Represents a route configuration that can be registered with the router.
@@ -63,7 +63,6 @@ export class FilterDefinition {
         this.filter = undefined; // Set later by RouteBuilder
     }
 }
-
 
 /**
  * Main application metadata interface.

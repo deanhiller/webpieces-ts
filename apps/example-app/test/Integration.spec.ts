@@ -4,12 +4,7 @@ import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
 import { ProdServerMeta } from '../src/ProdServerMeta';
 import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse } from '../src/api/SaveApi';
 import { PublicApi, PublicApiPrototype, PublicInfoRequest } from '../src/api/PublicApi';
-import {
-    RemoteApi,
-    FetchValueRequest,
-    FetchValueResponse,
-    TYPES,
-} from '../src/remote/RemoteApi';
+import { RemoteApi, FetchValueRequest, FetchValueResponse, TYPES } from '../src/remote/RemoteApi';
 
 /**
  * Mock implementation of RemoteApi.

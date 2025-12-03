@@ -224,7 +224,8 @@ ${Array(100)
             },
         ],
     });
-} catch {
+} catch (err: any) {
+    //const error = toError(err);
     // Test may fail due to too many errors, but file should be created
 }
 

@@ -18,16 +18,14 @@ export class ExpressWrapper {
 
     constructor(
         private service: Service<MethodMeta, WpResponse<unknown>>,
-        private routeMeta: RouteMetadata
-    ) {
-    }
+        private routeMeta: RouteMetadata,
+    ) {}
 
     public async execute(req: Request, res: Response, next: NextFunction) {
         try {
             // 1. Get request DTO class from routeMeta
             const requestDtoClass = this.routeMeta.parameterTypes?.[0];
-            if(!requestDtoClass)
-                throw new Error('No request DTO class found for route');
+            if (!requestDtoClass) throw new Error('No request DTO class found for route');
 
             // 2. Deserialize req.body → DTO instance
             const requestDto = this.jsonSerializer.deserializeObject(req.body, requestDtoClass);
@@ -35,8 +33,10 @@ export class ExpressWrapper {
             const methodMeta = new MethodMeta(this.routeMeta, requestDto);
             // 4. Invoke the service (filter chain + controller)
             const wpResponse = await this.service.invoke(methodMeta);
-            if(!wpResponse.response)
-                throw new Error(`Route chain(filters & all) is not returning a response.  ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`);
+            if (!wpResponse.response)
+                throw new Error(
+                    `Route chain(filters & all) is not returning a response.  ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`,
+                );
 
             // 6. Serialize response → plain object
             const responseDtoStr = this.jsonSerializer.serializeObject(wpResponse.response);
@@ -45,9 +45,10 @@ export class ExpressWrapper {
             res.status(200);
             res.setHeader('Content-Type', 'application/json');
             res.json(responseDtoStr);
-        } catch (err: unknown) {
+        } catch (err: any) {
+            const error = toError(err);
             // 8. Handle errors (SYMMETRIC - wrapExpress owns error handling!)
-            this.handleError(res, err);
+            this.handleError(res, error);
         }
     }
 
@@ -109,7 +110,6 @@ export class ExpressWrapper {
 @provideSingleton()
 @injectable()
 export class WebpiecesMiddleware {
-
     /**
      * Global error handler middleware - catches ALL unhandled errors.
      * Returns HTML 500 error page for any errors that escape the filter chain.
@@ -117,11 +117,7 @@ export class WebpiecesMiddleware {
      * This is the outermost safety net - JsonTranslator catches JSON API errors,
      * this catches everything else.
      */
-    async globalErrorHandler(
-        req: Request,
-        res: Response,
-        next: NextFunction,
-    ): Promise<void> {
+    async globalErrorHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
         console.log('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
 
         try {
@@ -134,7 +130,7 @@ export class WebpiecesMiddleware {
                 req.method,
                 req.path,
             );
-        } catch (err: unknown) {
+        } catch (err: any) {
             const error = toError(err);
             console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
             if (!res.headersSent) {

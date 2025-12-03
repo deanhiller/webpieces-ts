@@ -26,12 +26,7 @@ export class HttpError extends Error {
     public subType?: string;
     public readonly httpCause?: Error;
 
-    constructor(
-        message: string,
-        code: number,
-        subType?: string,
-        cause?: Error,
-    ) {
+    constructor(message: string, code: number, subType?: string, cause?: Error) {
         super(message);
         this.code = code;
         this.subType = subType;

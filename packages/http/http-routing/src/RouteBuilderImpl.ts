@@ -119,10 +119,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         this.routes.push(routeWithMeta);
 
         // Also add to map for O(1) lookup by method:path
-        const key = this.createRouteKey(
-            route.routeMeta.httpMethod,
-            route.routeMeta.path
-        );
+        const key = this.createRouteKey(route.routeMeta.httpMethod, route.routeMeta.path);
         this.routeMap.set(key, routeWithMeta);
     }
 
@@ -162,14 +159,11 @@ export class RouteBuilderImpl implements RouteBuilder {
 
         const handler = new RouteHandlerImpl<TResult>(
             controller,
-            method as (this: unknown, requestDto?: unknown) => Promise<TResult>
+            method as (this: unknown, requestDto?: unknown) => Promise<TResult>,
         );
 
         // Return handler with route definition
-        return new RouteHandlerWithMeta(
-            handler as RouteHandler<unknown>,
-            route,
-        );
+        return new RouteHandlerWithMeta(handler, route);
     }
 
     /**

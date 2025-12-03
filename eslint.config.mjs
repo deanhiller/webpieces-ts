@@ -55,6 +55,8 @@ export default [
         rules: {
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-non-null-assertion': 'off',
+            '@webpieces/max-method-lines': 'off',
+            '@webpieces/max-file-lines': 'off',
         },
     },
 ];
