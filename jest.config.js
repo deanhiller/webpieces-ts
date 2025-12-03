@@ -24,5 +24,5 @@ module.exports = {
     verbose: true,
     // Setup file to replace Jest's console with Node's native console
     // This removes the "at ..." stack traces after each console.log
-    setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
 };
