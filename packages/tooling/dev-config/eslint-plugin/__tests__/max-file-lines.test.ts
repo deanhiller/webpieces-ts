@@ -173,7 +173,8 @@ try {
             },
         ],
     });
-} catch {
+} catch (err: any) {
+    //const error = toError(err);
     // Test may fail, but file should be created
 }
 

@@ -63,10 +63,7 @@ export class WebpiecesFactory {
      * @param overrides - Optional ContainerModule for test overrides (can use async operations)
      * @returns Promise of a fully initialized WebpiecesServer ready to start()
      */
-    static async create(
-        meta: WebAppMeta,
-        overrides?: ContainerModule,
-    ): Promise<WebpiecesServer> {
+    static async create(meta: WebAppMeta, overrides?: ContainerModule): Promise<WebpiecesServer> {
         // Create WebPieces container for framework-level bindings
         const webpiecesContainer = new Container();
 

@@ -59,4 +59,12 @@ export default [
             '@webpieces/max-file-lines': 'off',
         },
     },
+    {
+        // ESLint rule implementation files - relaxed rules (complex inline validation logic)
+        files: ['**/eslint-plugin/rules/**/*.ts'],
+        rules: {
+            '@webpieces/max-method-lines': 'off',
+            '@webpieces/catch-error-pattern': 'off',
+        },
+    },
 ];
