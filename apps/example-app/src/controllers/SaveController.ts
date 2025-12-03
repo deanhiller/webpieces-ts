@@ -1,9 +1,16 @@
 import { injectable, inject } from 'inversify';
 import { Controller, provideSingleton, ValidateImplementation } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { SaveApi, SaveApiPrototype, SaveApiToken } from '../api/SaveApi';
-import { SaveRequest } from '../api/SaveRequest';
-import { SaveResponse, TheMatch } from '../api/SaveResponse';
+import {
+    SaveApi,
+    SaveApiPrototype,
+    SaveApiToken,
+    SaveRequest,
+    SaveItem,
+    SaveResponse,
+    TheMatch,
+    ResponseItem,
+} from '../api/SaveApi';
 import { RemoteApi, FetchValueRequest, TYPES } from '../remote/RemoteApi';
 
 /**
@@ -50,7 +57,7 @@ export class SimpleCounter implements Counter {
  */
 @provideSingleton()
 @Controller()
-export class SaveController extends SaveApiPrototype implements SaveApi {
+export class SaveController implements SaveApi {
     // Compile-time validator: Ensures all SaveApi methods are implemented
     // If you remove or don't override a method from SaveApi, you'll get a compile error here
     private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
@@ -61,12 +68,11 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
         @inject(TYPES.Counter) counter: Counter,
         @inject(TYPES.RemoteApi) remoteService: RemoteApi,
     ) {
-        super();
         this.counter = counter;
         this.remoteService = remoteService;
     }
 
-    override async save(request: SaveRequest): Promise<SaveResponse> {
+    async save(request: SaveRequest): Promise<SaveResponse> {
         console.log('[SaveController] save() method called with request:', request);
 
         // Increment counter
@@ -75,6 +81,16 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
         // Example: Access context (set by ContextFilter)
         const requestPath = RequestContext.get('REQUEST_PATH');
         console.log('[SaveController] Request path from context:', requestPath);
+
+        // Loop over and print items array (demonstrating deserialization worked)
+        console.log('[SaveController] Processing items array:');
+        if (request.items && request.items.length > 0) {
+            for (const item of request.items) {
+                console.log(`  - Item id=${item.id}, name="${item.name}", quantity=${item.quantity}`);
+            }
+        } else {
+            console.log('  (no items in request)');
+        }
 
         // Build request to remote service
         const fetchReq = new FetchValueRequest();
@@ -87,6 +103,7 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
         const response = new SaveResponse();
         response.success = true;
         response.searchTime = 5;
+        response.query = request.query;
 
         // Build matches from remote response
         const match = new TheMatch();
@@ -96,11 +113,24 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
 
         response.matches = [match];
 
+        // Build response items array from request items
+        response.processedItems = [];
+        if (request.items) {
+            for (const item of request.items) {
+                const responseItem = new ResponseItem();
+                responseItem.id = item.id;
+                responseItem.name = item.name;
+                responseItem.processed = true;
+                responseItem.message = `Processed ${item.quantity} units of "${item.name}"`;
+                response.processedItems.push(responseItem);
+            }
+        }
+
         // If metadata was provided, add more matches
         if (request.meta?.source) {
             const extraMatch = new TheMatch();
             extraMatch.title = `Source: ${request.meta.source}`;
-            extraMatch.description = 'Extra match based on metadata';
+            extraMatch.description = `Extra match based on metadata (priority: ${request.meta.priority})`;
             extraMatch.score = 50;
             response.matches.push(extraMatch);
         }

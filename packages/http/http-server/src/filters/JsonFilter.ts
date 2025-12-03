@@ -3,6 +3,7 @@ import { provideSingleton } from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
 import { Request, Response } from 'express';
+import { JsonSerializer } from 'typescript-json-serializer';
 import { MethodMeta } from '../MethodMeta';
 
 /**
@@ -37,8 +38,11 @@ export class JsonFilterConfig {
 @provideSingleton()
 @injectable()
 export class JsonFilter extends Filter<MethodMeta, WpResponse<unknown>> {
+    private serializer: JsonSerializer;
+
     constructor(@inject(FILTER_TYPES.JsonFilterConfig) private config: JsonFilterConfig) {
         super();
+        this.serializer = new JsonSerializer();
     }
 
     async filter(
@@ -78,12 +82,24 @@ export class JsonFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     /**
      * Deserialize request body to DTO and set on meta.requestDto.
+     * Uses JsonSerializer from typescript-json-serializer to properly
+     * deserialize nested objects and arrays with @JsonObject/@JsonProperty.
      */
     private deserializeRequest(meta: MethodMeta, expressRequest: Request): void {
-        if (expressRequest.body) {
-            // Set the deserialized body as requestDto
-            meta.requestDto = expressRequest.body;
+        if(!expressRequest.body) {
+            throw new Error("missing body for request dto");
         }
+            // Get the parameter type from route metadata (first parameter is the request DTO)
+            const parameterTypes = meta.routeMeta.parameterTypes;
+        if(!parameterTypes)
+            throw new Error("missing parameterTypes");
+        else if(parameterTypes.length === 0)
+            throw new Error("parameterType length is 0 and must be more");
+        const dtoClass = parameterTypes[0];
+        // Use JsonSerializer to deserialize into the proper class
+        // This handles @JsonObject/@JsonProperty decorators
+        meta.requestDto = this.serializer.deserialize(expressRequest.body, dtoClass);
+        console.log('[JsonFilter] Deserialized to class:', dtoClass?.name);
     }
 
     /**

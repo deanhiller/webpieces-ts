@@ -19,8 +19,8 @@ export class FilterRoutes implements Routes {
         // Global filter - applies to all controllers (pattern '*' matches all)
         routeBuilder.addFilter(new FilterDefinition(140, ContextFilter, '*'));
 
-        // Scoped filter - applies to all controllers in src/controllers
-        routeBuilder.addFilter(new FilterDefinition(60, JsonFilter, 'src/controllers/**/*.ts'));
+        // Global JSON filter - applies to all controllers
+        routeBuilder.addFilter(new FilterDefinition(60, JsonFilter, '*'));
 
         // Example: Admin-only filter (uncomment if you have an AdminAuthFilter)
         // routeBuilder.addFilter(

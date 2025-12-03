@@ -48,6 +48,8 @@ mkdir -p node_modules/@webpieces
 # Create symlinks to dist packages
 ln -sf "$(pwd)/dist/packages/core/core-context" node_modules/@webpieces/core-context
 ln -sf "$(pwd)/dist/packages/core/core-meta" node_modules/@webpieces/core-meta
+ln -sf "$(pwd)/dist/packages/core/core-util" node_modules/@webpieces/core-util
+ln -sf "$(pwd)/dist/packages/http/http-api" node_modules/@webpieces/http-api
 ln -sf "$(pwd)/dist/packages/http/http-routing" node_modules/@webpieces/http-routing
 ln -sf "$(pwd)/dist/packages/http/http-filters" node_modules/@webpieces/http-filters
 ln -sf "$(pwd)/dist/packages/http/http-server" node_modules/@webpieces/http-server
