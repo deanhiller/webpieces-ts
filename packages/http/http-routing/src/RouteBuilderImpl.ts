@@ -1,10 +1,21 @@
 import { Container, injectable } from 'inversify';
+import { Request, Response, NextFunction } from 'express';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 import { provideSingleton } from './decorators';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from './MethodMeta';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
+
+/**
+ * Express route handler function type.
+ * Used by wrapExpress to create handlers that Express can call.
+ */
+export type ExpressRouteHandler = (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => Promise<void>;
 
 /**
  * FilterWithMeta - Pairs a resolved filter instance with its definition.
@@ -18,6 +29,23 @@ export class FilterWithMeta {
 }
 
 /**
+ * RouteHandlerImpl - Concrete implementation of RouteHandler.
+ * Wraps a resolved controller and method to invoke on each request.
+ */
+export class RouteHandlerImpl<TResult> implements RouteHandler<TResult> {
+    constructor(
+        private controller: Record<string, unknown>,
+        private method: (this: unknown, requestDto?: unknown) => Promise<TResult>,
+    ) {}
+
+    async execute(meta: MethodMeta): Promise<TResult> {
+        // Invoke the method with requestDto from meta
+        // The controller is already resolved - no DI lookup on every request!
+        const result: TResult = await this.method.call(this.controller, meta.requestDto);
+        return result;
+    }
+}
+/**
  * RouteHandlerWithMeta - Pairs a route handler with its definition.
  * Stores both the handler (which wraps the DI-resolved controller) and the route metadata.
  *
@@ -26,8 +54,8 @@ export class FilterWithMeta {
  */
 export class RouteHandlerWithMeta {
     constructor(
-        public handler: RouteHandler<unknown>,
-        public definition: RouteDefinition<unknown>,
+        public invokeControllerHandler: RouteHandler<unknown>,
+        public definition: RouteDefinition,
     ) {}
 }
 
@@ -50,9 +78,23 @@ export class RouteHandlerWithMeta {
 @provideSingleton()
 @injectable()
 export class RouteBuilderImpl implements RouteBuilder {
-    private routes: Map<string, RouteHandlerWithMeta> = new Map();
+    private routes: RouteHandlerWithMeta[] = [];
     private filterRegistry: Array<FilterWithMeta> = [];
     private container?: Container;
+
+    /**
+     * Map for O(1) route lookup by method:path.
+     * Used by both addRoute() and createRouteInvoker() for fast route access.
+     */
+    private routeMap: Map<string, RouteHandlerWithMeta> = new Map();
+
+    /**
+     * Create route key for consistent lookup.
+     * Key format: "${METHOD}:${path}" (e.g., "POST:/search/item")
+     */
+    private createRouteKey(method: string, path: string): string {
+        return `${method.toUpperCase()}:${path}`;
+    }
 
     /**
      * Set the DI container used for resolving filters and controllers.
@@ -67,27 +109,50 @@ export class RouteBuilderImpl implements RouteBuilder {
     /**
      * Register a route with the router.
      *
-     * Resolves the controller from DI container ONCE and creates a handler that uses
-     * the resolved controller instance. This is more efficient than resolving on every request.
-     *
-     * The route is stored with a key of "METHOD:path" (e.g., "POST:/search/item").
+     * Uses createRouteHandlerWithMeta() to create the handler, then stores it
+     * in both the routes array and the routeMap for O(1) lookup.
      *
      * @param route - Route definition with controller class and method name
      */
-    addRoute<TResult = unknown>(route: RouteDefinition<TResult>): void {
+    addRoute(route: RouteDefinition): void {
+        const routeWithMeta = this.createRouteHandlerWithMeta(route);
+        this.routes.push(routeWithMeta);
+
+        // Also add to map for O(1) lookup by method:path
+        const key = this.createRouteKey(
+            route.routeMeta.httpMethod,
+            route.routeMeta.path
+        );
+        this.routeMap.set(key, routeWithMeta);
+    }
+
+    /**
+     * Create RouteHandlerWithMeta from a RouteDefinition.
+     *
+     * Resolves controller from DI container ONCE and creates a handler that
+     * invokes the controller method with the request DTO.
+     *
+     * This method is used by:
+     * - addRoute() for production route registration
+     * - createRouteInvoker() for test clients (via createApiClient)
+     *
+     * @param route - Route definition with controller class and method name
+     * @returns RouteHandlerWithMeta containing the handler and route definition
+     */
+    private createRouteHandlerWithMeta<TResult = unknown>(
+        route: RouteDefinition,
+    ): RouteHandlerWithMeta {
         if (!this.container) {
             throw new Error('Container not set. Call setContainer() before registering routes.');
         }
 
         const routeMeta = route.routeMeta;
 
-        const key = `${routeMeta.httpMethod}:${routeMeta.path}`;
-
         // Resolve controller instance from DI container ONCE (not on every request!)
-        const controller = this.container.get(route.controllerClass);
+        const controller = this.container.get(route.controllerClass) as Record<string, unknown>;
 
         // Get the controller method
-        const method = (controller as Record<string, unknown>)[routeMeta.methodName];
+        const method = controller[routeMeta.methodName];
         if (typeof method !== 'function') {
             const controllerName = (route.controllerClass as { name?: string }).name || 'Unknown';
             throw new Error(
@@ -95,24 +160,16 @@ export class RouteBuilderImpl implements RouteBuilder {
             );
         }
 
-        // Create handler that uses the resolved controller instance
-        const handler = new (class extends RouteHandler<TResult> {
-            async execute(meta: MethodMeta): Promise<TResult> {
-                // Invoke the method with requestDto from meta
-                // The controller is already resolved - no DI lookup on every request!
-                // Pass requestDto as the single argument to the controller method
-                const result: TResult = await method.call(controller, meta.requestDto);
-                return result;
-            }
-        })();
-
-        // Store handler with route definition
-        const routeWithMeta = new RouteHandlerWithMeta(
-            handler as RouteHandler<unknown>,
-            route as RouteDefinition<unknown>,
+        const handler = new RouteHandlerImpl<TResult>(
+            controller,
+            method as (this: unknown, requestDto?: unknown) => Promise<TResult>
         );
 
-        this.routes.set(key, routeWithMeta);
+        // Return handler with route definition
+        return new RouteHandlerWithMeta(
+            handler as RouteHandler<unknown>,
+            route,
+        );
     }
 
     /**
@@ -141,7 +198,7 @@ export class RouteBuilderImpl implements RouteBuilder {
      *
      * @returns Map of routes with handlers and definitions, keyed by "METHOD:path"
      */
-    getRoutes(): Map<string, RouteHandlerWithMeta> {
+    getRoutes(): RouteHandlerWithMeta[] {
         return this.routes;
     }
 
@@ -157,81 +214,93 @@ export class RouteBuilderImpl implements RouteBuilder {
     }
 
     /**
-     * Map of route keys to their filter chain services.
-     * Created by setupRoutes().
+     * Cached filter definitions for lazy route setup.
      */
-    private routeServices: Map<string, Service<MethodMeta, WpResponse<unknown>>> = new Map();
+    private cachedFilterDefinitions?: FilterDefinition[];
 
     /**
-     * Setup all routes by creating filter chains.
-     * This must be called after all routes and filters are registered.
-     *
-     * This method creates a Service for each route that wraps the filter chain
-     * and controller invocation. The services are DTO-only and have no Express dependency.
+     * Get filter definitions, computing once and caching.
      */
-    setupRoutes(): void {
-        const sortedFilters = this.getSortedFilters();
-
-        // Convert FilterWithMeta[] to FilterDefinition[] with filter instances set
-        const filterDefinitions = sortedFilters.map((fwm) => {
-            const def = fwm.definition;
-            def.filter = fwm.filter;
-            return def;
-        });
-
-        for (const [key, routeWithMeta] of this.routes.entries()) {
-            const route = routeWithMeta.definition;
-            const routeMeta = route.routeMeta;
-
-            console.log(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
-
-            // Find matching filters for this route
-            const matchingFilters = FilterMatcher.findMatchingFilters(
-                route.controllerFilepath,
-                filterDefinitions,
-            );
-
-            // Create service that wraps the controller execution
-            const controllerService: Service<MethodMeta, WpResponse<unknown>> = {
-                invoke: async (meta: MethodMeta): Promise<WpResponse<unknown>> => {
-                    const result = await routeWithMeta.handler.execute(meta);
-                    return new WpResponse(result);
-                },
-            };
-
-            // Chain filters with the controller service (reverse order for correct execution)
-            let filterChain = matchingFilters[matchingFilters.length - 1];
-            for (let i = matchingFilters.length - 2; i >= 0; i--) {
-                filterChain = filterChain.chain(matchingFilters[i]);
-            }
-
-            const svc = filterChain.chainService(controllerService);
-            this.routeServices.set(key, svc);
+    private getFilterDefinitions(): FilterDefinition[] {
+        if (!this.cachedFilterDefinitions) {
+            const sortedFilters = this.getSortedFilters();
+            this.cachedFilterDefinitions = sortedFilters.map((fwm) => {
+                const def = fwm.definition;
+                def.filter = fwm.filter;
+                return def;
+            });
         }
+        return this.cachedFilterDefinitions;
     }
 
     /**
-     * Get the service for a specific route.
-     * The service wraps the filter chain and controller invocation.
+     * Setup a single route by creating its filter chain.
+     * This is called lazily by createHandler() and getRouteService().
      *
-     * @param method - HTTP method (GET, POST, etc.)
-     * @param path - URL path
-     * @returns The service, or undefined if route not found
+     * Creates a Service that wraps the filter chain and controller invocation.
+     * The service is DTO-only and has no Express dependency.
+     *
+     * @param key - Route key in format "METHOD:path"
+     * @param routeWithMeta - Route handler with metadata
+     * @returns The service for this route
      */
-    getRouteService(method: string, path: string): Service<MethodMeta, WpResponse<unknown>> | undefined {
-        const key = `${method.toUpperCase()}:${path}`;
-        return this.routeServices.get(key);
+    public createRouteHandler(
+        routeWithMeta: RouteHandlerWithMeta,
+    ): Service<MethodMeta, WpResponse<unknown>> {
+        const route = routeWithMeta.definition;
+        const routeMeta = route.routeMeta;
+
+        console.log(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
+
+        // Get cached filter definitions
+        const filterDefinitions = this.getFilterDefinitions();
+
+        // Find matching filters for this route
+        const matchingFilters = FilterMatcher.findMatchingFilters(
+            route.controllerFilepath,
+            filterDefinitions,
+        );
+
+        // Create service that wraps the controller execution
+        const controllerService: Service<MethodMeta, WpResponse<unknown>> = {
+            invoke: async (meta: MethodMeta): Promise<WpResponse<unknown>> => {
+                const result = await routeWithMeta.invokeControllerHandler.execute(meta);
+                return new WpResponse(result);
+            },
+        };
+
+        // Chain filters with the controller service (reverse order for correct execution)
+        let filterChain = matchingFilters[matchingFilters.length - 1];
+        for (let i = matchingFilters.length - 2; i >= 0; i--) {
+            filterChain = filterChain.chain(matchingFilters[i]);
+        }
+
+        return filterChain.chainService(controllerService);
     }
 
     /**
-     * Get route metadata for a specific route.
+     * Create an invoker function for a route (for testing via createApiClient).
+     * Uses routeMap for O(1) lookup, sets up the filter chain ONCE,
+     * and returns a Service that can be called multiple times without
+     * recreating the filter chain.
+     *
+     * This method is called by WebpiecesServer.createApiClient() during proxy setup.
+     * The returned Service is stored as the proxy method and invoked on each call.
      *
      * @param method - HTTP method (GET, POST, etc.)
      * @param path - URL path
-     * @returns The route handler with metadata, or undefined if not found
+     * @returns A Service that invokes the route
      */
-    getRouteWithMeta(method: string, path: string): RouteHandlerWithMeta | undefined {
-        const key = `${method.toUpperCase()}:${path}`;
-        return this.routes.get(key);
+    createRouteInvoker(method: string, path: string): Service<MethodMeta, WpResponse<unknown>> {
+        // Use routeMap for O(1) lookup (not linear search!)
+        const key = this.createRouteKey(method, path);
+        const routeWithMeta = this.routeMap.get(key);
+
+        if (!routeWithMeta) {
+            throw new Error(`Route not found: ${method} ${path}`);
+        }
+
+        // Setup filter chain ONCE (not on every invocation!)
+        return this.createRouteHandler(routeWithMeta);
     }
 }

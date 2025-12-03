@@ -1,4 +1,4 @@
-import { Container } from 'inversify';
+import { Container, ContainerModule } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { WebAppMeta } from '@webpieces/http-routing';
 import { WebpiecesServer } from './WebpiecesServer';
@@ -19,10 +19,16 @@ import { WebpiecesServerImpl } from './WebpiecesServerImpl';
  *
  * Usage:
  * ```typescript
+ * // Production
  * const server = WebpiecesFactory.create(new ProdServerMeta());
  * server.start(8080);
- * // ... later
- * server.stop();
+ *
+ * // Testing with overrides
+ * const overrides = new ContainerModule((bind) => {
+ *     bind(TYPES.RemoteApi).toConstantValue(mockRemoteApi);
+ * });
+ * const server = WebpiecesFactory.create(new ProdServerMeta(), overrides);
+ * const api = server.createApiClient(SaveApiPrototype);
  * ```
  *
  * This pattern:
@@ -40,23 +46,39 @@ export class WebpiecesFactory {
      * 2. Loads framework bindings via buildProviderModule()
      * 3. Resolves the server implementation from DI
      * 4. Initializes the server with the container and meta
+     * 5. Loads optional override module (for testing)
      *
      * @param meta - User-provided WebAppMeta with DI modules and routes
+     * @param overrides - Optional ContainerModule for test overrides (loaded LAST to override bindings)
      * @returns A fully initialized WebpiecesServer ready to start()
      */
-    static create(meta: WebAppMeta): WebpiecesServer {
+
+    /**
+     * Create a new WebPieces server instance asynchronously.
+     *
+     * Use this method when you need async operations in your override modules
+     * (e.g., rebind() in new Inversify versions).
+     *
+     * @param meta - User-provided WebAppMeta with DI modules and routes
+     * @param overrides - Optional ContainerModule for test overrides (can use async operations)
+     * @returns Promise of a fully initialized WebpiecesServer ready to start()
+     */
+    static async create(
+        meta: WebAppMeta,
+        overrides?: ContainerModule,
+        testMode?: boolean
+    ): Promise<WebpiecesServer> {
         // Create WebPieces container for framework-level bindings
         const webpiecesContainer = new Container();
 
         // Load buildProviderModule to auto-scan for @provideSingleton decorators
-        // This registers framework classes (WebpiecesServerImpl, RouteBuilderImpl)
-        webpiecesContainer.load(buildProviderModule());
+        await webpiecesContainer.load(buildProviderModule());
 
-        // Resolve WebpiecesServerImpl from DI container (proper DI - no 'new'!)
+        // Resolve WebpiecesServerImpl from DI container
         const serverImpl = webpiecesContainer.get(WebpiecesServerImpl);
 
-        // Initialize the server (loads app DI modules, registers routes)
-        serverImpl.initialize(webpiecesContainer, meta);
+        // Initialize the server asynchronously (loads app DI modules, registers routes)
+        await serverImpl.initialize(webpiecesContainer, meta, overrides);
 
         // Return as interface to hide initialize() from consumers
         return serverImpl;

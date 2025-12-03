@@ -5,6 +5,8 @@ import { FilterRoutes } from './routes/FilterRoutes';
 import { RESTApiRoutes } from '@webpieces/http-routing';
 import { SaveApi, SaveApiPrototype } from './api/SaveApi';
 import { SaveController } from './controllers/SaveController';
+import { PublicApiPrototype } from './api/PublicApi';
+import { PublicController } from './controllers/PublicController';
 
 /**
  * ProdServerMeta - Application metadata and configuration.
@@ -44,6 +46,9 @@ export class ProdServerMeta implements WebAppMeta {
             // SaveController extends SaveApiPrototype and implements SaveApi interface
             // Type-safe: RESTApiRoutes<SaveApiPrototype, SaveController>
             new RESTApiRoutes(SaveApiPrototype, SaveController),
+
+            // Auto-wire PublicApiPrototype to PublicController
+            new RESTApiRoutes(PublicApiPrototype, PublicController),
         ];
     }
 }

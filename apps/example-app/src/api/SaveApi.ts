@@ -1,4 +1,5 @@
 import { ApiInterface, Post, Path, ValidateImplementation } from '@webpieces/http-routing';
+import {JsonObject} from "typescript-json-serializer";
 
 /**
  * DI token for SaveApi.
@@ -14,6 +15,7 @@ export const SaveApiToken = Symbol.for('SaveApi');
 /**
  * Nested sub-item for testing deep object deserialization.
  */
+@JsonObject()
 export class SubItem {
     thename?: string;
     count?: number;

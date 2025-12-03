@@ -32,7 +32,6 @@ export {
     RouteBuilder,
     RouteDefinition,
     FilterDefinition,
-    RouteRequest,
 } from './WebAppMeta';
 
 // Method metadata and route handler
@@ -44,6 +43,7 @@ export {
     RouteBuilderImpl,
     RouteHandlerWithMeta,
     FilterWithMeta,
+    ExpressRouteHandler,
 } from './RouteBuilderImpl';
 
 // Filter matching
