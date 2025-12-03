@@ -27,6 +27,10 @@
     "peerDependencies": {
         "eslint": ">=8.0.0"
     },
+    "devDependencies": {
+        "@types/eslint": "^9.6.1",
+        "eslint": "^9.39.1"
+    },
     "keywords": [
         "webpieces",
         "config",
