@@ -1,5 +1,4 @@
 import { ApiInterface, Post, Path, ValidateImplementation } from '@webpieces/http-routing';
-import { JsonObject, JsonProperty } from 'typescript-json-serializer';
 
 /**
  * DI token for SaveApi.
@@ -9,111 +8,84 @@ export const SaveApiToken = Symbol.for('SaveApi');
 
 // ============================================================
 // Request DTOs
+// All fields are optional for protocol evolution/future-proofing
 // ============================================================
+
+/**
+ * Nested sub-item for testing deep object deserialization.
+ */
+export class SubItem {
+    thename?: string;
+    count?: number;
+}
 
 /**
  * Individual item in the save request.
  * Demonstrates nested object serialization.
  */
-@JsonObject()
 export class SaveItem {
-    @JsonProperty()
-    id: number = 0;
-
-    @JsonProperty()
-    name: string = '';
-
-    @JsonProperty()
-    quantity: number = 0;
+    id?: number;
+    name?: string;
+    quantity?: number;
+    subItem?: SubItem;
 }
 
 /**
  * Optional metadata for the request.
  */
-@JsonObject()
 export class RequestMeta {
-    @JsonProperty()
-    source: string = '';
-
-    @JsonProperty()
-    priority: number = 0;
+    source?: string;
+    priority?: number;
 }
 
 /**
  * Save request DTO.
- * Demonstrates array serialization with @JsonProperty.
+ * All fields optional for protocol evolution.
  */
-@JsonObject()
 export class SaveRequest {
-    @JsonProperty()
-    query: string = '';
-
-    @JsonProperty({ type: SaveItem })
-    items: SaveItem[] = [];
-
-    @JsonProperty({ type: RequestMeta })
+    query?: string;
+    items?: SaveItem[];
     meta?: RequestMeta;
+    createdAt?: Date;
 }
 
 // ============================================================
 // Response DTOs
+// All fields are optional for protocol evolution/future-proofing
 // ============================================================
 
 /**
  * Match result DTO.
  * Similar to Java TheMatch class.
  */
-@JsonObject()
 export class TheMatch {
-    @JsonProperty()
-    title: string = '';
-
-    @JsonProperty()
-    description: string = '';
-
-    @JsonProperty()
-    score: number = 0;
+    title?: string;
+    description?: string;
+    score?: number;
 }
 
 /**
  * Processed item in the response.
  * Demonstrates array response serialization.
  */
-@JsonObject()
 export class ResponseItem {
-    @JsonProperty()
-    id: number = 0;
-
-    @JsonProperty()
-    name: string = '';
-
-    @JsonProperty()
-    processed: boolean = false;
-
-    @JsonProperty()
-    message: string = '';
+    id?: number;
+    name?: string;
+    processed?: boolean;
+    message?: string;
+    subItemResult?: SubItem;
 }
 
 /**
  * Save response DTO.
  * Similar to Java SaveResponse class.
  */
-@JsonObject()
 export class SaveResponse {
-    @JsonProperty()
-    query: string = '';
-
-    @JsonProperty()
-    searchTime: number = 0;
-
-    @JsonProperty()
-    success: boolean = false;
-
-    @JsonProperty({ type: TheMatch })
-    matches: TheMatch[] = [];
-
-    @JsonProperty({ type: ResponseItem })
-    processedItems: ResponseItem[] = [];
+    query?: string;
+    searchTime?: number;
+    success?: boolean;
+    matches?: TheMatch[];
+    processedItems?: ResponseItem[];
 }
 
 // ============================================================

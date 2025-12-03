@@ -10,6 +10,7 @@ import {
     SaveResponse,
     TheMatch,
     ResponseItem,
+    SubItem,
 } from '../api/SaveApi';
 import { RemoteApi, FetchValueRequest, TYPES } from '../remote/RemoteApi';
 
@@ -73,7 +74,32 @@ export class SaveController implements SaveApi {
     }
 
     async save(request: SaveRequest): Promise<SaveResponse> {
-        console.log('[SaveController] save() method called with request:', request);
+        console.log('[SaveController] save() method called with request:', JSON.stringify(request, null, 2));
+
+        // DIAGNOSTIC: Check if objects are actual class instances or plain objects
+        console.log('[SaveController] INSTANCEOF CHECKS:');
+        console.log(`  request instanceof SaveRequest: ${request instanceof SaveRequest}`);
+        if (request.items && request.items.length > 0) {
+            console.log(`  request.items[0] instanceof SaveItem: ${request.items[0] instanceof SaveItem}`);
+            if (request.items[0].subItem) {
+                console.log(`  request.items[0].subItem instanceof SubItem: ${request.items[0].subItem instanceof SubItem}`);
+            }
+        }
+
+        // DIAGNOSTIC: Check Date handling
+        if (request.createdAt) {
+            console.log('[SaveController] DATE CHECK:');
+            console.log(`  typeof request.createdAt: ${typeof request.createdAt}`);
+            console.log(`  request.createdAt instanceof Date: ${request.createdAt instanceof Date}`);
+            console.log(`  request.createdAt value: ${request.createdAt}`);
+            // Try calling a Date method - this will fail if it's a string
+            try {
+                const time = (request.createdAt as Date).getTime();
+                console.log(`  request.createdAt.getTime(): ${time}`);
+            } catch (e) {
+                console.log(`  request.createdAt.getTime() FAILED: ${e}`);
+            }
+        }
 
         // Increment counter
         this.counter.inc();
@@ -87,6 +113,10 @@ export class SaveController implements SaveApi {
         if (request.items && request.items.length > 0) {
             for (const item of request.items) {
                 console.log(`  - Item id=${item.id}, name="${item.name}", quantity=${item.quantity}`);
+                // Test SubItem nested object
+                if (item.subItem) {
+                    console.log(`    -> SubItem thename="${item.subItem.thename}", count=${item.subItem.count}`);
+                }
             }
         } else {
             console.log('  (no items in request)');
@@ -94,7 +124,7 @@ export class SaveController implements SaveApi {
 
         // Build request to remote service
         const fetchReq = new FetchValueRequest();
-        fetchReq.name = request.query;
+        fetchReq.name = request.query ?? '';
 
         // Call remote service (async)
         const remoteResponse = await this.remoteService.fetchValue(fetchReq);
@@ -122,6 +152,13 @@ export class SaveController implements SaveApi {
                 responseItem.name = item.name;
                 responseItem.processed = true;
                 responseItem.message = `Processed ${item.quantity} units of "${item.name}"`;
+                // Echo back SubItem if present
+                if (item.subItem) {
+                    const subResult = new SubItem();
+                    subResult.thename = `Processed: ${item.subItem.thename}`;
+                    subResult.count = (item.subItem.count ?? 0) * 2;
+                    responseItem.subItemResult = subResult;
+                }
                 response.processedItems.push(responseItem);
             }
         }

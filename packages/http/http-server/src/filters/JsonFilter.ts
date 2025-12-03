@@ -96,10 +96,10 @@ export class JsonFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         else if(parameterTypes.length === 0)
             throw new Error("parameterType length is 0 and must be more");
         const dtoClass = parameterTypes[0];
-        // Use JsonSerializer to deserialize into the proper class
-        // This handles @JsonObject/@JsonProperty decorators
-        meta.requestDto = this.serializer.deserialize(expressRequest.body, dtoClass);
-        console.log('[JsonFilter] Deserialized to class:', dtoClass?.name);
+        // EXPERIMENT: Just use the raw body (already parsed by express.json())
+        // instead of JsonSerializer to see if we really need it
+        meta.requestDto = expressRequest.body;
+        console.log('[JsonFilter] Using raw body (no JsonSerializer), dtoClass was:', dtoClass?.name);
     }
 
     /**
