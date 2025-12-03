@@ -34,3 +34,17 @@ export {
     FilterDefinition,
     RouteRequest,
 } from './WebAppMeta';
+
+// Method metadata and route handler
+export { MethodMeta } from './MethodMeta';
+export { RouteHandler } from './RouteHandler';
+
+// Route builder implementation
+export {
+    RouteBuilderImpl,
+    RouteHandlerWithMeta,
+    FilterWithMeta,
+} from './RouteBuilderImpl';
+
+// Filter matching
+export { FilterMatcher, HttpFilter } from './FilterMatcher';

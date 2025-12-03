@@ -101,6 +101,9 @@ export class RESTApiRoutes<TApi = any, TController extends TApi = any> implement
             );
         }
 
+        // Set controller class name for logging
+        route.controllerClassName = (this.controllerClass as any).name;
+
         // Extract controller filepath for filter matching
         const controllerFilepath = this.getControllerFilepath();
 

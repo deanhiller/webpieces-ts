@@ -20,12 +20,20 @@ export class RouteMetadata {
     path: string;
     methodName: string;
     parameterTypes?: any[];
+    controllerClassName?: string;
 
-    constructor(httpMethod: string, path: string, methodName: string, parameterTypes?: any[]) {
+    constructor(
+        httpMethod: string,
+        path: string,
+        methodName: string,
+        parameterTypes?: any[],
+        controllerClassName?: string,
+    ) {
         this.httpMethod = httpMethod;
         this.path = path;
         this.methodName = methodName;
         this.parameterTypes = parameterTypes;
+        this.controllerClassName = controllerClassName;
     }
 }
 

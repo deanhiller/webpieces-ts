@@ -1,12 +1,8 @@
 import { injectable, inject } from 'inversify';
 import { Controller, provideSingleton, ValidateImplementation } from '@webpieces/http-routing';
-import { RequestContext } from '@webpieces/core-context';
 import {
     SaveApi,
-    SaveApiPrototype,
-    SaveApiToken,
     SaveRequest,
-    SaveItem,
     SaveResponse,
     TheMatch,
     ResponseItem,
@@ -74,53 +70,8 @@ export class SaveController implements SaveApi {
     }
 
     async save(request: SaveRequest): Promise<SaveResponse> {
-        console.log('[SaveController] save() method called with request:', JSON.stringify(request, null, 2));
-
-        // DIAGNOSTIC: Check if objects are actual class instances or plain objects
-        console.log('[SaveController] INSTANCEOF CHECKS:');
-        console.log(`  request instanceof SaveRequest: ${request instanceof SaveRequest}`);
-        if (request.items && request.items.length > 0) {
-            console.log(`  request.items[0] instanceof SaveItem: ${request.items[0] instanceof SaveItem}`);
-            if (request.items[0].subItem) {
-                console.log(`  request.items[0].subItem instanceof SubItem: ${request.items[0].subItem instanceof SubItem}`);
-            }
-        }
-
-        // DIAGNOSTIC: Check Date handling
-        if (request.createdAt) {
-            console.log('[SaveController] DATE CHECK:');
-            console.log(`  typeof request.createdAt: ${typeof request.createdAt}`);
-            console.log(`  request.createdAt instanceof Date: ${request.createdAt instanceof Date}`);
-            console.log(`  request.createdAt value: ${request.createdAt}`);
-            // Try calling a Date method - this will fail if it's a string
-            try {
-                const time = (request.createdAt as Date).getTime();
-                console.log(`  request.createdAt.getTime(): ${time}`);
-            } catch (e) {
-                console.log(`  request.createdAt.getTime() FAILED: ${e}`);
-            }
-        }
-
         // Increment counter
         this.counter.inc();
-
-        // Example: Access context (set by ContextFilter)
-        const requestPath = RequestContext.get('REQUEST_PATH');
-        console.log('[SaveController] Request path from context:', requestPath);
-
-        // Loop over and print items array (demonstrating deserialization worked)
-        console.log('[SaveController] Processing items array:');
-        if (request.items && request.items.length > 0) {
-            for (const item of request.items) {
-                console.log(`  - Item id=${item.id}, name="${item.name}", quantity=${item.quantity}`);
-                // Test SubItem nested object
-                if (item.subItem) {
-                    console.log(`    -> SubItem thename="${item.subItem.thename}", count=${item.subItem.count}`);
-                }
-            }
-        } else {
-            console.log('  (no items in request)');
-        }
 
         // Build request to remote service
         const fetchReq = new FetchValueRequest();

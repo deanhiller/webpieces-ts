@@ -1,6 +1,6 @@
 import { Filter, WpResponse } from '@webpieces/http-filters';
 import { MethodMeta } from './MethodMeta';
-import { FilterDefinition } from '@webpieces/http-routing';
+import { FilterDefinition } from './WebAppMeta';
 import { minimatch } from 'minimatch';
 
 /**

@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, FilterDefinition } from '@webpieces/http-routing';
-import { ContextFilter, JsonFilter } from '@webpieces/http-server';
+import { ContextFilter, LogApiFilter } from '@webpieces/http-server';
 
 /**
  * FilterRoutes - Registers filters for the application.
@@ -7,20 +7,23 @@ import { ContextFilter, JsonFilter } from '@webpieces/http-server';
  *
  * Filters are executed in priority order (higher numbers first):
  * - 140: ContextFilter (setup AsyncLocalStorage)
- * - 60: JsonFilter (JSON serialization/deserialization)
+ * - 130: LogApiFilter (structured API logging)
  *
- * Filters can now be scoped to specific controller files using glob patterns:
+ * Note: JSON serialization/deserialization is now handled by the jsonTranslator
+ * Express middleware in WebpiecesServerImpl, not by a filter.
+ *
+ * Filters can be scoped to specific controller files using glob patterns:
  * - filepathPattern: 'src/controllers/admin/**' + '/*.ts' - All admin controllers
  * - filepathPattern: '**' + '/SaveController.ts' - Specific controller file
  * - No pattern = matches all controllers (default behavior)
  */
 export class FilterRoutes implements Routes {
     configure(routeBuilder: RouteBuilder): void {
-        // Global filter - applies to all controllers (pattern '*' matches all)
-        routeBuilder.addFilter(new FilterDefinition(140, ContextFilter, '*'));
+        // Global context filter - applies to all controllers (pattern '*' matches all)
+        routeBuilder.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
 
-        // Global JSON filter - applies to all controllers
-        routeBuilder.addFilter(new FilterDefinition(60, JsonFilter, '*'));
+        // Global API logging filter - applies to all controllers
+        routeBuilder.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
 
         // Example: Admin-only filter (uncomment if you have an AdminAuthFilter)
         // routeBuilder.addFilter(

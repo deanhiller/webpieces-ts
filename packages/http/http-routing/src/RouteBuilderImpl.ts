@@ -1,14 +1,10 @@
 import { Container, injectable } from 'inversify';
-import { RouteBuilder, RouteDefinition, FilterDefinition } from '@webpieces/http-routing';
-import { Filter, WpResponse } from '@webpieces/http-filters';
-import { provideSingleton } from '@webpieces/http-routing';
+import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
+import { provideSingleton } from './decorators';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from './MethodMeta';
-
-/**
- * Type alias for HTTP filters that work with MethodMeta and ResponseWrapper.
- */
-export type HttpFilter = Filter<MethodMeta, WpResponse<unknown>>;
+import { WpResponse, Service } from '@webpieces/http-filters';
+import { FilterMatcher, HttpFilter } from './FilterMatcher';
 
 /**
  * FilterWithMeta - Pairs a resolved filter instance with its definition.
@@ -158,5 +154,84 @@ export class RouteBuilderImpl implements RouteBuilder {
         return [...this.filterRegistry].sort(
             (a, b) => b.definition.priority - a.definition.priority,
         );
+    }
+
+    /**
+     * Map of route keys to their filter chain services.
+     * Created by setupRoutes().
+     */
+    private routeServices: Map<string, Service<MethodMeta, WpResponse<unknown>>> = new Map();
+
+    /**
+     * Setup all routes by creating filter chains.
+     * This must be called after all routes and filters are registered.
+     *
+     * This method creates a Service for each route that wraps the filter chain
+     * and controller invocation. The services are DTO-only and have no Express dependency.
+     */
+    setupRoutes(): void {
+        const sortedFilters = this.getSortedFilters();
+
+        // Convert FilterWithMeta[] to FilterDefinition[] with filter instances set
+        const filterDefinitions = sortedFilters.map((fwm) => {
+            const def = fwm.definition;
+            def.filter = fwm.filter;
+            return def;
+        });
+
+        for (const [key, routeWithMeta] of this.routes.entries()) {
+            const route = routeWithMeta.definition;
+            const routeMeta = route.routeMeta;
+
+            console.log(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
+
+            // Find matching filters for this route
+            const matchingFilters = FilterMatcher.findMatchingFilters(
+                route.controllerFilepath,
+                filterDefinitions,
+            );
+
+            // Create service that wraps the controller execution
+            const controllerService: Service<MethodMeta, WpResponse<unknown>> = {
+                invoke: async (meta: MethodMeta): Promise<WpResponse<unknown>> => {
+                    const result = await routeWithMeta.handler.execute(meta);
+                    return new WpResponse(result);
+                },
+            };
+
+            // Chain filters with the controller service (reverse order for correct execution)
+            let filterChain = matchingFilters[matchingFilters.length - 1];
+            for (let i = matchingFilters.length - 2; i >= 0; i--) {
+                filterChain = filterChain.chain(matchingFilters[i]);
+            }
+
+            const svc = filterChain.chainService(controllerService);
+            this.routeServices.set(key, svc);
+        }
+    }
+
+    /**
+     * Get the service for a specific route.
+     * The service wraps the filter chain and controller invocation.
+     *
+     * @param method - HTTP method (GET, POST, etc.)
+     * @param path - URL path
+     * @returns The service, or undefined if route not found
+     */
+    getRouteService(method: string, path: string): Service<MethodMeta, WpResponse<unknown>> | undefined {
+        const key = `${method.toUpperCase()}:${path}`;
+        return this.routeServices.get(key);
+    }
+
+    /**
+     * Get route metadata for a specific route.
+     *
+     * @param method - HTTP method (GET, POST, etc.)
+     * @param path - URL path
+     * @returns The route handler with metadata, or undefined if not found
+     */
+    getRouteWithMeta(method: string, path: string): RouteHandlerWithMeta | undefined {
+        const key = `${method.toUpperCase()}:${path}`;
+        return this.routes.get(key);
     }
 }

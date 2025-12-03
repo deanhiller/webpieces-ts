@@ -1,13 +1,21 @@
 import express, { Express, NextFunction, Request, Response } from 'express';
 import { Container, inject, injectable } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
-import { RouteRequest, WebAppMeta } from '@webpieces/http-routing';
-import { WpResponse, Service } from '@webpieces/http-filters';
-import { provideSingleton } from '@webpieces/http-routing';
-import { RouteBuilderImpl, RouteHandlerWithMeta, FilterWithMeta } from './RouteBuilderImpl';
-import { FilterMatcher } from './FilterMatcher';
+import {
+    RouteRequest,
+    WebAppMeta,
+    provideSingleton,
+    MethodMeta,
+    RouteBuilderImpl, RouteHandler,
+} from '@webpieces/http-routing';
+import {
+    ProtocolError,
+    HttpError,
+    HttpBadRequestError,
+    HttpVendorError,
+    HttpUserError,
+} from '@webpieces/http-api';
 import { toError } from '@webpieces/core-util';
-import { MethodMeta } from './MethodMeta';
 import { WebpiecesServer } from './WebpiecesServer';
 
 /**
@@ -178,11 +186,119 @@ export class WebpiecesServerImpl implements WebpiecesServer {
     /**
      * Logging middleware - logs request/response flow.
      * Demonstrates middleware execution order.
+     * IMPORTANT: Must be async and await next() to properly chain with async middleware.
      */
-    private logNextLayer(req: Request, res: Response, next: NextFunction): void {
+    private async logNextLayer(req: Request, res: Response, next: NextFunction): Promise<void> {
         console.log('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
-        next();
+        await next();
         console.log('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
+    }
+
+    /**
+     * JSON Translator middleware - Handles JSON serialization/deserialization and route dispatch.
+     *
+     * Layer 3 responsibilities:
+     * 1. Look up the route service from RouteBuilder
+     * 2. For non-JSON POST/PUT/PATCH, pass through (non-JSON route)
+     * 3. Create MethodMeta with request body
+     * 4. Invoke the filter chain and controller
+     * 5. Write JSON response
+     * 6. On error: Map HttpError to status code, serialize ProtocolError
+     *
+     * This middleware is the route dispatcher - no individual Express route handlers needed.
+     */
+    private async jsonTranslator(req: Request, res: Response, next: NextFunction): Promise<void> {
+        // Look up route service
+        const service = this.routeBuilder.getRouteService(req.method, req.path);
+
+        // If no route found, pass through (Express will return 404)
+        if (!service) {
+            console.log('[Layer 3: JsonTranslator] No route found:', req.method, req.path);
+            await next();
+            return;
+        }
+
+        // Check Content-Type for POST/PUT/PATCH
+        const contentType = req.headers['content-type'] || '';
+        const isJsonRequest = contentType.includes('application/json');
+
+        if (['POST', 'PUT', 'PATCH'].includes(req.method) && !isJsonRequest) {
+            console.log('[Layer 3: JsonTranslator] Non-JSON route, passing through:', req.method, req.path);
+            await next();
+            return;
+        }
+
+        console.log('[Layer 3: JsonTranslator] Request:', req.method, req.path);
+
+        // Get route metadata
+        const routeWithMeta = this.routeBuilder.getRouteWithMeta(req.method, req.path);
+        if (!routeWithMeta) {
+            await next();
+            return;
+        }
+
+        const routeMeta = routeWithMeta.definition.routeMeta;
+
+        try {
+            // Create MethodMeta with Express Request/Response and request body
+            const routeRequest = new RouteRequest(req, res);
+            const meta = new MethodMeta(routeMeta, routeRequest, req.body);
+
+            // Invoke filter chain and controller
+            const responseWrapper = await service.invoke(meta);
+
+            // Write JSON response
+            console.log('[Layer 3: JsonTranslator] Response:', req.method, req.path);
+
+            if (!res.headersSent) {
+                res.status(200);
+                res.setHeader('Content-Type', 'application/json');
+                if (responseWrapper.response !== undefined) {
+                    res.json(responseWrapper.response);
+                } else {
+                    res.end();
+                }
+            }
+        } catch (err: unknown) {
+            this.handleJsonTranslatorError(res, err);
+        }
+    }
+
+    /**
+     * Handle errors caught by jsonTranslator.
+     * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
+     */
+    private handleJsonTranslatorError(res: Response, error: unknown): void {
+        if (res.headersSent) {
+            return;
+        }
+
+        const protocolError = new ProtocolError();
+
+        if (error instanceof HttpError) {
+            protocolError.message = error.message;
+            protocolError.subType = error.subType;
+            protocolError.name = error.name;
+
+            if (error instanceof HttpBadRequestError) {
+                protocolError.field = error.field;
+                protocolError.guiAlertMessage = error.guiMessage;
+            }
+            if (error instanceof HttpVendorError) {
+                protocolError.waitSeconds = error.waitSeconds;
+            }
+            if (error instanceof HttpUserError) {
+                protocolError.errorCode = error.errorCode;
+            }
+
+            res.status(error.code).json(protocolError);
+        } else {
+            // Unknown error - 500
+            const err = toError(error);
+            protocolError.message = 'Internal Server Error';
+            console.error('[JsonTranslator] Unexpected error:', err);
+            res.status(500).json(protocolError);
+        }
     }
 
     /**
@@ -205,15 +321,19 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         // Create Express app
         this.app = express();
 
-        // Parse JSON request bodies
-        this.app.use(express.json());
-
         // Layer 1: Global Error Handler (OUTERMOST - runs FIRST)
         // Catches all unhandled errors and returns HTML 500 page
         this.app.use(this.globalErrorHandler.bind(this));
 
         // Layer 2: Request/Response Logging
         this.app.use(this.logNextLayer.bind(this));
+
+        // Parse JSON request bodies (must be before jsonTranslator)
+        this.app.use(express.json());
+
+        // Layer 3: JSON Translator - handles JSON serialization/deserialization and route dispatch
+        // This is the route dispatcher - no individual Express route handlers needed
+        this.app.use(this.jsonTranslator.bind(this));
 
         // Register routes (these become the innermost handlers)
         this.registerExpressRoutes();
@@ -235,9 +355,6 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         });
     }
 
-    /**
-     * Register all routes with Express.
-     */
     private registerExpressRoutes(): void {
         if (!this.app) {
             throw new Error('Express app not initialized');
@@ -246,80 +363,17 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         const routes = this.routeBuilder.getRoutes();
         const sortedFilters = this.routeBuilder.getSortedFilters();
         for (const [key, routeWithMeta] of routes.entries()) {
-            this.setupRoute(key, routeWithMeta, sortedFilters);
+            const handler = this.routeBuilder.createHandler(key, routeWithMeta, sortedFilters)
+            this.registerHandler(routeWithMeta.definition.routeMeta.httpMethod,
+                routeWithMeta.definition.routeMeta.path,
+                handler
+                )
         }
     }
 
-    /**
-     * Setup a single route with Express.
-     * Finds matching filters, creates handler, and registers with Express.
-     *
-     * @param key - Route key (method:path)
-     * @param routeWithMeta - The route handler paired with its definition
-     * @param filtersWithMeta - All filters with their definitions
-     */
-    private setupRoute(
-        key: string,
-        routeWithMeta: RouteHandlerWithMeta,
-        filtersWithMeta: Array<FilterWithMeta>,
-    ): void {
-        if (!this.app) {
-            throw new Error('Express app not initialized');
-        }
-
-        const route = routeWithMeta.definition;
-        const routeMeta = route.routeMeta;
-        const method = routeMeta.httpMethod.toLowerCase();
-        const path = routeMeta.path;
-
-        console.log(`[WebpiecesServer] Registering route: ${method.toUpperCase()} ${path}`);
-
-        // Find matching filters for this route - FilterMatcher returns Filter[] not FilterWithMeta[]
-        // So we need to convert our FilterWithMeta[] to what FilterMatcher expects
-        const filterDefinitions = filtersWithMeta.map((fwm) => {
-            // Set the filter instance on the definition for FilterMatcher
-            const def = fwm.definition;
-            def.filter = fwm.filter;
-            return def;
-        });
-
-        const matchingFilters = FilterMatcher.findMatchingFilters(
-            route.controllerFilepath,
-            filterDefinitions,
-        );
-
-        // Create service that wraps the controller execution
-        const controllerService: Service<MethodMeta, WpResponse> = {
-            invoke: async (meta: MethodMeta): Promise<WpResponse> => {
-                // Invoke the controller method via route handler
-                const result = await routeWithMeta.handler.execute(meta);
-                const responseWrapper = new WpResponse(result);
-                return responseWrapper;
-            },
-        };
-
-        // Chain filters with the controller service (reverse order for correct execution)
-        // IMPORTANT: MUST USE Filter.chain(filter) and Filter.chainService(svc);
-        let filterChain = matchingFilters[matchingFilters.length - 1];
-        for (let i = matchingFilters.length - 2; i >= 0; i--) {
-            filterChain = filterChain.chain(matchingFilters[i]);
-        }
-        const svc = filterChain.chainService(controllerService);
-
-        // Create Express route handler - delegates to filter chain
-        const handler = async (req: Request, res: Response, next: NextFunction) => {
-            // Create RouteRequest with Express Request/Response
-            const routeRequest = new RouteRequest(req, res);
-
-            // Create MethodMeta with route info and Express Request/Response
-            const meta = new MethodMeta(routeMeta, routeRequest);
-
-            // Response is written by JsonFilter - we just await completion
-            await svc.invoke(meta);
-        };
-
+    registerHandler(httpMethod:string, path: string, handler: RouteHandler) {
         // Register with Express
-        switch (method) {
+        switch (httpMethod) {
             case 'get':
                 this.app.get(path, handler);
                 break;
@@ -336,7 +390,7 @@ export class WebpiecesServerImpl implements WebpiecesServer {
                 this.app.patch(path, handler);
                 break;
             default:
-                console.warn(`[WebpiecesServer] Unknown HTTP method: ${method}`);
+                console.warn(`[WebpiecesServer] Unknown HTTP method: ${httpMethod}`);
         }
     }
 
