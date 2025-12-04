@@ -1,11 +1,4 @@
 import { ApiInterface, Get, Path, ValidateImplementation } from '@webpieces/http-routing';
-import { JsonObject, JsonProperty } from 'typescript-json-serializer';
-
-/**
- * DI token for PublicApi.
- * Used to register and resolve the PublicApi implementation in the DI container.
- */
-export const PublicApiToken = Symbol.for('PublicApi');
 
 // ============================================================
 // Request DTOs
@@ -14,9 +7,8 @@ export const PublicApiToken = Symbol.for('PublicApi');
 /**
  * Request to get public info.
  */
-@JsonObject()
-export class PublicInfoRequest {
-    @JsonProperty() name?: string;
+export interface PublicInfoRequest {
+    name?: string;
 }
 
 // ============================================================
@@ -26,11 +18,10 @@ export class PublicInfoRequest {
 /**
  * Response with public info.
  */
-@JsonObject()
-export class PublicInfoResponse {
-    @JsonProperty() greeting?: string;
-    @JsonProperty() serverTime?: string;
-    @JsonProperty() name?: string;
+export interface PublicInfoResponse {
+    greeting?: string;
+    serverTime?: string; // ISO-8601 string (use InstantDto if you need Date methods)
+    name?: string;
 }
 
 // ============================================================

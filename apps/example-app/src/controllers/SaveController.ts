@@ -73,55 +73,62 @@ export class SaveController implements SaveApi {
         // Increment counter
         this.counter.inc();
 
-        // Build request to remote service
-        const fetchReq = new FetchValueRequest();
-        fetchReq.name = request.query ?? '';
+        // Build request to remote service (plain object literal)
+        const fetchReq: FetchValueRequest = {
+            name: request.query ?? '',
+        };
 
         // Call remote service (async)
         const remoteResponse = await this.remoteService.fetchValue(fetchReq);
 
-        // Transform response
-        const response = new SaveResponse();
-        response.success = true;
-        response.searchTime = 5;
-        response.query = request.query;
-
         // Build matches from remote response
-        const match = new TheMatch();
-        match.title = request.query;
-        match.description = remoteResponse.value;
-        match.score = 100;
-
-        response.matches = [match];
+        const match: TheMatch = {
+            title: request.query,
+            description: remoteResponse.value,
+            score: 100,
+        };
 
         // Build response items array from request items
-        response.processedItems = [];
+        const processedItems: ResponseItem[] = [];
         if (request.items) {
             for (const item of request.items) {
-                const responseItem = new ResponseItem();
-                responseItem.id = item.id;
-                responseItem.name = item.name;
-                responseItem.processed = true;
-                responseItem.message = `Processed ${item.quantity} units of "${item.name}"`;
+                const responseItem: ResponseItem = {
+                    id: item.id,
+                    name: item.name,
+                    processed: true,
+                    message: `Processed ${item.quantity} units of "${item.name}"`,
+                };
                 // Echo back SubItem if present
                 if (item.subItem) {
-                    const subResult = new SubItem();
-                    subResult.thename = `Processed: ${item.subItem.thename}`;
-                    subResult.count = (item.subItem.count ?? 0) * 2;
-                    responseItem.subItemResult = subResult;
+                    responseItem.subItemResult = {
+                        thename: `Processed: ${item.subItem.thename}`,
+                        count: (item.subItem.count ?? 0) * 2,
+                    };
                 }
-                response.processedItems.push(responseItem);
+                processedItems.push(responseItem);
             }
         }
 
+        const matches = [match];
+
         // If metadata was provided, add more matches
         if (request.meta?.source) {
-            const extraMatch = new TheMatch();
-            extraMatch.title = `Source: ${request.meta.source}`;
-            extraMatch.description = `Extra match based on metadata (priority: ${request.meta.priority})`;
-            extraMatch.score = 50;
-            response.matches.push(extraMatch);
+            const extraMatch: TheMatch = {
+                title: `Source: ${request.meta.source}`,
+                description: `Extra match based on metadata (priority: ${request.meta.priority})`,
+                score: 50,
+            };
+            matches.push(extraMatch);
         }
+
+        // Transform response (plain object literal)
+        const response: SaveResponse = {
+            success: true,
+            searchTime: 5,
+            query: request.query,
+            matches,
+            processedItems,
+        };
 
         return response;
     }

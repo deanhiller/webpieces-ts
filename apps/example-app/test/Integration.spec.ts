@@ -127,13 +127,15 @@ describe('Integration Tests with DI Overrides', () => {
 
         it('should use mocked RemoteApi response in SaveResponse', async () => {
             // Arrange - Add a mock response to the queue
-            const mockResponse = new FetchValueResponse();
-            mockResponse.value = 'MOCKED: TEST_MOCK_RESPONSE for test-query';
-            mockResponse.timestamp = Date.now();
+            const mockResponse: FetchValueResponse = {
+                value: 'MOCKED: TEST_MOCK_RESPONSE for test-query',
+                timestamp: Date.now(),
+            };
             mockRemoteApi.addResponse('fetchValue', mockResponse);
 
-            const request = new SaveRequest();
-            request.query = 'test-query';
+            const request: SaveRequest = {
+                query: 'test-query',
+            };
 
             // Act - Call through filter chain + controller
             const response = await saveApi.save(request);
@@ -150,16 +152,19 @@ describe('Integration Tests with DI Overrides', () => {
 
         it('should increment counter through filter chain', async () => {
             // Arrange - Set default response for fetchValue
-            const defaultResponse = new FetchValueResponse();
-            defaultResponse.value = 'MOCKED: DEFAULT_MOCK_VALUE';
-            defaultResponse.timestamp = Date.now();
+            const defaultResponse: FetchValueResponse = {
+                value: 'MOCKED: DEFAULT_MOCK_VALUE',
+                timestamp: Date.now(),
+            };
             mockRemoteApi.setDefaultResponse('fetchValue', defaultResponse);
 
-            const request1 = new SaveRequest();
-            request1.query = 'test1';
+            const request1: SaveRequest = {
+                query: 'test1',
+            };
 
-            const request2 = new SaveRequest();
-            request2.query = 'test2';
+            const request2: SaveRequest = {
+                query: 'test2',
+            };
 
             // Act - Make two requests through filter chain
             await saveApi.save(request1);
@@ -173,21 +178,25 @@ describe('Integration Tests with DI Overrides', () => {
 
         it('should pass different mock values for different requests', async () => {
             // Arrange - Queue two different responses
-            const mockResponse1 = new FetchValueResponse();
-            mockResponse1.value = 'MOCKED: VALUE_ONE for query1';
-            mockResponse1.timestamp = Date.now();
+            const mockResponse1: FetchValueResponse = {
+                value: 'MOCKED: VALUE_ONE for query1',
+                timestamp: Date.now(),
+            };
             mockRemoteApi.addResponse('fetchValue', mockResponse1);
 
-            const mockResponse2 = new FetchValueResponse();
-            mockResponse2.value = 'MOCKED: VALUE_TWO for query2';
-            mockResponse2.timestamp = Date.now();
+            const mockResponse2: FetchValueResponse = {
+                value: 'MOCKED: VALUE_TWO for query2',
+                timestamp: Date.now(),
+            };
             mockRemoteApi.addResponse('fetchValue', mockResponse2);
 
-            const request1 = new SaveRequest();
-            request1.query = 'query1';
+            const request1: SaveRequest = {
+                query: 'query1',
+            };
 
-            const request2 = new SaveRequest();
-            request2.query = 'query2';
+            const request2: SaveRequest = {
+                query: 'query2',
+            };
 
             // Act - Both requests dequeue from the queue
             const response1 = await saveApi.save(request1);
@@ -209,8 +218,9 @@ describe('Integration Tests with DI Overrides', () => {
 
         it('should return greeting with name', async () => {
             // Arrange
-            const request = new PublicInfoRequest();
-            request.name = 'WebPieces';
+            const request: PublicInfoRequest = {
+                name: 'WebPieces',
+            };
 
             // Act
             const response = await publicApi.getInfo(request);
@@ -224,7 +234,7 @@ describe('Integration Tests with DI Overrides', () => {
 
         it('should return default greeting when no name provided', async () => {
             // Arrange
-            const request = new PublicInfoRequest();
+            const request: PublicInfoRequest = {};
 
             // Act
             const response = await publicApi.getInfo(request);

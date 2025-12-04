@@ -1,4 +1,5 @@
-import { getRoutes, isApiInterface, RouteMetadata } from '@webpieces/http-api';
+import { getRoutes, isApiInterface, RouteMetadata, ProtocolError, HttpError } from '@webpieces/http-api';
+import { ClientErrorTranslator } from './ClientErrorTranslator';
 
 /**
  * Configuration options for HTTP client.
@@ -73,6 +74,12 @@ export function createClient<T extends object>(
 
 /**
  * Make an HTTP request based on route metadata and arguments.
+ *
+ * Uses plain JSON.stringify/parse - no serialization library needed!
+ *
+ * Error handling:
+ * - Server: Throws HttpError → translates to ProtocolError JSON
+ * - Client: Receives ProtocolError JSON → reconstructs HttpError
  */
 async function makeRequest(config: ClientConfig, route: RouteMetadata, args: any[]): Promise<any> {
     const { httpMethod, path } = route;
@@ -91,20 +98,24 @@ async function makeRequest(config: ClientConfig, route: RouteMetadata, args: any
         headers,
     };
 
-    // For POST/PUT/PATCH, include the body (first argument)
+    // For POST/PUT/PATCH, include the body (first argument) as JSON
     if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && args.length > 0) {
-        options.body = JSON.stringify(args[0]);
+        const requestDto = args[0];
+        // Plain JSON stringify - works with plain objects and our DateTimeDto classes
+        options.body = JSON.stringify(requestDto);
     }
 
     // Make the HTTP request
     const response = await fetch(url, options);
 
-    // Check for HTTP errors
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText}`);
+    if(response.ok) {
+        return response.json();
     }
 
-    // Parse and return the JSON response
-    return response.json();
+    // Handle errors (non-2xx responses)
+
+    // Try to parse ProtocolError from response body
+    const protocolError = (await response.json()) as ProtocolError;
+    // Reconstruct appropriate HttpError subclass
+    throw ClientErrorTranslator.translateError(response, protocolError);
 }

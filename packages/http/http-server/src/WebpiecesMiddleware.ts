@@ -7,15 +7,19 @@ import {
     HttpBadRequestError,
     HttpVendorError,
     HttpUserError,
+    HttpNotFoundError,
+    HttpTimeoutError,
+    HttpUnauthorizedError,
+    HttpForbiddenError,
+    HttpInternalServerError,
+    HttpBadGatewayError,
+    HttpGatewayTimeoutError,
     RouteMetadata,
 } from '@webpieces/http-api';
 import { Service, WpResponse } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
-import { JsonSerializer } from 'typescript-json-serializer';
 
 export class ExpressWrapper {
-    private jsonSerializer = new JsonSerializer();
-
     constructor(
         private service: Service<MethodMeta, WpResponse<unknown>>,
         private routeMeta: RouteMetadata
@@ -24,37 +28,67 @@ export class ExpressWrapper {
 
     public async execute(req: Request, res: Response, next: NextFunction) {
         try {
-            // 1. Get request DTO class from routeMeta
-            const requestDtoClass = this.routeMeta.parameterTypes?.[0];
-            if(!requestDtoClass)
-                throw new Error('No request DTO class found for route');
+            // 1. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
+            let requestDto: unknown = {};
+            if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+                // Read raw body as text
+                const bodyText = await this.readRequestBody(req);
+                // Parse JSON
+                requestDto = bodyText ? JSON.parse(bodyText) : {};
+            }
 
-            // 2. Deserialize req.body → DTO instance
-            const requestDto = this.jsonSerializer.deserializeObject(req.body, requestDtoClass);
-            // 3. Create MethodMeta with deserialized DTO
+            // 2. Create MethodMeta with request DTO
             const methodMeta = new MethodMeta(this.routeMeta, requestDto);
-            // 4. Invoke the service (filter chain + controller)
+
+            // 3. Invoke the service (filter chain + controller)
             const wpResponse = await this.service.invoke(methodMeta);
             if(!wpResponse.response)
                 throw new Error(`Route chain(filters & all) is not returning a response.  ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`);
 
-            // 6. Serialize response → plain object
-            const responseDtoStr = this.jsonSerializer.serializeObject(wpResponse.response);
-
-            // 7. WRITE response as JSON (SYMMETRIC with reading request!)
-            res.status(200);
-            res.setHeader('Content-Type', 'application/json');
-            res.json(responseDtoStr);
+            // 4. Serialize response DTO to JSON (SYMMETRIC with client's response.json())
+            const responseJson = JSON.stringify(wpResponse.response);
+            res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
         } catch (err: unknown) {
-            // 8. Handle errors (SYMMETRIC - wrapExpress owns error handling!)
+            // 5. Handle errors
             this.handleError(res, err);
         }
     }
 
     /**
-     * Handle errors - translate to JSON ProtocolError.
+     * Read raw request body as text.
+     * Used to manually parse JSON (instead of express.json() middleware).
+     */
+    private async readRequestBody(req: Request): Promise<string> {
+        return new Promise((resolve, reject) => {
+            let body = '';
+            req.on('data', (chunk) => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                resolve(body);
+            });
+            req.on('error', (err) => {
+                reject(err);
+            });
+        });
+    }
+
+    /**
+     * Handle errors - translate to JSON ProtocolError (SYMMETRIC with ClientErrorTranslator).
      * PUBLIC so wrapExpress can call it for symmetric error handling.
      * Maps HttpError subclasses to appropriate HTTP status codes and ProtocolError response.
+     *
+     * Maps all HttpError types (must match ClientErrorTranslator.translateError()):
+     * - HttpUserError → 266 (with errorCode)
+     * - HttpBadRequestError → 400 (with field, guiAlertMessage)
+     * - HttpUnauthorizedError → 401
+     * - HttpForbiddenError → 403
+     * - HttpNotFoundError → 404
+     * - HttpTimeoutError → 408
+     * - HttpInternalServerError → 500
+     * - HttpBadGatewayError → 502
+     * - HttpGatewayTimeoutError → 504
+     * - HttpVendorError → 598 (with waitSeconds)
      */
     public handleError(res: Response, error: unknown): void {
         if (res.headersSent) {
@@ -64,28 +98,50 @@ export class ExpressWrapper {
         const protocolError = new ProtocolError();
 
         if (error instanceof HttpError) {
+            // Set common fields for all HttpError types
             protocolError.message = error.message;
             protocolError.subType = error.subType;
             protocolError.name = error.name;
 
-            if (error instanceof HttpBadRequestError) {
+            // Set type-specific fields (MUST match ClientErrorTranslator)
+            if (error instanceof HttpUserError) {
+                console.log('[ExpressWrapper] User Error:', error.message);
+                protocolError.errorCode = error.errorCode;
+            } else if (error instanceof HttpBadRequestError) {
+                console.log('[ExpressWrapper] Bad Request:', error.message);
                 protocolError.field = error.field;
                 protocolError.guiAlertMessage = error.guiMessage;
-            }
-            if (error instanceof HttpVendorError) {
+            } else if (error instanceof HttpNotFoundError) {
+                console.log('[ExpressWrapper] Not Found:', error.message);
+            } else if (error instanceof HttpTimeoutError) {
+                console.error('[ExpressWrapper] Timeout Error:', error.message);
+            } else if (error instanceof HttpVendorError) {
+                console.error('[ExpressWrapper] Vendor Error:', error.message);
                 protocolError.waitSeconds = error.waitSeconds;
-            }
-            if (error instanceof HttpUserError) {
-                protocolError.errorCode = error.errorCode;
+            } else if (error instanceof HttpUnauthorizedError) {
+                console.log('[ExpressWrapper] Unauthorized:', error.message);
+            } else if (error instanceof HttpForbiddenError) {
+                console.log('[ExpressWrapper] Forbidden:', error.message);
+            } else if (error instanceof HttpInternalServerError) {
+                console.error('[ExpressWrapper] Internal Server Error:', error.message);
+            } else if (error instanceof HttpBadGatewayError) {
+                console.error('[ExpressWrapper] Bad Gateway:', error.message);
+            } else if (error instanceof HttpGatewayTimeoutError) {
+                console.error('[ExpressWrapper] Gateway Timeout:', error.message);
+            } else {
+                console.log('[ExpressWrapper] Generic HttpError:', error.message);
             }
 
-            res.status(error.code).json(protocolError);
+            // Serialize ProtocolError to JSON (SYMMETRIC with client)
+            const responseJson = JSON.stringify(protocolError);
+            res.status(error.code).setHeader('Content-Type', 'application/json').send(responseJson);
         } else {
             // Unknown error - 500
             const err = toError(error);
             protocolError.message = 'Internal Server Error';
-            console.error('[JsonTranslator] Unexpected error:', err);
-            res.status(500).json(protocolError);
+            console.error('[ExpressWrapper] Unexpected error:', err);
+            const responseJson = JSON.stringify(protocolError);
+            res.status(500).setHeader('Content-Type', 'application/json').send(responseJson);
         }
     }
 }

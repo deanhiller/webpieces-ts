@@ -31,6 +31,7 @@
  */
 
 export { createClient, ClientConfig } from './ClientFactory';
+export { ClientErrorTranslator } from './ClientErrorTranslator';
 
 // Re-export API decorators for convenience (same as http-routing does)
 export {
