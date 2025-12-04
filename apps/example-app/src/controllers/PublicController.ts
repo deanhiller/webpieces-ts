@@ -13,10 +13,10 @@ import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '../api/PublicA
 export class PublicController implements PublicApi {
 
     async getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
-        const response = new PublicInfoResponse();
-        response.greeting = `Hello, ${request.name ?? 'World'}!`;
-        response.serverTime = new Date().toISOString();
-        response.name = request.name;
-        return response;
+        return {
+            greeting: `Hello, ${request.name ?? 'World'}!`,
+            serverTime: new Date().toISOString(),
+            name: request.name,
+        };
     }
 }

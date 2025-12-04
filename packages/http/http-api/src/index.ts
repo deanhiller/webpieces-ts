@@ -60,3 +60,15 @@ export {
     WRONG_COMPANY,
     NO_REG_CODE,
 } from './errors';
+
+// Date/Time DTOs and Utilities (inspired by Java Time / JSR-310)
+export {
+    InstantDto,
+    DateDto,
+    TimeDto,
+    DateTimeDto,
+    InstantUtil,
+    DateUtil,
+    TimeUtil,
+    DateTimeUtil,
+} from './datetime';
