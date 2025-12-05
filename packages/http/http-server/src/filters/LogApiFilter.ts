@@ -44,6 +44,8 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             this.allHeaders.push(...extension.getHeaders());
         }
 
+        console.log(`[LogApiFilter] Collected ${this.allHeaders.length} platform headers from ${extensions.length} extensions`);
+
         this.logApiCall = new LogApiCall();
     }
 
@@ -51,7 +53,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        // Build header map from RequestContext (headers are already masked for secure values)
+        // Build header map from RequestContext (headers are already transferred by ContextFilter)
         const contextReader = new RequestContextReader();
         const headers = this.headerMethods.buildSecureMapForLogs(this.allHeaders, contextReader);
 

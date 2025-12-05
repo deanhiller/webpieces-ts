@@ -6,12 +6,13 @@ import {
     getRoutes,
     MethodMeta,
     provideSingleton,
-    RouteBuilderImpl,
+    RouteBuilderImpl, RouteMetadata,
     WebAppMeta,
 } from '@webpieces/http-routing';
 import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
 import {RequestContext} from '@webpieces/core-context';
+import {Service, WpResponse} from "@webpieces/http-filters";
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -346,25 +347,23 @@ export class WebpiecesServerImpl implements WebpiecesServer {
                 // Verify we're inside an active RequestContext
                 // This helps test authors know they need to wrap their test in RequestContext.run()
                 if (!RequestContext.isActive()) {
-                    throw new Error(
-                        `RequestContext not active for ${routeMeta.controllerClassName}.${routeMeta.methodName}(). ` +
-                        `Tests must wrap API calls in RequestContext.run(() => { ... }). ` +
-                        `Example:\n` +
-                        `  await RequestContext.run(async () => {\n` +
-                        `    const response = await apiClient.${methodName}(request);\n` +
-                        `  });\n` +
-                        `This matches production behavior where ExpressWrapper.execute() establishes the context.`
-                    );
+                    //Many devs may not activate headers
+                    return RequestContext.run(async () => {
+                        return await this.runMethod(routeMeta, requestDto, service);
+                    });
                 }
-
-                // Create MethodMeta without headers (test mode - no HTTP involved)
-                // requestHeaders is optional, so we can omit it
-                const meta = new MethodMeta(routeMeta, undefined, requestDto);
-                const responseWrapper = await service.invoke(meta);
-                return responseWrapper.response;
+                return await this.runMethod(routeMeta, requestDto, service);
             };
         }
 
         return proxy as T;
+    }
+
+    private async runMethod(routeMeta: RouteMetadata, requestDto: unknown, service: Service<MethodMeta, WpResponse<unknown>>) {
+        // Create MethodMeta without headers (test mode - no HTTP involved)
+        // requestHeaders is optional, so we can omit it
+        const meta = new MethodMeta(routeMeta, undefined, requestDto);
+        const responseWrapper = await service.invoke(meta);
+        return responseWrapper.response;
     }
 }

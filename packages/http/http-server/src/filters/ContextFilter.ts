@@ -71,7 +71,7 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      */
     private transferHeaders(meta: MethodMeta): void {
         if (!meta.requestHeaders) {
-            // No headers in test mode
+            // No headers in test mode (createApiClient creates context but not headers)
             this.ensureRequestId();
             return;
         }

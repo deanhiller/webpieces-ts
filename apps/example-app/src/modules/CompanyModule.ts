@@ -39,6 +39,17 @@ export class CompanyHeaders {
     );
 
     /**
+     * Authorization token for authentication.
+     * This is a SECURE header - value will be masked in logs.
+     */
+    static readonly AUTHORIZATION = new PlatformHeader(
+        'authorization',
+        true,   // transfer to downstream services
+        true,   // SECURED - mask in logs!
+        false   // not a metrics dimension
+    );
+
+    /**
      * Get all company headers as an array.
      *
      * @returns Array of all company platform headers
@@ -47,6 +58,7 @@ export class CompanyHeaders {
         return [
             CompanyHeaders.TENANT_ID,
             CompanyHeaders.API_VERSION,
+            CompanyHeaders.AUTHORIZATION,
         ];
     }
 }

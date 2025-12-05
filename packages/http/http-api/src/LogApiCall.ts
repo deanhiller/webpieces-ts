@@ -41,9 +41,10 @@ export class LogApiCall {
         headers: Map<string, any>,
         method: (dto: any) => Promise<any>
     ): Promise<any> {
-        // Log request
+        // Log request - convert Map to Object for JSON serialization
+        const headersObj = Object.fromEntries(headers);
         console.log(
-            `[API-${type}-req] ${meta.controllerClassName}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)} headers=${JSON.stringify(headers)}`
+            `[API-${type}-req] ${meta.controllerClassName}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)} headers=${JSON.stringify(headersObj)}`
         );
 
         try {
