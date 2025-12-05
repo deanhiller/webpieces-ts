@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { Header } from '@webpieces/core-util';
 
-//some stuff here
 /**
  * Context management using AsyncLocalStorage.
  * Similar to Java WebPieces Context class that uses ThreadLocal.

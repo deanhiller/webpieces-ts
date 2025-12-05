@@ -38,9 +38,10 @@ export class ExpressWrapper {
     public async executeTryCatch(req: Request, res: Response, next: NextFunction) {
         try {
             await this.executeImpl(req, res, next);
-        } catch (err: unknown) {
+        } catch (err: any) {
+            const error = toError(err);
             // 5. Handle errors
-            this.handleError(res, err);
+            this.handleError(res, error);
         }
     }
 

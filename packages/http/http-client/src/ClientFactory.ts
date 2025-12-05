@@ -62,7 +62,9 @@ export function createClient<T extends object>(
     const routes = getRoutes(apiPrototype);
 
     // Create ProxyClient with injected LogApiCall (or create new one)
-    const proxyClient = new ProxyClient(config, new LogApiCall(), routes, contextMgr);
+    //CRAP our own little DI going on here as angular and nodejs are using 2 different DI systems!!! fuck!!
+    const proxyClient = new ProxyClient(
+        config, new LogApiCall(), new HeaderMethods(), routes, contextMgr);
 
     // Create a proxy that intercepts method calls and makes HTTP requests
     return new Proxy({} as T, {
@@ -100,8 +102,8 @@ export class ProxyClient {
     constructor(
         private config: ClientConfig,
         private logApiCall: LogApiCall,
+        private headerMethods: HeaderMethods,
         routes: RouteMetadata[],
-        private headerMethods: HeaderMethods = new HeaderMethods(),
         private contextMgr?: ContextMgr,
     ) {
         // Create a map of method name -> route metadata for fast lookup

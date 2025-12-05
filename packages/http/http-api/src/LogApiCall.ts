@@ -1,4 +1,3 @@
-import {PlatformHeader} from "./PlatformHeader";
 import {RouteMetadata} from "./decorators";
 import {
     HttpBadRequestError,
