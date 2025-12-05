@@ -28,9 +28,6 @@ export class ExpressWrapper {
     }
 
     public async execute(req: Request, res: Response, next: NextFunction) {
-<<<<<<< HEAD
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- ExpressWrapper catches errors to translate to HTTP responses
-=======
         // MOVED: Wrap entire request in RequestContext.run()
         // This establishes AsyncLocalStorage context for the request
         await RequestContext.run(async () => {
@@ -39,7 +36,7 @@ export class ExpressWrapper {
     }
 
     public async executeTryCatch(req: Request, res: Response, next: NextFunction) {
->>>>>>> main
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- ExpressWrapper catches errors to translate to HTTP responses
         try {
             await this.executeImpl(req, res, next);
         } catch (err: any) {
