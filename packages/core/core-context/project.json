@@ -7,6 +7,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "core-util:build"],
             "options": {
                 "outputPath": "dist/packages/core/core-context",
                 "main": "packages/core/core-context/src/index.ts",

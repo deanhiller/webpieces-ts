@@ -19,6 +19,11 @@
             "implementation": "./architecture/executors/validate-architecture-unchanged/executor",
             "schema": "./architecture/executors/validate-architecture-unchanged/schema.json",
             "description": "Validate the architecture graph matches the saved blessed graph"
+        },
+        "validate-no-skiplevel-deps": {
+            "implementation": "./architecture/executors/validate-no-skiplevel-deps/executor",
+            "schema": "./architecture/executors/validate-no-skiplevel-deps/schema.json",
+            "description": "Validate no project has redundant transitive dependencies"
         }
     }
 }

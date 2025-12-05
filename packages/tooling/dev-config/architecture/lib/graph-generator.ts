@@ -14,7 +14,7 @@ import {
 /**
  * Projects to exclude from graph validation (tools, configs, etc.)
  */
-const EXCLUDED_PROJECTS = new Set(['dev-config', 'rules']);
+const EXCLUDED_PROJECTS = new Set<string>([]);
 
 /**
  * Extract project dependencies from project.json's build.dependsOn and implicitDependencies

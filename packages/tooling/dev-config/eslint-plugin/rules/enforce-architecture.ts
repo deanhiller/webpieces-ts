@@ -57,12 +57,28 @@ Ask yourself:
 4. **Can you use an interface/abstraction?** Define interface in lower-level package, implement in higher-level.
 
 ### Step 3: Get Senior Developer Approval
+
+## 🛑 AI AGENTS: STOP HERE AND ASK FOR HUMAN APPROVAL! 🛑
+
+**YOU MUST NOT PROCEED TO STEP 4 WITHOUT EXPLICIT HUMAN APPROVAL!**
+
 **REQUIRED**: Discuss this architectural change with a senior developer before proceeding.
 - Explain why the dependency is needed
-- Show you've considered alternatives
-- Get explicit approval for the change
+- Show you've considered alternatives (Step 2)
+- **WAIT for explicit approval before making ANY changes to project.json or package.json**
+
+**AI Agent Instructions:**
+1. Present your analysis from Step 2 to the human
+2. Explain which package needs which dependency and why
+3. ASK: "Do you approve adding this dependency?"
+4. **DO NOT modify project.json or package.json until you receive explicit "yes" or approval**
 
 ### Step 4: If Approved, Add the Dependency
+
+## ⛔ NEVER MODIFY THESE FILES WITHOUT HUMAN APPROVAL FROM STEP 3! ⛔
+
+Only after receiving explicit human approval in Step 3, make these changes:
+
 1. **Update project.json** - Add to \`build.dependsOn\`:
    \`\`\`json
    {

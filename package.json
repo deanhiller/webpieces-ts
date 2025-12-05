@@ -22,7 +22,7 @@
         "build-all:compile": "nx run-many --target=build --all",
         "build-all:lint": "nx run-many --target=lint --all",
         "build-all:test": "nx run-many --target=test --all",
-        "build-all:architecture": "nx run architecture:validate-no-cycles && nx run architecture:validate-architecture-unchanged",
+        "build-all:architecture": "nx run architecture:validate-no-cycles && nx run architecture:validate-no-skiplevel-deps && nx run architecture:validate-architecture-unchanged",
         "clean": "rm -rf dist coverage .nx",
         "lint": "eslint . --ext .ts,.tsx,.js,.jsx --quiet",
         "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix --quiet",

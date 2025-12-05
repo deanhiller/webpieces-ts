@@ -10,6 +10,7 @@ eslint rules
   * If violations, instruct AI/user is this architecture change intentional and to regen architecture if so 
 * no circ deps on files within module (madge?)
   * Need AI instructions on how to fix
+* depending on existing transitive dep directly breaks build to simplify graph picture for human quick understanding 
 * no try..catch except disable rule comment (very useful for ensuring global try..catch is used which is how we tell AI /debugBug {errorId})
 * try..catch() { toError(x) except disable rule comment
 * method no more than 70 lines except disable rule comment with AI instructions on fixing when violated

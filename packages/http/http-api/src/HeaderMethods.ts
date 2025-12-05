@@ -1,6 +1,4 @@
 import { PlatformHeader } from './PlatformHeader';
-import {RequestContext} from "@webpieces/core-context";
-
 
 /**
  * ContextReader - Interface for reading header values from context.

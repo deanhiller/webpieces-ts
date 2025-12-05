@@ -22,8 +22,6 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/core-util": "0.0.0-dev",
-        "@webpieces/http-routing": "0.0.0-dev",
-        "@webpieces/http-filters": "0.0.0-dev"
+        "@webpieces/http-routing": "0.0.0-dev"
     }
 }
