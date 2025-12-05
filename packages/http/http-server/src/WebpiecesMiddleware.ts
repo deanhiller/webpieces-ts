@@ -36,6 +36,7 @@ export class ExpressWrapper {
     }
 
     public async executeTryCatch(req: Request, res: Response, next: NextFunction) {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- ExpressWrapper catches errors to translate to HTTP responses
         try {
             await this.executeImpl(req, res, next);
         } catch (err: any) {
@@ -231,6 +232,7 @@ export class WebpiecesMiddleware {
     ): Promise<void> {
         console.log('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
 
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Global error handler IS the top-level catch-all
         try {
             // await next() catches BOTH:
             // 1. Synchronous throws from next() itself

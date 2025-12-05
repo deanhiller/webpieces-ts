@@ -67,6 +67,10 @@
                     "watchDepsName": "tsc:watch-deps"
                 }
             }
+        },
+        {
+            "plugin": "./packages/tooling/dev-config/plugins/circular-deps/index.ts",
+            "options": {}
         }
     ]
 }

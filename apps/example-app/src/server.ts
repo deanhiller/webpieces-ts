@@ -8,6 +8,7 @@ import { toError } from '@webpieces/core-util';
  * Similar to Java Server.main().
  */
 async function main() {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Top-level server startup needs to catch and exit on error
     try {
         console.log('[Server] Starting WebPieces TypeScript server...');
         console.log('[Server] Creating server instance...');

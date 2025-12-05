@@ -46,6 +46,7 @@ export class LogApiCall {
             `[API-${type}-req] ${meta.controllerClassName}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)} headers=${JSON.stringify(headersObj)}`
         );
 
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller
         try {
             const response = await method(requestDto);
 
