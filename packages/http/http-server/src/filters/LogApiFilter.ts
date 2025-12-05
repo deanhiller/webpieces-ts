@@ -42,10 +42,11 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             this.logSuccessResponse(classMethod, url, response);
 
             return response;
-        } catch (error: unknown) {
+        } catch (err: any) {
+            //const error = toError(err);
             // Log error and re-throw (jsonTranslator will handle serialization)
-            this.logException(classMethod, url, error);
-            throw error;
+            this.logException(classMethod, url, err);
+            throw err;
         }
     }
 

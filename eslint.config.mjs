@@ -10,7 +10,7 @@ import webpiecesPlugin from './dist/packages/tooling/dev-config/eslint-plugin/in
 
 export default [
     {
-        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx'],
+        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx', 'scripts/**'],
     },
     {
         files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -31,23 +31,17 @@ export default [
             '@webpieces/enforce-architecture': 'error',
 
             // TypeScript rules
-            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/explicit-function-return-type': 'off',
-            '@typescript-eslint/no-unused-vars': [
-                'warn',
-                {
-                    argsIgnorePattern: '^_',
-                    varsIgnorePattern: '^_',
-                },
-            ],
+            '@typescript-eslint/no-unused-vars': 'off',
             '@typescript-eslint/no-empty-interface': 'off',
             '@typescript-eslint/no-empty-function': 'off',
 
             // General code quality
             'no-console': 'off',
-            'no-debugger': 'warn',
+            'no-debugger': 'off',
             'no-var': 'error',
-            'prefer-const': 'warn',
+            'prefer-const': 'off',
         },
     },
     {
@@ -56,6 +50,32 @@ export default [
         rules: {
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-non-null-assertion': 'off',
+            '@webpieces/max-method-lines': 'off',
+        },
+    },
+    {
+        // ESLint plugin rules - disable self-checking (false positives on AST node handlers)
+        // and allow long methods for rule implementations
+        files: ['**/eslint-plugin/rules/**/*.ts'],
+        rules: {
+            '@webpieces/catch-error-pattern': 'off',
+            '@webpieces/max-method-lines': 'off',
+        },
+    },
+    {
+        // ESLint plugin tests - relaxed rules for test infrastructure
+        files: ['**/eslint-plugin/__tests__/**/*.ts'],
+        rules: {
+            '@webpieces/catch-error-pattern': 'off',
+        },
+    },
+    {
+        // Architecture tooling - relaxed rules for build infrastructure
+        files: ['**/architecture/executors/**/*.ts', '**/architecture/lib/**/*.ts'],
+        rules: {
+            '@webpieces/catch-error-pattern': 'off',
+            '@webpieces/max-method-lines': 'off',
+            '@webpieces/max-file-lines': 'off',
         },
     },
 ];

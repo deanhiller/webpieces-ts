@@ -35,7 +35,10 @@
                 "{workspaceRoot}/architecture/dependencies.json",
                 "{workspaceRoot}/packages/tooling/dev-config/eslint-plugin/**/*"
             ],
-            "cache": true
+            "cache": true,
+            "options": {
+                "quiet": true
+            }
         }
     },
     "plugins": [

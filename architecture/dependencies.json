@@ -23,7 +23,7 @@
     "dependsOn": []
   },
   "@webpieces/example-app": {
-    "level": 3,
+    "level": 4,
     "dependsOn": [
       "@webpieces/http-routing",
       "@webpieces/http-server"
@@ -46,13 +46,14 @@
     ]
   },
   "@webpieces/http-routing": {
-    "level": 1,
+    "level": 2,
     "dependsOn": [
-      "@webpieces/http-api"
+      "@webpieces/http-api",
+      "@webpieces/http-filters"
     ]
   },
   "@webpieces/http-server": {
-    "level": 2,
+    "level": 3,
     "dependsOn": [
       "@webpieces/core-util",
       "@webpieces/http-filters",
@@ -60,7 +61,7 @@
     ]
   },
   "@webpieces/server": {
-    "level": 3,
+    "level": 4,
     "dependsOn": [
       "@webpieces/core-meta",
       "@webpieces/http-server"

@@ -36,6 +36,11 @@ interface FunctionNode {
     [key: string]: any;
 }
 
+interface CheckerContext {
+    context: Rule.RuleContext;
+    maxLines: number;
+}
+
 const METHOD_DOC_CONTENT = `# AI Agent Instructions: Method Too Long
 
 **READ THIS FILE to fix methods that are too long**
@@ -141,7 +146,6 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
     const filename = context.filename || context.getFilename();
     let dir = path.dirname(filename);
 
-    // Walk up directory tree to find workspace root
     while (dir !== path.dirname(dir)) {
         const pkgPath = path.join(dir, 'package.json');
         if (fs.existsSync(pkgPath)) {
@@ -150,13 +154,14 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
                     return dir;
                 }
-            } catch (err: unknown) {
-                // Continue searching if JSON parse fails
+            } catch (err: any) {
+                //const error = toError(err);
+                void err;
             }
         }
         dir = path.dirname(dir);
     }
-    return process.cwd(); // Fallback
+    return process.cwd();
 }
 
 function ensureDocFile(docPath: string, content: string): boolean {
@@ -164,21 +169,74 @@ function ensureDocFile(docPath: string, content: string): boolean {
         fs.mkdirSync(path.dirname(docPath), { recursive: true });
         fs.writeFileSync(docPath, content, 'utf-8');
         return true;
-    } catch (err: unknown) {
-        // Graceful degradation: log warning but don't break lint
+    } catch (err: any) {
+        //const error = toError(err);
+        // err is used in console.warn below
         console.warn(`[webpieces] Could not create doc file: ${docPath}`, err);
         return false;
     }
 }
 
 function ensureMethodDoc(context: Rule.RuleContext): void {
-    if (methodDocCreated) return; // Performance: only create once per lint run
-
+    if (methodDocCreated) return;
     const workspaceRoot = getWorkspaceRoot(context);
     const docPath = path.join(workspaceRoot, 'tmp', 'webpieces', 'webpieces.methods.md');
-
     if (ensureDocFile(docPath, METHOD_DOC_CONTENT)) {
         methodDocCreated = true;
+    }
+}
+
+function getFunctionName(funcNode: FunctionNode): string {
+    if (funcNode.type === 'FunctionDeclaration' && funcNode.id?.name) {
+        return funcNode.id.name;
+    }
+    if (funcNode.type === 'FunctionExpression' && funcNode.id?.name) {
+        return funcNode.id.name;
+    }
+    return 'anonymous';
+}
+
+function reportTooLong(ctx: CheckerContext, node: any, name: string, lineCount: number): void {
+    ctx.context.report({
+        node,
+        messageId: 'tooLong',
+        data: {
+            name,
+            actual: String(lineCount),
+            max: String(ctx.maxLines),
+        },
+    });
+}
+
+function checkFunctionNode(ctx: CheckerContext, node: any): void {
+    ensureMethodDoc(ctx.context);
+    const funcNode = node as FunctionNode;
+
+    // Skip function expressions inside method definitions
+    if (funcNode.type === 'FunctionExpression' && funcNode['parent']?.type === 'MethodDefinition') {
+        return;
+    }
+
+    if (!funcNode.loc || !funcNode.body) return;
+
+    const name = getFunctionName(funcNode);
+    const lineCount = funcNode.loc.end.line - funcNode.loc.start.line + 1;
+
+    if (lineCount > ctx.maxLines) {
+        reportTooLong(ctx, funcNode, name, lineCount);
+    }
+}
+
+function checkMethodNode(ctx: CheckerContext, node: any): void {
+    ensureMethodDoc(ctx.context);
+
+    if (!node.loc || !node.value) return;
+
+    const name = node.key?.name || 'anonymous';
+    const lineCount = node.loc.end.line - node.loc.start.line + 1;
+
+    if (lineCount > ctx.maxLines) {
+        reportTooLong(ctx, node, name, lineCount);
     }
 }
 
@@ -212,89 +270,13 @@ const rule: Rule.RuleModule = {
 
     create(context: Rule.RuleContext): Rule.RuleListener {
         const options = context.options[0] as MethodLinesOptions | undefined;
-        const maxLines = options?.max ?? 70;
-
-        function checkFunction(node: any): void {
-            ensureMethodDoc(context);
-
-            const funcNode = node as FunctionNode;
-
-            // Skip if this is a function expression that's part of a method definition
-            // (method definitions will be handled by checkMethod)
-            if (
-                funcNode.type === 'FunctionExpression' &&
-                funcNode['parent']?.type === 'MethodDefinition'
-            ) {
-                return;
-            }
-
-            // Skip if no location info or no body
-            if (!funcNode.loc || !funcNode.body) {
-                return;
-            }
-
-            // Get function name
-            let name = 'anonymous';
-            if (funcNode.type === 'FunctionDeclaration' && funcNode.id?.name) {
-                name = funcNode.id.name;
-            } else if (funcNode.type === 'FunctionExpression' && funcNode.id?.name) {
-                name = funcNode.id.name;
-            }
-
-            // Calculate line count
-            const startLine = funcNode.loc.start.line;
-            const endLine = funcNode.loc.end.line;
-            const lineCount = endLine - startLine + 1;
-
-            if (lineCount > maxLines) {
-                context.report({
-                    node: funcNode as any,
-                    messageId: 'tooLong',
-                    data: {
-                        name,
-                        actual: String(lineCount),
-                        max: String(maxLines),
-                    },
-                });
-            }
-        }
-
-        function checkMethod(node: any): void {
-            ensureMethodDoc(context);
-
-            const methodNode = node;
-
-            // Skip if no location info
-            if (!methodNode.loc || !methodNode.value) {
-                return;
-            }
-
-            // Get method name from key
-            const name = methodNode.key?.name || 'anonymous';
-
-            // Calculate line count for the method (including the method definition)
-            const startLine = methodNode.loc.start.line;
-            const endLine = methodNode.loc.end.line;
-            const lineCount = endLine - startLine + 1;
-
-            if (lineCount > maxLines) {
-                context.report({
-                    node: methodNode as any,
-                    messageId: 'tooLong',
-                    data: {
-                        name,
-                        actual: String(lineCount),
-                        max: String(maxLines),
-                    },
-                });
-            }
-        }
+        const ctx: CheckerContext = { context, maxLines: options?.max ?? 70 };
 
         return {
-            FunctionDeclaration: checkFunction,
-            FunctionExpression: checkFunction,
-            ArrowFunctionExpression: checkFunction,
-            MethodDefinition: checkMethod,
+            FunctionDeclaration: (node) => checkFunctionNode(ctx, node),
+            FunctionExpression: (node) => checkFunctionNode(ctx, node),
+            ArrowFunctionExpression: (node) => checkFunctionNode(ctx, node),
+            MethodDefinition: (node) => checkMethodNode(ctx, node),
         };
     },
 };

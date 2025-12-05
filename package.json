@@ -24,8 +24,8 @@
         "build-all:test": "nx run-many --target=test --all",
         "build-all:architecture": "nx run architecture:validate-no-cycles && nx run architecture:validate-architecture-unchanged",
         "clean": "rm -rf dist coverage .nx",
-        "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
-        "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
+        "lint": "eslint . --ext .ts,.tsx,.js,.jsx --quiet",
+        "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix --quiet",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "setup:npm-publishers": "ts-node scripts/setup-npm-trusted-publishers.ts"

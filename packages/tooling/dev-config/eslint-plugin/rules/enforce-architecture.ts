@@ -54,8 +54,9 @@ function findWorkspaceRoot(startPath: string): string {
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
                     return currentDir;
                 }
-            } catch (err: unknown) {
-                // Continue searching
+            } catch (err: any) {
+                //const error = toError(err);
+                void err;
             }
         }
 
@@ -87,7 +88,9 @@ function loadBlessedGraph(workspaceRoot: string): EnhancedGraph | null {
         cachedGraph = JSON.parse(content) as EnhancedGraph;
         cachedGraphPath = graphPath;
         return cachedGraph;
-    } catch (err: unknown) {
+    } catch (err: any) {
+        //const error = toError(err);
+        // err is used below
         console.error(`[ESLint @webpieces/enforce-architecture] Could not load graph: ${err}`);
         return null;
     }
@@ -154,8 +157,9 @@ function scanForProjects(
                             root: projectRoot,
                             name: projectName,
                         });
-                    } catch (err: unknown) {
-                        // Skip invalid project.json
+                    } catch (err: any) {
+                        //const error = toError(err);
+                        void err;
                     }
                 }
 
@@ -163,8 +167,9 @@ function scanForProjects(
                 scanForProjects(fullPath, workspaceRoot, mappings);
             }
         }
-    } catch (err: unknown) {
-        // Directory not readable, skip
+    } catch (err: any) {
+        //const error = toError(err);
+        void err;
     }
 }
 
