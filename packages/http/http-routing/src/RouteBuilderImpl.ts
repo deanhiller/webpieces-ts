@@ -269,6 +269,10 @@ export class RouteBuilderImpl implements RouteBuilder {
             },
         };
 
+        if (matchingFilters.length === 0) {
+            throw new Error("No filters found for route. Check filter definitions as you must have at least ContextFilter");
+        }
+
         // Chain filters with the controller service (reverse order for correct execution)
         let filterChain = matchingFilters[matchingFilters.length - 1];
         for (let i = matchingFilters.length - 2; i >= 0; i--) {

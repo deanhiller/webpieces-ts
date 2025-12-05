@@ -115,7 +115,94 @@ class RequestContextImpl {
         const store = this.storage.getStore();
         return store?.has(key) ?? false;
     }
+
+    /**
+     * Check if RequestContext is currently active.
+     * Returns true if we're inside a RequestContext.run() block, false otherwise.
+     *
+     * Useful for tests to verify context is set up before making API calls.
+     */
+    isActive(): boolean {
+        return this.storage.getStore() !== undefined;
+    }
+
+    /**
+     * Store a platform header value in the context.
+     * Uses HEADER_ prefix to avoid collisions with regular context keys.
+     *
+     * Called by ExpressWrapper.transferHeaders() to store incoming HTTP headers.
+     * Called by controllers/filters to set headers for downstream services.
+     *
+     * @param header - The platform header definition
+     * @param value - The header value from the HTTP request
+     */
+    putHeader(header: PlatformHeader, value: string): void {
+        // Use HEADER_ prefix to namespace headers separately from other context data
+        const key = `HEADER_${header.headerName}`;
+        this.put(key, value);
+    }
+
+    /**
+     * Retrieve a platform header value from the context.
+     *
+     * Used by:
+     * - Controllers/filters to read incoming headers
+     * - RequestContextReader (client-side) to propagate headers to downstream calls
+     *
+     * @param header - The platform header definition
+     * @returns The header value, or undefined if not set
+     */
+    getHeader(header: PlatformHeader): string | undefined {
+        const key = `HEADER_${header.headerName}`;
+        return this.get<string>(key);
+    }
+
+    /**
+     * Check if a platform header is present in the context.
+     *
+     * @param header - The platform header definition
+     * @returns true if header is set, false otherwise
+     */
+    hasHeader(header: PlatformHeader): boolean {
+        const key = `HEADER_${header.headerName}`;
+        return this.has(key);
+    }
+
+    /**
+     * Get all headers stored in the context.
+     * Returns a Map of header names to values.
+     *
+     * Useful for:
+     * - Debugging (inspect all headers)
+     * - Logging (log all request headers)
+     * - Response headers (echo headers back to client)
+     *
+     * @returns Map of header names (without HEADER_ prefix) to values
+     */
+    getAllHeaders(): Map<string, string> {
+        const headers = new Map<string, string>();
+        const store = this.storage.getStore();
+
+        if (store) {
+            for (const [key, value] of store.entries()) {
+                // Only include keys with HEADER_ prefix
+                if (key.startsWith('HEADER_')) {
+                    const headerName = key.substring('HEADER_'.length);
+                    // Only include string values (headers are always strings)
+                    if (typeof value === 'string') {
+                        headers.set(headerName, value);
+                    }
+                }
+            }
+        }
+
+        return headers;
+    }
 }
+
+// Import PlatformHeader type for type annotations
+// Note: This is a type-only import to avoid circular dependencies
+import type { PlatformHeader } from '@webpieces/http-api';
 
 /**
  * Global singleton instance of RequestContext.

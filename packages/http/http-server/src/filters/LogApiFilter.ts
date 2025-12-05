@@ -1,4 +1,4 @@
-import { injectable } from 'inversify';
+import { injectable, multiInject, optional } from 'inversify';
 import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import {
@@ -7,17 +7,25 @@ import {
     HttpForbiddenError,
     HttpNotFoundError,
     HttpUserError,
+    PlatformHeader,
+    PlatformHeadersExtension,
+    HEADER_TYPES,
 } from '@webpieces/http-api';
+import { RequestContext } from '@webpieces/core-context';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.
- * Priority: 130 (just below ContextFilter at 140, with gap for custom context filters)
+ * Priority: 1800 (after JsonFilter at 1850, before custom filters)
  *
  * Logging patterns:
- * - [API-SVR-req] 'Class.method / url' request=jsonStringOfRequest
- * - [API-SVR-resp-SUCCESS] 'Class.method / url' response=jsonStringOfResponse
- * - [API-SVR-resp-FAIL] 'Class.method / url' error=... (server errors: 500, 502, 504)
- * - [API-SVR-resp-OTHER] 'Class.method / url' errorType=... (user errors: 400, 401, 403, 404, 266)
+ * - [API-SVR-req] 'Class.method /url' request={...} headers={...}
+ * - [API-SVR-resp-SUCCESS] 'Class.method /url' response={...}
+ * - [API-SVR-resp-FAIL] 'Class.method /url' error=... (server errors: 500, 502, 504)
+ * - [API-SVR-resp-OTHER] 'Class.method /url' errorType=... (user errors: 400, 401, 403, 404, 266)
+ *
+ * NEW: Logs platform headers with secure masking
+ * - Secure headers (isSecured=true): masked based on length
+ * - Non-secure headers: logged in full
  *
  * User errors (HttpBadRequestError, etc.) are logged as OTHER, not FAIL,
  * because they are expected behavior from the server's perspective.
@@ -25,6 +33,20 @@ import {
 @provideSingleton()
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
+    private allHeaders: PlatformHeader[] = [];
+
+    constructor(
+        @multiInject(HEADER_TYPES.PlatformHeadersExtension) @optional()
+        extensions: PlatformHeadersExtension[] = []
+    ) {
+        super();
+
+        // Flatten all headers from all extensions
+        for (const extension of extensions) {
+            this.allHeaders.push(...extension.getHeaders());
+        }
+    }
+
     async filter(
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
@@ -32,7 +54,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         const classMethod = this.getClassMethod(meta);
         const url = meta.path;
 
-        // Log request
+        // Log request with headers
         this.logRequest(classMethod, url, meta.requestDto);
 
         try {
@@ -58,10 +80,62 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * Log incoming request.
+     * Log incoming request with headers.
+     * Masks secure headers based on their length for security.
      */
     private logRequest(classMethod: string, url: string, request: unknown): void {
-        console.log(`[API-SVR-req] '${classMethod} ${url}' request=${JSON.stringify(request)}`);
+        const headersLog = this.formatHeadersForLogging();
+        console.log(`[API-SVR-req] '${classMethod} ${url}' request=${JSON.stringify(request)} headers=${headersLog}`);
+    }
+
+    /**
+     * Format headers for logging with secure masking.
+     *
+     * Masking rules for secure headers (isSecured=true):
+     * - Length > 15: Show first 3 and last 3 characters with "..." between (e.g., "abc...xyz")
+     * - Length 8-15: Show first 2 characters with "..." (e.g., "ab...")
+     * - Length < 8: Show "<secure key too short to log>"
+     *
+     * Non-secure headers are logged in full.
+     */
+    private formatHeadersForLogging(): string {
+        const headerMap: Record<string, string> = {};
+        const allStoredHeaders = RequestContext.getAllHeaders();
+
+        for (const header of this.allHeaders) {
+            const value = allStoredHeaders.get(header.headerName);
+            if (!value) {
+                continue;
+            }
+
+            if (header.isSecured) {
+                headerMap[header.headerName] = this.maskSecureValue(value);
+            } else {
+                headerMap[header.headerName] = value;
+            }
+        }
+
+        return JSON.stringify(headerMap);
+    }
+
+    /**
+     * Mask a secure header value based on its length.
+     *
+     * @param value - The secure header value to mask
+     * @returns Masked value
+     */
+    private maskSecureValue(value: string): string {
+        const len = value.length;
+
+        if (len < 8) {
+            return '<secure key too short to log>';
+        } else if (len <= 15) {
+            // 8-15 characters: show first 2 + "..."
+            return `${value.substring(0, 2)}...`;
+        } else {
+            // > 15 characters: show first 3 + "..." + last 3
+            return `${value.substring(0, 3)}...${value.substring(len - 3)}`;
+        }
     }
 
     /**

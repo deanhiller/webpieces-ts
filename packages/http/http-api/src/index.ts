@@ -72,3 +72,9 @@ export {
     TimeUtil,
     DateTimeUtil,
 } from './datetime';
+
+// Platform Headers
+export { PlatformHeader } from './PlatformHeader';
+export { PlatformHeadersExtension } from './PlatformHeadersExtension';
+export { HEADER_TYPES } from './HeaderTypes';
+export { ContextReader } from './ContextReader';

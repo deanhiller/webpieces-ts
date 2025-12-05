@@ -1,5 +1,6 @@
 import { getRoutes, isApiInterface, RouteMetadata, ProtocolError, HttpError } from '@webpieces/http-api';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
+import { ContextMgr } from './ContextMgr';
 
 /**
  * Configuration options for HTTP client.
@@ -8,8 +9,15 @@ export class ClientConfig {
     /** Base URL for all requests (e.g., 'http://localhost:3000') */
     baseUrl: string;
 
-    constructor(baseUrl: string) {
+    /**
+     * Optional context manager for automatic header propagation.
+     * When provided, headers will be read from the ContextReader and added to requests.
+     */
+    contextMgr?: ContextMgr;
+
+    constructor(baseUrl: string, contextMgr?: ContextMgr) {
         this.baseUrl = baseUrl;
+        this.contextMgr = contextMgr;
     }
 }
 
@@ -80,6 +88,15 @@ export function createClient<T extends object>(
  * Error handling:
  * - Server: Throws HttpError → translates to ProtocolError JSON
  * - Client: Receives ProtocolError JSON → reconstructs HttpError
+ *
+ * NEW: Automatic header propagation via ContextMgr
+ * - If config.contextMgr is provided, reads headers from ContextReader
+ * - Adds headers to request before fetch()
+ *
+ * NEW: Client-side logging (similar to LogApiFilter on server)
+ * - [API-CLIENT-req] logs outgoing requests
+ * - [API-CLIENT-resp-SUCCESS] logs successful responses
+ * - [API-CLIENT-resp-FAIL] logs failed responses
  */
 async function makeRequest(config: ClientConfig, route: RouteMetadata, args: any[]): Promise<any> {
     const { httpMethod, path } = route;
@@ -87,10 +104,21 @@ async function makeRequest(config: ClientConfig, route: RouteMetadata, args: any
     // Build the full URL
     const url = `${config.baseUrl}${path}`;
 
-    // Build headers
+    // Build base headers
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };
+
+    // NEW: Add headers from ContextMgr (if provided)
+    // Single loop - ContextMgr.read() checks isWantTransferred and reads from context
+    if (config.contextMgr) {
+        for (const header of config.contextMgr.headerSet) {
+            const value = config.contextMgr.read(header.headerName);
+            if (value) {
+                headers[header.headerName] = value;
+            }
+        }
+    }
 
     // Build request options
     const options: RequestInit = {
@@ -99,23 +127,66 @@ async function makeRequest(config: ClientConfig, route: RouteMetadata, args: any
     };
 
     // For POST/PUT/PATCH, include the body (first argument) as JSON
+    let requestDto: unknown;
     if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && args.length > 0) {
-        const requestDto = args[0];
+        requestDto = args[0];
         // Plain JSON stringify - works with plain objects and our DateTimeDto classes
         options.body = JSON.stringify(requestDto);
     }
 
-    // Make the HTTP request
-    const response = await fetch(url, options);
+    // Log outgoing request
+    logClientRequest(httpMethod, path, requestDto);
 
-    if(response.ok) {
-        return response.json();
+    try {
+        // Make the HTTP request
+        const response = await fetch(url, options);
+
+        if (response.ok) {
+            const responseDto = await response.json();
+            // Log successful response
+            logClientSuccessResponse(httpMethod, path, responseDto);
+            return responseDto;
+        }
+
+        // Handle errors (non-2xx responses)
+        // Try to parse ProtocolError from response body
+        const protocolError = (await response.json()) as ProtocolError;
+
+        // Log error response
+        logClientErrorResponse(httpMethod, path, response.status, protocolError);
+
+        // Reconstruct appropriate HttpError subclass
+        throw ClientErrorTranslator.translateError(response, protocolError);
+    } catch (error) {
+        // Log network/fetch errors (not HTTP errors)
+        if (!(error instanceof HttpError)) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`[API-CLIENT-resp-FAIL] '${httpMethod} ${path}' networkError=${errorMessage}`);
+        }
+        throw error;
     }
+}
 
-    // Handle errors (non-2xx responses)
+/**
+ * Log outgoing HTTP request.
+ * Pattern: [API-CLIENT-req] 'METHOD /path' request={...}
+ */
+function logClientRequest(method: string, path: string, requestDto: unknown): void {
+    console.log(`[API-CLIENT-req] '${method} ${path}' request=${JSON.stringify(requestDto ?? {})}`);
+}
 
-    // Try to parse ProtocolError from response body
-    const protocolError = (await response.json()) as ProtocolError;
-    // Reconstruct appropriate HttpError subclass
-    throw ClientErrorTranslator.translateError(response, protocolError);
+/**
+ * Log successful HTTP response.
+ * Pattern: [API-CLIENT-resp-SUCCESS] 'METHOD /path' response={...}
+ */
+function logClientSuccessResponse(method: string, path: string, responseDto: unknown): void {
+    console.log(`[API-CLIENT-resp-SUCCESS] '${method} ${path}' response=${JSON.stringify(responseDto)}`);
+}
+
+/**
+ * Log error HTTP response.
+ * Pattern: [API-CLIENT-resp-FAIL] 'METHOD /path' status=XXX error=...
+ */
+function logClientErrorResponse(method: string, path: string, status: number, error: ProtocolError): void {
+    console.error(`[API-CLIENT-resp-FAIL] '${method} ${path}' status=${status} error=${error.message}`);
 }

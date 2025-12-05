@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ContainerModule } from 'inversify';
 import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
+import { RequestContext } from '@webpieces/core-context';
 import { ProdServerMeta } from '../src/ProdServerMeta';
 import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse } from '../src/api/SaveApi';
 import { PublicApi, PublicApiPrototype, PublicInfoRequest } from '../src/api/PublicApi';
@@ -138,7 +139,10 @@ describe('Integration Tests with DI Overrides', () => {
             };
 
             // Act - Call through filter chain + controller
-            const response = await saveApi.save(request);
+            // Tests must wrap in RequestContext.run() to match production behavior
+            const response = await RequestContext.run(async () => {
+                return await saveApi.save(request);
+            });
 
             // Assert - Verify mock response flows through
             expect(response).toBeDefined();
@@ -167,8 +171,12 @@ describe('Integration Tests with DI Overrides', () => {
             };
 
             // Act - Make two requests through filter chain
-            await saveApi.save(request1);
-            await saveApi.save(request2);
+            await RequestContext.run(async () => {
+                await saveApi.save(request1);
+            });
+            await RequestContext.run(async () => {
+                await saveApi.save(request2);
+            });
 
             // Assert - Verify counter was incremented
             const container = server.getContainer();
@@ -199,8 +207,12 @@ describe('Integration Tests with DI Overrides', () => {
             };
 
             // Act - Both requests dequeue from the queue
-            const response1 = await saveApi.save(request1);
-            const response2 = await saveApi.save(request2);
+            const response1 = await RequestContext.run(async () => {
+                return await saveApi.save(request1);
+            });
+            const response2 = await RequestContext.run(async () => {
+                return await saveApi.save(request2);
+            });
 
             // Assert - Each response has the correct mock value
             expect(response1.matches![0].description).toContain('VALUE_ONE');
@@ -223,7 +235,9 @@ describe('Integration Tests with DI Overrides', () => {
             };
 
             // Act
-            const response = await publicApi.getInfo(request);
+            const response = await RequestContext.run(async () => {
+                return await publicApi.getInfo(request);
+            });
 
             // Assert
             expect(response).toBeDefined();
@@ -237,7 +251,9 @@ describe('Integration Tests with DI Overrides', () => {
             const request: PublicInfoRequest = {};
 
             // Act
-            const response = await publicApi.getInfo(request);
+            const response = await RequestContext.run(async () => {
+                return await publicApi.getInfo(request);
+            });
 
             // Assert
             expect(response.greeting).toBe('Hello, World!');

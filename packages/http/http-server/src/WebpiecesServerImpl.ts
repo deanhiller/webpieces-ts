@@ -11,6 +11,7 @@ import {
 } from '@webpieces/http-routing';
 import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
+import {RequestContext} from '@webpieces/core-context';
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -339,8 +340,26 @@ export class WebpiecesServerImpl implements WebpiecesServer {
             const service = this.routeBuilder.createRouteInvoker(httpMethod, path);
 
             // Proxy method creates MethodMeta and calls the pre-configured service
+            // IMPORTANT: Tests MUST wrap calls in RequestContext.run() themselves
+            // This forces explicit context setup in tests, matching production behavior
             proxy[methodName] = async (requestDto: unknown): Promise<unknown> => {
-                const meta = new MethodMeta(routeMeta, requestDto);
+                // Verify we're inside an active RequestContext
+                // This helps test authors know they need to wrap their test in RequestContext.run()
+                if (!RequestContext.isActive()) {
+                    throw new Error(
+                        `RequestContext not active for ${routeMeta.controllerClassName}.${routeMeta.methodName}(). ` +
+                        `Tests must wrap API calls in RequestContext.run(() => { ... }). ` +
+                        `Example:\n` +
+                        `  await RequestContext.run(async () => {\n` +
+                        `    const response = await apiClient.${methodName}(request);\n` +
+                        `  });\n` +
+                        `This matches production behavior where ExpressWrapper.execute() establishes the context.`
+                    );
+                }
+
+                // Create MethodMeta without RouterReqResp (test mode - no HTTP involved)
+                // JsonFilter will skip body parsing if no routerReqResp, so set requestDto directly
+                const meta = new MethodMeta(routeMeta, undefined, requestDto);
                 const responseWrapper = await service.invoke(meta);
                 return responseWrapper.response;
             };

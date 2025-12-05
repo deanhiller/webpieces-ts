@@ -33,6 +33,13 @@
 export { createClient, ClientConfig } from './ClientFactory';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
 
+// Context management for header propagation
+export { StaticContextReader, CompositeContextReader } from './ContextReader';
+export { ContextMgr } from './ContextMgr';
+
+// Re-export ContextReader interface from http-api for convenience
+export { ContextReader } from '@webpieces/http-api';
+
 // Re-export API decorators for convenience (same as http-routing does)
 export {
     ApiInterface,
