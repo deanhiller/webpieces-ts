@@ -32,11 +32,35 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            - name: Run tests
-              run: npm test
+            - name: Bootstrap dev-config (required before Nx can process project graph)
+              run: |
+                # ESLint config imports from dist/packages/tooling/dev-config/eslint-plugin/index.js
+                # This must exist before Nx can create the project graph (due to @nx/eslint/plugin)
+                # Build dev-config with tsc to a temp location, then move to expected structure
+                npx tsc -p packages/tooling/dev-config/tsconfig.lib.json --outDir dist/temp-tsc
+                # Move compiled files to expected location (tsc outputs to packages/tooling/dev-config/*)
+                mkdir -p dist/packages/tooling/dev-config
+                mv dist/temp-tsc/packages/tooling/dev-config/* dist/packages/tooling/dev-config/
+                rm -rf dist/temp-tsc
+                # Copy required assets
+                cp packages/tooling/dev-config/package.json dist/packages/tooling/dev-config/
+                cp packages/tooling/dev-config/executors.json dist/packages/tooling/dev-config/
+                cp -r packages/tooling/dev-config/architecture dist/packages/tooling/dev-config/
 
             - name: Build all packages
               run: npx nx run-many --target=build --all
+
+            - name: Run linting
+              run: npx nx run-many --target=lint --all
+
+            - name: Run tests
+              run: npm test
+
+            - name: Validate architecture (no cycles)
+              run: npx nx run architecture:validate-no-cycles
+
+            - name: Validate architecture (unchanged)
+              run: npx nx run architecture:validate-architecture-unchanged
 
             - name: Upload coverage
               uses: codecov/codecov-action@v4

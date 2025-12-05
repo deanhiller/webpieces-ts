@@ -1,0 +1,70 @@
+{
+  "@webpieces/architecture": {
+    "level": 0,
+    "dependsOn": []
+  },
+  "@webpieces/client": {
+    "level": 2,
+    "dependsOn": [
+      "@webpieces/http-api",
+      "@webpieces/http-client"
+    ]
+  },
+  "@webpieces/core-context": {
+    "level": 0,
+    "dependsOn": []
+  },
+  "@webpieces/core-meta": {
+    "level": 0,
+    "dependsOn": []
+  },
+  "@webpieces/core-util": {
+    "level": 0,
+    "dependsOn": []
+  },
+  "@webpieces/example-app": {
+    "level": 4,
+    "dependsOn": [
+      "@webpieces/http-routing",
+      "@webpieces/http-server"
+    ]
+  },
+  "@webpieces/http-api": {
+    "level": 0,
+    "dependsOn": []
+  },
+  "@webpieces/http-client": {
+    "level": 1,
+    "dependsOn": [
+      "@webpieces/http-api"
+    ]
+  },
+  "@webpieces/http-filters": {
+    "level": 1,
+    "dependsOn": [
+      "@webpieces/core-context"
+    ]
+  },
+  "@webpieces/http-routing": {
+    "level": 2,
+    "dependsOn": [
+      "@webpieces/http-api",
+      "@webpieces/http-filters"
+    ]
+  },
+  "@webpieces/http-server": {
+    "level": 3,
+    "dependsOn": [
+      "@webpieces/core-util",
+      "@webpieces/http-filters",
+      "@webpieces/http-routing"
+    ]
+  },
+  "@webpieces/server": {
+    "level": 4,
+    "dependsOn": [
+      "@webpieces/core-meta",
+      "@webpieces/http-server"
+    ]
+  }
+}

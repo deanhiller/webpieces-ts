@@ -29,8 +29,9 @@ async function main() {
                 resolve(undefined);
             });
         });
-    } catch (error) {
-        console.error('[Server] Error during startup:', error);
+    } catch (err: any) {
+        //const error = toError(err);
+        console.error('[Server] Error during startup:', err);
         process.exit(1);
     }
 }

@@ -11,6 +11,9 @@ import webpiecesPlugin from '../../eslint-plugin/index.js';
  *
  * Includes custom WebPieces rules:
  * - catch-error-pattern: Enforces toError() usage in catch blocks
+ * - max-method-lines: Enforces maximum method length (70 lines)
+ * - max-file-lines: Enforces maximum file length (700 lines)
+ * - enforce-architecture: Enforces architecture dependency boundaries
  *
  * Usage in consumer projects:
  *
@@ -55,6 +58,9 @@ export default [
         rules: {
             // WebPieces custom rules
             '@webpieces/catch-error-pattern': 'error',
+            '@webpieces/max-method-lines': ['error', { max: 70 }],
+            '@webpieces/max-file-lines': ['error', { max: 700 }],
+            '@webpieces/enforce-architecture': 'error',
             // General code quality
             'no-console': 'off', // Allow console for logging
             'no-debugger': 'warn',

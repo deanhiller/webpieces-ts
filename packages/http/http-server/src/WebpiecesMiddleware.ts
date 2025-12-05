@@ -48,7 +48,8 @@ export class ExpressWrapper {
             // 4. Serialize response DTO to JSON (SYMMETRIC with client's response.json())
             const responseJson = JSON.stringify(wpResponse.response);
             res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
-        } catch (err: unknown) {
+        } catch (err: any) {
+            //const error = toError(err);
             // 5. Handle errors
             this.handleError(res, err);
         }
@@ -190,7 +191,7 @@ export class WebpiecesMiddleware {
                 req.method,
                 req.path,
             );
-        } catch (err: unknown) {
+        } catch (err: any) {
             const error = toError(err);
             console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
             if (!res.headersSent) {
