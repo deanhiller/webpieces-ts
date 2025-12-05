@@ -35,6 +35,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // Log request
         this.logRequest(classMethod, url, meta.requestDto);
 
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Filter logs errors before re-throwing to global handler
         try {
             const response = await nextFilter.invoke(meta);
 

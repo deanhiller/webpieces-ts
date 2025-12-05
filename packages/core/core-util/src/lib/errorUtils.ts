@@ -90,6 +90,7 @@ export function toError(err: any): Error {
         }
 
         // For objects without message, try to stringify
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- toError utility must handle circular references without recursion
         try {
             const message = JSON.stringify(err);
             return new Error(`Non-Error object thrown: ${message}`);

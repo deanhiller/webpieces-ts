@@ -27,6 +27,7 @@ export class ExpressWrapper {
     }
 
     public async execute(req: Request, res: Response, next: NextFunction) {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- ExpressWrapper catches errors to translate to HTTP responses
         try {
             // 1. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
             let requestDto: unknown = {};
@@ -181,6 +182,7 @@ export class WebpiecesMiddleware {
     ): Promise<void> {
         console.log('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
 
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Global error handler IS the top-level catch-all
         try {
             // await next() catches BOTH:
             // 1. Synchronous throws from next() itself
