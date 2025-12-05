@@ -14,6 +14,7 @@
                 "assets": [
                     "packages/tooling/dev-config/package.json",
                     "packages/tooling/dev-config/README.md",
+                    "packages/tooling/dev-config/executors.json",
                     "packages/tooling/dev-config/config/jest/preset.js",
                     {
                         "input": "packages/tooling/dev-config/bin",
@@ -39,6 +40,16 @@
                         "input": "packages/tooling/dev-config/patterns",
                         "glob": "**/*",
                         "output": "patterns"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/plugins",
+                        "glob": "**/*",
+                        "output": "plugins"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/architecture",
+                        "glob": "**/*",
+                        "output": "architecture"
                     }
                 ]
             }

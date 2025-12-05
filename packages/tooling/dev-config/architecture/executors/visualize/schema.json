@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Visualize Executor",
+    "description": "Generates visual representations of the architecture graph",
+    "type": "object",
+    "properties": {
+        "graphPath": {
+            "type": "string",
+            "description": "Path to the graph file (relative to workspace root)",
+            "default": "architecture/dependencies.json"
+        }
+    },
+    "required": []
+}

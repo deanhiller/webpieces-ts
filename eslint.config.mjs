@@ -26,6 +26,9 @@ export default [
         rules: {
             // WebPieces custom rules
             '@webpieces/catch-error-pattern': 'error',
+            '@webpieces/max-method-lines': ['error', { max: 70 }],
+            '@webpieces/max-file-lines': ['error', { max: 700 }],
+            '@webpieces/enforce-architecture': 'error',
 
             // TypeScript rules
             '@typescript-eslint/no-explicit-any': 'warn',
