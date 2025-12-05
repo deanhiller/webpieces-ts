@@ -37,7 +37,7 @@ export class ExpressWrapper {
 
     public async executeTryCatch(req: Request, res: Response, next: NextFunction) {
         try {
-            await this.executeImpl(req, res,next);
+            await this.executeImpl(req, res, next);
         } catch (err: unknown) {
             // 5. Handle errors
             this.handleError(res, err);
@@ -240,7 +240,7 @@ export class WebpiecesMiddleware {
                 req.method,
                 req.path,
             );
-        } catch (err: unknown) {
+        } catch (err: any) {
             const error = toError(err);
             console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
             if (!res.headersSent) {

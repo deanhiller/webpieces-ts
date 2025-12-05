@@ -11,21 +11,31 @@
         "wp-use-published": "./bin/use-published-webpieces.sh",
         "wp-setup-patterns": "./bin/setup-claude-patterns.sh"
     },
+    "executors": "./executors.json",
     "exports": {
+        ".": "./index.js",
+        "./package.json": "./package.json",
         "./eslint": "./config/eslint/base.mjs",
         "./eslint-plugin": "./eslint-plugin/index.js",
         "./jest": "./config/jest/preset.js",
-        "./tsconfig": "./config/typescript/tsconfig.base.json"
+        "./tsconfig": "./config/typescript/tsconfig.base.json",
+        "./plugins/circular-deps": "./plugins/circular-deps/index.js",
+        "./architecture": "./architecture/index.js",
+        "./executors.json": "./executors.json"
     },
     "files": [
         "bin/**/*",
         "config/**/*",
         "eslint-plugin/**/*",
         "patterns/**/*",
+        "plugins/**/*",
+        "architecture/**/*",
+        "executors.json",
         "README.md"
     ],
     "peerDependencies": {
-        "eslint": ">=8.0.0"
+        "eslint": ">=8.0.0",
+        "@nx/devkit": ">=18.0.0"
     },
     "keywords": [
         "webpieces",

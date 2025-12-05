@@ -1,0 +1,24 @@
+{
+    "name": "architecture",
+    "$schema": "../node_modules/nx/schemas/project-schema.json",
+    "projectType": "application",
+    "targets": {
+        "generate": {
+            "executor": "@webpieces/dev-config:generate",
+            "options": {}
+        },
+        "visualize": {
+            "executor": "@webpieces/dev-config:visualize",
+            "dependsOn": ["generate"],
+            "options": {}
+        },
+        "validate-no-cycles": {
+            "executor": "@webpieces/dev-config:validate-no-cycles",
+            "options": {}
+        },
+        "validate-architecture-unchanged": {
+            "executor": "@webpieces/dev-config:validate-architecture-unchanged",
+            "options": {}
+        }
+    }
+}

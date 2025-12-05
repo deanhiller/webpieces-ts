@@ -14,11 +14,8 @@
                 "assets": []
             },
             "dependsOn": [
-                "core-context:build",
-                "core-meta:build",
-                "http-routing:build",
-                "http-filters:build",
-                "http-server:build"
+                "http-server:build",
+                "http-routing:build"
             ]
         },
         "serve": {

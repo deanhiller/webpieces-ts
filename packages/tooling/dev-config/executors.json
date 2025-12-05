@@ -1,0 +1,24 @@
+{
+    "executors": {
+        "generate": {
+            "implementation": "./architecture/executors/generate/executor",
+            "schema": "./architecture/executors/generate/schema.json",
+            "description": "Generate the architecture dependency graph and save it"
+        },
+        "visualize": {
+            "implementation": "./architecture/executors/visualize/executor",
+            "schema": "./architecture/executors/visualize/schema.json",
+            "description": "Generate visual representations of the architecture graph"
+        },
+        "validate-no-cycles": {
+            "implementation": "./architecture/executors/validate-no-cycles/executor",
+            "schema": "./architecture/executors/validate-no-cycles/schema.json",
+            "description": "Validate the architecture graph has no circular dependencies"
+        },
+        "validate-architecture-unchanged": {
+            "implementation": "./architecture/executors/validate-architecture-unchanged/executor",
+            "schema": "./architecture/executors/validate-architecture-unchanged/schema.json",
+            "description": "Validate the architecture graph matches the saved blessed graph"
+        }
+    }
+}

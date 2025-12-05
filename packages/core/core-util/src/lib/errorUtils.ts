@@ -94,9 +94,10 @@ export function toError(err: any): Error {
             const message = JSON.stringify(err);
             return new Error(`Non-Error object thrown: ${message}`);
         } catch (err: any) {
-            // eslint-disable-next-line @webpieces/catch-error-pattern
+            //const error = toError(err);
             // NOTE: Intentionally not calling toError() here to prevent infinite recursion
             // in error recovery path. This is the ONLY acceptable exception to the pattern.
+            void err; // Mark as intentionally unused
             return new Error('Non-Error object thrown (unable to stringify)');
         }
     }
