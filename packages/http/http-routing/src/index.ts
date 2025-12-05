@@ -48,3 +48,6 @@ export {
 
 // Filter matching
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
+
+// Context readers (Node.js only)
+export { RequestContextReader } from './RequestContextReader';

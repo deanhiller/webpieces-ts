@@ -72,3 +72,12 @@ export {
     TimeUtil,
     DateTimeUtil,
 } from './datetime';
+
+// Platform Headers
+export { PlatformHeader } from './PlatformHeader';
+export { PlatformHeadersExtension } from './PlatformHeadersExtension';
+export { HeaderMethods, ContextReader } from './HeaderMethods';
+export { HEADER_TYPES } from './HeaderTypes';
+
+// Logging
+export { LogApiCall } from './LogApiCall';

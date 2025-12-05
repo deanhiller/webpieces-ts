@@ -269,13 +269,19 @@ export class RouteBuilderImpl implements RouteBuilder {
             },
         };
 
-        // Chain filters with the controller service (reverse order for correct execution)
-        let filterChain = matchingFilters[matchingFilters.length - 1];
-        for (let i = matchingFilters.length - 2; i >= 0; i--) {
-            filterChain = filterChain.chain(matchingFilters[i]);
+        if (matchingFilters.length === 0) {
+            throw new Error("No filters found for route. Check filter definitions as you must have at least ContextFilter");
         }
 
-        return filterChain.chainService(controllerService);
+        // Chain filters: highest priority (first in array) should run first (be outermost)
+        // Build from innermost (lowest priority) to outermost (highest priority)
+        // Start with controller, then wrap with filters in reverse priority order
+        let service: Service<MethodMeta, WpResponse<unknown>> = controllerService;
+        for (let i = matchingFilters.length - 1; i >= 0; i--) {
+            service = matchingFilters[i].chainService(service);
+        }
+
+        return service;
     }
 
     /**

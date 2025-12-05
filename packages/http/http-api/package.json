@@ -21,5 +21,7 @@
     "publishConfig": {
         "access": "public"
     },
-    "dependencies": {}
+    "dependencies": {
+        "@webpieces/core-util": "*"
+    }
 }

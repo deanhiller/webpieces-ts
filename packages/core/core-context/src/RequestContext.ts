@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import { Header } from '@webpieces/core-util';
 
-//some stuff here
 /**
  * Context management using AsyncLocalStorage.
  * Similar to Java WebPieces Context class that uses ThreadLocal.
@@ -36,6 +36,22 @@ class RequestContextImpl {
      */
     runWithContext<T>(context: Map<string, any>, fn: () => T): T {
         return this.storage.run(context, fn);
+    }
+
+    getHeader(header: Header) {
+        return this.get(header.getHeaderName());
+    }
+
+    putHeader(header: Header, value: any) {
+        this.put(header.getHeaderName(), value);
+    }
+
+    hasHeader(header: Header) {
+        return this.has(header.getHeaderName());
+    }
+
+    getHeaders(headers: Header[]): any[] {
+        return headers.map(header => this.getHeader(header));
     }
 
     /**
@@ -115,7 +131,20 @@ class RequestContextImpl {
         const store = this.storage.getStore();
         return store?.has(key) ?? false;
     }
+
+    /**
+     * Check if RequestContext is currently active.
+     * Returns true if we're inside a RequestContext.run() block, false otherwise.
+     *
+     * Useful for tests to verify context is set up before making API calls.
+     */
+    isActive(): boolean {
+        return this.storage.getStore() !== undefined;
+    }
+
 }
+
+
 
 /**
  * Global singleton instance of RequestContext.

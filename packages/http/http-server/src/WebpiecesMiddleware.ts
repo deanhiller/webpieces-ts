@@ -18,6 +18,7 @@ import {
 } from '@webpieces/http-api';
 import { Service, WpResponse } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 
 export class ExpressWrapper {
     constructor(
@@ -27,33 +28,77 @@ export class ExpressWrapper {
     }
 
     public async execute(req: Request, res: Response, next: NextFunction) {
+<<<<<<< HEAD
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- ExpressWrapper catches errors to translate to HTTP responses
+=======
+        // MOVED: Wrap entire request in RequestContext.run()
+        // This establishes AsyncLocalStorage context for the request
+        await RequestContext.run(async () => {
+            await this.executeTryCatch(req, res, next);
+        });
+    }
+
+    public async executeTryCatch(req: Request, res: Response, next: NextFunction) {
+>>>>>>> main
         try {
-            // 1. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
-            let requestDto: unknown = {};
-            if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-                // Read raw body as text
-                const bodyText = await this.readRequestBody(req);
-                // Parse JSON
-                requestDto = bodyText ? JSON.parse(bodyText) : {};
-            }
-
-            // 2. Create MethodMeta with request DTO
-            const methodMeta = new MethodMeta(this.routeMeta, requestDto);
-
-            // 3. Invoke the service (filter chain + controller)
-            const wpResponse = await this.service.invoke(methodMeta);
-            if(!wpResponse.response)
-                throw new Error(`Route chain(filters & all) is not returning a response.  ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`);
-
-            // 4. Serialize response DTO to JSON (SYMMETRIC with client's response.json())
-            const responseJson = JSON.stringify(wpResponse.response);
-            res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
+            await this.executeImpl(req, res, next);
         } catch (err: any) {
-            //const error = toError(err);
+            const error = toError(err);
             // 5. Handle errors
-            this.handleError(res, err);
+            this.handleError(res, error);
         }
+    }
+
+    public async executeImpl(req: Request, res: Response, next: NextFunction) {
+        // 1. Read HTTP headers from Express request
+        const requestHeaders = this.readExpressHeaders(req);
+
+        // 2. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
+        let requestDto: unknown = {};
+        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            // Read raw body as text
+            const bodyText = await this.readRequestBody(req);
+            // Parse JSON
+            requestDto = bodyText ? JSON.parse(bodyText) : {};
+        }
+
+        // 3. Create MethodMeta with headers and request DTO
+        const methodMeta = new MethodMeta(this.routeMeta, requestHeaders, requestDto);
+
+        // 4. Invoke the service (filter chain + controller)
+        const wpResponse = await this.service.invoke(methodMeta);
+        if (!wpResponse.response) {
+            throw new Error(
+                `Route chain(filters & all) is not returning a response. ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`
+            );
+        }
+
+        // 5. Serialize response DTO to JSON (SYMMETRIC with client's response.json())
+        const responseJson = JSON.stringify(wpResponse.response);
+        res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
+    }
+
+    /**
+     * Read HTTP headers from Express request.
+     * Returns Map of header name (lowercase) -> array of values.
+     *
+     * HTTP spec allows multiple values for same header name.
+     */
+    private readExpressHeaders(req: Request): Map<string, string[]> {
+        const headers = new Map<string, string[]>();
+
+        // Express stores headers in req.headers as Record<string, string | string[]>
+        for (const [name, value] of Object.entries(req.headers)) {
+            const lowerName = name.toLowerCase();
+
+            if (typeof value === 'string') {
+                headers.set(lowerName, [value]);
+            } else if (Array.isArray(value)) {
+                headers.set(lowerName, value);
+            }
+        }
+
+        return headers;
     }
 
     /**
@@ -147,6 +192,7 @@ export class ExpressWrapper {
         }
     }
 }
+
 /**
  * WebpiecesMiddleware - Express middleware for WebPieces server.
  *
@@ -162,7 +208,14 @@ export class ExpressWrapper {
  * Express's registered route handlers (created by RouteBuilder.createHandler()).
  * jsonTranslator only validates Content-Type and translates errors to JSON.
  *
- * DI Pattern: This class is registered via @provideSingleton() with no dependencies.
+ * NEW: ExpressWrapper simplified - no longer handles JSON or headers
+ * - JSON parsing/serialization moved to JsonFilter
+ * - Header transfer moved to ContextFilter (injects PlatformHeadersExtension directly)
+ * - ExpressWrapper just creates RouterReqResp and invokes filter chain
+ *
+ * Extension vs Plugin pattern:
+ * - Extensions (DI-level): Contribute capabilities to framework (headers, converters, etc.)
+ * - Plugins (App-level): Provide complete features with modules + routes (Hibernate, Jackson, etc.)
  */
 @provideSingleton()
 @injectable()
@@ -232,6 +285,8 @@ export class WebpiecesMiddleware {
     /**
      * Create an ExpressWrapper for a route.
      * The wrapper handles the full request/response cycle (symmetric design).
+     *
+     * NEW: Simplified - no longer passes headers (ContextFilter handles it now)
      *
      * @param service - The service wrapping the filter chain and controller
      * @param routeMeta - Route metadata for MethodMeta and DTO type

@@ -19,6 +19,10 @@
         "validate-architecture-unchanged": {
             "executor": "@webpieces/dev-config:validate-architecture-unchanged",
             "options": {}
+        },
+        "validate-no-skiplevel-deps": {
+            "executor": "@webpieces/dev-config:validate-no-skiplevel-deps",
+            "options": {}
         }
     }
 }

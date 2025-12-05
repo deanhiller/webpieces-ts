@@ -14,8 +14,7 @@
                 "assets": []
             },
             "dependsOn": [
-                "http-server:build",
-                "http-routing:build"
+                "http-server:build"
             ]
         },
         "serve": {

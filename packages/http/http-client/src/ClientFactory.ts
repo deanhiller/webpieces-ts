@@ -1,5 +1,13 @@
-import { getRoutes, isApiInterface, RouteMetadata, ProtocolError, HttpError } from '@webpieces/http-api';
+import {
+    getRoutes,
+    isApiInterface,
+    RouteMetadata,
+    ProtocolError,
+    HeaderMethods,
+    LogApiCall,
+} from '@webpieces/http-api';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
+import { ContextMgr } from './ContextMgr';
 
 /**
  * Configuration options for HTTP client.
@@ -8,8 +16,15 @@ export class ClientConfig {
     /** Base URL for all requests (e.g., 'http://localhost:3000') */
     baseUrl: string;
 
-    constructor(baseUrl: string) {
+    /**
+     * Optional context manager for automatic header propagation.
+     * When provided, headers will be read from the ContextReader and added to requests.
+     */
+    contextMgr?: ContextMgr;
+
+    constructor(baseUrl: string, contextMgr?: ContextMgr) {
         this.baseUrl = baseUrl;
+        this.contextMgr = contextMgr;
     }
 }
 
@@ -29,11 +44,13 @@ export class ClientConfig {
  *
  * @param apiPrototype - The API prototype class with decorators (e.g., SaveApiPrototype)
  * @param config - Client configuration with baseUrl
+ * @param logApiCall - Optional LogApiCall instance (creates new one if not provided)
  * @returns A proxy object that implements the API interface
  */
 export function createClient<T extends object>(
     apiPrototype: Function & { prototype: T },
     config: ClientConfig,
+    contextMgr?: ContextMgr
 ): T {
     // Validate that the API prototype is marked with @ApiInterface
     if (!isApiInterface(apiPrototype)) {
@@ -44,11 +61,10 @@ export function createClient<T extends object>(
     // Get all routes from the API prototype
     const routes = getRoutes(apiPrototype);
 
-    // Create a map of method name -> route metadata for fast lookup
-    const routeMap = new Map<string, RouteMetadata>();
-    for (const route of routes) {
-        routeMap.set(route.methodName, route);
-    }
+    // Create ProxyClient with injected LogApiCall (or create new one)
+    //CRAP our own little DI going on here as angular and nodejs are using 2 different DI systems!!! fuck!!
+    const proxyClient = new ProxyClient(
+        config, new LogApiCall(), new HeaderMethods(), routes, contextMgr);
 
     // Create a proxy that intercepts method calls and makes HTTP requests
     return new Proxy({} as T, {
@@ -59,63 +75,138 @@ export function createClient<T extends object>(
             }
 
             // Get the route metadata for this method
-            const route = routeMap.get(prop);
-            if (!route) {
-                throw new Error(`No route found for method ${prop}`);
-            }
+            const route = proxyClient.getRoute(prop);
 
             // Return a function that makes the HTTP request
             return async (...args: any[]) => {
-                return makeRequest(config, route, args);
+                return proxyClient.makeRequest(route, args);
             };
         },
     });
 }
 
 /**
- * Make an HTTP request based on route metadata and arguments.
+ * ProxyClient - HTTP client implementation with logging.
  *
- * Uses plain JSON.stringify/parse - no serialization library needed!
+ * This class handles:
+ * - Making HTTP requests based on route metadata
+ * - Header propagation via ContextMgr
+ * - Logging via LogApiCall
+ * - Error translation via ClientErrorTranslator
  *
- * Error handling:
- * - Server: Throws HttpError → translates to ProtocolError JSON
- * - Client: Receives ProtocolError JSON → reconstructs HttpError
+ * LogApiCall is injected for consistent logging across the framework.
  */
-async function makeRequest(config: ClientConfig, route: RouteMetadata, args: any[]): Promise<any> {
-    const { httpMethod, path } = route;
+export class ProxyClient {
+    private routeMap: Map<string, RouteMetadata>;
 
-    // Build the full URL
-    const url = `${config.baseUrl}${path}`;
-
-    // Build headers
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-    };
-
-    // Build request options
-    const options: RequestInit = {
-        method: httpMethod,
-        headers,
-    };
-
-    // For POST/PUT/PATCH, include the body (first argument) as JSON
-    if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && args.length > 0) {
-        const requestDto = args[0];
-        // Plain JSON stringify - works with plain objects and our DateTimeDto classes
-        options.body = JSON.stringify(requestDto);
+    constructor(
+        private config: ClientConfig,
+        private logApiCall: LogApiCall,
+        private headerMethods: HeaderMethods,
+        routes: RouteMetadata[],
+        private contextMgr?: ContextMgr,
+    ) {
+        // Create a map of method name -> route metadata for fast lookup
+        this.routeMap = new Map<string, RouteMetadata>();
+        for (const route of routes) {
+            this.routeMap.set(route.methodName, route);
+        }
     }
 
-    // Make the HTTP request
-    const response = await fetch(url, options);
-
-    if(response.ok) {
-        return response.json();
+    /**
+     * Get route metadata for a method name.
+     * @throws Error if no route found
+     */
+    getRoute(methodName: string): RouteMetadata {
+        const route = this.routeMap.get(methodName);
+        if (!route) {
+            throw new Error(`No route found for method ${methodName}`);
+        }
+        return route;
     }
 
-    // Handle errors (non-2xx responses)
+    /**
+     * Make an HTTP request based on route metadata and arguments.
+     *
+     * Uses plain JSON.stringify/parse - no serialization library needed!
+     *
+     * Error handling:
+     * - Server: Throws HttpError → translates to ProtocolError JSON
+     * - Client: Receives ProtocolError JSON → reconstructs HttpError
+     *
+     * Automatic header propagation via ContextMgr:
+     * - If config.contextMgr is provided, reads headers from ContextReader
+     * - Adds headers to request before fetch()
+     *
+     * Logging via LogApiCall.execute():
+     * - [API-CLIENT-req] logs outgoing requests with headers (secure ones masked)
+     * - [API-CLIENT-resp-SUCCESS] logs successful responses
+     * - [API-CLIENT-resp-FAIL] logs failed responses
+     */
+    async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
+        const { httpMethod, path } = route;
 
-    // Try to parse ProtocolError from response body
-    const protocolError = (await response.json()) as ProtocolError;
-    // Reconstruct appropriate HttpError subclass
-    throw ClientErrorTranslator.translateError(response, protocolError);
+        // Build the full URL
+        const url = `${this.config.baseUrl}${path}`;
+
+
+        // Build base headers for the HTTP request
+        const httpHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+
+        // Add context headers to httpHeaders (unmasked, for actual HTTP request)
+        if (this.contextMgr) {
+            for (const header of this.contextMgr.headerSet) {
+                const value = this.contextMgr.contextReader.read(header);
+                if (value) {
+                    httpHeaders[header.headerName] = value;
+                }
+            }
+        }
+
+        // Build masked headers map for logging
+        const headersForLogging = this.contextMgr
+            ? this.headerMethods.buildSecureMapForLogs(this.contextMgr.headerSet, this.contextMgr.contextReader)
+            : new Map<string, any>();
+
+        // Build request options
+        const options: RequestInit = {
+            method: httpMethod,
+            headers: httpHeaders,
+        };
+
+        // For POST/PUT/PATCH, include the body (first argument) as JSON
+        let requestDto: unknown;
+        if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && args.length > 0) {
+            requestDto = args[0];
+            // Plain JSON stringify - works with plain objects and our DateTimeDto classes
+            options.body = JSON.stringify(requestDto);
+        }
+
+        // Wrap fetch in a method for LogApiCall.execute
+        const method = async (): Promise<unknown> => {
+            return this.executeFetch(url, options);
+        };
+
+        return await this.logApiCall.execute("CLIENT", route, requestDto, headersForLogging, method);
+    }
+
+    /**
+     * Execute the fetch request and handle response.
+     */
+    private async executeFetch(url: string, options: RequestInit): Promise<unknown> {
+        const response = await fetch(url, options);
+
+        if (response.ok) {
+            return await response.json();
+        }
+
+        // Handle errors (non-2xx responses)
+        // Try to parse ProtocolError from response body
+        const protocolError = (await response.json()) as ProtocolError;
+
+        // Reconstruct appropriate HttpError subclass and throw
+        throw ClientErrorTranslator.translateError(response, protocolError);
+    }
 }
