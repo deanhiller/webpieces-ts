@@ -208,6 +208,14 @@ console.log('All max-method-lines rule tests passed!');
 // Test documentation file creation
 const docPath = path.join(process.cwd(), 'tmp', 'webpieces', 'webpieces.methods.md');
 
+// Ensure tmp directory exists before test
+fs.mkdirSync(path.dirname(docPath), { recursive: true });
+
+// Delete file if it exists (to test creation)
+if (fs.existsSync(docPath)) {
+    fs.unlinkSync(docPath);
+}
+
 // Run a test that triggers violation (will create doc file)
 try {
     ruleTester.run('max-method-lines-doc-test', rule, {

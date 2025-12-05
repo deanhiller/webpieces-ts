@@ -178,9 +178,12 @@ function ensureDocFile(docPath: string, content: string): boolean {
 }
 
 function ensureMethodDoc(context: Rule.RuleContext): void {
-    if (methodDocCreated) return;
     const workspaceRoot = getWorkspaceRoot(context);
     const docPath = path.join(workspaceRoot, 'tmp', 'webpieces', 'webpieces.methods.md');
+
+    // Check if file exists AND flag is true - if both, skip
+    if (methodDocCreated && fs.existsSync(docPath)) return;
+
     if (ensureDocFile(docPath, METHOD_DOC_CONTENT)) {
         methodDocCreated = true;
     }
