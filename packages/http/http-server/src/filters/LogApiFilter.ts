@@ -1,31 +1,26 @@
-import { injectable, multiInject, optional } from 'inversify';
-import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
+import {inject, injectable, multiInject, optional} from 'inversify';
+import {provideSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import {
-    HttpBadRequestError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpNotFoundError,
-    HttpUserError,
     PlatformHeader,
     PlatformHeadersExtension,
+    HeaderMethods,
     HEADER_TYPES,
+    LogApiCall,
 } from '@webpieces/http-api';
-import { RequestContext } from '@webpieces/core-context';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.
- * Priority: 1800 (after JsonFilter at 1850, before custom filters)
+ * Priority: 1800 (after ContextFilter at 2000, before custom filters)
  *
- * Logging patterns:
- * - [API-SVR-req] 'Class.method /url' request={...} headers={...}
- * - [API-SVR-resp-SUCCESS] 'Class.method /url' response={...}
- * - [API-SVR-resp-FAIL] 'Class.method /url' error=... (server errors: 500, 502, 504)
- * - [API-SVR-resp-OTHER] 'Class.method /url' errorType=... (user errors: 400, 401, 403, 404, 266)
+ * Logging patterns (via LogApiCall):
+ * - [API-SVR-req] Class.method /url request={...} headers={...}
+ * - [API-SVR-resp-SUCCESS] Class.method response={...}
+ * - [API-SVR-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
+ * - [API-SVR-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
  *
- * NEW: Logs platform headers with secure masking
- * - Secure headers (isSecured=true): masked based on length
- * - Non-secure headers: logged in full
+ * Headers are read from RequestContext (NOT from meta.requestHeaders which is undefined
+ * after ContextFilter runs at priority 2000).
  *
  * User errors (HttpBadRequestError, etc.) are logged as OTHER, not FAIL,
  * because they are expected behavior from the server's perspective.
@@ -33,147 +28,40 @@ import { RequestContext } from '@webpieces/core-context';
 @provideSingleton()
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-    private allHeaders: PlatformHeader[] = [];
+    private logApiCall: LogApiCall;
+    private allHeaders: PlatformHeader[];
 
     constructor(
         @multiInject(HEADER_TYPES.PlatformHeadersExtension) @optional()
-        extensions: PlatformHeadersExtension[] = []
+        extensions: PlatformHeadersExtension[] = [],
+        @inject(HeaderMethods) private headerMethods: HeaderMethods
     ) {
         super();
 
         // Flatten all headers from all extensions
+        this.allHeaders = [];
         for (const extension of extensions) {
             this.allHeaders.push(...extension.getHeaders());
         }
+
+        this.logApiCall = new LogApiCall();
     }
 
     async filter(
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        const classMethod = this.getClassMethod(meta);
-        const url = meta.path;
+        // Build header map from RequestContext (headers are already masked for secure values)
+        const contextReader = new RequestContextReader();
+        const headers = this.headerMethods.buildSecureMapForLogs(this.allHeaders, contextReader);
 
-        // Log request with headers
-        this.logRequest(classMethod, url, meta.requestDto);
+        // Wrap nextFilter.invoke in a method that returns the response
+        const method = async (): Promise<unknown> => {
+            const wpResponse = await nextFilter.invoke(meta);
+            return wpResponse.response;
+        };
 
-        try {
-            const response = await nextFilter.invoke(meta);
-
-            // Log success response
-            this.logSuccessResponse(classMethod, url, response);
-
-            return response;
-        } catch (error: unknown) {
-            // Log error and re-throw (jsonTranslator will handle serialization)
-            this.logException(classMethod, url, error);
-            throw error;
-        }
-    }
-
-    /**
-     * Get formatted class.method string for logging.
-     */
-    private getClassMethod(meta: MethodMeta): string {
-        const className = meta.routeMeta.controllerClassName ?? 'Unknown';
-        return `${className}.${meta.methodName}`;
-    }
-
-    /**
-     * Log incoming request with headers.
-     * Masks secure headers based on their length for security.
-     */
-    private logRequest(classMethod: string, url: string, request: unknown): void {
-        const headersLog = this.formatHeadersForLogging();
-        console.log(`[API-SVR-req] '${classMethod} ${url}' request=${JSON.stringify(request)} headers=${headersLog}`);
-    }
-
-    /**
-     * Format headers for logging with secure masking.
-     *
-     * Masking rules for secure headers (isSecured=true):
-     * - Length > 15: Show first 3 and last 3 characters with "..." between (e.g., "abc...xyz")
-     * - Length 8-15: Show first 2 characters with "..." (e.g., "ab...")
-     * - Length < 8: Show "<secure key too short to log>"
-     *
-     * Non-secure headers are logged in full.
-     */
-    private formatHeadersForLogging(): string {
-        const headerMap: Record<string, string> = {};
-        const allStoredHeaders = RequestContext.getAllHeaders();
-
-        for (const header of this.allHeaders) {
-            const value = allStoredHeaders.get(header.headerName);
-            if (!value) {
-                continue;
-            }
-
-            if (header.isSecured) {
-                headerMap[header.headerName] = this.maskSecureValue(value);
-            } else {
-                headerMap[header.headerName] = value;
-            }
-        }
-
-        return JSON.stringify(headerMap);
-    }
-
-    /**
-     * Mask a secure header value based on its length.
-     *
-     * @param value - The secure header value to mask
-     * @returns Masked value
-     */
-    private maskSecureValue(value: string): string {
-        const len = value.length;
-
-        if (len < 8) {
-            return '<secure key too short to log>';
-        } else if (len <= 15) {
-            // 8-15 characters: show first 2 + "..."
-            return `${value.substring(0, 2)}...`;
-        } else {
-            // > 15 characters: show first 3 + "..." + last 3
-            return `${value.substring(0, 3)}...${value.substring(len - 3)}`;
-        }
-    }
-
-    /**
-     * Log successful response.
-     */
-    private logSuccessResponse(classMethod: string, url: string, response: WpResponse<unknown>): void {
-        console.log(
-            `[API-SVR-resp-SUCCESS] '${classMethod} ${url}' response=${JSON.stringify(response.response)}`,
-        );
-    }
-
-    /**
-     * Log exception based on error type.
-     * User errors get OTHER (no stack trace), server errors get FAIL.
-     */
-    private logException(classMethod: string, url: string, error: unknown): void {
-        if (this.isUserError(error)) {
-            // User errors (400, 401, 403, 404, 266) - no stack trace needed
-            const errorType = (error as Error)?.constructor.name ?? 'UnknownError';
-            console.log(`[API-SVR-resp-OTHER] '${classMethod} ${url}' errorType=${errorType}`);
-        } else {
-            // Server errors (500, 502, etc.) - log full details
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            console.error(`[API-SVR-resp-FAIL] '${classMethod} ${url}' error=${errorMessage}`);
-        }
-    }
-
-    /**
-     * Check if error is a user error (expected behavior from server perspective).
-     * These are NOT failures - just users making mistakes or validation issues.
-     */
-    private isUserError(error: unknown): boolean {
-        return (
-            error instanceof HttpBadRequestError ||
-            error instanceof HttpUnauthorizedError ||
-            error instanceof HttpForbiddenError ||
-            error instanceof HttpNotFoundError ||
-            error instanceof HttpUserError
-        );
+        const response = await this.logApiCall.execute("SVR", meta.routeMeta, meta.requestDto, headers, method);
+        return new WpResponse(response);
     }
 }

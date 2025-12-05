@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { HEADER_TYPES, PlatformHeadersExtension } from '@webpieces/http-api';
+import { HEADER_TYPES, PlatformHeadersExtension, HeaderMethods } from '@webpieces/http-api';
 import { WebpiecesCoreHeaders } from '../headers/WebpiecesCoreHeaders';
 
 /**
@@ -22,6 +22,9 @@ import { WebpiecesCoreHeaders } from '../headers/WebpiecesCoreHeaders';
  */
 export const WebpiecesModule = new ContainerModule((options) => {
     const { bind } = options;
+
+    // Bind HeaderMethods as singleton (stateless utility, can be shared)
+    bind<HeaderMethods>(HeaderMethods).toSelf().inSingletonScope();
 
     // Create extension with core headers
     const coreExtension = new PlatformHeadersExtension(WebpiecesCoreHeaders.getAllHeaders());

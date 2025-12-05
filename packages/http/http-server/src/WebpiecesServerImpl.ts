@@ -357,8 +357,8 @@ export class WebpiecesServerImpl implements WebpiecesServer {
                     );
                 }
 
-                // Create MethodMeta without RouterReqResp (test mode - no HTTP involved)
-                // JsonFilter will skip body parsing if no routerReqResp, so set requestDto directly
+                // Create MethodMeta without headers (test mode - no HTTP involved)
+                // requestHeaders is optional, so we can omit it
                 const meta = new MethodMeta(routeMeta, undefined, requestDto);
                 const responseWrapper = await service.invoke(meta);
                 return responseWrapper.response;

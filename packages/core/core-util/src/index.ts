@@ -8,3 +8,4 @@
  */
 
 export { toError } from './lib/errorUtils';
+export { Header } from './Header';

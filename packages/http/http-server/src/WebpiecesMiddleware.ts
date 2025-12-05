@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { injectable, multiInject, optional } from 'inversify';
-import { provideSingleton, MethodMeta, ExpressRouteHandler, RouterReqResp } from '@webpieces/http-routing';
+import { injectable } from 'inversify';
+import { provideSingleton, MethodMeta, ExpressRouteHandler } from '@webpieces/http-routing';
 import {
     ProtocolError,
     HttpError,
@@ -15,14 +15,10 @@ import {
     HttpBadGatewayError,
     HttpGatewayTimeoutError,
     RouteMetadata,
-    PlatformHeadersExtension,
-    HEADER_TYPES,
 } from '@webpieces/http-api';
 import { Service, WpResponse } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
-import { ExpressRouterRequest } from './express/ExpressRouterRequest';
-import { ExpressRouterResponse } from './express/ExpressRouterResponse';
 
 export class ExpressWrapper {
     constructor(
@@ -49,25 +45,74 @@ export class ExpressWrapper {
     }
 
     public async executeImpl(req: Request, res: Response, next: NextFunction) {
-        // NEW: Create RouterRequest/RouterResponse abstractions
-        // These decouple filters from Express, making them portable and testable
-        const routerRequest = new ExpressRouterRequest(req);
-        const routerResponse = new ExpressRouterResponse(res);
-        const routerReqResp = new RouterReqResp(routerRequest, routerResponse);
+        // 1. Read HTTP headers from Express request
+        const requestHeaders = this.readExpressHeaders(req);
 
-        // Create MethodMeta with RouterReqResp (no requestDto yet - JsonFilter will parse it)
-        const methodMeta = new MethodMeta(this.routeMeta, routerReqResp);
+        // 2. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
+        let requestDto: unknown = {};
+        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            // Read raw body as text
+            const bodyText = await this.readRequestBody(req);
+            // Parse JSON
+            requestDto = bodyText ? JSON.parse(bodyText) : {};
+        }
 
-        // Invoke the service (filter chain + controller)
-        // Flow:
-        // 1. ContextFilter transfers headers from RouterRequest to RequestContext
-        // 2. JsonFilter parses JSON body from RouterRequest, sets requestDto in MethodMeta
-        // 3. LogApiFilter logs the request
-        // 4. Controller executes
-        // 5. JsonFilter serializes response to JSON and writes to RouterResponse
-        await this.service.invoke(methodMeta);
+        // 3. Create MethodMeta with headers and request DTO
+        const methodMeta = new MethodMeta(this.routeMeta, requestHeaders, requestDto);
 
-        // JsonFilter already sent the response, nothing more to do here
+        // 4. Invoke the service (filter chain + controller)
+        const wpResponse = await this.service.invoke(methodMeta);
+        if (!wpResponse.response) {
+            throw new Error(
+                `Route chain(filters & all) is not returning a response. ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`
+            );
+        }
+
+        // 5. Serialize response DTO to JSON (SYMMETRIC with client's response.json())
+        const responseJson = JSON.stringify(wpResponse.response);
+        res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
+    }
+
+    /**
+     * Read HTTP headers from Express request.
+     * Returns Map of header name (lowercase) -> array of values.
+     *
+     * HTTP spec allows multiple values for same header name.
+     */
+    private readExpressHeaders(req: Request): Map<string, string[]> {
+        const headers = new Map<string, string[]>();
+
+        // Express stores headers in req.headers as Record<string, string | string[]>
+        for (const [name, value] of Object.entries(req.headers)) {
+            const lowerName = name.toLowerCase();
+
+            if (typeof value === 'string') {
+                headers.set(lowerName, [value]);
+            } else if (Array.isArray(value)) {
+                headers.set(lowerName, value);
+            }
+        }
+
+        return headers;
+    }
+
+    /**
+     * Read raw request body as text.
+     * Used to manually parse JSON (instead of express.json() middleware).
+     */
+    private async readRequestBody(req: Request): Promise<string> {
+        return new Promise((resolve, reject) => {
+            let body = '';
+            req.on('data', (chunk) => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                resolve(body);
+            });
+            req.on('error', (err) => {
+                reject(err);
+            });
+        });
     }
 
     /**

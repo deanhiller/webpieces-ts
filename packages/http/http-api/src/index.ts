@@ -76,5 +76,8 @@ export {
 // Platform Headers
 export { PlatformHeader } from './PlatformHeader';
 export { PlatformHeadersExtension } from './PlatformHeadersExtension';
+export { HeaderMethods, ContextReader } from './HeaderMethods';
 export { HEADER_TYPES } from './HeaderTypes';
-export { ContextReader } from './ContextReader';
+
+// Logging
+export { LogApiCall } from './LogApiCall';

@@ -1,8 +1,9 @@
-import { injectable, multiInject, optional } from 'inversify';
+import {inject, injectable, multiInject, optional} from 'inversify';
 import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { PlatformHeader, PlatformHeadersExtension, HEADER_TYPES } from '@webpieces/http-api';
+import { PlatformHeader, PlatformHeadersExtension, HeaderMethods, HEADER_TYPES } from '@webpieces/http-api';
+import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
 
 /**
  * ContextFilter - Transfers platform headers and stores request metadata in RequestContext.
@@ -26,27 +27,32 @@ import { PlatformHeader, PlatformHeadersExtension, HEADER_TYPES } from '@webpiec
 @provideSingleton()
 @injectable()
 export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-    private allHeaders: PlatformHeader[] = [];
+    private headerMethods: PlatformHeader[];
 
     constructor(
         @multiInject(HEADER_TYPES.PlatformHeadersExtension) @optional()
-        extensions: PlatformHeadersExtension[] = []
+        extensions: PlatformHeadersExtension[] = [],
+        @inject(HeaderMethods) headerMethods: HeaderMethods
     ) {
         super();
 
         // Flatten all headers from all extensions
+        const allHeaders: PlatformHeader[] = [];
         for (const extension of extensions) {
-            this.allHeaders.push(...extension.getHeaders());
+            allHeaders.push(...extension.getHeaders());
         }
 
-        console.log(`[ContextFilter] Collected ${this.allHeaders.length} platform headers from ${extensions.length} extensions`);
+        // Create HeaderMethods helper with flattened headers
+        this.headerMethods = headerMethods.findTransferHeaders(allHeaders);
+
+        console.log(`[ContextFilter] Collected ${allHeaders.length} platform headers from ${extensions.length} extensions`);
     }
 
     async filter(
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        // Transfer platform headers from RouterRequest to RequestContext
+        // Transfer platform headers from MethodMeta.requestHeaders to RequestContext
         this.transferHeaders(meta);
 
         // Store request metadata in context for other filters/controllers to access
@@ -60,33 +66,28 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * Transfer platform headers from RouterRequest to RequestContext.
-     * Only transfers headers marked with isWantTransferred=true.
-     *
-     * @param meta - MethodMeta containing RouterReqResp
+     * Transfer platform headers from MethodMeta.requestHeaders to RequestContext.
+     * Uses HeaderMethods.findTransferHeaders() to filter by isWantTransferred=true.
      */
     private transferHeaders(meta: MethodMeta): void {
-        if (!meta.routerReqResp) {
-            // No RouterReqResp (test mode using createApiClient)
-            // Generate REQUEST_ID and skip header transfer
+        if (!meta.requestHeaders) {
+            // No headers in test mode
             this.ensureRequestId();
             return;
         }
 
-        const headers = meta.routerReqResp.request.getHeaders();
-
-        for (const header of this.allHeaders) {
-            // Skip headers not marked for transfer
-            if (!header.isWantTransferred) {
-                continue;
-            }
-
-            // Read header value (case-insensitive)
-            const value = headers.get(header.headerName.toLowerCase());
-            if (value) {
-                RequestContext.putHeader(header, value);
+        // Transfer each header to RequestContext using RequestContext.putHeader()
+        for (const header of this.headerMethods) {
+            // Get values from requestHeaders (case-insensitive lookup)
+            const values = meta.requestHeaders.get(header.headerName.toLowerCase());
+            if (values && values.length > 0) {
+                // Use RequestContext.putHeader() which calls header.getHeaderName()
+                RequestContext.putHeader(header, values[0]);
             }
         }
+
+        // Clear request headers from MethodMeta - MUST FORCE USAGE of RequestContext!!!
+        meta.requestHeaders = undefined;
 
         // Generate REQUEST_ID if not present (first service in chain)
         this.ensureRequestId();
@@ -97,12 +98,9 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * Generates one if not present.
      */
     private ensureRequestId(): void {
-        // Find REQUEST_ID header definition
-        const requestIdHeader = this.allHeaders.find(h => h.headerName.toLowerCase() === 'x-request-id');
-
-        if (requestIdHeader && !RequestContext.hasHeader(requestIdHeader)) {
+        if (!RequestContext.hasHeader(WebpiecesCoreHeaders.REQUEST_ID)) {
             const requestId = this.generateRequestId();
-            RequestContext.putHeader(requestIdHeader, requestId);
+            RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID, requestId);
         }
     }
 
@@ -111,7 +109,7 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * Format: req-{timestamp}-{random}
      */
     private generateRequestId(): string {
-        return `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+        return `svrGenReqId-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
     }
 }
 

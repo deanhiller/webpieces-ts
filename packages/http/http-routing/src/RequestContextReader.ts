@@ -21,8 +21,7 @@ export class RequestContextReader implements ContextReader {
      * @returns The header value, or undefined if not in context
      */
     read(header: PlatformHeader): string | undefined {
-        // Read from RequestContext using HEADER_ prefix
-        // (matching the storage pattern in RequestContext.putHeader())
-        return RequestContext.get<string>(`HEADER_${header.headerName}`);
+        // Use RequestContext.getHeader() which calls header.getHeaderName()
+        return RequestContext.getHeader(header);
     }
 }

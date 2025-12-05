@@ -51,8 +51,3 @@ export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
 // Context readers (Node.js only)
 export { RequestContextReader } from './RequestContextReader';
-
-// Router abstractions (Express-independent)
-export { RouterRequest } from './RouterRequest';
-export { RouterResponse } from './RouterResponse';
-export { RouterReqResp } from './RouterReqResp';

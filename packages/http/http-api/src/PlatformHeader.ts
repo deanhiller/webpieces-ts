@@ -1,3 +1,5 @@
+import { Header } from '@webpieces/core-util';
+
 /**
  * PlatformHeader - Defines an HTTP header that can be transferred between services.
  *
@@ -5,10 +7,12 @@
  * - Single headerName field (used for both HTTP header and MDC logging key)
  * - No separate getLoggerMDCKey() - just use headerName
  *
+ * Implements Header interface from core-util to avoid circular dependencies.
+ *
  * Per CLAUDE.md: "All data-only structures MUST be classes, not interfaces."
  * This is a data-only class with no business logic methods.
  */
-export class PlatformHeader {
+export class PlatformHeader implements Header {
     /**
      * The HTTP header name (e.g., 'x-request-id', 'x-tenant-id').
      * Also used as the MDC logging key in RequestContext.
@@ -45,5 +49,13 @@ export class PlatformHeader {
         this.isWantTransferred = isWantTransferred;
         this.isSecured = isSecured;
         this.isDimensionForMetrics = isDimensionForMetrics;
+    }
+
+    /**
+     * Get the header name (implements Header interface).
+     * @returns The HTTP header name
+     */
+    getHeaderName(): string {
+        return this.headerName;
     }
 }
