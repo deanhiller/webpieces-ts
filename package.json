@@ -28,8 +28,7 @@
         "lint": "eslint . --ext .ts,.tsx,.js,.jsx --quiet",
         "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix --quiet",
         "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "setup:npm-publishers": "ts-node scripts/setup-npm-trusted-publishers.ts"
+        "format:check": "prettier --check ."
     },
     "repository": {
         "type": "git",
