@@ -32,11 +32,20 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            - name: Build all packages
+              run: npx nx run-many --target=build --all
+
+            - name: Run linting
+              run: npx nx run-many --target=lint --all
+
             - name: Run tests
               run: npm test
 
-            - name: Build all packages
-              run: npx nx run-many --target=build --all
+            - name: Validate architecture (no cycles)
+              run: npx nx run architecture:validate-no-cycles
+
+            - name: Validate architecture (unchanged)
+              run: npx nx run architecture:validate-architecture-unchanged
 
             - name: Upload coverage
               uses: codecov/codecov-action@v4
