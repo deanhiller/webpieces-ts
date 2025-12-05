@@ -6,11 +6,13 @@ import {
     getRoutes,
     MethodMeta,
     provideSingleton,
-    RouteBuilderImpl,
+    RouteBuilderImpl, RouteMetadata,
     WebAppMeta,
 } from '@webpieces/http-routing';
 import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
+import {RequestContext} from '@webpieces/core-context';
+import {Service, WpResponse} from "@webpieces/http-filters";
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -339,13 +341,29 @@ export class WebpiecesServerImpl implements WebpiecesServer {
             const service = this.routeBuilder.createRouteInvoker(httpMethod, path);
 
             // Proxy method creates MethodMeta and calls the pre-configured service
+            // IMPORTANT: Tests MUST wrap calls in RequestContext.run() themselves
+            // This forces explicit context setup in tests, matching production behavior
             proxy[methodName] = async (requestDto: unknown): Promise<unknown> => {
-                const meta = new MethodMeta(routeMeta, requestDto);
-                const responseWrapper = await service.invoke(meta);
-                return responseWrapper.response;
+                // Verify we're inside an active RequestContext
+                // This helps test authors know they need to wrap their test in RequestContext.run()
+                if (!RequestContext.isActive()) {
+                    //Many devs may not activate headers
+                    return RequestContext.run(async () => {
+                        return await this.runMethod(routeMeta, requestDto, service);
+                    });
+                }
+                return await this.runMethod(routeMeta, requestDto, service);
             };
         }
 
         return proxy as T;
+    }
+
+    private async runMethod(routeMeta: RouteMetadata, requestDto: unknown, service: Service<MethodMeta, WpResponse<unknown>>) {
+        // Create MethodMeta without headers (test mode - no HTTP involved)
+        // requestHeaders is optional, so we can omit it
+        const meta = new MethodMeta(routeMeta, undefined, requestDto);
+        const responseWrapper = await service.invoke(meta);
+        return responseWrapper.response;
     }
 }

@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate No Skip-Level Dependencies Executor",
+    "description": "Validates that no project has redundant transitive dependencies",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

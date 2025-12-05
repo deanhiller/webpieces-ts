@@ -13,7 +13,7 @@
                 "tsConfig": "packages/client/tsconfig.lib.json",
                 "assets": ["packages/client/package.json", "packages/client/README.md"]
             },
-            "dependsOn": ["http-client:build", "http-api:build"]
+            "dependsOn": ["http-client:build"]
         }
     },
     "tags": ["umbrella"]

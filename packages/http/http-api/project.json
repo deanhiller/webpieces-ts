@@ -7,6 +7,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "core-util:build"],
             "options": {
                 "outputPath": "dist/packages/http/http-api",
                 "main": "packages/http/http-api/src/index.ts",

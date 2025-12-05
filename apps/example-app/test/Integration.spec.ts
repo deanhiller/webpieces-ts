@@ -138,6 +138,7 @@ describe('Integration Tests with DI Overrides', () => {
             };
 
             // Act - Call through filter chain + controller
+            // RequestContext is automatically created by createApiClient()
             const response = await saveApi.save(request);
 
             // Assert - Verify mock response flows through

@@ -6,11 +6,14 @@ import { ContextFilter, LogApiFilter } from '@webpieces/http-server';
  * Similar to Java FilterRoutes.
  *
  * Filters are executed in priority order (higher numbers first):
- * - 140: ContextFilter (setup AsyncLocalStorage)
- * - 130: LogApiFilter (structured API logging)
+ * - 2000: ContextFilter (transfers headers from MethodMeta.requestHeaders to RequestContext, stores metadata)
+ * - 1800: LogApiFilter (structured API logging with secure header masking)
  *
- * Note: JSON serialization/deserialization is now handled by the jsonTranslator
- * Express middleware in WebpiecesServerImpl, not by a filter.
+ * Filter responsibilities:
+ * - ContextFilter: Uses HeaderMethods to transfer headers → RequestContext, generates REQUEST_ID
+ * - LogApiFilter: Logs request/response with SUCCESS/FAIL/OTHER categories, masks secure headers
+ *
+ * JSON parsing/serialization is handled by ExpressWrapper, not a filter.
  *
  * Filters can be scoped to specific controller files using glob patterns:
  * - filepathPattern: 'src/controllers/admin/**' + '/*.ts' - All admin controllers

@@ -20,7 +20,6 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/http-client": "0.0.0-dev",
-        "@webpieces/http-api": "0.0.0-dev"
+        "@webpieces/http-client": "0.0.0-dev"
     }
 }
