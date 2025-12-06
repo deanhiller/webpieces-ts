@@ -1,4 +1,4 @@
-import { formatFiles, readNxJson, Tree, updateNxJson } from '@nx/devkit';
+import { formatFiles, readNxJson, Tree, updateNxJson, readJson, updateJson, addDependenciesToPackageJson } from '@nx/devkit';
 import type { InitGeneratorSchema } from './schema';
 
 /**
@@ -9,10 +9,22 @@ import type { InitGeneratorSchema } from './schema';
  * Responsibilities:
  * - Registers the plugin in nx.json
  * - Creates architecture/ directory if needed
+ * - Adds madge as a devDependency (required for circular dep checking)
  * - Provides helpful output about available targets
  */
 export default async function initGenerator(tree: Tree, options: InitGeneratorSchema) {
-    // 1. Register plugin in nx.json
+    registerPlugin(tree);
+    const installTask = addMadgeDependency(tree);
+    createArchitectureDirectory(tree);
+
+    if (!options.skipFormat) {
+        await formatFiles(tree);
+    }
+
+    return createSuccessCallback(installTask);
+}
+
+function registerPlugin(tree: Tree): void {
     const nxJson = readNxJson(tree);
     if (!nxJson) {
         throw new Error('Could not read nx.json. Are you in an Nx workspace?');
@@ -22,12 +34,9 @@ export default async function initGenerator(tree: Tree, options: InitGeneratorSc
         nxJson.plugins = [];
     }
 
-    // Check if already registered
     const pluginName = '@webpieces/dev-config';
     const alreadyRegistered = nxJson.plugins.some(
-        (p) => typeof p === 'string'
-            ? p === pluginName
-            : p.plugin === pluginName
+        (p) => typeof p === 'string' ? p === pluginName : p.plugin === pluginName
     );
 
     if (!alreadyRegistered) {
@@ -37,38 +46,45 @@ export default async function initGenerator(tree: Tree, options: InitGeneratorSc
     } else {
         console.log(`ℹ️  ${pluginName} plugin is already registered`);
     }
+}
 
-    // 2. Create architecture/ directory if needed
+function addMadgeDependency(tree: Tree) {
+    return addDependenciesToPackageJson(tree, {}, { 'madge': '^8.0.0' });
+}
+
+function createArchitectureDirectory(tree: Tree): void {
     if (!tree.exists('architecture')) {
         tree.write('architecture/.gitkeep', '');
         console.log('✅ Created architecture/ directory');
     }
+}
 
-    // 3. Format files if not skipped
-    if (!options.skipFormat) {
-        await formatFiles(tree);
-    }
-
-    // 4. Return callback to display helpful message
-    return () => {
+function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToPackageJson>) {
+    return async () => {
+        await installTask();
+        console.log('✅ Added madge to devDependencies');
         console.log('');
         console.log('✅ @webpieces/dev-config plugin initialized!');
         console.log('');
-        console.log('📝 Available targets:');
-        console.log('');
-        console.log('  Workspace-level architecture validation:');
-        console.log('    nx run .:arch:generate                      # Generate dependency graph');
-        console.log('    nx run .:arch:visualize                     # Visualize dependency graph');
-        console.log('    nx run .:arch:validate-no-cycles            # Check for circular dependencies');
-        console.log('    nx run .:arch:validate-no-skiplevel-deps    # Check for redundant dependencies');
-        console.log('    nx run .:arch:validate-architecture-unchanged # Validate against blessed graph');
-        console.log('');
-        console.log('  Per-project circular dependency checking:');
-        console.log('    nx run <project>:check-circular-deps        # Check project for circular deps');
-        console.log('    nx affected --target=check-circular-deps    # Check all affected projects');
-        console.log('');
-        console.log('💡 First, generate the dependency graph:');
-        console.log('   nx run .:arch:generate');
-        console.log('');
+        printAvailableTargets();
     };
+}
+
+function printAvailableTargets(): void {
+    console.log('📝 Available targets:');
+    console.log('');
+    console.log('  Workspace-level architecture validation:');
+    console.log('    nx run .:arch:generate                      # Generate dependency graph');
+    console.log('    nx run .:arch:visualize                     # Visualize dependency graph');
+    console.log('    nx run .:arch:validate-no-cycles            # Check for circular dependencies');
+    console.log('    nx run .:arch:validate-no-skiplevel-deps    # Check for redundant dependencies');
+    console.log('    nx run .:arch:validate-architecture-unchanged # Validate against blessed graph');
+    console.log('');
+    console.log('  Per-project circular dependency checking:');
+    console.log('    nx run <project>:check-circular-deps        # Check project for circular deps');
+    console.log('    nx affected --target=check-circular-deps    # Check all affected projects');
+    console.log('');
+    console.log('💡 First, generate the dependency graph:');
+    console.log('   nx run .:arch:generate');
+    console.log('');
 }

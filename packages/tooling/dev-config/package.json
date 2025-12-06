@@ -40,9 +40,6 @@
         "executors.json",
         "README.md"
     ],
-    "dependencies": {
-        "madge": "^8.0.0"
-    },
     "peerDependencies": {
         "eslint": ">=8.0.0",
         "@nx/devkit": ">=18.0.0"

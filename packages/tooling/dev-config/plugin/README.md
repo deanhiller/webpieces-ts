@@ -28,6 +28,7 @@ nx add @webpieces/dev-config
 
 This automatically:
 - Registers the plugin in `nx.json`
+- Adds `madge` as a devDependency (required for circular dependency checking)
 - Creates the `architecture/` directory
 - Makes all targets immediately available
 

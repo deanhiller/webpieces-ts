@@ -185,79 +185,90 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     const targets: Record<string, TargetConfiguration> = {};
     const prefix = opts.workspace.targetPrefix;
 
-    // Generate target
     if (opts.workspace.features.generate) {
-        targets[`${prefix}generate`] = {
-            executor: '@webpieces/dev-config:generate',
-            cache: true,
-            inputs: ['default'],
-            outputs: ['{workspaceRoot}/architecture/dependencies.json'],
-            options: {
-                graphPath: opts.workspace.graphPath,
-            },
-            metadata: {
-                technologies: ['nx'],
-                description: 'Generate the architecture dependency graph from project.json files',
-            },
-        };
+        targets[`${prefix}generate`] = createGenerateTarget(opts.workspace.graphPath);
     }
 
-    // Visualize target
     if (opts.workspace.features.visualize) {
-        targets[`${prefix}visualize`] = {
-            executor: '@webpieces/dev-config:visualize',
-            dependsOn: [`${prefix}generate`],
-            options: {
-                graphPath: opts.workspace.graphPath,
-            },
-            metadata: {
-                technologies: ['nx'],
-                description: 'Generate visual representations of the architecture graph',
-            },
-        };
+        targets[`${prefix}visualize`] = createVisualizeTarget(prefix, opts.workspace.graphPath);
     }
 
-    // Validation targets
     if (opts.workspace.validations.noCycles) {
-        targets[`${prefix}validate-no-cycles`] = {
-            executor: '@webpieces/dev-config:validate-no-cycles',
-            cache: true,
-            inputs: ['default'],
-            metadata: {
-                technologies: ['nx'],
-                description: 'Validate the architecture has no circular dependencies',
-            },
-        };
+        targets[`${prefix}validate-no-cycles`] = createValidateNoCyclesTarget();
     }
 
     if (opts.workspace.validations.architectureUnchanged) {
-        targets[`${prefix}validate-architecture-unchanged`] = {
-            executor: '@webpieces/dev-config:validate-architecture-unchanged',
-            cache: true,
-            inputs: ['default', '{workspaceRoot}/architecture/dependencies.json'],
-            options: {
-                graphPath: opts.workspace.graphPath,
-            },
-            metadata: {
-                technologies: ['nx'],
-                description: 'Validate the architecture matches the saved blessed graph',
-            },
-        };
+        targets[`${prefix}validate-architecture-unchanged`] = createValidateUnchangedTarget(opts.workspace.graphPath);
     }
 
     if (opts.workspace.validations.noSkipLevelDeps) {
-        targets[`${prefix}validate-no-skiplevel-deps`] = {
-            executor: '@webpieces/dev-config:validate-no-skiplevel-deps',
-            cache: true,
-            inputs: ['default'],
-            metadata: {
-                technologies: ['nx'],
-                description: 'Validate no project has redundant transitive dependencies',
-            },
-        };
+        targets[`${prefix}validate-no-skiplevel-deps`] = createValidateNoSkipLevelTarget();
     }
 
     return targets;
+}
+
+function createGenerateTarget(graphPath: string): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:generate',
+        cache: true,
+        inputs: ['default'],
+        outputs: ['{workspaceRoot}/architecture/dependencies.json'],
+        options: { graphPath },
+        metadata: {
+            technologies: ['nx'],
+            description: 'Generate the architecture dependency graph from project.json files',
+        },
+    };
+}
+
+function createVisualizeTarget(prefix: string, graphPath: string): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:visualize',
+        dependsOn: [`${prefix}generate`],
+        options: { graphPath },
+        metadata: {
+            technologies: ['nx'],
+            description: 'Generate visual representations of the architecture graph',
+        },
+    };
+}
+
+function createValidateNoCyclesTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-no-cycles',
+        cache: true,
+        inputs: ['default'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate the architecture has no circular dependencies',
+        },
+    };
+}
+
+function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-architecture-unchanged',
+        cache: true,
+        inputs: ['default', '{workspaceRoot}/architecture/dependencies.json'],
+        options: { graphPath },
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate the architecture matches the saved blessed graph',
+        },
+    };
+}
+
+function createValidateNoSkipLevelTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-no-skiplevel-deps',
+        cache: true,
+        inputs: ['default'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate no project has redundant transitive dependencies',
+        },
+    };
 }
 
 /**
