@@ -45,6 +45,7 @@ jobs:
                 # Copy required assets
                 cp packages/tooling/dev-config/package.json dist/packages/tooling/dev-config/
                 cp packages/tooling/dev-config/executors.json dist/packages/tooling/dev-config/
+                cp packages/tooling/dev-config/generators.json dist/packages/tooling/dev-config/
                 cp -r packages/tooling/dev-config/architecture dist/packages/tooling/dev-config/
 
             - name: Build all packages
@@ -57,10 +58,10 @@ jobs:
               run: npm test
 
             - name: Validate architecture (no cycles)
-              run: npx nx run architecture:validate-no-cycles
+              run: npx nx run .:arch:validate-no-cycles
 
             - name: Validate architecture (unchanged)
-              run: npx nx run architecture:validate-architecture-unchanged
+              run: npx nx run .:arch:validate-architecture-unchanged
 
             - name: Upload coverage
               uses: codecov/codecov-action@v4

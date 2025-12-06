@@ -10,9 +10,9 @@
  * 3. Setting the HTTP status code from WpResponse.statusCode
  */
 export class WpResponse<TResult = unknown> {
-    response?: TResult;
+    response: TResult;
 
-    constructor(response?: TResult) {
+    constructor(response: TResult) {
         this.response = response;
     }
 }

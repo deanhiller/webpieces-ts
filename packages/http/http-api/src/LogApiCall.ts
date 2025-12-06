@@ -48,7 +48,13 @@ export class LogApiCall {
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller
         try {
+            if(!requestDto)
+                throw new Error(`Request cannot be null and was from ${meta.controllerClassName}.${meta.methodName}`);
+            
             const response = await method(requestDto);
+
+            if(!response)
+                throw new Error(`Response cannot be null and was from ${meta.controllerClassName}.${meta.methodName}`);
 
             // Log success response
             console.log(

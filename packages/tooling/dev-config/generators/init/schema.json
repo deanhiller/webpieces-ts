@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "InitGenerator",
+  "title": "Initialize @webpieces/dev-config",
+  "description": "Initialize @webpieces/dev-config plugin in an Nx workspace",
+  "type": "object",
+  "properties": {
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Skip formatting files with Prettier",
+      "default": false
+    }
+  },
+  "required": []
+}
