@@ -1,5 +1,5 @@
 {
-  "@webpieces/architecture": {
+  "@webpieces/.": {
     "level": 0,
     "dependsOn": []
   },

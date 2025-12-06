@@ -12,6 +12,7 @@
         "wp-setup-patterns": "./bin/setup-claude-patterns.sh"
     },
     "executors": "./executors.json",
+    "generators": "./generators.json",
     "exports": {
         ".": "./index.js",
         "./package.json": "./package.json",
@@ -19,9 +20,11 @@
         "./eslint-plugin": "./eslint-plugin/index.js",
         "./jest": "./config/jest/preset.js",
         "./tsconfig": "./config/typescript/tsconfig.base.json",
+        "./plugin": "./plugin.js",
         "./plugins/circular-deps": "./plugins/circular-deps/index.js",
         "./architecture": "./architecture/index.js",
-        "./executors.json": "./executors.json"
+        "./executors.json": "./executors.json",
+        "./generators.json": "./generators.json"
     },
     "files": [
         "bin/**/*",
@@ -29,6 +32,10 @@
         "eslint-plugin/**/*",
         "patterns/**/*",
         "plugins/**/*",
+        "plugin/**/*",
+        "plugin.js",
+        "generators/**/*",
+        "generators.json",
         "architecture/**/*",
         "executors.json",
         "README.md"

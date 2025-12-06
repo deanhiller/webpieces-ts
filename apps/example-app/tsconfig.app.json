@@ -6,5 +6,19 @@
         "types": ["node"]
     },
     "include": ["src/**/*.ts"],
-    "exclude": ["**/*.spec.ts", "**/*.test.ts", "../../dist/**/*.ts"]
+    "exclude": ["**/*.spec.ts", "**/*.test.ts", "../../dist/**/*.ts"],
+    "references": [
+        {
+            "path": "../../packages/core/core-util"
+        },
+        {
+            "path": "../../packages/http/http-api"
+        },
+        {
+            "path": "../../packages/http/http-server"
+        },
+        {
+            "path": "../../packages/http/http-routing"
+        }
+    ]
 }

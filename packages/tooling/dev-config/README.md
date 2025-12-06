@@ -6,6 +6,7 @@ Development configuration, scripts, and patterns for WebPieces projects.
 
 This package provides shareable development tools for projects using the WebPieces framework:
 
+- **Nx Plugin** for automatic architecture validation and circular dependency checking
 - **Executable scripts** for common development tasks
 - **ESLint configuration** with WebPieces patterns and best practices
 - **Jest preset** for testing TypeScript projects
@@ -13,6 +14,14 @@ This package provides shareable development tools for projects using the WebPiec
 - **Claude Code patterns** for AI-assisted development
 
 ## Installation
+
+For Nx workspaces (recommended):
+
+```bash
+nx add @webpieces/dev-config
+```
+
+For non-Nx projects:
 
 ```bash
 npm install --save-dev @webpieces/dev-config
@@ -73,7 +82,41 @@ To develop against a local copy of webpieces-ts:
    wp-use-published
    ```
 
-### 2. ESLint Configuration
+### 2. Nx Plugin (Architecture Validation)
+
+Automatically adds architecture validation and circular dependency checking to Nx workspaces.
+
+#### Quick Start
+
+```bash
+# Install and register the plugin
+nx add @webpieces/dev-config
+
+# Generate dependency graph
+nx run .:arch:generate
+
+# Validate architecture
+nx run .:arch:validate-no-cycles
+
+# Check project for circular dependencies
+nx run my-project:check-circular-deps
+```
+
+#### Available Targets
+
+**Workspace-level:**
+- `arch:generate` - Generate dependency graph
+- `arch:visualize` - Visualize dependency graph
+- `arch:validate-no-cycles` - Validate no circular dependencies
+- `arch:validate-no-skiplevel-deps` - Validate no redundant dependencies
+- `arch:validate-architecture-unchanged` - Validate against blessed graph
+
+**Per-project:**
+- `check-circular-deps` - Check for circular dependencies (auto-added to all projects)
+
+For detailed documentation, see [Plugin README](./plugin/README.md).
+
+### 3. ESLint Configuration
 
 Import the base configuration in your `eslint.config.mjs`:
 
