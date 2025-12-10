@@ -31,7 +31,10 @@ This automatically:
 - Adds `madge` as a devDependency (required for circular dependency checking)
 - Creates the `architecture/` directory
 - Adds convenient npm scripts to `package.json`
+- Creates `eslint.config.mjs` with @webpieces ESLint rules (if not exists)
 - Makes all targets immediately available
+
+**That's it! Zero additional configuration needed.** All architecture validation, circular dependency checking, and ESLint rules are now active.
 
 ## Usage
 
