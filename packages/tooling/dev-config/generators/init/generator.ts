@@ -11,6 +11,9 @@ import type { InitGeneratorSchema } from './schema';
  * - Creates architecture/ directory if needed
  * - Adds madge as a devDependency (required for circular dep checking)
  * - Adds convenient npm scripts to package.json
+ * - Always creates eslint.webpieces.config.mjs with @webpieces rules
+ * - Creates eslint.config.mjs (if not exists) that imports eslint.webpieces.config.mjs
+ * - If eslint.config.mjs exists, shows user how to import eslint.webpieces.config.mjs
  * - Provides helpful output about available targets
  */
 export default async function initGenerator(tree: Tree, options: InitGeneratorSchema) {
@@ -18,6 +21,7 @@ export default async function initGenerator(tree: Tree, options: InitGeneratorSc
     const installTask = addMadgeDependency(tree);
     createArchitectureDirectory(tree);
     addNpmScripts(tree);
+    createEslintConfig(tree);
 
     if (!options.skipFormat) {
         await formatFiles(tree);
@@ -82,6 +86,112 @@ function addNpmScripts(tree: Tree): void {
     });
 
     console.log('✅ Added npm scripts for architecture validation and circular dependency checking');
+}
+
+function createEslintConfig(tree: Tree): void {
+    const webpiecesConfigPath = 'eslint.webpieces.config.mjs';
+    const mainConfigPath = 'eslint.config.mjs';
+
+    // Always create eslint.webpieces.config.mjs with our rules
+    createWebpiecesEslintConfig(tree, webpiecesConfigPath);
+
+    // Check if main eslint.config.mjs exists
+    if (tree.exists(mainConfigPath)) {
+        // Existing config - show them how to import
+        console.log('');
+        console.log('📋 Existing eslint.config.mjs detected');
+        console.log('');
+        console.log('To use @webpieces/dev-config ESLint rules, add this import to your eslint.config.mjs:');
+        console.log('');
+        console.log('  import webpiecesConfig from \'./eslint.webpieces.config.mjs\';');
+        console.log('');
+        console.log('Then spread it into your config array:');
+        console.log('');
+        console.log('  export default [');
+        console.log('    ...webpiecesConfig,  // Add this line');
+        console.log('    // ... your existing config');
+        console.log('  ];');
+        console.log('');
+    } else {
+        // No existing config - create one that imports webpieces config
+        const mainConfig = `// ESLint configuration
+// Imports @webpieces/dev-config rules
+
+import webpiecesConfig from './eslint.webpieces.config.mjs';
+
+// Export the webpieces configuration
+// You can add your own rules after spreading webpiecesConfig
+export default [
+    ...webpiecesConfig,
+    // Add your custom ESLint configuration here
+];
+`;
+
+        tree.write(mainConfigPath, mainConfig);
+        console.log('✅ Created eslint.config.mjs with @webpieces/dev-config rules');
+    }
+}
+
+function createWebpiecesEslintConfig(tree: Tree, configPath: string): void {
+    const webpiecesConfig = `// @webpieces/dev-config ESLint rules
+// This file contains the ESLint configuration provided by @webpieces/dev-config
+// You can modify or remove rules as needed for your project
+
+import webpiecesPlugin from '@webpieces/dev-config/eslint-plugin';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
+
+export default [
+    {
+        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx'],
+    },
+    {
+        files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+        plugins: {
+            '@webpieces': webpiecesPlugin,
+            '@typescript-eslint': tseslint,
+        },
+        languageOptions: {
+            parser: tsparser,
+            ecmaVersion: 2021,
+            sourceType: 'module',
+        },
+        rules: {
+            // WebPieces custom rules
+            '@webpieces/catch-error-pattern': 'error',
+            '@webpieces/no-unmanaged-exceptions': 'error',
+            '@webpieces/max-method-lines': ['error', { max: 70 }],
+            '@webpieces/max-file-lines': ['error', { max: 700 }],
+            '@webpieces/enforce-architecture': 'error',
+
+            // TypeScript rules
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/explicit-function-return-type': 'off',
+            '@typescript-eslint/no-unused-vars': 'off',
+            '@typescript-eslint/no-empty-interface': 'off',
+            '@typescript-eslint/no-empty-function': 'off',
+
+            // General code quality
+            'no-console': 'off',
+            'no-debugger': 'off',
+            'no-var': 'error',
+            'prefer-const': 'off',
+        },
+    },
+    {
+        // Test files - relaxed rules
+        files: ['**/*.spec.ts', '**/*.test.ts'],
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-non-null-assertion': 'off',
+            '@webpieces/max-method-lines': 'off',
+        },
+    },
+];
+`;
+
+    tree.write(configPath, webpiecesConfig);
+    console.log('✅ Created eslint.webpieces.config.mjs with @webpieces/dev-config rules');
 }
 
 function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToPackageJson>) {
