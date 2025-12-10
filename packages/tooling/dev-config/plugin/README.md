@@ -31,10 +31,14 @@ This automatically:
 - Adds `madge` as a devDependency (required for circular dependency checking)
 - Creates the `architecture/` directory
 - Adds convenient npm scripts to `package.json`
-- Creates `eslint.config.mjs` with @webpieces ESLint rules (if not exists)
+- Creates `eslint.webpieces.config.mjs` with @webpieces ESLint rules
+- Creates `eslint.config.mjs` (if you don't have one) that imports the webpieces rules
+- If you already have `eslint.config.mjs`, shows you how to import the webpieces rules (one line)
 - Makes all targets immediately available
 
-**That's it! Zero additional configuration needed.** All architecture validation, circular dependency checking, and ESLint rules are now active.
+**For new projects: Zero configuration needed!** All architecture validation, circular dependency checking, and ESLint rules are active.
+
+**For existing projects with ESLint:** Just add one import line shown during installation to enable the @webpieces ESLint rules.
 
 ## Usage
 

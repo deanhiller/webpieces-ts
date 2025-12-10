@@ -11,7 +11,9 @@ import type { InitGeneratorSchema } from './schema';
  * - Creates architecture/ directory if needed
  * - Adds madge as a devDependency (required for circular dep checking)
  * - Adds convenient npm scripts to package.json
- * - Creates eslint.config.mjs with @webpieces rules (if not exists)
+ * - Always creates eslint.webpieces.config.mjs with @webpieces rules
+ * - Creates eslint.config.mjs (if not exists) that imports eslint.webpieces.config.mjs
+ * - If eslint.config.mjs exists, shows user how to import eslint.webpieces.config.mjs
  * - Provides helpful output about available targets
  */
 export default async function initGenerator(tree: Tree, options: InitGeneratorSchema) {
@@ -87,16 +89,53 @@ function addNpmScripts(tree: Tree): void {
 }
 
 function createEslintConfig(tree: Tree): void {
-    const eslintConfigPath = 'eslint.config.mjs';
+    const webpiecesConfigPath = 'eslint.webpieces.config.mjs';
+    const mainConfigPath = 'eslint.config.mjs';
 
-    if (tree.exists(eslintConfigPath)) {
-        console.log(`ℹ️  ${eslintConfigPath} already exists - skipping ESLint configuration`);
-        console.log('   To use @webpieces/dev-config ESLint rules, manually import from "@webpieces/dev-config/eslint-plugin"');
-        return;
+    // Always create eslint.webpieces.config.mjs with our rules
+    createWebpiecesEslintConfig(tree, webpiecesConfigPath);
+
+    // Check if main eslint.config.mjs exists
+    if (tree.exists(mainConfigPath)) {
+        // Existing config - show them how to import
+        console.log('');
+        console.log('📋 Existing eslint.config.mjs detected');
+        console.log('');
+        console.log('To use @webpieces/dev-config ESLint rules, add this import to your eslint.config.mjs:');
+        console.log('');
+        console.log('  import webpiecesConfig from \'./eslint.webpieces.config.mjs\';');
+        console.log('');
+        console.log('Then spread it into your config array:');
+        console.log('');
+        console.log('  export default [');
+        console.log('    ...webpiecesConfig,  // Add this line');
+        console.log('    // ... your existing config');
+        console.log('  ];');
+        console.log('');
+    } else {
+        // No existing config - create one that imports webpieces config
+        const mainConfig = `// ESLint configuration
+// Imports @webpieces/dev-config rules
+
+import webpiecesConfig from './eslint.webpieces.config.mjs';
+
+// Export the webpieces configuration
+// You can add your own rules after spreading webpiecesConfig
+export default [
+    ...webpiecesConfig,
+    // Add your custom ESLint configuration here
+];
+`;
+
+        tree.write(mainConfigPath, mainConfig);
+        console.log('✅ Created eslint.config.mjs with @webpieces/dev-config rules');
     }
+}
 
-    const eslintConfig = `// ESLint configuration
-// Uses @webpieces/dev-config for code quality rules
+function createWebpiecesEslintConfig(tree: Tree, configPath: string): void {
+    const webpiecesConfig = `// @webpieces/dev-config ESLint rules
+// This file contains the ESLint configuration provided by @webpieces/dev-config
+// You can modify or remove rules as needed for your project
 
 import webpiecesPlugin from '@webpieces/dev-config/eslint-plugin';
 import tseslint from '@typescript-eslint/eslint-plugin';
@@ -151,8 +190,8 @@ export default [
 ];
 `;
 
-    tree.write(eslintConfigPath, eslintConfig);
-    console.log('✅ Created eslint.config.mjs with @webpieces/dev-config rules');
+    tree.write(configPath, webpiecesConfig);
+    console.log('✅ Created eslint.webpieces.config.mjs with @webpieces/dev-config rules');
 }
 
 function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToPackageJson>) {
