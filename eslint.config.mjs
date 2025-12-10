@@ -1,12 +1,20 @@
 // ESLint configuration for webpieces-ts
 // Uses @webpieces/dev-config base configuration
 
+import { loadWorkspaceRules } from '@nx/eslint-plugin';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 
-// Import webpieces plugin from dist (compiled JavaScript)
-// In workspace development, use the compiled output from dist
-import webpiecesPlugin from './dist/packages/tooling/dev-config/eslint-plugin/index.js';
+// Load webpieces plugin directly from TypeScript source using loadWorkspaceRules
+// This avoids the chicken-egg problem where ESLint config needs the plugin
+// before dev-config has been built. loadWorkspaceRules automatically handles
+// TypeScript transpilation.
+const webpiecesRules = await loadWorkspaceRules(
+    'packages/tooling/dev-config/eslint-plugin',
+    'packages/tooling/dev-config/tsconfig.lib.json'
+);
+
+const webpiecesPlugin = { rules: webpiecesRules };
 
 export default [
     {
