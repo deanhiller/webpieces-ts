@@ -30,11 +30,35 @@ This automatically:
 - Registers the plugin in `nx.json`
 - Adds `madge` as a devDependency (required for circular dependency checking)
 - Creates the `architecture/` directory
+- Adds convenient npm scripts to `package.json`
 - Makes all targets immediately available
 
 ## Usage
 
-### Workspace Architecture Targets
+### Convenient npm Scripts
+
+The init generator adds these npm scripts for easy access:
+
+```bash
+# Generate and visualize
+npm run arch:generate     # Generate dependency graph
+npm run arch:visualize    # Visualize in browser
+
+# Validation
+npm run arch:validate                  # Quick: no-cycles + no-skiplevel-deps
+npm run arch:validate-all              # Full: adds architecture-unchanged check
+npm run arch:check-circular            # Check all projects for circular deps (madge)
+npm run arch:check-circular-affected   # Check only affected projects
+npm run arch:validate-complete         # Complete: all validations + circular deps
+
+# Recommended workflow
+npm run arch:generate           # 1. Generate graph first
+npm run arch:validate-complete  # 2. Run all validations
+```
+
+### Direct Nx Targets
+
+You can also run targets directly with Nx:
 
 ```bash
 # Generate the dependency graph

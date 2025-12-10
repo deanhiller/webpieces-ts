@@ -15,6 +15,7 @@
                     "packages/tooling/dev-config/package.json",
                     "packages/tooling/dev-config/README.md",
                     "packages/tooling/dev-config/executors.json",
+                    "packages/tooling/dev-config/generators.json",
                     "packages/tooling/dev-config/config/jest/preset.js",
                     {
                         "input": "packages/tooling/dev-config/bin",
@@ -42,9 +43,14 @@
                         "output": "patterns"
                     },
                     {
-                        "input": "packages/tooling/dev-config/plugins",
+                        "input": "packages/tooling/dev-config/plugin",
                         "glob": "**/*",
-                        "output": "plugins"
+                        "output": "plugin"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/generators",
+                        "glob": "**/*",
+                        "output": "generators"
                     },
                     {
                         "input": "packages/tooling/dev-config/architecture",

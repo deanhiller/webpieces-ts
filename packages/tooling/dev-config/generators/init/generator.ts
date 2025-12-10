@@ -1,4 +1,4 @@
-import { formatFiles, readNxJson, Tree, updateNxJson, readJson, updateJson, addDependenciesToPackageJson } from '@nx/devkit';
+import { formatFiles, readNxJson, Tree, updateNxJson, updateJson, addDependenciesToPackageJson } from '@nx/devkit';
 import type { InitGeneratorSchema } from './schema';
 
 /**
@@ -10,12 +10,14 @@ import type { InitGeneratorSchema } from './schema';
  * - Registers the plugin in nx.json
  * - Creates architecture/ directory if needed
  * - Adds madge as a devDependency (required for circular dep checking)
+ * - Adds convenient npm scripts to package.json
  * - Provides helpful output about available targets
  */
 export default async function initGenerator(tree: Tree, options: InitGeneratorSchema) {
     registerPlugin(tree);
     const installTask = addMadgeDependency(tree);
     createArchitectureDirectory(tree);
+    addNpmScripts(tree);
 
     if (!options.skipFormat) {
         await formatFiles(tree);
@@ -59,6 +61,29 @@ function createArchitectureDirectory(tree: Tree): void {
     }
 }
 
+function addNpmScripts(tree: Tree): void {
+    updateJson(tree, 'package.json', (pkgJson) => {
+        pkgJson.scripts = pkgJson.scripts ?? {};
+
+        // Add architecture validation scripts
+        pkgJson.scripts['arch:generate'] = 'nx run .:arch:generate';
+        pkgJson.scripts['arch:visualize'] = 'nx run .:arch:visualize';
+        pkgJson.scripts['arch:validate'] = 'nx run .:arch:validate-no-cycles && nx run .:arch:validate-no-skiplevel-deps';
+        pkgJson.scripts['arch:validate-all'] = 'nx run .:arch:validate-no-cycles && nx run .:arch:validate-no-skiplevel-deps && nx run .:arch:validate-architecture-unchanged';
+
+        // Add circular dependency checking scripts
+        pkgJson.scripts['arch:check-circular'] = 'nx run-many --target=check-circular-deps --all';
+        pkgJson.scripts['arch:check-circular-affected'] = 'nx affected --target=check-circular-deps';
+
+        // Complete validation including circular deps
+        pkgJson.scripts['arch:validate-complete'] = 'npm run arch:validate-all && npm run arch:check-circular';
+
+        return pkgJson;
+    });
+
+    console.log('✅ Added npm scripts for architecture validation and circular dependency checking');
+}
+
 function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToPackageJson>) {
     return async () => {
         await installTask();
@@ -71,20 +96,35 @@ function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToP
 }
 
 function printAvailableTargets(): void {
-    console.log('📝 Available targets:');
+    console.log('📝 Available npm scripts (convenient shortcuts):');
+    console.log('');
+    console.log('  Architecture graph:');
+    console.log('    npm run arch:generate                  # Generate dependency graph');
+    console.log('    npm run arch:visualize                 # Visualize dependency graph');
+    console.log('');
+    console.log('  Validation:');
+    console.log('    npm run arch:validate                  # Quick validation (no-cycles + no-skiplevel-deps)');
+    console.log('    npm run arch:validate-all              # Full arch validation (+ unchanged check)');
+    console.log('    npm run arch:check-circular            # Check all projects for circular deps');
+    console.log('    npm run arch:check-circular-affected   # Check affected projects only');
+    console.log('    npm run arch:validate-complete         # Complete validation (arch + circular)');
+    console.log('');
+    console.log('📝 Available Nx targets:');
     console.log('');
     console.log('  Workspace-level architecture validation:');
-    console.log('    nx run .:arch:generate                      # Generate dependency graph');
-    console.log('    nx run .:arch:visualize                     # Visualize dependency graph');
-    console.log('    nx run .:arch:validate-no-cycles            # Check for circular dependencies');
-    console.log('    nx run .:arch:validate-no-skiplevel-deps    # Check for redundant dependencies');
-    console.log('    nx run .:arch:validate-architecture-unchanged # Validate against blessed graph');
+    console.log('    nx run .:arch:generate                         # Generate dependency graph');
+    console.log('    nx run .:arch:visualize                        # Visualize dependency graph');
+    console.log('    nx run .:arch:validate-no-cycles               # Check for circular dependencies');
+    console.log('    nx run .:arch:validate-no-skiplevel-deps       # Check for redundant dependencies');
+    console.log('    nx run .:arch:validate-architecture-unchanged  # Validate against blessed graph');
     console.log('');
     console.log('  Per-project circular dependency checking:');
-    console.log('    nx run <project>:check-circular-deps        # Check project for circular deps');
-    console.log('    nx affected --target=check-circular-deps    # Check all affected projects');
+    console.log('    nx run <project>:check-circular-deps           # Check project for circular deps');
+    console.log('    nx affected --target=check-circular-deps       # Check all affected projects');
+    console.log('    nx run-many --target=check-circular-deps --all # Check all projects');
     console.log('');
-    console.log('💡 First, generate the dependency graph:');
-    console.log('   nx run .:arch:generate');
+    console.log('💡 Quick start:');
+    console.log('   npm run arch:generate           # Generate the graph first');
+    console.log('   npm run arch:validate-complete  # Run complete validation');
     console.log('');
 }
