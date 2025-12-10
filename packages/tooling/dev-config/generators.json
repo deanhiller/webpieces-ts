@@ -2,8 +2,8 @@
     "$schema": "http://json-schema.org/schema",
     "generators": {
         "init": {
-            "factory": "./generators/init/generator",
-            "schema": "./generators/init/schema.json",
+            "factory": "./src/generators/init/generator",
+            "schema": "./src/generators/init/schema.json",
             "description": "Initialize @webpieces/dev-config in an Nx workspace"
         }
     }
