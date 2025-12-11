@@ -3,6 +3,9 @@
     "version": "0.0.0-dev",
     "description": "Umbrella package for WebPieces development tooling and configurations",
     "type": "commonjs",
+    "scripts": {
+        "postinstall": "node -e \"console.log('\\n📦 @webpieces/rules installed!\\n\\n💡 For architecture validation and linting:\\n   npx nx add @webpieces/dev-config\\n\\nThis sets up:\\n  - Architecture dependency validation\\n  - Circular dependency checking\\n  - ESLint rules enforcement\\n')\""
+    },
     "author": "Dean Hiller",
     "license": "Apache-2.0",
     "repository": {
