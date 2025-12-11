@@ -48,9 +48,9 @@
                         "output": "plugin"
                     },
                     {
-                        "input": "packages/tooling/dev-config/generators",
-                        "glob": "**/*",
-                        "output": "generators"
+                        "input": "packages/tooling/dev-config/src/generators",
+                        "glob": "**/schema.json",
+                        "output": "src/generators"
                     },
                     {
                         "input": "packages/tooling/dev-config/architecture",
