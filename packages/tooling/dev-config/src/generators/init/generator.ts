@@ -1,5 +1,8 @@
 import { formatFiles, readNxJson, Tree, updateNxJson, updateJson, addDependenciesToPackageJson } from '@nx/devkit';
-import type { InitGeneratorSchema } from './schema';
+
+export interface InitGeneratorSchema {
+    skipFormat?: boolean;
+}
 
 /**
  * Init generator for @webpieces/dev-config
