@@ -24,6 +24,16 @@
             "implementation": "./architecture/executors/validate-no-skiplevel-deps/executor",
             "schema": "./architecture/executors/validate-no-skiplevel-deps/schema.json",
             "description": "Validate no project has redundant transitive dependencies"
+        },
+        "help": {
+            "implementation": "./executors/help/executor",
+            "schema": "./executors/help/schema.json",
+            "description": "Display help for @webpieces/dev-config commands and targets"
+        },
+        "validate-eslint-sync": {
+            "implementation": "./executors/validate-eslint-sync/executor",
+            "schema": "./executors/validate-eslint-sync/schema.json",
+            "description": "Validate that workspace and template eslint.webpieces.config.mjs files have identical rules"
         }
     }
 }

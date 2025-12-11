@@ -4,6 +4,14 @@
     "sourceRoot": "packages/tooling/dev-config",
     "projectType": "library",
     "targets": {
+        "validate-eslint-sync": {
+            "executor": "@webpieces/dev-config:validate-eslint-sync",
+            "cache": true,
+            "inputs": [
+                "{workspaceRoot}/packages/tooling/dev-config/templates/eslint.webpieces.config.mjs",
+                "{workspaceRoot}/eslint.webpieces.config.mjs"
+            ]
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
@@ -46,6 +54,11 @@
                         "input": "packages/tooling/dev-config/plugin",
                         "glob": "**/*",
                         "output": "plugin"
+                    },
+                    {
+                        "input": "packages/tooling/dev-config/templates",
+                        "glob": "**/*",
+                        "output": "templates"
                     },
                     {
                         "input": "packages/tooling/dev-config/src/generators",

@@ -1,7 +1,21 @@
 import { formatFiles, readNxJson, Tree, updateNxJson, updateJson, addDependenciesToPackageJson } from '@nx/devkit';
+import { createHash } from 'crypto';
 
 export interface InitGeneratorSchema {
     skipFormat?: boolean;
+}
+
+function calculateHash(content: string): string {
+    return createHash('sha256').update(content).digest('hex');
+}
+
+function getPackageVersion(tree: Tree): string {
+    const content = tree.read('node_modules/@webpieces/dev-config/package.json', 'utf-8');
+    if (!content) {
+        throw new Error('Could not read package.json from node_modules/@webpieces/dev-config');
+    }
+    const pkgJson = JSON.parse(content);
+    return pkgJson.version;
 }
 
 /**
@@ -135,109 +149,83 @@ export default [
     }
 }
 
+function getWebpiecesEslintConfigTemplate(tree: Tree): string {
+    // Read from canonical template file (single source of truth)
+    const templatePath = 'node_modules/@webpieces/dev-config/templates/eslint.webpieces.config.mjs';
+    const template = tree.read(templatePath, 'utf-8');
+
+    if (!template) {
+        throw new Error(`Could not read ESLint template from ${templatePath}`);
+    }
+
+    return template;
+}
+
+function warnConfigChanges(tree: Tree, configPath: string, newConfig: string): void {
+    const version = getPackageVersion(tree);
+    const versionedFilename = `${configPath}.v${version}`;
+
+    tree.write(versionedFilename, newConfig);
+
+    console.log('');
+    console.log(`⚠️  ${configPath} has changes`);
+    console.log('');
+    console.log('   Either you modified the file OR @webpieces/dev-config has updates.');
+    console.log('');
+    console.log(`   Created: ${versionedFilename} with latest version`);
+    console.log('');
+    console.log('   Please review and merge if needed:');
+    console.log(`     - Your current: ${configPath}`);
+    console.log(`     - New version:  ${versionedFilename}`);
+    console.log('');
+}
+
 function createWebpiecesEslintConfig(tree: Tree, configPath: string): void {
-    const webpiecesConfig = `// @webpieces/dev-config ESLint rules
-// This file contains the ESLint configuration provided by @webpieces/dev-config
-// You can modify or remove rules as needed for your project
+    const webpiecesConfig = getWebpiecesEslintConfigTemplate(tree);
 
-import webpiecesPlugin from '@webpieces/dev-config/eslint-plugin';
-import tseslint from '@typescript-eslint/eslint-plugin';
-import tsparser from '@typescript-eslint/parser';
+    if (!tree.exists(configPath)) {
+        tree.write(configPath, webpiecesConfig);
+        console.log(`✅ Created ${configPath}`);
+        return;
+    }
 
-export default [
-    {
-        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx'],
-    },
-    {
-        files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-        plugins: {
-            '@webpieces': webpiecesPlugin,
-            '@typescript-eslint': tseslint,
-        },
-        languageOptions: {
-            parser: tsparser,
-            ecmaVersion: 2021,
-            sourceType: 'module',
-        },
-        rules: {
-            // WebPieces custom rules
-            '@webpieces/catch-error-pattern': 'error',
-            '@webpieces/no-unmanaged-exceptions': 'error',
-            '@webpieces/max-method-lines': ['error', { max: 70 }],
-            '@webpieces/max-file-lines': ['error', { max: 700 }],
-            '@webpieces/enforce-architecture': 'error',
+    const currentContent = tree.read(configPath, 'utf-8');
+    if (!currentContent) {
+        tree.write(configPath, webpiecesConfig);
+        console.log(`✅ Created ${configPath}`);
+        return;
+    }
 
-            // TypeScript rules
-            '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/explicit-function-return-type': 'off',
-            '@typescript-eslint/no-unused-vars': 'off',
-            '@typescript-eslint/no-empty-interface': 'off',
-            '@typescript-eslint/no-empty-function': 'off',
+    const currentHash = calculateHash(currentContent);
+    const newHash = calculateHash(webpiecesConfig);
 
-            // General code quality
-            'no-console': 'off',
-            'no-debugger': 'off',
-            'no-var': 'error',
-            'prefer-const': 'off',
-        },
-    },
-    {
-        // Test files - relaxed rules
-        files: ['**/*.spec.ts', '**/*.test.ts'],
-        rules: {
-            '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/no-non-null-assertion': 'off',
-            '@webpieces/max-method-lines': 'off',
-        },
-    },
-];
-`;
+    if (currentHash === newHash) {
+        console.log(`✅ ${configPath} is up to date`);
+        return;
+    }
 
-    tree.write(configPath, webpiecesConfig);
-    console.log('✅ Created eslint.webpieces.config.mjs with @webpieces/dev-config rules');
+    warnConfigChanges(tree, configPath, webpiecesConfig);
 }
 
 function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToPackageJson>) {
     return async () => {
         await installTask();
+
+        // ANSI color codes for formatted output
+        const GREEN = '\x1b[32m\x1b[1m';
+        const BOLD = '\x1b[1m';
+        const RESET = '\x1b[0m';
+
+        console.log('');
         console.log('✅ Added madge to devDependencies');
         console.log('');
-        console.log('✅ @webpieces/dev-config plugin initialized!');
+        console.log(`${GREEN}✅ @webpieces/dev-config plugin initialized!${RESET}`);
         console.log('');
-        printAvailableTargets();
+        console.log(`${GREEN}💡 Quick start:${RESET}`);
+        console.log(`   ${BOLD}npm run arch:generate${RESET}           # Generate the dependency graph`);
+        console.log(`   ${BOLD}npm run arch:validate-complete${RESET}  # Run complete validation`);
+        console.log('');
+        console.log(`💡 For full documentation, run: ${BOLD}nx run .:webpieces:help${RESET}`);
+        console.log('');
     };
-}
-
-function printAvailableTargets(): void {
-    console.log('📝 Available npm scripts (convenient shortcuts):');
-    console.log('');
-    console.log('  Architecture graph:');
-    console.log('    npm run arch:generate                  # Generate dependency graph');
-    console.log('    npm run arch:visualize                 # Visualize dependency graph');
-    console.log('');
-    console.log('  Validation:');
-    console.log('    npm run arch:validate                  # Quick validation (no-cycles + no-skiplevel-deps)');
-    console.log('    npm run arch:validate-all              # Full arch validation (+ unchanged check)');
-    console.log('    npm run arch:check-circular            # Check all projects for circular deps');
-    console.log('    npm run arch:check-circular-affected   # Check affected projects only');
-    console.log('    npm run arch:validate-complete         # Complete validation (arch + circular)');
-    console.log('');
-    console.log('📝 Available Nx targets:');
-    console.log('');
-    console.log('  Workspace-level architecture validation:');
-    console.log('    nx run .:arch:generate                         # Generate dependency graph');
-    console.log('    nx run .:arch:visualize                        # Visualize dependency graph');
-    console.log('    nx run .:arch:validate-no-cycles               # Check for circular dependencies');
-    console.log('    nx run .:arch:validate-no-skiplevel-deps       # Check for redundant dependencies');
-    console.log('    nx run .:arch:validate-architecture-unchanged  # Validate against blessed graph');
-    console.log('');
-    console.log('  Per-project circular dependency checking:');
-    console.log('    nx run <project>:check-circular-deps           # Check project for circular deps');
-    console.log('    nx affected --target=check-circular-deps       # Check all affected projects');
-    console.log('    nx run-many --target=check-circular-deps --all # Check all projects');
-    console.log('');
-    console.log('💡 Quick start:');
-    console.log('   npm run arch:generate           # Generate the graph first');
-    console.log('   npm run arch:validate-complete  # Run complete validation');
-    console.log('');
 }
