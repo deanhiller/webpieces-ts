@@ -24,6 +24,15 @@ const LEVEL_COLORS: Record<number, string> = {
 };
 
 /**
+ * Remove scope from name for display
+ * '@scope/name' → 'name'
+ * 'name' → 'name'
+ */
+function getShortName(name: string): string {
+    return name.includes('/') ? name.split('/').pop()! : name;
+}
+
+/**
  * Generate Graphviz DOT format from the graph
  */
 export function generateDot(graph: EnhancedGraph, title: string = 'WebPieces Architecture'): string {
@@ -41,7 +50,7 @@ export function generateDot(graph: EnhancedGraph, title: string = 'WebPieces Arc
 
     // Create nodes with level-based colors
     for (const [project, info] of Object.entries(graph)) {
-        const shortName = project.replace('@webpieces/', '');
+        const shortName = getShortName(project);
         const color = LEVEL_COLORS[info.level] || '#F5F5F5';
         dot += `  "${shortName}" [fillcolor="${color}", label="${shortName}\\n(L${info.level})"];\n`;
     }
@@ -52,7 +61,7 @@ export function generateDot(graph: EnhancedGraph, title: string = 'WebPieces Arc
     for (const [level, projects] of Object.entries(levels)) {
         dot += `  { rank=same; `;
         projects.forEach((p) => {
-            const shortName = p.replace('@webpieces/', '');
+            const shortName = getShortName(p);
             dot += `"${shortName}"; `;
         });
         dot += '}\n';
@@ -62,9 +71,9 @@ export function generateDot(graph: EnhancedGraph, title: string = 'WebPieces Arc
 
     // Create edges (dependencies)
     for (const [project, info] of Object.entries(graph)) {
-        const shortName = project.replace('@webpieces/', '');
+        const shortName = getShortName(project);
         for (const dep of info.dependsOn || []) {
-            const depShortName = dep.replace('@webpieces/', '');
+            const depShortName = getShortName(dep);
             dot += `  "${shortName}" -> "${depShortName}";\n`;
         }
     }
