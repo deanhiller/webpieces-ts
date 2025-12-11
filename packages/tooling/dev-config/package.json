@@ -14,7 +14,7 @@
     "executors": "./executors.json",
     "generators": "./generators.json",
     "exports": {
-        ".": "./index.js",
+        ".": "./src/index.js",
         "./package.json": "./package.json",
         "./eslint": "./config/eslint/base.mjs",
         "./eslint-plugin": "./eslint-plugin/index.js",
