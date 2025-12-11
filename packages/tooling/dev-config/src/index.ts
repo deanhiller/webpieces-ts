@@ -4,6 +4,7 @@
  * Development configuration, scripts, and patterns for WebPieces projects.
  *
  * This package provides:
+ * - Nx inference plugin for architecture validation and circular dependency checking
  * - Executable scripts (via bin commands: wp-start, wp-stop, etc.)
  * - Shareable ESLint configuration
  * - Jest preset
@@ -13,15 +14,7 @@
  * @packageDocumentation
  */
 
-/**
- * This is primarily a configuration and scripts package.
- * The actual exports are defined in package.json:
- *
- * - bin: Executable scripts (wp-start, wp-stop, etc.)
- * - exports: Configuration files (eslint, jest, tsconfig)
- *
- * See README.md for usage instructions.
- */
+import { createNodesV2 } from '../plugin';
 
 export const version = '0.0.0-dev';
 export const packageName = '@webpieces/dev-config';
@@ -40,3 +33,12 @@ export function getProjectRoot(): string {
     // This is a simple helper, actual path detection is in bash scripts
     return process.cwd();
 }
+
+/**
+ * Default export for Nx plugin system
+ * This is what Nx loads when the package is registered as a plugin in nx.json
+ */
+export default {
+    name: '@webpieces/dev-config',
+    createNodesV2,
+};
