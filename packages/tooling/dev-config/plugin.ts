@@ -97,7 +97,7 @@ function normalizeOptions(
     return {
         circularDeps,
         workspace,
-    };
+    } as Required<ArchitecturePluginOptions>;
 }
 
 /**
@@ -147,23 +147,24 @@ export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
                 if (projectRoot === '.') continue;
 
                 // Check exclude patterns
-                if (isExcluded(projectRoot, opts.circularDeps.excludePatterns)) {
+                if (isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
                     continue;
                 }
 
                 // Only create target if project has a src/ directory
                 const srcDir = join(context.workspaceRoot, projectRoot, 'src');
                 if (existsSync(srcDir)) {
+                    const targetName = opts.circularDeps.targetName!;
                     const checkCircularDepsTarget = createCircularDepsTarget(
                         projectRoot,
-                        opts.circularDeps.targetName
+                        targetName
                     );
 
                     const result: CreateNodesResult = {
                         projects: {
                             [projectRoot]: {
                                 targets: {
-                                    [opts.circularDeps.targetName]: checkCircularDepsTarget,
+                                    [targetName]: checkCircularDepsTarget,
                                 },
                             },
                         },
@@ -183,28 +184,29 @@ export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
  */
 function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
-    const prefix = opts.workspace.targetPrefix;
+    const prefix = opts.workspace.targetPrefix!;
+    const graphPath = opts.workspace.graphPath!;
 
     // Add help target (always available)
     targets[`${prefix}help`] = createHelpTarget();
 
-    if (opts.workspace.features.generate) {
-        targets[`${prefix}generate`] = createGenerateTarget(opts.workspace.graphPath);
+    if (opts.workspace.features!.generate) {
+        targets[`${prefix}generate`] = createGenerateTarget(graphPath);
     }
 
-    if (opts.workspace.features.visualize) {
-        targets[`${prefix}visualize`] = createVisualizeTarget(prefix, opts.workspace.graphPath);
+    if (opts.workspace.features!.visualize) {
+        targets[`${prefix}visualize`] = createVisualizeTarget(prefix, graphPath);
     }
 
-    if (opts.workspace.validations.noCycles) {
+    if (opts.workspace.validations!.noCycles) {
         targets[`${prefix}validate-no-cycles`] = createValidateNoCyclesTarget();
     }
 
-    if (opts.workspace.validations.architectureUnchanged) {
-        targets[`${prefix}validate-architecture-unchanged`] = createValidateUnchangedTarget(opts.workspace.graphPath);
+    if (opts.workspace.validations!.architectureUnchanged) {
+        targets[`${prefix}validate-architecture-unchanged`] = createValidateUnchangedTarget(graphPath);
     }
 
-    if (opts.workspace.validations.noSkipLevelDeps) {
+    if (opts.workspace.validations!.noSkipLevelDeps) {
         targets[`${prefix}validate-no-skiplevel-deps`] = createValidateNoSkipLevelTarget();
     }
 
