@@ -66,6 +66,11 @@
                         "output": "src/generators"
                     },
                     {
+                        "input": "packages/tooling/dev-config/executors",
+                        "glob": "**/*",
+                        "output": "executors"
+                    },
+                    {
                         "input": "packages/tooling/dev-config/architecture",
                         "glob": "**/*",
                         "output": "architecture"

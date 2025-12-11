@@ -35,6 +35,7 @@
         "plugin/**/*",
         "plugin.js",
         "templates/**/*",
+        "executors/**/*",
         "src/**/*",
         "generators.json",
         "architecture/**/*",
