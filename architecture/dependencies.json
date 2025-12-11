@@ -1,80 +1,80 @@
 {
-  "@webpieces/.": {
+  "architecture": {
     "level": 0,
     "dependsOn": []
   },
-  "@webpieces/client": {
+  "client": {
     "level": 3,
     "dependsOn": [
-      "@webpieces/http-client"
+      "http-client"
     ]
   },
-  "@webpieces/core-context": {
+  "core-context": {
     "level": 1,
     "dependsOn": [
-      "@webpieces/core-util"
+      "core-util"
     ]
   },
-  "@webpieces/core-meta": {
+  "core-meta": {
     "level": 0,
     "dependsOn": []
   },
-  "@webpieces/core-util": {
+  "core-util": {
     "level": 0,
     "dependsOn": []
   },
-  "@webpieces/dev-config": {
+  "dev-config": {
     "level": 0,
     "dependsOn": []
   },
-  "@webpieces/example-app": {
+  "example-app": {
     "level": 5,
     "dependsOn": [
-      "@webpieces/http-server"
+      "http-server"
     ]
   },
-  "@webpieces/http-api": {
+  "http-api": {
     "level": 1,
     "dependsOn": [
-      "@webpieces/core-util"
+      "core-util"
     ]
   },
-  "@webpieces/http-client": {
+  "http-client": {
     "level": 2,
     "dependsOn": [
-      "@webpieces/http-api"
+      "http-api"
     ]
   },
-  "@webpieces/http-filters": {
+  "http-filters": {
     "level": 2,
     "dependsOn": [
-      "@webpieces/core-context"
+      "core-context"
     ]
   },
-  "@webpieces/http-routing": {
+  "http-routing": {
     "level": 3,
     "dependsOn": [
-      "@webpieces/http-api",
-      "@webpieces/http-filters"
+      "http-api",
+      "http-filters"
     ]
   },
-  "@webpieces/http-server": {
+  "http-server": {
     "level": 4,
     "dependsOn": [
-      "@webpieces/http-routing"
+      "http-routing"
     ]
   },
-  "@webpieces/rules": {
+  "rules": {
     "level": 1,
     "dependsOn": [
-      "@webpieces/dev-config"
+      "dev-config"
     ]
   },
-  "@webpieces/server": {
+  "server": {
     "level": 5,
     "dependsOn": [
-      "@webpieces/core-meta",
-      "@webpieces/http-server"
+      "core-meta",
+      "http-server"
     ]
   }
 }
