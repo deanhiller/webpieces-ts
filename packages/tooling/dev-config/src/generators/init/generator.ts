@@ -87,10 +87,10 @@ function addNpmScripts(tree: Tree): void {
         pkgJson.scripts = pkgJson.scripts ?? {};
 
         // Add architecture validation scripts
-        pkgJson.scripts['arch:generate'] = 'nx run .:arch:generate';
-        pkgJson.scripts['arch:visualize'] = 'nx run .:arch:visualize';
-        pkgJson.scripts['arch:validate'] = 'nx run .:arch:validate-no-cycles && nx run .:arch:validate-no-skiplevel-deps';
-        pkgJson.scripts['arch:validate-all'] = 'nx run .:arch:validate-no-cycles && nx run .:arch:validate-no-skiplevel-deps && nx run .:arch:validate-architecture-unchanged';
+        pkgJson.scripts['arch:generate'] = 'nx run architecture:generate';
+        pkgJson.scripts['arch:visualize'] = 'nx run architecture:visualize';
+        pkgJson.scripts['arch:validate'] = 'nx run architecture:validate-no-cycles && nx run architecture:validate-no-skiplevel-deps';
+        pkgJson.scripts['arch:validate-all'] = 'nx run architecture:validate-no-cycles && nx run architecture:validate-no-skiplevel-deps && nx run architecture:validate-architecture-unchanged';
 
         // Add circular dependency checking scripts
         pkgJson.scripts['arch:check-circular'] = 'nx run-many --target=check-circular-deps --all';
@@ -225,7 +225,7 @@ function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToP
         console.log(`   ${BOLD}npm run arch:generate${RESET}           # Generate the dependency graph`);
         console.log(`   ${BOLD}npm run arch:validate-complete${RESET}  # Run complete validation`);
         console.log('');
-        console.log(`💡 For full documentation, run: ${BOLD}nx run .:webpieces:help${RESET}`);
+        console.log(`💡 For full documentation, run: ${BOLD}nx run architecture:help${RESET}`);
         console.log('');
     };
 }

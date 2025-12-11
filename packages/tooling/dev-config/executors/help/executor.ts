@@ -30,11 +30,11 @@ export default async function helpExecutor(
     console.log(`${BOLD}📝 Available Nx targets:${RESET}`);
     console.log('');
     console.log('  Workspace-level architecture validation:');
-    console.log('    nx run .:arch:generate                         # Generate dependency graph');
-    console.log('    nx run .:arch:visualize                        # Visualize dependency graph');
-    console.log('    nx run .:arch:validate-no-cycles               # Check for circular dependencies');
-    console.log('    nx run .:arch:validate-no-skiplevel-deps       # Check for redundant dependencies');
-    console.log('    nx run .:arch:validate-architecture-unchanged  # Validate against blessed graph');
+    console.log('    nx run architecture:generate                         # Generate dependency graph');
+    console.log('    nx run architecture:visualize                        # Visualize dependency graph');
+    console.log('    nx run architecture:validate-no-cycles               # Check for circular dependencies');
+    console.log('    nx run architecture:validate-no-skiplevel-deps       # Check for redundant dependencies');
+    console.log('    nx run architecture:validate-architecture-unchanged  # Validate against blessed graph');
     console.log('');
     console.log('  Per-project circular dependency checking:');
     console.log('    nx run <project>:check-circular-deps           # Check project for circular deps');

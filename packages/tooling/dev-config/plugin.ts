@@ -100,87 +100,138 @@ function normalizeOptions(
     } as Required<ArchitecturePluginOptions>;
 }
 
+async function createNodesFunction(
+    projectFiles: readonly string[],
+    options: ArchitecturePluginOptions | undefined,
+    context: CreateNodesContextV2
+): Promise<CreateNodesResultV2> {
+    const opts = normalizeOptions(options);
+    const results: Array<readonly [string, CreateNodesResult]> = [];
+
+    // Add workspace-level architecture targets
+    addArchitectureProject(results, projectFiles, opts, context);
+
+    // Add per-project circular-deps targets
+    addCircularDepsTargets(results, projectFiles, opts, context);
+
+    return results;
+}
+
+function addArchitectureProject(
+    results: Array<readonly [string, CreateNodesResult]>,
+    projectFiles: readonly string[],
+    opts: Required<ArchitecturePluginOptions>,
+    context: CreateNodesContextV2
+): void {
+    if (!opts.workspace.enabled) return;
+
+    const archDirPath = join(context.workspaceRoot, 'architecture');
+    if (!existsSync(archDirPath)) return;
+
+    const workspaceTargets = createWorkspaceTargetsWithoutPrefix(opts);
+    if (Object.keys(workspaceTargets).length === 0) return;
+
+    const result: CreateNodesResult = {
+        projects: {
+            architecture: {
+                name: 'architecture',
+                root: 'architecture',
+                targets: workspaceTargets,
+            },
+        },
+    };
+
+    const firstProjectFile = projectFiles[0];
+    if (firstProjectFile) {
+        results.push([firstProjectFile, result] as const);
+    }
+}
+
+function addCircularDepsTargets(
+    results: Array<readonly [string, CreateNodesResult]>,
+    projectFiles: readonly string[],
+    opts: Required<ArchitecturePluginOptions>,
+    context: CreateNodesContextV2
+): void {
+    if (!opts.circularDeps.enabled) return;
+
+    for (const projectFile of projectFiles) {
+        if (!projectFile.endsWith('project.json')) continue;
+
+        const projectRoot = dirname(projectFile);
+        if (projectRoot === '.') continue;
+
+        if (isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) continue;
+
+        const srcDir = join(context.workspaceRoot, projectRoot, 'src');
+        if (!existsSync(srcDir)) continue;
+
+        const targetName = opts.circularDeps.targetName!;
+        const checkCircularDepsTarget = createCircularDepsTarget(projectRoot, targetName);
+
+        const result: CreateNodesResult = {
+            projects: {
+                [projectRoot]: {
+                    targets: {
+                        [targetName]: checkCircularDepsTarget,
+                    },
+                },
+            },
+        };
+
+        results.push([projectFile, result] as const);
+    }
+}
+
 /**
  * Nx V2 Inference Plugin
- * Matches project.json files and creates architecture + circular-deps targets
+ * Matches project.json files to create targets
  */
 export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
-    // Pattern to match: look for project.json files
+    // Pattern to match project.json files
     '**/project.json',
 
     // Inference function
-    async (
-        projectFiles: readonly string[],
-        options: ArchitecturePluginOptions | undefined,
-        context: CreateNodesContextV2
-    ): Promise<CreateNodesResultV2> => {
-        const opts = normalizeOptions(options);
-        const results: Array<readonly [string, CreateNodesResult]> = [];
-
-        // Phase 1: Add workspace-level architecture targets to root
-        if (opts.workspace.enabled) {
-            const rootProject = projectFiles.find((f) => dirname(f) === '.');
-
-            if (rootProject) {
-                const workspaceTargets = createWorkspaceTargets(opts);
-
-                if (Object.keys(workspaceTargets).length > 0) {
-                    const result: CreateNodesResult = {
-                        projects: {
-                            '.': {
-                                targets: workspaceTargets,
-                            },
-                        },
-                    };
-
-                    results.push([rootProject, result] as const);
-                }
-            }
-        }
-
-        // Phase 2: Add per-project circular-deps targets
-        if (opts.circularDeps.enabled) {
-            for (const projectFile of projectFiles) {
-                const projectRoot = dirname(projectFile);
-
-                // Skip workspace root (already handled)
-                if (projectRoot === '.') continue;
-
-                // Check exclude patterns
-                if (isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
-                    continue;
-                }
-
-                // Only create target if project has a src/ directory
-                const srcDir = join(context.workspaceRoot, projectRoot, 'src');
-                if (existsSync(srcDir)) {
-                    const targetName = opts.circularDeps.targetName!;
-                    const checkCircularDepsTarget = createCircularDepsTarget(
-                        projectRoot,
-                        targetName
-                    );
-
-                    const result: CreateNodesResult = {
-                        projects: {
-                            [projectRoot]: {
-                                targets: {
-                                    [targetName]: checkCircularDepsTarget,
-                                },
-                            },
-                        },
-                    };
-
-                    results.push([projectFile, result] as const);
-                }
-            }
-        }
-
-        return results;
-    },
+    createNodesFunction,
 ];
 
 /**
- * Create workspace-level architecture validation targets
+ * Create workspace-level architecture validation targets WITHOUT prefix
+ * Used for virtual 'architecture' project
+ */
+function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
+    const targets: Record<string, TargetConfiguration> = {};
+    const graphPath = opts.workspace.graphPath!;
+
+    // Add help target (always available)
+    targets['help'] = createHelpTarget();
+
+    if (opts.workspace.features!.generate) {
+        targets['generate'] = createGenerateTarget(graphPath);
+    }
+
+    if (opts.workspace.features!.visualize) {
+        targets['visualize'] = createVisualizeTargetWithoutPrefix(graphPath);
+    }
+
+    if (opts.workspace.validations!.noCycles) {
+        targets['validate-no-cycles'] = createValidateNoCyclesTarget();
+    }
+
+    if (opts.workspace.validations!.architectureUnchanged) {
+        targets['validate-architecture-unchanged'] = createValidateUnchangedTarget(graphPath);
+    }
+
+    if (opts.workspace.validations!.noSkipLevelDeps) {
+        targets['validate-no-skiplevel-deps'] = createValidateNoSkipLevelTarget();
+    }
+
+    return targets;
+}
+
+/**
+ * Create workspace-level architecture validation targets (DEPRECATED - keeping for backward compat)
+ * Used when root project.json exists (old style with '.' project)
  */
 function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
@@ -223,6 +274,18 @@ function createGenerateTarget(graphPath: string): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Generate the architecture dependency graph from project.json files',
+        },
+    };
+}
+
+function createVisualizeTargetWithoutPrefix(graphPath: string): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:visualize',
+        dependsOn: ['generate'],
+        options: { graphPath },
+        metadata: {
+            technologies: ['nx'],
+            description: 'Generate visual representations of the architecture graph',
         },
     };
 }

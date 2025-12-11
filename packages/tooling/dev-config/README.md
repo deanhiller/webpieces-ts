@@ -93,10 +93,10 @@ Automatically adds architecture validation and circular dependency checking to N
 nx add @webpieces/dev-config
 
 # Generate dependency graph
-nx run .:arch:generate
+nx run architecture:generate
 
 # Validate architecture
-nx run .:arch:validate-no-cycles
+nx run architecture:validate-no-cycles
 
 # Check project for circular dependencies
 nx run my-project:check-circular-deps

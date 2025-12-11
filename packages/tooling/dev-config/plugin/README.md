@@ -69,19 +69,19 @@ You can also run targets directly with Nx:
 
 ```bash
 # Generate the dependency graph
-nx run .:arch:generate
+nx run architecture:generate
 
 # Visualize the graph in your browser
-nx run .:arch:visualize
+nx run architecture:visualize
 
 # Validate no circular dependencies
-nx run .:arch:validate-no-cycles
+nx run architecture:validate-no-cycles
 
 # Validate against blessed graph (for CI)
-nx run .:arch:validate-architecture-unchanged
+nx run architecture:validate-architecture-unchanged
 
 # Check for redundant dependencies
-nx run .:arch:validate-no-skiplevel-deps
+nx run architecture:validate-no-skiplevel-deps
 ```
 
 ### Per-Project Circular Dependency Checking
@@ -114,7 +114,7 @@ Configure the plugin in `nx.json`:
         },
         "workspace": {
           "enabled": true,
-          "targetPrefix": "arch:",
+          "targetPrefix": "architecture:",
           "validations": {
             "noCycles": true,
             "noSkipLevelDeps": true,

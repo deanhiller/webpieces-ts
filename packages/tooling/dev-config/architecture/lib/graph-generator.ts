@@ -72,20 +72,15 @@ export async function generateRawGraph(): Promise<Record<string, string[]>> {
 }
 
 /**
- * Transform project names to @webpieces/xxx format
+ * Transform project names (sorting dependencies only - no scope transformation)
  */
 export function transformGraph(rawGraph: Record<string, string[]>): Record<string, string[]> {
     const result: Record<string, string[]> = {};
 
     for (const [projectName, deps] of Object.entries(rawGraph)) {
-        // Avoid double prefix if already has @webpieces/
-        const transformedName = projectName.startsWith('@webpieces/')
-            ? projectName
-            : `@webpieces/${projectName}`;
-
-        const transformedDeps = deps
-            .map((d) => (d.startsWith('@webpieces/') ? d : `@webpieces/${d}`))
-            .sort();
+        // Use project names as-is - don't force @webpieces scope on client projects
+        const transformedName = projectName;
+        const transformedDeps = deps.sort();
 
         result[transformedName] = transformedDeps;
     }
