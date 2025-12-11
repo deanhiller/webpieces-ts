@@ -256,6 +256,66 @@ function loadBlessedGraph(workspaceRoot: string): EnhancedGraph | null {
 }
 
 /**
+ * Build set of all workspace package names (from package.json files)
+ * Used to detect workspace imports (works for any scope or unscoped)
+ */
+function buildWorkspacePackageNames(workspaceRoot: string): Set<string> {
+    const packageNames = new Set<string>();
+    const mappings = buildProjectMappings(workspaceRoot);
+
+    for (const mapping of mappings) {
+        const pkgJsonPath = path.join(workspaceRoot, mapping.root, 'package.json');
+        if (fs.existsSync(pkgJsonPath)) {
+            try {
+                const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+                if (pkgJson.name) {
+                    packageNames.add(pkgJson.name);
+                }
+            } catch {
+                // Ignore parse errors
+            }
+        }
+    }
+
+    return packageNames;
+}
+
+/**
+ * Check if an import path is a workspace project
+ * Works for scoped (@scope/name) or unscoped (name) packages
+ */
+function isWorkspaceImport(importPath: string, workspaceRoot: string): boolean {
+    const workspacePackages = buildWorkspacePackageNames(workspaceRoot);
+    return workspacePackages.has(importPath);
+}
+
+/**
+ * Get project name from package name
+ * e.g., '@webpieces/client' → 'client', 'apis' → 'apis'
+ */
+function getProjectNameFromPackageName(packageName: string, workspaceRoot: string): string {
+    const mappings = buildProjectMappings(workspaceRoot);
+
+    // Try to find by reading package.json files
+    for (const mapping of mappings) {
+        const pkgJsonPath = path.join(workspaceRoot, mapping.root, 'package.json');
+        if (fs.existsSync(pkgJsonPath)) {
+            try {
+                const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+                if (pkgJson.name === packageName) {
+                    return mapping.name; // Return project name
+                }
+            } catch {
+                // Ignore parse errors
+            }
+        }
+    }
+
+    // Fallback: return package name as-is (might be unscoped project name)
+    return packageName;
+}
+
+/**
  * Build project mappings from project.json files in workspace
  */
 function buildProjectMappings(workspaceRoot: string): ProjectMapping[] {
@@ -304,13 +364,8 @@ function scanForProjects(
                         const projectJson = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
                         const projectRoot = path.relative(workspaceRoot, fullPath);
 
-                        // Determine project name
-                        let projectName = projectJson.name || entry.name;
-
-                        // Add @webpieces/ prefix if not present
-                        if (!projectName.startsWith('@webpieces/')) {
-                            projectName = `@webpieces/${projectName}`;
-                        }
+                        // Use project name from project.json as-is (no scope forcing)
+                        const projectName = projectJson.name || entry.name;
 
                         mappings.push({
                             root: projectRoot,
@@ -402,20 +457,23 @@ const rule: Rule.RuleModule = {
             ImportDeclaration(node: any): void {
                 const importPath = node.source.value as string;
 
-                // Only check @webpieces/* imports
-                if (!importPath.startsWith('@webpieces/')) {
-                    return;
+                // Check if this is a workspace import (works for any scope or unscoped)
+                if (!isWorkspaceImport(importPath, workspaceRoot)) {
+                    return; // Not a workspace import, skip validation
                 }
 
                 // Determine which project this file belongs to
-                const project = getProjectFromFile(filename, workspaceRoot);
-                if (!project) {
+                const sourceProject = getProjectFromFile(filename, workspaceRoot);
+                if (!sourceProject) {
                     // File not in any known project (e.g., tools/, scripts/)
                     return;
                 }
 
+                // Convert import (package name) to project name
+                const targetProject = getProjectNameFromPackageName(importPath, workspaceRoot);
+
                 // Self-import is always allowed
-                if (importPath === project) {
+                if (targetProject === sourceProject) {
                     return;
                 }
 
@@ -423,23 +481,21 @@ const rule: Rule.RuleModule = {
                 const graph = loadBlessedGraph(workspaceRoot);
                 if (!graph) {
                     // No graph file - warn but don't fail (allows gradual adoption)
-                    // Uncomment below to enforce graph existence:
-                    // context.report({ node: node.source, messageId: 'noGraph' });
                     return;
                 }
 
                 // Get project entry
-                const projectEntry = graph[project];
+                const projectEntry = graph[sourceProject];
                 if (!projectEntry) {
                     // Project not in graph (new project?) - allow
                     return;
                 }
 
                 // Compute allowed dependencies (direct + transitive)
-                const allowedDeps = computeTransitiveDependencies(project, graph);
+                const allowedDeps = computeTransitiveDependencies(sourceProject, graph);
 
-                // Check if import is allowed
-                if (!allowedDeps.has(importPath)) {
+                // Check if import is allowed (use project name, not package name)
+                if (!allowedDeps.has(targetProject)) {
                     // Write documentation file for AI/developer to read
                     ensureDependenciesDoc(workspaceRoot);
 
@@ -455,7 +511,7 @@ const rule: Rule.RuleModule = {
                         messageId: 'illegalImport',
                         data: {
                             imported: importPath,
-                            project: project,
+                            project: sourceProject,
                             level: String(projectEntry.level),
                             allowedList: allowedList,
                         },
