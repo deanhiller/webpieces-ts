@@ -601,13 +601,18 @@ const rule: Rule.RuleModule = {
     create(context: Rule.RuleContext): Rule.RuleListener {
         return {
             TryStatement(node: any): void {
+                // Skip try..finally blocks (no catch handler, no exception handling)
+                if (!node.handler) {
+                    return;
+                }
+
                 // Auto-allow in test files
                 const filename = context.filename || context.getFilename();
                 if (isTestFile(filename)) {
                     return;
                 }
 
-                // Not in test file - report violation
+                // Has catch block outside test file - report violation
                 ensureExceptionDoc(context);
                 context.report({
                     node,
