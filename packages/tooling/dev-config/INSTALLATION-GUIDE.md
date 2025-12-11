@@ -26,8 +26,8 @@ Adds convenient shortcuts to `package.json`:
 ```json
 {
   "scripts": {
-    "arch:generate": "nx run .:arch:generate",
-    "arch:visualize": "nx run .:arch:visualize",
+    "arch:generate": "nx run architecture:generate",
+    "arch:visualize": "nx run architecture:visualize",
     "arch:validate": "...",
     "arch:validate-all": "...",
     "arch:check-circular": "...",
@@ -184,7 +184,7 @@ npm run arch:check-circular-affected
 
 All these targets are automatically created:
 
-### Workspace-level (run with `nx run .:target`)
+### Workspace-level (run with `nx run architecture:target`)
 - `arch:generate`
 - `arch:visualize`
 - `arch:validate-no-cycles`
