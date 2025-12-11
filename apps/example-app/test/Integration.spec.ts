@@ -81,34 +81,39 @@ class MockRemoteApi implements RemoteApi {
 }
 
 /**
- * Integration tests for WebPieces test framework.
- *
- * These tests demonstrate:
- * 1. Creating a WebpiecesServer with DI overrides (ContainerModule)
- * 2. Using createApiClient() to test APIs without HTTP
- * 3. Proving that mocked services flow through the filter chain
- *
- * This is similar to Java WebPieces testing pattern where you can
- * inject mock services and test the full stack without HTTP overhead.
+ * Helper: Create server with mocked RemoteApi
  */
-describe('Integration Tests with DI Overrides', () => {
+async function createServerWithMockRemoteApi(mockRemoteApi: MockRemoteApi): Promise<WebpiecesServer> {
+    const overrides = new ContainerModule(async (options) => {
+        const { rebind } = options;
+        (await rebind<RemoteApi>(TYPES.RemoteApi)).toConstantValue(mockRemoteApi);
+    });
+
+    return await WebpiecesFactory.create(new ProdServerMeta(), overrides);
+}
+
+/**
+ * Helper: Create mock FetchValueResponse
+ */
+function createMockFetchResponse(value: string): FetchValueResponse {
+    return {
+        value,
+        timestamp: Date.now(),
+    };
+}
+
+/**
+ * Integration tests - SaveApi with mocked RemoteApi
+ */
+describe('SaveApi with mocked RemoteApi', () => {
     let server: WebpiecesServer;
     let mockRemoteApi: MockRemoteApi;
+    let saveApi: SaveApi;
 
     beforeEach(async () => {
-        // Create mock instance
         mockRemoteApi = new MockRemoteApi();
-
-        // Create override module that replaces RemoteApi with our mock
-        // Using async callback for rebind() which is async in new Inversify
-        const overrides = new ContainerModule(async (options) => {
-            const { rebind } = options;
-            // Rebind overwrites existing bindings (async in new Inversify)
-            (await rebind<RemoteApi>(TYPES.RemoteApi)).toConstantValue(mockRemoteApi);
-        });
-
-        // Create server with production meta + test overrides (async for async modules)
-        server = await WebpiecesFactory.create(new ProdServerMeta(), overrides);
+        server = await createServerWithMockRemoteApi(mockRemoteApi);
+        saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
     });
 
     afterEach(async () => {
@@ -117,145 +122,105 @@ describe('Integration Tests with DI Overrides', () => {
         }
     });
 
-    describe('SaveApi with mocked RemoteApi', () => {
-        let saveApi: SaveApi;
+    it('should use mocked RemoteApi response in SaveResponse', async () => {
+        const mockResponse = createMockFetchResponse('MOCKED: TEST_MOCK_RESPONSE for test-query');
+        mockRemoteApi.addResponse('fetchValue', mockResponse);
 
-        beforeEach(() => {
-            // Create API client proxy (no HTTP!)
-            saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
-        });
+        const response = await saveApi.save({ query: 'test-query' });
 
-        it('should use mocked RemoteApi response in SaveResponse', async () => {
-            // Arrange - Add a mock response to the queue
-            const mockResponse: FetchValueResponse = {
-                value: 'MOCKED: TEST_MOCK_RESPONSE for test-query',
-                timestamp: Date.now(),
-            };
-            mockRemoteApi.addResponse('fetchValue', mockResponse);
-
-            const request: SaveRequest = {
-                query: 'test-query',
-            };
-
-            // Act - Call through filter chain + controller
-            // RequestContext is automatically created by createApiClient()
-            const response = await saveApi.save(request);
-
-            // Assert - Verify mock response flows through
-            expect(response).toBeDefined();
-            expect(response.success).toBe(true);
-            expect(response.query).toBe('test-query');
-            expect(response.matches).toHaveLength(1);
-            // The description should contain our mock value
-            expect(response.matches![0].description).toContain('MOCKED');
-            expect(response.matches![0].description).toContain('TEST_MOCK_RESPONSE');
-        });
-
-        it('should increment counter through filter chain', async () => {
-            // Arrange - Set default response for fetchValue
-            const defaultResponse: FetchValueResponse = {
-                value: 'MOCKED: DEFAULT_MOCK_VALUE',
-                timestamp: Date.now(),
-            };
-            mockRemoteApi.setDefaultResponse('fetchValue', defaultResponse);
-
-            const request1: SaveRequest = {
-                query: 'test1',
-            };
-
-            const request2: SaveRequest = {
-                query: 'test2',
-            };
-
-            // Act - Make two requests through filter chain
-            await saveApi.save(request1);
-            await saveApi.save(request2);
-
-            // Assert - Verify counter was incremented
-            const container = server.getContainer();
-            const counter = container.get<any>(TYPES.Counter);
-            expect(counter.get()).toBe(2);
-        });
-
-        it('should pass different mock values for different requests', async () => {
-            // Arrange - Queue two different responses
-            const mockResponse1: FetchValueResponse = {
-                value: 'MOCKED: VALUE_ONE for query1',
-                timestamp: Date.now(),
-            };
-            mockRemoteApi.addResponse('fetchValue', mockResponse1);
-
-            const mockResponse2: FetchValueResponse = {
-                value: 'MOCKED: VALUE_TWO for query2',
-                timestamp: Date.now(),
-            };
-            mockRemoteApi.addResponse('fetchValue', mockResponse2);
-
-            const request1: SaveRequest = {
-                query: 'query1',
-            };
-
-            const request2: SaveRequest = {
-                query: 'query2',
-            };
-
-            // Act - Both requests dequeue from the queue
-            const response1 = await saveApi.save(request1);
-            const response2 = await saveApi.save(request2);
-
-            // Assert - Each response has the correct mock value
-            expect(response1.matches![0].description).toContain('VALUE_ONE');
-            expect(response2.matches![0].description).toContain('VALUE_TWO');
-        });
+        expect(response).toBeDefined();
+        expect(response.success).toBe(true);
+        expect(response.query).toBe('test-query');
+        expect(response.matches).toHaveLength(1);
+        expect(response.matches![0].description).toContain('MOCKED');
+        expect(response.matches![0].description).toContain('TEST_MOCK_RESPONSE');
     });
 
-    describe('PublicApi', () => {
-        let publicApi: PublicApi;
+    it('should increment counter through filter chain', async () => {
+        const defaultResponse = createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE');
+        mockRemoteApi.setDefaultResponse('fetchValue', defaultResponse);
 
-        beforeEach(() => {
-            // Create API client proxy for PublicApi
-            publicApi = server.createApiClient<PublicApi>(PublicApiPrototype);
-        });
+        await saveApi.save({ query: 'test1' });
+        await saveApi.save({ query: 'test2' });
 
-        it('should return greeting with name', async () => {
-            // Arrange
-            const request: PublicInfoRequest = {
-                name: 'WebPieces',
-            };
-
-            // Act
-            const response = await publicApi.getInfo(request);
-
-            // Assert
-            expect(response).toBeDefined();
-            expect(response.greeting).toBe('Hello, WebPieces!');
-            expect(response.name).toBe('WebPieces');
-            expect(response.serverTime).toBeDefined();
-        });
-
-        it('should return default greeting when no name provided', async () => {
-            // Arrange
-            const request: PublicInfoRequest = {};
-
-            // Act
-            const response = await publicApi.getInfo(request);
-
-            // Assert
-            expect(response.greeting).toBe('Hello, World!');
-        });
+        const container = server.getContainer();
+        const counter = container.get<any>(TYPES.Counter);
+        expect(counter.get()).toBe(2);
     });
 
-    describe('Container access', () => {
-        it('should provide access to DI container', () => {
-            // Act
-            const container = server.getContainer();
+    it('should pass different mock values for different requests', async () => {
+        const mockResponse1 = createMockFetchResponse('MOCKED: VALUE_ONE for query1');
+        const mockResponse2 = createMockFetchResponse('MOCKED: VALUE_TWO for query2');
+        mockRemoteApi.addResponse('fetchValue', mockResponse1);
+        mockRemoteApi.addResponse('fetchValue', mockResponse2);
 
-            // Assert
-            expect(container).toBeDefined();
+        const response1 = await saveApi.save({ query: 'query1' });
+        const response2 = await saveApi.save({ query: 'query2' });
 
-            // Verify we can resolve services from the container
-            const remoteApi = container.get<RemoteApi>(TYPES.RemoteApi);
-            expect(remoteApi).toBe(mockRemoteApi); // Should be our mock
-        });
+        expect(response1.matches![0].description).toContain('VALUE_ONE');
+        expect(response2.matches![0].description).toContain('VALUE_TWO');
+    });
+});
+
+/**
+ * Integration tests - PublicApi
+ */
+describe('PublicApi', () => {
+    let server: WebpiecesServer;
+    let publicApi: PublicApi;
+
+    beforeEach(async () => {
+        const mockRemoteApi = new MockRemoteApi();
+        server = await createServerWithMockRemoteApi(mockRemoteApi);
+        publicApi = server.createApiClient<PublicApi>(PublicApiPrototype);
+    });
+
+    afterEach(async () => {
+        if (server) {
+            await server.stop();
+        }
+    });
+
+    it('should return greeting with name', async () => {
+        const response = await publicApi.getInfo({ name: 'WebPieces' });
+
+        expect(response).toBeDefined();
+        expect(response.greeting).toBe('Hello, WebPieces!');
+        expect(response.name).toBe('WebPieces');
+        expect(response.serverTime).toBeDefined();
+    });
+
+    it('should return default greeting when no name provided', async () => {
+        const response = await publicApi.getInfo({});
+
+        expect(response.greeting).toBe('Hello, World!');
+    });
+});
+
+/**
+ * Integration tests - Container access
+ */
+describe('Container access', () => {
+    let server: WebpiecesServer;
+    let mockRemoteApi: MockRemoteApi;
+
+    beforeEach(async () => {
+        mockRemoteApi = new MockRemoteApi();
+        server = await createServerWithMockRemoteApi(mockRemoteApi);
+    });
+
+    afterEach(async () => {
+        if (server) {
+            await server.stop();
+        }
+    });
+
+    it('should provide access to DI container', () => {
+        const container = server.getContainer();
+
+        expect(container).toBeDefined();
+
+        const remoteApi = container.get<RemoteApi>(TYPES.RemoteApi);
+        expect(remoteApi).toBe(mockRemoteApi);
     });
 });

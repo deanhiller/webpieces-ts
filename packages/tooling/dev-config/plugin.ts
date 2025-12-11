@@ -185,6 +185,9 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     const targets: Record<string, TargetConfiguration> = {};
     const prefix = opts.workspace.targetPrefix;
 
+    // Add help target (always available)
+    targets[`${prefix}help`] = createHelpTarget();
+
     if (opts.workspace.features.generate) {
         targets[`${prefix}generate`] = createGenerateTarget(opts.workspace.graphPath);
     }
@@ -267,6 +270,17 @@ function createValidateNoSkipLevelTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate no project has redundant transitive dependencies',
+        },
+    };
+}
+
+function createHelpTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:help',
+        cache: true,
+        metadata: {
+            technologies: ['nx'],
+            description: 'Display help for @webpieces/dev-config commands and targets',
         },
     };
 }

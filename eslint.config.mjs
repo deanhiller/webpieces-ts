@@ -1,29 +1,24 @@
-// ESLint configuration for webpieces-ts
-// Uses @webpieces/dev-config base configuration
+// ESLint configuration for webpieces-ts workspace
+// Imports @webpieces custom rules from eslint.webpieces.config.mjs
+// Workspace-specific TypeScript and general rules configured here
 
-import { loadWorkspaceRules } from '@nx/eslint-plugin';
+import webpiecesConfig from './eslint.webpieces.config.mjs';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 
-// Load webpieces plugin directly from TypeScript source using loadWorkspaceRules
-// This avoids the chicken-egg problem where ESLint config needs the plugin
-// before dev-config has been built. loadWorkspaceRules automatically handles
-// TypeScript transpilation.
-const webpiecesRules = await loadWorkspaceRules(
-    'packages/tooling/dev-config/eslint-plugin',
-    'packages/tooling/dev-config/tsconfig.lib.json'
-);
-
-const webpiecesPlugin = { rules: webpiecesRules };
-
 export default [
+    // Import @webpieces custom rules
+    ...webpiecesConfig,
+
+    // Workspace-specific ignores
     {
-        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx', 'scripts/**'],
+        ignores: ['scripts/**'],
     },
+
+    // Workspace-specific TypeScript and general rules
     {
         files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
         plugins: {
-            '@webpieces': webpiecesPlugin,
             '@typescript-eslint': tseslint,
         },
         languageOptions: {
@@ -32,21 +27,14 @@ export default [
             sourceType: 'module',
         },
         rules: {
-            // WebPieces custom rules
-            '@webpieces/catch-error-pattern': 'error',
-            '@webpieces/no-unmanaged-exceptions': 'error',
-            '@webpieces/max-method-lines': ['error', { max: 70 }],
-            '@webpieces/max-file-lines': ['error', { max: 700 }],
-            '@webpieces/enforce-architecture': 'error',
-
-            // TypeScript rules
+            // TypeScript rules (workspace preferences)
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/explicit-function-return-type': 'off',
             '@typescript-eslint/no-unused-vars': 'off',
             '@typescript-eslint/no-empty-interface': 'off',
             '@typescript-eslint/no-empty-function': 'off',
 
-            // General code quality
+            // General code quality (workspace preferences)
             'no-console': 'off',
             'no-debugger': 'off',
             'no-var': 'error',
@@ -54,12 +42,11 @@ export default [
         },
     },
     {
-        // Test files - relaxed rules
+        // Test files - additional relaxed TypeScript rules
         files: ['**/*.spec.ts', '**/*.test.ts'],
         rules: {
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-non-null-assertion': 'off',
-            '@webpieces/max-method-lines': 'off',
         },
     },
     {
