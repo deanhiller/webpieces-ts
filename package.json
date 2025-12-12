@@ -46,7 +46,7 @@
     "type": "commonjs",
     "devDependencies": {
         "@nx/eslint": "^22.1.3",
-        "@nx/eslint-plugin": "^22.2.0",
+        "@nx/eslint-plugin": "^22.2.1",
         "@nx/jest": "^22.0.2",
         "@nx/js": "^22.0.2",
         "@playwright/test": "^1.57.0",

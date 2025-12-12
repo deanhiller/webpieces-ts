@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { WebpiecesFactory } from '@webpieces/http-server';
+import { WebpiecesConfig } from '@webpieces/http-routing';
 import { ProdServerMeta } from './ProdServerMeta';
 import { toError } from '@webpieces/core-util';
 
@@ -13,7 +14,8 @@ async function main() {
         console.log('[Server] Starting WebPieces TypeScript server...');
         console.log('[Server] Creating server instance...');
 
-        const server = await WebpiecesFactory.create(new ProdServerMeta());
+        const config = new WebpiecesConfig();
+        const server = await WebpiecesFactory.create(new ProdServerMeta(), config);
 
         console.log('[Server] Calling server.start()...');
         await server.start(8000);

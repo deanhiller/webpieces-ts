@@ -84,3 +84,8 @@ export interface WebAppMeta {
      */
     getRoutes(): Routes[];
 }
+
+/**
+ * DI token for WebAppMeta injection.
+ */
+export const WEBAPP_META_TOKEN = Symbol.for('WebAppMeta');

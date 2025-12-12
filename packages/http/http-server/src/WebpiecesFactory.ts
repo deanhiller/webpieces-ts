@@ -1,6 +1,6 @@
 import { Container, ContainerModule } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
-import { WebAppMeta } from '@webpieces/http-routing';
+import { WebAppMeta, WEBAPP_META_TOKEN, WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from '@webpieces/http-routing';
 import { WebpiecesServer } from './WebpiecesServer';
 import { WebpiecesServerImpl } from './WebpiecesServerImpl';
 
@@ -20,14 +20,15 @@ import { WebpiecesServerImpl } from './WebpiecesServerImpl';
  * Usage:
  * ```typescript
  * // Production
- * const server = WebpiecesFactory.create(new ProdServerMeta());
+ * const config = new WebpiecesConfig();
+ * const server = WebpiecesFactory.create(new ProdServerMeta(), config);
  * server.start(8080);
  *
- * // Testing with overrides
- * const overrides = new ContainerModule((bind) => {
+ * // Testing with appOverrides
+ * const appOverrides = new ContainerModule((bind) => {
  *     bind(TYPES.RemoteApi).toConstantValue(mockRemoteApi);
  * });
- * const server = WebpiecesFactory.create(new ProdServerMeta(), overrides);
+ * const server = WebpiecesFactory.create(new ProdServerMeta(), config, appOverrides);
  * const api = server.createApiClient(SaveApiPrototype);
  * ```
  *
@@ -49,7 +50,7 @@ export class WebpiecesFactory {
      * 5. Loads optional override module (for testing)
      *
      * @param meta - User-provided WebAppMeta with DI modules and routes
-     * @param overrides - Optional ContainerModule for test overrides (loaded LAST to override bindings)
+     * @param appOverrides - Optional ContainerModule for test overrides (loaded LAST to override bindings)
      * @returns A fully initialized WebpiecesServer ready to start()
      */
 
@@ -60,16 +61,25 @@ export class WebpiecesFactory {
      * (e.g., rebind() in new Inversify versions).
      *
      * @param meta - User-provided WebAppMeta with DI modules and routes
-     * @param overrides - Optional ContainerModule for test overrides (can use async operations)
+     * @param config - Server configuration (CORS, etc.)
+     * @param appOverrides - Optional ContainerModule for app test overrides (can use async operations)
+     * @param testMode - Optional flag for test mode (skips Express server)
      * @returns Promise of a fully initialized WebpiecesServer ready to start()
      */
     static async create(
         meta: WebAppMeta,
-        overrides?: ContainerModule,
+        config: WebpiecesConfig,
+        appOverrides?: ContainerModule,
         testMode?: boolean
     ): Promise<WebpiecesServer> {
         // Create WebPieces container for framework-level bindings
         const webpiecesContainer = new Container();
+
+        // Bind WebAppMeta so it can be injected into framework classes
+        webpiecesContainer.bind<WebAppMeta>(WEBAPP_META_TOKEN).toConstantValue(meta);
+
+        // Bind WebpiecesConfig so it can be injected into framework classes
+        webpiecesContainer.bind<WebpiecesConfig>(WEBPIECES_CONFIG_TOKEN).toConstantValue(config);
 
         // Load buildProviderModule to auto-scan for @provideSingleton decorators
         await webpiecesContainer.load(buildProviderModule());
@@ -78,7 +88,7 @@ export class WebpiecesFactory {
         const serverImpl = webpiecesContainer.get(WebpiecesServerImpl);
 
         // Initialize the server asynchronously (loads app DI modules, registers routes)
-        await serverImpl.initialize(webpiecesContainer, meta, overrides);
+        await serverImpl.initialize(webpiecesContainer, appOverrides);
 
         // Return as interface to hide initialize() from consumers
         return serverImpl;

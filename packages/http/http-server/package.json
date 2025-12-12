@@ -22,6 +22,10 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/http-routing": "0.0.0-dev"
+        "@webpieces/http-routing": "0.0.0-dev",
+        "cors": "^2.8.5"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.19"
     }
 }

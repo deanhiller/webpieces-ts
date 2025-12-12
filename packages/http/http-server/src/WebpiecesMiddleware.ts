@@ -1,4 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+import cors from 'cors';
 import { injectable } from 'inversify';
 import { provideSingleton, MethodMeta, ExpressRouteHandler } from '@webpieces/http-routing';
 import {
@@ -277,6 +278,42 @@ export class WebpiecesMiddleware {
         console.log('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
         await next();
         console.log('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
+    }
+
+    /**
+     * CORS middleware for localhost development.
+     * Only enables CORS when request origin is localhost:*.
+     *
+     * Wide open for all headers/methods in dev mode.
+     * Non-localhost origins are blocked.
+     *
+     * @returns Express middleware handler for CORS
+     */
+    corsForLocalhost(): RequestHandler {
+        console.log('[WebpiecesMiddleware] CORS enabled for localhost:* origins');
+
+        return cors({
+            origin: function (origin, callback) {
+                // Allow requests with no origin (same-origin, Postman, curl)
+                if (!origin) {
+                    callback(null, true);
+                    return;
+                }
+
+                // Only allow localhost origins
+                if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
+                    callback(null, true);
+                } else {
+                    console.log(`[CORS] Blocked origin: ${origin} (only localhost:* allowed)`);
+                    callback(new Error(`CORS not allowed for origin: ${origin}`));
+                }
+            },
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+            allowedHeaders: '*', // Wide open for dev
+            exposedHeaders: '*', // Expose all response headers to browser JS
+            maxAge: 3600,
+        });
     }
 
     /**
