@@ -148,18 +148,23 @@ Without traceId in errors:
 - DevOps cannot trace request flow through distributed systems
 - Users report "an error occurred" with no way to investigate
 
-### Problem 3: Try-Catch-Rethrow Is Code Smell
+### Problem 3: Pointless Try-Catch-Rethrow
 \`\`\`typescript
-// BAD: Why catch if you're just rethrowing?
+// BAD: Catching just to rethrow without adding value
 try {
   await operation();
 } catch (err: any) {
   const error = toError(err);
   console.error('Failed:', error);
-  throw error;  // Why catch at all???
+  throw error;  // No new info added - why catch?
 }
 \`\`\`
-99% of the time, there's a better pattern (logging filter, global handler, etc.).
+
+**However, try-catch-rethrow IS acceptable when:**
+1. **Adding context to the error**: \`throw new Error("Failed to process order #123", { cause: error })\`
+2. **Edge code logging** (see "Edge Code Patterns" section below)
+
+The key question: Are you adding meaningful information or context? If yes, it may be valid.
 
 ### Problem 4: Swallowing Exceptions = Lazy Programming
 \`\`\`typescript
@@ -200,28 +205,37 @@ TraceId (also called correlation ID, request ID) ties these together.
 
 1. **IDENTIFY** the try-catch block flagged in the error message
 
-2. **ANALYZE** the purpose:
+2. **ANALYZE** the purpose and ASK USER if needed:
    - Is it catching errors just to log them? → Remove (use LogApiFilter)
    - Is it catching to show custom message? → Remove (use global handler)
    - Is it catching to retry? → Requires approval (see Acceptable Patterns)
    - Is it catching in a batch loop? → Requires approval (see Acceptable Patterns)
    - Is it catching for cleanup? → Usually wrong pattern
+   - **Is this a global entry point?** → **ASK USER**: "I think this code is the entry point where we need a global try-catch block. Is this correct?" (95% of the time it is NOT!)
+   - **Is this edge code calling external services?** → **ASK USER**: "This looks like edge code calling an external service. Should I add request/response logging with try-catch?"
+   - **Is this form error handling?** → Valid IF: catches only \`HttpUserError\` for display AND rethrows other errors (see Form Error Handling Pattern)
+   - Is it adding context to the error before rethrowing? → May be valid (see Problem 3)
 
-3. **REMOVE** the try-catch block:
+3. **IF REMOVING** the try-catch block:
    - Delete the \`try {\` and \`} catch (err: any) { ... }\` wrapper
    - Let the code execute normally
    - Errors will bubble to global handler automatically
 
-4. **VERIFY** global handler exists:
+4. **IF KEEPING** (after user approval):
+   - Add eslint-disable comment with justification
+   - Ensure traceId is logged/preserved
+   - Follow patterns in "Global Try-Catch Entry Points" or "Edge Code Patterns" sections
+
+5. **VERIFY** global handler exists:
    - Check that WebpiecesMiddleware.globalErrorHandler is registered
    - Check that ContextFilter is setting up RequestContext
    - Check that traceId is being added to RequestContext
 
-5. **ADD** traceId to RequestContext (if not already present):
+6. **ADD** traceId to RequestContext (if not already present):
    - In ContextFilter or similar high-priority filter
    - Use \`RequestContext.put('TRACE_ID', generateTraceId())\`
 
-6. **TEST** error flow:
+7. **TEST** error flow:
    - Trigger an error in the code
    - Verify error is logged with traceId
    - Verify \`/debugLocal/{traceId}\` endpoint works
@@ -516,26 +530,46 @@ async function processBatch(items: Item[]): Promise<BatchResult> {
 - Batch traceId included in response
 - Requires senior developer approval (enforced by PR review)
 
-### UNACCEPTABLE Example: Try-Catch-Rethrow
+### UNACCEPTABLE Example: Pointless Try-Catch-Rethrow (Internal Code)
 
 \`\`\`typescript
-// UNACCEPTABLE: Pointless try-catch that just rethrows
+// UNACCEPTABLE: Pointless try-catch in INTERNAL code
 async function saveUser(user: User): Promise<void> {
   try {
-    await database.save(user);
+    await userRepository.save(user);  // Internal call, not edge
   } catch (err: any) {
     const error = toError(err);
     console.error('Save failed:', error);
-    throw error;  // Why catch at all???
+    throw error;  // No value added - why catch?
   }
 }
 \`\`\`
 
-**Why UNACCEPTABLE**:
+**Why UNACCEPTABLE for internal code**:
 - Adds no value - logging should be in LogApiFilter
 - Global handler already logs errors
 - Just adds noise and confusion
 - Remove the try-catch entirely!
+
+**CONTRAST with edge code (ACCEPTABLE)**:
+\`\`\`typescript
+// ACCEPTABLE: Edge code calling external database service
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Edge code: database logging
+async function saveUserToDb(user: User): Promise<void> {
+  const traceId = RequestContext.get<string>('TRACE_ID');
+  try {
+    logRequest('[DB] Saving user', { traceId, userId: user.id });
+    await externalDbClient.save('users', user);  // EDGE: external service
+    logSuccess('[DB] User saved', { traceId, userId: user.id });
+  } catch (err: any) {
+    const error = toError(err);
+    logFailure('[DB] Save failed', { traceId, userId: user.id, error: error.message });
+    throw error;  // Rethrow - logging value at the edge
+  }
+}
+\`\`\`
+
+**The difference**: Edge code benefits from request/response/failure logging at the service boundary. Internal code does not.
 
 ## When eslint-disable IS Acceptable
 
@@ -544,11 +578,182 @@ You may use \`// eslint-disable-next-line @webpieces/no-unmanaged-exceptions\` O
 1. **Retry loops** with exponential backoff (vendor API calls)
 2. **Batching patterns** where partial failure is expected
 3. **Resource cleanup** with explicit approval
+4. **Global error handler entry points** (see below)
+5. **Edge code patterns** for vendor/external service calls (see below)
+6. **Form error handling** - catching \`HttpUserError\` for display, rethrowing others (see below)
 
-All three require:
-- Senior developer approval in PR review
+All require:
 - Comment explaining WHY try-catch is needed
-- TraceId must still be logged/included in final error
+- TraceId must still be logged/included in final error (or error must be rethrown)
+
+## Global Try-Catch Entry Points (MUST ASK USER)
+
+**CRITICAL: 95% of the time, the code you're looking at is NOT a global entry point!**
+
+Before adding a global try-catch, **AI agents MUST ask the user**: "I think this code is the entry point where we need a global try-catch block. Is this correct?"
+
+### Examples of LEGITIMATE Global Error Handlers
+
+These are the rare places where global try-catch IS correct:
+
+1. **Node.js/Express middleware** (at the TOP, after setting up traceId in context):
+\`\`\`typescript
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Global error handler entry point
+app.use(async (req, res, next) => {
+  // First: set up traceId in RequestContext
+  const traceId = uuidv4();
+  RequestContext.put('TRACE_ID', traceId);
+
+  try {
+    await next();
+  } catch (err: any) {
+    const error = toError(err);
+    // Report to Sentry/observability
+    Sentry.captureException(error, { extra: { traceId } });
+    res.status(500).json({ error: 'Internal error', traceId });
+  }
+});
+\`\`\`
+
+2. **RxJS global error handler**:
+\`\`\`typescript
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- RxJS global unhandled error hook
+config.onUnhandledError = (err: any) => {
+  const error = toError(err);
+  Sentry.captureException(error);
+  console.error('[RxJS Unhandled]', error);
+};
+\`\`\`
+
+3. **Browser window unhandled promise rejection**:
+\`\`\`typescript
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Browser global unhandled promise handler
+window.addEventListener('unhandledrejection', (event) => {
+  const error = toError(event.reason);
+  Sentry.captureException(error);
+  console.error('[Unhandled Promise]', error);
+});
+\`\`\`
+
+4. **Angular ErrorHandler** (may need try-catch to prevent double recording):
+\`\`\`typescript
+@Injectable()
+export class GlobalErrorHandler implements ErrorHandler {
+  // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Angular global error handler
+  handleError(error: any): void {
+    try {
+      Sentry.captureException(error);
+    } catch (sentryError) {
+      // Prevent infinite loop if Sentry itself fails
+      console.error('[Sentry failed]', sentryError);
+    }
+    console.error('[Angular Error]', error);
+  }
+}
+\`\`\`
+
+5. **3rd party vendor event listeners**:
+\`\`\`typescript
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Vendor callback error boundary
+vendorSdk.on('event', async (data) => {
+  try {
+    await processVendorEvent(data);
+  } catch (err: any) {
+    const error = toError(err);
+    const traceId = RequestContext.get<string>('TRACE_ID');
+    Sentry.captureException(error, { extra: { traceId, vendorData: data } });
+    // Don't rethrow - vendor SDK may not handle errors gracefully
+  }
+});
+\`\`\`
+
+**All global handlers should report to observability (Sentry, Datadog, etc.) in production.**
+
+## Edge Code Patterns (MUST ASK USER)
+
+Edge code is code that interacts with external systems (vendors, APIs, databases, email services, etc.). These often benefit from a try-catch pattern for **logging the full request/response cycle**.
+
+**AI agents MUST ask the user** before adding edge code try-catch: "This looks like edge code calling an external service. Should I add request/response logging with try-catch?"
+
+### Example: sendMail Pattern
+\`\`\`typescript
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Edge code: external email service logging
+async function sendMail(request: MailRequest): Promise<MailResponse> {
+  const traceId = RequestContext.get<string>('TRACE_ID');
+
+  try {
+    logRequest('[Email] Sending', { traceId, to: request.to, subject: request.subject });
+    const response = await emailService.send(request);
+    logSuccess('[Email] Sent', { traceId, messageId: response.messageId });
+    return response;
+  } catch (err: any) {
+    const error = toError(err);
+    logFailure('[Email] Failed', { traceId, error: error.message, to: request.to });
+    throw error;  // Rethrow - adds logging value at the edge
+  }
+}
+\`\`\`
+
+### Why This Pattern Is Valuable at Edges
+
+1. **Complete audit trail**: Request logged, then either success OR failure logged
+2. **Vendor debugging**: When vendor says "we never received it", you have proof
+3. **Performance monitoring**: Track timing at service boundaries
+4. **Correlation**: TraceId connects this edge call to the overall request
+
+### Where Edge Code Patterns Apply
+
+- HTTP client calls to external APIs
+- Database operations (especially writes)
+- Message queue publish/consume
+- Email/SMS/notification services
+- Payment gateway calls
+- File storage operations (S3, GCS, etc.)
+- Any call leaving your service boundary
+
+## Form Error Handling Pattern (Client-Side)
+
+Frontend forms often need to catch user-facing errors (like validation errors) to display in the UI, while rethrowing unexpected errors to the global handler.
+
+**This pattern is ACCEPTABLE because**:
+- It catches ONLY user-facing errors (\`HttpUserError\`) for display
+- Unexpected errors are RETHROWN (not swallowed)
+- Server throws \`HttpUserError\` → protocol translates to error payload → client translates back to exception
+
+### Example: Form Submission Error Handling
+\`\`\`typescript
+// eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Form error display: catch user errors, rethrow others
+async submitForm(): Promise<void> {
+  try {
+    await this.apiClient.saveData(this.formData);
+    this.router.navigate(['/success']);
+  } catch (err: any) {
+    const error = toError(err);
+
+    if (error instanceof HttpUserError) {
+      // User-facing error - display in form
+      this.formError = error.message;
+      this.cdr.detectChanges();
+    } else {
+      // Unexpected error - let global handler deal with it
+      throw error;
+    }
+  }
+}
+\`\`\`
+
+### Why This Pattern Is Valid
+
+1. **Selective catching**: Only catches errors meant for user display
+2. **No swallowing**: Unexpected errors bubble to global handler with traceId
+3. **Protocol design**: Server intentionally throws \`HttpUserError\` for user-facing messages
+4. **UX requirement**: Forms must show validation errors inline, not via global error page
+
+### Key Requirements
+
+- **ONLY catch specific error types** (e.g., \`HttpUserError\`, \`ValidationError\`)
+- **ALWAYS rethrow** errors that aren't user-facing
+- The server-side code should throw \`HttpUserError\` for user-displayable messages
 
 ## How to Request Approval
 
@@ -573,10 +778,18 @@ If you believe you have a legitimate use case for try-catch:
 
 **Key takeaways**:
 - Global error handler with traceId = debuggable production issues
-- Local try-catch = lost context and debugging nightmares
-- 99% of try-catch blocks can be removed safely
-- Only use try-catch for: retries, batching (with approval)
+- Local try-catch in internal code = lost context and debugging nightmares
+- 95% of try-catch blocks can be removed safely
+- Acceptable try-catch uses: retries, batching, global entry points, edge code
+- **AI agents MUST ask user** before adding global try-catch or edge code patterns
 - TraceId enables \`/debugLocal/{id}\` and \`/debugCloud/{id}\` endpoints
+
+**Acceptable patterns (with eslint-disable)**:
+1. **Global entry points**: Express middleware, RxJS error hooks, Angular ErrorHandler, browser unhandledrejection
+2. **Edge code**: External API calls, database operations, email services - use logRequest/logSuccess/logFailure pattern
+3. **Retry loops**: Vendor APIs with exponential backoff
+4. **Batching**: Partial failure handling where processing must continue
+5. **Form error handling**: Catch \`HttpUserError\` for UI display, rethrow all other errors
 
 **Remember**: If you can't handle the error meaningfully, don't catch it. Let it bubble to the global handler where it will be logged with full context and traceId.
 `;
