@@ -61,6 +61,18 @@ export function createClient<T extends object>(
     // Get all routes from the API prototype
     const routes = getRoutes(apiPrototype);
 
+    // Validate that all methods use @Post() - we only support POST for now
+    for (const route of routes) {
+        if (route.httpMethod !== 'POST') {
+            throw new Error(
+                `Method '${route.methodName}' uses @${route.httpMethod.charAt(0) + route.httpMethod.slice(1).toLowerCase()}() but we only support @Post() on methods right now. ` +
+                `This is how gRPC, thrift, etc. all work - @Get is not needed but we may add later. ` +
+                `Currently, no app has 'truly' needed it and only wanted to conform to ideals when in practice, ` +
+                `there are no issues with @Post() and in fact @Post is more flexible as it can evolve to returning stuff later which happens frequently.`
+            );
+        }
+    }
+
     // Create ProxyClient with injected LogApiCall (or create new one)
     //CRAP our own little DI going on here as angular and nodejs are using 2 different DI systems!!! fuck!!
     const proxyClient = new ProxyClient(
