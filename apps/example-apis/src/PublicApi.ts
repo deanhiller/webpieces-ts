@@ -1,4 +1,4 @@
-import { ApiInterface, Get, Path, ValidateImplementation } from '@webpieces/http-routing';
+import { ApiInterface, Get, Path, ValidateImplementation } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs

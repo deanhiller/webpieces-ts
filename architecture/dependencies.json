@@ -27,9 +27,23 @@
     "level": 0,
     "dependsOn": []
   },
-  "example-app": {
+  "example-apis": {
+    "level": 2,
+    "dependsOn": [
+      "http-api"
+    ]
+  },
+  "example-client": {
+    "level": 3,
+    "dependsOn": [
+      "example-apis",
+      "http-client"
+    ]
+  },
+  "example-server": {
     "level": 5,
     "dependsOn": [
+      "example-apis",
       "http-server"
     ]
   },

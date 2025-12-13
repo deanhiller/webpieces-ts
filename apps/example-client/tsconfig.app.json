@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.test.ts"],
+  "references": [
+    { "path": "../../libraries/apis/example-apis" },
+    { "path": "../../packages/http/http-client" }
+  ]
+}

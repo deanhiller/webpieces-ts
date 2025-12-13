@@ -12,6 +12,15 @@
                 "{workspaceRoot}/eslint.webpieces.config.mjs"
             ]
         },
+        "validate-versions": {
+            "executor": "@webpieces/dev-config:validate-versions",
+            "cache": true,
+            "inputs": [
+                "{workspaceRoot}/package.json",
+                "{workspaceRoot}/package-lock.json",
+                "{workspaceRoot}/**/package.json"
+            ]
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],

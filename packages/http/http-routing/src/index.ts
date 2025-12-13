@@ -28,6 +28,7 @@ export { RESTApiRoutes, ClassType } from './RESTApiRoutes';
 // Core routing types (moved from core-meta)
 export {
     WebAppMeta,
+    WEBAPP_META_TOKEN,
     Routes,
     RouteBuilder,
     RouteDefinition,
@@ -51,3 +52,6 @@ export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
 // Context readers (Node.js only)
 export { RequestContextReader } from './RequestContextReader';
+
+// Server configuration
+export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';

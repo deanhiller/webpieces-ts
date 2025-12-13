@@ -17,6 +17,39 @@ jobs:
         if: github.event.pull_request.user.login == 'deanhiller'
 
         steps:
+            # Step 1: Dismiss any existing approvals so we can re-approve on every push
+            - name: Dismiss stale approvals
+              uses: actions/github-script@v7
+              continue-on-error: true  # Don't fail if no approvals exist
+              with:
+                  github-token: ${{ secrets.BOT_PAT }}
+                  script: |
+                      const { data: reviews } = await github.rest.pulls.listReviews({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.payload.pull_request.number,
+                      });
+
+                      // Dismiss all APPROVED reviews from the bot
+                      const approvals = reviews.filter(review =>
+                        review.state === 'APPROVED' &&
+                        review.user.login === 'deanhiller-bot'
+                      );
+
+                      for (const review of approvals) {
+                        console.log(`Dismissing approval #${review.id} from ${review.user.login}`);
+                        await github.rest.pulls.dismissReview({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          pull_number: context.payload.pull_request.number,
+                          review_id: review.id,
+                          message: 'Dismissing to re-approve after new commits'
+                        });
+                      }
+
+                      console.log(`Dismissed ${approvals.length} approval(s)`);
+
+            # Step 2: Auto-approve the PR (always runs, even on new pushes)
             - name: Auto approve PR
               uses: hmarr/auto-approve-action@v4
               with:

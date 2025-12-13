@@ -1,0 +1,10 @@
+{
+  "name": "@webpieces/example-apis",
+  "version": "0.0.0-dev",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "dependencies": {
+    "@webpieces/http-api": "0.0.0-dev"
+  }
+}

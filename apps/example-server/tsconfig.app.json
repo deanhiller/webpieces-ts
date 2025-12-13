@@ -19,6 +19,9 @@
         },
         {
             "path": "../../packages/http/http-routing"
+        },
+        {
+            "path": "../../libraries/apis/example-apis"
         }
     ]
 }

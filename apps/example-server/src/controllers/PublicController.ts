@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import { Controller, provideSingleton, ValidateImplementation } from '@webpieces/http-routing';
-import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '../api/PublicApi';
+import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '@webpieces/example-apis';
 
 /**
  * PublicController - Extends PublicApiPrototype and implements PublicApi.

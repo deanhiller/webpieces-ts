@@ -5,9 +5,8 @@ import { CompanyModule } from './modules/CompanyModule';
 import { InversifyModule } from './modules/InversifyModule';
 import { FilterRoutes } from './routes/FilterRoutes';
 import { RESTApiRoutes } from '@webpieces/http-routing';
-import { SaveApi, SaveApiPrototype } from './api/SaveApi';
+import { SaveApi, SaveApiPrototype, PublicApiPrototype } from '@webpieces/example-apis';
 import { SaveController } from './controllers/SaveController';
-import { PublicApiPrototype } from './api/PublicApi';
 import { PublicController } from './controllers/PublicController';
 
 /**

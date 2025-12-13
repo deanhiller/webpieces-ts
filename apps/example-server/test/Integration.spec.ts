@@ -1,9 +1,9 @@
 import 'reflect-metadata';
 import { ContainerModule } from 'inversify';
 import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
+import { WebpiecesConfig } from '@webpieces/http-routing';
 import { ProdServerMeta } from '../src/ProdServerMeta';
-import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse } from '../src/api/SaveApi';
-import { PublicApi, PublicApiPrototype, PublicInfoRequest } from '../src/api/PublicApi';
+import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse, PublicApi, PublicApiPrototype, PublicInfoRequest } from '@webpieces/example-apis';
 import {
     RemoteApi,
     FetchValueRequest,
@@ -84,12 +84,13 @@ class MockRemoteApi implements RemoteApi {
  * Helper: Create server with mocked RemoteApi
  */
 async function createServerWithMockRemoteApi(mockRemoteApi: MockRemoteApi): Promise<WebpiecesServer> {
-    const overrides = new ContainerModule(async (options) => {
+    const appOverrides = new ContainerModule(async (options) => {
         const { rebind } = options;
         (await rebind<RemoteApi>(TYPES.RemoteApi)).toConstantValue(mockRemoteApi);
     });
 
-    return await WebpiecesFactory.create(new ProdServerMeta(), overrides);
+    const config = new WebpiecesConfig();
+    return await WebpiecesFactory.create(new ProdServerMeta(), config, appOverrides);
 }
 
 /**

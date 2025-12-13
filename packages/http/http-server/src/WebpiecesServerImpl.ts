@@ -1,4 +1,4 @@
-import express, {Express, NextFunction, Request, Response} from 'express';
+import express, {Express} from 'express';
 import {Container, ContainerModule, inject, injectable} from 'inversify';
 import {buildProviderModule} from '@inversifyjs/binding-decorators';
 import {
@@ -8,6 +8,8 @@ import {
     provideSingleton,
     RouteBuilderImpl, RouteMetadata,
     WebAppMeta,
+    WEBAPP_META_TOKEN,
+    WebpiecesConfig,
 } from '@webpieces/http-routing';
 import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
@@ -41,7 +43,6 @@ import {Service, WpResponse} from "@webpieces/http-filters";
 @provideSingleton()
 @injectable()
 export class WebpiecesServerImpl implements WebpiecesServer {
-    private meta!: WebAppMeta;
     private webpiecesContainer!: Container;
 
     /**
@@ -57,38 +58,29 @@ export class WebpiecesServerImpl implements WebpiecesServer {
     private port: number = 8200;
 
     constructor(
+        @inject(WEBAPP_META_TOKEN) private meta: WebAppMeta,
         @inject(RouteBuilderImpl) private routeBuilder: RouteBuilderImpl,
         @inject(WebpiecesMiddleware) private middleware: WebpiecesMiddleware,
     ) {}
 
     /**
-     * Initialize the server (DI container, routes, filters).
+     * Initialize the server asynchronously.
      * This is called by WebpiecesFactory.create() after resolving this class from DI.
      * This method is internal and not exposed on the WebpiecesServer interface.
      *
      * @param webpiecesContainer - The framework container
      * @param meta - User-provided WebAppMeta with DI modules and routes
-     * @param overrides - Optional ContainerModule for test overrides (loaded LAST)
-     */
-    /**
-     * Initialize the server asynchronously.
-     * Use this when overrides module contains async operations (e.g., rebind() in new Inversify).
-     *
-     * @param webpiecesContainer - The framework container
-     * @param meta - User-provided WebAppMeta with DI modules and routes
-     * @param overrides - Optional ContainerModule for test overrides (loaded LAST)
+     * @param appOverrides - Optional ContainerModule for app test overrides (loaded LAST)
      */
     async initialize(
         webpiecesContainer: Container,
-        meta: WebAppMeta,
-        overrides?: ContainerModule
+        appOverrides?: ContainerModule
     ): Promise<void> {
         if (this.initialized) {
             return;
         }
 
         this.webpiecesContainer = webpiecesContainer;
-        this.meta = meta;
 
         // Create application container as child of framework container
         this.appContainer = new Container({ parent: this.webpiecesContainer });
@@ -97,7 +89,7 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         this.routeBuilder.setContainer(this.appContainer);
 
         // 1. Load DI modules asynchronously
-        await this.loadDIModules(overrides);
+        await this.loadDIModules(appOverrides);
 
         // 2. Register routes and filters
         this.registerRoutes();
@@ -115,9 +107,9 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      *
      * For now, everything goes into appContainer which has access to webpiecesContainer.
      *
-     * @param overrides - Optional ContainerModule for test overrides (loaded LAST to override bindings)
+     * @param appOverrides - Optional ContainerModule for app test overrides (loaded LAST to override bindings)
      */
-    private async loadDIModules(overrides?: ContainerModule): Promise<void> {
+    private async loadDIModules(appOverrides?: ContainerModule): Promise<void> {
         const modules = this.meta.getDIModules();
 
         // Load buildProviderModule to auto-scan for @provideSingleton decorators
@@ -129,9 +121,9 @@ export class WebpiecesServerImpl implements WebpiecesServer {
             await this.appContainer.load(module);
         }
 
-        // Load overrides LAST so they can override existing bindings
-        if (overrides) {
-            await this.appContainer.load(overrides);
+        // Load appOverrides LAST so they can override existing bindings
+        if (appOverrides) {
+            await this.appContainer.load(appOverrides);
         }
     }
 
@@ -181,7 +173,10 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         // Catches all unhandled errors and returns HTML 500 page
         this.app.use(this.middleware.globalErrorHandler.bind(this.middleware));
 
-        // Layer 2: Request/Response Logging
+        // Layer 2: CORS for localhost development
+        this.app.use(this.middleware.corsForLocalhost());
+
+        // Layer 3: Request/Response Logging
         this.app.use(this.middleware.logNextLayer.bind(this.middleware));
 
         // Register routes
