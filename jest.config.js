@@ -12,6 +12,7 @@ module.exports = {
         '^@webpieces/http-filters$': '<rootDir>/packages/http/http-filters/src/index.ts',
         '^@webpieces/http-server$': '<rootDir>/packages/http/http-server/src/index.ts',
         '^@webpieces/http-client$': '<rootDir>/packages/http/http-client/src/index.ts',
+        '^@webpieces/example-apis$': '<rootDir>/apps/example-apis/src/index.ts',
     },
     collectCoverageFrom: [
         'packages/**/*.ts',
