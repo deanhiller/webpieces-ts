@@ -226,6 +226,22 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
         targets['validate-no-skiplevel-deps'] = createValidateNoSkipLevelTarget();
     }
 
+    // Add validate-complete target that runs all validations
+    const validationTargets: string[] = [];
+    if (opts.workspace.validations!.noCycles) {
+        validationTargets.push('validate-no-cycles');
+    }
+    if (opts.workspace.validations!.architectureUnchanged) {
+        validationTargets.push('validate-architecture-unchanged');
+    }
+    if (opts.workspace.validations!.noSkipLevelDeps) {
+        validationTargets.push('validate-no-skiplevel-deps');
+    }
+
+    if (validationTargets.length > 0) {
+        targets['validate-complete'] = createValidateCompleteTarget(validationTargets);
+    }
+
     return targets;
 }
 
@@ -335,6 +351,18 @@ function createValidateNoSkipLevelTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate no project has redundant transitive dependencies',
+        },
+    };
+}
+
+function createValidateCompleteTarget(validationTargets: string[]): TargetConfiguration {
+    return {
+        executor: 'nx:noop',
+        cache: true,
+        dependsOn: validationTargets,
+        metadata: {
+            technologies: ['nx'],
+            description: 'Run all architecture validations (cycles, unchanged, skip-level deps)',
         },
     };
 }
