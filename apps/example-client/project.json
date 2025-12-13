@@ -1,0 +1,64 @@
+{
+  "name": "example-client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/example-client/src",
+  "projectType": "application",
+  "prefix": "app",
+  "targets": {
+    "build": {
+      "executor": "@angular/build:application",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/example-client",
+        "index": "apps/example-client/src/index.html",
+        "browser": "apps/example-client/src/main.ts",
+        "polyfills": ["zone.js"],
+        "tsConfig": "apps/example-client/tsconfig.app.json",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/example-client/src/assets",
+            "output": "/assets/"
+          }
+        ],
+        "styles": ["apps/example-client/src/styles.css"],
+        "scripts": []
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kB",
+              "maximumError": "1MB"
+            }
+          ],
+          "outputHashing": "all"
+        },
+        "development": {
+          "optimization": false,
+          "extractLicenses": false,
+          "sourceMap": true
+        }
+      },
+      "defaultConfiguration": "production",
+      "dependsOn": ["example-apis:build", "http-client:build"]
+    },
+    "serve": {
+      "executor": "@angular/build:dev-server",
+      "configurations": {
+        "production": {
+          "buildTarget": "example-client:build:production"
+        },
+        "development": {
+          "buildTarget": "example-client:build:development"
+        }
+      },
+      "defaultConfiguration": "development",
+      "options": {
+        "port": 4200,
+        "host": "localhost"
+      }
+    }
+  }
+}

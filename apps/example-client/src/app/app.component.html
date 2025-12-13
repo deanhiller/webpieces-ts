@@ -1,0 +1,39 @@
+<div class="container">
+  <h1>{{ title }}</h1>
+
+  <div class="info">
+    <p><strong>API Base URL:</strong> {{ apiBaseUrl }}</p>
+    <p><strong>Client URL:</strong> {{ envConfig.webBaseUrl() }}</p>
+  </div>
+
+  <div class="actions">
+    <button (click)="callSaveApi()" [disabled]="loading">
+      Call SaveApi
+    </button>
+
+    <button (click)="callPublicApi()" [disabled]="loading">
+      Call PublicApi
+    </button>
+  </div>
+
+  <div class="status" *ngIf="loading">
+    <p>Loading...</p>
+  </div>
+
+  <div class="error" *ngIf="error">
+    <h3>Error:</h3>
+    <pre>{{ error }}</pre>
+  </div>
+
+  <div class="response" *ngIf="saveResponse">
+    <h3>SaveApi Response:</h3>
+    <pre>{{ saveResponse | json }}</pre>
+  </div>
+
+  <div class="response" *ngIf="publicResponse">
+    <h3>PublicApi Response:</h3>
+    <pre>{{ publicResponse | json }}</pre>
+  </div>
+
+  <router-outlet></router-outlet>
+</div>

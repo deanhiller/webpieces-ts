@@ -1,0 +1,21 @@
+{
+  "name": "example-apis",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/example-apis/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/example-apis",
+        "main": "apps/example-apis/src/index.ts",
+        "tsConfig": "apps/example-apis/tsconfig.lib.json",
+        "assets": [
+          "apps/example-apis/package.json"
+        ]
+      },
+      "dependsOn": ["http-api:build"]
+    }
+  }
+}

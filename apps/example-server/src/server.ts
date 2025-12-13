@@ -18,8 +18,9 @@ async function main() {
         const server = await WebpiecesFactory.create(new ProdServerMeta(), config);
 
         console.log('[Server] Calling server.start()...');
-        await server.start(8000);
-        console.log('Server started');
+        const port = parseInt(process.env['PORT'] || '8200', 10);
+        await server.start(port);
+        console.log(`Server started and listening on port ${port}`);
 
         // Keep the process alive - wait indefinitely
         await new Promise((resolve) => {

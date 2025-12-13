@@ -3,8 +3,7 @@ import { ContainerModule } from 'inversify';
 import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
 import { WebpiecesConfig } from '@webpieces/http-routing';
 import { ProdServerMeta } from '../src/ProdServerMeta';
-import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse } from '../src/api/SaveApi';
-import { PublicApi, PublicApiPrototype, PublicInfoRequest } from '../src/api/PublicApi';
+import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse, PublicApi, PublicApiPrototype, PublicInfoRequest } from '@webpieces/example-apis';
 import {
     RemoteApi,
     FetchValueRequest,
