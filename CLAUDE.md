@@ -283,6 +283,30 @@ export class MyRoutes implements Routes {
 4. **Update documentation** - Keep this file and claude.patterns.md up to date
 5. **Follow existing patterns** - Look at similar features for consistency
 
+## Build Verification (CRITICAL)
+
+**RULE: Always run `npm run build-all` after making code changes.**
+
+This command runs:
+- TypeScript compilation for all packages
+- ESLint checks (including custom rules like max-file-lines, no-unmanaged-exceptions)
+- Circular dependency checks
+
+```bash
+npm run build-all
+```
+
+**Why this is critical:**
+- Catches type errors across package boundaries
+- Verifies ESLint rules pass (file size limits, exception handling patterns, etc.)
+- Ensures no circular dependencies were introduced
+- The monorepo has interdependent packages - changes in one may break others
+
+**Do NOT:**
+- Skip this step after code changes
+- Assume changes are safe without verification
+- Commit code that doesn't pass build-all
+
 ## Common Mistakes to Avoid
 
 1. ❌ Using interfaces for data structures
