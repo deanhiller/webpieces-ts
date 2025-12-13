@@ -25,6 +25,7 @@ function getPackageVersion(tree: Tree): string {
  *
  * Responsibilities:
  * - Registers the plugin in nx.json
+ * - Adds architecture validation to targetDefaults (runs once before all builds)
  * - Creates architecture/ directory if needed
  * - Adds madge as a devDependency (required for circular dep checking)
  * - Adds convenient npm scripts to package.json
@@ -35,6 +36,7 @@ function getPackageVersion(tree: Tree): string {
  */
 export default async function initGenerator(tree: Tree, options: InitGeneratorSchema) {
     registerPlugin(tree);
+    addTargetDefaults(tree);
     const installTask = addMadgeDependency(tree);
     createArchitectureDirectory(tree);
     addNpmScripts(tree);
@@ -68,6 +70,68 @@ function registerPlugin(tree: Tree): void {
         console.log(`✅ Registered ${pluginName} plugin in nx.json`);
     } else {
         console.log(`ℹ️  ${pluginName} plugin is already registered`);
+    }
+}
+
+function addTargetDefaults(tree: Tree): void {
+    const nxJson = readNxJson(tree);
+    if (!nxJson) {
+        throw new Error('Could not read nx.json. Are you in an Nx workspace?');
+    }
+
+    if (!nxJson.targetDefaults) {
+        nxJson.targetDefaults = {};
+    }
+
+    // List of common build executors that should validate architecture first
+    const buildExecutors = [
+        '@nx/js:tsc',
+        '@nx/esbuild:esbuild',
+        '@nx/webpack:webpack',
+        '@nx/rollup:rollup',
+        '@nx/vite:build',
+        '@angular/build:application',
+        '@angular-devkit/build-angular:browser',
+        '@angular-devkit/build-angular:application'
+    ];
+
+    let updated = false;
+
+    buildExecutors.forEach((executor) => {
+        if (!nxJson.targetDefaults![executor]) {
+            nxJson.targetDefaults![executor] = {};
+        }
+
+        const targetDef = nxJson.targetDefaults![executor];
+        let dependsOn = targetDef.dependsOn || [];
+
+        // Ensure dependsOn is an array
+        if (!Array.isArray(dependsOn)) {
+            dependsOn = [dependsOn];
+        }
+
+        // Check if architecture validation is already in dependsOn
+        const hasArchValidation = dependsOn.some((dep) => {
+            if (typeof dep === 'string') {
+                return dep === 'architecture:validate-complete';
+            }
+            // Handle object format: { target: 'validate', projects: 'self' }
+            return dep.target === 'architecture:validate-complete';
+        });
+
+        if (!hasArchValidation) {
+            // Add architecture validation before other dependencies
+            dependsOn.unshift('architecture:validate-complete');
+            targetDef.dependsOn = dependsOn;
+            updated = true;
+        }
+    });
+
+    if (updated) {
+        updateNxJson(tree, nxJson);
+        console.log('✅ Added architecture validation to targetDefaults (runs once before all builds)');
+    } else {
+        console.log('ℹ️  Architecture validation already configured in targetDefaults');
     }
 }
 
