@@ -66,7 +66,7 @@ export function saveGraph(
         sortedGraph[key] = graph[key];
     }
 
-    const content = JSON.stringify(sortedGraph, null, 2) + '\n';
+    const content = JSON.stringify(sortedGraph, null, 4) + '\n';
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
 
