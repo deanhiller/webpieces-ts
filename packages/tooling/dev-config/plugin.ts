@@ -115,8 +115,8 @@ async function createNodesFunction(
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
 
-    // Add per-project circular-deps targets
-    addCircularDepsTargets(results, projectFiles, opts, context);
+    // Add per-project targets (circular-deps, ci)
+    addPerProjectTargets(results, projectFiles, opts, context);
 
     return results;
 }
@@ -151,34 +151,41 @@ function addArchitectureProject(
     }
 }
 
-function addCircularDepsTargets(
+function addPerProjectTargets(
     results: Array<readonly [string, CreateNodesResult]>,
     projectFiles: readonly string[],
     opts: Required<ArchitecturePluginOptions>,
     context: CreateNodesContextV2
 ): void {
-    if (!opts.circularDeps.enabled) return;
-
     for (const projectFile of projectFiles) {
         if (!projectFile.endsWith('project.json')) continue;
 
         const projectRoot = dirname(projectFile);
         if (projectRoot === '.') continue;
 
-        if (isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) continue;
+        const targets: Record<string, TargetConfiguration> = {};
 
-        const srcDir = join(context.workspaceRoot, projectRoot, 'src');
-        if (!existsSync(srcDir)) continue;
+        // Add circular-deps target if enabled and src exists
+        if (opts.circularDeps.enabled) {
+            if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
+                const srcDir = join(context.workspaceRoot, projectRoot, 'src');
+                if (existsSync(srcDir)) {
+                    const targetName = opts.circularDeps.targetName!;
+                    targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
+                }
+            }
+        }
 
-        const targetName = opts.circularDeps.targetName!;
-        const checkCircularDepsTarget = createCircularDepsTarget(projectRoot, targetName);
+        // Add ci target - composite target that runs lint, build, test in parallel
+        // (with test depending on build via targetDefaults)
+        targets['ci'] = createCiTarget();
+
+        if (Object.keys(targets).length === 0) continue;
 
         const result: CreateNodesResult = {
             projects: {
                 [projectRoot]: {
-                    targets: {
-                        [targetName]: checkCircularDepsTarget,
-                    },
+                    targets,
                 },
             },
         };
@@ -415,6 +422,22 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
         metadata: {
             technologies: ['nx'],
             description: 'Run all architecture validations (cycles, unchanged, skip-level deps)',
+        },
+    };
+}
+
+/**
+ * Create per-project ci target - Gradle-style composite target
+ * Runs lint, build, and test in parallel (with test waiting for build via targetDefaults)
+ */
+function createCiTarget(): TargetConfiguration {
+    return {
+        executor: 'nx:noop',
+        cache: true,
+        dependsOn: ['lint', 'build', 'test'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Run all CI checks: lint, build, and test (Gradle-style composite target)',
         },
     };
 }

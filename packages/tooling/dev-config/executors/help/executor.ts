@@ -41,6 +41,17 @@ export default async function helpExecutor(
     console.log('    nx affected --target=validate-no-file-import-cycles       # Check all affected projects');
     console.log('    nx run-many --target=validate-no-file-import-cycles --all # Check all projects');
     console.log('');
+    console.log('  Per-project CI target (lint + build + test):');
+    console.log('    nx run <project>:ci                    # Run lint, build, test together');
+    console.log('    nx run-many --target=ci --all          # Run ci for all projects');
+    console.log('');
+    console.log('    Execution order (test waits for build via targetDefaults):');
+    console.log('    ci (nx:noop)');
+    console.log('    ├── lint ─────────────────┐');
+    console.log('    ├── build ────────────────┼── run in parallel');
+    console.log('    └── test ─────────────────┘');
+    console.log('        └── depends on build (waits)');
+    console.log('');
     console.log(`${GREEN}💡 Quick start:${RESET}`);
     console.log(`   ${BOLD}npm run arch:generate${RESET}           # Generate the graph first`);
     console.log(`   ${BOLD}npm run arch:validate-complete${RESET}  # Run complete validation`);
