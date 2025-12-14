@@ -1,16 +1,18 @@
-eslint rules
+##validator rules
+- validate-no-cycles - Explicitly validates cycles
+- validate-packagejson - Explicitly validates package.json matches project.json
+- validate-architecture-unchanged - Validates against blessed graph
+    - ADD AI instructions 1. how to fix, 2. ask user before changing arch!
+- validate-no-skiplevel-deps - Validates transitive dependencies
+- validate-new-method - cannot be done in lint as we need context if it is new method to force AI to write cleaner smaller methods that read like a table of contents in a book(self documenting code).
+
+##actions##
 * generate graph to architecture/dependencies.json FROM project.json files
-* validate package.json files match project.json files or break build
-* no circ deps on generated graph (moduleA -> moduleB -> moduleA fails)
-  * Need AI instructions on how to fix
-  * If no architecture: instruct user to generate and checkin
-* files do not violate the graph (they will if allowed, fucking AI)
-  * Need AI instructions on how to fix
-  * If no architecture: instruct user to generate as
-  * If violations, instruct AI/user is this architecture change intentional and to regen architecture if so 
+
+eslint rules
 * no circ deps on files within module (madge?)
-  * Need AI instructions on how to fix
-* depending on existing transitive dep directly breaks build to simplify graph picture for human quick understanding 
+    * Need AI instructions on how to fix
+* depending on existing transitive dep directly breaks build to simplify graph picture for human quick understanding
 * no try..catch except disable rule comment (very useful for ensuring global try..catch is used which is how we tell AI /debugBug {errorId})
 * try..catch() { toError(x) except disable rule comment
 * method no more than 70 lines except disable rule comment with AI instructions on fixing when violated

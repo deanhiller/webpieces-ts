@@ -83,21 +83,13 @@ function addTargetDefaults(tree: Tree): void {
         nxJson.targetDefaults = {};
     }
 
-    // List of common build executors that should validate architecture first
-    const buildExecutors = [
-        '@nx/js:tsc',
-        '@nx/esbuild:esbuild',
-        '@nx/webpack:webpack',
-        '@nx/rollup:rollup',
-        '@nx/vite:build',
-        '@angular/build:application',
-        '@angular-devkit/build-angular:browser',
-        '@angular-devkit/build-angular:application'
-    ];
+    // Find which executors are actually used in this workspace
+    const usedExecutors = findUsedExecutors(tree);
 
+    // Only add targetDefaults for executors that are actually used
     let updated = false;
 
-    buildExecutors.forEach((executor) => {
+    usedExecutors.forEach((executor) => {
         if (!nxJson.targetDefaults![executor]) {
             nxJson.targetDefaults![executor] = {};
         }
@@ -115,7 +107,6 @@ function addTargetDefaults(tree: Tree): void {
             if (typeof dep === 'string') {
                 return dep === 'architecture:validate-complete';
             }
-            // Handle object format: { target: 'validate', projects: 'self' }
             return dep.target === 'architecture:validate-complete';
         });
 
@@ -124,15 +115,77 @@ function addTargetDefaults(tree: Tree): void {
             dependsOn.unshift('architecture:validate-complete');
             targetDef.dependsOn = dependsOn;
             updated = true;
+            console.log(`  ✅ Added architecture validation to ${executor}`);
         }
     });
 
     if (updated) {
         updateNxJson(tree, nxJson);
-        console.log('✅ Added architecture validation to targetDefaults (runs once before all builds)');
+        console.log('✅ Added architecture validation to targetDefaults for used executors');
     } else {
         console.log('ℹ️  Architecture validation already configured in targetDefaults');
     }
+}
+
+/**
+ * Scan all project.json files to find which build executors are actually used
+ */
+function findUsedExecutors(tree: Tree): Set<string> {
+    const usedExecutors = new Set<string>();
+
+    // Known build executors we care about
+    const buildExecutors = new Set([
+        '@nx/js:tsc',
+        '@nx/esbuild:esbuild',
+        '@nx/webpack:webpack',
+        '@nx/rollup:rollup',
+        '@nx/vite:build',
+        '@angular/build:application',
+        '@angular-devkit/build-angular:browser',
+        '@angular-devkit/build-angular:application'
+    ]);
+
+    // Scan all project.json files
+    tree.listChanges(); // Force tree to be aware of all files
+
+    const scanDir = (dir: string) => {
+        for (const child of tree.children(dir)) {
+            const childPath = dir === '.' ? child : `${dir}/${child}`;
+
+            if (tree.isFile(childPath)) {
+                if (child === 'project.json') {
+                    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Intentionally ignoring JSON parse errors for malformed project.json files
+                    try {
+                        const content = tree.read(childPath, 'utf-8');
+                        if (content) {
+                            const projectJson = JSON.parse(content);
+                            if (projectJson.targets) {
+                                for (const target of Object.values(projectJson.targets)) {
+                                    const executor = (target as { executor?: string })?.executor;
+                                    if (executor && buildExecutors.has(executor)) {
+                                        usedExecutors.add(executor);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (err: any) {
+                        //const error = toError(err);
+                    }
+                }
+            } else {
+                // Skip node_modules and dist
+                if (child !== 'node_modules' && child !== 'dist' && child !== '.git') {
+                    scanDir(childPath);
+                }
+            }
+        }
+    };
+
+    scanDir('.');
+
+    console.log(`ℹ️  Found ${usedExecutors.size} build executors in use: ${[...usedExecutors].join(', ')}`);
+
+    return usedExecutors;
 }
 
 function addMadgeDependency(tree: Tree) {
