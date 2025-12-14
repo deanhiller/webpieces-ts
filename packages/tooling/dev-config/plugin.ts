@@ -445,7 +445,7 @@ function createCiTarget(): TargetConfiguration {
 function createHelpTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:help',
-        cache: true,
+        cache: false, // Never cache - always show help output
         metadata: {
             technologies: ['nx'],
             description: 'Display help for @webpieces/dev-config commands and targets',
