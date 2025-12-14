@@ -43,6 +43,7 @@ export interface ArchitecturePluginOptions {
             noCycles?: boolean;
             noSkipLevelDeps?: boolean;
             architectureUnchanged?: boolean;
+            validatePackageJson?: boolean;
         };
         features?: {
             generate?: boolean;
@@ -65,6 +66,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             noCycles: true,
             noSkipLevelDeps: true,
             architectureUnchanged: true,
+            validatePackageJson: true,
         },
         features: {
             generate: true,
@@ -226,6 +228,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
         targets['validate-no-skiplevel-deps'] = createValidateNoSkipLevelTarget();
     }
 
+    if (opts.workspace.validations!.validatePackageJson) {
+        targets['validate-packagejson'] = createValidatePackageJsonTarget();
+    }
+
     // Add validate-complete target that runs all validations
     const validationTargets: string[] = [];
     if (opts.workspace.validations!.noCycles) {
@@ -236,6 +242,9 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     }
     if (opts.workspace.validations!.noSkipLevelDeps) {
         validationTargets.push('validate-no-skiplevel-deps');
+    }
+    if (opts.workspace.validations!.validatePackageJson) {
+        validationTargets.push('validate-packagejson');
     }
 
     if (validationTargets.length > 0) {
@@ -275,6 +284,10 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
 
     if (opts.workspace.validations!.noSkipLevelDeps) {
         targets[`${prefix}validate-no-skiplevel-deps`] = createValidateNoSkipLevelTarget();
+    }
+
+    if (opts.workspace.validations!.validatePackageJson) {
+        targets[`${prefix}validate-packagejson`] = createValidatePackageJsonTarget();
     }
 
     return targets;
@@ -351,6 +364,18 @@ function createValidateNoSkipLevelTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate no project has redundant transitive dependencies',
+        },
+    };
+}
+
+function createValidatePackageJsonTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-packagejson',
+        cache: true,
+        inputs: ['default'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate package.json dependencies match project.json build dependencies',
         },
     };
 }
