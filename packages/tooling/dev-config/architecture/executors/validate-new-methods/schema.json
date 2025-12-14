@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate New Methods Executor",
+    "description": "Validates that newly added methods don't exceed a maximum line count. Only runs in affected mode (when NX_BASE is set).",
+    "type": "object",
+    "properties": {
+        "max": {
+            "type": "number",
+            "description": "Maximum number of lines allowed for new methods",
+            "default": 30
+        }
+    },
+    "required": []
+}
