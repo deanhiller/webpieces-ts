@@ -2,13 +2,16 @@
  * Validate New Methods Executor
  *
  * Validates that newly added methods don't exceed a maximum line count.
- * Only runs when NX_BASE environment variable is set (affected mode).
+ * Runs in affected mode when:
+ *   1. NX_BASE environment variable is set (via nx affected), OR
+ *   2. Auto-detects base by finding merge-base with origin/main
  *
  * This validator encourages writing methods that read like a "table of contents"
  * where each method call describes a larger piece of work.
  *
  * Usage:
  * nx affected --target=validate-new-methods --base=origin/main
+ * OR: runs automatically via build's architecture:validate-complete dependency
  *
  * Escape hatch: Add eslint-disable comment with justification
  */
@@ -125,10 +128,10 @@ const result = this.buildResultObject(data);
 
 Sometimes methods genuinely need to be longer (complex algorithms, state machines, etc.).
 
-**Escape hatch**: Add an eslint-disable comment with justification:
+**Escape hatch**: Add a webpieces-disable comment with justification:
 
 \`\`\`typescript
-// eslint-disable-next-line @webpieces/max-method-lines -- Complex state machine, splitting reduces clarity
+// webpieces-disable max-method-lines -- Complex state machine, splitting reduces clarity
 async complexStateMachine(): Promise<void> {
     // ... longer method with justification
 }
@@ -140,7 +143,7 @@ async complexStateMachine(): Promise<void> {
 2. **IDENTIFY** logical units that can be extracted
 3. **EXTRACT** into well-named private methods
 4. **VERIFY** the main method now reads like a table of contents
-5. **IF NOT FEASIBLE**: Add eslint-disable with clear justification
+5. **IF NOT FEASIBLE**: Add webpieces-disable comment with clear justification
 
 ## Remember
 
@@ -163,11 +166,14 @@ function writeTmpInstructions(workspaceRoot: string): string {
 }
 
 /**
- * Get changed TypeScript files between base and head
+ * Get changed TypeScript files between base and working tree.
+ * Uses `git diff base` (no three-dots) to match what `nx affected` does -
+ * this includes both committed and uncommitted changes in one diff.
  */
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head: string): string[] {
+function getChangedTypeScriptFiles(workspaceRoot: string, base: string): string[] {
     try {
-        const output = execSync(`git diff --name-only ${base}...${head} -- '*.ts' '*.tsx'`, {
+        // Use two-dot diff (base to working tree) - same as nx affected
+        const output = execSync(`git diff --name-only ${base} -- '*.ts' '*.tsx'`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -181,11 +187,14 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head: st
 }
 
 /**
- * Get the diff content for a specific file
+ * Get the diff content for a specific file between base and working tree.
+ * Uses `git diff base` (no three-dots) to match what `nx affected` does -
+ * this includes both committed and uncommitted changes in one diff.
  */
-function getFileDiff(workspaceRoot: string, file: string, base: string, head: string): string {
+function getFileDiff(workspaceRoot: string, file: string, base: string): string {
     try {
-        return execSync(`git diff ${base}...${head} -- "${file}"`, {
+        // Use two-dot diff (base to working tree) - same as nx affected
+        return execSync(`git diff ${base} -- "${file}"`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -203,14 +212,14 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
 
     // Patterns to match method definitions
     const patterns = [
-        // async methodName( or methodName(
-        /^\+\s*(async\s+)?(\w+)\s*\(/,
-        // function methodName(
-        /^\+\s*(async\s+)?function\s+(\w+)\s*\(/,
-        // const/let methodName = (async)? (
-        /^\+\s*(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
-        // const/let methodName = (async)? function
-        /^\+\s*(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
+        // [export] [async] function methodName( - most explicit, check first
+        /^\+\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/,
+        // [export] const/let methodName = [async] (
+        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
+        // [export] const/let methodName = [async] function
+        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
+        // class method: [async] methodName( - but NOT constructor, if, for, while, etc.
+        /^\+\s*(?:async\s+)?(\w+)\s*\(/,
     ];
 
     for (const line of lines) {
@@ -218,8 +227,8 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
             for (const pattern of patterns) {
                 const match = line.match(pattern);
                 if (match) {
-                    // Extract method name from different capture groups
-                    const methodName = match[2] || match[1];
+                    // Extract method name - now always in capture group 1
+                    const methodName = match[1];
                     if (methodName && !['if', 'for', 'while', 'switch', 'catch', 'constructor'].includes(methodName)) {
                         newMethods.add(methodName);
                     }
@@ -233,19 +242,40 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
 }
 
 /**
+ * Check if a line contains a webpieces-disable comment for max-method-lines
+ */
+function hasDisableComment(lines: string[], lineNumber: number): boolean {
+    // Check the line before the method (lineNumber is 1-indexed, array is 0-indexed)
+    // We need to check a few lines before in case there's JSDoc or decorators
+    const startCheck = Math.max(0, lineNumber - 5);
+    for (let i = lineNumber - 2; i >= startCheck; i--) {
+        const line = lines[i]?.trim() ?? '';
+        // Stop if we hit another function/class/etc
+        if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
+            break;
+        }
+        if (line.includes('webpieces-disable') && line.includes('max-method-lines')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Parse a TypeScript file and find methods with their line counts
  */
 function findMethodsInFile(
     filePath: string,
     workspaceRoot: string
-): Array<{ name: string; line: number; lines: number }> {
+): Array<{ name: string; line: number; lines: number; hasDisableComment: boolean }> {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
 
     const content = fs.readFileSync(fullPath, 'utf-8');
+    const fileLines = content.split('\n');
     const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
 
-    const methods: Array<{ name: string; line: number; lines: number }> = [];
+    const methods: Array<{ name: string; line: number; lines: number; hasDisableComment: boolean }> = [];
 
     function visit(node: ts.Node): void {
         let methodName: string | undefined;
@@ -280,6 +310,7 @@ function findMethodsInFile(
                 name: methodName,
                 line: startLine,
                 lines: endLine - startLine + 1,
+                hasDisableComment: hasDisableComment(fileLines, startLine),
             });
         }
 
@@ -297,14 +328,13 @@ function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    head: string,
     maxLines: number
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
         // Get the diff to find which methods are NEW (not just modified)
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = getFileDiff(workspaceRoot, file, base);
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
 
         if (newMethodNames.size === 0) continue;
@@ -313,8 +343,8 @@ function findViolations(
         const methods = findMethodsInFile(file, workspaceRoot);
 
         for (const method of methods) {
-            // Only check NEW methods
-            if (newMethodNames.has(method.name) && method.lines > maxLines) {
+            // Only check NEW methods that don't have webpieces-disable comment
+            if (newMethodNames.has(method.name) && method.lines > maxLines && !method.hasDisableComment) {
                 violations.push({
                     file,
                     methodName: method.name,
@@ -329,6 +359,41 @@ function findViolations(
     return violations;
 }
 
+/**
+ * Auto-detect the base branch by finding the merge-base with origin/main.
+ * This allows the executor to run even when NX_BASE isn't set (e.g., via dependsOn).
+ */
+function detectBase(workspaceRoot: string): string | null {
+    try {
+        // First, try to get merge-base with origin/main
+        const mergeBase = execSync('git merge-base HEAD origin/main', {
+            cwd: workspaceRoot,
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+
+        if (mergeBase) {
+            return mergeBase;
+        }
+    } catch {
+        // origin/main might not exist, try main
+        try {
+            const mergeBase = execSync('git merge-base HEAD main', {
+                cwd: workspaceRoot,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            }).trim();
+
+            if (mergeBase) {
+                return mergeBase;
+            }
+        } catch {
+            // Ignore - will return null
+        }
+    }
+    return null;
+}
+
 export default async function runExecutor(
     options: ValidateNewMethodsOptions,
     context: ExecutorContext
@@ -336,26 +401,35 @@ export default async function runExecutor(
     const workspaceRoot = context.root;
     const maxLines = options.max ?? 30;
 
-    // Check if running in affected mode
-    const base = process.env['NX_BASE'];
-    const head = process.env['NX_HEAD'] || 'HEAD';
+    // Check if running in affected mode via NX_BASE, or auto-detect
+    // We use NX_BASE as the base, and compare to WORKING TREE (not NX_HEAD)
+    // This matches what `nx affected` does - it compares base to working tree
+    let base = process.env['NX_BASE'];
 
     if (!base) {
-        console.log('\n⏭️  Skipping new method validation (not in affected mode)');
-        console.log('   To run: nx affected --target=validate-new-methods --base=origin/main');
-        console.log('');
-        return { success: true };
+        // Try to auto-detect base from git merge-base
+        base = detectBase(workspaceRoot) ?? undefined;
+
+        if (!base) {
+            console.log('\n⏭️  Skipping new method validation (could not detect base branch)');
+            console.log('   To run explicitly: nx affected --target=validate-new-methods --base=origin/main');
+            console.log('');
+            return { success: true };
+        }
+
+        console.log('\n📏 Validating New Method Sizes (auto-detected base)\n');
+    } else {
+        console.log('\n📏 Validating New Method Sizes\n');
     }
 
-    console.log('\n📏 Validating New Method Sizes\n');
     console.log(`   Base: ${base}`);
-    console.log(`   Head: ${head}`);
+    console.log(`   Comparing to: working tree (includes uncommitted changes)`);
     console.log(`   Max lines for new methods: ${maxLines}`);
     console.log('');
 
     try {
-        // Get changed TypeScript files
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+        // Get changed TypeScript files (base to working tree, like nx affected)
+        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base);
 
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
@@ -365,7 +439,7 @@ export default async function runExecutor(
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
         // Find violations
-        const violations = findViolations(workspaceRoot, changedFiles, base, head, maxLines);
+        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines);
 
         if (violations.length === 0) {
             console.log('✅ All new methods are under ' + maxLines + ' lines');
@@ -373,30 +447,23 @@ export default async function runExecutor(
         }
 
         // Write instructions file
-        const mdPath = writeTmpInstructions(workspaceRoot);
+        writeTmpInstructions(workspaceRoot);
 
         // Report violations
         console.error('');
         console.error('❌ New methods exceed ' + maxLines + ' lines!');
         console.error('');
         console.error('📚 Methods should read like a "table of contents" - each method call');
-        console.error('   describes a larger piece of work. ~50% of the time, you can refactor');
-        console.error('   to stay under ' + maxLines + ' lines. If not feasible, use the escape hatch.');
+        console.error('   describes a larger piece of work. You can refactor');
+        console.error('   to stay under ' + maxLines + ' lines 50% of the time. If not feasible, use the escape hatch.');
+        console.error('');
+        console.error('⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️');
         console.error('');
 
         for (const v of violations) {
             console.error(`  ❌ ${v.file}:${v.line}`);
             console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
-            console.error(`     READ ${mdPath} to fix this error properly`);
-            console.error('');
         }
-
-        console.error('💡 To fix:');
-        console.error('   1. Refactor the method to read like a table of contents (preferred)');
-        console.error('   2. OR add eslint-disable comment with justification:');
-        console.error('      // eslint-disable-next-line @webpieces/max-method-lines -- [reason]');
-        console.error('');
-        console.error(`⚠️  *** READ ${mdPath} for detailed guidance *** ⚠️`);
         console.error('');
 
         return { success: false };
