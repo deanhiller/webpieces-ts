@@ -153,12 +153,12 @@ function addNpmScripts(tree: Tree): void {
         // Add architecture validation scripts
         pkgJson.scripts['arch:generate'] = 'nx run architecture:generate';
         pkgJson.scripts['arch:visualize'] = 'nx run architecture:visualize';
-        pkgJson.scripts['arch:validate'] = 'nx run architecture:validate-no-cycles && nx run architecture:validate-no-skiplevel-deps';
-        pkgJson.scripts['arch:validate-all'] = 'nx run architecture:validate-no-cycles && nx run architecture:validate-no-skiplevel-deps && nx run architecture:validate-architecture-unchanged';
+        pkgJson.scripts['arch:validate'] = 'nx run architecture:validate-no-architecture-cycles && nx run architecture:validate-no-skiplevel-deps';
+        pkgJson.scripts['arch:validate-all'] = 'nx run architecture:validate-no-architecture-cycles && nx run architecture:validate-no-skiplevel-deps && nx run architecture:validate-architecture-unchanged';
 
-        // Add circular dependency checking scripts
-        pkgJson.scripts['arch:check-circular'] = 'nx run-many --target=check-circular-deps --all';
-        pkgJson.scripts['arch:check-circular-affected'] = 'nx affected --target=check-circular-deps';
+        // Add file import cycle checking scripts
+        pkgJson.scripts['arch:check-circular'] = 'nx run-many --target=validate-no-file-import-cycles --all';
+        pkgJson.scripts['arch:check-circular-affected'] = 'nx affected --target=validate-no-file-import-cycles';
 
         // Complete validation including circular deps
         pkgJson.scripts['arch:validate-complete'] = 'npm run arch:validate-all && npm run arch:check-circular';

@@ -133,7 +133,7 @@ This will:
 
 ### Step 6: Verify No Cycles
 \`\`\`bash
-npx nx run architecture:validate-no-cycles
+npx nx run architecture:validate-no-architecture-cycles
 \`\`\`
 
 If cycles are detected, you MUST refactor to break the cycle. Common strategies:
