@@ -69,7 +69,7 @@ export default async function runExecutor(
             console.error(comparison.summary);
             console.error('\nTo fix:');
             console.error('  1. Review the changes above');
-            console.error('  2. If intentional, run: nx run architecture:generate');
+            console.error('  2. If intentional, ASK USER to run: nx run architecture:generate since this is a critical change');
             console.error('  3. Commit the updated architecture/dependencies.json');
             return { success: false };
         }

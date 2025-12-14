@@ -25,6 +25,11 @@
             "schema": "./architecture/executors/validate-no-skiplevel-deps/schema.json",
             "description": "Validate no project has redundant transitive dependencies"
         },
+        "validate-packagejson": {
+            "implementation": "./architecture/executors/validate-packagejson/executor",
+            "schema": "./architecture/executors/validate-packagejson/schema.json",
+            "description": "Validate package.json dependencies match project.json build dependencies"
+        },
         "help": {
             "implementation": "./executors/help/executor",
             "schema": "./executors/help/schema.json",
