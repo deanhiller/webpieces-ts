@@ -15,7 +15,16 @@ import type { Rule } from 'eslint';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DEPENDENCIES_DOC_CONTENT = `# AI Agent Instructions: Architecture Dependency Violation
+const DEPENDENCIES_DOC_CONTENT = `# Instructions: Architecture Dependency Violation
+
+IN GENERAL, it is better to avoid these changes and find a different way by moving classes
+around to existing packages you already depend on. It is not always avoidable though.
+A clean dependency graph keeps you out of huge trouble later.
+
+If you are a human, simply run these commands:
+* nx run architecture:visualize - to see the new dependencies and validate that change is desired
+* nx run architecture:generate - updates the dep graph
+* git diff architecture/dependencies.json - to see the deps changes you made
 
 **READ THIS FILE FIRST before making any changes!**
 
@@ -102,7 +111,7 @@ Only after receiving explicit human approval in Step 3, make these changes:
 ### Step 5: Update Architecture Definition
 Run this command to validate and update the architecture:
 \`\`\`bash
-npx nx run architecture:validate --mode=update
+npx nx run architecture:generate
 \`\`\`
 
 This will:
@@ -112,7 +121,7 @@ This will:
 
 ### Step 6: Verify No Cycles
 \`\`\`bash
-npx nx run architecture:validate
+npx nx run architecture:validate-no-cycles
 \`\`\`
 
 If cycles are detected, you MUST refactor to break the cycle. Common strategies:
