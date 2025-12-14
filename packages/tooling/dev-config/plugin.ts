@@ -56,7 +56,7 @@ export interface ArchitecturePluginOptions {
 const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
     circularDeps: {
         enabled: true,
-        targetName: 'check-circular-deps',
+        targetName: 'validate-no-file-import-cycles',
         excludePatterns: [],
     },
     workspace: {
@@ -219,7 +219,7 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     }
 
     if (opts.workspace.validations!.noCycles) {
-        targets['validate-no-cycles'] = createValidateNoCyclesTarget();
+        targets['validate-no-architecture-cycles'] = createValidateNoCyclesTarget();
     }
 
     if (opts.workspace.validations!.architectureUnchanged) {
@@ -241,7 +241,7 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     // Add validate-complete target that runs all validations
     const validationTargets: string[] = [];
     if (opts.workspace.validations!.noCycles) {
-        validationTargets.push('validate-no-cycles');
+        validationTargets.push('validate-no-architecture-cycles');
     }
     if (opts.workspace.validations!.architectureUnchanged) {
         validationTargets.push('validate-architecture-unchanged');
@@ -285,7 +285,7 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     }
 
     if (opts.workspace.validations!.noCycles) {
-        targets[`${prefix}validate-no-cycles`] = createValidateNoCyclesTarget();
+        targets[`${prefix}validate-no-architecture-cycles`] = createValidateNoCyclesTarget();
     }
 
     if (opts.workspace.validations!.architectureUnchanged) {
@@ -347,12 +347,12 @@ function createVisualizeTarget(prefix: string, graphPath: string): TargetConfigu
 
 function createValidateNoCyclesTarget(): TargetConfiguration {
     return {
-        executor: '@webpieces/dev-config:validate-no-cycles',
+        executor: '@webpieces/dev-config:validate-no-architecture-cycles',
         cache: true,
         inputs: ['default'],
         metadata: {
             technologies: ['nx'],
-            description: 'Validate the architecture has no circular dependencies',
+            description: 'Validate the architecture has no circular project dependencies',
         },
     };
 }

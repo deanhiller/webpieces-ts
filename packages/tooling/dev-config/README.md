@@ -96,10 +96,10 @@ nx add @webpieces/dev-config
 nx run architecture:generate
 
 # Validate architecture
-nx run architecture:validate-no-cycles
+nx run architecture:validate-no-architecture-cycles
 
-# Check project for circular dependencies
-nx run my-project:check-circular-deps
+# Check project for file import cycles
+nx run my-project:validate-no-file-import-cycles
 ```
 
 #### Available Targets
@@ -107,12 +107,12 @@ nx run my-project:check-circular-deps
 **Workspace-level:**
 - `arch:generate` - Generate dependency graph
 - `arch:visualize` - Visualize dependency graph
-- `arch:validate-no-cycles` - Validate no circular dependencies
+- `arch:validate-no-architecture-cycles` - Validate no circular project dependencies
 - `arch:validate-no-skiplevel-deps` - Validate no redundant dependencies
 - `arch:validate-architecture-unchanged` - Validate against blessed graph
 
 **Per-project:**
-- `check-circular-deps` - Check for circular dependencies (auto-added to all projects)
+- `validate-no-file-import-cycles` - Check for file import cycles (auto-added to all projects)
 
 For detailed documentation, see [Plugin README](./plugin/README.md).
 

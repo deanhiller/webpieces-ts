@@ -187,12 +187,12 @@ All these targets are automatically created:
 ### Workspace-level (run with `nx run architecture:target`)
 - `arch:generate`
 - `arch:visualize`
-- `arch:validate-no-cycles`
+- `arch:validate-no-architecture-cycles`
 - `arch:validate-no-skiplevel-deps`
 - `arch:validate-architecture-unchanged`
 
 ### Per-project (run with `nx run <project>:target`)
-- `check-circular-deps` - Available for every project with a `src/` directory
+- `validate-no-file-import-cycles` - Available for every project with a `src/` directory
 
 ## Verification
 

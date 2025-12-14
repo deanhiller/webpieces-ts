@@ -1,11 +1,11 @@
 /**
- * Validate No Cycles Executor
+ * Validate No Architecture Cycles Executor
  *
  * Validates that the architecture dependency graph has no circular dependencies.
- * This is a fast check that only validates acyclicity.
+ * This is a fast check that only validates acyclicity at the project level.
  *
  * Usage:
- * nx run architecture:validate-no-cycles
+ * nx run architecture:validate-no-architecture-cycles
  */
 
 import type { ExecutorContext } from '@nx/devkit';

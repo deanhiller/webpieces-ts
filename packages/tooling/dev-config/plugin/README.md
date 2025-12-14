@@ -10,13 +10,13 @@ Automatically adds targets for managing and validating your project architecture
 
 - **`arch:generate`** - Generate dependency graph from project.json files
 - **`arch:visualize`** - Create visual representations of the dependency graph
-- **`arch:validate-no-cycles`** - Validate the architecture has no circular dependencies
+- **`arch:validate-no-architecture-cycles`** - Validate the architecture has no circular project dependencies
 - **`arch:validate-no-skiplevel-deps`** - Validate no redundant transitive dependencies
 - **`arch:validate-architecture-unchanged`** - Validate against blessed dependency graph
 
-### Per-Project Circular Dependency Checking
+### Per-Project File Import Cycle Checking
 
-Automatically adds a `check-circular-deps` target to every project with a `src/` directory using [madge](https://github.com/pahen/madge).
+Automatically adds a `validate-no-file-import-cycles` target to every project with a `src/` directory using [madge](https://github.com/pahen/madge).
 
 ## Installation
 
@@ -74,8 +74,8 @@ nx run architecture:generate
 # Visualize the graph in your browser
 nx run architecture:visualize
 
-# Validate no circular dependencies
-nx run architecture:validate-no-cycles
+# Validate no circular project dependencies
+nx run architecture:validate-no-architecture-cycles
 
 # Validate against blessed graph (for CI)
 nx run architecture:validate-architecture-unchanged
@@ -84,17 +84,17 @@ nx run architecture:validate-architecture-unchanged
 nx run architecture:validate-no-skiplevel-deps
 ```
 
-### Per-Project Circular Dependency Checking
+### Per-Project File Import Cycle Checking
 
 ```bash
 # Check a specific project
-nx run my-project:check-circular-deps
+nx run my-project:validate-no-file-import-cycles
 
 # Check all affected projects
-nx affected --target=check-circular-deps
+nx affected --target=validate-no-file-import-cycles
 
 # Check all projects
-nx run-many --target=check-circular-deps --all
+nx run-many --target=validate-no-file-import-cycles --all
 ```
 
 ## Configuration
@@ -109,7 +109,7 @@ Configure the plugin in `nx.json`:
       "options": {
         "circularDeps": {
           "enabled": true,
-          "targetName": "check-circular-deps",
+          "targetName": "validate-no-file-import-cycles",
           "excludePatterns": ["**/test-fixtures/**"]
         },
         "workspace": {
@@ -135,8 +135,8 @@ Configure the plugin in `nx.json`:
 
 #### `circularDeps`
 
-- **`enabled`** (boolean, default: `true`) - Enable/disable circular dependency checking
-- **`targetName`** (string, default: `'check-circular-deps'`) - Name of the target to create
+- **`enabled`** (boolean, default: `true`) - Enable/disable file import cycle checking
+- **`targetName`** (string, default: `'validate-no-file-import-cycles'`) - Name of the target to create
 - **`excludePatterns`** (string[], default: `[]`) - Patterns to exclude from checking
 
 #### `workspace`
