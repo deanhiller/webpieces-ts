@@ -30,6 +30,11 @@
             "schema": "./architecture/executors/validate-packagejson/schema.json",
             "description": "Validate package.json dependencies match project.json build dependencies"
         },
+        "validate-new-methods": {
+            "implementation": "./architecture/executors/validate-new-methods/executor",
+            "schema": "./architecture/executors/validate-new-methods/schema.json",
+            "description": "Validate new methods don't exceed max line count (only runs in affected mode)"
+        },
         "help": {
             "implementation": "./executors/help/executor",
             "schema": "./executors/help/schema.json",

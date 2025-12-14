@@ -44,6 +44,7 @@ export interface ArchitecturePluginOptions {
             noSkipLevelDeps?: boolean;
             architectureUnchanged?: boolean;
             validatePackageJson?: boolean;
+            validateNewMethods?: boolean;
         };
         features?: {
             generate?: boolean;
@@ -67,6 +68,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             noSkipLevelDeps: true,
             architectureUnchanged: true,
             validatePackageJson: true,
+            validateNewMethods: true,
         },
         features: {
             generate: true,
@@ -232,6 +234,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
         targets['validate-packagejson'] = createValidatePackageJsonTarget();
     }
 
+    if (opts.workspace.validations!.validateNewMethods) {
+        targets['validate-new-methods'] = createValidateNewMethodsTarget();
+    }
+
     // Add validate-complete target that runs all validations
     const validationTargets: string[] = [];
     if (opts.workspace.validations!.noCycles) {
@@ -245,6 +251,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     }
     if (opts.workspace.validations!.validatePackageJson) {
         validationTargets.push('validate-packagejson');
+    }
+
+    if (opts.workspace.validations!.validateNewMethods) {
+        validationTargets.push('validate-new-methods');
     }
 
     if (validationTargets.length > 0) {
@@ -288,6 +298,10 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
 
     if (opts.workspace.validations!.validatePackageJson) {
         targets[`${prefix}validate-packagejson`] = createValidatePackageJsonTarget();
+    }
+
+    if (opts.workspace.validations!.validateNewMethods) {
+        targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget();
     }
 
     return targets;
@@ -376,6 +390,19 @@ function createValidatePackageJsonTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate package.json dependencies match project.json build dependencies',
+        },
+    };
+}
+
+function createValidateNewMethodsTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-new-methods',
+        cache: false, // Don't cache - depends on git state
+        inputs: ['default'],
+        options: { max: 30 },
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate new methods do not exceed max line count (only runs in affected mode)',
         },
     };
 }
