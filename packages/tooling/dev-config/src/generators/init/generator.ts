@@ -110,6 +110,22 @@ function addTargetDefaults(tree: Tree): void {
             return dep.target === 'architecture:validate-complete';
         });
 
+        // Check if circular deps validation is already in dependsOn
+        const hasCircularDepsValidation = dependsOn.some((dep) => {
+            if (typeof dep === 'string') {
+                return dep === 'validate-no-file-import-cycles';
+            }
+            return dep.target === 'validate-no-file-import-cycles';
+        });
+
+        if (!hasCircularDepsValidation) {
+            // Add circular deps validation (per-project check)
+            dependsOn.unshift('validate-no-file-import-cycles');
+            targetDef.dependsOn = dependsOn;
+            updated = true;
+            console.log(`  ✅ Added circular deps validation to ${executor}`);
+        }
+
         if (!hasArchValidation) {
             // Add architecture validation before other dependencies
             dependsOn.unshift('architecture:validate-complete');
