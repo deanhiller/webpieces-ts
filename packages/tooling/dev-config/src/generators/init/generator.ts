@@ -40,13 +40,13 @@ export default async function initGenerator(tree: Tree, options: InitGeneratorSc
     const installTask = addMadgeDependency(tree);
     createArchitectureDirectory(tree);
     addNpmScripts(tree);
-    createEslintConfig(tree);
+    const hasExistingEslintConfig = createEslintConfig(tree);
 
     if (!options.skipFormat) {
         await formatFiles(tree);
     }
 
-    return createSuccessCallback(installTask);
+    return createSuccessCallback(installTask, hasExistingEslintConfig);
 }
 
 function registerPlugin(tree: Tree): void {
@@ -169,7 +169,7 @@ function addNpmScripts(tree: Tree): void {
     console.log('✅ Added npm scripts for architecture validation and circular dependency checking');
 }
 
-function createEslintConfig(tree: Tree): void {
+function createEslintConfig(tree: Tree): boolean {
     const webpiecesConfigPath = 'eslint.webpieces.config.mjs';
     const mainConfigPath = 'eslint.config.mjs';
 
@@ -177,23 +177,9 @@ function createEslintConfig(tree: Tree): void {
     createWebpiecesEslintConfig(tree, webpiecesConfigPath);
 
     // Check if main eslint.config.mjs exists
-    if (tree.exists(mainConfigPath)) {
-        // Existing config - show them how to import
-        console.log('');
-        console.log('📋 Existing eslint.config.mjs detected');
-        console.log('');
-        console.log('To use @webpieces/dev-config ESLint rules, add this import to your eslint.config.mjs:');
-        console.log('');
-        console.log('  import webpiecesConfig from \'./eslint.webpieces.config.mjs\';');
-        console.log('');
-        console.log('Then spread it into your config array:');
-        console.log('');
-        console.log('  export default [');
-        console.log('    ...webpiecesConfig,  // Add this line');
-        console.log('    // ... your existing config');
-        console.log('  ];');
-        console.log('');
-    } else {
+    const hasExistingConfig = tree.exists(mainConfigPath);
+
+    if (!hasExistingConfig) {
         // No existing config - create one that imports webpieces config
         const mainConfig = `// ESLint configuration
 // Imports @webpieces/dev-config rules
@@ -211,6 +197,8 @@ export default [
         tree.write(mainConfigPath, mainConfig);
         console.log('✅ Created eslint.config.mjs with @webpieces/dev-config rules');
     }
+
+    return hasExistingConfig;
 }
 
 function getWebpiecesEslintConfigTemplate(tree: Tree): string {
@@ -271,7 +259,10 @@ function createWebpiecesEslintConfig(tree: Tree, configPath: string): void {
     warnConfigChanges(tree, configPath, webpiecesConfig);
 }
 
-function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToPackageJson>) {
+function createSuccessCallback(
+    installTask: ReturnType<typeof addDependenciesToPackageJson>,
+    hasExistingEslintConfig: boolean
+) {
     return async () => {
         await installTask();
 
@@ -290,6 +281,24 @@ function createSuccessCallback(installTask: ReturnType<typeof addDependenciesToP
         console.log(`   ${BOLD}npm run arch:validate-complete${RESET}  # Run complete validation`);
         console.log('');
         console.log(`💡 For full documentation, run: ${BOLD}nx run architecture:help${RESET}`);
+
+        // Show ESLint integration instructions if they have an existing config
+        if (hasExistingEslintConfig) {
+            console.log('');
+            console.log('📋 Existing eslint.config.mjs detected');
+            console.log('');
+            console.log('To use @webpieces/dev-config ESLint rules, add this import to your eslint.config.mjs:');
+            console.log('');
+            console.log('  import webpiecesConfig from \'./eslint.webpieces.config.mjs\';');
+            console.log('');
+            console.log('Then spread it into your config array:');
+            console.log('');
+            console.log('  export default [');
+            console.log('    ...webpiecesConfig,  // Add this line');
+            console.log('    // ... your existing config');
+            console.log('  ];');
+        }
+
         console.log('');
     };
 }

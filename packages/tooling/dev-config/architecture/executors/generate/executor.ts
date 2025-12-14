@@ -2,7 +2,6 @@
  * Generate Executor
  *
  * Generates the architecture dependency graph and saves it to architecture/dependencies.json.
- * Also validates that package.json dependencies match project.json.
  *
  * Usage:
  * nx run architecture:generate
@@ -11,7 +10,6 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
-import { validatePackageJsonDependencies } from '../../lib/package-validator';
 import { saveGraph } from '../../lib/graph-loader';
 
 export interface GenerateExecutorOptions {
@@ -36,33 +34,11 @@ export default async function runExecutor(
         console.log('📊 Generating dependency graph from project.json files...');
         const rawGraph = await generateGraph();
 
-        // Step 2: Topological sort (validates acyclic and assigns levels)
+        // Step 2: Topological sort (to assign levels for visualization)
         console.log('🔄 Computing topological layers...');
-        let enhancedGraph;
-        try {
-            enhancedGraph = sortGraphTopologically(rawGraph);
-            console.log('✅ Graph is acyclic');
-        } catch (err: unknown) {
-            const error = err instanceof Error ? err : new Error(String(err));
-            console.error('❌ Circular dependency detected!');
-            console.error(error.message);
-            return { success: false };
-        }
+        const enhancedGraph = sortGraphTopologically(rawGraph);
 
-        // Step 3: Validate package.json dependencies match
-        console.log('📦 Validating package.json dependencies match project.json...');
-        const packageValidation = await validatePackageJsonDependencies(enhancedGraph, workspaceRoot);
-
-        if (!packageValidation.valid) {
-            console.error('❌ Package.json validation failed!');
-            for (const error of packageValidation.errors) {
-                console.error(`  ${error}`);
-            }
-            return { success: false };
-        }
-        console.log('✅ Package.json dependencies match');
-
-        // Step 4: Save the graph
+        // Step 3: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');
         saveGraph(enhancedGraph, workspaceRoot, graphPath);
         console.log('✅ Graph saved successfully');
