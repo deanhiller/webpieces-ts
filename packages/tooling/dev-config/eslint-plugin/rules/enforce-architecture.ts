@@ -508,11 +508,20 @@ const rule: Rule.RuleModule = {
                     // Write documentation file for AI/developer to read
                     ensureDependenciesDoc(workspaceRoot);
 
-                    const directDeps = projectEntry.dependsOn || [];
+                    // Build list of all allowed deps (direct + transitive) sorted by level
+                    const allAllowedDeps = Array.from(allowedDeps);
+                    // Sort by level (highest first) then alphabetically
+                    allAllowedDeps.sort((a, b) => {
+                        const levelA = graph[a]?.level ?? 0;
+                        const levelB = graph[b]?.level ?? 0;
+                        if (levelB !== levelA) return levelB - levelA;
+                        return a.localeCompare(b);
+                    });
                     const allowedList =
-                        directDeps.length > 0
-                            ? directDeps.map((dep) => `  - ${dep}`).join('\n') +
-                              '\n  (and their transitive dependencies)'
+                        allAllowedDeps.length > 0
+                            ? allAllowedDeps
+                                  .map((dep) => `  - ${dep} (level ${graph[dep]?.level ?? '?'})`)
+                                  .join('\n')
                             : '  (none - this is a foundation project)';
 
                     context.report({
