@@ -165,14 +165,11 @@ function addPerProjectTargets(
 
         const targets: Record<string, TargetConfiguration> = {};
 
-        // Add circular-deps target if enabled and src exists
+        // Add circular-deps target if enabled (runs on ALL projects - KISS)
         if (opts.circularDeps.enabled) {
             if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
-                const srcDir = join(context.workspaceRoot, projectRoot, 'src');
-                if (existsSync(srcDir)) {
-                    const targetName = opts.circularDeps.targetName!;
-                    targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
-                }
+                const targetName = opts.circularDeps.targetName!;
+                targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
             }
         }
 
@@ -455,6 +452,7 @@ function createHelpTarget(): TargetConfiguration {
 
 /**
  * Create per-project circular dependency checking target
+ * Runs on project root (.) to check ALL TypeScript files in the project
  */
 function createCircularDepsTarget(projectRoot: string, targetName: string): TargetConfiguration {
     return {
@@ -463,7 +461,7 @@ function createCircularDepsTarget(projectRoot: string, targetName: string): Targ
         inputs: ['default'],
         outputs: [] as string[],
         options: {
-            command: 'npx madge --circular --extensions ts,tsx src',
+            command: 'npx madge --circular --extensions ts,tsx .',
             cwd: projectRoot,
         },
         metadata: {

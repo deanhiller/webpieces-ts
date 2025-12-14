@@ -16,7 +16,11 @@
     "targetDefaults": {
         "@nx/js:tsc": {
             "cache": true,
-            "dependsOn": ["^build"],
+            "dependsOn": [
+                "architecture:validate-complete",
+                "validate-no-file-import-cycles",
+                "^build"
+            ],
             "inputs": ["default", "^default"]
         },
         "build": {
@@ -39,6 +43,9 @@
             "options": {
                 "quiet": true
             }
+        },
+        "@angular/build:application": {
+            "dependsOn": ["architecture:validate-complete", "validate-no-file-import-cycles"]
         }
     },
     "plugins": [
@@ -71,6 +78,7 @@
         {
             "plugin": "./packages/tooling/dev-config/plugin.ts",
             "options": {}
-        }
+        },
+        "@webpieces/dev-config"
     ]
 }
