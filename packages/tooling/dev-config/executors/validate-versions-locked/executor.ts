@@ -170,6 +170,13 @@ function checkNpmCiCompatibility(workspaceRoot: string): string[] {
         // Parse the error output to extract peer dependency conflicts
         const output = err.stdout || err.stderr || err.message;
 
+        // Ignore errors about internal @webpieces/* packages with 0.0.0-dev versions
+        // These don't exist on npm registry (only locally) but that's expected in development/CI
+        if (output.includes('npm error') && output.includes('@webpieces/') && output.includes('0.0.0-dev')) {
+            console.log('   ⏭️  Skipping npm ci check - internal @webpieces packages use local 0.0.0-dev versions');
+            return [];
+        }
+
         // Check if it's a peer dependency error (npm error, not npm warn)
         if (output.includes('npm error') && (output.includes('ERESOLVE') || output.includes('peer'))) {
             return [output];

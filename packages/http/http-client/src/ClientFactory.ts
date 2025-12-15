@@ -83,10 +83,18 @@ export function createClient<T extends object>(
         get(target, prop: string | symbol) {
             // Only handle string properties (method names)
             if (typeof prop !== 'string') {
-                return undefined;
+                throw new Error(`Method names must be strings, not ${typeof prop}`);
             }
 
-            // Get the route metadata for this method
+            // Check if this property is actually a route method BEFORE calling getRoute()
+            if (!proxyClient.hasRoute(prop)) {
+                // For unknown properties (likely typos), throw a helpful error
+                throw new Error(
+                    `No route found for method '${prop}'. ` +
+                    `Check for typos or ensure the method has @Post() decorator.`
+                );
+            }
+
             const route = proxyClient.getRoute(prop);
 
             // Return a function that makes the HTTP request
@@ -123,6 +131,13 @@ export class ProxyClient {
         for (const route of routes) {
             this.routeMap.set(route.methodName, route);
         }
+    }
+
+    /**
+     * Check if a route exists for the given method name.
+     */
+    hasRoute(methodName: string): boolean {
+        return this.routeMap.has(methodName);
     }
 
     /**
