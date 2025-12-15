@@ -79,6 +79,16 @@
             "plugin": "./packages/tooling/dev-config/plugin.ts",
             "options": {}
         },
-        "@webpieces/dev-config"
+        {
+            "plugin": "@webpieces/dev-config",
+            "options": {
+                "workspace": {
+                    "validations": {
+                        "newMethodsMaxLines": 30,
+                        "modifiedAndNewMethodsMaxLines": 80
+                    }
+                }
+            }
+        }
     ]
 }
