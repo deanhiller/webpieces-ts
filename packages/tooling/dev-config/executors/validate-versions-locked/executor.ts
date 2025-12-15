@@ -201,8 +201,9 @@ function collectAllDependencies(workspaceRoot: string): Map<string, DependencyUs
                     dependencyMap.get(name)!.push(usage);
                 }
             }
-        } catch {
-            // Skip files that can't be parsed
+        } catch (err: any) {
+            // const error = toError(err);
+            // Intentionally skip files that can't be parsed - this is expected for some package.json files
         }
     }
 
