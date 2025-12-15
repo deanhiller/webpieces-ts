@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "Validate Versions Locked Executor",
-    "description": "Validates package.json versions are locked (no semver ranges) and npm ci compatible",
+    "description": "Validates package.json versions are locked (no semver ranges) and consistent across all projects",
     "type": "object",
     "properties": {},
     "required": []

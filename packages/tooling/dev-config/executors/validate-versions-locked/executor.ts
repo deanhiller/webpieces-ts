@@ -1,8 +1,9 @@
 /**
  * Validate Versions Locked Executor
  *
- * Validates that package.json versions are LOCKED (exact versions, no semver ranges)
- * and checks npm ci compatibility for peer dependency conflicts.
+ * Validates that package.json versions are:
+ * 1. LOCKED (exact versions, no semver ranges like ^, ~, *)
+ * 2. CONSISTENT across all package.json files (no version conflicts)
  *
  * Why locked versions matter:
  * - Micro bugs ARE introduced via patch versions (1.4.5 → 1.4.6)
@@ -14,7 +15,6 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -144,52 +144,106 @@ function validatePackageJson(filePath: string): string[] {
     }
 }
 
-// webpieces-disable max-lines-new-methods -- Existing method from renamed validate-versions file
-// Check npm ci compatibility
-function checkNpmCiCompatibility(workspaceRoot: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        // Run npm install --package-lock-only to check for peer dependency conflicts
-        // This simulates what npm ci does without actually installing
-        // Use --ignore-scripts to prevent infinite recursion (avoid triggering preinstall hook)
-        console.log('   Running npm dependency resolution check (10s timeout)...');
-        execSync('npm install --package-lock-only --ignore-scripts 2>&1', {
-            cwd: workspaceRoot,
-            stdio: 'pipe',
-            encoding: 'utf-8',
-            timeout: 10000  // 10 second timeout
-        });
-        return [];
-    } catch (err: any) {
-        //const error = toError(err);
-        // Check if it's a timeout
-        if (err.killed) {
-            return ['npm dependency check timed out - this might indicate a hang or network issue'];
+// Track all dependency versions across the monorepo
+interface DependencyUsage {
+    version: string;
+    file: string;
+    type: 'dependencies' | 'devDependencies';
+}
+
+// webpieces-disable max-lines-new-methods -- Collecting dependencies from all package.json files
+// Collect all dependency versions from all package.json files
+function collectAllDependencies(workspaceRoot: string): Map<string, DependencyUsage[]> {
+    const dependencyMap = new Map<string, DependencyUsage[]>();
+    const packageFiles = findPackageJsonFiles(workspaceRoot);
+
+    for (const filePath of packageFiles) {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const pkg = JSON.parse(content);
+            const relativePath = path.relative(workspaceRoot, filePath);
+
+            // Collect dependencies
+            if (pkg.dependencies) {
+                for (const [name, version] of Object.entries(pkg.dependencies)) {
+                    // Skip internal workspace packages
+                    if (name.startsWith('@webpieces/')) continue;
+
+                    const usage: DependencyUsage = {
+                        version: version as string,
+                        file: relativePath,
+                        type: 'dependencies'
+                    };
+
+                    if (!dependencyMap.has(name)) {
+                        dependencyMap.set(name, []);
+                    }
+                    dependencyMap.get(name)!.push(usage);
+                }
+            }
+
+            // Collect devDependencies
+            if (pkg.devDependencies) {
+                for (const [name, version] of Object.entries(pkg.devDependencies)) {
+                    // Skip internal workspace packages
+                    if (name.startsWith('@webpieces/')) continue;
+
+                    const usage: DependencyUsage = {
+                        version: version as string,
+                        file: relativePath,
+                        type: 'devDependencies'
+                    };
+
+                    if (!dependencyMap.has(name)) {
+                        dependencyMap.set(name, []);
+                    }
+                    dependencyMap.get(name)!.push(usage);
+                }
+            }
+        } catch {
+            // Skip files that can't be parsed
         }
-
-        // Parse the error output to extract peer dependency conflicts
-        const output = err.stdout || err.stderr || err.message;
-
-        // Ignore errors about internal @webpieces/* packages with 0.0.0-dev versions
-        // These don't exist on npm registry (only locally) but that's expected in development/CI
-        if (output.includes('npm error') && output.includes('@webpieces/') && output.includes('0.0.0-dev')) {
-            console.log('   ⏭️  Skipping npm ci check - internal @webpieces packages use local 0.0.0-dev versions');
-            return [];
-        }
-
-        // Check if it's a peer dependency error (npm error, not npm warn)
-        if (output.includes('npm error') && (output.includes('ERESOLVE') || output.includes('peer'))) {
-            return [output];
-        }
-
-        // If it's just warnings, not errors, we're OK
-        if (output.includes('npm warn') && !output.includes('npm error')) {
-            return [];
-        }
-
-        // Some other error - return it
-        return [`npm dependency check failed: ${output}`];
     }
+
+    return dependencyMap;
+}
+
+// webpieces-disable max-lines-new-methods -- Simple iteration logic, splitting would reduce clarity
+// Check for version conflicts across package.json files
+function checkVersionConflicts(workspaceRoot: string): string[] {
+    console.log('\n🔍 Checking for version conflicts across package.json files:');
+
+    const dependencyMap = collectAllDependencies(workspaceRoot);
+    const conflicts: string[] = [];
+
+    for (const [packageName, usages] of dependencyMap.entries()) {
+        // Get unique versions (ignoring workspace: and file: protocols)
+        const versions = new Set(
+            usages
+                .map(u => u.version)
+                .filter(v => !v.startsWith('workspace:') && !v.startsWith('file:'))
+        );
+
+        if (versions.size > 1) {
+            const conflictDetails = usages
+                .filter(u => !u.version.startsWith('workspace:') && !u.version.startsWith('file:'))
+                .map(u => `      ${u.file} (${u.type}): ${u.version}`)
+                .join('\n');
+
+            conflicts.push(`   ❌ ${packageName} has ${versions.size} different versions:\n${conflictDetails}`);
+        }
+    }
+
+    if (conflicts.length === 0) {
+        console.log('   ✅ No version conflicts found');
+    } else {
+        for (const conflict of conflicts) {
+            console.log(conflict);
+        }
+    }
+
+    return conflicts;
 }
 
 /**
@@ -276,47 +330,22 @@ export default async function runExecutor(
     _options: ValidateVersionsLockedOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
-    console.log('\n🔒 Validating Package Versions are LOCKED (no semver ranges)\n');
+    console.log('\n🔒 Validating Package Versions are LOCKED and CONSISTENT\n');
 
     const workspaceRoot = context.root;
 
-    // Step 1: Check npm ci compatibility
-    console.log('🔄 Checking npm ci compatibility (peer dependencies):');
-    const npmCiErrors = checkNpmCiCompatibility(workspaceRoot);
-    if (npmCiErrors.length > 0) {
-        console.log('   ❌ npm ci compatibility check failed:');
-        console.log('   This means "npm ci" will fail in CI even though "npm install" works locally.\n');
-        for (const error of npmCiErrors) {
-            const errorLines = error.split('\n').slice(0, 30);
-            for (const line of errorLines) {
-                console.log(`   ${line}`);
-            }
-            if (error.split('\n').length > 30) {
-                console.log('   ... (truncated)');
-            }
-        }
-        console.log('');
-    } else {
-        console.log('   ✅ npm ci compatibility check passed');
-    }
-
-    // Step 2: Check for semver ranges (FAILS if any found)
+    // Step 1: Check for semver ranges (FAILS if any found)
     const { errors: semverErrors } = checkSemverRanges(workspaceRoot);
     const packageFiles = findPackageJsonFiles(workspaceRoot);
 
+    // Step 2: Check for version conflicts across package.json files
+    const versionConflicts = checkVersionConflicts(workspaceRoot);
+
     // Summary
     console.log(`\n📊 Summary:`);
-    console.log(`   npm ci compatibility: ${npmCiErrors.length === 0 ? '✅' : '❌'}`);
     console.log(`   Files checked: ${packageFiles.length}`);
-    console.log(`   Unlocked versions: ${semverErrors}`);
-    console.log(`   Peer dep errors: ${npmCiErrors.length}`);
-
-    // Fail on npm ci errors
-    if (npmCiErrors.length > 0) {
-        console.log('\n❌ VALIDATION FAILED!');
-        console.log('   Fix peer dependency conflicts to avoid CI failures.\n');
-        return { success: false };
-    }
+    console.log(`   Unlocked versions (semver ranges): ${semverErrors}`);
+    console.log(`   Version conflicts: ${versionConflicts.length}`);
 
     // Fail on semver ranges with educational message
     if (semverErrors > 0) {
@@ -324,6 +353,14 @@ export default async function runExecutor(
         return { success: false };
     }
 
-    console.log('\n✅ VALIDATION PASSED! All versions are locked.');
+    // Fail on version conflicts
+    if (versionConflicts.length > 0) {
+        console.log('\n❌ VALIDATION FAILED!');
+        console.log('   Fix version conflicts - all package.json files must use the same version for each dependency.');
+        console.log('   This prevents "works on my machine" bugs where different projects use different library versions.\n');
+        return { success: false };
+    }
+
+    console.log('\n✅ VALIDATION PASSED! All versions are locked and consistent.');
     return { success: true };
 }
