@@ -181,16 +181,10 @@ function addPerProjectTargets(
             }
         }
 
-        // Check if project has tsconfig.spec.json for test file type-checking
-        const hasTestTypeConfig = existsSync(join(context.workspaceRoot, projectRoot, 'tsconfig.spec.json'));
-        if (hasTestTypeConfig) {
-            targets['typecheck-tests'] = createTypecheckTestsTarget(projectRoot);
-        }
-
-        // Add ci target - composite target that runs lint, build, test in parallel
-        // (with test depending on build via targetDefaults)
-        // Include typecheck-tests if the project has tsconfig.spec.json
-        targets['ci'] = createCiTarget(hasTestTypeConfig);
+        // Add ci target - composite target that runs lint, build, test, and typecheck
+        // The 'typecheck' target from @nx/js/typescript plugin already type-checks ALL files
+        // including *.spec.ts and *.test.ts via tsconfig.json references
+        targets['ci'] = createCiTarget();
 
         if (Object.keys(targets).length === 0) continue;
 
@@ -468,48 +462,20 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
 
 /**
  * Create per-project ci target - Gradle-style composite target
- * Runs lint, build, test, and optionally typecheck-tests in parallel
+ * Runs lint, build, test, and typecheck in parallel
  * (with test depending on build via targetDefaults)
+ *
+ * The 'typecheck' target from @nx/js/typescript plugin type-checks ALL *.ts files
+ * including test files (*.spec.ts, *.test.ts) via tsconfig.json references.
  */
-function createCiTarget(includeTypecheckTests: boolean): TargetConfiguration {
-    const dependsOn = ['lint', 'build', 'test'];
-    if (includeTypecheckTests) {
-        dependsOn.push('typecheck-tests');
-    }
-
+function createCiTarget(): TargetConfiguration {
     return {
         executor: 'nx:noop',
         cache: true,
-        dependsOn,
+        dependsOn: ['lint', 'build', 'test', 'typecheck'],
         metadata: {
             technologies: ['nx'],
-            description: includeTypecheckTests
-                ? 'Run all CI checks: lint, build, test, and typecheck-tests (Gradle-style composite target)'
-                : 'Run all CI checks: lint, build, and test (Gradle-style composite target)',
-        },
-    };
-}
-
-/**
- * Create per-project typecheck-tests target
- * Type-checks test files (*.spec.ts) using tsconfig.spec.json
- * This catches TypeScript errors in test files that wouldn't be caught by:
- * - build (excludes test files via tsconfig.lib.json/tsconfig.app.json)
- * - test (Jest/ts-jest transpiles but doesn't type-check)
- */
-function createTypecheckTestsTarget(projectRoot: string): TargetConfiguration {
-    return {
-        executor: 'nx:run-commands',
-        cache: true,
-        inputs: ['default'],
-        outputs: [] as string[],
-        options: {
-            command: 'npx tsc --noEmit -p tsconfig.spec.json',
-            cwd: projectRoot,
-        },
-        metadata: {
-            technologies: ['typescript'],
-            description: 'Type-check test files (*.spec.ts) to catch TypeScript errors',
+            description: 'Run all CI checks: lint, build, test, and typecheck (Gradle-style composite target)',
         },
     };
 }
