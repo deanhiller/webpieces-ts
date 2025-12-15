@@ -46,6 +46,7 @@ export interface ArchitecturePluginOptions {
             validatePackageJson?: boolean;
             validateNewMethods?: boolean;
             validateModifiedMethods?: boolean;
+            validateVersionsLocked?: boolean;
             newMethodsMaxLines?: number;
             modifiedAndNewMethodsMaxLines?: number;
         };
@@ -73,6 +74,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validatePackageJson: true,
             validateNewMethods: true,
             validateModifiedMethods: true,
+            validateVersionsLocked: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
         },
@@ -179,9 +181,16 @@ function addPerProjectTargets(
             }
         }
 
+        // Check if project has tsconfig.spec.json for test file type-checking
+        const hasTestTypeConfig = existsSync(join(context.workspaceRoot, projectRoot, 'tsconfig.spec.json'));
+        if (hasTestTypeConfig) {
+            targets['typecheck-tests'] = createTypecheckTestsTarget(projectRoot);
+        }
+
         // Add ci target - composite target that runs lint, build, test in parallel
         // (with test depending on build via targetDefaults)
-        targets['ci'] = createCiTarget();
+        // Include typecheck-tests if the project has tsconfig.spec.json
+        targets['ci'] = createCiTarget(hasTestTypeConfig);
 
         if (Object.keys(targets).length === 0) continue;
 
@@ -210,12 +219,28 @@ export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
 ];
 
 /**
+ * Build list of enabled validation target names for validate-complete dependency chain
+ */
+function buildValidationTargetsList(validations: Required<ArchitecturePluginOptions>['workspace']['validations']): string[] {
+    const targets: string[] = [];
+    if (validations!.noCycles) targets.push('validate-no-architecture-cycles');
+    if (validations!.architectureUnchanged) targets.push('validate-architecture-unchanged');
+    if (validations!.noSkipLevelDeps) targets.push('validate-no-skiplevel-deps');
+    if (validations!.validatePackageJson) targets.push('validate-packagejson');
+    if (validations!.validateNewMethods) targets.push('validate-new-methods');
+    if (validations!.validateModifiedMethods) targets.push('validate-modified-methods');
+    if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
+    return targets;
+}
+
+/**
  * Create workspace-level architecture validation targets WITHOUT prefix
  * Used for virtual 'architecture' project
  */
 function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
     const graphPath = opts.workspace.graphPath!;
+    const validations = opts.workspace.validations!;
 
     // Add help target (always available)
     targets['help'] = createHelpTarget();
@@ -223,58 +248,33 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     if (opts.workspace.features!.generate) {
         targets['generate'] = createGenerateTarget(graphPath);
     }
-
     if (opts.workspace.features!.visualize) {
         targets['visualize'] = createVisualizeTargetWithoutPrefix(graphPath);
     }
-
-    if (opts.workspace.validations!.noCycles) {
+    if (validations.noCycles) {
         targets['validate-no-architecture-cycles'] = createValidateNoCyclesTarget();
     }
-
-    if (opts.workspace.validations!.architectureUnchanged) {
+    if (validations.architectureUnchanged) {
         targets['validate-architecture-unchanged'] = createValidateUnchangedTarget(graphPath);
     }
-
-    if (opts.workspace.validations!.noSkipLevelDeps) {
+    if (validations.noSkipLevelDeps) {
         targets['validate-no-skiplevel-deps'] = createValidateNoSkipLevelTarget();
     }
-
-    if (opts.workspace.validations!.validatePackageJson) {
+    if (validations.validatePackageJson) {
         targets['validate-packagejson'] = createValidatePackageJsonTarget();
     }
-
-    if (opts.workspace.validations!.validateNewMethods) {
-        targets['validate-new-methods'] = createValidateNewMethodsTarget(opts.workspace.validations!.newMethodsMaxLines!);
+    if (validations.validateNewMethods) {
+        targets['validate-new-methods'] = createValidateNewMethodsTarget(validations.newMethodsMaxLines!);
+    }
+    if (validations.validateModifiedMethods) {
+        targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(validations.modifiedAndNewMethodsMaxLines!);
+    }
+    if (validations.validateVersionsLocked) {
+        targets['validate-versions-locked'] = createValidateVersionsLockedTarget();
     }
 
-    if (opts.workspace.validations!.validateModifiedMethods) {
-        targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(opts.workspace.validations!.modifiedAndNewMethodsMaxLines!);
-    }
-
-    // Add validate-complete target that runs all validations
-    const validationTargets: string[] = [];
-    if (opts.workspace.validations!.noCycles) {
-        validationTargets.push('validate-no-architecture-cycles');
-    }
-    if (opts.workspace.validations!.architectureUnchanged) {
-        validationTargets.push('validate-architecture-unchanged');
-    }
-    if (opts.workspace.validations!.noSkipLevelDeps) {
-        validationTargets.push('validate-no-skiplevel-deps');
-    }
-    if (opts.workspace.validations!.validatePackageJson) {
-        validationTargets.push('validate-packagejson');
-    }
-
-    if (opts.workspace.validations!.validateNewMethods) {
-        validationTargets.push('validate-new-methods');
-    }
-
-    if (opts.workspace.validations!.validateModifiedMethods) {
-        validationTargets.push('validate-modified-methods');
-    }
-
+    // Add validate-complete target that runs all enabled validations
+    const validationTargets = buildValidationTargetsList(validations);
     if (validationTargets.length > 0) {
         targets['validate-complete'] = createValidateCompleteTarget(validationTargets);
     }
@@ -442,6 +442,18 @@ function createValidateModifiedMethodsTarget(maxLines: number): TargetConfigurat
     };
 }
 
+function createValidateVersionsLockedTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-versions-locked',
+        cache: true,
+        inputs: ['default'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate package.json versions are locked (no semver ranges) and npm ci compatible',
+        },
+    };
+}
+
 function createValidateCompleteTarget(validationTargets: string[]): TargetConfiguration {
     return {
         executor: 'nx:noop',
@@ -456,16 +468,48 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
 
 /**
  * Create per-project ci target - Gradle-style composite target
- * Runs lint, build, and test in parallel (with test waiting for build via targetDefaults)
+ * Runs lint, build, test, and optionally typecheck-tests in parallel
+ * (with test depending on build via targetDefaults)
  */
-function createCiTarget(): TargetConfiguration {
+function createCiTarget(includeTypecheckTests: boolean): TargetConfiguration {
+    const dependsOn = ['lint', 'build', 'test'];
+    if (includeTypecheckTests) {
+        dependsOn.push('typecheck-tests');
+    }
+
     return {
         executor: 'nx:noop',
         cache: true,
-        dependsOn: ['lint', 'build', 'test'],
+        dependsOn,
         metadata: {
             technologies: ['nx'],
-            description: 'Run all CI checks: lint, build, and test (Gradle-style composite target)',
+            description: includeTypecheckTests
+                ? 'Run all CI checks: lint, build, test, and typecheck-tests (Gradle-style composite target)'
+                : 'Run all CI checks: lint, build, and test (Gradle-style composite target)',
+        },
+    };
+}
+
+/**
+ * Create per-project typecheck-tests target
+ * Type-checks test files (*.spec.ts) using tsconfig.spec.json
+ * This catches TypeScript errors in test files that wouldn't be caught by:
+ * - build (excludes test files via tsconfig.lib.json/tsconfig.app.json)
+ * - test (Jest/ts-jest transpiles but doesn't type-check)
+ */
+function createTypecheckTestsTarget(projectRoot: string): TargetConfiguration {
+    return {
+        executor: 'nx:run-commands',
+        cache: true,
+        inputs: ['default'],
+        outputs: [] as string[],
+        options: {
+            command: 'npx tsc --noEmit -p tsconfig.spec.json',
+            cwd: projectRoot,
+        },
+        metadata: {
+            technologies: ['typescript'],
+            description: 'Type-check test files (*.spec.ts) to catch TypeScript errors',
         },
     };
 }
