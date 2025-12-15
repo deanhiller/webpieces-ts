@@ -230,18 +230,9 @@ function addNpmScripts(tree: Tree): void {
     updateJson(tree, 'package.json', (pkgJson) => {
         pkgJson.scripts = pkgJson.scripts ?? {};
 
-        // Add architecture validation scripts
+        // Add architecture scripts
         pkgJson.scripts['arch:generate'] = 'nx run architecture:generate';
         pkgJson.scripts['arch:visualize'] = 'nx run architecture:visualize';
-        pkgJson.scripts['arch:validate'] = 'nx run architecture:validate-no-architecture-cycles && nx run architecture:validate-no-skiplevel-deps';
-        pkgJson.scripts['arch:validate-all'] = 'nx run architecture:validate-no-architecture-cycles && nx run architecture:validate-no-skiplevel-deps && nx run architecture:validate-architecture-unchanged';
-
-        // Add file import cycle checking scripts
-        pkgJson.scripts['arch:check-circular'] = 'nx run-many --target=validate-no-file-import-cycles --all';
-        pkgJson.scripts['arch:check-circular-affected'] = 'nx affected --target=validate-no-file-import-cycles';
-
-        // Complete validation including circular deps
-        pkgJson.scripts['arch:validate-complete'] = 'npm run arch:validate-all && npm run arch:check-circular';
 
         // Add CI script that runs lint, build, test on affected projects
         pkgJson.scripts['webpieces:ci'] = 'npx nx affected --target=ci';
@@ -249,7 +240,7 @@ function addNpmScripts(tree: Tree): void {
         return pkgJson;
     });
 
-    console.log('✅ Added npm scripts for architecture validation, circular dependency checking, and CI');
+    console.log('✅ Added npm scripts for architecture generation and CI');
 }
 
 function createEslintConfig(tree: Tree): boolean {
@@ -360,8 +351,8 @@ function createSuccessCallback(
         console.log(`${GREEN}✅ @webpieces/dev-config plugin initialized!${RESET}`);
         console.log('');
         console.log(`${GREEN}💡 Quick start:${RESET}`);
-        console.log(`   ${BOLD}npm run arch:generate${RESET}           # Generate the dependency graph`);
-        console.log(`   ${BOLD}npm run arch:validate-complete${RESET}  # Run complete validation`);
+        console.log(`   ${BOLD}npm run arch:generate${RESET}    # Generate the dependency graph`);
+        console.log(`   ${BOLD}npm run webpieces:ci${RESET}     # Run CI on affected projects`);
         console.log('');
         console.log(`💡 For full documentation, run: ${BOLD}nx run architecture:help${RESET}`);
 
