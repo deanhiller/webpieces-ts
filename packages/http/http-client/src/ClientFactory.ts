@@ -61,6 +61,7 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set([
     'constructor',     // Angular DI profiler, class inspection
     'prototype',       // Prototype chain inspection
     '__proto__',       // Legacy prototype access
+    'name',            // Angular isNotFound() check, function/class name inspection
     'then',            // Promise/thenable detection
     'catch',           // Promise check
     'finally',         // Promise check
