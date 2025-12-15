@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Modified Methods Executor",
+    "description": "Validates that modified methods don't exceed a maximum line count. Encourages gradual cleanup of legacy long methods.",
+    "type": "object",
+    "properties": {
+        "max": {
+            "type": "number",
+            "description": "Maximum number of lines allowed for modified methods",
+            "default": 80
+        }
+    },
+    "required": []
+}

@@ -35,6 +35,11 @@
             "schema": "./architecture/executors/validate-new-methods/schema.json",
             "description": "Validate new methods don't exceed max line count (only runs in affected mode)"
         },
+        "validate-modified-methods": {
+            "implementation": "./architecture/executors/validate-modified-methods/executor",
+            "schema": "./architecture/executors/validate-modified-methods/schema.json",
+            "description": "Validate modified methods don't exceed max line count (encourages gradual cleanup)"
+        },
         "help": {
             "implementation": "./executors/help/executor",
             "schema": "./executors/help/schema.json",

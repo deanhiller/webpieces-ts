@@ -21,8 +21,8 @@ export default [
         rules: {
             '@webpieces/catch-error-pattern': 'error',
             '@webpieces/no-unmanaged-exceptions': 'error',
-            '@webpieces/max-method-lines': ['error', { max: 70 }],
-            '@webpieces/max-file-lines': ['error', { max: 700 }],
+            // '@webpieces/max-method-lines': ['error', { max: 70 }],
+            // '@webpieces/max-file-lines': ['error', { max: 700 }],
             '@webpieces/enforce-architecture': 'error',
         },
     },

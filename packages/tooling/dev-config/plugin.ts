@@ -45,6 +45,7 @@ export interface ArchitecturePluginOptions {
             architectureUnchanged?: boolean;
             validatePackageJson?: boolean;
             validateNewMethods?: boolean;
+            validateModifiedMethods?: boolean;
         };
         features?: {
             generate?: boolean;
@@ -69,6 +70,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             architectureUnchanged: true,
             validatePackageJson: true,
             validateNewMethods: true,
+            validateModifiedMethods: true,
         },
         features: {
             generate: true,
@@ -242,6 +244,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
         targets['validate-new-methods'] = createValidateNewMethodsTarget();
     }
 
+    if (opts.workspace.validations!.validateModifiedMethods) {
+        targets['validate-modified-methods'] = createValidateModifiedMethodsTarget();
+    }
+
     // Add validate-complete target that runs all validations
     const validationTargets: string[] = [];
     if (opts.workspace.validations!.noCycles) {
@@ -259,6 +265,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
 
     if (opts.workspace.validations!.validateNewMethods) {
         validationTargets.push('validate-new-methods');
+    }
+
+    if (opts.workspace.validations!.validateModifiedMethods) {
+        validationTargets.push('validate-modified-methods');
     }
 
     if (validationTargets.length > 0) {
@@ -306,6 +316,10 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
 
     if (opts.workspace.validations!.validateNewMethods) {
         targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget();
+    }
+
+    if (opts.workspace.validations!.validateModifiedMethods) {
+        targets[`${prefix}validate-modified-methods`] = createValidateModifiedMethodsTarget();
     }
 
     return targets;
@@ -407,6 +421,19 @@ function createValidateNewMethodsTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate new methods do not exceed max line count (only runs in affected mode)',
+        },
+    };
+}
+
+function createValidateModifiedMethodsTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-modified-methods',
+        cache: false, // Don't cache - depends on git state
+        inputs: ['default'],
+        options: { max: 80 },
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate modified methods do not exceed max line count (encourages gradual cleanup)',
         },
     };
 }
