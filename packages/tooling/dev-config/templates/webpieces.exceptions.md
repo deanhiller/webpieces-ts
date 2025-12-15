@@ -2,6 +2,23 @@
 
 **READ THIS FILE to understand why try-catch blocks are restricted and how to fix violations**
 
+## GETTING STARTED: Rolling Out This Rule
+
+**Why this rule exists**: AI agents tend to randomly add try-catch blocks ~50% of the time, creating pointless error handling that swallows exceptions and breaks debugging.
+
+**How to roll out on existing codebases**:
+1. Enable the rule: `'@webpieces/no-unmanaged-exceptions': 'error'`
+2. Have AI add `// eslint-disable-next-line @webpieces/no-unmanaged-exceptions` to EACH try-catch line (NOT file-level disables)
+3. This forces AI to consciously acknowledge each exception handling location
+4. Going forward, the rule makes AI think twice before adding new try-catch blocks
+
+**What the global error handler provides** (when exceptions bubble up properly):
+1. **Logs it** - Full error with stack trace and traceId
+2. **Reports to operations** - Sends to monitoring (Sentry/Datadog) so AI/team can fix
+3. **Shows user-friendly error** - Pops error dialog with errorId (user receives email with same ID for support)
+
+**Per-line disables are intentional**: Each disable comment serves as documentation explaining WHY that specific try-catch exists, making code review and future AI sessions aware of the exception handling decision.
+
 ## Core Principle
 
 **EXCEPTIONS MUST BUBBLE TO GLOBAL HANDLER WITH TRACEID FOR DEBUGGABILITY.**
