@@ -95,7 +95,13 @@ CHANGED_FILES=$(git diff --name-only "$FORK_POINT" HEAD -- '*.ts' '*.tsx' '*.js'
 if [ -z "$CHANGED_FILES" ]; then
     echo "No formattable files changed since fork from main."
     echo ""
-    echo "Done! Ready to push."
+    echo "Running CI validation..."
+    npm run webpieces:ci
+    echo ""
+    echo "Pushing to origin..."
+    git push -u origin "$CURRENT_BRANCH"
+    echo ""
+    echo "Done! Changes pushed to origin/$CURRENT_BRANCH"
     exit 0
 fi
 
@@ -114,7 +120,13 @@ done
 if [ -z "$EXISTING_FILES" ]; then
     echo "No existing formattable files to format."
     echo ""
-    echo "Done! Ready to push."
+    echo "Running CI validation..."
+    npm run webpieces:ci
+    echo ""
+    echo "Pushing to origin..."
+    git push -u origin "$CURRENT_BRANCH"
+    echo ""
+    echo "Done! Changes pushed to origin/$CURRENT_BRANCH"
     exit 0
 fi
 
@@ -129,7 +141,13 @@ npx prettier --write $EXISTING_FILES
 if git diff --quiet; then
     echo "Prettier made no changes."
     echo ""
-    echo "Done! Ready to push."
+    echo "Running CI validation..."
+    npm run webpieces:ci
+    echo ""
+    echo "Pushing to origin..."
+    git push -u origin "$CURRENT_BRANCH"
+    echo ""
+    echo "Done! Changes pushed to origin/$CURRENT_BRANCH"
     exit 0
 fi
 
@@ -142,6 +160,18 @@ echo "Prettier made formatting changes. Creating formatting commit..."
 git add -A
 git commit -m "prettier: format changed files"
 
+# ============================================================
+# Run CI Validation and Push
+# ============================================================
+
 echo ""
-echo "Done! Created separate formatting commit. Ready to push."
+echo "Running CI validation..."
+npm run webpieces:ci
+
+echo ""
+echo "Pushing to origin..."
+git push -u origin "$CURRENT_BRANCH"
+
+echo ""
+echo "Done! Changes pushed to origin/$CURRENT_BRANCH"
 echo ""
