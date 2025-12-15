@@ -13,7 +13,7 @@
  * nx affected --target=validate-new-methods --base=origin/main
  * OR: runs automatically via build's architecture:validate-complete dependency
  *
- * Escape hatch: Add eslint-disable comment with justification
+ * Escape hatch: Add webpieces-disable max-lines-new-methods comment with justification
  */
 
 import type { ExecutorContext } from '@nx/devkit';
@@ -131,7 +131,7 @@ Sometimes methods genuinely need to be longer (complex algorithms, state machine
 **Escape hatch**: Add a webpieces-disable comment with justification:
 
 \`\`\`typescript
-// webpieces-disable max-method-lines -- Complex state machine, splitting reduces clarity
+// webpieces-disable max-lines-new-methods -- Complex state machine, splitting reduces clarity
 async complexStateMachine(): Promise<void> {
     // ... longer method with justification
 }
@@ -143,7 +143,7 @@ async complexStateMachine(): Promise<void> {
 2. **IDENTIFY** logical units that can be extracted
 3. **EXTRACT** into well-named private methods
 4. **VERIFY** the main method now reads like a table of contents
-5. **IF NOT FEASIBLE**: Add webpieces-disable comment with clear justification
+5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-new-methods comment with clear justification
 
 ## Remember
 
@@ -242,7 +242,7 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
 }
 
 /**
- * Check if a line contains a webpieces-disable comment for max-method-lines
+ * Check if a line contains a webpieces-disable comment for max-lines-new-methods
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
     // Check the line before the method (lineNumber is 1-indexed, array is 0-indexed)
@@ -254,7 +254,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('max-method-lines')) {
+        if (line.includes('webpieces-disable') && line.includes('max-lines-new-methods')) {
             return true;
         }
     }

@@ -14,7 +14,7 @@
  * Usage:
  * nx affected --target=validate-modified-methods --base=origin/main
  *
- * Escape hatch: Add webpieces-disable comment with justification
+ * Escape hatch: Add webpieces-disable max-lines-modified-methods comment with justification
  */
 
 import type { ExecutorContext } from '@nx/devkit';
@@ -134,7 +134,7 @@ Sometimes methods genuinely need to be longer (complex algorithms, state machine
 **Escape hatch**: Add a webpieces-disable comment with justification:
 
 \`\`\`typescript
-// webpieces-disable max-method-lines -- Complex state machine, splitting reduces clarity
+// webpieces-disable max-lines-modified-methods -- Complex state machine, splitting reduces clarity
 async complexStateMachine(): Promise<void> {
     // ... longer method with justification
 }
@@ -146,7 +146,7 @@ async complexStateMachine(): Promise<void> {
 2. **IDENTIFY** logical units that can be extracted
 3. **EXTRACT** into well-named private methods
 4. **VERIFY** the main method now reads like a table of contents
-5. **IF NOT FEASIBLE**: Add webpieces-disable comment with clear justification
+5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-modified-methods comment with clear justification
 
 ## Remember
 
@@ -267,7 +267,7 @@ function getChangedLineNumbers(diffContent: string): Set<number> {
 }
 
 /**
- * Check if a line contains a webpieces-disable comment for max-method-lines
+ * Check if a line contains a webpieces-disable comment for max-lines-modified-methods
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
     const startCheck = Math.max(0, lineNumber - 5);
@@ -276,7 +276,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('max-method-lines')) {
+        if (line.includes('webpieces-disable') && line.includes('max-lines-modified-methods')) {
             return true;
         }
     }
@@ -286,6 +286,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
 /**
  * Parse a TypeScript file and find methods with their line counts
  */
+// webpieces-disable max-lines-new-methods -- AST traversal requires inline visitor function
 function findMethodsInFile(
     filePath: string,
     workspaceRoot: string
@@ -300,6 +301,7 @@ function findMethodsInFile(
     const methods: Array<{ name: string; line: number; endLine: number; lines: number; hasDisableComment: boolean }> =
         [];
 
+    // webpieces-disable max-lines-new-methods -- AST visitor pattern requires handling multiple node types
     function visit(node: ts.Node): void {
         let methodName: string | undefined;
         let startLine: number | undefined;
@@ -348,6 +350,7 @@ function findMethodsInFile(
  * Find modified methods that exceed the line limit
  * Modified = has changes within method body but is NOT a new method
  */
+// webpieces-disable max-lines-new-methods -- Core validation logic with multiple file operations
 function findViolations(
     workspaceRoot: string,
     changedFiles: string[],

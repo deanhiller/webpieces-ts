@@ -32,17 +32,8 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            - name: Build all packages
-              run: npx nx run-many --target=build --all
-
-            - name: Run linting
-              run: npx nx run-many --target=lint --all
-
-            - name: Run tests
-              run: npm test
-
-            - name: Validate architecture (complete)
-              run: npm run arch:validate-complete
+            - name: Run all CI checks (lint, build, test, architecture validation)
+              run: npx nx affected --target=ci --base=origin/main
 
             - name: Upload coverage
               uses: codecov/codecov-action@v4
