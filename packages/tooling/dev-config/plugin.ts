@@ -441,7 +441,7 @@ function createValidateVersionsLockedTarget(): TargetConfiguration {
         inputs: ['default'],
         metadata: {
             technologies: ['nx'],
-            description: 'Validate package.json versions are locked (no semver ranges) and npm ci compatible',
+            description: 'Validate package.json versions are locked (no semver ranges) and consistent across projects',
         },
     };
 }
