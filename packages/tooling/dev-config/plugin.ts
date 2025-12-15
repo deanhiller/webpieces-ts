@@ -45,6 +45,9 @@ export interface ArchitecturePluginOptions {
             architectureUnchanged?: boolean;
             validatePackageJson?: boolean;
             validateNewMethods?: boolean;
+            validateModifiedMethods?: boolean;
+            newMethodsMaxLines?: number;
+            modifiedAndNewMethodsMaxLines?: number;
         };
         features?: {
             generate?: boolean;
@@ -69,6 +72,9 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             architectureUnchanged: true,
             validatePackageJson: true,
             validateNewMethods: true,
+            validateModifiedMethods: true,
+            newMethodsMaxLines: 30,
+            modifiedAndNewMethodsMaxLines: 80,
         },
         features: {
             generate: true,
@@ -239,7 +245,11 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     }
 
     if (opts.workspace.validations!.validateNewMethods) {
-        targets['validate-new-methods'] = createValidateNewMethodsTarget();
+        targets['validate-new-methods'] = createValidateNewMethodsTarget(opts.workspace.validations!.newMethodsMaxLines!);
+    }
+
+    if (opts.workspace.validations!.validateModifiedMethods) {
+        targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(opts.workspace.validations!.modifiedAndNewMethodsMaxLines!);
     }
 
     // Add validate-complete target that runs all validations
@@ -259,6 +269,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
 
     if (opts.workspace.validations!.validateNewMethods) {
         validationTargets.push('validate-new-methods');
+    }
+
+    if (opts.workspace.validations!.validateModifiedMethods) {
+        validationTargets.push('validate-modified-methods');
     }
 
     if (validationTargets.length > 0) {
@@ -305,7 +319,11 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     }
 
     if (opts.workspace.validations!.validateNewMethods) {
-        targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget();
+        targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget(opts.workspace.validations!.newMethodsMaxLines!);
+    }
+
+    if (opts.workspace.validations!.validateModifiedMethods) {
+        targets[`${prefix}validate-modified-methods`] = createValidateModifiedMethodsTarget(opts.workspace.validations!.modifiedAndNewMethodsMaxLines!);
     }
 
     return targets;
@@ -398,15 +416,28 @@ function createValidatePackageJsonTarget(): TargetConfiguration {
     };
 }
 
-function createValidateNewMethodsTarget(): TargetConfiguration {
+function createValidateNewMethodsTarget(maxLines: number): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-new-methods',
         cache: false, // Don't cache - depends on git state
         inputs: ['default'],
-        options: { max: 30 },
+        options: { max: maxLines },
         metadata: {
             technologies: ['nx'],
-            description: 'Validate new methods do not exceed max line count (only runs in affected mode)',
+            description: `Validate new methods do not exceed ${maxLines} lines (only runs in affected mode)`,
+        },
+    };
+}
+
+function createValidateModifiedMethodsTarget(maxLines: number): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-modified-methods',
+        cache: false, // Don't cache - depends on git state
+        inputs: ['default'],
+        options: { max: maxLines },
+        metadata: {
+            technologies: ['nx'],
+            description: `Validate new and modified methods do not exceed ${maxLines} lines (encourages gradual cleanup)`,
         },
     };
 }

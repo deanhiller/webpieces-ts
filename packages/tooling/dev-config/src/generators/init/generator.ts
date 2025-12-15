@@ -65,9 +65,20 @@ function registerPlugin(tree: Tree): void {
     );
 
     if (!alreadyRegistered) {
-        nxJson.plugins.push(pluginName);
+        // Register plugin with default options for method size validation
+        nxJson.plugins.push({
+            plugin: pluginName,
+            options: {
+                workspace: {
+                    validations: {
+                        newMethodsMaxLines: 30,
+                        modifiedAndNewMethodsMaxLines: 80,
+                    },
+                },
+            },
+        });
         updateNxJson(tree, nxJson);
-        console.log(`✅ Registered ${pluginName} plugin in nx.json`);
+        console.log(`✅ Registered ${pluginName} plugin in nx.json with default options`);
     } else {
         console.log(`ℹ️  ${pluginName} plugin is already registered`);
     }

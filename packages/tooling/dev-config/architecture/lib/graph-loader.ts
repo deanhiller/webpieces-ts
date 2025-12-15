@@ -40,6 +40,39 @@ export function loadBlessedGraph(
 }
 
 /**
+ * Format a graph as JSON with multi-line arrays for readability
+ */
+function formatGraphJson(graph: EnhancedGraph): string {
+    const lines: string[] = ['{'];
+    const keys = Object.keys(graph).sort();
+
+    keys.forEach((key, index) => {
+        const entry = graph[key];
+        const isLast = index === keys.length - 1;
+        const comma = isLast ? '' : ',';
+
+        lines.push(`  "${key}": {`);
+        lines.push(`    "level": ${entry.level},`);
+
+        if (entry.dependsOn.length === 0) {
+            lines.push(`    "dependsOn": []`);
+        } else {
+            lines.push(`    "dependsOn": [`);
+            entry.dependsOn.forEach((dep, depIndex) => {
+                const depComma = depIndex === entry.dependsOn.length - 1 ? '' : ',';
+                lines.push(`      "${dep}"${depComma}`);
+            });
+            lines.push(`    ]`);
+        }
+
+        lines.push(`  }${comma}`);
+    });
+
+    lines.push('}');
+    return lines.join('\n') + '\n';
+}
+
+/**
  * Save the graph to disk
  *
  * @param graph - The graph to save
@@ -66,7 +99,7 @@ export function saveGraph(
         sortedGraph[key] = graph[key];
     }
 
-    const content = JSON.stringify(sortedGraph, null, 4) + '\n';
+    const content = formatGraphJson(sortedGraph);
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
 
