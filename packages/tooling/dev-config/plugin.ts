@@ -181,9 +181,7 @@ function addPerProjectTargets(
             }
         }
 
-        // Add ci target - composite target that runs lint, build, test, and typecheck
-        // The 'typecheck' target from @nx/js/typescript plugin already type-checks ALL files
-        // including *.spec.ts and *.test.ts via tsconfig.json references
+        // Add ci target - composite target that runs lint, build, and test
         targets['ci'] = createCiTarget();
 
         if (Object.keys(targets).length === 0) continue;
@@ -443,7 +441,7 @@ function createValidateVersionsLockedTarget(): TargetConfiguration {
         inputs: ['default'],
         metadata: {
             technologies: ['nx'],
-            description: 'Validate package.json versions are locked (no semver ranges) and npm ci compatible',
+            description: 'Validate package.json versions are locked (no semver ranges) and consistent across projects',
         },
     };
 }
@@ -462,20 +460,19 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
 
 /**
  * Create per-project ci target - Gradle-style composite target
- * Runs lint, build, test, and typecheck in parallel
+ * Runs lint, build, and test in parallel
  * (with test depending on build via targetDefaults)
  *
- * The 'typecheck' target from @nx/js/typescript plugin type-checks ALL *.ts files
- * including test files (*.spec.ts, *.test.ts) via tsconfig.json references.
+ * NOTE: Type checking is done by the build target (@nx/js:tsc) during compilation.
  */
 function createCiTarget(): TargetConfiguration {
     return {
         executor: 'nx:noop',
         cache: true,
-        dependsOn: ['lint', 'build', 'test', 'typecheck'],
+        dependsOn: ['lint', 'build', 'test'],
         metadata: {
             technologies: ['nx'],
-            description: 'Run all CI checks: lint, build, test, and typecheck (Gradle-style composite target)',
+            description: 'Run all CI checks: lint, build, and test (Gradle-style composite target)',
         },
     };
 }

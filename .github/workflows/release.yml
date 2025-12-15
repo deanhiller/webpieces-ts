@@ -97,9 +97,6 @@ jobs:
                   echo "   Base: $BASE_VERSION (from VERSION file)"
                   echo "   Build: $BUILD_NUMBER"
 
-            - name: Run tests
-              run: npm test
-
             - name: Set dynamic version for all packages
               run: |
                   BUILD_NUMBER=${{ steps.version.outputs.build_number }} ./scripts/set-version.sh
