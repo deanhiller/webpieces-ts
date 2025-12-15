@@ -50,10 +50,10 @@
             "schema": "./executors/validate-eslint-sync/schema.json",
             "description": "Validate that workspace and template eslint.webpieces.config.mjs files have identical rules"
         },
-        "validate-versions": {
-            "implementation": "./executors/validate-versions/executor",
-            "schema": "./executors/validate-versions/schema.json",
-            "description": "Validate package.json versions and npm ci compatibility"
+        "validate-versions-locked": {
+            "implementation": "./executors/validate-versions-locked/executor",
+            "schema": "./executors/validate-versions-locked/schema.json",
+            "description": "Validate package.json versions are locked (no semver ranges) and npm ci compatible"
         }
     }
 }

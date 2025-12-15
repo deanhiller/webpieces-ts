@@ -51,21 +51,22 @@ function formatGraphJson(graph: EnhancedGraph): string {
         const isLast = index === keys.length - 1;
         const comma = isLast ? '' : ',';
 
-        lines.push(`  "${key}": {`);
-        lines.push(`    "level": ${entry.level},`);
+        lines.push(`    "${key}": {`);
+        lines.push(`        "level": ${entry.level},`);
 
         if (entry.dependsOn.length === 0) {
-            lines.push(`    "dependsOn": []`);
+            lines.push(`        "dependsOn": []`);
         } else {
-            lines.push(`    "dependsOn": [`);
+            lines.push(`        "dependsOn": [`);
             entry.dependsOn.forEach((dep, depIndex) => {
                 const depComma = depIndex === entry.dependsOn.length - 1 ? '' : ',';
-                lines.push(`      "${dep}"${depComma}`);
+                lines.push(`            "${dep}"${depComma}`);
             });
-            lines.push(`    ]`);
+            lines.push(`        ]`);
         }
 
-        lines.push(`  }${comma}`);
+        lines.push(`    }${comma}`);
+
     });
 
     lines.push('}');

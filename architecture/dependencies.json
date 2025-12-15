@@ -1,94 +1,94 @@
 {
-  "architecture": {
-    "level": 0,
-    "dependsOn": []
-  },
-  "client": {
-    "level": 3,
-    "dependsOn": [
-      "http-client"
-    ]
-  },
-  "core-context": {
-    "level": 1,
-    "dependsOn": [
-      "core-util"
-    ]
-  },
-  "core-meta": {
-    "level": 0,
-    "dependsOn": []
-  },
-  "core-util": {
-    "level": 0,
-    "dependsOn": []
-  },
-  "dev-config": {
-    "level": 0,
-    "dependsOn": []
-  },
-  "example-apis": {
-    "level": 2,
-    "dependsOn": [
-      "http-api"
-    ]
-  },
-  "example-client": {
-    "level": 3,
-    "dependsOn": [
-      "example-apis",
-      "http-client"
-    ]
-  },
-  "example-server": {
-    "level": 5,
-    "dependsOn": [
-      "example-apis",
-      "http-server"
-    ]
-  },
-  "http-api": {
-    "level": 1,
-    "dependsOn": [
-      "core-util"
-    ]
-  },
-  "http-client": {
-    "level": 2,
-    "dependsOn": [
-      "http-api"
-    ]
-  },
-  "http-filters": {
-    "level": 2,
-    "dependsOn": [
-      "core-context"
-    ]
-  },
-  "http-routing": {
-    "level": 3,
-    "dependsOn": [
-      "http-api",
-      "http-filters"
-    ]
-  },
-  "http-server": {
-    "level": 4,
-    "dependsOn": [
-      "http-routing"
-    ]
-  },
-  "rules": {
-    "level": 1,
-    "dependsOn": [
-      "dev-config"
-    ]
-  },
-  "server": {
-    "level": 5,
-    "dependsOn": [
-      "core-meta",
-      "http-server"
-    ]
-  }
+    "architecture": {
+        "level": 0,
+        "dependsOn": []
+    },
+    "client": {
+        "level": 3,
+        "dependsOn": [
+            "http-client"
+        ]
+    },
+    "core-context": {
+        "level": 1,
+        "dependsOn": [
+            "core-util"
+        ]
+    },
+    "core-meta": {
+        "level": 0,
+        "dependsOn": []
+    },
+    "core-util": {
+        "level": 0,
+        "dependsOn": []
+    },
+    "dev-config": {
+        "level": 0,
+        "dependsOn": []
+    },
+    "example-apis": {
+        "level": 2,
+        "dependsOn": [
+            "http-api"
+        ]
+    },
+    "example-client": {
+        "level": 3,
+        "dependsOn": [
+            "example-apis",
+            "http-client"
+        ]
+    },
+    "example-server": {
+        "level": 5,
+        "dependsOn": [
+            "example-apis",
+            "http-server"
+        ]
+    },
+    "http-api": {
+        "level": 1,
+        "dependsOn": [
+            "core-util"
+        ]
+    },
+    "http-client": {
+        "level": 2,
+        "dependsOn": [
+            "http-api"
+        ]
+    },
+    "http-filters": {
+        "level": 2,
+        "dependsOn": [
+            "core-context"
+        ]
+    },
+    "http-routing": {
+        "level": 3,
+        "dependsOn": [
+            "http-api",
+            "http-filters"
+        ]
+    },
+    "http-server": {
+        "level": 4,
+        "dependsOn": [
+            "http-routing"
+        ]
+    },
+    "rules": {
+        "level": 1,
+        "dependsOn": [
+            "dev-config"
+        ]
+    },
+    "server": {
+        "level": 5,
+        "dependsOn": [
+            "core-meta",
+            "http-server"
+        ]
+    }
 }
