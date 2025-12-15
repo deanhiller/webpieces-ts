@@ -45,8 +45,11 @@ const METHODSIZE_DOC_CONTENT = `# Instructions: New Method Too Long
 
 ## Requirement
 
-You MUST make a **best effort** to keep new methods under the configured limit
-(default: 30 lines, configurable via \`newMethodsMaxLines\` in nx.json).
+**~50% of the time**, you can stay under the \`newMethodsMaxLines\` limit from nx.json
+by extracting logical units into well-named methods.
+
+**~99% of the time**, you can stay under the \`modifiedAndNewMethodsMaxLines\` limit from nx.json.
+Nearly all software can be written with methods under this size.
 
 ## The "Table of Contents" Principle
 
@@ -64,8 +67,7 @@ Methods under the limit are:
 - More testable in isolation
 - Self-documenting through well-named extracted methods
 
-**~50% of the time**, you can stay under the limit in new code by extracting
-logical units into well-named methods. This makes code more readable for both
+Extracting logical units into well-named methods makes code more readable for both
 AI and humans.
 
 ## How to Refactor
@@ -247,7 +249,10 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
 }
 
 /**
- * Check if a line contains a webpieces-disable comment for max-lines-new-methods
+ * Check if a line contains a webpieces-disable comment that exempts from new method validation.
+ * Both max-lines-new-methods AND max-lines-new-and-modified are accepted here.
+ * - max-lines-new-methods: Exempts from 30-line check, still checked by 80-line validator
+ * - max-lines-new-and-modified: Exempts from both validators (ultimate escape hatch)
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
     // Check the line before the method (lineNumber is 1-indexed, array is 0-indexed)
@@ -259,8 +264,11 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('max-lines-new-methods')) {
-            return true;
+        if (line.includes('webpieces-disable')) {
+            // Either escape hatch exempts from the 30-line new method check
+            if (line.includes('max-lines-new-methods') || line.includes('max-lines-new-and-modified')) {
+                return true;
+            }
         }
     }
     return false;

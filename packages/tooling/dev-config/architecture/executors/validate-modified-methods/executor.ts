@@ -45,10 +45,11 @@ const METHODSIZE_DOC_CONTENT = `# Instructions: Method Too Long
 
 ## Requirement
 
-You MUST **REALLY, REALLY TRY** to keep modified methods under the configured limit
-(default: 80 lines, configurable via \`modifiedAndNewMethodsMaxLines\` in nx.json).
+**~50% of the time**, you can stay under the \`newMethodsMaxLines\` limit from nx.json
+by extracting logical units into well-named methods.
 
-**Nearly all software can be written with 99% of methods under this limit.**
+**~99% of the time**, you can stay under the \`modifiedAndNewMethodsMaxLines\` limit from nx.json.
+Nearly all software can be written with methods under this size.
 Take the extra time to refactor - it's worth it for long-term maintainability.
 
 ## The "Table of Contents" Principle
@@ -70,8 +71,8 @@ Methods under reasonable limits are:
 ## Gradual Cleanup Strategy
 
 This codebase uses a gradual cleanup approach:
-- **New methods**: Must be under \`newMethodsMaxLines\` (default: 30 lines)
-- **Modified methods**: Must be under \`modifiedAndNewMethodsMaxLines\` (default: 80 lines)
+- **New methods**: Must be under \`newMethodsMaxLines\` from nx.json
+- **Modified methods**: Must be under \`modifiedAndNewMethodsMaxLines\` from nx.json
 - **Untouched methods**: No limit (legacy code is allowed until touched)
 
 ## How to Refactor
@@ -177,11 +178,14 @@ function writeTmpInstructions(workspaceRoot: string): string {
 }
 
 /**
- * Get changed TypeScript files between base and head
+ * Get changed TypeScript files between base and working tree.
+ * Uses `git diff base` (no three-dots) to match what `nx affected` does -
+ * this includes both committed and uncommitted changes in one diff.
  */
 function getChangedTypeScriptFiles(workspaceRoot: string, base: string): string[] {
     try {
-        const output = execSync(`git diff --name-only ${base}...HEAD -- '*.ts' '*.tsx'`, {
+        // Use two-dot diff (base to working tree) - same as nx affected
+        const output = execSync(`git diff --name-only ${base} -- '*.ts' '*.tsx'`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -195,11 +199,14 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string): string[
 }
 
 /**
- * Get the diff content for a specific file
+ * Get the diff content for a specific file between base and working tree.
+ * Uses `git diff base` (no three-dots) to match what `nx affected` does -
+ * this includes both committed and uncommitted changes in one diff.
  */
 function getFileDiff(workspaceRoot: string, file: string, base: string): string {
     try {
-        return execSync(`git diff ${base}...HEAD -- "${file}"`, {
+        // Use two-dot diff (base to working tree) - same as nx affected
+        return execSync(`git diff ${base} -- "${file}"`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -209,17 +216,24 @@ function getFileDiff(workspaceRoot: string, file: string, base: string): string 
 }
 
 /**
- * Parse diff to find NEW method signatures (to exclude from modified check)
+ * Parse diff to find NEW method signatures.
+ * Must handle: export function, async function, const/let arrow functions, class methods
  */
+// webpieces-disable max-lines-new-methods -- Regex patterns require inline documentation
 function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
     const newMethods = new Set<string>();
     const lines = diffContent.split('\n');
 
+    // Patterns to match method definitions (same as validate-new-methods)
     const patterns = [
-        /^\+\s*(async\s+)?(\w+)\s*\(/,
-        /^\+\s*(async\s+)?function\s+(\w+)\s*\(/,
-        /^\+\s*(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
-        /^\+\s*(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
+        // [export] [async] function methodName( - most explicit, check first
+        /^\+\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/,
+        // [export] const/let methodName = [async] (
+        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
+        // [export] const/let methodName = [async] function
+        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
+        // class method: [async] methodName( - but NOT constructor, if, for, while, etc.
+        /^\+\s*(?:async\s+)?(\w+)\s*\(/,
     ];
 
     for (const line of lines) {
@@ -227,7 +241,8 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
             for (const pattern of patterns) {
                 const match = line.match(pattern);
                 if (match) {
-                    const methodName = match[2] || match[1];
+                    // Extract method name - now always in capture group 1
+                    const methodName = match[1];
                     if (methodName && !['if', 'for', 'while', 'switch', 'catch', 'constructor'].includes(methodName)) {
                         newMethods.add(methodName);
                     }
@@ -275,20 +290,29 @@ function getChangedLineNumbers(diffContent: string): Set<number> {
 }
 
 /**
- * Check if a line contains a webpieces-disable comment for max-lines-new-and-modified
+ * Check what kind of webpieces-disable comment is present for a method.
+ * Returns: 'full' | 'new-only' | 'none'
+ * - 'full': max-lines-new-and-modified (ultimate escape, skips both validators)
+ * - 'new-only': max-lines-new-methods (escaped 30-line check, still needs 80-line check)
+ * - 'none': no escape hatch
  */
-function hasDisableComment(lines: string[], lineNumber: number): boolean {
+function getDisableType(lines: string[], lineNumber: number): 'full' | 'new-only' | 'none' {
     const startCheck = Math.max(0, lineNumber - 5);
     for (let i = lineNumber - 2; i >= startCheck; i--) {
         const line = lines[i]?.trim() ?? '';
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('max-lines-new-and-modified')) {
-            return true;
+        if (line.includes('webpieces-disable')) {
+            if (line.includes('max-lines-new-and-modified')) {
+                return 'full';
+            }
+            if (line.includes('max-lines-new-methods')) {
+                return 'new-only';
+            }
         }
     }
-    return false;
+    return 'none';
 }
 
 /**
@@ -298,7 +322,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
 function findMethodsInFile(
     filePath: string,
     workspaceRoot: string
-): Array<{ name: string; line: number; endLine: number; lines: number; hasDisableComment: boolean }> {
+): Array<{ name: string; line: number; endLine: number; lines: number; disableType: 'full' | 'new-only' | 'none' }> {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
 
@@ -306,7 +330,7 @@ function findMethodsInFile(
     const fileLines = content.split('\n');
     const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
 
-    const methods: Array<{ name: string; line: number; endLine: number; lines: number; hasDisableComment: boolean }> =
+    const methods: Array<{ name: string; line: number; endLine: number; lines: number; disableType: 'full' | 'new-only' | 'none' }> =
         [];
 
     // webpieces-disable max-lines-new-methods -- AST visitor pattern requires handling multiple node types
@@ -343,7 +367,7 @@ function findMethodsInFile(
                 line: startLine,
                 endLine: endLine,
                 lines: endLine - startLine + 1,
-                hasDisableComment: hasDisableComment(fileLines, startLine),
+                disableType: getDisableType(fileLines, startLine),
             });
         }
 
@@ -355,8 +379,15 @@ function findMethodsInFile(
 }
 
 /**
- * Find modified methods that exceed the line limit
- * Modified = has changes within method body but is NOT a new method
+ * Find methods that exceed the 80-line limit.
+ *
+ * This validator checks:
+ * 1. NEW methods that have `max-lines-new-methods` escape (they passed 30-line check, now need 80-line check)
+ * 2. MODIFIED methods (existing methods with changes)
+ *
+ * Skips:
+ * - NEW methods without any escape (let validate-new-methods handle them first)
+ * - Methods with `max-lines-new-and-modified` escape (ultimate escape hatch)
  */
 // webpieces-disable max-lines-new-methods -- Core validation logic with multiple file operations
 function findViolations(
@@ -371,7 +402,7 @@ function findViolations(
         const diff = getFileDiff(workspaceRoot, file, base);
         if (!diff) continue;
 
-        // Find NEW methods (to exclude)
+        // Find NEW methods from the diff
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
 
         // Find which lines have changes
@@ -382,31 +413,45 @@ function findViolations(
         const methods = findMethodsInFile(file, workspaceRoot);
 
         for (const method of methods) {
-            // Skip new methods (handled by validate-new-methods)
-            if (newMethodNames.has(method.name)) continue;
+            const isNewMethod = newMethodNames.has(method.name);
 
-            // Skip methods with disable comment
-            if (method.hasDisableComment) continue;
+            // Skip methods with full escape (max-lines-new-and-modified)
+            if (method.disableType === 'full') continue;
 
             // Skip methods under the limit
             if (method.lines <= maxLines) continue;
 
-            // Check if any changed line falls within this method's range
-            let hasChanges = false;
-            for (let line = method.line; line <= method.endLine; line++) {
-                if (changedLineNumbers.has(line)) {
-                    hasChanges = true;
-                    break;
-                }
-            }
+            if (isNewMethod) {
+                // For NEW methods:
+                // - If has 'new-only' escape → check (they escaped 30-line, now need 80-line check)
+                // - If has 'none' → skip (let validate-new-methods handle first)
+                if (method.disableType !== 'new-only') continue;
 
-            if (hasChanges) {
+                // New method with max-lines-new-methods escape - check against 80-line limit
                 violations.push({
                     file,
                     methodName: method.name,
                     line: method.line,
                     lines: method.lines,
                 });
+            } else {
+                // For MODIFIED methods: check if any changed line falls within method's range
+                let hasChanges = false;
+                for (let line = method.line; line <= method.endLine; line++) {
+                    if (changedLineNumbers.has(line)) {
+                        hasChanges = true;
+                        break;
+                    }
+                }
+
+                if (hasChanges) {
+                    violations.push({
+                        file,
+                        methodName: method.name,
+                        line: method.line,
+                        lines: method.lines,
+                    });
+                }
             }
         }
     }
