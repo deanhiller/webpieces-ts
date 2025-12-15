@@ -43,6 +43,11 @@ const TMP_MD_FILE = 'webpieces.methodsize.md';
 
 const METHODSIZE_DOC_CONTENT = `# Instructions: New Method Too Long
 
+## Requirement
+
+You MUST make a **best effort** to keep new methods under the configured limit
+(default: 30 lines, configurable via \`newMethodsMaxLines\` in nx.json).
+
 ## The "Table of Contents" Principle
 
 Good code reads like a book's table of contents:
@@ -50,16 +55,16 @@ Good code reads like a book's table of contents:
 - Reading chapter titles gives you the full story
 - You can dive into chapters (implementations) for details
 
-## Why Limit New Methods to 20-30 Lines?
+## Why Limit New Methods?
 
-Methods under 20-30 lines are:
+Methods under the limit are:
 - Easy to review in a single screen
 - Simple to understand without scrolling
 - Quick for AI to analyze and suggest improvements
 - More testable in isolation
 - Self-documenting through well-named extracted methods
 
-**~50% of the time**, you can stay under 20-30 lines in new code by extracting
+**~50% of the time**, you can stay under the limit in new code by extracting
 logical units into well-named methods. This makes code more readable for both
 AI and humans.
 

@@ -14,7 +14,7 @@
  * Usage:
  * nx affected --target=validate-modified-methods --base=origin/main
  *
- * Escape hatch: Add webpieces-disable max-lines-modified-methods comment with justification
+ * Escape hatch: Add webpieces-disable max-lines-new-and-modified comment with justification
  */
 
 import type { ExecutorContext } from '@nx/devkit';
@@ -43,6 +43,14 @@ const TMP_MD_FILE = 'webpieces.methodsize.md';
 
 const METHODSIZE_DOC_CONTENT = `# Instructions: Method Too Long
 
+## Requirement
+
+You MUST **REALLY, REALLY TRY** to keep modified methods under the configured limit
+(default: 80 lines, configurable via \`modifiedAndNewMethodsMaxLines\` in nx.json).
+
+**Nearly all software can be written with 99% of methods under this limit.**
+Take the extra time to refactor - it's worth it for long-term maintainability.
+
 ## The "Table of Contents" Principle
 
 Good code reads like a book's table of contents:
@@ -62,8 +70,8 @@ Methods under reasonable limits are:
 ## Gradual Cleanup Strategy
 
 This codebase uses a gradual cleanup approach:
-- **New methods**: Must be under 30 lines (strict)
-- **Modified methods**: Must be under 80 lines (when you touch it, clean it up)
+- **New methods**: Must be under \`newMethodsMaxLines\` (default: 30 lines)
+- **Modified methods**: Must be under \`modifiedAndNewMethodsMaxLines\` (default: 80 lines)
 - **Untouched methods**: No limit (legacy code is allowed until touched)
 
 ## How to Refactor
@@ -134,7 +142,7 @@ Sometimes methods genuinely need to be longer (complex algorithms, state machine
 **Escape hatch**: Add a webpieces-disable comment with justification:
 
 \`\`\`typescript
-// webpieces-disable max-lines-modified-methods -- Complex state machine, splitting reduces clarity
+// webpieces-disable max-lines-new-and-modified -- Complex state machine, splitting reduces clarity
 async complexStateMachine(): Promise<void> {
     // ... longer method with justification
 }
@@ -146,7 +154,7 @@ async complexStateMachine(): Promise<void> {
 2. **IDENTIFY** logical units that can be extracted
 3. **EXTRACT** into well-named private methods
 4. **VERIFY** the main method now reads like a table of contents
-5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-modified-methods comment with clear justification
+5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-new-and-modified comment with clear justification
 
 ## Remember
 
@@ -267,7 +275,7 @@ function getChangedLineNumbers(diffContent: string): Set<number> {
 }
 
 /**
- * Check if a line contains a webpieces-disable comment for max-lines-modified-methods
+ * Check if a line contains a webpieces-disable comment for max-lines-new-and-modified
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
     const startCheck = Math.max(0, lineNumber - 5);
@@ -276,7 +284,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('max-lines-modified-methods')) {
+        if (line.includes('webpieces-disable') && line.includes('max-lines-new-and-modified')) {
             return true;
         }
     }
