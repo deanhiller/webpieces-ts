@@ -47,6 +47,37 @@ export class ClientConfig {
  * @param logApiCall - Optional LogApiCall instance (creates new one if not provided)
  * @returns A proxy object that implements the API interface
  */
+/**
+ * Properties accessed by DI frameworks (Angular, Vue), debuggers, Promise checks, and serializers.
+ * These should return undefined instead of throwing, allowing frameworks to inspect the proxy.
+ *
+ * Why this exists:
+ * - Angular's injector profiler accesses `constructor` after useFactory returns
+ * - Promise.resolve() checks for `then` to detect thenables
+ * - JSON.stringify checks for `toJSON`
+ * - Debuggers access `prototype`, `__proto__`, etc.
+ */
+const FRAMEWORK_INSPECTION_PROPERTIES = new Set([
+    'constructor',     // Angular DI profiler, class inspection
+    'prototype',       // Prototype chain inspection
+    '__proto__',       // Legacy prototype access
+    'then',            // Promise/thenable detection
+    'catch',           // Promise check
+    'finally',         // Promise check
+    'toJSON',          // JSON.stringify
+    'valueOf',         // Type coercion
+    'toString',        // String coercion
+    'nodeType',        // DOM element check
+    'tagName',         // DOM element check
+    '$$typeof',        // React element/component check
+    '$typeof',         // React internal
+    '_isVue',          // Vue internal
+    'ngOnInit',        // Angular lifecycle hook check
+    'ngOnDestroy',     // Angular lifecycle hook check
+    'ngOnChanges',     // Angular lifecycle hook check
+    'asymmetricMatch', // Jest matcher protocol
+]);
+
 export function createClient<T extends object>(
     apiPrototype: Function & { prototype: T },
     config: ClientConfig,
@@ -81,12 +112,21 @@ export function createClient<T extends object>(
     // Create a proxy that intercepts method calls and makes HTTP requests
     return new Proxy({} as T, {
         get(target, prop: string | symbol) {
-            // Only handle string properties (method names)
+            // Symbols (Symbol.toStringTag, Symbol.iterator, etc.) - throw for now to learn if this happens
             if (typeof prop !== 'string') {
-                throw new Error(`Method names must be strings, not ${typeof prop}`);
+                throw new Error(
+                    `Proxy accessed with non-string property: ${String(prop)} (type: ${typeof prop}). ` +
+                    `Please report this so we can add it to the whitelist.`
+                );
             }
 
-            // Check if this property is actually a route method BEFORE calling getRoute()
+            // Framework inspection properties - return undefined to allow inspection
+            // WITHOUT throwing. This is critical for Angular DI, Promise checks, etc.
+            if (FRAMEWORK_INSPECTION_PROPERTIES.has(prop)) {
+                return undefined;
+            }
+
+            // Check if this property is actually a route method
             if (!proxyClient.hasRoute(prop)) {
                 // For unknown properties (likely typos), throw a helpful error
                 throw new Error(
