@@ -18,6 +18,7 @@ These validations check the entire workspace architecture and run only once, reg
 | **validate-packagejson** | Validates `package.json` dependencies match `project.json` build.dependsOn | ✅ TESTED |
 | **validate-new-methods** | Validates new/modified methods don't exceed max line count (git-based, affected mode) | ✅ TESTED |
 | **validate-versions-locked** | Validates package.json versions are locked (no ^, ~, *) and npm ci compatible | ✅ TESTED |
+| **validate-no-any-modified-code** | Validates new/modified methods don't use `any` type (git-based, affected mode) | ⏳ TODO |
 
 ---
 
@@ -64,6 +65,7 @@ build target
                              • validate-packagejson
                              • validate-new-methods
                              • validate-versions-locked
+                             • validate-no-any-modified-code (TODO)
 
 lint target
   └─> ESLint rules:
@@ -90,10 +92,7 @@ lint target
 ## NPM Scripts
 
 ```bash
+npm run build-all               # Run CI target on affected projects (runs all validations)
 npm run arch:generate           # Generate architecture/dependencies.json
 npm run arch:visualize          # Open interactive dependency graph
-npm run arch:validate           # Run workspace validations (no architecture-unchanged check)
-npm run arch:validate-all       # Run all workspace validations
-npm run arch:check-circular     # Run circular deps check on all projects
-npm run arch:validate-complete  # Run arch:validate-all + arch:check-circular
 ```
