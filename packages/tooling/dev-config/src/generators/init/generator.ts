@@ -243,10 +243,13 @@ function addNpmScripts(tree: Tree): void {
         // Complete validation including circular deps
         pkgJson.scripts['arch:validate-complete'] = 'npm run arch:validate-all && npm run arch:check-circular';
 
+        // Add CI script that runs lint, build, test on affected projects
+        pkgJson.scripts['webpieces:ci'] = 'npx nx affected --target=ci';
+
         return pkgJson;
     });
 
-    console.log('✅ Added npm scripts for architecture validation and circular dependency checking');
+    console.log('✅ Added npm scripts for architecture validation, circular dependency checking, and CI');
 }
 
 function createEslintConfig(tree: Tree): boolean {
