@@ -3,6 +3,14 @@ module.exports = {
     testEnvironment: 'node',
     roots: ['<rootDir>/apps', '<rootDir>/packages'],
     testMatch: ['**/*.spec.ts', '**/*.test.ts'],
+    transform: {
+        '^.+\\.[tj]s$': [
+            'ts-jest',
+            {
+                tsconfig: 'tsconfig.base.json',
+            },
+        ],
+    },
     moduleNameMapper: {
         '^@webpieces/core-context$': '<rootDir>/packages/core/core-context/src/index.ts',
         '^@webpieces/core-meta$': '<rootDir>/packages/core/core-meta/src/index.ts',
