@@ -545,9 +545,10 @@ export default async function runExecutor(
         console.error('❌ Modified methods exceed ' + maxLines + ' lines!');
         console.error('');
         console.error('📚 When you modify a method, you must bring it under ' + maxLines + ' lines.');
-        console.error('   This encourages gradual cleanup of legacy code.');
-        console.error('   You can refactor to stay under the limit 50% of the time.');
-        console.error('   If not feasible, use the escape hatch.');
+        console.error('   This rule encourages GRADUAL cleanup so even though you did not cause it,');
+        console.error('   you touched it, so you should fix now as part of your PR');
+        console.error('   (this is for vibe coding and AI to fix as it touches things).');
+        console.error('   You can refactor to stay under the limit 50% of the time. If not feasible, use the escape hatch.');
         console.error('');
         console.error(
             '⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️'
