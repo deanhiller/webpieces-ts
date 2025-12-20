@@ -54,6 +54,11 @@
             "implementation": "./executors/validate-versions-locked/executor",
             "schema": "./executors/validate-versions-locked/schema.json",
             "description": "Validate package.json versions are locked (no semver ranges) and npm ci compatible"
+        },
+        "validate-modified-files": {
+            "implementation": "./architecture/executors/validate-modified-files/executor",
+            "schema": "./architecture/executors/validate-modified-files/schema.json",
+            "description": "Validate modified files don't exceed max line count"
         }
     }
 }

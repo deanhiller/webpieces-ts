@@ -14,7 +14,9 @@
  * Usage:
  * nx affected --target=validate-modified-methods --base=origin/main
  *
- * Escape hatch: Add webpieces-disable max-lines-new-and-modified comment with justification
+ * Escape hatch: Add webpieces-disable max-lines-new-and-modified comment with date and justification
+ * Format: // webpieces-disable max-lines-new-and-modified 2025/01/15 -- [reason]
+ * The disable expires after 1 month from the date specified.
  */
 
 import type { ExecutorContext } from '@nx/devkit';
@@ -36,6 +38,8 @@ interface MethodViolation {
     methodName: string;
     line: number;
     lines: number;
+    expiredDisable?: boolean;
+    expiredDate?: string;
 }
 
 const TMP_DIR = 'tmp/webpieces';
@@ -140,14 +144,18 @@ const result = this.buildResultObject(data);
 
 Sometimes methods genuinely need to be longer (complex algorithms, state machines, etc.).
 
-**Escape hatch**: Add a webpieces-disable comment with justification:
+**Escape hatch**: Add a webpieces-disable comment with DATE and justification:
 
 \`\`\`typescript
-// webpieces-disable max-lines-new-and-modified -- Complex state machine, splitting reduces clarity
+// webpieces-disable max-lines-new-and-modified 2025/01/15 -- Complex state machine, splitting reduces clarity
 async complexStateMachine(): Promise<void> {
     // ... longer method with justification
 }
 \`\`\`
+
+**IMPORTANT**: The date format is yyyy/mm/dd. The disable will EXPIRE after 1 month from this date.
+After expiration, you must either fix the method or update the date to get another month.
+This ensures that disable comments are reviewed periodically.
 
 ## AI Agent Action Steps
 
@@ -290,13 +298,63 @@ function getChangedLineNumbers(diffContent: string): Set<number> {
 }
 
 /**
+ * Parse a date string in yyyy/mm/dd format and return a Date object.
+ * Returns null if the format is invalid.
+ */
+function parseDisableDate(dateStr: string): Date | null {
+    // Match yyyy/mm/dd format
+    const match = dateStr.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+    if (!match) return null;
+
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1; // JS months are 0-indexed
+    const day = parseInt(match[3], 10);
+
+    const date = new Date(year, month, day);
+
+    // Validate the date is valid (e.g., not Feb 30)
+    if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
+        return null;
+    }
+
+    return date;
+}
+
+/**
+ * Check if a date is within the last month (not expired).
+ */
+function isDateWithinMonth(date: Date): boolean {
+    const now = new Date();
+    const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    return date >= oneMonthAgo;
+}
+
+/**
+ * Get today's date in yyyy/mm/dd format for error messages
+ */
+function getTodayDateString(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}/${month}/${day}`;
+}
+
+interface DisableInfo {
+    type: 'full' | 'new-only' | 'none';
+    isExpired: boolean;
+    date?: string;
+}
+
+/**
  * Check what kind of webpieces-disable comment is present for a method.
- * Returns: 'full' | 'new-only' | 'none'
+ * Returns: DisableInfo with type, expiration status, and date
  * - 'full': max-lines-new-and-modified (ultimate escape, skips both validators)
  * - 'new-only': max-lines-new-methods (escaped 30-line check, still needs 80-line check)
  * - 'none': no escape hatch
  */
-function getDisableType(lines: string[], lineNumber: number): 'full' | 'new-only' | 'none' {
+// webpieces-disable max-lines-new-methods -- Complex validation logic with multiple escape hatch types
+function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
     const startCheck = Math.max(0, lineNumber - 5);
     for (let i = lineNumber - 2; i >= startCheck; i--) {
         const line = lines[i]?.trim() ?? '';
@@ -305,24 +363,83 @@ function getDisableType(lines: string[], lineNumber: number): 'full' | 'new-only
         }
         if (line.includes('webpieces-disable')) {
             if (line.includes('max-lines-new-and-modified')) {
-                return 'full';
+                // Check for date in format: max-lines-new-and-modified yyyy/mm/dd
+                const dateMatch = line.match(/max-lines-new-and-modified\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
+
+                if (!dateMatch) {
+                    // No date found - treat as expired (invalid)
+                    return { type: 'full', isExpired: true, date: undefined };
+                }
+
+                const dateStr = dateMatch[1];
+
+                // Secret permanent disable
+                if (dateStr === 'XXXX/XX/XX') {
+                    return { type: 'full', isExpired: false, date: dateStr };
+                }
+
+                const date = parseDisableDate(dateStr);
+                if (!date) {
+                    // Invalid date format - treat as expired
+                    return { type: 'full', isExpired: true, date: dateStr };
+                }
+
+                if (!isDateWithinMonth(date)) {
+                    // Date is expired (older than 1 month)
+                    return { type: 'full', isExpired: true, date: dateStr };
+                }
+
+                // Valid and not expired
+                return { type: 'full', isExpired: false, date: dateStr };
             }
             if (line.includes('max-lines-new-methods')) {
-                return 'new-only';
+                // Check for date in format: max-lines-new-methods yyyy/mm/dd
+                const dateMatch = line.match(/max-lines-new-methods\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
+
+                if (!dateMatch) {
+                    // No date found - treat as expired (invalid)
+                    return { type: 'new-only', isExpired: true, date: undefined };
+                }
+
+                const dateStr = dateMatch[1];
+
+                // Secret permanent disable
+                if (dateStr === 'XXXX/XX/XX') {
+                    return { type: 'new-only', isExpired: false, date: dateStr };
+                }
+
+                const date = parseDisableDate(dateStr);
+                if (!date) {
+                    // Invalid date format - treat as expired
+                    return { type: 'new-only', isExpired: true, date: dateStr };
+                }
+
+                if (!isDateWithinMonth(date)) {
+                    // Date is expired (older than 1 month)
+                    return { type: 'new-only', isExpired: true, date: dateStr };
+                }
+
+                // Valid and not expired
+                return { type: 'new-only', isExpired: false, date: dateStr };
             }
         }
     }
-    return 'none';
+    return { type: 'none', isExpired: false };
+}
+
+interface MethodInfo {
+    name: string;
+    line: number;
+    endLine: number;
+    lines: number;
+    disableInfo: DisableInfo;
 }
 
 /**
  * Parse a TypeScript file and find methods with their line counts
  */
 // webpieces-disable max-lines-new-methods -- AST traversal requires inline visitor function
-function findMethodsInFile(
-    filePath: string,
-    workspaceRoot: string
-): Array<{ name: string; line: number; endLine: number; lines: number; disableType: 'full' | 'new-only' | 'none' }> {
+function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[] {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
 
@@ -330,8 +447,7 @@ function findMethodsInFile(
     const fileLines = content.split('\n');
     const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
 
-    const methods: Array<{ name: string; line: number; endLine: number; lines: number; disableType: 'full' | 'new-only' | 'none' }> =
-        [];
+    const methods: MethodInfo[] = [];
 
     // webpieces-disable max-lines-new-methods -- AST visitor pattern requires handling multiple node types
     function visit(node: ts.Node): void {
@@ -367,7 +483,7 @@ function findMethodsInFile(
                 line: startLine,
                 endLine: endLine,
                 lines: endLine - startLine + 1,
-                disableType: getDisableType(fileLines, startLine),
+                disableInfo: getDisableInfo(fileLines, startLine),
             });
         }
 
@@ -387,9 +503,9 @@ function findMethodsInFile(
  *
  * Skips:
  * - NEW methods without any escape (let validate-new-methods handle them first)
- * - Methods with `max-lines-new-and-modified` escape (ultimate escape hatch)
+ * - Methods with valid, non-expired `max-lines-new-and-modified` escape (ultimate escape hatch)
  */
-// webpieces-disable max-lines-new-methods -- Core validation logic with multiple file operations
+// webpieces-disable max-lines-new-and-modified 2025/12/20 -- Core validation logic with multiple file operations
 function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
@@ -414,26 +530,52 @@ function findViolations(
 
         for (const method of methods) {
             const isNewMethod = newMethodNames.has(method.name);
+            const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
 
-            // Skip methods with full escape (max-lines-new-and-modified)
-            if (method.disableType === 'full') continue;
+            // Skip methods with valid, non-expired full escape (max-lines-new-and-modified)
+            if (disableType === 'full' && !isExpired) continue;
 
             // Skip methods under the limit
             if (method.lines <= maxLines) continue;
 
             if (isNewMethod) {
                 // For NEW methods:
-                // - If has 'new-only' escape → check (they escaped 30-line, now need 80-line check)
+                // - If has 'new-only' escape (non-expired) → check (they escaped 30-line, now need 80-line check)
                 // - If has 'none' → skip (let validate-new-methods handle first)
-                if (method.disableType !== 'new-only') continue;
+                // - If has expired disable → report as violation
+                if (disableType === 'full' && isExpired) {
+                    // Expired full disable - report with expired info
+                    violations.push({
+                        file,
+                        methodName: method.name,
+                        line: method.line,
+                        lines: method.lines,
+                        expiredDisable: true,
+                        expiredDate: disableDate,
+                    });
+                    continue;
+                }
+                if (disableType !== 'new-only') continue;
 
-                // New method with max-lines-new-methods escape - check against 80-line limit
-                violations.push({
-                    file,
-                    methodName: method.name,
-                    line: method.line,
-                    lines: method.lines,
-                });
+                if (isExpired) {
+                    // Expired new-only disable - report with expired info
+                    violations.push({
+                        file,
+                        methodName: method.name,
+                        line: method.line,
+                        lines: method.lines,
+                        expiredDisable: true,
+                        expiredDate: disableDate,
+                    });
+                } else {
+                    // New method with valid max-lines-new-methods escape - check against 80-line limit
+                    violations.push({
+                        file,
+                        methodName: method.name,
+                        line: method.line,
+                        lines: method.lines,
+                    });
+                }
             } else {
                 // For MODIFIED methods: check if any changed line falls within method's range
                 let hasChanges = false;
@@ -445,12 +587,24 @@ function findViolations(
                 }
 
                 if (hasChanges) {
-                    violations.push({
-                        file,
-                        methodName: method.name,
-                        line: method.line,
-                        lines: method.lines,
-                    });
+                    if (disableType === 'full' && isExpired) {
+                        // Expired full disable - report with expired info
+                        violations.push({
+                            file,
+                            methodName: method.name,
+                            line: method.line,
+                            lines: method.lines,
+                            expiredDisable: true,
+                            expiredDate: disableDate,
+                        });
+                    } else {
+                        violations.push({
+                            file,
+                            methodName: method.name,
+                            line: method.line,
+                            lines: method.lines,
+                        });
+                    }
                 }
             }
         }
@@ -489,6 +643,46 @@ function detectBase(workspaceRoot: string): string | null {
         }
     }
     return null;
+}
+
+/**
+ * Report violations to console
+ */
+// webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
+function reportViolations(violations: MethodViolation[], maxLines: number): void {
+    console.error('');
+    console.error('❌ Modified methods exceed ' + maxLines + ' lines!');
+    console.error('');
+    console.error('📚 When you modify a method, you must bring it under ' + maxLines + ' lines.');
+    console.error('   This rule encourages GRADUAL cleanup so even though you did not cause it,');
+    console.error('   you touched it, so you should fix now as part of your PR');
+    console.error('   (this is for vibe coding and AI to fix as it touches things).');
+    console.error('   You can refactor to stay under the limit 50% of the time. If not feasible, use the escape hatch.');
+    console.error('');
+    console.error(
+        '⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️'
+    );
+    console.error('');
+
+    for (const v of violations) {
+        if (v.expiredDisable) {
+            console.error(`  ❌ ${v.file}:${v.line}`);
+            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
+            console.error(`     ⏰ EXPIRED DISABLE: Your disable comment dated ${v.expiredDate ?? 'unknown'} has expired (>1 month old).`);
+            console.error(`        You must either FIX the method or UPDATE the date to get another month.`);
+        } else {
+            console.error(`  ❌ ${v.file}:${v.line}`);
+            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
+        }
+    }
+    console.error('');
+
+    console.error('   You can disable this error, but you will be forced to fix again in 1 month');
+    console.error('   since 99% of methods can be less than ' + maxLines + ' lines of code.');
+    console.error('');
+    console.error('   Use escape with DATE (expires in 1 month):');
+    console.error(`   // webpieces-disable max-lines-new-and-modified ${getTodayDateString()} -- [your reason]`);
+    console.error('');
 }
 
 export default async function runExecutor(
@@ -537,30 +731,8 @@ export default async function runExecutor(
             return { success: true };
         }
 
-        // Write instructions file
         writeTmpInstructions(workspaceRoot);
-
-        // Report violations
-        console.error('');
-        console.error('❌ Modified methods exceed ' + maxLines + ' lines!');
-        console.error('');
-        console.error('📚 When you modify a method, you must bring it under ' + maxLines + ' lines.');
-        console.error('   This rule encourages GRADUAL cleanup so even though you did not cause it,');
-        console.error('   you touched it, so you should fix now as part of your PR');
-        console.error('   (this is for vibe coding and AI to fix as it touches things).');
-        console.error('   You can refactor to stay under the limit 50% of the time. If not feasible, use the escape hatch.');
-        console.error('');
-        console.error(
-            '⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️'
-        );
-        console.error('');
-
-        for (const v of violations) {
-            console.error(`  ❌ ${v.file}:${v.line}`);
-            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
-        }
-        console.error('');
-
+        reportViolations(violations, maxLines);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
