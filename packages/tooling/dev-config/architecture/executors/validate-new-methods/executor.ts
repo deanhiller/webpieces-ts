@@ -407,6 +407,30 @@ function detectBase(workspaceRoot: string): string | null {
     return null;
 }
 
+/**
+ * Report violations to the user with helpful instructions
+ */
+function reportViolations(violations: MethodViolation[], maxLines: number): void {
+    console.error('');
+    console.error('❌ New methods exceed ' + maxLines + ' lines!');
+    console.error('');
+    console.error('📚 Methods should read like a "table of contents" - each method call');
+    console.error('   describes a larger piece of work. You can refactor');
+    console.error('   to stay under ' + maxLines + ' lines 50% of the time.');
+    console.error('');
+    console.error('⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️');
+    console.error('');
+
+    for (const v of violations) {
+        console.error(`  ❌ ${v.file}:${v.line}`);
+        console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
+    }
+    console.error('');
+    console.error('   If you REALLY REALLY need more than ' + maxLines + ' lines, this happens 50% of the time,');
+    console.error('   so use escape: // webpieces-disable max-lines-new-methods -- [your reason]');
+    console.error('');
+}
+
 export default async function runExecutor(
     options: ValidateNewMethodsOptions,
     context: ExecutorContext
@@ -459,25 +483,9 @@ export default async function runExecutor(
             return { success: true };
         }
 
-        // Write instructions file
+        // Write instructions file and report violations
         writeTmpInstructions(workspaceRoot);
-
-        // Report violations
-        console.error('');
-        console.error('❌ New methods exceed ' + maxLines + ' lines!');
-        console.error('');
-        console.error('📚 Methods should read like a "table of contents" - each method call');
-        console.error('   describes a larger piece of work. You can refactor');
-        console.error('   to stay under ' + maxLines + ' lines 50% of the time. If not feasible, use the escape hatch.');
-        console.error('');
-        console.error('⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️');
-        console.error('');
-
-        for (const v of violations) {
-            console.error(`  ❌ ${v.file}:${v.line}`);
-            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
-        }
-        console.error('');
+        reportViolations(violations, maxLines);
 
         return { success: false };
     } catch (err: unknown) {
