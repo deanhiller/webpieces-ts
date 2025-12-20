@@ -46,9 +46,11 @@ export interface ArchitecturePluginOptions {
             validatePackageJson?: boolean;
             validateNewMethods?: boolean;
             validateModifiedMethods?: boolean;
+            validateModifiedFiles?: boolean;
             validateVersionsLocked?: boolean;
             newMethodsMaxLines?: number;
             modifiedAndNewMethodsMaxLines?: number;
+            modifiedFilesMaxLines?: number;
         };
         features?: {
             generate?: boolean;
@@ -74,9 +76,11 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validatePackageJson: true,
             validateNewMethods: true,
             validateModifiedMethods: true,
+            validateModifiedFiles: true,
             validateVersionsLocked: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
+            modifiedFilesMaxLines: 900,
         },
         features: {
             generate: true,
@@ -221,6 +225,7 @@ function buildValidationTargetsList(validations: Required<ArchitecturePluginOpti
     if (validations!.validatePackageJson) targets.push('validate-packagejson');
     if (validations!.validateNewMethods) targets.push('validate-new-methods');
     if (validations!.validateModifiedMethods) targets.push('validate-modified-methods');
+    if (validations!.validateModifiedFiles) targets.push('validate-modified-files');
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
     return targets;
 }
@@ -260,6 +265,9 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     }
     if (validations.validateModifiedMethods) {
         targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(validations.modifiedAndNewMethodsMaxLines!);
+    }
+    if (validations.validateModifiedFiles) {
+        targets['validate-modified-files'] = createValidateModifiedFilesTarget(validations.modifiedFilesMaxLines!);
     }
     if (validations.validateVersionsLocked) {
         targets['validate-versions-locked'] = createValidateVersionsLockedTarget();
@@ -316,6 +324,10 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
 
     if (opts.workspace.validations!.validateModifiedMethods) {
         targets[`${prefix}validate-modified-methods`] = createValidateModifiedMethodsTarget(opts.workspace.validations!.modifiedAndNewMethodsMaxLines!);
+    }
+
+    if (opts.workspace.validations!.validateModifiedFiles) {
+        targets[`${prefix}validate-modified-files`] = createValidateModifiedFilesTarget(opts.workspace.validations!.modifiedFilesMaxLines!);
     }
 
     return targets;
@@ -430,6 +442,19 @@ function createValidateModifiedMethodsTarget(maxLines: number): TargetConfigurat
         metadata: {
             technologies: ['nx'],
             description: `Validate new and modified methods do not exceed ${maxLines} lines (encourages gradual cleanup)`,
+        },
+    };
+}
+
+function createValidateModifiedFilesTarget(maxLines: number): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-modified-files',
+        cache: false, // Don't cache - depends on git state
+        inputs: ['default'],
+        options: { max: maxLines },
+        metadata: {
+            technologies: ['nx'],
+            description: `Validate modified files do not exceed ${maxLines} lines (encourages keeping files small)`,
         },
     };
 }

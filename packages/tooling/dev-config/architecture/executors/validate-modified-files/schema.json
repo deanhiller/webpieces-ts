@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Modified Files Executor",
+    "description": "Validates that modified files don't exceed a maximum line count. Encourages keeping files small and focused.",
+    "type": "object",
+    "properties": {
+        "max": {
+            "type": "number",
+            "description": "Maximum number of lines allowed for modified files",
+            "default": 900
+        }
+    },
+    "required": []
+}
