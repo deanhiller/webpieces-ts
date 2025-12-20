@@ -282,6 +282,7 @@ interface DisableStatus {
  * Check if a file has a valid, non-expired disable comment at the top (within first 5 lines).
  * Returns status object with details about the disable comment.
  */
+// webpieces-disable max-lines-new-methods -- Date validation logic requires checking multiple conditions
 function checkDisableComment(content: string): DisableStatus {
     const lines = content.split('\n').slice(0, 5);
 
@@ -325,6 +326,7 @@ function checkDisableComment(content: string): DisableStatus {
 /**
  * Count lines in a file and check for violations
  */
+// webpieces-disable max-lines-new-methods -- File iteration with disable checking logic
 function findViolations(workspaceRoot: string, changedFiles: string[], maxLines: number): FileViolation[] {
     const violations: FileViolation[] = [];
 
@@ -414,6 +416,43 @@ function getTodayDateString(): string {
     return `${year}/${month}/${day}`;
 }
 
+/**
+ * Report violations to console
+ */
+// webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
+function reportViolations(violations: FileViolation[], maxLines: number): void {
+    console.error('');
+    console.error('❌ YOU MUST FIX THIS AND NOT be more than ' + maxLines + ' lines of code per file');
+    console.error('   as it slows down IDEs AND is VERY VERY EASY to refactor.');
+    console.error('');
+    console.error('📚 With stateless systems + dependency injection, refactor is trivial:');
+    console.error('   Pick a method or a few and move to new class XXXXX, then inject XXXXX');
+    console.error('   into all users of those methods via the constructor.');
+    console.error('   Delete those methods from original class.');
+    console.error('   99% of files can be less than ' + maxLines + ' lines of code.');
+    console.error('');
+    console.error('⚠️  *** READ tmp/webpieces/webpieces.filesize.md for detailed guidance on how to fix this easily *** ⚠️');
+    console.error('');
+
+    for (const v of violations) {
+        if (v.expiredDisable) {
+            console.error(`  ❌ ${v.file} (${v.lines} lines, max: ${maxLines})`);
+            console.error(`     ⏰ EXPIRED DISABLE: Your disable comment dated ${v.expiredDate} has expired (>1 month old).`);
+            console.error(`        You must either FIX the file or UPDATE the date to get another month.`);
+        } else {
+            console.error(`  ❌ ${v.file} (${v.lines} lines, max: ${maxLines})`);
+        }
+    }
+    console.error('');
+
+    console.error('   You can disable this error, but you will be forced to fix again in 1 month');
+    console.error('   since 99% of files can be less than ' + maxLines + ' lines of code.');
+    console.error('');
+    console.error('   Use escape with DATE (expires in 1 month):');
+    console.error(`   // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`);
+    console.error('');
+}
+
 export default async function runExecutor(
     options: ValidateModifiedFilesOptions,
     context: ExecutorContext
@@ -460,41 +499,8 @@ export default async function runExecutor(
             return { success: true };
         }
 
-        // Write instructions file
         writeTmpInstructions(workspaceRoot);
-
-        // Report violations
-        console.error('');
-        console.error('❌ YOU MUST FIX THIS AND NOT be more than ' + maxLines + ' lines of code per file');
-        console.error('   as it slows down IDEs AND is VERY VERY EASY to refactor.');
-        console.error('');
-        console.error('📚 With stateless systems + dependency injection, refactor is trivial:');
-        console.error('   Pick a method or a few and move to new class XXXXX, then inject XXXXX');
-        console.error('   into all users of those methods via the constructor.');
-        console.error('   Delete those methods from original class.');
-        console.error('   99% of files can be less than ' + maxLines + ' lines of code.');
-        console.error('');
-        console.error('⚠️  *** READ tmp/webpieces/webpieces.filesize.md for detailed guidance on how to fix this easily *** ⚠️');
-        console.error('');
-
-        for (const v of violations) {
-            if (v.expiredDisable) {
-                console.error(`  ❌ ${v.file} (${v.lines} lines, max: ${maxLines})`);
-                console.error(`     ⏰ EXPIRED DISABLE: Your disable comment dated ${v.expiredDate} has expired (>1 month old).`);
-                console.error(`        You must either FIX the file or UPDATE the date to get another month.`);
-            } else {
-                console.error(`  ❌ ${v.file} (${v.lines} lines, max: ${maxLines})`);
-            }
-        }
-        console.error('');
-
-        console.error('   You can disable this error, but you will be forced to fix again in 1 month');
-        console.error('   since 99% of files can be less than ' + maxLines + ' lines of code.');
-        console.error('');
-        console.error('   Use escape with DATE (expires in 1 month):');
-        console.error(`   // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`);
-        console.error('');
-
+        reportViolations(violations, maxLines);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
