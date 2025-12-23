@@ -14,8 +14,8 @@
  * Usage:
  * nx affected --target=validate-modified-methods --base=origin/main
  *
- * Escape hatch: Add webpieces-disable max-lines-new-and-modified comment with date and justification
- * Format: // webpieces-disable max-lines-new-and-modified 2025/01/15 -- [reason]
+ * Escape hatch: Add webpieces-disable max-lines-modified comment with date and justification
+ * Format: // webpieces-disable max-lines-modified 2025/01/15 -- [reason]
  * The disable expires after 1 month from the date specified.
  */
 
@@ -147,7 +147,7 @@ Sometimes methods genuinely need to be longer (complex algorithms, state machine
 **Escape hatch**: Add a webpieces-disable comment with DATE and justification:
 
 \`\`\`typescript
-// webpieces-disable max-lines-new-and-modified 2025/01/15 -- Complex state machine, splitting reduces clarity
+// webpieces-disable max-lines-modified 2025/01/15 -- Complex state machine, splitting reduces clarity
 async complexStateMachine(): Promise<void> {
     // ... longer method with justification
 }
@@ -163,7 +163,7 @@ This ensures that disable comments are reviewed periodically.
 2. **IDENTIFY** logical units that can be extracted
 3. **EXTRACT** into well-named private methods
 4. **VERIFY** the main method now reads like a table of contents
-5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-new-and-modified comment with clear justification
+5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-modified comment with clear justification
 
 ## Remember
 
@@ -349,7 +349,7 @@ interface DisableInfo {
 /**
  * Check what kind of webpieces-disable comment is present for a method.
  * Returns: DisableInfo with type, expiration status, and date
- * - 'full': max-lines-new-and-modified (ultimate escape, skips both validators)
+ * - 'full': max-lines-modified (ultimate escape, skips both validators)
  * - 'new-only': max-lines-new-methods (escaped 30-line check, still needs 80-line check)
  * - 'none': no escape hatch
  */
@@ -362,9 +362,9 @@ function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
             break;
         }
         if (line.includes('webpieces-disable')) {
-            if (line.includes('max-lines-new-and-modified')) {
-                // Check for date in format: max-lines-new-and-modified yyyy/mm/dd
-                const dateMatch = line.match(/max-lines-new-and-modified\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
+            if (line.includes('max-lines-modified')) {
+                // Check for date in format: max-lines-modified yyyy/mm/dd
+                const dateMatch = line.match(/max-lines-modified\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
 
                 if (!dateMatch) {
                     // No date found - treat as expired (invalid)
@@ -503,9 +503,9 @@ function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[
  *
  * Skips:
  * - NEW methods without any escape (let validate-new-methods handle them first)
- * - Methods with valid, non-expired `max-lines-new-and-modified` escape (ultimate escape hatch)
+ * - Methods with valid, non-expired `max-lines-modified` escape (ultimate escape hatch)
  */
-// webpieces-disable max-lines-new-and-modified 2025/12/20 -- Core validation logic with multiple file operations
+// webpieces-disable max-lines-modified 2025/12/20 -- Core validation logic with multiple file operations
 function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
@@ -532,7 +532,7 @@ function findViolations(
             const isNewMethod = newMethodNames.has(method.name);
             const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
 
-            // Skip methods with valid, non-expired full escape (max-lines-new-and-modified)
+            // Skip methods with valid, non-expired full escape (max-lines-modified)
             if (disableType === 'full' && !isExpired) continue;
 
             // Skip methods under the limit
@@ -681,7 +681,7 @@ function reportViolations(violations: MethodViolation[], maxLines: number): void
     console.error('   since 99% of methods can be less than ' + maxLines + ' lines of code.');
     console.error('');
     console.error('   Use escape with DATE (expires in 1 month):');
-    console.error(`   // webpieces-disable max-lines-new-and-modified ${getTodayDateString()} -- [your reason]`);
+    console.error(`   // webpieces-disable max-lines-modified ${getTodayDateString()} -- [your reason]`);
     console.error('');
 }
 

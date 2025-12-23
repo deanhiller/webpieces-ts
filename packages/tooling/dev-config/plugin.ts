@@ -51,6 +51,7 @@ export interface ArchitecturePluginOptions {
             newMethodsMaxLines?: number;
             modifiedAndNewMethodsMaxLines?: number;
             modifiedFilesMaxLines?: number;
+            forceModifiedFilesLimit?: boolean;
         };
         features?: {
             generate?: boolean;
@@ -81,6 +82,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
             modifiedFilesMaxLines: 900,
+            forceModifiedFilesLimit: false,
         },
         features: {
             generate: true,
@@ -267,7 +269,7 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
         targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(validations.modifiedAndNewMethodsMaxLines!);
     }
     if (validations.validateModifiedFiles) {
-        targets['validate-modified-files'] = createValidateModifiedFilesTarget(validations.modifiedFilesMaxLines!);
+        targets['validate-modified-files'] = createValidateModifiedFilesTarget(validations.modifiedFilesMaxLines!, validations.forceModifiedFilesLimit!);
     }
     if (validations.validateVersionsLocked) {
         targets['validate-versions-locked'] = createValidateVersionsLockedTarget();
@@ -327,7 +329,7 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     }
 
     if (opts.workspace.validations!.validateModifiedFiles) {
-        targets[`${prefix}validate-modified-files`] = createValidateModifiedFilesTarget(opts.workspace.validations!.modifiedFilesMaxLines!);
+        targets[`${prefix}validate-modified-files`] = createValidateModifiedFilesTarget(opts.workspace.validations!.modifiedFilesMaxLines!, opts.workspace.validations!.forceModifiedFilesLimit!);
     }
 
     return targets;
@@ -446,12 +448,12 @@ function createValidateModifiedMethodsTarget(maxLines: number): TargetConfigurat
     };
 }
 
-function createValidateModifiedFilesTarget(maxLines: number): TargetConfiguration {
+function createValidateModifiedFilesTarget(maxLines: number, forceLimit: boolean): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-modified-files',
         cache: false, // Don't cache - depends on git state
         inputs: ['default'],
-        options: { max: maxLines },
+        options: { max: maxLines, forceLimit },
         metadata: {
             technologies: ['nx'],
             description: `Validate modified files do not exceed ${maxLines} lines (encourages keeping files small)`,

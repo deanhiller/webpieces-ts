@@ -20,6 +20,7 @@ import * as path from 'path';
 
 export interface ValidateModifiedFilesOptions {
     max?: number;
+    forceLimit?: boolean;
 }
 
 export interface ExecutorResult {
@@ -327,7 +328,7 @@ function checkDisableComment(content: string): DisableStatus {
  * Count lines in a file and check for violations
  */
 // webpieces-disable max-lines-new-methods -- File iteration with disable checking logic
-function findViolations(workspaceRoot: string, changedFiles: string[], maxLines: number): FileViolation[] {
+function findViolations(workspaceRoot: string, changedFiles: string[], maxLines: number, forceLimit: boolean): FileViolation[] {
     const violations: FileViolation[] = [];
 
     for (const file of changedFiles) {
@@ -340,6 +341,12 @@ function findViolations(workspaceRoot: string, changedFiles: string[], maxLines:
 
         // Skip files under the limit
         if (lineCount <= maxLines) continue;
+
+        // When forceLimit is true, ignore all disable comments
+        if (forceLimit) {
+            violations.push({ file, lines: lineCount });
+            continue;
+        }
 
         // Check for disable comment
         const disableStatus = checkDisableComment(content);
@@ -420,7 +427,7 @@ function getTodayDateString(): string {
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
-function reportViolations(violations: FileViolation[], maxLines: number): void {
+function reportViolations(violations: FileViolation[], maxLines: number, forceLimit: boolean): void {
     console.error('');
     console.error('❌ YOU MUST FIX THIS AND NOT be more than ' + maxLines + ' lines of code per file');
     console.error('   as it slows down IDEs AND is VERY VERY EASY to refactor.');
@@ -445,12 +452,19 @@ function reportViolations(violations: FileViolation[], maxLines: number): void {
     }
     console.error('');
 
-    console.error('   You can disable this error, but you will be forced to fix again in 1 month');
-    console.error('   since 99% of files can be less than ' + maxLines + ' lines of code.');
-    console.error('');
-    console.error('   Use escape with DATE (expires in 1 month):');
-    console.error(`   // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`);
-    console.error('');
+    // Only show escape hatch instructions when forceLimit is not enabled
+    if (!forceLimit) {
+        console.error('   You can disable this error, but you will be forced to fix again in 1 month');
+        console.error('   since 99% of files can be less than ' + maxLines + ' lines of code.');
+        console.error('');
+        console.error('   Use escape with DATE (expires in 1 month):');
+        console.error(`   // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`);
+        console.error('');
+    } else {
+        console.error('   ⚠️  forceModifiedFilesLimit is enabled - disable comments are NOT allowed.');
+        console.error('   You MUST refactor to reduce file size.');
+        console.error('');
+    }
 }
 
 export default async function runExecutor(
@@ -459,6 +473,7 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
     const maxLines = options.max ?? 900;
+    const forceLimit = options.forceLimit ?? false;
 
     let base = process.env['NX_BASE'];
 
@@ -480,6 +495,9 @@ export default async function runExecutor(
     console.log(`   Base: ${base}`);
     console.log('   Comparing to: working tree (includes uncommitted changes)');
     console.log(`   Max lines for modified files: ${maxLines}`);
+    if (forceLimit) {
+        console.log('   Force limit: ENABLED (disable comments will be ignored)');
+    }
     console.log('');
 
     try {
@@ -492,7 +510,7 @@ export default async function runExecutor(
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, maxLines);
+        const violations = findViolations(workspaceRoot, changedFiles, maxLines, forceLimit);
 
         if (violations.length === 0) {
             console.log('✅ All modified files are under ' + maxLines + ' lines');
@@ -500,7 +518,7 @@ export default async function runExecutor(
         }
 
         writeTmpInstructions(workspaceRoot);
-        reportViolations(violations, maxLines);
+        reportViolations(violations, maxLines, forceLimit);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));

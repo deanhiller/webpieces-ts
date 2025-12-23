@@ -250,9 +250,9 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
 
 /**
  * Check if a line contains a webpieces-disable comment that exempts from new method validation.
- * Both max-lines-new-methods AND max-lines-new-and-modified are accepted here.
+ * Both max-lines-new-methods AND max-lines-modified are accepted here.
  * - max-lines-new-methods: Exempts from 30-line check, still checked by 80-line validator
- * - max-lines-new-and-modified: Exempts from both validators (ultimate escape hatch)
+ * - max-lines-modified: Exempts from both validators (ultimate escape hatch)
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
     // Check the line before the method (lineNumber is 1-indexed, array is 0-indexed)
@@ -266,7 +266,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         }
         if (line.includes('webpieces-disable')) {
             // Either escape hatch exempts from the 30-line new method check
-            if (line.includes('max-lines-new-methods') || line.includes('max-lines-new-and-modified')) {
+            if (line.includes('max-lines-new-methods') || line.includes('max-lines-modified')) {
                 return true;
             }
         }

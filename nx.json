@@ -71,7 +71,8 @@
                 "workspace": {
                     "validations": {
                         "newMethodsMaxLines": 30,
-                        "modifiedAndNewMethodsMaxLines": 80
+                        "modifiedAndNewMethodsMaxLines": 80,
+                        "forceModifiedFilesLimit": true
                     }
                 }
             }
