@@ -8,6 +8,11 @@
             "type": "number",
             "description": "Maximum number of lines allowed for modified files",
             "default": 900
+        },
+        "forceLimit": {
+            "type": "boolean",
+            "description": "When true, disable comments are ignored and the limit is strictly enforced",
+            "default": false
         }
     },
     "required": []
