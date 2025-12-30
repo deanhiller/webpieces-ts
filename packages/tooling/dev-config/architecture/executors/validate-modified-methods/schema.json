@@ -8,6 +8,12 @@
             "type": "number",
             "description": "Maximum number of lines allowed for modified methods",
             "default": 80
+        },
+        "mode": {
+            "type": "string",
+            "enum": ["STRICT", "NORMAL", "OFF"],
+            "description": "STRICT: limits enforced, no disable comments. NORMAL: disable comments work. OFF: skip validation.",
+            "default": "NORMAL"
         }
     },
     "required": []

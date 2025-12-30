@@ -25,8 +25,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
+export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
+
 export interface ValidateModifiedMethodsOptions {
     max?: number;
+    mode?: ValidationMode;
 }
 
 export interface ExecutorResult {
@@ -495,22 +498,63 @@ function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[
 }
 
 /**
- * Find methods that exceed the 80-line limit.
- *
- * This validator checks:
- * 1. NEW methods that have `max-lines-new-methods` escape (they passed 30-line check, now need 80-line check)
- * 2. MODIFIED methods (existing methods with changes)
- *
- * Skips:
- * - NEW methods without any escape (let validate-new-methods handle them first)
- * - Methods with valid, non-expired `max-lines-modified` escape (ultimate escape hatch)
+ * Check if a method has any changes within its line range
  */
-// webpieces-disable max-lines-modified 2025/12/20 -- Core validation logic with multiple file operations
+function methodHasChanges(method: MethodInfo, changedLineNumbers: Set<number>): boolean {
+    for (let line = method.line; line <= method.endLine; line++) {
+        if (changedLineNumbers.has(line)) return true;
+    }
+    return false;
+}
+
+/**
+ * Check a NEW method and return violation if applicable
+ */
+function checkNewMethodViolation(file: string, method: MethodInfo, mode: ValidationMode): MethodViolation | null {
+    const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
+
+    if (mode === 'STRICT') {
+        // When mode is STRICT, skip NEW methods without escape (let validate-new-methods handle)
+        if (disableType === 'none') return null;
+        return { file, methodName: method.name, line: method.line, lines: method.lines };
+    }
+
+    if (disableType === 'full' && isExpired) {
+        return { file, methodName: method.name, line: method.line, lines: method.lines, expiredDisable: true, expiredDate: disableDate };
+    }
+    if (disableType !== 'new-only') return null;
+
+    if (isExpired) {
+        return { file, methodName: method.name, line: method.line, lines: method.lines, expiredDisable: true, expiredDate: disableDate };
+    }
+    return { file, methodName: method.name, line: method.line, lines: method.lines };
+}
+
+/**
+ * Check a MODIFIED method and return violation if applicable
+ */
+function checkModifiedMethodViolation(file: string, method: MethodInfo, mode: ValidationMode): MethodViolation {
+    const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
+
+    if (mode === 'STRICT') {
+        return { file, methodName: method.name, line: method.line, lines: method.lines };
+    }
+    if (disableType === 'full' && isExpired) {
+        return { file, methodName: method.name, line: method.line, lines: method.lines, expiredDisable: true, expiredDate: disableDate };
+    }
+    return { file, methodName: method.name, line: method.line, lines: method.lines };
+}
+
+/**
+ * Find methods that exceed the 80-line limit.
+ * Checks NEW methods with escape hatches and MODIFIED methods.
+ */
 function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    maxLines: number
+    maxLines: number,
+    mode: ValidationMode
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
@@ -518,94 +562,26 @@ function findViolations(
         const diff = getFileDiff(workspaceRoot, file, base);
         if (!diff) continue;
 
-        // Find NEW methods from the diff
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
-
-        // Find which lines have changes
         const changedLineNumbers = getChangedLineNumbers(diff);
         if (changedLineNumbers.size === 0) continue;
 
-        // Parse the current file to get all methods
         const methods = findMethodsInFile(file, workspaceRoot);
 
         for (const method of methods) {
-            const isNewMethod = newMethodNames.has(method.name);
-            const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
+            const { type: disableType, isExpired } = method.disableInfo;
 
-            // Skip methods with valid, non-expired full escape (max-lines-modified)
-            if (disableType === 'full' && !isExpired) continue;
-
-            // Skip methods under the limit
+            // Skip methods with valid, non-expired full escape - unless mode is STRICT
+            if (mode !== 'STRICT' && disableType === 'full' && !isExpired) continue;
             if (method.lines <= maxLines) continue;
 
+            const isNewMethod = newMethodNames.has(method.name);
+
             if (isNewMethod) {
-                // For NEW methods:
-                // - If has 'new-only' escape (non-expired) → check (they escaped 30-line, now need 80-line check)
-                // - If has 'none' → skip (let validate-new-methods handle first)
-                // - If has expired disable → report as violation
-                if (disableType === 'full' && isExpired) {
-                    // Expired full disable - report with expired info
-                    violations.push({
-                        file,
-                        methodName: method.name,
-                        line: method.line,
-                        lines: method.lines,
-                        expiredDisable: true,
-                        expiredDate: disableDate,
-                    });
-                    continue;
-                }
-                if (disableType !== 'new-only') continue;
-
-                if (isExpired) {
-                    // Expired new-only disable - report with expired info
-                    violations.push({
-                        file,
-                        methodName: method.name,
-                        line: method.line,
-                        lines: method.lines,
-                        expiredDisable: true,
-                        expiredDate: disableDate,
-                    });
-                } else {
-                    // New method with valid max-lines-new-methods escape - check against 80-line limit
-                    violations.push({
-                        file,
-                        methodName: method.name,
-                        line: method.line,
-                        lines: method.lines,
-                    });
-                }
-            } else {
-                // For MODIFIED methods: check if any changed line falls within method's range
-                let hasChanges = false;
-                for (let line = method.line; line <= method.endLine; line++) {
-                    if (changedLineNumbers.has(line)) {
-                        hasChanges = true;
-                        break;
-                    }
-                }
-
-                if (hasChanges) {
-                    if (disableType === 'full' && isExpired) {
-                        // Expired full disable - report with expired info
-                        violations.push({
-                            file,
-                            methodName: method.name,
-                            line: method.line,
-                            lines: method.lines,
-                            expiredDisable: true,
-                            expiredDate: disableDate,
-                        });
-                    } else {
-                        violations.push({
-                            file,
-                            methodName: method.name,
-                            line: method.line,
-                            lines: method.lines,
-                        });
-                    }
-                }
+                const violation = checkNewMethodViolation(file, method, mode);
+                if (violation) violations.push(violation);
+            } else if (methodHasChanges(method, changedLineNumbers)) {
+                violations.push(checkModifiedMethodViolation(file, method, mode));
             }
         }
     }
@@ -649,7 +625,7 @@ function detectBase(workspaceRoot: string): string | null {
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
-function reportViolations(violations: MethodViolation[], maxLines: number): void {
+function reportViolations(violations: MethodViolation[], maxLines: number, mode: ValidationMode): void {
     console.error('');
     console.error('❌ Modified methods exceed ' + maxLines + ' lines!');
     console.error('');
@@ -677,12 +653,19 @@ function reportViolations(violations: MethodViolation[], maxLines: number): void
     }
     console.error('');
 
-    console.error('   You can disable this error, but you will be forced to fix again in 1 month');
-    console.error('   since 99% of methods can be less than ' + maxLines + ' lines of code.');
-    console.error('');
-    console.error('   Use escape with DATE (expires in 1 month):');
-    console.error(`   // webpieces-disable max-lines-modified ${getTodayDateString()} -- [your reason]`);
-    console.error('');
+    // Only show escape hatch instructions when mode is not STRICT
+    if (mode !== 'STRICT') {
+        console.error('   You can disable this error, but you will be forced to fix again in 1 month');
+        console.error('   since 99% of methods can be less than ' + maxLines + ' lines of code.');
+        console.error('');
+        console.error('   Use escape with DATE (expires in 1 month):');
+        console.error(`   // webpieces-disable max-lines-modified ${getTodayDateString()} -- [your reason]`);
+        console.error('');
+    } else {
+        console.error('   ⚠️  validationMode is STRICT - disable comments are NOT allowed.');
+        console.error('   You MUST refactor to reduce method size.');
+        console.error('');
+    }
 }
 
 export default async function runExecutor(
@@ -691,6 +674,14 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
     const maxLines = options.max ?? 80;
+    const mode: ValidationMode = options.mode ?? 'NORMAL';
+
+    // Skip validation entirely if mode is OFF
+    if (mode === 'OFF') {
+        console.log('\n⏭️  Skipping modified method validation (validationMode: OFF)');
+        console.log('');
+        return { success: true };
+    }
 
     let base = process.env['NX_BASE'];
 
@@ -712,6 +703,7 @@ export default async function runExecutor(
     console.log(`   Base: ${base}`);
     console.log('   Comparing to: working tree (includes uncommitted changes)');
     console.log(`   Max lines for modified methods: ${maxLines}`);
+    console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored)' : ''}`);
     console.log('');
 
     try {
@@ -724,7 +716,7 @@ export default async function runExecutor(
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines);
+        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines, mode);
 
         if (violations.length === 0) {
             console.log('✅ All modified methods are under ' + maxLines + ' lines');
@@ -732,7 +724,7 @@ export default async function runExecutor(
         }
 
         writeTmpInstructions(workspaceRoot);
-        reportViolations(violations, maxLines);
+        reportViolations(violations, maxLines, mode);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
