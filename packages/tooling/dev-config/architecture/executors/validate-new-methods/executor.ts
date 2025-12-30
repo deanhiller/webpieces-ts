@@ -22,8 +22,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
+export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
+
 export interface ValidateNewMethodsOptions {
     max?: number;
+    mode?: ValidationMode;
 }
 
 export interface ExecutorResult {
@@ -437,6 +440,14 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
     const maxLines = options.max ?? 30;
+    const mode: ValidationMode = options.mode ?? 'NORMAL';
+
+    // Skip validation entirely if mode is OFF
+    if (mode === 'OFF') {
+        console.log('\n⏭️  Skipping new method validation (validationMode: OFF)');
+        console.log('');
+        return { success: true };
+    }
 
     // Check if running in affected mode via NX_BASE, or auto-detect
     // We use NX_BASE as the base, and compare to WORKING TREE (not NX_HEAD)
