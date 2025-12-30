@@ -18,9 +18,11 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
+
 export interface ValidateModifiedFilesOptions {
     max?: number;
-    forceLimit?: boolean;
+    mode?: ValidationMode;
 }
 
 export interface ExecutorResult {
@@ -328,7 +330,7 @@ function checkDisableComment(content: string): DisableStatus {
  * Count lines in a file and check for violations
  */
 // webpieces-disable max-lines-new-methods -- File iteration with disable checking logic
-function findViolations(workspaceRoot: string, changedFiles: string[], maxLines: number, forceLimit: boolean): FileViolation[] {
+function findViolations(workspaceRoot: string, changedFiles: string[], maxLines: number, mode: ValidationMode): FileViolation[] {
     const violations: FileViolation[] = [];
 
     for (const file of changedFiles) {
@@ -342,8 +344,8 @@ function findViolations(workspaceRoot: string, changedFiles: string[], maxLines:
         // Skip files under the limit
         if (lineCount <= maxLines) continue;
 
-        // When forceLimit is true, ignore all disable comments
-        if (forceLimit) {
+        // When mode is STRICT, ignore all disable comments
+        if (mode === 'STRICT') {
             violations.push({ file, lines: lineCount });
             continue;
         }
@@ -427,7 +429,7 @@ function getTodayDateString(): string {
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
-function reportViolations(violations: FileViolation[], maxLines: number, forceLimit: boolean): void {
+function reportViolations(violations: FileViolation[], maxLines: number, mode: ValidationMode): void {
     console.error('');
     console.error('❌ YOU MUST FIX THIS AND NOT be more than ' + maxLines + ' lines of code per file');
     console.error('   as it slows down IDEs AND is VERY VERY EASY to refactor.');
@@ -452,8 +454,8 @@ function reportViolations(violations: FileViolation[], maxLines: number, forceLi
     }
     console.error('');
 
-    // Only show escape hatch instructions when forceLimit is not enabled
-    if (!forceLimit) {
+    // Only show escape hatch instructions when mode is not STRICT
+    if (mode !== 'STRICT') {
         console.error('   You can disable this error, but you will be forced to fix again in 1 month');
         console.error('   since 99% of files can be less than ' + maxLines + ' lines of code.');
         console.error('');
@@ -461,7 +463,7 @@ function reportViolations(violations: FileViolation[], maxLines: number, forceLi
         console.error(`   // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`);
         console.error('');
     } else {
-        console.error('   ⚠️  forceModifiedFilesLimit is enabled - disable comments are NOT allowed.');
+        console.error('   ⚠️  validationMode is STRICT - disable comments are NOT allowed.');
         console.error('   You MUST refactor to reduce file size.');
         console.error('');
     }
@@ -473,7 +475,14 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
     const maxLines = options.max ?? 900;
-    const forceLimit = options.forceLimit ?? false;
+    const mode: ValidationMode = options.mode ?? 'NORMAL';
+
+    // Skip validation entirely if mode is OFF
+    if (mode === 'OFF') {
+        console.log('\n⏭️  Skipping modified files validation (validationMode: OFF)');
+        console.log('');
+        return { success: true };
+    }
 
     let base = process.env['NX_BASE'];
 
@@ -495,9 +504,7 @@ export default async function runExecutor(
     console.log(`   Base: ${base}`);
     console.log('   Comparing to: working tree (includes uncommitted changes)');
     console.log(`   Max lines for modified files: ${maxLines}`);
-    if (forceLimit) {
-        console.log('   Force limit: ENABLED (disable comments will be ignored)');
-    }
+    console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored)' : ''}`);
     console.log('');
 
     try {
@@ -510,7 +517,7 @@ export default async function runExecutor(
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, maxLines, forceLimit);
+        const violations = findViolations(workspaceRoot, changedFiles, maxLines, mode);
 
         if (violations.length === 0) {
             console.log('✅ All modified files are under ' + maxLines + ' lines');
@@ -518,7 +525,7 @@ export default async function runExecutor(
         }
 
         writeTmpInstructions(workspaceRoot);
-        reportViolations(violations, maxLines, forceLimit);
+        reportViolations(violations, maxLines, mode);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));

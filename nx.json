@@ -72,7 +72,7 @@
                     "validations": {
                         "newMethodsMaxLines": 30,
                         "modifiedAndNewMethodsMaxLines": 80,
-                        "forceModifiedFilesLimit": true
+                        "validationMode": "STRICT"
                     }
                 }
             }
