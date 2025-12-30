@@ -269,7 +269,7 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
         targets['validate-packagejson'] = createValidatePackageJsonTarget();
     }
     if (validations.validateNewMethods) {
-        targets['validate-new-methods'] = createValidateNewMethodsTarget(validations.newMethodsMaxLines!);
+        targets['validate-new-methods'] = createValidateNewMethodsTarget(validations.newMethodsMaxLines!, validations.validationMode!);
     }
     if (validations.validateModifiedMethods) {
         targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(validations.modifiedAndNewMethodsMaxLines!, validations.validationMode!);
@@ -327,7 +327,7 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     }
 
     if (opts.workspace.validations!.validateNewMethods) {
-        targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget(opts.workspace.validations!.newMethodsMaxLines!);
+        targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget(opts.workspace.validations!.newMethodsMaxLines!, opts.workspace.validations!.validationMode!);
     }
 
     if (opts.workspace.validations!.validateModifiedMethods) {
@@ -428,12 +428,12 @@ function createValidatePackageJsonTarget(): TargetConfiguration {
     };
 }
 
-function createValidateNewMethodsTarget(maxLines: number): TargetConfiguration {
+function createValidateNewMethodsTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-new-methods',
         cache: false, // Don't cache - depends on git state
         inputs: ['default'],
-        options: { max: maxLines },
+        options: { max: maxLines, mode },
         metadata: {
             technologies: ['nx'],
             description: `Validate new methods do not exceed ${maxLines} lines (only runs in affected mode)`,

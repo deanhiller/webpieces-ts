@@ -8,6 +8,12 @@
             "type": "number",
             "description": "Maximum number of lines allowed for new methods",
             "default": 30
+        },
+        "mode": {
+            "type": "string",
+            "enum": ["STRICT", "NORMAL", "OFF"],
+            "description": "OFF: skip validation. NORMAL/STRICT: validate (disable comments always work for new methods).",
+            "default": "NORMAL"
         }
     },
     "required": []
