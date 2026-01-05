@@ -59,6 +59,11 @@
             "implementation": "./architecture/executors/validate-modified-files/executor",
             "schema": "./architecture/executors/validate-modified-files/schema.json",
             "description": "Validate modified files don't exceed max line count"
+        },
+        "validate-code": {
+            "implementation": "./architecture/executors/validate-code/executor",
+            "schema": "./architecture/executors/validate-code/schema.json",
+            "description": "Combined validation for new methods, modified methods, and file sizes"
         }
     }
 }

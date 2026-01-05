@@ -1,0 +1,30 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Code Executor",
+    "description": "Combined validation for new methods, modified methods, and file sizes. Configure via targetDefaults in nx.json for runtime options (no cache issues).",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["STRICT", "NORMAL", "OFF"],
+            "description": "OFF: skip all validations. NORMAL: enforce limits, disable comments work. STRICT: enforce limits, no disable comments for modified code.",
+            "default": "NORMAL"
+        },
+        "newMethodsMaxLines": {
+            "type": "number",
+            "description": "Maximum lines for NEW methods (disable comments always allowed regardless of mode)",
+            "default": 30
+        },
+        "modifiedMethodsMaxLines": {
+            "type": "number",
+            "description": "Maximum lines for MODIFIED methods",
+            "default": 80
+        },
+        "modifiedFilesMaxLines": {
+            "type": "number",
+            "description": "Maximum lines for MODIFIED files",
+            "default": 900
+        }
+    },
+    "required": []
+}
