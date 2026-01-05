@@ -231,9 +231,10 @@ function buildValidationTargetsList(validations: Required<ArchitecturePluginOpti
     if (validations!.architectureUnchanged) targets.push('validate-architecture-unchanged');
     if (validations!.noSkipLevelDeps) targets.push('validate-no-skiplevel-deps');
     if (validations!.validatePackageJson) targets.push('validate-packagejson');
-    if (validations!.validateNewMethods) targets.push('validate-new-methods');
-    if (validations!.validateModifiedMethods) targets.push('validate-modified-methods');
-    if (validations!.validateModifiedFiles) targets.push('validate-modified-files');
+    // Use combined validate-code instead of 3 separate targets
+    if (validations!.validateNewMethods || validations!.validateModifiedMethods || validations!.validateModifiedFiles) {
+        targets.push('validate-code');
+    }
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
     return targets;
 }
@@ -268,14 +269,10 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     if (validations.validatePackageJson) {
         targets['validate-packagejson'] = createValidatePackageJsonTarget();
     }
-    if (validations.validateNewMethods) {
-        targets['validate-new-methods'] = createValidateNewMethodsTarget(validations.newMethodsMaxLines!, validations.validationMode!);
-    }
-    if (validations.validateModifiedMethods) {
-        targets['validate-modified-methods'] = createValidateModifiedMethodsTarget(validations.modifiedAndNewMethodsMaxLines!, validations.validationMode!);
-    }
-    if (validations.validateModifiedFiles) {
-        targets['validate-modified-files'] = createValidateModifiedFilesTarget(validations.modifiedFilesMaxLines!, validations.validationMode!);
+    // Use combined validate-code instead of 3 separate targets
+    // Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
+    if (validations.validateNewMethods || validations.validateModifiedMethods || validations.validateModifiedFiles) {
+        targets['validate-code'] = createValidateCodeTarget();
     }
     if (validations.validateVersionsLocked) {
         targets['validate-versions-locked'] = createValidateVersionsLockedTarget();
@@ -326,16 +323,10 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
         targets[`${prefix}validate-packagejson`] = createValidatePackageJsonTarget();
     }
 
-    if (opts.workspace.validations!.validateNewMethods) {
-        targets[`${prefix}validate-new-methods`] = createValidateNewMethodsTarget(opts.workspace.validations!.newMethodsMaxLines!, opts.workspace.validations!.validationMode!);
-    }
-
-    if (opts.workspace.validations!.validateModifiedMethods) {
-        targets[`${prefix}validate-modified-methods`] = createValidateModifiedMethodsTarget(opts.workspace.validations!.modifiedAndNewMethodsMaxLines!, opts.workspace.validations!.validationMode!);
-    }
-
-    if (opts.workspace.validations!.validateModifiedFiles) {
-        targets[`${prefix}validate-modified-files`] = createValidateModifiedFilesTarget(opts.workspace.validations!.modifiedFilesMaxLines!, opts.workspace.validations!.validationMode!);
+    // Use combined validate-code instead of 3 separate targets
+    // Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
+    if (opts.workspace.validations!.validateNewMethods || opts.workspace.validations!.validateModifiedMethods || opts.workspace.validations!.validateModifiedFiles) {
+        targets[`${prefix}validate-code`] = createValidateCodeTarget();
     }
 
     return targets;
@@ -463,6 +454,23 @@ function createValidateModifiedFilesTarget(maxLines: number, mode: 'STRICT' | 'N
         metadata: {
             technologies: ['nx'],
             description: `Validate modified files do not exceed ${maxLines} lines (encourages keeping files small)`,
+        },
+    };
+}
+
+/**
+ * Create combined validate-code target
+ * Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
+ */
+function createValidateCodeTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/dev-config:validate-code',
+        cache: false, // Don't cache - depends on git state
+        inputs: ['default'],
+        // No options here - they come from targetDefaults at runtime
+        metadata: {
+            technologies: ['nx'],
+            description: 'Combined validation for new methods, modified methods, and file sizes',
         },
     };
 }

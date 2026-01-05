@@ -46,6 +46,14 @@
         },
         "@angular/build:application": {
             "dependsOn": ["architecture:validate-complete", "validate-no-file-import-cycles"]
+        },
+        "validate-code": {
+            "options": {
+                "mode": "STRICT",
+                "newMethodsMaxLines": 30,
+                "modifiedMethodsMaxLines": 80,
+                "modifiedFilesMaxLines": 900
+            }
         }
     },
     "plugins": [
@@ -67,15 +75,7 @@
         },
         {
             "plugin": "@webpieces/dev-config",
-            "options": {
-                "workspace": {
-                    "validations": {
-                        "newMethodsMaxLines": 30,
-                        "modifiedAndNewMethodsMaxLines": 80,
-                        "validationMode": "STRICT"
-                    }
-                }
-            }
+            "options": {}
         }
     ]
 }
