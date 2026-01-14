@@ -290,8 +290,8 @@ function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
         /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
         // [export] const/let methodName = [async] function
         /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
-        // class method: [async] methodName( - but NOT constructor, if, for, while, etc.
-        /^\+\s*(?:async\s+)?(\w+)\s*\(/,
+        // class method: [public/private/protected] [static] [async] methodName( - but NOT constructor, if, for, while, etc.
+        /^\+\s*(?:(?:public|private|protected)\s+)?(?:static\s+)?(?:async\s+)?(\w+)\s*\(/,
     ];
 
     for (const line of lines) {
