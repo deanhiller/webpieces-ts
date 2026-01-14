@@ -6,13 +6,17 @@
     "properties": {
         "max": {
             "type": "number",
-            "description": "Maximum number of lines allowed for new methods",
+            "description": "Soft limit: Maximum lines for new methods (can be bypassed with disable comment)",
             "default": 30
+        },
+        "strictMax": {
+            "type": "number",
+            "description": "Hard limit: Absolute maximum lines for new methods (CANNOT be bypassed with disable comment). If not set, no hard limit is enforced."
         },
         "mode": {
             "type": "string",
             "enum": ["STRICT", "NORMAL", "OFF"],
-            "description": "OFF: skip validation. NORMAL/STRICT: validate (disable comments always work for new methods).",
+            "description": "OFF: skip validation. NORMAL/STRICT: validate (disable comments work for soft limit only).",
             "default": "NORMAL"
         }
     },

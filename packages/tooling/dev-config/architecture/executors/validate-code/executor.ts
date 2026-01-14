@@ -8,6 +8,7 @@ export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
 export interface ValidateCodeOptions {
     mode?: ValidationMode;
     newMethodsMaxLines?: number;
+    strictNewMethodMaxLines?: number;
     modifiedMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
 }
@@ -29,14 +30,17 @@ export default async function runExecutor(
 
     console.log('\n📏 Running Code Validations\n');
     console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored for modified code)' : ''}`);
-    console.log(`   New methods max: ${options.newMethodsMaxLines ?? 30} lines`);
+    console.log(`   New methods max: ${options.newMethodsMaxLines ?? 30} lines (soft limit)`);
+    if (options.strictNewMethodMaxLines) {
+        console.log(`   New methods max: ${options.strictNewMethodMaxLines} lines (hard limit, no escape)`);
+    }
     console.log(`   Modified methods max: ${options.modifiedMethodsMaxLines ?? 80} lines`);
     console.log(`   Modified files max: ${options.modifiedFilesMaxLines ?? 900} lines`);
     console.log('');
 
     // Run all three validators sequentially to avoid interleaved output
     const newMethodsResult = await runNewMethodsExecutor(
-        { max: options.newMethodsMaxLines ?? 30, mode },
+        { max: options.newMethodsMaxLines ?? 30, strictMax: options.strictNewMethodMaxLines, mode },
         context
     );
 
