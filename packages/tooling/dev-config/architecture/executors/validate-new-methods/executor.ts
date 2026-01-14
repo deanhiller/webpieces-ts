@@ -181,6 +181,7 @@ function writeTmpInstructions(workspaceRoot: string): string {
 /**
  * Get changed TypeScript files between base and head (or working tree if head not specified).
  * Uses `git diff base [head]` to match what `nx affected` does.
+ * When head is NOT specified, also includes untracked files (matching nx affected behavior).
  */
 function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
     try {
@@ -190,10 +191,33 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
-        return output
+        const changedFiles = output
             .trim()
             .split('\n')
             .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
+
+        // When comparing to working tree (no head specified), also include untracked files
+        // This matches what nx affected does: "All modified files not yet committed or tracked will also be added"
+        if (!head) {
+            try {
+                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
+                    cwd: workspaceRoot,
+                    encoding: 'utf-8',
+                });
+                const untrackedFiles = untrackedOutput
+                    .trim()
+                    .split('\n')
+                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
+                // Merge and dedupe
+                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
+                return Array.from(allFiles);
+            } catch {
+                // If ls-files fails, just return the changed files
+                return changedFiles;
+            }
+        }
+
+        return changedFiles;
     } catch {
         return [];
     }
@@ -202,15 +226,38 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
 /**
  * Get the diff content for a specific file between base and head (or working tree if head not specified).
  * Uses `git diff base [head]` to match what `nx affected` does.
+ * For untracked files, returns the entire file content as additions.
  */
 function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
     try {
         // If head is specified, diff base to head; otherwise diff base to working tree
         const diffTarget = head ? `${base} ${head}` : base;
-        return execSync(`git diff ${diffTarget} -- "${file}"`, {
+        const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
+
+        // If diff is empty and we're comparing to working tree, check if it's an untracked file
+        if (!diff && !head) {
+            const fullPath = path.join(workspaceRoot, file);
+            if (fs.existsSync(fullPath)) {
+                // Check if file is untracked
+                const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
+                    cwd: workspaceRoot,
+                    encoding: 'utf-8',
+                }).trim();
+
+                if (isUntracked) {
+                    // For untracked files, treat entire content as additions
+                    const content = fs.readFileSync(fullPath, 'utf-8');
+                    const lines = content.split('\n');
+                    // Create a pseudo-diff where all lines are additions
+                    return lines.map((line) => `+${line}`).join('\n');
+                }
+            }
+        }
+
+        return diff;
     } catch {
         return '';
     }
