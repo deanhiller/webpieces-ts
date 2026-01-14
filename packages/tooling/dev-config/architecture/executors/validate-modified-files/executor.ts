@@ -222,14 +222,14 @@ function writeTmpInstructions(workspaceRoot: string): string {
 }
 
 /**
- * Get changed TypeScript files between base and working tree.
- * Uses `git diff base` (no three-dots) to match what `nx affected` does -
- * this includes both committed and uncommitted changes in one diff.
+ * Get changed TypeScript files between base and head (or working tree if head not specified).
+ * Uses `git diff base [head]` to match what `nx affected` does.
  */
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string): string[] {
+function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
     try {
-        // Use two-dot diff (base to working tree) - same as nx affected
-        const output = execSync(`git diff --name-only ${base} -- '*.ts' '*.tsx'`, {
+        // If head is specified, diff base to head; otherwise diff base to working tree
+        const diffTarget = head ? `${base} ${head}` : base;
+        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -484,7 +484,9 @@ export default async function runExecutor(
         return { success: true };
     }
 
+    // If NX_HEAD is set (via nx affected --head=X), use it; otherwise compare to working tree
     let base = process.env['NX_BASE'];
+    const head = process.env['NX_HEAD'];
 
     if (!base) {
         base = detectBase(workspaceRoot) ?? undefined;
@@ -502,13 +504,13 @@ export default async function runExecutor(
     }
 
     console.log(`   Base: ${base}`);
-    console.log('   Comparing to: working tree (includes uncommitted changes)');
+    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log(`   Max lines for modified files: ${maxLines}`);
     console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored)' : ''}`);
     console.log('');
 
     try {
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base);
+        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
