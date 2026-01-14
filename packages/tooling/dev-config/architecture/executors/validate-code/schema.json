@@ -12,8 +12,12 @@
         },
         "newMethodsMaxLines": {
             "type": "number",
-            "description": "Maximum lines for NEW methods (disable comments always allowed regardless of mode)",
+            "description": "Soft limit: Maximum lines for NEW methods (can be bypassed with disable comment)",
             "default": 30
+        },
+        "strictNewMethodMaxLines": {
+            "type": "number",
+            "description": "Hard limit: Absolute maximum lines for NEW methods (CANNOT be bypassed). If not set, no hard limit is enforced."
         },
         "modifiedMethodsMaxLines": {
             "type": "number",

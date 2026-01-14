@@ -26,6 +26,7 @@ export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
 
 export interface ValidateNewMethodsOptions {
     max?: number;
+    strictMax?: number;
     mode?: ValidationMode;
 }
 
@@ -39,6 +40,8 @@ interface MethodViolation {
     line: number;
     lines: number;
     isNew: boolean;
+    isHardLimit: boolean;
+    limit: number;
 }
 
 const TMP_DIR = 'tmp/webpieces';
@@ -344,7 +347,8 @@ function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    maxLines: number
+    maxLines: number,
+    strictMaxLines?: number
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
@@ -359,14 +363,30 @@ function findViolations(
         const methods = findMethodsInFile(file, workspaceRoot);
 
         for (const method of methods) {
-            // Only check NEW methods that don't have webpieces-disable comment
-            if (newMethodNames.has(method.name) && method.lines > maxLines && !method.hasDisableComment) {
+            if (!newMethodNames.has(method.name)) continue;
+
+            // Check hard limit first (if defined) - NO escape possible
+            if (strictMaxLines && method.lines > strictMaxLines) {
                 violations.push({
                     file,
                     methodName: method.name,
                     line: method.line,
                     lines: method.lines,
                     isNew: true,
+                    isHardLimit: true,
+                    limit: strictMaxLines,
+                });
+            }
+            // Check soft limit - can be escaped with disable comment
+            else if (method.lines > maxLines && !method.hasDisableComment) {
+                violations.push({
+                    file,
+                    methodName: method.name,
+                    line: method.line,
+                    lines: method.lines,
+                    isNew: true,
+                    isHardLimit: false,
+                    limit: maxLines,
                 });
             }
         }
@@ -413,9 +433,13 @@ function detectBase(workspaceRoot: string): string | null {
 /**
  * Report violations to the user with helpful instructions
  */
-function reportViolations(violations: MethodViolation[], maxLines: number): void {
+// webpieces-disable max-lines-new-methods -- Console output formatting requires distinct sections for hard/soft violations
+function reportViolations(violations: MethodViolation[], maxLines: number, strictMaxLines?: number): void {
+    const hardViolations = violations.filter((v) => v.isHardLimit);
+    const softViolations = violations.filter((v) => !v.isHardLimit);
+
     console.error('');
-    console.error('❌ New methods exceed ' + maxLines + ' lines!');
+    console.error('❌ New methods exceed line limits!');
     console.error('');
     console.error('📚 Methods should read like a "table of contents" - each method call');
     console.error('   describes a larger piece of work. You can refactor');
@@ -424,14 +448,33 @@ function reportViolations(violations: MethodViolation[], maxLines: number): void
     console.error('⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️');
     console.error('');
 
-    for (const v of violations) {
-        console.error(`  ❌ ${v.file}:${v.line}`);
-        console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
+    if (hardViolations.length > 0) {
+        console.error('🚫 HARD LIMIT VIOLATIONS (cannot be bypassed with disable comment):');
+        console.error('');
+        for (const v of hardViolations) {
+            console.error(`  ❌ ${v.file}:${v.line}`);
+            console.error(`     Method: ${v.methodName} (${v.lines} lines, hard max: ${strictMaxLines})`);
+        }
+        console.error('');
+        console.error('   These methods MUST be refactored - no escape hatch available.');
+        console.error('');
     }
-    console.error('');
-    console.error('   If you REALLY REALLY need more than ' + maxLines + ' lines, this happens 50% of the time,');
-    console.error('   so use escape: // webpieces-disable max-lines-new-methods -- [your reason]');
-    console.error('');
+
+    if (softViolations.length > 0) {
+        console.error('⚠️  SOFT LIMIT VIOLATIONS (can be bypassed with disable comment):');
+        console.error('');
+        for (const v of softViolations) {
+            console.error(`  ❌ ${v.file}:${v.line}`);
+            console.error(`     Method: ${v.methodName} (${v.lines} lines, soft max: ${maxLines})`);
+        }
+        console.error('');
+        console.error('   If you REALLY REALLY need more than ' + maxLines + ' lines, this happens 50% of the time,');
+        console.error('   so use escape: // webpieces-disable max-lines-new-methods -- [your reason]');
+        if (strictMaxLines) {
+            console.error(`   NOTE: Even with escape, you cannot exceed the hard limit of ${strictMaxLines} lines.`);
+        }
+        console.error('');
+    }
 }
 
 export default async function runExecutor(
@@ -440,6 +483,7 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
     const maxLines = options.max ?? 30;
+    const strictMaxLines = options.strictMax;
     const mode: ValidationMode = options.mode ?? 'NORMAL';
 
     // Skip validation entirely if mode is OFF
@@ -472,7 +516,10 @@ export default async function runExecutor(
 
     console.log(`   Base: ${base}`);
     console.log(`   Comparing to: working tree (includes uncommitted changes)`);
-    console.log(`   Max lines for new methods: ${maxLines}`);
+    console.log(`   Soft limit for new methods: ${maxLines} lines (can escape with disable comment)`);
+    if (strictMaxLines) {
+        console.log(`   Hard limit for new methods: ${strictMaxLines} lines (NO escape possible)`);
+    }
     console.log('');
 
     try {
@@ -487,16 +534,19 @@ export default async function runExecutor(
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
         // Find violations
-        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines);
+        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines, strictMaxLines);
 
         if (violations.length === 0) {
-            console.log('✅ All new methods are under ' + maxLines + ' lines');
+            const limitMsg = strictMaxLines
+                ? `soft limit (${maxLines}) or hard limit (${strictMaxLines})`
+                : `${maxLines} lines`;
+            console.log('✅ All new methods are within ' + limitMsg);
             return { success: true };
         }
 
         // Write instructions file and report violations
         writeTmpInstructions(workspaceRoot);
-        reportViolations(violations, maxLines);
+        reportViolations(violations, maxLines, strictMaxLines);
 
         return { success: false };
     } catch (err: unknown) {
