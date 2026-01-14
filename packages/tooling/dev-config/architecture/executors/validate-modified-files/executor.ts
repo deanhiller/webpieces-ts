@@ -224,6 +224,7 @@ function writeTmpInstructions(workspaceRoot: string): string {
 /**
  * Get changed TypeScript files between base and head (or working tree if head not specified).
  * Uses `git diff base [head]` to match what `nx affected` does.
+ * When head is NOT specified, also includes untracked files (matching nx affected behavior).
  */
 function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
     try {
@@ -233,10 +234,33 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
-        return output
+        const changedFiles = output
             .trim()
             .split('\n')
             .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
+
+        // When comparing to working tree (no head specified), also include untracked files
+        // This matches what nx affected does: "All modified files not yet committed or tracked will also be added"
+        if (!head) {
+            try {
+                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
+                    cwd: workspaceRoot,
+                    encoding: 'utf-8',
+                });
+                const untrackedFiles = untrackedOutput
+                    .trim()
+                    .split('\n')
+                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
+                // Merge and dedupe
+                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
+                return Array.from(allFiles);
+            } catch {
+                // If ls-files fails, just return the changed files
+                return changedFiles;
+            }
+        }
+
+        return changedFiles;
     } catch {
         return [];
     }
