@@ -179,14 +179,14 @@ function writeTmpInstructions(workspaceRoot: string): string {
 }
 
 /**
- * Get changed TypeScript files between base and working tree.
- * Uses `git diff base` (no three-dots) to match what `nx affected` does -
- * this includes both committed and uncommitted changes in one diff.
+ * Get changed TypeScript files between base and head (or working tree if head not specified).
+ * Uses `git diff base [head]` to match what `nx affected` does.
  */
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string): string[] {
+function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
     try {
-        // Use two-dot diff (base to working tree) - same as nx affected
-        const output = execSync(`git diff --name-only ${base} -- '*.ts' '*.tsx'`, {
+        // If head is specified, diff base to head; otherwise diff base to working tree
+        const diffTarget = head ? `${base} ${head}` : base;
+        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -200,14 +200,14 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string): string[
 }
 
 /**
- * Get the diff content for a specific file between base and working tree.
- * Uses `git diff base` (no three-dots) to match what `nx affected` does -
- * this includes both committed and uncommitted changes in one diff.
+ * Get the diff content for a specific file between base and head (or working tree if head not specified).
+ * Uses `git diff base [head]` to match what `nx affected` does.
  */
-function getFileDiff(workspaceRoot: string, file: string, base: string): string {
+function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
     try {
-        // Use two-dot diff (base to working tree) - same as nx affected
-        return execSync(`git diff ${base} -- "${file}"`, {
+        // If head is specified, diff base to head; otherwise diff base to working tree
+        const diffTarget = head ? `${base} ${head}` : base;
+        return execSync(`git diff ${diffTarget} -- "${file}"`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
@@ -348,13 +348,14 @@ function findViolations(
     changedFiles: string[],
     base: string,
     maxLines: number,
-    strictMaxLines?: number
+    strictMaxLines?: number,
+    head?: string
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
         // Get the diff to find which methods are NEW (not just modified)
-        const diff = getFileDiff(workspaceRoot, file, base);
+        const diff = getFileDiff(workspaceRoot, file, base, head);
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
 
         if (newMethodNames.size === 0) continue;
@@ -494,9 +495,9 @@ export default async function runExecutor(
     }
 
     // Check if running in affected mode via NX_BASE, or auto-detect
-    // We use NX_BASE as the base, and compare to WORKING TREE (not NX_HEAD)
-    // This matches what `nx affected` does - it compares base to working tree
+    // If NX_HEAD is set (via nx affected --head=X), use it; otherwise compare to working tree
     let base = process.env['NX_BASE'];
+    const head = process.env['NX_HEAD'];
 
     if (!base) {
         // Try to auto-detect base from git merge-base
@@ -515,7 +516,7 @@ export default async function runExecutor(
     }
 
     console.log(`   Base: ${base}`);
-    console.log(`   Comparing to: working tree (includes uncommitted changes)`);
+    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log(`   Soft limit for new methods: ${maxLines} lines (can escape with disable comment)`);
     if (strictMaxLines) {
         console.log(`   Hard limit for new methods: ${strictMaxLines} lines (NO escape possible)`);
@@ -523,8 +524,8 @@ export default async function runExecutor(
     console.log('');
 
     try {
-        // Get changed TypeScript files (base to working tree, like nx affected)
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base);
+        // Get changed TypeScript files (base to head, or working tree if head not set)
+        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
@@ -534,7 +535,7 @@ export default async function runExecutor(
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
         // Find violations
-        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines, strictMaxLines);
+        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines, strictMaxLines, head);
 
         if (violations.length === 0) {
             const limitMsg = strictMaxLines
