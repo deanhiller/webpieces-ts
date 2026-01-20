@@ -3,6 +3,7 @@ import runNewMethodsExecutor from '../validate-new-methods/executor';
 import runModifiedMethodsExecutor from '../validate-modified-methods/executor';
 import runModifiedFilesExecutor from '../validate-modified-files/executor';
 import runReturnTypesExecutor, { ReturnTypeMode } from '../validate-return-types/executor';
+import runNoInlineTypesExecutor, { NoInlineTypesMode } from '../validate-no-inline-types/executor';
 
 export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
 
@@ -13,6 +14,7 @@ export interface ValidateCodeOptions {
     modifiedMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
     requireReturnTypeMode?: ReturnTypeMode;
+    noInlineTypeLiteralsMode?: NoInlineTypesMode;
 }
 
 export interface ExecutorResult {
@@ -31,6 +33,7 @@ export default async function runExecutor(
     }
 
     const returnTypeMode: ReturnTypeMode = options.requireReturnTypeMode ?? 'OFF';
+    const noInlineTypesMode: NoInlineTypesMode = options.noInlineTypeLiteralsMode ?? 'OFF';
 
     console.log('\n📏 Running Code Validations\n');
     console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored for modified code)' : ''}`);
@@ -41,6 +44,7 @@ export default async function runExecutor(
     console.log(`   Modified methods max: ${options.modifiedMethodsMaxLines ?? 80} lines`);
     console.log(`   Modified files max: ${options.modifiedFilesMaxLines ?? 900} lines`);
     console.log(`   Require return types: ${returnTypeMode}`);
+    console.log(`   No inline type literals: ${noInlineTypesMode}`);
     console.log('');
 
     // Run all three validators sequentially to avoid interleaved output
@@ -61,11 +65,14 @@ export default async function runExecutor(
 
     const returnTypesResult = await runReturnTypesExecutor({ mode: returnTypeMode }, context);
 
+    const noInlineTypesResult = await runNoInlineTypesExecutor({ mode: noInlineTypesMode }, context);
+
     const allSuccess =
         newMethodsResult.success &&
         modifiedMethodsResult.success &&
         modifiedFilesResult.success &&
-        returnTypesResult.success;
+        returnTypesResult.success &&
+        noInlineTypesResult.success;
 
     if (allSuccess) {
         console.log('\n✅ All code validations passed\n');

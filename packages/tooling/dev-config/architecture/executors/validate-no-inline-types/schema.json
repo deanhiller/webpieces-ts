@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate No Inline Types Executor",
+    "description": "Validates that inline type literals are not used - prefer named types/interfaces/classes.",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
+            "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all inline types in modified files. ALL: all inline types everywhere.",
+            "default": "OFF"
+        }
+    },
+    "required": []
+}

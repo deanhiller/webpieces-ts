@@ -69,6 +69,11 @@
             "implementation": "./architecture/executors/validate-return-types/executor",
             "schema": "./architecture/executors/validate-return-types/schema.json",
             "description": "Validate methods have explicit return type annotations"
+        },
+        "validate-no-inline-types": {
+            "implementation": "./architecture/executors/validate-no-inline-types/executor",
+            "schema": "./architecture/executors/validate-no-inline-types/schema.json",
+            "description": "Validate no inline type literals are used - prefer named types"
         }
     }
 }
