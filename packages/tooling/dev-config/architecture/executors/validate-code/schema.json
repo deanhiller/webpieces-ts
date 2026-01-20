@@ -31,8 +31,8 @@
         },
         "requireReturnTypeMode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_NEW", "MODIFIED", "ALL"],
-            "description": "OFF: skip return type validation. MODIFIED_NEW: only validate new methods. MODIFIED: validate all methods in modified files. ALL: validate all methods in all files.",
+            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
+            "description": "OFF: skip return type validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files. ALL: all methods everywhere.",
             "default": "OFF"
         }
     },

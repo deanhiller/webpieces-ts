@@ -10,8 +10,9 @@
  *
  * Modes:
  * - OFF: Skip validation entirely
- * - MODIFIED_NEW: Only validate new methods (detected via git diff)
- * - MODIFIED: Validate all methods in modified files
+ * - NEW_METHODS: Only validate new methods (detected via git diff)
+ * - MODIFIED_AND_NEW_METHODS: Validate new methods + methods with changes in their line range
+ * - MODIFIED_FILES: Validate all methods in modified files
  * - ALL: Validate all methods in all TypeScript files
  *
  * Escape hatch: Add webpieces-disable require-return-type comment with justification
@@ -23,7 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type ReturnTypeMode = 'OFF' | 'MODIFIED_NEW' | 'MODIFIED' | 'ALL';
+export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHODS' | 'MODIFIED_FILES' | 'ALL';
 
 export interface ValidateReturnTypesOptions {
     mode?: ReturnTypeMode;
@@ -188,6 +189,7 @@ function hasExplicitReturnType(node: ts.MethodDeclaration | ts.FunctionDeclarati
 interface MethodInfo {
     name: string;
     line: number;
+    endLine: number;
     hasReturnType: boolean;
     hasDisableComment: boolean;
 }
@@ -210,31 +212,39 @@ function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[
     function visit(node: ts.Node): void {
         let methodName: string | undefined;
         let startLine: number | undefined;
+        let endLine: number | undefined;
         let hasReturnType = false;
 
         if (ts.isMethodDeclaration(node) && node.name) {
             methodName = node.name.getText(sourceFile);
             const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
             startLine = start.line + 1;
+            endLine = end.line + 1;
             hasReturnType = hasExplicitReturnType(node);
         } else if (ts.isFunctionDeclaration(node) && node.name) {
             methodName = node.name.getText(sourceFile);
             const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
             startLine = start.line + 1;
+            endLine = end.line + 1;
             hasReturnType = hasExplicitReturnType(node);
         } else if (ts.isArrowFunction(node)) {
             if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) {
                 methodName = node.parent.name.getText(sourceFile);
                 const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+                const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
                 startLine = start.line + 1;
+                endLine = end.line + 1;
                 hasReturnType = hasExplicitReturnType(node);
             }
         }
 
-        if (methodName && startLine !== undefined) {
+        if (methodName && startLine !== undefined && endLine !== undefined) {
             methods.push({
                 name: methodName,
                 line: startLine,
+                endLine,
                 hasReturnType,
                 hasDisableComment: hasDisableComment(fileLines, startLine),
             });
@@ -248,10 +258,50 @@ function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[
 }
 
 /**
- * Find methods without explicit return types based on mode.
+ * Parse diff to extract changed line numbers (both additions and modifications).
+ */
+function getChangedLineNumbers(diffContent: string): Set<number> {
+    const changedLines = new Set<number>();
+    const lines = diffContent.split('\n');
+    let currentLine = 0;
+
+    for (const line of lines) {
+        const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (hunkMatch) {
+            currentLine = parseInt(hunkMatch[1], 10);
+            continue;
+        }
+
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+            changedLines.add(currentLine);
+            currentLine++;
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+            // Deletions don't increment line number
+        } else {
+            currentLine++;
+        }
+    }
+
+    return changedLines;
+}
+
+/**
+ * Check if a method has any changed lines within its range.
+ */
+function methodHasChanges(method: MethodInfo, changedLines: Set<number>): boolean {
+    for (let line = method.line; line <= method.endLine; line++) {
+        if (changedLines.has(line)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Find NEW methods without explicit return types (NEW_METHODS mode).
  */
 // webpieces-disable max-lines-new-methods -- File iteration with diff parsing and method matching
-function findViolationsForModifiedNew(
+function findViolationsForNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
@@ -284,9 +334,48 @@ function findViolationsForModifiedNew(
 }
 
 /**
- * Find all methods without explicit return types in modified files.
+ * Find NEW methods AND methods with changes (MODIFIED_AND_NEW_METHODS mode).
  */
-function findViolationsForModified(workspaceRoot: string, changedFiles: string[]): MethodViolation[] {
+// webpieces-disable max-lines-new-methods -- Combines new method detection with change detection
+function findViolationsForModifiedAndNewMethods(
+    workspaceRoot: string,
+    changedFiles: string[],
+    base: string,
+    head?: string
+): MethodViolation[] {
+    const violations: MethodViolation[] = [];
+
+    for (const file of changedFiles) {
+        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const newMethodNames = findNewMethodSignaturesInDiff(diff);
+        const changedLines = getChangedLineNumbers(diff);
+
+        const methods = findMethodsInFile(file, workspaceRoot);
+
+        for (const method of methods) {
+            if (method.hasReturnType) continue;
+            if (method.hasDisableComment) continue;
+
+            const isNewMethod = newMethodNames.has(method.name);
+            const isModifiedMethod = methodHasChanges(method, changedLines);
+
+            if (!isNewMethod && !isModifiedMethod) continue;
+
+            violations.push({
+                file,
+                methodName: method.name,
+                line: method.line,
+            });
+        }
+    }
+
+    return violations;
+}
+
+/**
+ * Find all methods without explicit return types in modified files (MODIFIED_FILES mode).
+ */
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[]): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
@@ -308,11 +397,11 @@ function findViolationsForModified(workspaceRoot: string, changedFiles: string[]
 }
 
 /**
- * Find all methods without explicit return types in all files.
+ * Find all methods without explicit return types in all files (ALL mode).
  */
 function findViolationsForAll(workspaceRoot: string): MethodViolation[] {
     const allFiles = getAllTypeScriptFiles(workspaceRoot);
-    return findViolationsForModified(workspaceRoot, allFiles);
+    return findViolationsForModifiedFiles(workspaceRoot, allFiles);
 }
 
 /**
@@ -381,7 +470,7 @@ export default async function runExecutor(
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const mode: ReturnTypeMode = options.mode ?? 'MODIFIED_NEW';
+    const mode: ReturnTypeMode = options.mode ?? 'NEW_METHODS';
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping return type validation (mode: OFF)');
@@ -425,10 +514,12 @@ export default async function runExecutor(
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
 
-        if (mode === 'MODIFIED_NEW') {
-            violations = findViolationsForModifiedNew(workspaceRoot, changedFiles, base, head);
-        } else if (mode === 'MODIFIED') {
-            violations = findViolationsForModified(workspaceRoot, changedFiles);
+        if (mode === 'NEW_METHODS') {
+            violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head);
+        } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
+            violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head);
+        } else if (mode === 'MODIFIED_FILES') {
+            violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
         }
     }
 
