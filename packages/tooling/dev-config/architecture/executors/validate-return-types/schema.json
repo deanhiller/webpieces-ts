@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Return Types Executor",
+    "description": "Validates that methods have explicit return type annotations for better code readability.",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["OFF", "MODIFIED_NEW", "MODIFIED", "ALL"],
+            "description": "OFF: skip validation. MODIFIED_NEW: only validate new methods. MODIFIED: validate all methods in modified files. ALL: validate all methods in all files.",
+            "default": "MODIFIED_NEW"
+        }
+    },
+    "required": []
+}

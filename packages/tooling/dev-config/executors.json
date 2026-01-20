@@ -64,6 +64,11 @@
             "implementation": "./architecture/executors/validate-code/executor",
             "schema": "./architecture/executors/validate-code/schema.json",
             "description": "Combined validation for new methods, modified methods, and file sizes"
+        },
+        "validate-return-types": {
+            "implementation": "./architecture/executors/validate-return-types/executor",
+            "schema": "./architecture/executors/validate-return-types/schema.json",
+            "description": "Validate methods have explicit return type annotations"
         }
     }
 }

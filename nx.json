@@ -52,7 +52,8 @@
                 "mode": "STRICT",
                 "newMethodsMaxLines": 30,
                 "modifiedMethodsMaxLines": 80,
-                "modifiedFilesMaxLines": 900
+                "modifiedFilesMaxLines": 900,
+                "requireReturnTypeMode": "MODIFIED_NEW"
             }
         }
     },

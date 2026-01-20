@@ -28,6 +28,12 @@
             "type": "number",
             "description": "Maximum lines for MODIFIED files",
             "default": 900
+        },
+        "requireReturnTypeMode": {
+            "type": "string",
+            "enum": ["OFF", "MODIFIED_NEW", "MODIFIED", "ALL"],
+            "description": "OFF: skip return type validation. MODIFIED_NEW: only validate new methods. MODIFIED: validate all methods in modified files. ALL: validate all methods in all files.",
+            "default": "OFF"
         }
     },
     "required": []

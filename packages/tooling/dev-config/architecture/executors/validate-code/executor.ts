@@ -2,6 +2,7 @@ import { ExecutorContext } from '@nx/devkit';
 import runNewMethodsExecutor from '../validate-new-methods/executor';
 import runModifiedMethodsExecutor from '../validate-modified-methods/executor';
 import runModifiedFilesExecutor from '../validate-modified-files/executor';
+import runReturnTypesExecutor, { ReturnTypeMode } from '../validate-return-types/executor';
 
 export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
 
@@ -11,6 +12,7 @@ export interface ValidateCodeOptions {
     strictNewMethodMaxLines?: number;
     modifiedMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
+    requireReturnTypeMode?: ReturnTypeMode;
 }
 
 export interface ExecutorResult {
@@ -28,6 +30,8 @@ export default async function runExecutor(
         return { success: true };
     }
 
+    const returnTypeMode: ReturnTypeMode = options.requireReturnTypeMode ?? 'OFF';
+
     console.log('\n📏 Running Code Validations\n');
     console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored for modified code)' : ''}`);
     console.log(`   New methods max: ${options.newMethodsMaxLines ?? 30} lines (soft limit)`);
@@ -36,6 +40,7 @@ export default async function runExecutor(
     }
     console.log(`   Modified methods max: ${options.modifiedMethodsMaxLines ?? 80} lines`);
     console.log(`   Modified files max: ${options.modifiedFilesMaxLines ?? 900} lines`);
+    console.log(`   Require return types: ${returnTypeMode}`);
     console.log('');
 
     // Run all three validators sequentially to avoid interleaved output
@@ -54,7 +59,13 @@ export default async function runExecutor(
         context
     );
 
-    const allSuccess = newMethodsResult.success && modifiedMethodsResult.success && modifiedFilesResult.success;
+    const returnTypesResult = await runReturnTypesExecutor({ mode: returnTypeMode }, context);
+
+    const allSuccess =
+        newMethodsResult.success &&
+        modifiedMethodsResult.success &&
+        modifiedFilesResult.success &&
+        returnTypesResult.success;
 
     if (allSuccess) {
         console.log('\n✅ All code validations passed\n');
