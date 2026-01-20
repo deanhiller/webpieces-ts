@@ -79,21 +79,18 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
 }
 
 /**
- * Get all TypeScript files in the workspace (excluding node_modules, dist, tests).
+ * Get all TypeScript files in the workspace using git ls-files (excluding tests).
  */
 function getAllTypeScriptFiles(workspaceRoot: string): string[] {
     try {
-        const output = execSync(
-            `find packages apps -type f \\( -name "*.ts" -o -name "*.tsx" \\) | grep -v node_modules | grep -v dist | grep -v ".spec.ts" | grep -v ".test.ts"`,
-            {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-            }
-        );
+        const output = execSync(`git ls-files '*.ts' '*.tsx'`, {
+            cwd: workspaceRoot,
+            encoding: 'utf-8',
+        });
         return output
             .trim()
             .split('\n')
-            .filter((f) => f);
+            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
     } catch {
         return [];
     }
@@ -398,7 +395,7 @@ export default async function runExecutor(
     let violations: MethodViolation[] = [];
 
     if (mode === 'ALL') {
-        console.log('   Scope: All TypeScript files');
+        console.log('   Scope: All tracked TypeScript files');
         console.log('');
         violations = findViolationsForAll(workspaceRoot);
     } else {
