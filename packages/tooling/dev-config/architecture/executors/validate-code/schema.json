@@ -34,6 +34,12 @@
             "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
             "description": "OFF: skip return type validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files. ALL: all methods everywhere.",
             "default": "OFF"
+        },
+        "noInlineTypeLiteralsMode": {
+            "type": "string",
+            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
+            "description": "OFF: skip validation. NEW_METHODS: only new methods. MODIFIED_AND_NEW_METHODS: new + modified methods. MODIFIED_FILES: all in modified files. ALL: everywhere. Disallows inline type literals like { x: number } - use named types instead.",
+            "default": "OFF"
         }
     },
     "required": []
