@@ -15,5 +15,12 @@
 
 set -e
 
-echo "Running CI on AFFECTED projects (compared to origin/main)..."
+echo "🔄 Fetching origin/main to ensure we have latest..."
+git fetch origin main
+
+echo ""
+echo "📋 Running CI on AFFECTED projects (compared to origin/main)..."
+echo "   This mirrors: .github/workflows/ci.yml"
+echo ""
+
 npx nx affected --target=ci --base=origin/main
