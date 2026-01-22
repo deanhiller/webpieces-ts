@@ -1,23 +1,83 @@
 /**
  * Validate No Inline Types Executor
  *
- * Validates that inline type literals are not used - prefer named types/interfaces/classes.
- * Instead of anonymous object types, use named types for clarity and reusability:
+ * Validates that inline type literals AND tuple types are not used in type positions.
+ * Prefer named types/interfaces/classes for clarity and reusability.
  *
- * BAD:  function foo(arg: { x: number }) { }
- * GOOD: function foo(arg: MyConfig) { }
+ * ============================================================================
+ * VIOLATIONS (BAD) - These patterns are flagged:
+ * ============================================================================
  *
- * BAD:  type Nullable = { x: number } | null;
- * GOOD: type MyData = { x: number }; type Nullable = MyData | null;
+ * 1. INLINE TYPE LITERALS { }
+ *    -------------------------
+ *    - Inline parameter type:     function foo(arg: { x: number }) { }
+ *    - Inline return type:        function foo(): { x: number } { }
+ *    - Inline variable type:      const config: { timeout: number } = { timeout: 5 };
+ *    - Inline property type:      class C { data: { id: number }; }
+ *    - Inline in union:           type T = { x: number } | null;
+ *    - Inline in intersection:    type T = { x: number } & { y: number };
+ *    - Inline in generic:         Promise<{ data: string }>
+ *    - Inline in array:           function foo(): { id: string }[] { }
+ *    - Nested inline in alias:    type T = { data: { nested: number } };  // inner { } flagged
+ *    - Inline in tuple:           type T = [{ x: number }, string];
  *
- * Modes:
- * - OFF: Skip validation entirely
- * - NEW_METHODS: Only validate inline types in new methods (detected via git diff)
- * - MODIFIED_AND_NEW_METHODS: Validate in new methods + methods with changes in their line range
- * - MODIFIED_FILES: Validate all inline types in modified files
- * - ALL: Validate all inline types in all TypeScript files
+ * 2. TUPLE TYPES [ ]
+ *    ----------------
+ *    - Tuple return type:         function foo(): [Items[], number] { }
+ *    - Tuple parameter type:      function foo(arg: [string, number]) { }
+ *    - Tuple variable type:       const result: [Data[], number] = getData();
+ *    - Tuple in generic:          Promise<[Items[], number]>
+ *    - Tuple in union:            type T = [A, B] | null;
+ *    - Nested tuple:              type T = { data: [A, B] };
  *
- * Escape hatch: Add webpieces-disable no-inline-types comment with justification
+ * ============================================================================
+ * ALLOWED (GOOD) - These patterns pass validation:
+ * ============================================================================
+ *
+ * 1. TYPE ALIAS DEFINITIONS (direct body only)
+ *    -----------------------------------------
+ *    - Type alias with literal:   type MyConfig = { timeout: number };
+ *    - Type alias with tuple:     type MyResult = [Items[], number];
+ *    - Interface definition:      interface MyData { id: number }
+ *    - Class definition:          class UserData { id: number; name: string; }
+ *
+ * 2. USING NAMED TYPES
+ *    ------------------
+ *    - Named param type:          function foo(arg: MyConfig) { }
+ *    - Named return type:         function foo(): MyConfig { }
+ *    - Named with null:           function foo(): MyConfig | null { }
+ *    - Named with undefined:      function foo(): MyConfig | undefined { }
+ *    - Union of named types:      type Either = TypeA | TypeB;
+ *    - Named in generic:          Promise<MyResult>
+ *    - Named tuple alias:         function foo(): MyTupleResult { }
+ *
+ * 3. PRIMITIVES AND BUILT-INS
+ *    -------------------------
+ *    - Primitive types:           function foo(): string { }
+ *    - Primitive arrays:          function foo(): string[] { }
+ *    - Built-in generics:         function foo(): Promise<string> { }
+ *    - Void return:               function foo(): void { }
+ *
+ * ============================================================================
+ * MODES
+ * ============================================================================
+ * - OFF:                      Skip validation entirely
+ * - NEW_METHODS:              Only validate in new methods (detected via git diff)
+ * - MODIFIED_AND_NEW_METHODS: Validate in new methods + methods with changes
+ * - MODIFIED_FILES:           Validate all violations in modified files
+ * - ALL:                      Validate all violations in all TypeScript files
+ *
+ * ============================================================================
+ * ESCAPE HATCH
+ * ============================================================================
+ * Add comment above the violation:
+ *   // webpieces-disable no-inline-types -- [your justification]
+ *   function foo(arg: { x: number }) { }
+ *
+ * Use sparingly! Common valid reasons:
+ * - Prisma payload types that require inline generics
+ * - Third-party library APIs that expect inline types
+ * - Legacy code being incrementally migrated
  */
 
 import type { ExecutorContext } from '@nx/devkit';
@@ -179,11 +239,27 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
 }
 
 /**
- * Check if a TypeLiteral node is in an allowed context.
+ * Check if a TypeLiteral or TupleType node is in an allowed context.
  * Only allowed if the DIRECT parent is a TypeAliasDeclaration.
+ *
+ * ALLOWED:
+ *   type MyConfig = { x: number };     // TypeLiteral direct child of TypeAliasDeclaration
+ *   type MyTuple = [A, B];             // TupleType direct child of TypeAliasDeclaration
+ *
+ * NOT ALLOWED (flagged):
+ *   type T = { x: number } | null;     // Parent is UnionType, not TypeAliasDeclaration
+ *   type T = { data: { nested: number } };  // Inner TypeLiteral's parent is PropertySignature
+ *   function foo(): [A, B] { }         // TupleType's parent is FunctionDeclaration
+ *   type T = Prisma.GetPayload<{ include: {...} }>;  // TypeLiteral in generic argument
+ *
+ * NOTE: Prisma types require inline type literals in generic arguments. Use the escape hatch:
+ *   // webpieces-disable no-inline-types -- Prisma API requires inline type argument
+ *   type T = Prisma.GetPayload<{ include: {...} }>;
  */
-function isInAllowedContext(node: ts.TypeLiteralNode): boolean {
+function isInAllowedContext(node: ts.TypeLiteralNode | ts.TupleTypeNode): boolean {
     const parent = node.parent;
+    if (!parent) return false;
+
     // Only allowed if it's the DIRECT body of a type alias
     if (ts.isTypeAliasDeclaration(parent)) {
         return true;
@@ -192,49 +268,73 @@ function isInAllowedContext(node: ts.TypeLiteralNode): boolean {
 }
 
 /**
- * Get a description of the context where the inline type appears.
+ * Get a description of the context where the inline type or tuple appears.
+ *
+ * Returns human-readable context like:
+ *   - "inline parameter type"
+ *   - "tuple return type"
+ *   - "inline type in generic argument"
  */
 // webpieces-disable max-lines-new-methods -- Context detection requires checking many AST node types
-function getViolationContext(node: ts.TypeLiteralNode, sourceFile: ts.SourceFile): string {
-    let current: ts.Node = node;
-    while (current.parent) {
-        const parent = current.parent;
-        if (ts.isParameter(parent)) {
-            return 'inline parameter type';
-        }
-        if (ts.isFunctionDeclaration(parent) || ts.isMethodDeclaration(parent) || ts.isArrowFunction(parent)) {
-            if (parent.type === current) {
-                return 'inline return type';
+function getViolationContext(node: ts.TypeLiteralNode | ts.TupleTypeNode, sourceFile: ts.SourceFile): string {
+    try {
+        const isTuple = ts.isTupleTypeNode(node);
+        const prefix = isTuple ? 'tuple' : 'inline';
+
+        let current: ts.Node = node;
+        while (current.parent) {
+            const parent = current.parent;
+            if (ts.isParameter(parent)) {
+                return `${prefix} parameter type`;
             }
-        }
-        if (ts.isVariableDeclaration(parent)) {
-            return 'inline variable type';
-        }
-        if (ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent)) {
-            if (parent.type === current) {
-                return 'inline property type';
-            }
-            // Check if it's nested inside another type literal
-            let ancestor: ts.Node | undefined = parent.parent;
-            while (ancestor) {
-                if (ts.isTypeLiteralNode(ancestor)) {
-                    return 'nested inline type';
+            if (ts.isFunctionDeclaration(parent) || ts.isMethodDeclaration(parent) || ts.isArrowFunction(parent)) {
+                if (parent.type === current) {
+                    return `${prefix} return type`;
                 }
-                if (ts.isTypeAliasDeclaration(ancestor)) {
-                    return 'nested inline type in type alias';
-                }
-                ancestor = ancestor.parent;
             }
+            if (ts.isVariableDeclaration(parent)) {
+                return `${prefix} variable type`;
+            }
+            if (ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent)) {
+                if (parent.type === current) {
+                    return `${prefix} property type`;
+                }
+                // Check if it's nested inside another type literal
+                let ancestor: ts.Node | undefined = parent.parent;
+                while (ancestor) {
+                    if (ts.isTypeLiteralNode(ancestor)) {
+                        return `nested ${prefix} type`;
+                    }
+                    if (ts.isTypeAliasDeclaration(ancestor)) {
+                        return `nested ${prefix} type in type alias`;
+                    }
+                    ancestor = ancestor.parent;
+                }
+            }
+            if (ts.isUnionTypeNode(parent) || ts.isIntersectionTypeNode(parent)) {
+                return `${prefix} type in union/intersection`;
+            }
+            // Safely check parent.parent before accessing it
+            if (parent.parent && ts.isTypeReferenceNode(parent.parent) && ts.isTypeNode(parent)) {
+                return `${prefix} type in generic argument`;
+            }
+            // Direct parent is TypeReferenceNode (e.g., Prisma.GetPayload<{...}>)
+            if (ts.isTypeReferenceNode(parent)) {
+                return `${prefix} type in generic argument`;
+            }
+            if (ts.isArrayTypeNode(parent)) {
+                return `${prefix} type in array`;
+            }
+            if (ts.isTupleTypeNode(parent) && !isTuple) {
+                return `inline type in tuple`;
+            }
+            current = parent;
         }
-        if (ts.isUnionTypeNode(parent) || ts.isIntersectionTypeNode(parent)) {
-            return 'inline type in union/intersection';
-        }
-        if (ts.isTypeReferenceNode(parent.parent) && ts.isTypeNode(parent)) {
-            return 'inline type in generic argument';
-        }
-        current = parent;
+        return isTuple ? 'tuple type' : 'inline type literal';
+    } catch (error) {
+        // Defensive: return generic context if AST traversal fails
+        return ts.isTupleTypeNode(node) ? 'tuple type' : 'inline type literal';
     }
-    return 'inline type literal';
 }
 
 interface MethodInfo {
@@ -373,7 +473,13 @@ interface InlineTypeInfo {
 }
 
 /**
- * Find all inline type literals in a file.
+ * Find all inline type literals AND tuple types in a file.
+ *
+ * Detects:
+ *   - TypeLiteral nodes: { x: number }
+ *   - TupleType nodes: [A, B]
+ *
+ * Both are flagged unless they are the DIRECT body of a type alias.
  */
 // webpieces-disable max-lines-new-methods -- AST traversal with visitor pattern
 function findInlineTypesInFile(filePath: string, workspaceRoot: string): InlineTypeInfo[] {
@@ -387,22 +493,52 @@ function findInlineTypesInFile(filePath: string, workspaceRoot: string): InlineT
     const inlineTypes: InlineTypeInfo[] = [];
 
     function visit(node: ts.Node): void {
-        if (ts.isTypeLiteralNode(node)) {
-            if (!isInAllowedContext(node)) {
-                const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-                const line = pos.line + 1;
-                const column = pos.character + 1;
-                const context = getViolationContext(node, sourceFile);
-                const disabled = hasDisableComment(fileLines, line);
+        try {
+            // Check for inline type literals: { x: number }
+            if (ts.isTypeLiteralNode(node)) {
+                if (!isInAllowedContext(node)) {
+                    const startPos = node.getStart(sourceFile);
+                    if (startPos >= 0) {
+                        const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
+                        const line = pos.line + 1;
+                        const column = pos.character + 1;
+                        const context = getViolationContext(node, sourceFile);
+                        const disabled = hasDisableComment(fileLines, line);
 
-                inlineTypes.push({
-                    line,
-                    column,
-                    context,
-                    hasDisableComment: disabled,
-                });
+                        inlineTypes.push({
+                            line,
+                            column,
+                            context,
+                            hasDisableComment: disabled,
+                        });
+                    }
+                }
             }
+
+            // Check for tuple types: [A, B]
+            if (ts.isTupleTypeNode(node)) {
+                if (!isInAllowedContext(node)) {
+                    const startPos = node.getStart(sourceFile);
+                    if (startPos >= 0) {
+                        const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
+                        const line = pos.line + 1;
+                        const column = pos.character + 1;
+                        const context = getViolationContext(node, sourceFile);
+                        const disabled = hasDisableComment(fileLines, line);
+
+                        inlineTypes.push({
+                            line,
+                            column,
+                            context,
+                            hasDisableComment: disabled,
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            // Skip nodes that cause errors during analysis
         }
+
         ts.forEachChild(node, visit);
     }
 

@@ -74,6 +74,11 @@
             "implementation": "./architecture/executors/validate-no-inline-types/executor",
             "schema": "./architecture/executors/validate-no-inline-types/schema.json",
             "description": "Validate no inline type literals are used - prefer named types"
+        },
+        "validate-no-any-unknown": {
+            "implementation": "./architecture/executors/validate-no-any-unknown/executor",
+            "schema": "./architecture/executors/validate-no-any-unknown/schema.json",
+            "description": "Validate no any/unknown keywords are used - use specific types instead"
         }
     }
 }
