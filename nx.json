@@ -54,7 +54,8 @@
                 "modifiedMethodsMaxLines": 80,
                 "modifiedFilesMaxLines": 900,
                 "requireReturnTypeMode": "MODIFIED_FILES",
-                "noInlineTypeLiteralsMode": "MODIFIED_FILES"
+                "noInlineTypeLiteralsMode": "MODIFIED_FILES",
+                "noAnyUnknownMode": "MODIFIED_CODE"
             }
         }
     },

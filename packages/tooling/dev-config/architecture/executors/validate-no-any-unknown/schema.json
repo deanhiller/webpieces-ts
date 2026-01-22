@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate No Any Unknown Executor",
+    "description": "Validates that `any` and `unknown` TypeScript keywords are not used. Uses LINE-BASED detection for git diff filtering.",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES", "ALL"],
+            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. ALL: everywhere. Disallows `any` and `unknown` TypeScript keywords.",
+            "default": "OFF"
+        }
+    },
+    "required": []
+}
