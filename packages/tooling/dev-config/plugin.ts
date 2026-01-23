@@ -27,43 +27,63 @@ import type {
 } from '@nx/devkit';
 
 /**
+ * Circular dependency checking options
+ */
+export interface CircularDepsOptions {
+    enabled?: boolean;
+    targetName?: string;
+    excludePatterns?: string[];
+}
+
+/**
+ * Validation options for architecture checks
+ */
+export interface ValidationOptions {
+    noCycles?: boolean;
+    noSkipLevelDeps?: boolean;
+    architectureUnchanged?: boolean;
+    validatePackageJson?: boolean;
+    validateNewMethods?: boolean;
+    validateModifiedMethods?: boolean;
+    validateModifiedFiles?: boolean;
+    validateVersionsLocked?: boolean;
+    newMethodsMaxLines?: number;
+    modifiedAndNewMethodsMaxLines?: number;
+    modifiedFilesMaxLines?: number;
+    /**
+     * Validation mode for method/file size limits:
+     * - STRICT: All limits enforced, disable comments ignored
+     * - NORMAL: Limits enforced, disable comments with dates work
+     * - OFF: Skip size validations entirely (for fast iteration)
+     */
+    validationMode?: 'STRICT' | 'NORMAL' | 'OFF';
+}
+
+/**
+ * Feature flags for workspace targets
+ */
+export interface FeatureOptions {
+    generate?: boolean;
+    visualize?: boolean;
+}
+
+/**
+ * Workspace-level configuration options
+ */
+export interface WorkspaceOptions {
+    enabled?: boolean;
+    targetPrefix?: string;
+    graphPath?: string;
+    validations?: ValidationOptions;
+    features?: FeatureOptions;
+}
+
+/**
  * Configuration for @webpieces/dev-config Nx plugin
  */
 export interface ArchitecturePluginOptions {
-    circularDeps?: {
-        enabled?: boolean;
-        targetName?: string;
-        excludePatterns?: string[];
-    };
-    workspace?: {
-        enabled?: boolean;
-        targetPrefix?: string;
-        graphPath?: string;
-        validations?: {
-            noCycles?: boolean;
-            noSkipLevelDeps?: boolean;
-            architectureUnchanged?: boolean;
-            validatePackageJson?: boolean;
-            validateNewMethods?: boolean;
-            validateModifiedMethods?: boolean;
-            validateModifiedFiles?: boolean;
-            validateVersionsLocked?: boolean;
-            newMethodsMaxLines?: number;
-            modifiedAndNewMethodsMaxLines?: number;
-            modifiedFilesMaxLines?: number;
-            /**
-             * Validation mode for method/file size limits:
-             * - STRICT: All limits enforced, disable comments ignored
-             * - NORMAL: Limits enforced, disable comments with dates work
-             * - OFF: Skip size validations entirely (for fast iteration)
-             */
-            validationMode?: 'STRICT' | 'NORMAL' | 'OFF';
-        };
-        features?: {
-            generate?: boolean;
-            visualize?: boolean;
-        };
-    };
+    circularDeps?: CircularDepsOptions;
+    workspace?: WorkspaceOptions;
 }
 
 const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
@@ -130,7 +150,7 @@ async function createNodesFunction(
     context: CreateNodesContextV2
 ): Promise<CreateNodesResultV2> {
     const opts = normalizeOptions(options);
-    const results: Array<readonly [string, CreateNodesResult]> = [];
+    const results: CreateNodesResultV2 = [];
 
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
@@ -142,7 +162,7 @@ async function createNodesFunction(
 }
 
 function addArchitectureProject(
-    results: Array<readonly [string, CreateNodesResult]>,
+    results: CreateNodesResultV2,
     projectFiles: readonly string[],
     opts: Required<ArchitecturePluginOptions>,
     context: CreateNodesContextV2
@@ -172,28 +192,49 @@ function addArchitectureProject(
 }
 
 function addPerProjectTargets(
-    results: Array<readonly [string, CreateNodesResult]>,
+    results: CreateNodesResultV2,
     projectFiles: readonly string[],
     opts: Required<ArchitecturePluginOptions>,
     context: CreateNodesContextV2
 ): void {
+    // Track processed project roots to avoid duplicates when both files exist
+    const processedRoots = new Set<string>();
+
     for (const projectFile of projectFiles) {
-        if (!projectFile.endsWith('project.json')) continue;
+        const isProjectJson = projectFile.endsWith('project.json');
+        const isPackageJson = projectFile.endsWith('package.json');
+
+        if (!isProjectJson && !isPackageJson) continue;
 
         const projectRoot = dirname(projectFile);
+
+        // Skip root (workspace manifest, not a project)
         if (projectRoot === '.') continue;
+
+        // Skip if we've already processed this project root
+        if (processedRoots.has(projectRoot)) continue;
+
+        // For package.json, skip if project.json also exists in same directory
+        // (prefer project.json - it will be processed separately)
+        if (isPackageJson) {
+            const projectJsonPath = join(context.workspaceRoot, projectRoot, 'project.json');
+            if (existsSync(projectJsonPath)) continue;
+        }
+
+        processedRoots.add(projectRoot);
 
         const targets: Record<string, TargetConfiguration> = {};
 
-        // Add circular-deps target if enabled (runs on ALL projects - KISS)
-        if (opts.circularDeps.enabled) {
+        // Add circular-deps target ONLY for project.json projects
+        // (package.json-only projects may not have TypeScript source)
+        if (isProjectJson && opts.circularDeps.enabled) {
             if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
                 const targetName = opts.circularDeps.targetName!;
                 targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
             }
         }
 
-        // Add ci target - composite target that runs lint, build, and test
+        // Add ci target to ALL projects (both project.json and package.json)
         targets['ci'] = createCiTarget();
 
         if (Object.keys(targets).length === 0) continue;
@@ -212,11 +253,11 @@ function addPerProjectTargets(
 
 /**
  * Nx V2 Inference Plugin
- * Matches project.json files to create targets
+ * Matches project.json and package.json files to create targets
  */
 export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
-    // Pattern to match project.json files
-    '**/project.json',
+    // Pattern to match project.json and package.json files
+    '**/{project,package}.json',
 
     // Inference function
     createNodesFunction,
