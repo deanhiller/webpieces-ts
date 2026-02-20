@@ -23,6 +23,10 @@
                     "type": "boolean",
                     "description": "Whether disable comments work. When false, no escape hatch (like old STRICT mode).",
                     "default": true
+                },
+                "ignoreModifiedUntilEpoch": {
+                    "type": "number",
+                    "description": "Epoch seconds. Until this time, skip modified-method validation (new methods still enforced). When expired, normal mode resumes. Omit when not needed."
                 }
             }
         },
@@ -45,6 +49,10 @@
                     "type": "boolean",
                     "description": "Whether disable comments work. When false, no escape hatch (like old STRICT mode).",
                     "default": true
+                },
+                "ignoreModifiedUntilEpoch": {
+                    "type": "number",
+                    "description": "Epoch seconds. Until this time, skip modified-file validation. When expired, normal mode resumes. Omit when not needed."
                 }
             }
         },

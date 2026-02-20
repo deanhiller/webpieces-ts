@@ -13,12 +13,14 @@ export interface MethodMaxLimitConfig {
     limit?: number;
     mode?: MethodMaxLimitMode;
     disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface FileMaxLimitConfig {
     limit?: number;
     mode?: FileMaxLimitMode;
     disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ValidateCodeOptions {
@@ -33,39 +35,116 @@ export interface ExecutorResult {
     success: boolean;
 }
 
+interface OverrideInfo {
+    active: boolean;
+    normalMode: string;
+    expiresDate: string;
+}
+
 interface ParsedConfig {
     methodLimit: number;
     methodMode: MethodMaxLimitMode;
     methodDisableAllowed: boolean;
+    methodOverride: OverrideInfo | undefined;
     fileLimit: number;
     fileMode: FileMaxLimitMode;
     fileDisableAllowed: boolean;
+    fileOverride: OverrideInfo | undefined;
     returnTypeMode: ReturnTypeMode;
     noInlineTypesMode: NoInlineTypesMode;
     noAnyUnknownMode: NoAnyUnknownMode;
+}
+
+interface ResolvedMethodMode {
+    mode: MethodMaxLimitMode;
+    override: OverrideInfo | undefined;
+}
+
+interface ResolvedFileMode {
+    mode: FileMaxLimitMode;
+    override: OverrideInfo | undefined;
+}
+
+function formatEpochDate(epoch: number): string {
+    return new Date(epoch * 1000).toISOString().split('T')[0];
+}
+
+function resolveMethodMode(
+    normalMode: MethodMaxLimitMode, epoch: number | undefined
+): ResolvedMethodMode {
+    if (epoch === undefined) {
+        return { mode: normalMode, override: undefined };
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        // Active: downgrade to skip modified checking
+        const downgraded: MethodMaxLimitMode =
+            normalMode === 'OFF' ? 'OFF' : 'NEW_METHODS';
+        return {
+            mode: downgraded,
+            override: { active: true, normalMode, expiresDate: formatEpochDate(epoch) },
+        };
+    }
+    // Expired
+    console.log(`\n\u26a0\ufe0f  methodMaxLimit.ignoreModifiedUntilEpoch (${epoch}) has expired (${formatEpochDate(epoch)}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return { mode: normalMode, override: undefined };
+}
+
+function resolveFileMode(
+    normalMode: FileMaxLimitMode, epoch: number | undefined
+): ResolvedFileMode {
+    if (epoch === undefined) {
+        return { mode: normalMode, override: undefined };
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        // Active: file checking is inherently about modified files, so skip entirely
+        return {
+            mode: 'OFF',
+            override: { active: true, normalMode, expiresDate: formatEpochDate(epoch) },
+        };
+    }
+    // Expired
+    console.log(`\n\u26a0\ufe0f  fileMaxLimit.ignoreModifiedUntilEpoch (${epoch}) has expired (${formatEpochDate(epoch)}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return { mode: normalMode, override: undefined };
 }
 
 function parseConfig(options: ValidateCodeOptions): ParsedConfig {
     const methodConfig: MethodMaxLimitConfig = options.methodMaxLimit ?? {};
     const fileConfig: FileMaxLimitConfig = options.fileMaxLimit ?? {};
 
+    const normalMethodMode = methodConfig.mode ?? 'NEW_AND_MODIFIED_METHODS';
+    const normalFileMode = fileConfig.mode ?? 'MODIFIED_FILES';
+
+    const methodResolved = resolveMethodMode(normalMethodMode, methodConfig.ignoreModifiedUntilEpoch);
+    const fileResolved = resolveFileMode(normalFileMode, fileConfig.ignoreModifiedUntilEpoch);
+
     return {
         methodLimit: methodConfig.limit ?? 80,
-        methodMode: methodConfig.mode ?? 'NEW_AND_MODIFIED_METHODS',
+        methodMode: methodResolved.mode,
         methodDisableAllowed: methodConfig.disableAllowed ?? true,
+        methodOverride: methodResolved.override,
         fileLimit: fileConfig.limit ?? 900,
-        fileMode: fileConfig.mode ?? 'MODIFIED_FILES',
+        fileMode: fileResolved.mode,
         fileDisableAllowed: fileConfig.disableAllowed ?? true,
+        fileOverride: fileResolved.override,
         returnTypeMode: options.requireReturnTypeMode ?? 'OFF',
         noInlineTypesMode: options.noInlineTypeLiteralsMode ?? 'OFF',
         noAnyUnknownMode: options.noAnyUnknownMode ?? 'OFF',
     };
 }
 
+function formatOverride(override: OverrideInfo | undefined): string {
+    if (!override) {
+        return '';
+    }
+    return ` (override active, normal: ${override.normalMode}, expires: ${override.expiresDate})`;
+}
+
 function logConfig(config: ParsedConfig): void {
     console.log('\n\ud83d\udccf Running Code Validations\n');
-    console.log(`   Method limits: mode=${config.methodMode}, limit=${config.methodLimit}, disableAllowed=${config.methodDisableAllowed}`);
-    console.log(`   File limits: mode=${config.fileMode}, limit=${config.fileLimit}, disableAllowed=${config.fileDisableAllowed}`);
+    console.log(`   Method limits: mode=${config.methodMode}${formatOverride(config.methodOverride)}, limit=${config.methodLimit}, disableAllowed=${config.methodDisableAllowed}`);
+    console.log(`   File limits: mode=${config.fileMode}${formatOverride(config.fileOverride)}, limit=${config.fileLimit}, disableAllowed=${config.fileDisableAllowed}`);
     console.log(`   Require return types: ${config.returnTypeMode}`);
     console.log(`   No inline type literals: ${config.noInlineTypesMode}`);
     console.log(`   No any/unknown: ${config.noAnyUnknownMode}`);
