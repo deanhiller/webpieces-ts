@@ -6,8 +6,8 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
-            "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files. ALL: all methods everywhere.",
+            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
             "default": "NEW_METHODS"
         }
     },

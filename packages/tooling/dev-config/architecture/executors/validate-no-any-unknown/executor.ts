@@ -21,7 +21,6 @@
  * - OFF:            Skip validation entirely
  * - MODIFIED_CODE:  Flag any/unknown on changed lines (lines in diff hunks)
  * - MODIFIED_FILES: Flag ALL any/unknown in files that were modified
- * - ALL:            Flag everywhere in all TypeScript files
  *
  * ============================================================================
  * ESCAPE HATCH
@@ -37,7 +36,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type NoAnyUnknownMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES' | 'ALL';
+export type NoAnyUnknownMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
 
 export interface ValidateNoAnyUnknownOptions {
     mode?: NoAnyUnknownMode;
@@ -89,24 +88,6 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
         }
 
         return changedFiles;
-    } catch {
-        return [];
-    }
-}
-
-/**
- * Get all TypeScript files in the workspace using git ls-files (excluding tests).
- */
-function getAllTypeScriptFiles(workspaceRoot: string): string[] {
-    try {
-        const output = execSync(`git ls-files '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        return output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
     } catch {
         return [];
     }
@@ -245,6 +226,32 @@ interface AnyUnknownInfo {
 }
 
 /**
+ * Check if a node is in a catch clause variable declaration.
+ * This allows `catch (err: any)` and `catch (err: unknown)` patterns.
+ */
+function isInCatchClause(node: ts.Node): boolean {
+    let current: ts.Node | undefined = node.parent;
+    while (current) {
+        if (ts.isCatchClause(current)) {
+            // We're somewhere in a catch clause - check if we're in the variable declaration
+            const catchClause = current as ts.CatchClause;
+            if (catchClause.variableDeclaration) {
+                // Walk back up from the original node to see if we're part of the variable declaration
+                let checkNode: ts.Node | undefined = node.parent;
+                while (checkNode && checkNode !== current) {
+                    if (checkNode === catchClause.variableDeclaration) {
+                        return true;
+                    }
+                    checkNode = checkNode.parent;
+                }
+            }
+        }
+        current = current.parent;
+    }
+    return false;
+}
+
+/**
  * Find all `any` and `unknown` keywords in a file using AST.
  */
 // webpieces-disable max-lines-new-methods -- AST traversal with nested visitor function for keyword detection
@@ -263,6 +270,12 @@ function findAnyUnknownInFile(filePath: string, workspaceRoot: string): AnyUnkno
         try {
             // Detect `any` keyword
             if (node.kind === ts.SyntaxKind.AnyKeyword) {
+                // Skip catch clause variable types: catch (err: any) is allowed
+                if (isInCatchClause(node)) {
+                    ts.forEachChild(node, visit);
+                    return;
+                }
+
                 const startPos = node.getStart(sourceFile);
                 if (startPos >= 0) {
                     const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
@@ -283,6 +296,12 @@ function findAnyUnknownInFile(filePath: string, workspaceRoot: string): AnyUnkno
 
             // Detect `unknown` keyword
             if (node.kind === ts.SyntaxKind.UnknownKeyword) {
+                // Skip catch clause variable types: catch (err: unknown) is allowed
+                if (isInCatchClause(node)) {
+                    ts.forEachChild(node, visit);
+                    return;
+                }
+
                 const startPos = node.getStart(sourceFile);
                 if (startPos >= 0) {
                     const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
@@ -376,14 +395,6 @@ function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: str
 }
 
 /**
- * ALL mode: Flag violations in all TypeScript files.
- */
-function findViolationsForAll(workspaceRoot: string): AnyUnknownViolation[] {
-    const allFiles = getAllTypeScriptFiles(workspaceRoot);
-    return findViolationsForModifiedFiles(workspaceRoot, allFiles);
-}
-
-/**
  * Auto-detect the base branch by finding the merge-base with origin/main.
  */
 function detectBase(workspaceRoot: string): string | null {
@@ -462,44 +473,38 @@ export default async function runExecutor(
     console.log('\n📏 Validating No Any/Unknown\n');
     console.log(`   Mode: ${mode}`);
 
-    let violations: AnyUnknownViolation[] = [];
+    let base = process.env['NX_BASE'];
+    const head = process.env['NX_HEAD'];
 
-    if (mode === 'ALL') {
-        console.log('   Scope: All tracked TypeScript files');
-        console.log('');
-        violations = findViolationsForAll(workspaceRoot);
-    } else {
-        let base = process.env['NX_BASE'];
-        const head = process.env['NX_HEAD'];
+    if (!base) {
+        base = detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
-            base = detectBase(workspaceRoot) ?? undefined;
-
-            if (!base) {
-                console.log('\n⏭️  Skipping no-any-unknown validation (could not detect base branch)');
-                console.log('');
-                return { success: true };
-            }
-        }
-
-        console.log(`   Base: ${base}`);
-        console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-        console.log('');
-
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
-
-        if (changedFiles.length === 0) {
-            console.log('✅ No TypeScript files changed');
+            console.log('\n⏭️  Skipping no-any-unknown validation (could not detect base branch)');
+            console.log('');
             return { success: true };
         }
+    }
 
-        console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+    console.log(`   Base: ${base}`);
+    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
+    console.log('');
 
-        if (mode === 'MODIFIED_CODE') {
-            violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head);
-        } else if (mode === 'MODIFIED_FILES') {
-            violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
-        }
+    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+
+    if (changedFiles.length === 0) {
+        console.log('✅ No TypeScript files changed');
+        return { success: true };
+    }
+
+    console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+
+    let violations: AnyUnknownViolation[] = [];
+
+    if (mode === 'MODIFIED_CODE') {
+        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head);
+    } else if (mode === 'MODIFIED_FILES') {
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
     }
 
     if (violations.length === 0) {

@@ -13,7 +13,6 @@
  * - NEW_METHODS: Only validate new methods (detected via git diff)
  * - MODIFIED_AND_NEW_METHODS: Validate new methods + methods with changes in their line range
  * - MODIFIED_FILES: Validate all methods in modified files
- * - ALL: Validate all methods in all TypeScript files
  *
  * Escape hatch: Add webpieces-disable require-return-type comment with justification
  */
@@ -24,7 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHODS' | 'MODIFIED_FILES' | 'ALL';
+export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHODS' | 'MODIFIED_FILES';
 
 export interface ValidateReturnTypesOptions {
     mode?: ReturnTypeMode;
@@ -74,24 +73,6 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
         }
 
         return changedFiles;
-    } catch {
-        return [];
-    }
-}
-
-/**
- * Get all TypeScript files in the workspace using git ls-files (excluding tests).
- */
-function getAllTypeScriptFiles(workspaceRoot: string): string[] {
-    try {
-        const output = execSync(`git ls-files '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        return output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
     } catch {
         return [];
     }
@@ -397,14 +378,6 @@ function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: str
 }
 
 /**
- * Find all methods without explicit return types in all files (ALL mode).
- */
-function findViolationsForAll(workspaceRoot: string): MethodViolation[] {
-    const allFiles = getAllTypeScriptFiles(workspaceRoot);
-    return findViolationsForModifiedFiles(workspaceRoot, allFiles);
-}
-
-/**
  * Auto-detect the base branch by finding the merge-base with origin/main.
  */
 function detectBase(workspaceRoot: string): string | null {
@@ -481,46 +454,40 @@ export default async function runExecutor(
     console.log('\n📏 Validating Return Types\n');
     console.log(`   Mode: ${mode}`);
 
-    let violations: MethodViolation[] = [];
+    let base = process.env['NX_BASE'];
+    const head = process.env['NX_HEAD'];
 
-    if (mode === 'ALL') {
-        console.log('   Scope: All tracked TypeScript files');
-        console.log('');
-        violations = findViolationsForAll(workspaceRoot);
-    } else {
-        let base = process.env['NX_BASE'];
-        const head = process.env['NX_HEAD'];
+    if (!base) {
+        base = detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
-            base = detectBase(workspaceRoot) ?? undefined;
-
-            if (!base) {
-                console.log('\n⏭️  Skipping return type validation (could not detect base branch)');
-                console.log('');
-                return { success: true };
-            }
-        }
-
-        console.log(`   Base: ${base}`);
-        console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-        console.log('');
-
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
-
-        if (changedFiles.length === 0) {
-            console.log('✅ No TypeScript files changed');
+            console.log('\n⏭️  Skipping return type validation (could not detect base branch)');
+            console.log('');
             return { success: true };
         }
+    }
 
-        console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+    console.log(`   Base: ${base}`);
+    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
+    console.log('');
 
-        if (mode === 'NEW_METHODS') {
-            violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head);
-        } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
-            violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head);
-        } else if (mode === 'MODIFIED_FILES') {
-            violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
-        }
+    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+
+    if (changedFiles.length === 0) {
+        console.log('✅ No TypeScript files changed');
+        return { success: true };
+    }
+
+    console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+
+    let violations: MethodViolation[] = [];
+
+    if (mode === 'NEW_METHODS') {
+        violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head);
+    } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
+        violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head);
+    } else if (mode === 'MODIFIED_FILES') {
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
     }
 
     if (violations.length === 0) {

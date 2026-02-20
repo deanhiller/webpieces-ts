@@ -6,8 +6,8 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES", "ALL"],
-            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. ALL: everywhere. Disallows `any` and `unknown` TypeScript keywords.",
+            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows `any` and `unknown` TypeScript keywords.",
             "default": "OFF"
         }
     },

@@ -4,20 +4,21 @@
     "description": "Validates that newly added methods don't exceed a maximum line count. Only runs in affected mode (when NX_BASE is set).",
     "type": "object",
     "properties": {
-        "max": {
+        "limit": {
             "type": "number",
-            "description": "Soft limit: Maximum lines for new methods (can be bypassed with disable comment)",
-            "default": 30
-        },
-        "strictMax": {
-            "type": "number",
-            "description": "Hard limit: Absolute maximum lines for new methods (CANNOT be bypassed with disable comment). If not set, no hard limit is enforced."
+            "description": "Maximum lines allowed for new methods",
+            "default": 80
         },
         "mode": {
             "type": "string",
-            "enum": ["STRICT", "NORMAL", "OFF"],
-            "description": "OFF: skip validation. NORMAL/STRICT: validate (disable comments work for soft limit only).",
-            "default": "NORMAL"
+            "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. NEW_AND_MODIFIED_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
+            "default": "NEW_AND_MODIFIED_METHODS"
+        },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether disable comments work. When false, no escape hatch.",
+            "default": true
         }
     },
     "required": []

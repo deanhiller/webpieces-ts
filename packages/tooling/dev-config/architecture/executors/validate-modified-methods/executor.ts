@@ -5,10 +5,10 @@
  * This encourages gradual cleanup of legacy long methods - when you touch a method,
  * you must bring it under the limit.
  *
- * Combined with validate-new-methods (30 line limit), this creates a gradual
+ * Combined with validate-new-methods, this creates a gradual
  * transition to cleaner code:
- * - New methods: strict 30 line limit
- * - Modified methods: lenient 80 line limit (cleanup when touched)
+ * - New methods: must be under limit
+ * - Modified methods: must be under limit (cleanup when touched)
  * - Untouched methods: no limit (legacy allowed)
  *
  * Usage:
@@ -25,11 +25,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
+export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
 export interface ValidateModifiedMethodsOptions {
-    max?: number;
-    mode?: ValidationMode;
+    limit?: number;
+    mode?: MethodMaxLimitMode;
+    disableAllowed?: boolean;
 }
 
 export interface ExecutorResult {
@@ -52,10 +53,8 @@ const METHODSIZE_DOC_CONTENT = `# Instructions: Method Too Long
 
 ## Requirement
 
-**~50% of the time**, you can stay under the \`newMethodsMaxLines\` limit from nx.json
+**~99% of the time**, you can stay under the \`limit\` from nx.json
 by extracting logical units into well-named methods.
-
-**~99% of the time**, you can stay under the \`modifiedAndNewMethodsMaxLines\` limit from nx.json.
 Nearly all software can be written with methods under this size.
 Take the extra time to refactor - it's worth it for long-term maintainability.
 
@@ -78,8 +77,8 @@ Methods under reasonable limits are:
 ## Gradual Cleanup Strategy
 
 This codebase uses a gradual cleanup approach:
-- **New methods**: Must be under \`newMethodsMaxLines\` from nx.json
-- **Modified methods**: Must be under \`modifiedAndNewMethodsMaxLines\` from nx.json
+- **New methods**: Must be under \`limit\` from nx.json
+- **Modified methods**: Must be under \`limit\` from nx.json
 - **Untouched methods**: No limit (legacy code is allowed until touched)
 
 ## How to Refactor
@@ -557,11 +556,11 @@ function methodHasChanges(method: MethodInfo, changedLineNumbers: Set<number>): 
 /**
  * Check a NEW method and return violation if applicable
  */
-function checkNewMethodViolation(file: string, method: MethodInfo, mode: ValidationMode): MethodViolation | null {
+function checkNewMethodViolation(file: string, method: MethodInfo, disableAllowed: boolean): MethodViolation | null {
     const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
 
-    if (mode === 'STRICT') {
-        // When mode is STRICT, skip NEW methods without escape (let validate-new-methods handle)
+    if (!disableAllowed) {
+        // When disableAllowed is false, skip NEW methods without escape (let validate-new-methods handle)
         if (disableType === 'none') return null;
         return { file, methodName: method.name, line: method.line, lines: method.lines };
     }
@@ -580,11 +579,15 @@ function checkNewMethodViolation(file: string, method: MethodInfo, mode: Validat
 /**
  * Check a MODIFIED method and return violation if applicable
  */
-function checkModifiedMethodViolation(file: string, method: MethodInfo, mode: ValidationMode): MethodViolation {
+function checkModifiedMethodViolation(file: string, method: MethodInfo, disableAllowed: boolean): MethodViolation | null {
     const { type: disableType, isExpired, date: disableDate } = method.disableInfo;
 
-    if (mode === 'STRICT') {
+    if (!disableAllowed) {
         return { file, methodName: method.name, line: method.line, lines: method.lines };
+    }
+    if (disableType === 'full' && !isExpired) {
+        // Valid escape, no violation
+        return null;
     }
     if (disableType === 'full' && isExpired) {
         return { file, methodName: method.name, line: method.line, lines: method.lines, expiredDisable: true, expiredDate: disableDate };
@@ -593,15 +596,15 @@ function checkModifiedMethodViolation(file: string, method: MethodInfo, mode: Va
 }
 
 /**
- * Find methods that exceed the 80-line limit.
+ * Find methods that exceed the limit.
  * Checks NEW methods with escape hatches and MODIFIED methods.
  */
 function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    maxLines: number,
-    mode: ValidationMode,
+    limit: number,
+    disableAllowed: boolean,
     head?: string
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
@@ -619,17 +622,18 @@ function findViolations(
         for (const method of methods) {
             const { type: disableType, isExpired } = method.disableInfo;
 
-            // Skip methods with valid, non-expired full escape - unless mode is STRICT
-            if (mode !== 'STRICT' && disableType === 'full' && !isExpired) continue;
-            if (method.lines <= maxLines) continue;
+            // Skip methods with valid, non-expired full escape - unless disableAllowed is false
+            if (disableAllowed && disableType === 'full' && !isExpired) continue;
+            if (method.lines <= limit) continue;
 
             const isNewMethod = newMethodNames.has(method.name);
 
             if (isNewMethod) {
-                const violation = checkNewMethodViolation(file, method, mode);
+                const violation = checkNewMethodViolation(file, method, disableAllowed);
                 if (violation) violations.push(violation);
             } else if (methodHasChanges(method, changedLineNumbers)) {
-                violations.push(checkModifiedMethodViolation(file, method, mode));
+                const violation = checkModifiedMethodViolation(file, method, disableAllowed);
+                if (violation) violations.push(violation);
             }
         }
     }
@@ -673,44 +677,44 @@ function detectBase(workspaceRoot: string): string | null {
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
-function reportViolations(violations: MethodViolation[], maxLines: number, mode: ValidationMode): void {
+function reportViolations(violations: MethodViolation[], limit: number, disableAllowed: boolean): void {
     console.error('');
-    console.error('❌ Modified methods exceed ' + maxLines + ' lines!');
+    console.error('\u274c Modified methods exceed ' + limit + ' lines!');
     console.error('');
-    console.error('📚 When you modify a method, you must bring it under ' + maxLines + ' lines.');
+    console.error('\ud83d\udcda When you modify a method, you must bring it under ' + limit + ' lines.');
     console.error('   This rule encourages GRADUAL cleanup so even though you did not cause it,');
     console.error('   you touched it, so you should fix now as part of your PR');
     console.error('   (this is for vibe coding and AI to fix as it touches things).');
     console.error('   You can refactor to stay under the limit 50% of the time. If not feasible, use the escape hatch.');
     console.error('');
     console.error(
-        '⚠️  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** ⚠️'
+        '\u26a0\ufe0f  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f'
     );
     console.error('');
 
     for (const v of violations) {
         if (v.expiredDisable) {
-            console.error(`  ❌ ${v.file}:${v.line}`);
-            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
-            console.error(`     ⏰ EXPIRED DISABLE: Your disable comment dated ${v.expiredDate ?? 'unknown'} has expired (>1 month old).`);
+            console.error(`  \u274c ${v.file}:${v.line}`);
+            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${limit})`);
+            console.error(`     \u23f0 EXPIRED DISABLE: Your disable comment dated ${v.expiredDate ?? 'unknown'} has expired (>1 month old).`);
             console.error(`        You must either FIX the method or UPDATE the date to get another month.`);
         } else {
-            console.error(`  ❌ ${v.file}:${v.line}`);
-            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${maxLines})`);
+            console.error(`  \u274c ${v.file}:${v.line}`);
+            console.error(`     Method: ${v.methodName} (${v.lines} lines, max: ${limit})`);
         }
     }
     console.error('');
 
-    // Only show escape hatch instructions when mode is not STRICT
-    if (mode !== 'STRICT') {
+    // Only show escape hatch instructions when disableAllowed is true
+    if (disableAllowed) {
         console.error('   You can disable this error, but you will be forced to fix again in 1 month');
-        console.error('   since 99% of methods can be less than ' + maxLines + ' lines of code.');
+        console.error('   since 99% of methods can be less than ' + limit + ' lines of code.');
         console.error('');
         console.error('   Use escape with DATE (expires in 1 month):');
         console.error(`   // webpieces-disable max-lines-modified ${getTodayDateString()} -- [your reason]`);
         console.error('');
     } else {
-        console.error('   ⚠️  validationMode is STRICT - disable comments are NOT allowed.');
+        console.error('   \u26a0\ufe0f  disableAllowed is false - disable comments are NOT allowed.');
         console.error('   You MUST refactor to reduce method size.');
         console.error('');
     }
@@ -721,12 +725,13 @@ export default async function runExecutor(
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const maxLines = options.max ?? 80;
-    const mode: ValidationMode = options.mode ?? 'NORMAL';
+    const limit = options.limit ?? 80;
+    const mode: MethodMaxLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
+    const disableAllowed = options.disableAllowed ?? true;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
-        console.log('\n⏭️  Skipping modified method validation (validationMode: OFF)');
+        console.log('\n\u23ed\ufe0f  Skipping modified method validation (mode: OFF)');
         console.log('');
         return { success: true };
     }
@@ -739,46 +744,47 @@ export default async function runExecutor(
         base = detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
-            console.log('\n⏭️  Skipping modified method validation (could not detect base branch)');
+            console.log('\n\u23ed\ufe0f  Skipping modified method validation (could not detect base branch)');
             console.log('   To run explicitly: nx affected --target=validate-modified-methods --base=origin/main');
             console.log('');
             return { success: true };
         }
 
-        console.log('\n📏 Validating Modified Method Sizes (auto-detected base)\n');
+        console.log('\n\ud83d\udccf Validating Modified Method Sizes (auto-detected base)\n');
     } else {
-        console.log('\n📏 Validating Modified Method Sizes\n');
+        console.log('\n\ud83d\udccf Validating Modified Method Sizes\n');
     }
 
     console.log(`   Base: ${base}`);
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-    console.log(`   Max lines for modified methods: ${maxLines}`);
-    console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored)' : ''}`);
+    console.log(`   Mode: ${mode}`);
+    console.log(`   Limit for modified methods: ${limit}`);
+    console.log(`   Disable allowed: ${disableAllowed}${!disableAllowed ? ' (no escape hatch)' : ''}`);
     console.log('');
 
     try {
         const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
-            console.log('✅ No TypeScript files changed');
+            console.log('\u2705 No TypeScript files changed');
             return { success: true };
         }
 
-        console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+        console.log(`\ud83d\udcc2 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, base, maxLines, mode, head);
+        const violations = findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, head);
 
         if (violations.length === 0) {
-            console.log('✅ All modified methods are under ' + maxLines + ' lines');
+            console.log('\u2705 All modified methods are under ' + limit + ' lines');
             return { success: true };
         }
 
         writeTmpInstructions(workspaceRoot);
-        reportViolations(violations, maxLines, mode);
+        reportViolations(violations, limit, disableAllowed);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
-        console.error('❌ Modified method validation failed:', error.message);
+        console.error('\u274c Modified method validation failed:', error.message);
         return { success: false };
     }
 }

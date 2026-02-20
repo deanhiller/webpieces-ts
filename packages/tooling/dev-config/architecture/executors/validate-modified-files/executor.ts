@@ -18,11 +18,12 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export type ValidationMode = 'STRICT' | 'NORMAL' | 'OFF';
+export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
 
 export interface ValidateModifiedFilesOptions {
-    max?: number;
-    mode?: ValidationMode;
+    limit?: number;
+    mode?: FileMaxLimitMode;
+    disableAllowed?: boolean;
 }
 
 export interface ExecutorResult {
@@ -354,7 +355,7 @@ function checkDisableComment(content: string): DisableStatus {
  * Count lines in a file and check for violations
  */
 // webpieces-disable max-lines-new-methods -- File iteration with disable checking logic
-function findViolations(workspaceRoot: string, changedFiles: string[], maxLines: number, mode: ValidationMode): FileViolation[] {
+function findViolations(workspaceRoot: string, changedFiles: string[], limit: number, disableAllowed: boolean): FileViolation[] {
     const violations: FileViolation[] = [];
 
     for (const file of changedFiles) {
@@ -366,10 +367,10 @@ function findViolations(workspaceRoot: string, changedFiles: string[], maxLines:
         const lineCount = content.split('\n').length;
 
         // Skip files under the limit
-        if (lineCount <= maxLines) continue;
+        if (lineCount <= limit) continue;
 
-        // When mode is STRICT, ignore all disable comments
-        if (mode === 'STRICT') {
+        // When disableAllowed is false, ignore all disable comments
+        if (!disableAllowed) {
             violations.push({ file, lines: lineCount });
             continue;
         }
@@ -453,41 +454,41 @@ function getTodayDateString(): string {
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
-function reportViolations(violations: FileViolation[], maxLines: number, mode: ValidationMode): void {
+function reportViolations(violations: FileViolation[], limit: number, disableAllowed: boolean): void {
     console.error('');
-    console.error('❌ YOU MUST FIX THIS AND NOT be more than ' + maxLines + ' lines of code per file');
+    console.error('\u274c YOU MUST FIX THIS AND NOT be more than ' + limit + ' lines of code per file');
     console.error('   as it slows down IDEs AND is VERY VERY EASY to refactor.');
     console.error('');
-    console.error('📚 With stateless systems + dependency injection, refactor is trivial:');
+    console.error('\ud83d\udcda With stateless systems + dependency injection, refactor is trivial:');
     console.error('   Pick a method or a few and move to new class XXXXX, then inject XXXXX');
     console.error('   into all users of those methods via the constructor.');
     console.error('   Delete those methods from original class.');
-    console.error('   99% of files can be less than ' + maxLines + ' lines of code.');
+    console.error('   99% of files can be less than ' + limit + ' lines of code.');
     console.error('');
-    console.error('⚠️  *** READ tmp/webpieces/webpieces.filesize.md for detailed guidance on how to fix this easily *** ⚠️');
+    console.error('\u26a0\ufe0f  *** READ tmp/webpieces/webpieces.filesize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
     console.error('');
 
     for (const v of violations) {
         if (v.expiredDisable) {
-            console.error(`  ❌ ${v.file} (${v.lines} lines, max: ${maxLines})`);
-            console.error(`     ⏰ EXPIRED DISABLE: Your disable comment dated ${v.expiredDate} has expired (>1 month old).`);
+            console.error(`  \u274c ${v.file} (${v.lines} lines, max: ${limit})`);
+            console.error(`     \u23f0 EXPIRED DISABLE: Your disable comment dated ${v.expiredDate} has expired (>1 month old).`);
             console.error(`        You must either FIX the file or UPDATE the date to get another month.`);
         } else {
-            console.error(`  ❌ ${v.file} (${v.lines} lines, max: ${maxLines})`);
+            console.error(`  \u274c ${v.file} (${v.lines} lines, max: ${limit})`);
         }
     }
     console.error('');
 
-    // Only show escape hatch instructions when mode is not STRICT
-    if (mode !== 'STRICT') {
+    // Only show escape hatch instructions when disableAllowed is true
+    if (disableAllowed) {
         console.error('   You can disable this error, but you will be forced to fix again in 1 month');
-        console.error('   since 99% of files can be less than ' + maxLines + ' lines of code.');
+        console.error('   since 99% of files can be less than ' + limit + ' lines of code.');
         console.error('');
         console.error('   Use escape with DATE (expires in 1 month):');
         console.error(`   // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`);
         console.error('');
     } else {
-        console.error('   ⚠️  validationMode is STRICT - disable comments are NOT allowed.');
+        console.error('   \u26a0\ufe0f  disableAllowed is false - disable comments are NOT allowed.');
         console.error('   You MUST refactor to reduce file size.');
         console.error('');
     }
@@ -498,12 +499,13 @@ export default async function runExecutor(
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const maxLines = options.max ?? 900;
-    const mode: ValidationMode = options.mode ?? 'NORMAL';
+    const limit = options.limit ?? 900;
+    const mode: FileMaxLimitMode = options.mode ?? 'MODIFIED_FILES';
+    const disableAllowed = options.disableAllowed ?? true;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
-        console.log('\n⏭️  Skipping modified files validation (validationMode: OFF)');
+        console.log('\n\u23ed\ufe0f  Skipping modified files validation (mode: OFF)');
         console.log('');
         return { success: true };
     }
@@ -516,46 +518,47 @@ export default async function runExecutor(
         base = detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
-            console.log('\n⏭️  Skipping modified files validation (could not detect base branch)');
+            console.log('\n\u23ed\ufe0f  Skipping modified files validation (could not detect base branch)');
             console.log('   To run explicitly: nx affected --target=validate-modified-files --base=origin/main');
             console.log('');
             return { success: true };
         }
 
-        console.log('\n📏 Validating Modified File Sizes (auto-detected base)\n');
+        console.log('\n\ud83d\udccf Validating Modified File Sizes (auto-detected base)\n');
     } else {
-        console.log('\n📏 Validating Modified File Sizes\n');
+        console.log('\n\ud83d\udccf Validating Modified File Sizes\n');
     }
 
     console.log(`   Base: ${base}`);
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-    console.log(`   Max lines for modified files: ${maxLines}`);
-    console.log(`   Validation mode: ${mode}${mode === 'STRICT' ? ' (disable comments ignored)' : ''}`);
+    console.log(`   Mode: ${mode}`);
+    console.log(`   Max lines for modified files: ${limit}`);
+    console.log(`   Disable allowed: ${disableAllowed}${!disableAllowed ? ' (no escape hatch)' : ''}`);
     console.log('');
 
     try {
         const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
-            console.log('✅ No TypeScript files changed');
+            console.log('\u2705 No TypeScript files changed');
             return { success: true };
         }
 
-        console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+        console.log(`\ud83d\udcc2 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, maxLines, mode);
+        const violations = findViolations(workspaceRoot, changedFiles, limit, disableAllowed);
 
         if (violations.length === 0) {
-            console.log('✅ All modified files are under ' + maxLines + ' lines');
+            console.log('\u2705 All modified files are under ' + limit + ' lines');
             return { success: true };
         }
 
         writeTmpInstructions(workspaceRoot);
-        reportViolations(violations, maxLines, mode);
+        reportViolations(violations, limit, disableAllowed);
         return { success: false };
     } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
-        console.error('❌ Modified files validation failed:', error.message);
+        console.error('\u274c Modified files validation failed:', error.message);
         return { success: false };
     }
 }
