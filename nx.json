@@ -49,10 +49,16 @@
         },
         "validate-code": {
             "options": {
-                "mode": "STRICT",
-                "newMethodsMaxLines": 30,
-                "modifiedMethodsMaxLines": 80,
-                "modifiedFilesMaxLines": 900,
+                "methodMaxLimit": {
+                    "limit": 80,
+                    "mode": "NEW_AND_MODIFIED_METHODS",
+                    "disableAllowed": false
+                },
+                "fileMaxLimit": {
+                    "limit": 900,
+                    "mode": "MODIFIED_FILES",
+                    "disableAllowed": false
+                },
                 "requireReturnTypeMode": "MODIFIED_FILES",
                 "noInlineTypeLiteralsMode": "MODIFIED_FILES",
                 "noAnyUnknownMode": "MODIFIED_CODE"

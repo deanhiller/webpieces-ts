@@ -4,16 +4,21 @@
     "description": "Validates that modified files don't exceed a maximum line count. Encourages keeping files small and focused.",
     "type": "object",
     "properties": {
-        "max": {
+        "limit": {
             "type": "number",
             "description": "Maximum number of lines allowed for modified files",
             "default": 900
         },
         "mode": {
             "type": "string",
-            "enum": ["STRICT", "NORMAL", "OFF"],
-            "description": "STRICT: limits enforced, no disable comments. NORMAL: disable comments work. OFF: skip validation.",
-            "default": "NORMAL"
+            "enum": ["OFF", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_FILES: validate all code in modified files.",
+            "default": "MODIFIED_FILES"
+        },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether disable comments work. When false, no escape hatch (like old STRICT mode).",
+            "default": true
         }
     },
     "required": []

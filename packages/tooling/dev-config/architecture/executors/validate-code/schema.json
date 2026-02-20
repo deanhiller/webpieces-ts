@@ -4,47 +4,66 @@
     "description": "Combined validation for new methods, modified methods, and file sizes. Configure via targetDefaults in nx.json for runtime options (no cache issues).",
     "type": "object",
     "properties": {
-        "mode": {
-            "type": "string",
-            "enum": ["STRICT", "NORMAL", "OFF"],
-            "description": "OFF: skip all validations. NORMAL: enforce limits, disable comments work. STRICT: enforce limits, no disable comments for modified code.",
-            "default": "NORMAL"
+        "methodMaxLimit": {
+            "type": "object",
+            "description": "Configuration for method line limit validation",
+            "properties": {
+                "limit": {
+                    "type": "number",
+                    "description": "Maximum lines allowed for methods",
+                    "default": 80
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
+                    "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. NEW_AND_MODIFIED_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
+                    "default": "NEW_AND_MODIFIED_METHODS"
+                },
+                "disableAllowed": {
+                    "type": "boolean",
+                    "description": "Whether disable comments work. When false, no escape hatch (like old STRICT mode).",
+                    "default": true
+                }
+            }
         },
-        "newMethodsMaxLines": {
-            "type": "number",
-            "description": "Soft limit: Maximum lines for NEW methods (can be bypassed with disable comment)",
-            "default": 30
-        },
-        "strictNewMethodMaxLines": {
-            "type": "number",
-            "description": "Hard limit: Absolute maximum lines for NEW methods (CANNOT be bypassed). If not set, no hard limit is enforced."
-        },
-        "modifiedMethodsMaxLines": {
-            "type": "number",
-            "description": "Maximum lines for MODIFIED methods",
-            "default": 80
-        },
-        "modifiedFilesMaxLines": {
-            "type": "number",
-            "description": "Maximum lines for MODIFIED files",
-            "default": 900
+        "fileMaxLimit": {
+            "type": "object",
+            "description": "Configuration for file line limit validation",
+            "properties": {
+                "limit": {
+                    "type": "number",
+                    "description": "Maximum lines for modified files",
+                    "default": 900
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["OFF", "MODIFIED_FILES"],
+                    "description": "OFF: skip validation. MODIFIED_FILES: all code in modified files.",
+                    "default": "MODIFIED_FILES"
+                },
+                "disableAllowed": {
+                    "type": "boolean",
+                    "description": "Whether disable comments work. When false, no escape hatch (like old STRICT mode).",
+                    "default": true
+                }
+            }
         },
         "requireReturnTypeMode": {
             "type": "string",
-            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
-            "description": "OFF: skip return type validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files. ALL: all methods everywhere.",
+            "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
+            "description": "OFF: skip return type validation. NEW_METHODS: only new methods in diff. NEW_AND_MODIFIED_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
             "default": "OFF"
         },
         "noInlineTypeLiteralsMode": {
             "type": "string",
-            "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES", "ALL"],
-            "description": "OFF: skip validation. NEW_METHODS: only new methods. MODIFIED_AND_NEW_METHODS: new + modified methods. MODIFIED_FILES: all in modified files. ALL: everywhere. Disallows inline type literals like { x: number } - use named types instead.",
+            "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_METHODS: only new methods. NEW_AND_MODIFIED_METHODS: new + modified methods. MODIFIED_FILES: all in modified files. Disallows inline type literals like { x: number } - use named types instead.",
             "default": "OFF"
         },
         "noAnyUnknownMode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES", "ALL"],
-            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. ALL: everywhere. Disallows `any` and `unknown` TypeScript keywords.",
+            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows `any` and `unknown` TypeScript keywords.",
             "default": "OFF"
         }
     },

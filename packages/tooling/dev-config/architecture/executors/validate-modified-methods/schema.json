@@ -4,16 +4,21 @@
     "description": "Validates that modified methods don't exceed a maximum line count. Encourages gradual cleanup of legacy long methods.",
     "type": "object",
     "properties": {
-        "max": {
+        "limit": {
             "type": "number",
-            "description": "Maximum number of lines allowed for modified methods",
+            "description": "Maximum lines allowed for modified methods",
             "default": 80
         },
         "mode": {
             "type": "string",
-            "enum": ["STRICT", "NORMAL", "OFF"],
-            "description": "STRICT: limits enforced, no disable comments. NORMAL: disable comments work. OFF: skip validation.",
-            "default": "NORMAL"
+            "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_AND_MODIFIED_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
+            "default": "NEW_AND_MODIFIED_METHODS"
+        },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether disable comments work. When false, no escape hatch (like old STRICT mode).",
+            "default": true
         }
     },
     "required": []
