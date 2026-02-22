@@ -489,7 +489,14 @@ function reportViolations(violations: FileViolation[], limit: number, disableAll
         console.error('');
     } else {
         console.error('   \u26a0\ufe0f  disableAllowed is false - disable comments are NOT allowed.');
+        console.error('   This rule must be met and cannot be disabled since nx.json disableAllowed is set to false.');
         console.error('   You MUST refactor to reduce file size.');
+        console.error('');
+        console.error('   For a major refactor, a human can add "ignoreModifiedUntilEpoch" to nx.json validate-code options.');
+        console.error('   This is an expiry timestamp (epoch ms) for when we start forcing everyone to meet size rules again.');
+        console.error('   Sometimes for speed, we allow files to expand during a refactor and over time,');
+        console.error('   each PR reduces files as they get touched.');
+        console.error('   AI agents should NOT add ignoreModifiedUntilEpoch - ask a human to do it.');
         console.error('');
     }
 }
