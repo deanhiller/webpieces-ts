@@ -73,6 +73,27 @@
             "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
             "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows `any` and `unknown` TypeScript keywords.",
             "default": "OFF"
+        },
+        "validateDtos": {
+            "type": "object",
+            "description": "Validate DTO fields match Prisma Dbo model fields. Prevents AI from inventing field names.",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["OFF", "MODIFIED_FILES"],
+                    "description": "OFF: skip validation. MODIFIED_FILES: validate Dto files that were modified in the diff.",
+                    "default": "OFF"
+                },
+                "prismaSchemaPath": {
+                    "type": "string",
+                    "description": "Relative path from workspace root to schema.prisma"
+                },
+                "dtoSourcePaths": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Array of directories (relative to workspace root) containing Dto files"
+                }
+            }
         }
     },
     "required": []

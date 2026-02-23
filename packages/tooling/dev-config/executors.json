@@ -79,6 +79,11 @@
             "implementation": "./architecture/executors/validate-no-any-unknown/executor",
             "schema": "./architecture/executors/validate-no-any-unknown/schema.json",
             "description": "Validate no any/unknown keywords are used - use specific types instead"
+        },
+        "validate-dtos": {
+            "implementation": "./architecture/executors/validate-dtos/executor",
+            "schema": "./architecture/executors/validate-dtos/schema.json",
+            "description": "Validate DTO fields match Prisma Dbo model fields"
         }
     }
 }
