@@ -9,7 +9,8 @@
  * MODES
  * ============================================================================
  * - OFF:            Skip validation entirely
- * - MODIFIED_FILES: Validate Dto files that were modified in the diff
+ * - MODIFIED_CLASS: Only validate Dto classes that have changed lines in the diff
+ * - MODIFIED_FILES: Validate ALL Dto classes in files that were modified
  *
  * ============================================================================
  * SKIP CONDITIONS
@@ -22,6 +23,7 @@
  * MATCHING
  * ============================================================================
  * - UserDto matches UserDbo by case-insensitive prefix ("user")
+ * - Dbo field names are converted from snake_case to camelCase for comparison
  * - Dto fields must be a subset of Dbo fields
  * - Extra Dbo fields are allowed (e.g., password)
  */
@@ -32,7 +34,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type ValidateDtosMode = 'OFF' | 'MODIFIED_FILES';
+export type ValidateDtosMode = 'OFF' | 'MODIFIED_CLASS' | 'MODIFIED_FILES';
 
 export interface ValidateDtosOptions {
     mode?: ValidateDtosMode;
@@ -53,6 +55,8 @@ interface DtoFieldInfo {
 interface DtoInfo {
     name: string;
     file: string;
+    startLine: number;
+    endLine: number;
     fields: DtoFieldInfo[];
 }
 
@@ -142,8 +146,78 @@ function getChangedFiles(workspaceRoot: string, base: string, head?: string): st
 }
 
 /**
- * Parse schema.prisma to build a map of Dbo model name -> set of field names.
+ * Get the diff content for a specific file.
+ */
+function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
+    try {
+        const diffTarget = head ? `${base} ${head}` : base;
+        const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
+            cwd: workspaceRoot,
+            encoding: 'utf-8',
+        });
+
+        if (!diff && !head) {
+            const fullPath = path.join(workspaceRoot, file);
+            if (fs.existsSync(fullPath)) {
+                const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
+                    cwd: workspaceRoot,
+                    encoding: 'utf-8',
+                }).trim();
+
+                if (isUntracked) {
+                    const content = fs.readFileSync(fullPath, 'utf-8');
+                    const lines = content.split('\n');
+                    return lines.map((line) => `+${line}`).join('\n');
+                }
+            }
+        }
+
+        return diff;
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Parse diff to extract changed line numbers (additions only - lines starting with +).
+ */
+function getChangedLineNumbers(diffContent: string): Set<number> {
+    const changedLines = new Set<number>();
+    const lines = diffContent.split('\n');
+    let currentLine = 0;
+
+    for (const line of lines) {
+        const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (hunkMatch) {
+            currentLine = parseInt(hunkMatch[1], 10);
+            continue;
+        }
+
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+            changedLines.add(currentLine);
+            currentLine++;
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+            // Deletions don't increment line number
+        } else {
+            currentLine++;
+        }
+    }
+
+    return changedLines;
+}
+
+/**
+ * Convert a snake_case string to camelCase.
+ * e.g., "version_number" -> "versionNumber", "id" -> "id"
+ */
+function snakeToCamel(s: string): string {
+    return s.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+/**
+ * Parse schema.prisma to build a map of Dbo model name -> set of field names (camelCase).
  * Only models whose name ends with "Dbo" are included.
+ * Field names are converted from snake_case to camelCase since Dto fields use camelCase.
  */
 function parsePrismaSchema(schemaPath: string): Map<string, Set<string>> {
     const models = new Map<string, Set<string>>();
@@ -184,10 +258,10 @@ function parsePrismaSchema(schemaPath: string): Map<string, Set<string>> {
                 continue;
             }
 
-            // Field name is the first word on the line
+            // Field name is the first word on the line, converted to camelCase
             const fieldMatch = trimmed.match(/^(\w+)\s/);
             if (fieldMatch) {
-                currentFields.add(fieldMatch[1]);
+                currentFields.add(snakeToCamel(fieldMatch[1]));
             }
         }
     }
@@ -232,6 +306,8 @@ function findDtosInFile(filePath: string, workspaceRoot: string): DtoInfo[] {
             // Must end with Dto but NOT with JoinDto
             if (name.endsWith('Dto') && !name.endsWith('JoinDto')) {
                 const fields: DtoFieldInfo[] = [];
+                const nodeStart = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+                const nodeEnd = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
 
                 for (const member of node.members) {
                     if (ts.isPropertyDeclaration(member) || ts.isPropertySignature(member)) {
@@ -247,7 +323,13 @@ function findDtosInFile(filePath: string, workspaceRoot: string): DtoInfo[] {
                     }
                 }
 
-                dtos.push({ name, file: filePath, fields });
+                dtos.push({
+                    name,
+                    file: filePath,
+                    startLine: nodeStart.line + 1,
+                    endLine: nodeEnd.line + 1,
+                    fields,
+                });
             }
         }
 
@@ -329,7 +411,7 @@ function reportViolations(violations: DtoViolation[]): void {
     }
     console.error('');
 
-    console.error('   Dto fields must be a subset of Dbo fields (matching TypeScript field names from schema.prisma).');
+    console.error('   Dto fields must be a subset of Dbo fields (matching camelCase field names).');
     console.error('   Fields marked @deprecated in the Dto are exempt from this check.');
     console.error('');
     console.error('   When needing fields from multiple tables (e.g., a join), use a XxxJoinDto that');
@@ -361,6 +443,46 @@ function collectDtos(dtoFiles: string[], workspaceRoot: string): DtoInfo[] {
 }
 
 /**
+ * Check if a Dto class overlaps with any changed lines in the diff.
+ */
+function isDtoTouched(dto: DtoInfo, changedLines: Set<number>): boolean {
+    for (let line = dto.startLine; line <= dto.endLine; line++) {
+        if (changedLines.has(line)) return true;
+    }
+    return false;
+}
+
+/**
+ * Filter Dtos to only those that have changed lines in the diff (MODIFIED_CLASS mode).
+ */
+function filterTouchedDtos(
+    dtos: DtoInfo[],
+    workspaceRoot: string,
+    base: string,
+    head?: string
+): DtoInfo[] {
+    // Group dtos by file to avoid re-fetching diffs
+    const byFile = new Map<string, DtoInfo[]>();
+    for (const dto of dtos) {
+        const list = byFile.get(dto.file) ?? [];
+        list.push(dto);
+        byFile.set(dto.file, list);
+    }
+
+    const touched: DtoInfo[] = [];
+    for (const [file, fileDtos] of byFile) {
+        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const changedLines = getChangedLineNumbers(diff);
+        for (const dto of fileDtos) {
+            if (isDtoTouched(dto, changedLines)) {
+                touched.push(dto);
+            }
+        }
+    }
+    return touched;
+}
+
+/**
  * Resolve git base ref from env vars or auto-detection.
  */
 function resolveBase(workspaceRoot: string): string | undefined {
@@ -372,11 +494,15 @@ function resolveBase(workspaceRoot: string): string | undefined {
 /**
  * Run the core validation after early-exit checks have passed.
  */
+// webpieces-disable max-lines-new-methods -- Core validation orchestration with multiple early-exit checks
 function validateDtoFiles(
     workspaceRoot: string,
     prismaSchemaPath: string,
     changedFiles: string[],
-    dtoSourcePaths: string[]
+    dtoSourcePaths: string[],
+    mode: ValidateDtosMode,
+    base: string,
+    head?: string
 ): ExecutorResult {
     if (changedFiles.some((f) => f.endsWith(prismaSchemaPath))) {
         console.log('⏭️  Skipping validate-dtos (schema.prisma is modified - schema in flux)');
@@ -404,14 +530,23 @@ function validateDtoFiles(
 
     console.log(`   Found ${dboModels.size} Dbo model(s) in schema.prisma`);
 
-    const allDtos = collectDtos(dtoFiles, workspaceRoot);
+    let allDtos = collectDtos(dtoFiles, workspaceRoot);
 
     if (allDtos.length === 0) {
         console.log('✅ No Dto definitions found in changed files');
         return { success: true };
     }
 
-    console.log(`   Found ${allDtos.length} Dto definition(s) in changed files`);
+    // In MODIFIED_CLASS mode, narrow to only Dtos with changed lines
+    if (mode === 'MODIFIED_CLASS') {
+        allDtos = filterTouchedDtos(allDtos, workspaceRoot, base, head);
+        if (allDtos.length === 0) {
+            console.log('✅ No Dto classes were modified');
+            return { success: true };
+        }
+    }
+
+    console.log(`   Validating ${allDtos.length} Dto definition(s)`);
 
     const violations = findViolations(allDtos, dboModels);
 
@@ -467,5 +602,5 @@ export default async function runExecutor(
 
     const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
-    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths);
+    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
 }

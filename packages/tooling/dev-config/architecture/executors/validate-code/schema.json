@@ -80,8 +80,8 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "MODIFIED_FILES"],
-                    "description": "OFF: skip validation. MODIFIED_FILES: validate Dto files that were modified in the diff.",
+                    "enum": ["OFF", "MODIFIED_CLASS", "MODIFIED_FILES"],
+                    "description": "OFF: skip validation. MODIFIED_CLASS: only validate Dto classes with changed lines. MODIFIED_FILES: validate all Dtos in modified files.",
                     "default": "OFF"
                 },
                 "prismaSchemaPath": {
