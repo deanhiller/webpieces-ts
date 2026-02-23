@@ -337,6 +337,93 @@ function reportViolations(violations: DtoViolation[]): void {
     console.error('');
 }
 
+/**
+ * Filter changed files to only TypeScript Dto source files within configured paths.
+ */
+function filterDtoFiles(changedFiles: string[], dtoSourcePaths: string[]): string[] {
+    return changedFiles.filter((f) => {
+        if (!f.endsWith('.ts') && !f.endsWith('.tsx')) return false;
+        if (f.includes('.spec.ts') || f.includes('.test.ts')) return false;
+        return dtoSourcePaths.some((srcPath) => f.startsWith(srcPath));
+    });
+}
+
+/**
+ * Collect all Dto definitions from the given files.
+ */
+function collectDtos(dtoFiles: string[], workspaceRoot: string): DtoInfo[] {
+    const allDtos: DtoInfo[] = [];
+    for (const file of dtoFiles) {
+        const dtos = findDtosInFile(file, workspaceRoot);
+        allDtos.push(...dtos);
+    }
+    return allDtos;
+}
+
+/**
+ * Resolve git base ref from env vars or auto-detection.
+ */
+function resolveBase(workspaceRoot: string): string | undefined {
+    const envBase = process.env['NX_BASE'];
+    if (envBase) return envBase;
+    return detectBase(workspaceRoot) ?? undefined;
+}
+
+/**
+ * Run the core validation after early-exit checks have passed.
+ */
+function validateDtoFiles(
+    workspaceRoot: string,
+    prismaSchemaPath: string,
+    changedFiles: string[],
+    dtoSourcePaths: string[]
+): ExecutorResult {
+    if (changedFiles.some((f) => f.endsWith(prismaSchemaPath))) {
+        console.log('⏭️  Skipping validate-dtos (schema.prisma is modified - schema in flux)');
+        console.log('');
+        return { success: true };
+    }
+
+    const dtoFiles = filterDtoFiles(changedFiles, dtoSourcePaths);
+
+    if (dtoFiles.length === 0) {
+        console.log('✅ No Dto files changed');
+        return { success: true };
+    }
+
+    console.log(`📂 Checking ${dtoFiles.length} changed file(s) for Dto definitions...`);
+
+    const fullSchemaPath = path.join(workspaceRoot, prismaSchemaPath);
+    const dboModels = parsePrismaSchema(fullSchemaPath);
+
+    if (dboModels.size === 0) {
+        console.log('⏭️  No Dbo models found in schema.prisma');
+        console.log('');
+        return { success: true };
+    }
+
+    console.log(`   Found ${dboModels.size} Dbo model(s) in schema.prisma`);
+
+    const allDtos = collectDtos(dtoFiles, workspaceRoot);
+
+    if (allDtos.length === 0) {
+        console.log('✅ No Dto definitions found in changed files');
+        return { success: true };
+    }
+
+    console.log(`   Found ${allDtos.length} Dto definition(s) in changed files`);
+
+    const violations = findViolations(allDtos, dboModels);
+
+    if (violations.length === 0) {
+        console.log('✅ All Dto fields match their Dbo models');
+        return { success: true };
+    }
+
+    reportViolations(violations);
+    return { success: false };
+}
+
 export default async function runExecutor(
     options: ValidateDtosOptions,
     context: ExecutorContext
@@ -353,14 +440,9 @@ export default async function runExecutor(
     const prismaSchemaPath = options.prismaSchemaPath;
     const dtoSourcePaths = options.dtoSourcePaths ?? [];
 
-    if (!prismaSchemaPath) {
-        console.log('\n⏭️  Skipping validate-dtos (no prismaSchemaPath configured)');
-        console.log('');
-        return { success: true };
-    }
-
-    if (dtoSourcePaths.length === 0) {
-        console.log('\n⏭️  Skipping validate-dtos (no dtoSourcePaths configured)');
+    if (!prismaSchemaPath || dtoSourcePaths.length === 0) {
+        const reason = !prismaSchemaPath ? 'no prismaSchemaPath configured' : 'no dtoSourcePaths configured';
+        console.log(`\n⏭️  Skipping validate-dtos (${reason})`);
         console.log('');
         return { success: true };
     }
@@ -370,17 +452,13 @@ export default async function runExecutor(
     console.log(`   Schema: ${prismaSchemaPath}`);
     console.log(`   Dto paths: ${dtoSourcePaths.join(', ')}`);
 
-    let base = process.env['NX_BASE'];
+    const base = resolveBase(workspaceRoot);
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
-
-        if (!base) {
-            console.log('\n⏭️  Skipping validate-dtos (could not detect base branch)');
-            console.log('');
-            return { success: true };
-        }
+        console.log('\n⏭️  Skipping validate-dtos (could not detect base branch)');
+        console.log('');
+        return { success: true };
     }
 
     console.log(`   Base: ${base}`);
@@ -389,62 +467,5 @@ export default async function runExecutor(
 
     const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
-    // If schema.prisma itself is changed, skip validation (schema in flux)
-    if (changedFiles.some((f) => f.endsWith(prismaSchemaPath))) {
-        console.log('⏭️  Skipping validate-dtos (schema.prisma is modified - schema in flux)');
-        console.log('');
-        return { success: true };
-    }
-
-    // Filter to only TypeScript files within dtoSourcePaths
-    const dtoFiles = changedFiles.filter((f) => {
-        if (!f.endsWith('.ts') && !f.endsWith('.tsx')) return false;
-        if (f.includes('.spec.ts') || f.includes('.test.ts')) return false;
-        return dtoSourcePaths.some((srcPath) => f.startsWith(srcPath));
-    });
-
-    if (dtoFiles.length === 0) {
-        console.log('✅ No Dto files changed');
-        return { success: true };
-    }
-
-    console.log(`📂 Checking ${dtoFiles.length} changed file(s) for Dto definitions...`);
-
-    // Parse schema.prisma
-    const fullSchemaPath = path.join(workspaceRoot, prismaSchemaPath);
-    const dboModels = parsePrismaSchema(fullSchemaPath);
-
-    if (dboModels.size === 0) {
-        console.log('⏭️  No Dbo models found in schema.prisma');
-        console.log('');
-        return { success: true };
-    }
-
-    console.log(`   Found ${dboModels.size} Dbo model(s) in schema.prisma`);
-
-    // Find all Dtos in changed files
-    const allDtos: DtoInfo[] = [];
-    for (const file of dtoFiles) {
-        const dtos = findDtosInFile(file, workspaceRoot);
-        allDtos.push(...dtos);
-    }
-
-    if (allDtos.length === 0) {
-        console.log('✅ No Dto definitions found in changed files');
-        return { success: true };
-    }
-
-    console.log(`   Found ${allDtos.length} Dto definition(s) in changed files`);
-
-    // Find violations
-    const violations = findViolations(allDtos, dboModels);
-
-    if (violations.length === 0) {
-        console.log('✅ All Dto fields match their Dbo models');
-        return { success: true };
-    }
-
-    reportViolations(violations);
-
-    return { success: false };
+    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths);
 }
