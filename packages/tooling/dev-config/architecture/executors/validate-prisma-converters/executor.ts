@@ -486,6 +486,95 @@ function reportViolations(violations: PrismaConverterViolation[], mode: PrismaCo
     console.error('');
 }
 
+/**
+ * Resolve git base ref from env vars or auto-detection.
+ */
+function resolveBase(workspaceRoot: string): string | undefined {
+    const envBase = process.env['NX_BASE'];
+    if (envBase) return envBase;
+    return detectBase(workspaceRoot) ?? undefined;
+}
+
+/**
+ * Collect all violations from converter and non-converter files.
+ */
+function collectAllViolations(
+    changedFiles: string[],
+    convertersPaths: string[],
+    workspaceRoot: string,
+    prismaModels: Set<string>
+): PrismaConverterViolation[] {
+    const converterFiles = changedFiles.filter((f) =>
+        convertersPaths.some((cp) => f.startsWith(cp))
+    );
+    const nonConverterFiles = changedFiles.filter((f) =>
+        !convertersPaths.some((cp) => f.startsWith(cp))
+    );
+
+    const allViolations: PrismaConverterViolation[] = [];
+
+    if (converterFiles.length > 0) {
+        console.log(`📂 Checking ${converterFiles.length} converter file(s)...`);
+        for (const file of converterFiles) {
+            allViolations.push(...findConverterViolationsInFile(file, workspaceRoot, prismaModels));
+        }
+    }
+
+    if (nonConverterFiles.length > 0) {
+        console.log(`📂 Checking ${nonConverterFiles.length} non-converter file(s) for Dto creation...`);
+        for (const file of nonConverterFiles) {
+            allViolations.push(...findDtoCreationOutsideConverters(file, workspaceRoot, prismaModels, convertersPaths));
+        }
+    }
+
+    return allViolations;
+}
+
+/**
+ * Run validation after early-exit checks have passed.
+ */
+function validateChangedFiles(
+    workspaceRoot: string,
+    schemaPath: string,
+    convertersPaths: string[],
+    base: string,
+    mode: PrismaConverterMode
+): ExecutorResult {
+    const head = process.env['NX_HEAD'];
+
+    console.log(`   Base: ${base}`);
+    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
+    console.log('');
+
+    const fullSchemaPath = path.join(workspaceRoot, schemaPath);
+    const prismaModels = parsePrismaModels(fullSchemaPath);
+
+    if (prismaModels.size === 0) {
+        console.log('⏭️  No models found in schema.prisma');
+        console.log('');
+        return { success: true };
+    }
+
+    console.log(`   Found ${prismaModels.size} model(s) in schema.prisma`);
+
+    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+
+    if (changedFiles.length === 0) {
+        console.log('✅ No TypeScript files changed');
+        return { success: true };
+    }
+
+    const allViolations = collectAllViolations(changedFiles, convertersPaths, workspaceRoot, prismaModels);
+
+    if (allViolations.length === 0) {
+        console.log('✅ All converter patterns are valid');
+        return { success: true };
+    }
+
+    reportViolations(allViolations, mode);
+    return { success: false };
+}
+
 export default async function runExecutor(
     options: ValidatePrismaConvertersOptions,
     context: ExecutorContext
@@ -514,77 +603,13 @@ export default async function runExecutor(
     console.log(`   Schema: ${schemaPath}`);
     console.log(`   Converter paths: ${convertersPaths.join(', ')}`);
 
-    let base = process.env['NX_BASE'];
-    const head = process.env['NX_HEAD'];
+    const base = resolveBase(workspaceRoot);
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
-
-        if (!base) {
-            console.log('\n⏭️  Skipping prisma-converter validation (could not detect base branch)');
-            console.log('');
-            return { success: true };
-        }
-    }
-
-    console.log(`   Base: ${base}`);
-    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-    console.log('');
-
-    const fullSchemaPath = path.join(workspaceRoot, schemaPath);
-    const prismaModels = parsePrismaModels(fullSchemaPath);
-
-    if (prismaModels.size === 0) {
-        console.log('⏭️  No models found in schema.prisma');
+        console.log('\n⏭️  Skipping prisma-converter validation (could not detect base branch)');
         console.log('');
         return { success: true };
     }
 
-    console.log(`   Found ${prismaModels.size} model(s) in schema.prisma`);
-
-    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
-
-    if (changedFiles.length === 0) {
-        console.log('✅ No TypeScript files changed');
-        return { success: true };
-    }
-
-    // Split changed files into converter files vs non-converter files
-    const converterFiles = changedFiles.filter((f) =>
-        convertersPaths.some((cp) => f.startsWith(cp))
-    );
-    const nonConverterFiles = changedFiles.filter((f) =>
-        !convertersPaths.some((cp) => f.startsWith(cp))
-    );
-
-    const allViolations: PrismaConverterViolation[] = [];
-
-    // Check converter files for method pattern violations
-    if (converterFiles.length > 0) {
-        console.log(`📂 Checking ${converterFiles.length} converter file(s)...`);
-
-        for (const file of converterFiles) {
-            const fileViolations = findConverterViolationsInFile(file, workspaceRoot, prismaModels);
-            allViolations.push(...fileViolations);
-        }
-    }
-
-    // Check non-converter files for Dto creation outside converters
-    if (nonConverterFiles.length > 0) {
-        console.log(`📂 Checking ${nonConverterFiles.length} non-converter file(s) for Dto creation...`);
-
-        for (const file of nonConverterFiles) {
-            const fileViolations = findDtoCreationOutsideConverters(file, workspaceRoot, prismaModels, convertersPaths);
-            allViolations.push(...fileViolations);
-        }
-    }
-
-    if (allViolations.length === 0) {
-        console.log('✅ All converter patterns are valid');
-        return { success: true };
-    }
-
-    reportViolations(allViolations, mode);
-
-    return { success: false };
+    return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, base, mode);
 }
