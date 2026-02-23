@@ -84,6 +84,11 @@
             "implementation": "./architecture/executors/validate-dtos/executor",
             "schema": "./architecture/executors/validate-dtos/schema.json",
             "description": "Validate DTO fields match Prisma Dbo model fields"
+        },
+        "validate-prisma-converters": {
+            "implementation": "./architecture/executors/validate-prisma-converters/executor",
+            "schema": "./architecture/executors/validate-prisma-converters/schema.json",
+            "description": "Validate Prisma converter method patterns and Dto creation locations"
         }
     }
 }

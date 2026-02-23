@@ -94,6 +94,27 @@
                     "description": "Array of directories (relative to workspace root) containing Dto files"
                 }
             }
+        },
+        "prismaConverter": {
+            "type": "object",
+            "description": "Validate Prisma converter methods follow scalable patterns: correct Dbo parameter, no async, no standalone functions, Dto creation only in converter directories.",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["OFF", "MODIFIED_FILES"],
+                    "description": "OFF: skip validation. MODIFIED_FILES: validate converter and non-converter files modified in the diff.",
+                    "default": "OFF"
+                },
+                "schemaPath": {
+                    "type": "string",
+                    "description": "Relative path from workspace root to schema.prisma"
+                },
+                "convertersPaths": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Array of directories (relative to workspace root) containing converter files"
+                }
+            }
         }
     },
     "required": []

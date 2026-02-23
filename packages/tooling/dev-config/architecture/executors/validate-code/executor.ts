@@ -6,6 +6,7 @@ import runReturnTypesExecutor, { ReturnTypeMode } from '../validate-return-types
 import runNoInlineTypesExecutor, { NoInlineTypesMode } from '../validate-no-inline-types/executor';
 import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from '../validate-no-any-unknown/executor';
 import runValidateDtosExecutor, { ValidateDtosMode } from '../validate-dtos/executor';
+import runPrismaConvertersExecutor, { PrismaConverterMode } from '../validate-prisma-converters/executor';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
@@ -30,6 +31,12 @@ export interface ValidateDtosConfig {
     dtoSourcePaths?: string[];
 }
 
+export interface PrismaConverterConfig {
+    mode?: PrismaConverterMode;
+    schemaPath?: string;
+    convertersPaths?: string[];
+}
+
 export interface ValidateCodeOptions {
     methodMaxLimit?: MethodMaxLimitConfig;
     fileMaxLimit?: FileMaxLimitConfig;
@@ -37,6 +44,7 @@ export interface ValidateCodeOptions {
     noInlineTypeLiteralsMode?: NoInlineTypesMode;
     noAnyUnknownMode?: NoAnyUnknownMode;
     validateDtos?: ValidateDtosConfig;
+    prismaConverter?: PrismaConverterConfig;
 }
 
 export interface ExecutorResult {
@@ -64,6 +72,9 @@ interface ParsedConfig {
     validateDtosMode: ValidateDtosMode;
     validateDtosPrismaPath: string | undefined;
     validateDtosSrcPaths: string[];
+    prismaConverterMode: PrismaConverterMode;
+    prismaConverterSchemaPath: string | undefined;
+    prismaConverterConvertersPaths: string[];
 }
 
 interface ResolvedMethodMode {
@@ -145,6 +156,9 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         validateDtosMode: options.validateDtos?.mode ?? 'OFF',
         validateDtosPrismaPath: options.validateDtos?.prismaSchemaPath,
         validateDtosSrcPaths: options.validateDtos?.dtoSourcePaths ?? [],
+        prismaConverterMode: options.prismaConverter?.mode ?? 'OFF',
+        prismaConverterSchemaPath: options.prismaConverter?.schemaPath,
+        prismaConverterConvertersPaths: options.prismaConverter?.convertersPaths ?? [],
     };
 }
 
@@ -163,13 +177,15 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   No inline type literals: ${config.noInlineTypesMode}`);
     console.log(`   No any/unknown: ${config.noAnyUnknownMode}`);
     console.log(`   Validate DTOs: ${config.validateDtosMode}`);
+    console.log(`   Prisma converters: ${config.prismaConverterMode}`);
     console.log('');
 }
 
 function isAllOff(config: ParsedConfig): boolean {
     return config.methodMode === 'OFF' && config.fileMode === 'OFF' &&
         config.returnTypeMode === 'OFF' && config.noInlineTypesMode === 'OFF' &&
-        config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF';
+        config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF' &&
+        config.prismaConverterMode === 'OFF';
 }
 
 async function runMethodValidators(config: ParsedConfig, context: ExecutorContext): Promise<ExecutorResult[]> {
@@ -216,11 +232,16 @@ export default async function runExecutor(
         prismaSchemaPath: config.validateDtosPrismaPath,
         dtoSourcePaths: config.validateDtosSrcPaths,
     }, context);
+    const prismaConverterResult = await runPrismaConvertersExecutor({
+        mode: config.prismaConverterMode,
+        schemaPath: config.prismaConverterSchemaPath,
+        convertersPaths: config.prismaConverterConvertersPaths,
+    }, context);
 
     const allSuccess = methodResults.every((r) => r.success) &&
         fileResult.success && returnTypesResult.success &&
         noInlineTypesResult.success && noAnyUnknownResult.success &&
-        validateDtosResult.success;
+        validateDtosResult.success && prismaConverterResult.success;
 
     console.log(allSuccess ? '\n\u2705 All code validations passed\n' : '\n\u274c Some code validations failed\n');
     return { success: allSuccess };
