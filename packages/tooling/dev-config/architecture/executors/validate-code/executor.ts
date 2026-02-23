@@ -5,6 +5,7 @@ import runModifiedFilesExecutor from '../validate-modified-files/executor';
 import runReturnTypesExecutor, { ReturnTypeMode } from '../validate-return-types/executor';
 import runNoInlineTypesExecutor, { NoInlineTypesMode } from '../validate-no-inline-types/executor';
 import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from '../validate-no-any-unknown/executor';
+import runValidateDtosExecutor, { ValidateDtosMode } from '../validate-dtos/executor';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
@@ -23,12 +24,19 @@ export interface FileMaxLimitConfig {
     ignoreModifiedUntilEpoch?: number;
 }
 
+export interface ValidateDtosConfig {
+    mode?: ValidateDtosMode;
+    prismaSchemaPath?: string;
+    dtoSourcePaths?: string[];
+}
+
 export interface ValidateCodeOptions {
     methodMaxLimit?: MethodMaxLimitConfig;
     fileMaxLimit?: FileMaxLimitConfig;
     requireReturnTypeMode?: ReturnTypeMode;
     noInlineTypeLiteralsMode?: NoInlineTypesMode;
     noAnyUnknownMode?: NoAnyUnknownMode;
+    validateDtos?: ValidateDtosConfig;
 }
 
 export interface ExecutorResult {
@@ -53,6 +61,9 @@ interface ParsedConfig {
     returnTypeMode: ReturnTypeMode;
     noInlineTypesMode: NoInlineTypesMode;
     noAnyUnknownMode: NoAnyUnknownMode;
+    validateDtosMode: ValidateDtosMode;
+    validateDtosPrismaPath: string | undefined;
+    validateDtosSrcPaths: string[];
 }
 
 interface ResolvedMethodMode {
@@ -131,6 +142,9 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         returnTypeMode: options.requireReturnTypeMode ?? 'OFF',
         noInlineTypesMode: options.noInlineTypeLiteralsMode ?? 'OFF',
         noAnyUnknownMode: options.noAnyUnknownMode ?? 'OFF',
+        validateDtosMode: options.validateDtos?.mode ?? 'OFF',
+        validateDtosPrismaPath: options.validateDtos?.prismaSchemaPath,
+        validateDtosSrcPaths: options.validateDtos?.dtoSourcePaths ?? [],
     };
 }
 
@@ -148,13 +162,14 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   Require return types: ${config.returnTypeMode}`);
     console.log(`   No inline type literals: ${config.noInlineTypesMode}`);
     console.log(`   No any/unknown: ${config.noAnyUnknownMode}`);
+    console.log(`   Validate DTOs: ${config.validateDtosMode}`);
     console.log('');
 }
 
 function isAllOff(config: ParsedConfig): boolean {
     return config.methodMode === 'OFF' && config.fileMode === 'OFF' &&
         config.returnTypeMode === 'OFF' && config.noInlineTypesMode === 'OFF' &&
-        config.noAnyUnknownMode === 'OFF';
+        config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF';
 }
 
 async function runMethodValidators(config: ParsedConfig, context: ExecutorContext): Promise<ExecutorResult[]> {
@@ -196,10 +211,16 @@ export default async function runExecutor(
     const returnTypesResult = await runReturnTypesExecutor({ mode: config.returnTypeMode }, context);
     const noInlineTypesResult = await runNoInlineTypesExecutor({ mode: config.noInlineTypesMode }, context);
     const noAnyUnknownResult = await runNoAnyUnknownExecutor({ mode: config.noAnyUnknownMode }, context);
+    const validateDtosResult = await runValidateDtosExecutor({
+        mode: config.validateDtosMode,
+        prismaSchemaPath: config.validateDtosPrismaPath,
+        dtoSourcePaths: config.validateDtosSrcPaths,
+    }, context);
 
     const allSuccess = methodResults.every((r) => r.success) &&
         fileResult.success && returnTypesResult.success &&
-        noInlineTypesResult.success && noAnyUnknownResult.success;
+        noInlineTypesResult.success && noAnyUnknownResult.success &&
+        validateDtosResult.success;
 
     console.log(allSuccess ? '\n\u2705 All code validations passed\n' : '\n\u274c Some code validations failed\n');
     return { success: allSuccess };
