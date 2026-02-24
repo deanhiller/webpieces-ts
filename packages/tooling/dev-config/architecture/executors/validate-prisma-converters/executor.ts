@@ -56,6 +56,7 @@ export interface ValidatePrismaConvertersOptions {
     mode?: PrismaConverterMode;
     schemaPath?: string;
     convertersPaths?: string[];
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ExecutorResult {
@@ -575,12 +576,35 @@ function validateChangedFiles(
     return { success: false };
 }
 
+/**
+ * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * When active, downgrades to OFF. When expired, logs a warning.
+ */
+function resolvePrismaConverterMode(
+    normalMode: PrismaConverterMode,
+    epoch: number | undefined
+): PrismaConverterMode {
+    if (epoch === undefined || normalMode === 'OFF') {
+        return normalMode;
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+        console.log(`\n⏭️  Skipping prisma-converter validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+        console.log('');
+        return 'OFF';
+    }
+    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+    console.log(`\n⚠️  prismaConverter.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return normalMode;
+}
+
 export default async function runExecutor(
     options: ValidatePrismaConvertersOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const mode: PrismaConverterMode = options.mode ?? 'OFF';
+    const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping prisma-converter validation (mode: OFF)');

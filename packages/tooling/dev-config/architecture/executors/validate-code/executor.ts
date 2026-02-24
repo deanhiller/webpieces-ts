@@ -29,12 +29,14 @@ export interface ValidateDtosConfig {
     mode?: ValidateDtosMode;
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface PrismaConverterConfig {
     mode?: PrismaConverterMode;
     schemaPath?: string;
     convertersPaths?: string[];
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ValidateCodeOptions {
@@ -72,9 +74,11 @@ interface ParsedConfig {
     validateDtosMode: ValidateDtosMode;
     validateDtosPrismaPath: string | undefined;
     validateDtosSrcPaths: string[];
+    validateDtosIgnoreEpoch: number | undefined;
     prismaConverterMode: PrismaConverterMode;
     prismaConverterSchemaPath: string | undefined;
     prismaConverterConvertersPaths: string[];
+    prismaConverterIgnoreEpoch: number | undefined;
 }
 
 interface ResolvedMethodMode {
@@ -156,9 +160,11 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         validateDtosMode: options.validateDtos?.mode ?? 'OFF',
         validateDtosPrismaPath: options.validateDtos?.prismaSchemaPath,
         validateDtosSrcPaths: options.validateDtos?.dtoSourcePaths ?? [],
+        validateDtosIgnoreEpoch: options.validateDtos?.ignoreModifiedUntilEpoch,
         prismaConverterMode: options.prismaConverter?.mode ?? 'OFF',
         prismaConverterSchemaPath: options.prismaConverter?.schemaPath,
         prismaConverterConvertersPaths: options.prismaConverter?.convertersPaths ?? [],
+        prismaConverterIgnoreEpoch: options.prismaConverter?.ignoreModifiedUntilEpoch,
     };
 }
 
@@ -231,11 +237,13 @@ export default async function runExecutor(
         mode: config.validateDtosMode,
         prismaSchemaPath: config.validateDtosPrismaPath,
         dtoSourcePaths: config.validateDtosSrcPaths,
+        ignoreModifiedUntilEpoch: config.validateDtosIgnoreEpoch,
     }, context);
     const prismaConverterResult = await runPrismaConvertersExecutor({
         mode: config.prismaConverterMode,
         schemaPath: config.prismaConverterSchemaPath,
         convertersPaths: config.prismaConverterConvertersPaths,
+        ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,
     }, context);
 
     const allSuccess = methodResults.every((r) => r.success) &&
