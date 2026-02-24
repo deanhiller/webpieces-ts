@@ -18,6 +18,10 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "Array of directories (relative to workspace root) containing converter files"
+        },
+        "ignoreModifiedUntilEpoch": {
+            "type": "number",
+            "description": "Epoch seconds. Until this time, skip prisma-converter validation entirely. When expired, normal mode resumes. Omit when not needed."
         }
     },
     "required": []

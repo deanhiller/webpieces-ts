@@ -40,6 +40,7 @@ export interface ValidateDtosOptions {
     mode?: ValidateDtosMode;
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ExecutorResult {
@@ -393,29 +394,92 @@ function findViolations(
 }
 
 /**
- * Report violations to console.
+ * Compute similarity between two strings using longest common subsequence ratio.
+ * Returns a value between 0 and 1, where 1 is an exact match.
+ */
+function similarity(a: string, b: string): number {
+    const al = a.toLowerCase();
+    const bl = b.toLowerCase();
+    if (al === bl) return 1;
+
+    const m = al.length;
+    const n = bl.length;
+    const prev = new Array<number>(n + 1).fill(0);
+    const curr = new Array<number>(n + 1).fill(0);
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (al[i - 1] === bl[j - 1]) {
+                curr[j] = prev[j - 1] + 1;
+            } else {
+                curr[j] = Math.max(prev[j], curr[j - 1]);
+            }
+        }
+        for (let j = 0; j <= n; j++) {
+            prev[j] = curr[j];
+            curr[j] = 0;
+        }
+    }
+
+    const lcsLen = prev[n];
+    return (2 * lcsLen) / (m + n);
+}
+
+/**
+ * Find the closest matching Dbo field for a given Dto field name.
+ * Returns the best match or null if nothing scores above the threshold.
+ */
+function suggestClosestField(fieldName: string, availableFields: string[]): string | null {
+    let bestMatch: string | null = null;
+    let bestScore = 0.4; // minimum threshold
+
+    for (const candidate of availableFields) {
+        const score = similarity(fieldName, candidate);
+        if (score > bestScore) {
+            bestScore = score;
+            bestMatch = candidate;
+        }
+    }
+
+    return bestMatch;
+}
+
+/**
+ * Report violations to console with prominent AI warning and rename suggestions.
  */
 function reportViolations(violations: DtoViolation[]): void {
     console.error('');
-    console.error('❌ DTO fields don\'t match Prisma Dbo models!');
+    console.error('❌❌❌ DTO FIELD MISMATCH - AI AGENT: READ THIS CAREFULLY ❌❌❌');
+    console.error('');
+    console.error('🛑 DO NOT attempt find/replace or manual renaming. Instead:');
+    console.error('   1. IDE rename is 10x faster than AI renaming PLUS 100% correct vs. AI\'s 80%');
+    console.error('   2. Show the human the suggested renames below');
+    console.error('   3. Ask the human to use IDE rename-refactoring (F2 / right-click → Rename Symbol)');
     console.error('');
     console.error('📚 Every non-deprecated field in a Dto must exist in the corresponding Dbo.');
-    console.error('   This prevents AI from inventing field names that don\'t match the database schema.');
-    console.error('   Dbo can have extra fields (e.g., password) - Dto cannot.');
+    console.error('   Dbo can have extra fields (e.g., password) — Dto fields cannot be invented.');
+    console.error('');
+    console.error('   When needing fields from multiple tables (e.g., a join), use a XxxJoinDto that');
+    console.error('   contains YYDto and ZZDto fields from the other tables instead of flattening.');
+    console.error('   Fields marked @deprecated in the Dto are exempt from this check.');
     console.error('');
 
     for (const v of violations) {
         console.error(`  ❌ ${v.file}:${v.line}`);
         console.error(`     ${v.dtoName}.${v.fieldName} does not exist in ${v.dboName}`);
-        console.error(`     Available Dbo fields: ${v.availableFields.join(', ')}`);
+
+        const suggestion = suggestClosestField(v.fieldName, v.availableFields);
+        if (suggestion) {
+            console.error(`     💡 Suggested rename: ${v.fieldName} → ${suggestion}   (Use IDE rename on ${v.dtoName}.${v.fieldName})`);
+        } else {
+            const preview = v.availableFields.slice(0, 8).join(', ');
+            const ellipsis = v.availableFields.length > 8 ? ', ...' : '';
+            console.error(`     💡 No close match found. Available: ${preview}${ellipsis}`);
+        }
     }
     console.error('');
 
-    console.error('   Dto fields must be a subset of Dbo fields (matching camelCase field names).');
-    console.error('   Fields marked @deprecated in the Dto are exempt from this check.');
-    console.error('');
-    console.error('   When needing fields from multiple tables (e.g., a join), use a XxxJoinDto that');
-    console.error('   contains YYDto and ZZDto fields from the other tables instead of flattening.');
+    console.error('❌❌❌ AI AGENT: Ask the human which renames to apply via IDE rename-refactoring ❌❌❌');
     console.error('');
 }
 
@@ -559,12 +623,32 @@ function validateDtoFiles(
     return { success: false };
 }
 
+/**
+ * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * When active, downgrades to OFF. When expired, logs a warning.
+ */
+function resolveMode(normalMode: ValidateDtosMode, epoch: number | undefined): ValidateDtosMode {
+    if (epoch === undefined || normalMode === 'OFF') {
+        return normalMode;
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+        console.log(`\n⏭️  Skipping validate-dtos (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+        console.log('');
+        return 'OFF';
+    }
+    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+    console.log(`\n⚠️  validateDtos.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return normalMode;
+}
+
 export default async function runExecutor(
     options: ValidateDtosOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const mode: ValidateDtosMode = options.mode ?? 'OFF';
+    const mode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping validate-dtos (mode: OFF)');
