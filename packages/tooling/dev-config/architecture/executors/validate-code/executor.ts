@@ -137,7 +137,7 @@ const VALID_MODES: Record<string, string[]> = {
     noInlineTypeLiterals: ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noAnyUnknown:         ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
     validateDtos:         ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'],
-    prismaConverter:      ['OFF', 'MODIFIED_METHOD_AND_CODE', 'MODIFIED_FILES'],
+    prismaConverter:      ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noDestructure:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
 };
 

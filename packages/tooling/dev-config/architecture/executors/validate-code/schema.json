@@ -149,7 +149,7 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "description": "OFF: skip validation. MODIFIED_METHOD_AND_CODE: validate new/modified methods in converters + changed lines in non-converters. MODIFIED_FILES: validate all methods in modified files.",
+                    "description": "OFF: skip validation. NEW_AND_MODIFIED_METHODS: validate new/modified methods in converters + changed lines in non-converters. MODIFIED_FILES: validate all methods in modified files.",
                     "default": "OFF"
                 },
                 "disableAllowed": {
