@@ -52,16 +52,43 @@
                 "methodMaxLimit": {
                     "limit": 80,
                     "mode": "NEW_AND_MODIFIED_METHODS",
-                    "disableAllowed": false
+                    "disableAllowed": false,
+                    "ignoreModifiedUntilEpoch": 1771931925
                 },
                 "fileMaxLimit": {
-                    "limit": 900,
+                    "limit": 902,
                     "mode": "MODIFIED_FILES",
+                    "disableAllowed": false,
+                    "ignoreModifiedUntilEpoch": 1771931925
+                },
+                "requireReturnType": {
+                    "mode": "NEW_AND_MODIFIED_METHODS",
+                    "disableAllowed": false,
+                    "ignoreModifiedUntilEpoch": 1771931925
+                },
+                "noInlineTypeLiterals": {
+                    "mode": "NEW_AND_MODIFIED_METHODS",
+                    "disableAllowed": false,
+                    "ignoreModifiedUntilEpoch": 1771931925
+                },
+                "noAnyUnknown": {
+                    "mode": "MODIFIED_CODE",
+                    "disableAllowed": true,
+                    "ignoreModifiedUntilEpoch": 1771931925
+                },
+                "validateDtos": {
+                    "mode": "MODIFIED_CLASS",
                     "disableAllowed": false
                 },
-                "requireReturnTypeMode": "MODIFIED_FILES",
-                "noInlineTypeLiteralsMode": "MODIFIED_FILES",
-                "noAnyUnknownMode": "MODIFIED_CODE"
+                "prismaConverter": {
+                    "mode": "NEW_AND_MODIFIED_METHODS",
+                    "disableAllowed": false
+                },
+                "noDestructure": {
+                    "mode": "MODIFIED_CODE",
+                    "disableAllowed": false,
+                    "ignoreModifiedUntilEpoch": 1771931925
+                }
             }
         }
     },

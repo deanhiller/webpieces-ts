@@ -355,8 +355,7 @@ function extractPrefix(name: string, suffix: string): string {
  */
 function findViolations(
     dtos: DtoInfo[],
-    dboModels: Map<string, Set<string>>,
-    disableAllowed: boolean
+    dboModels: Map<string, Set<string>>
 ): DtoViolation[] {
     const violations: DtoViolation[] = [];
 
@@ -377,7 +376,7 @@ function findViolations(
         }
 
         for (const field of dto.fields) {
-            if (disableAllowed && field.deprecated) continue;
+            if (field.deprecated) continue;
 
             if (!dbo.fields.has(field.name)) {
                 violations.push({
@@ -567,7 +566,6 @@ function validateDtoFiles(
     changedFiles: string[],
     dtoSourcePaths: string[],
     mode: ValidateDtosMode,
-    disableAllowed: boolean,
     base: string,
     head?: string
 ): ExecutorResult {
@@ -615,7 +613,7 @@ function validateDtoFiles(
 
     console.log(`   Validating ${allDtos.length} Dto definition(s)`);
 
-    const violations = findViolations(allDtos, dboModels, disableAllowed);
+    const violations = findViolations(allDtos, dboModels);
 
     if (violations.length === 0) {
         console.log('✅ All Dto fields match their Dbo models');
@@ -641,8 +639,6 @@ function resolveMode(normalMode: ValidateDtosMode, epoch: number | undefined): V
         console.log('');
         return 'OFF';
     }
-    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-    console.log(`\n⚠️  validateDtos.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
     return normalMode;
 }
 
@@ -687,8 +683,7 @@ export default async function runExecutor(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const disableAllowed = options.disableAllowed ?? true;
     const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
-    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, disableAllowed, base, head);
+    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
 }

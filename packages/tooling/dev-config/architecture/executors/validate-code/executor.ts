@@ -190,7 +190,6 @@ function resolveMethodMode(
         };
     }
     // Expired
-    console.log(`\n\u26a0\ufe0f  methodMaxLimit.ignoreModifiedUntilEpoch (${epoch}) has expired (${formatEpochDate(epoch)}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
     return { mode: normalMode, override: undefined };
 }
 
@@ -209,7 +208,6 @@ function resolveFileMode(
         };
     }
     // Expired
-    console.log(`\n\u26a0\ufe0f  fileMaxLimit.ignoreModifiedUntilEpoch (${epoch}) has expired (${formatEpochDate(epoch)}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
     return { mode: normalMode, override: undefined };
 }
 
