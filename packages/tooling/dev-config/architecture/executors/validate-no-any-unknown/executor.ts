@@ -40,6 +40,8 @@ export type NoAnyUnknownMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
 
 export interface ValidateNoAnyUnknownOptions {
     mode?: NoAnyUnknownMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ExecutorResult {
@@ -339,7 +341,8 @@ function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    head?: string
+    head: string | undefined,
+    disableAllowed: boolean
 ): AnyUnknownViolation[] {
     const violations: AnyUnknownViolation[] = [];
 
@@ -352,7 +355,7 @@ function findViolationsForModifiedCode(
         const allViolations = findAnyUnknownInFile(file, workspaceRoot);
 
         for (const v of allViolations) {
-            if (v.hasDisableComment) continue;
+            if (disableAllowed && v.hasDisableComment) continue;
             // LINE-BASED: Only include if the violation is on a changed line
             if (!changedLines.has(v.line)) continue;
 
@@ -372,14 +375,14 @@ function findViolationsForModifiedCode(
 /**
  * MODIFIED_FILES mode: Flag ALL violations in files that were modified.
  */
-function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[]): AnyUnknownViolation[] {
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): AnyUnknownViolation[] {
     const violations: AnyUnknownViolation[] = [];
 
     for (const file of changedFiles) {
         const allViolations = findAnyUnknownInFile(file, workspaceRoot);
 
         for (const v of allViolations) {
-            if (v.hasDisableComment) continue;
+            if (disableAllowed && v.hasDisableComment) continue;
 
             violations.push({
                 file,
@@ -457,12 +460,33 @@ function reportViolations(violations: AnyUnknownViolation[], mode: NoAnyUnknownM
     console.error('');
 }
 
+/**
+ * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * When active, downgrades to OFF. When expired, logs a warning.
+ */
+function resolveMode(normalMode: NoAnyUnknownMode, epoch: number | undefined): NoAnyUnknownMode {
+    if (epoch === undefined || normalMode === 'OFF') {
+        return normalMode;
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+        console.log(`\n⏭️  Skipping no-any-unknown validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+        console.log('');
+        return 'OFF';
+    }
+    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+    console.log(`\n⚠️  noAnyUnknown.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return normalMode;
+}
+
 export default async function runExecutor(
     options: ValidateNoAnyUnknownOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const mode: NoAnyUnknownMode = options.mode ?? 'OFF';
+    const mode: NoAnyUnknownMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping no-any-unknown validation (mode: OFF)');
@@ -502,9 +526,9 @@ export default async function runExecutor(
     let violations: AnyUnknownViolation[] = [];
 
     if (mode === 'MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head);
+        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_FILES') {
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
     if (violations.length === 0) {

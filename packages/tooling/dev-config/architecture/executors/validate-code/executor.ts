@@ -25,8 +25,27 @@ export interface FileMaxLimitConfig {
     ignoreModifiedUntilEpoch?: number;
 }
 
+export interface RequireReturnTypeConfig {
+    mode?: ReturnTypeMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
+export interface NoInlineTypeLiteralsConfig {
+    mode?: NoInlineTypesMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
+export interface NoAnyUnknownConfig {
+    mode?: NoAnyUnknownMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
 export interface ValidateDtosConfig {
     mode?: ValidateDtosMode;
+    disableAllowed?: boolean;
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
@@ -34,6 +53,7 @@ export interface ValidateDtosConfig {
 
 export interface PrismaConverterConfig {
     mode?: PrismaConverterMode;
+    disableAllowed?: boolean;
     schemaPath?: string;
     convertersPaths?: string[];
     ignoreModifiedUntilEpoch?: number;
@@ -42,9 +62,9 @@ export interface PrismaConverterConfig {
 export interface ValidateCodeOptions {
     methodMaxLimit?: MethodMaxLimitConfig;
     fileMaxLimit?: FileMaxLimitConfig;
-    requireReturnTypeMode?: ReturnTypeMode;
-    noInlineTypeLiteralsMode?: NoInlineTypesMode;
-    noAnyUnknownMode?: NoAnyUnknownMode;
+    requireReturnType?: RequireReturnTypeConfig;
+    noInlineTypeLiterals?: NoInlineTypeLiteralsConfig;
+    noAnyUnknown?: NoAnyUnknownConfig;
     validateDtos?: ValidateDtosConfig;
     prismaConverter?: PrismaConverterConfig;
 }
@@ -69,13 +89,21 @@ interface ParsedConfig {
     fileDisableAllowed: boolean;
     fileOverride: OverrideInfo | undefined;
     returnTypeMode: ReturnTypeMode;
+    returnTypeDisableAllowed: boolean;
+    returnTypeIgnoreEpoch: number | undefined;
     noInlineTypesMode: NoInlineTypesMode;
+    noInlineTypesDisableAllowed: boolean;
+    noInlineTypesIgnoreEpoch: number | undefined;
     noAnyUnknownMode: NoAnyUnknownMode;
+    noAnyUnknownDisableAllowed: boolean;
+    noAnyUnknownIgnoreEpoch: number | undefined;
     validateDtosMode: ValidateDtosMode;
+    validateDtosDisableAllowed: boolean;
     validateDtosPrismaPath: string | undefined;
     validateDtosSrcPaths: string[];
     validateDtosIgnoreEpoch: number | undefined;
     prismaConverterMode: PrismaConverterMode;
+    prismaConverterDisableAllowed: boolean;
     prismaConverterSchemaPath: string | undefined;
     prismaConverterConvertersPaths: string[];
     prismaConverterIgnoreEpoch: number | undefined;
@@ -154,14 +182,22 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         fileMode: fileResolved.mode,
         fileDisableAllowed: fileConfig.disableAllowed ?? true,
         fileOverride: fileResolved.override,
-        returnTypeMode: options.requireReturnTypeMode ?? 'OFF',
-        noInlineTypesMode: options.noInlineTypeLiteralsMode ?? 'OFF',
-        noAnyUnknownMode: options.noAnyUnknownMode ?? 'OFF',
+        returnTypeMode: options.requireReturnType?.mode ?? 'OFF',
+        returnTypeDisableAllowed: options.requireReturnType?.disableAllowed ?? true,
+        returnTypeIgnoreEpoch: options.requireReturnType?.ignoreModifiedUntilEpoch,
+        noInlineTypesMode: options.noInlineTypeLiterals?.mode ?? 'OFF',
+        noInlineTypesDisableAllowed: options.noInlineTypeLiterals?.disableAllowed ?? true,
+        noInlineTypesIgnoreEpoch: options.noInlineTypeLiterals?.ignoreModifiedUntilEpoch,
+        noAnyUnknownMode: options.noAnyUnknown?.mode ?? 'OFF',
+        noAnyUnknownDisableAllowed: options.noAnyUnknown?.disableAllowed ?? true,
+        noAnyUnknownIgnoreEpoch: options.noAnyUnknown?.ignoreModifiedUntilEpoch,
         validateDtosMode: options.validateDtos?.mode ?? 'OFF',
+        validateDtosDisableAllowed: options.validateDtos?.disableAllowed ?? true,
         validateDtosPrismaPath: options.validateDtos?.prismaSchemaPath,
         validateDtosSrcPaths: options.validateDtos?.dtoSourcePaths ?? [],
         validateDtosIgnoreEpoch: options.validateDtos?.ignoreModifiedUntilEpoch,
         prismaConverterMode: options.prismaConverter?.mode ?? 'OFF',
+        prismaConverterDisableAllowed: options.prismaConverter?.disableAllowed ?? true,
         prismaConverterSchemaPath: options.prismaConverter?.schemaPath,
         prismaConverterConvertersPaths: options.prismaConverter?.convertersPaths ?? [],
         prismaConverterIgnoreEpoch: options.prismaConverter?.ignoreModifiedUntilEpoch,
@@ -179,11 +215,11 @@ function logConfig(config: ParsedConfig): void {
     console.log('\n\ud83d\udccf Running Code Validations\n');
     console.log(`   Method limits: mode=${config.methodMode}${formatOverride(config.methodOverride)}, limit=${config.methodLimit}, disableAllowed=${config.methodDisableAllowed}`);
     console.log(`   File limits: mode=${config.fileMode}${formatOverride(config.fileOverride)}, limit=${config.fileLimit}, disableAllowed=${config.fileDisableAllowed}`);
-    console.log(`   Require return types: ${config.returnTypeMode}`);
-    console.log(`   No inline type literals: ${config.noInlineTypesMode}`);
-    console.log(`   No any/unknown: ${config.noAnyUnknownMode}`);
-    console.log(`   Validate DTOs: ${config.validateDtosMode}`);
-    console.log(`   Prisma converters: ${config.prismaConverterMode}`);
+    console.log(`   Require return types: mode=${config.returnTypeMode}, disableAllowed=${config.returnTypeDisableAllowed}`);
+    console.log(`   No inline type literals: mode=${config.noInlineTypesMode}, disableAllowed=${config.noInlineTypesDisableAllowed}`);
+    console.log(`   No any/unknown: mode=${config.noAnyUnknownMode}, disableAllowed=${config.noAnyUnknownDisableAllowed}`);
+    console.log(`   Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
+    console.log(`   Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
     console.log('');
 }
 
@@ -230,17 +266,31 @@ export default async function runExecutor(
     const fileResult = await runModifiedFilesExecutor({
         limit: config.fileLimit, mode: config.fileMode, disableAllowed: config.fileDisableAllowed,
     }, context);
-    const returnTypesResult = await runReturnTypesExecutor({ mode: config.returnTypeMode }, context);
-    const noInlineTypesResult = await runNoInlineTypesExecutor({ mode: config.noInlineTypesMode }, context);
-    const noAnyUnknownResult = await runNoAnyUnknownExecutor({ mode: config.noAnyUnknownMode }, context);
+    const returnTypesResult = await runReturnTypesExecutor({
+        mode: config.returnTypeMode,
+        disableAllowed: config.returnTypeDisableAllowed,
+        ignoreModifiedUntilEpoch: config.returnTypeIgnoreEpoch,
+    }, context);
+    const noInlineTypesResult = await runNoInlineTypesExecutor({
+        mode: config.noInlineTypesMode,
+        disableAllowed: config.noInlineTypesDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noInlineTypesIgnoreEpoch,
+    }, context);
+    const noAnyUnknownResult = await runNoAnyUnknownExecutor({
+        mode: config.noAnyUnknownMode,
+        disableAllowed: config.noAnyUnknownDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noAnyUnknownIgnoreEpoch,
+    }, context);
     const validateDtosResult = await runValidateDtosExecutor({
         mode: config.validateDtosMode,
+        disableAllowed: config.validateDtosDisableAllowed,
         prismaSchemaPath: config.validateDtosPrismaPath,
         dtoSourcePaths: config.validateDtosSrcPaths,
         ignoreModifiedUntilEpoch: config.validateDtosIgnoreEpoch,
     }, context);
     const prismaConverterResult = await runPrismaConvertersExecutor({
         mode: config.prismaConverterMode,
+        disableAllowed: config.prismaConverterDisableAllowed,
         schemaPath: config.prismaConverterSchemaPath,
         convertersPaths: config.prismaConverterConvertersPaths,
         ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,

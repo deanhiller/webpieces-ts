@@ -54,6 +54,7 @@ export type PrismaConverterMode = 'OFF' | 'MODIFIED_FILES';
 
 export interface ValidatePrismaConvertersOptions {
     mode?: PrismaConverterMode;
+    disableAllowed?: boolean;
     schemaPath?: string;
     convertersPaths?: string[];
     ignoreModifiedUntilEpoch?: number;
@@ -79,6 +80,7 @@ interface FileContext {
     fileLines: string[];
     sourceFile: ts.SourceFile;
     prismaModels: Set<string>;
+    disableAllowed: boolean;
 }
 
 /**
@@ -266,7 +268,7 @@ function checkStandaloneFunction(
     const pos = ctx.sourceFile.getLineAndCharacterOfPosition(startPos);
     const line = pos.line + 1;
 
-    if (hasDisableComment(ctx.fileLines, line) || isDeprecated(node)) return null;
+    if ((ctx.disableAllowed && hasDisableComment(ctx.fileLines, line)) || isDeprecated(node)) return null;
 
     return {
         file: ctx.filePath,
@@ -344,7 +346,7 @@ function checkConverterMethod(
     const pos = ctx.sourceFile.getLineAndCharacterOfPosition(startPos);
     const line = pos.line + 1;
 
-    if (hasDisableComment(ctx.fileLines, line) || isDeprecated(node)) return [];
+    if ((ctx.disableAllowed && hasDisableComment(ctx.fileLines, line)) || isDeprecated(node)) return [];
 
     const returnTypeText = getTypeText(node.type, ctx.sourceFile);
     const { inner: innerType, isAsync } = unwrapPromise(returnTypeText);
@@ -371,7 +373,8 @@ function checkConverterMethod(
 function findConverterViolationsInFile(
     filePath: string,
     workspaceRoot: string,
-    prismaModels: Set<string>
+    prismaModels: Set<string>,
+    disableAllowed: boolean
 ): PrismaConverterViolation[] {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
@@ -382,6 +385,7 @@ function findConverterViolationsInFile(
         fileLines: content.split('\n'),
         sourceFile: ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true),
         prismaModels,
+        disableAllowed,
     };
 
     const violations: PrismaConverterViolation[] = [];
@@ -412,7 +416,8 @@ function findDtoCreationOutsideConverters(
     filePath: string,
     workspaceRoot: string,
     prismaModels: Set<string>,
-    convertersPaths: string[]
+    convertersPaths: string[],
+    disableAllowed: boolean
 ): PrismaConverterViolation[] {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
@@ -434,7 +439,7 @@ function findDtoCreationOutsideConverters(
                 const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
                 const line = pos.line + 1;
 
-                if (!hasDisableComment(fileLines, line)) {
+                if (!disableAllowed || !hasDisableComment(fileLines, line)) {
                     const dirs = convertersPaths.map((p) => `"${p}"`).join(', ');
                     violations.push({
                         file: filePath,
@@ -503,7 +508,8 @@ function collectAllViolations(
     changedFiles: string[],
     convertersPaths: string[],
     workspaceRoot: string,
-    prismaModels: Set<string>
+    prismaModels: Set<string>,
+    disableAllowed: boolean
 ): PrismaConverterViolation[] {
     const converterFiles = changedFiles.filter((f) =>
         convertersPaths.some((cp) => f.startsWith(cp))
@@ -517,14 +523,14 @@ function collectAllViolations(
     if (converterFiles.length > 0) {
         console.log(`📂 Checking ${converterFiles.length} converter file(s)...`);
         for (const file of converterFiles) {
-            allViolations.push(...findConverterViolationsInFile(file, workspaceRoot, prismaModels));
+            allViolations.push(...findConverterViolationsInFile(file, workspaceRoot, prismaModels, disableAllowed));
         }
     }
 
     if (nonConverterFiles.length > 0) {
         console.log(`📂 Checking ${nonConverterFiles.length} non-converter file(s) for Dto creation...`);
         for (const file of nonConverterFiles) {
-            allViolations.push(...findDtoCreationOutsideConverters(file, workspaceRoot, prismaModels, convertersPaths));
+            allViolations.push(...findDtoCreationOutsideConverters(file, workspaceRoot, prismaModels, convertersPaths, disableAllowed));
         }
     }
 
@@ -539,7 +545,8 @@ function validateChangedFiles(
     schemaPath: string,
     convertersPaths: string[],
     base: string,
-    mode: PrismaConverterMode
+    mode: PrismaConverterMode,
+    disableAllowed: boolean
 ): ExecutorResult {
     const head = process.env['NX_HEAD'];
 
@@ -565,7 +572,7 @@ function validateChangedFiles(
         return { success: true };
     }
 
-    const allViolations = collectAllViolations(changedFiles, convertersPaths, workspaceRoot, prismaModels);
+    const allViolations = collectAllViolations(changedFiles, convertersPaths, workspaceRoot, prismaModels, disableAllowed);
 
     if (allViolations.length === 0) {
         console.log('✅ All converter patterns are valid');
@@ -635,5 +642,6 @@ export default async function runExecutor(
         return { success: true };
     }
 
-    return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, base, mode);
+    const disableAllowed = options.disableAllowed ?? true;
+    return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, base, mode, disableAllowed);
 }

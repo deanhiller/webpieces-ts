@@ -38,6 +38,7 @@ export type ValidateDtosMode = 'OFF' | 'MODIFIED_CLASS' | 'MODIFIED_FILES';
 
 export interface ValidateDtosOptions {
     mode?: ValidateDtosMode;
+    disableAllowed?: boolean;
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
@@ -354,7 +355,8 @@ function extractPrefix(name: string, suffix: string): string {
  */
 function findViolations(
     dtos: DtoInfo[],
-    dboModels: Map<string, Set<string>>
+    dboModels: Map<string, Set<string>>,
+    disableAllowed: boolean
 ): DtoViolation[] {
     const violations: DtoViolation[] = [];
 
@@ -375,7 +377,7 @@ function findViolations(
         }
 
         for (const field of dto.fields) {
-            if (field.deprecated) continue;
+            if (disableAllowed && field.deprecated) continue;
 
             if (!dbo.fields.has(field.name)) {
                 violations.push({
@@ -565,6 +567,7 @@ function validateDtoFiles(
     changedFiles: string[],
     dtoSourcePaths: string[],
     mode: ValidateDtosMode,
+    disableAllowed: boolean,
     base: string,
     head?: string
 ): ExecutorResult {
@@ -612,7 +615,7 @@ function validateDtoFiles(
 
     console.log(`   Validating ${allDtos.length} Dto definition(s)`);
 
-    const violations = findViolations(allDtos, dboModels);
+    const violations = findViolations(allDtos, dboModels, disableAllowed);
 
     if (violations.length === 0) {
         console.log('✅ All Dto fields match their Dbo models');
@@ -684,7 +687,8 @@ export default async function runExecutor(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
+    const disableAllowed = options.disableAllowed ?? true;
     const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
-    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
+    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, disableAllowed, base, head);
 }

@@ -89,6 +89,8 @@ export type NoInlineTypesMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHOD
 
 export interface ValidateNoInlineTypesOptions {
     mode?: NoInlineTypesMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ExecutorResult {
@@ -535,7 +537,8 @@ function findViolationsForNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    head?: string
+    head: string | undefined,
+    disableAllowed: boolean
 ): InlineTypeViolation[] {
     const violations: InlineTypeViolation[] = [];
 
@@ -549,7 +552,7 @@ function findViolationsForNewMethods(
         const inlineTypes = findInlineTypesInFile(file, workspaceRoot);
 
         for (const inlineType of inlineTypes) {
-            if (inlineType.hasDisableComment) continue;
+            if (disableAllowed && inlineType.hasDisableComment) continue;
             if (!isLineInNewMethod(inlineType.line, methods, newMethodNames)) continue;
 
             violations.push({
@@ -572,7 +575,8 @@ function findViolationsForModifiedAndNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    head?: string
+    head: string | undefined,
+    disableAllowed: boolean
 ): InlineTypeViolation[] {
     const violations: InlineTypeViolation[] = [];
 
@@ -585,7 +589,7 @@ function findViolationsForModifiedAndNewMethods(
         const inlineTypes = findInlineTypesInFile(file, workspaceRoot);
 
         for (const inlineType of inlineTypes) {
-            if (inlineType.hasDisableComment) continue;
+            if (disableAllowed && inlineType.hasDisableComment) continue;
             if (!isLineInChangedMethod(inlineType.line, methods, changedLines, newMethodNames)) continue;
 
             violations.push({
@@ -603,14 +607,14 @@ function findViolationsForModifiedAndNewMethods(
 /**
  * Find all violations in modified files (MODIFIED_FILES mode).
  */
-function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[]): InlineTypeViolation[] {
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): InlineTypeViolation[] {
     const violations: InlineTypeViolation[] = [];
 
     for (const file of changedFiles) {
         const inlineTypes = findInlineTypesInFile(file, workspaceRoot);
 
         for (const inlineType of inlineTypes) {
-            if (inlineType.hasDisableComment) continue;
+            if (disableAllowed && inlineType.hasDisableComment) continue;
 
             violations.push({
                 file,
@@ -689,12 +693,33 @@ function reportViolations(violations: InlineTypeViolation[], mode: NoInlineTypes
     console.error('');
 }
 
+/**
+ * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * When active, downgrades to OFF. When expired, logs a warning.
+ */
+function resolveMode(normalMode: NoInlineTypesMode, epoch: number | undefined): NoInlineTypesMode {
+    if (epoch === undefined || normalMode === 'OFF') {
+        return normalMode;
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+        console.log(`\n⏭️  Skipping no-inline-types validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+        console.log('');
+        return 'OFF';
+    }
+    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+    console.log(`\n⚠️  noInlineTypeLiterals.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return normalMode;
+}
+
 export default async function runExecutor(
     options: ValidateNoInlineTypesOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const mode: NoInlineTypesMode = options.mode ?? 'OFF';
+    const mode: NoInlineTypesMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping no-inline-types validation (mode: OFF)');
@@ -734,11 +759,11 @@ export default async function runExecutor(
     let violations: InlineTypeViolation[] = [];
 
     if (mode === 'NEW_METHODS') {
-        violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head);
+        violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
-        violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head);
+        violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_FILES') {
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
     if (violations.length === 0) {
