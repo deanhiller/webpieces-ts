@@ -7,6 +7,7 @@ import runNoInlineTypesExecutor, { NoInlineTypesMode } from '../validate-no-inli
 import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from '../validate-no-any-unknown/executor';
 import runValidateDtosExecutor, { ValidateDtosMode } from '../validate-dtos/executor';
 import runPrismaConvertersExecutor, { PrismaConverterMode } from '../validate-prisma-converters/executor';
+import runNoDestructureExecutor, { NoDestructureMode } from '../validate-no-destructure/executor';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
@@ -59,6 +60,12 @@ export interface PrismaConverterConfig {
     ignoreModifiedUntilEpoch?: number;
 }
 
+export interface NoDestructureConfig {
+    mode?: NoDestructureMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
 export interface ValidateCodeOptions {
     methodMaxLimit?: MethodMaxLimitConfig;
     fileMaxLimit?: FileMaxLimitConfig;
@@ -67,6 +74,7 @@ export interface ValidateCodeOptions {
     noAnyUnknown?: NoAnyUnknownConfig;
     validateDtos?: ValidateDtosConfig;
     prismaConverter?: PrismaConverterConfig;
+    noDestructure?: NoDestructureConfig;
 }
 
 export interface ExecutorResult {
@@ -107,6 +115,9 @@ interface ParsedConfig {
     prismaConverterSchemaPath: string | undefined;
     prismaConverterConvertersPaths: string[];
     prismaConverterIgnoreEpoch: number | undefined;
+    noDestructureMode: NoDestructureMode;
+    noDestructureDisableAllowed: boolean;
+    noDestructureIgnoreEpoch: number | undefined;
 }
 
 interface ResolvedMethodMode {
@@ -201,6 +212,9 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         prismaConverterSchemaPath: options.prismaConverter?.schemaPath,
         prismaConverterConvertersPaths: options.prismaConverter?.convertersPaths ?? [],
         prismaConverterIgnoreEpoch: options.prismaConverter?.ignoreModifiedUntilEpoch,
+        noDestructureMode: options.noDestructure?.mode ?? 'OFF',
+        noDestructureDisableAllowed: options.noDestructure?.disableAllowed ?? true,
+        noDestructureIgnoreEpoch: options.noDestructure?.ignoreModifiedUntilEpoch,
     };
 }
 
@@ -220,6 +234,7 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   No any/unknown: mode=${config.noAnyUnknownMode}, disableAllowed=${config.noAnyUnknownDisableAllowed}`);
     console.log(`   Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
     console.log(`   Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
+    console.log(`   No destructure: mode=${config.noDestructureMode}, disableAllowed=${config.noDestructureDisableAllowed}`);
     console.log('');
 }
 
@@ -227,7 +242,7 @@ function isAllOff(config: ParsedConfig): boolean {
     return config.methodMode === 'OFF' && config.fileMode === 'OFF' &&
         config.returnTypeMode === 'OFF' && config.noInlineTypesMode === 'OFF' &&
         config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF' &&
-        config.prismaConverterMode === 'OFF';
+        config.prismaConverterMode === 'OFF' && config.noDestructureMode === 'OFF';
 }
 
 async function runMethodValidators(config: ParsedConfig, context: ExecutorContext): Promise<ExecutorResult[]> {
@@ -295,11 +310,17 @@ export default async function runExecutor(
         convertersPaths: config.prismaConverterConvertersPaths,
         ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,
     }, context);
+    const noDestructureResult = await runNoDestructureExecutor({
+        mode: config.noDestructureMode,
+        disableAllowed: config.noDestructureDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noDestructureIgnoreEpoch,
+    }, context);
 
     const allSuccess = methodResults.every((r) => r.success) &&
         fileResult.success && returnTypesResult.success &&
         noInlineTypesResult.success && noAnyUnknownResult.success &&
-        validateDtosResult.success && prismaConverterResult.success;
+        validateDtosResult.success && prismaConverterResult.success &&
+        noDestructureResult.success;
 
     console.log(allSuccess ? '\n\u2705 All code validations passed\n' : '\n\u274c Some code validations failed\n');
     return { success: allSuccess };
