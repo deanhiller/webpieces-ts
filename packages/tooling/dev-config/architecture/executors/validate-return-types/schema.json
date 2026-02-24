@@ -9,6 +9,15 @@
             "enum": ["OFF", "NEW_METHODS", "MODIFIED_AND_NEW_METHODS", "MODIFIED_FILES"],
             "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. MODIFIED_AND_NEW_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
             "default": "NEW_METHODS"
+        },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether disable comments work. When false, no escape hatch.",
+            "default": true
+        },
+        "ignoreModifiedUntilEpoch": {
+            "type": "number",
+            "description": "Epoch seconds. Until this time, skip validation entirely. When expired, normal mode resumes. Omit when not needed."
         }
     },
     "required": []

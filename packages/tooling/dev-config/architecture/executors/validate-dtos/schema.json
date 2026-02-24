@@ -19,6 +19,11 @@
             "items": { "type": "string" },
             "description": "Array of directories (relative to workspace root) containing Dto files"
         },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether @deprecated field exemption works. When false, all fields must match.",
+            "default": true
+        },
         "ignoreModifiedUntilEpoch": {
             "type": "number",
             "description": "Epoch seconds. Until this time, skip DTO validation entirely. When expired, normal mode resumes. Omit when not needed."

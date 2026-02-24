@@ -27,6 +27,8 @@ export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHODS' 
 
 export interface ValidateReturnTypesOptions {
     mode?: ReturnTypeMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
 }
 
 export interface ExecutorResult {
@@ -286,7 +288,8 @@ function findViolationsForNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    head?: string
+    head: string | undefined,
+    disableAllowed: boolean
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
@@ -301,7 +304,7 @@ function findViolationsForNewMethods(
         for (const method of methods) {
             if (!newMethodNames.has(method.name)) continue;
             if (method.hasReturnType) continue;
-            if (method.hasDisableComment) continue;
+            if (disableAllowed && method.hasDisableComment) continue;
 
             violations.push({
                 file,
@@ -322,7 +325,8 @@ function findViolationsForModifiedAndNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
-    head?: string
+    head: string | undefined,
+    disableAllowed: boolean
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
@@ -335,7 +339,7 @@ function findViolationsForModifiedAndNewMethods(
 
         for (const method of methods) {
             if (method.hasReturnType) continue;
-            if (method.hasDisableComment) continue;
+            if (disableAllowed && method.hasDisableComment) continue;
 
             const isNewMethod = newMethodNames.has(method.name);
             const isModifiedMethod = methodHasChanges(method, changedLines);
@@ -356,7 +360,7 @@ function findViolationsForModifiedAndNewMethods(
 /**
  * Find all methods without explicit return types in modified files (MODIFIED_FILES mode).
  */
-function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[]): MethodViolation[] {
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): MethodViolation[] {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
@@ -364,7 +368,7 @@ function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: str
 
         for (const method of methods) {
             if (method.hasReturnType) continue;
-            if (method.hasDisableComment) continue;
+            if (disableAllowed && method.hasDisableComment) continue;
 
             violations.push({
                 file,
@@ -438,12 +442,33 @@ function reportViolations(violations: MethodViolation[], mode: ReturnTypeMode): 
     console.error('');
 }
 
+/**
+ * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * When active, downgrades to OFF. When expired, logs a warning.
+ */
+function resolveMode(normalMode: ReturnTypeMode, epoch: number | undefined): ReturnTypeMode {
+    if (epoch === undefined || normalMode === 'OFF') {
+        return normalMode;
+    }
+    const nowSeconds = Date.now() / 1000;
+    if (nowSeconds < epoch) {
+        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+        console.log(`\n⏭️  Skipping require-return-type validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+        console.log('');
+        return 'OFF';
+    }
+    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
+    console.log(`\n⚠️  requireReturnType.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
+    return normalMode;
+}
+
 export default async function runExecutor(
     options: ValidateReturnTypesOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
-    const mode: ReturnTypeMode = options.mode ?? 'NEW_METHODS';
+    const mode: ReturnTypeMode = resolveMode(options.mode ?? 'NEW_METHODS', options.ignoreModifiedUntilEpoch);
+    const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping return type validation (mode: OFF)');
@@ -483,11 +508,11 @@ export default async function runExecutor(
     let violations: MethodViolation[] = [];
 
     if (mode === 'NEW_METHODS') {
-        violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head);
+        violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
-        violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head);
+        violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_FILES') {
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
     if (violations.length === 0) {
