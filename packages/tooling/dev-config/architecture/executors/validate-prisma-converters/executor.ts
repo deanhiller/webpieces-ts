@@ -41,7 +41,7 @@
  * MODES
  * ============================================================================
  * - OFF:                      Skip validation entirely
- * - MODIFIED_METHOD_AND_CODE: Validate new/modified methods in converters + changed lines in non-converters
+ * - NEW_AND_MODIFIED_METHODS: Validate new/modified methods in converters + changed lines in non-converters
  * - MODIFIED_FILES:           Validate all methods in modified files
  */
 
@@ -52,7 +52,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from '../diff-utils';
 
-export type PrismaConverterMode = 'OFF' | 'MODIFIED_METHOD_AND_CODE' | 'MODIFIED_FILES';
+export type PrismaConverterMode = 'OFF' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
 export interface ValidatePrismaConvertersOptions {
     mode?: PrismaConverterMode;
@@ -461,7 +461,7 @@ function findDtoCreationOutsideConverters(
 }
 
 /**
- * Find converter violations only for new/modified methods (MODIFIED_METHOD_AND_CODE mode).
+ * Find converter violations only for new/modified methods (NEW_AND_MODIFIED_METHODS mode).
  * For converter files: only check methods/functions that are new or have changed lines in their range.
  */
 // webpieces-disable max-lines-new-methods -- AST traversal with method boundary filtering for new/modified detection
@@ -514,7 +514,7 @@ function findConverterViolationsForModifiedMethods(
 }
 
 /**
- * Find Dto creation violations only on changed lines (MODIFIED_METHOD_AND_CODE mode).
+ * Find Dto creation violations only on changed lines (NEW_AND_MODIFIED_METHODS mode).
  * For non-converter files: only flag `new XxxDto(...)` on changed lines in the diff.
  */
 // webpieces-disable max-lines-new-methods -- AST traversal for new-expression detection with changed-line filtering
@@ -565,7 +565,7 @@ function findDtoCreationOnChangedLines(
 }
 
 /**
- * Collect violations for MODIFIED_METHOD_AND_CODE mode.
+ * Collect violations for NEW_AND_MODIFIED_METHODS mode.
  * Converter files: method-level — only check new/modified methods.
  * Non-converter files: line-level — only flag new XxxDto() on changed lines.
  */
@@ -732,7 +732,7 @@ function validateChangedFiles(
 
     let allViolations: PrismaConverterViolation[];
 
-    if (mode === 'MODIFIED_METHOD_AND_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_METHODS') {
         allViolations = collectViolationsForModifiedMethodAndCode(
             changedFiles, convertersPaths, workspaceRoot, prismaModels, disableAllowed, base, head
         );

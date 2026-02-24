@@ -6,8 +6,8 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_METHOD_AND_CODE", "MODIFIED_FILES"],
-            "description": "OFF: skip validation. MODIFIED_METHOD_AND_CODE: validate methods that are new or have changed lines. MODIFIED_FILES: validate all methods in modified files.",
+            "enum": ["OFF", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_AND_MODIFIED_METHODS: validate methods that are new or have changed lines. MODIFIED_FILES: validate all methods in modified files.",
             "default": "OFF"
         },
         "schemaPath": {
