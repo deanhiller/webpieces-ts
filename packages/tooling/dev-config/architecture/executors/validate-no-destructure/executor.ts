@@ -513,8 +513,6 @@ function resolveNoDestructureMode(normalMode: NoDestructureMode, epoch: number |
         console.log('');
         return 'OFF';
     }
-    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-    console.log(`\n\u26a0\ufe0f  noDestructure.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
     return normalMode;
 }
 

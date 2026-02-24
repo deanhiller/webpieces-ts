@@ -708,8 +708,6 @@ function resolveMode(normalMode: NoInlineTypesMode, epoch: number | undefined): 
         console.log('');
         return 'OFF';
     }
-    const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-    console.log(`\n⚠️  noInlineTypeLiterals.ignoreModifiedUntilEpoch (${epoch}) has expired (${expiresDate}). Remove it from nx.json. Using normal mode: ${normalMode}\n`);
     return normalMode;
 }
 
