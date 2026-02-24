@@ -453,7 +453,7 @@ function reportViolations(violations: DtoViolation[]): void {
     console.error('');
     console.error('🛑 DO NOT attempt find/replace or manual renaming. Instead:');
     console.error('   1. IDE rename is 10x faster than AI renaming PLUS 100% correct vs. AI\'s 80%');
-    console.error('   2. Show the human the suggested renames below');
+    console.error('   2. Based on errors below, suggest renames to the user');
     console.error('   3. Ask the human to use IDE rename-refactoring (F2 / right-click → Rename Symbol)');
     console.error('');
     console.error('📚 Every non-deprecated field in a Dto must exist in the corresponding Dbo.');
@@ -479,7 +479,7 @@ function reportViolations(violations: DtoViolation[]): void {
     }
     console.error('');
 
-    console.error('❌❌❌ AI AGENT: Ask the human which renames to apply via IDE rename-refactoring ❌❌❌');
+    console.error('❌❌❌ AI AGENT: Suggest to the human which are the most likely renames needed and list them ❌❌❌');
     console.error('');
 }
 
