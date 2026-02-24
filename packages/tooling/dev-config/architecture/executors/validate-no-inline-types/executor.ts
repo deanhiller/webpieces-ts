@@ -63,7 +63,7 @@
  * ============================================================================
  * - OFF:                      Skip validation entirely
  * - NEW_METHODS:              Only validate in new methods (detected via git diff)
- * - MODIFIED_AND_NEW_METHODS: Validate in new methods + methods with changes
+ * - NEW_AND_MODIFIED_METHODS: Validate in new methods + methods with changes
  * - MODIFIED_FILES:           Validate all violations in modified files
  *
  * ============================================================================
@@ -85,7 +85,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type NoInlineTypesMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHODS' | 'MODIFIED_FILES';
+export type NoInlineTypesMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
 export interface ValidateNoInlineTypesOptions {
     mode?: NoInlineTypesMode;
@@ -568,7 +568,7 @@ function findViolationsForNewMethods(
 }
 
 /**
- * Find violations in new and modified methods (MODIFIED_AND_NEW_METHODS mode).
+ * Find violations in new and modified methods (NEW_AND_MODIFIED_METHODS mode).
  */
 // webpieces-disable max-lines-new-methods -- Combines new method detection with change detection
 function findViolationsForModifiedAndNewMethods(
@@ -760,7 +760,7 @@ export default async function runExecutor(
 
     if (mode === 'NEW_METHODS') {
         violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
+    } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
         violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

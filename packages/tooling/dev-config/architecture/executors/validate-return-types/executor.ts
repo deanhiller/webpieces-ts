@@ -11,7 +11,7 @@
  * Modes:
  * - OFF: Skip validation entirely
  * - NEW_METHODS: Only validate new methods (detected via git diff)
- * - MODIFIED_AND_NEW_METHODS: Validate new methods + methods with changes in their line range
+ * - NEW_AND_MODIFIED_METHODS: Validate new methods + methods with changes in their line range
  * - MODIFIED_FILES: Validate all methods in modified files
  *
  * Escape hatch: Add webpieces-disable require-return-type comment with justification
@@ -23,7 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'MODIFIED_AND_NEW_METHODS' | 'MODIFIED_FILES';
+export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
 export interface ValidateReturnTypesOptions {
     mode?: ReturnTypeMode;
@@ -318,7 +318,7 @@ function findViolationsForNewMethods(
 }
 
 /**
- * Find NEW methods AND methods with changes (MODIFIED_AND_NEW_METHODS mode).
+ * Find NEW methods AND methods with changes (NEW_AND_MODIFIED_METHODS mode).
  */
 // webpieces-disable max-lines-new-methods -- Combines new method detection with change detection
 function findViolationsForModifiedAndNewMethods(
@@ -509,7 +509,7 @@ export default async function runExecutor(
 
     if (mode === 'NEW_METHODS') {
         violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'MODIFIED_AND_NEW_METHODS') {
+    } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
         violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
