@@ -89,6 +89,11 @@
             "implementation": "./architecture/executors/validate-prisma-converters/executor",
             "schema": "./architecture/executors/validate-prisma-converters/schema.json",
             "description": "Validate Prisma converter method patterns and Dto creation locations"
+        },
+        "validate-no-destructure": {
+            "implementation": "./architecture/executors/validate-no-destructure/executor",
+            "schema": "./architecture/executors/validate-no-destructure/schema.json",
+            "description": "Validate no destructuring patterns are used - use explicit property access instead"
         }
     }
 }

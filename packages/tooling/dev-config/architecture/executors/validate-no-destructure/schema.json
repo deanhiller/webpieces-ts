@@ -1,0 +1,24 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate No Destructure Executor",
+    "description": "Validates that destructuring patterns are not used. Uses LINE-BASED detection for git diff filtering.",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows destructuring patterns.",
+            "default": "OFF"
+        },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether disable comments work. When false, no escape hatch.",
+            "default": true
+        },
+        "ignoreModifiedUntilEpoch": {
+            "type": "number",
+            "description": "Epoch seconds. Until this time, skip validation entirely. When expired, normal mode resumes. Omit when not needed."
+        }
+    },
+    "required": []
+}
