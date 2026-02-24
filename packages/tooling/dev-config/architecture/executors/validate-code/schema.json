@@ -15,7 +15,6 @@
                 },
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
                     "description": "OFF: skip validation. NEW_METHODS: only new methods in diff. NEW_AND_MODIFIED_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
                     "default": "NEW_AND_MODIFIED_METHODS"
                 },
@@ -41,7 +40,6 @@
                 },
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "MODIFIED_FILES"],
                     "description": "OFF: skip validation. MODIFIED_FILES: all code in modified files.",
                     "default": "MODIFIED_FILES"
                 },
@@ -62,7 +60,6 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
                     "description": "OFF: skip return type validation. NEW_METHODS: only new methods in diff. NEW_AND_MODIFIED_METHODS: new methods + methods with changes. MODIFIED_FILES: all methods in modified files.",
                     "default": "OFF"
                 },
@@ -83,7 +80,6 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "NEW_METHODS", "NEW_AND_MODIFIED_METHODS", "MODIFIED_FILES"],
                     "description": "OFF: skip validation. NEW_METHODS: only new methods. NEW_AND_MODIFIED_METHODS: new + modified methods. MODIFIED_FILES: all in modified files. Disallows inline type literals like { x: number } - use named types instead.",
                     "default": "OFF"
                 },
@@ -104,7 +100,6 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
                     "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows `any` and `unknown` TypeScript keywords.",
                     "default": "OFF"
                 },
@@ -125,7 +120,6 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "MODIFIED_CLASS", "MODIFIED_FILES"],
                     "description": "OFF: skip validation. MODIFIED_CLASS: only validate Dto classes with changed lines. MODIFIED_FILES: validate all Dtos in modified files.",
                     "default": "OFF"
                 },
@@ -155,8 +149,7 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "MODIFIED_FILES"],
-                    "description": "OFF: skip validation. MODIFIED_FILES: validate converter and non-converter files modified in the diff.",
+                    "description": "OFF: skip validation. MODIFIED_METHOD_AND_CODE: validate new/modified methods in converters + changed lines in non-converters. MODIFIED_FILES: validate all methods in modified files.",
                     "default": "OFF"
                 },
                 "disableAllowed": {
@@ -185,7 +178,6 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
                     "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows destructuring patterns.",
                     "default": "OFF"
                 },

@@ -40,8 +40,9 @@
  * ============================================================================
  * MODES
  * ============================================================================
- * - OFF:            Skip validation entirely
- * - MODIFIED_FILES: Validate converter files that were modified in the diff
+ * - OFF:                      Skip validation entirely
+ * - MODIFIED_METHOD_AND_CODE: Validate new/modified methods in converters + changed lines in non-converters
+ * - MODIFIED_FILES:           Validate all methods in modified files
  */
 
 import type { ExecutorContext } from '@nx/devkit';
@@ -49,8 +50,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from '../diff-utils';
 
-export type PrismaConverterMode = 'OFF' | 'MODIFIED_FILES';
+export type PrismaConverterMode = 'OFF' | 'MODIFIED_METHOD_AND_CODE' | 'MODIFIED_FILES';
 
 export interface ValidatePrismaConvertersOptions {
     mode?: PrismaConverterMode;
@@ -459,6 +461,162 @@ function findDtoCreationOutsideConverters(
 }
 
 /**
+ * Find converter violations only for new/modified methods (MODIFIED_METHOD_AND_CODE mode).
+ * For converter files: only check methods/functions that are new or have changed lines in their range.
+ */
+// webpieces-disable max-lines-new-methods -- AST traversal with method boundary filtering for new/modified detection
+function findConverterViolationsForModifiedMethods(
+    filePath: string,
+    workspaceRoot: string,
+    prismaModels: Set<string>,
+    disableAllowed: boolean,
+    changedLines: Set<number>,
+    newMethodNames: Set<string>
+): PrismaConverterViolation[] {
+    const fullPath = path.join(workspaceRoot, filePath);
+    if (!fs.existsSync(fullPath)) return [];
+
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const ctx: FileContext = {
+        filePath,
+        fileLines: content.split('\n'),
+        sourceFile: ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true),
+        prismaModels,
+        disableAllowed,
+    };
+
+    const violations: PrismaConverterViolation[] = [];
+
+    function visitNode(node: ts.Node): void {
+        if (ts.isFunctionDeclaration(node) && node.name) {
+            const start = ctx.sourceFile.getLineAndCharacterOfPosition(node.getStart(ctx.sourceFile));
+            const end = ctx.sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+            if (isNewOrModified(node.name.text, start.line + 1, end.line + 1, changedLines, newMethodNames)) {
+                const violation = checkStandaloneFunction(node, ctx);
+                if (violation) violations.push(violation);
+            }
+        }
+
+        if (ts.isMethodDeclaration(node) && node.name) {
+            const start = ctx.sourceFile.getLineAndCharacterOfPosition(node.getStart(ctx.sourceFile));
+            const end = ctx.sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+            const methodName = node.name.getText(ctx.sourceFile);
+            if (isNewOrModified(methodName, start.line + 1, end.line + 1, changedLines, newMethodNames)) {
+                violations.push(...checkConverterMethod(node, ctx));
+            }
+        }
+
+        ts.forEachChild(node, visitNode);
+    }
+
+    visitNode(ctx.sourceFile);
+    return violations;
+}
+
+/**
+ * Find Dto creation violations only on changed lines (MODIFIED_METHOD_AND_CODE mode).
+ * For non-converter files: only flag `new XxxDto(...)` on changed lines in the diff.
+ */
+// webpieces-disable max-lines-new-methods -- AST traversal for new-expression detection with changed-line filtering
+function findDtoCreationOnChangedLines(
+    filePath: string,
+    workspaceRoot: string,
+    prismaModels: Set<string>,
+    convertersPaths: string[],
+    disableAllowed: boolean,
+    changedLines: Set<number>
+): PrismaConverterViolation[] {
+    const fullPath = path.join(workspaceRoot, filePath);
+    if (!fs.existsSync(fullPath)) return [];
+
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const fileLines = content.split('\n');
+    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
+
+    const violations: PrismaConverterViolation[] = [];
+
+    function visitNode(node: ts.Node): void {
+        if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)) {
+            const className = node.expression.text;
+            const expectedDbo = deriveExpectedDboName(className);
+
+            if (expectedDbo && prismaModels.has(expectedDbo)) {
+                const startPos = node.getStart(sourceFile);
+                const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
+                const line = pos.line + 1;
+
+                if (changedLines.has(line) && (!disableAllowed || !hasDisableComment(fileLines, line))) {
+                    const dirs = convertersPaths.map((p) => `"${p}"`).join(', ');
+                    violations.push({
+                        file: filePath,
+                        line,
+                        message: `"${className}" can only be created from its Dbo using a converter in one of these directories: ${dirs}. ` +
+                            'Move this Dto construction into a converter class method.',
+                    });
+                }
+            }
+        }
+
+        ts.forEachChild(node, visitNode);
+    }
+
+    visitNode(sourceFile);
+    return violations;
+}
+
+/**
+ * Collect violations for MODIFIED_METHOD_AND_CODE mode.
+ * Converter files: method-level — only check new/modified methods.
+ * Non-converter files: line-level — only flag new XxxDto() on changed lines.
+ */
+// webpieces-disable max-lines-new-methods -- File classification and diff-based violation collection
+function collectViolationsForModifiedMethodAndCode(
+    changedFiles: string[],
+    convertersPaths: string[],
+    workspaceRoot: string,
+    prismaModels: Set<string>,
+    disableAllowed: boolean,
+    base: string,
+    head: string | undefined
+): PrismaConverterViolation[] {
+    const converterFiles = changedFiles.filter((f) =>
+        convertersPaths.some((cp) => f.startsWith(cp))
+    );
+    const nonConverterFiles = changedFiles.filter((f) =>
+        !convertersPaths.some((cp) => f.startsWith(cp))
+    );
+
+    const allViolations: PrismaConverterViolation[] = [];
+
+    if (converterFiles.length > 0) {
+        console.log(`📂 Checking ${converterFiles.length} converter file(s) (new/modified methods only)...`);
+        for (const file of converterFiles) {
+            const diff = getFileDiff(workspaceRoot, file, base, head);
+            const changedLines = getChangedLineNumbers(diff);
+            const newMethodNames = findNewMethodSignaturesInDiff(diff);
+            if (changedLines.size === 0 && newMethodNames.size === 0) continue;
+            allViolations.push(...findConverterViolationsForModifiedMethods(
+                file, workspaceRoot, prismaModels, disableAllowed, changedLines, newMethodNames
+            ));
+        }
+    }
+
+    if (nonConverterFiles.length > 0) {
+        console.log(`📂 Checking ${nonConverterFiles.length} non-converter file(s) for Dto creation (changed lines only)...`);
+        for (const file of nonConverterFiles) {
+            const diff = getFileDiff(workspaceRoot, file, base, head);
+            const changedLines = getChangedLineNumbers(diff);
+            if (changedLines.size === 0) continue;
+            allViolations.push(...findDtoCreationOnChangedLines(
+                file, workspaceRoot, prismaModels, convertersPaths, disableAllowed, changedLines
+            ));
+        }
+    }
+
+    return allViolations;
+}
+
+/**
  * Report violations to console.
  */
 function reportViolations(violations: PrismaConverterViolation[], mode: PrismaConverterMode): void {
@@ -572,7 +730,15 @@ function validateChangedFiles(
         return { success: true };
     }
 
-    const allViolations = collectAllViolations(changedFiles, convertersPaths, workspaceRoot, prismaModels, disableAllowed);
+    let allViolations: PrismaConverterViolation[];
+
+    if (mode === 'MODIFIED_METHOD_AND_CODE') {
+        allViolations = collectViolationsForModifiedMethodAndCode(
+            changedFiles, convertersPaths, workspaceRoot, prismaModels, disableAllowed, base, head
+        );
+    } else {
+        allViolations = collectAllViolations(changedFiles, convertersPaths, workspaceRoot, prismaModels, disableAllowed);
+    }
 
     if (allViolations.length === 0) {
         console.log('✅ All converter patterns are valid');

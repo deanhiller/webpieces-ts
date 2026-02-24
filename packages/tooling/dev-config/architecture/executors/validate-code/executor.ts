@@ -130,6 +130,45 @@ interface ResolvedFileMode {
     override: OverrideInfo | undefined;
 }
 
+const VALID_MODES: Record<string, string[]> = {
+    methodMaxLimit:       ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
+    fileMaxLimit:         ['OFF', 'MODIFIED_FILES'],
+    requireReturnType:    ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
+    noInlineTypeLiterals: ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
+    noAnyUnknown:         ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+    validateDtos:         ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'],
+    prismaConverter:      ['OFF', 'MODIFIED_METHOD_AND_CODE', 'MODIFIED_FILES'],
+    noDestructure:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+};
+
+/**
+ * Validate that all configured modes are valid. Produces clear error messages naming the rule.
+ */
+function validateModes(options: ValidateCodeOptions): string[] {
+    const errors: string[] = [];
+
+    const modeEntries: [string, string | undefined][] = [
+        ['methodMaxLimit', options.methodMaxLimit?.mode],
+        ['fileMaxLimit', options.fileMaxLimit?.mode],
+        ['requireReturnType', options.requireReturnType?.mode],
+        ['noInlineTypeLiterals', options.noInlineTypeLiterals?.mode],
+        ['noAnyUnknown', options.noAnyUnknown?.mode],
+        ['validateDtos', options.validateDtos?.mode],
+        ['prismaConverter', options.prismaConverter?.mode],
+        ['noDestructure', options.noDestructure?.mode],
+    ];
+
+    for (const [ruleName, modeValue] of modeEntries) {
+        if (modeValue === undefined) continue;
+        const validModes = VALID_MODES[ruleName];
+        if (!validModes.includes(modeValue)) {
+            errors.push(`${ruleName}.mode = '${modeValue}' is invalid. Valid modes: ${validModes.join(', ')}`);
+        }
+    }
+
+    return errors;
+}
+
 function formatEpochDate(epoch: number): string {
     return new Date(epoch * 1000).toISOString().split('T')[0];
 }
@@ -268,6 +307,16 @@ export default async function runExecutor(
     options: ValidateCodeOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
+    const modeErrors = validateModes(options);
+    if (modeErrors.length > 0) {
+        console.error('');
+        for (const err of modeErrors) {
+            console.error(`❌ ${err}`);
+        }
+        console.error('');
+        return { success: false };
+    }
+
     const config = parseConfig(options);
 
     if (isAllOff(config)) {
