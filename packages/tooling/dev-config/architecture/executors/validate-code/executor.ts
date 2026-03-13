@@ -8,6 +8,7 @@ import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from '../validate-no-any-un
 import runValidateDtosExecutor, { ValidateDtosMode } from '../validate-dtos/executor';
 import runPrismaConvertersExecutor, { PrismaConverterMode } from '../validate-prisma-converters/executor';
 import runNoDestructureExecutor, { NoDestructureMode } from '../validate-no-destructure/executor';
+import runNoDirectApiResolverExecutor, { NoDirectApiResolverMode } from '../validate-no-direct-api-resolver/executor';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
@@ -67,6 +68,13 @@ export interface NoDestructureConfig {
     ignoreModifiedUntilEpoch?: number;
 }
 
+export interface NoDirectApiResolverConfig {
+    mode?: NoDirectApiResolverMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+    enforcePaths?: string[];
+}
+
 export interface ValidateCodeOptions {
     methodMaxLimit?: MethodMaxLimitConfig;
     fileMaxLimit?: FileMaxLimitConfig;
@@ -76,6 +84,7 @@ export interface ValidateCodeOptions {
     validateDtos?: ValidateDtosConfig;
     prismaConverter?: PrismaConverterConfig;
     noDestructure?: NoDestructureConfig;
+    noDirectApiInResolver?: NoDirectApiResolverConfig;
 }
 
 export interface ExecutorResult {
@@ -120,6 +129,10 @@ interface ParsedConfig {
     noDestructureMode: NoDestructureMode;
     noDestructureDisableAllowed: boolean;
     noDestructureIgnoreEpoch: number | undefined;
+    noDirectApiResolverMode: NoDirectApiResolverMode;
+    noDirectApiResolverDisableAllowed: boolean;
+    noDirectApiResolverIgnoreEpoch: number | undefined;
+    noDirectApiResolverEnforcePaths: string[];
 }
 
 interface ResolvedMethodMode {
@@ -141,6 +154,7 @@ const VALID_MODES: Record<string, string[]> = {
     validateDtos:         ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'],
     prismaConverter:      ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noDestructure:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+    noDirectApiInResolver: ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
 };
 
 /**
@@ -149,7 +163,8 @@ const VALID_MODES: Record<string, string[]> = {
 function validateModes(options: ValidateCodeOptions): string[] {
     const errors: string[] = [];
 
-    const modeEntries: [string, string | undefined][] = [
+    type ModeEntry = [string, string | undefined];
+    const modeEntries: ModeEntry[] = [
         ['methodMaxLimit', options.methodMaxLimit?.mode],
         ['fileMaxLimit', options.fileMaxLimit?.mode],
         ['requireReturnType', options.requireReturnType?.mode],
@@ -158,6 +173,7 @@ function validateModes(options: ValidateCodeOptions): string[] {
         ['validateDtos', options.validateDtos?.mode],
         ['prismaConverter', options.prismaConverter?.mode],
         ['noDestructure', options.noDestructure?.mode],
+        ['noDirectApiInResolver', options.noDirectApiInResolver?.mode],
     ];
 
     for (const [ruleName, modeValue] of modeEntries) {
@@ -255,6 +271,10 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         noDestructureMode: options.noDestructure?.mode ?? 'OFF',
         noDestructureDisableAllowed: options.noDestructure?.disableAllowed ?? true,
         noDestructureIgnoreEpoch: options.noDestructure?.ignoreModifiedUntilEpoch,
+        noDirectApiResolverMode: options.noDirectApiInResolver?.mode ?? 'OFF',
+        noDirectApiResolverDisableAllowed: options.noDirectApiInResolver?.disableAllowed ?? true,
+        noDirectApiResolverIgnoreEpoch: options.noDirectApiInResolver?.ignoreModifiedUntilEpoch,
+        noDirectApiResolverEnforcePaths: options.noDirectApiInResolver?.enforcePaths ?? [],
     };
 }
 
@@ -275,6 +295,7 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
     console.log(`   Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
     console.log(`   No destructure: mode=${config.noDestructureMode}, disableAllowed=${config.noDestructureDisableAllowed}`);
+    console.log(`   No direct API in resolver: mode=${config.noDirectApiResolverMode}, disableAllowed=${config.noDirectApiResolverDisableAllowed}`);
     console.log('');
 }
 
@@ -282,7 +303,8 @@ function isAllOff(config: ParsedConfig): boolean {
     return config.methodMode === 'OFF' && config.fileMode === 'OFF' &&
         config.returnTypeMode === 'OFF' && config.noInlineTypesMode === 'OFF' &&
         config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF' &&
-        config.prismaConverterMode === 'OFF' && config.noDestructureMode === 'OFF';
+        config.prismaConverterMode === 'OFF' && config.noDestructureMode === 'OFF' &&
+        config.noDirectApiResolverMode === 'OFF';
 }
 
 async function runMethodValidators(config: ParsedConfig, context: ExecutorContext): Promise<ExecutorResult[]> {
@@ -366,12 +388,18 @@ export default async function runExecutor(
         disableAllowed: config.noDestructureDisableAllowed,
         ignoreModifiedUntilEpoch: config.noDestructureIgnoreEpoch,
     }, context);
+    const noDirectApiResolverResult = await runNoDirectApiResolverExecutor({
+        mode: config.noDirectApiResolverMode,
+        disableAllowed: config.noDirectApiResolverDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noDirectApiResolverIgnoreEpoch,
+        enforcePaths: config.noDirectApiResolverEnforcePaths,
+    }, context);
 
     const allSuccess = methodResults.every((r) => r.success) &&
         fileResult.success && returnTypesResult.success &&
         noInlineTypesResult.success && noAnyUnknownResult.success &&
         validateDtosResult.success && prismaConverterResult.success &&
-        noDestructureResult.success;
+        noDestructureResult.success && noDirectApiResolverResult.success;
 
     console.log(allSuccess ? '\n\u2705 All code validations passed\n' : '\n\u274c Some code validations failed\n');
     return { success: allSuccess };
