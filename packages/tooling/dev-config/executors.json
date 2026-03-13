@@ -94,6 +94,11 @@
             "implementation": "./architecture/executors/validate-no-destructure/executor",
             "schema": "./architecture/executors/validate-no-destructure/schema.json",
             "description": "Validate no destructuring patterns are used - use explicit property access instead"
+        },
+        "validate-no-direct-api-resolver": {
+            "implementation": "./architecture/executors/validate-no-direct-api-resolver/executor",
+            "schema": "./architecture/executors/validate-no-direct-api-resolver/schema.json",
+            "description": "Validate resolvers use services (not APIs) and components subscribe to observables (not route.snapshot.data)"
         }
     }
 }
