@@ -19,6 +19,11 @@
             "items": { "type": "string" },
             "description": "Array of directories (relative to workspace root) containing converter files"
         },
+        "enforcePaths": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of directory prefixes (relative to workspace root) to scope validation to. When set, only files under these paths are checked. When empty/omitted, all changed files are checked."
+        },
         "disableAllowed": {
             "type": "boolean",
             "description": "Whether disable comments work. When false, no escape hatch.",

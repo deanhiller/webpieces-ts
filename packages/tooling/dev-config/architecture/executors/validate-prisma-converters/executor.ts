@@ -59,6 +59,7 @@ export interface ValidatePrismaConvertersOptions {
     disableAllowed?: boolean;
     schemaPath?: string;
     convertersPaths?: string[];
+    enforcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
 }
 
@@ -702,6 +703,7 @@ function validateChangedFiles(
     workspaceRoot: string,
     schemaPath: string,
     convertersPaths: string[],
+    enforcePaths: string[],
     base: string,
     mode: PrismaConverterMode,
     disableAllowed: boolean
@@ -723,7 +725,12 @@ function validateChangedFiles(
 
     console.log(`   Found ${prismaModels.size} model(s) in schema.prisma`);
 
-    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+    let changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+    if (enforcePaths.length > 0) {
+        changedFiles = changedFiles.filter((f) =>
+            enforcePaths.some((ep) => f.startsWith(ep))
+        );
+    }
 
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
@@ -785,6 +792,7 @@ export default async function runExecutor(
 
     const schemaPath = options.schemaPath;
     const convertersPaths = options.convertersPaths ?? [];
+    const enforcePaths = options.enforcePaths ?? [];
 
     if (!schemaPath || convertersPaths.length === 0) {
         const reason = !schemaPath ? 'no schemaPath configured' : 'no convertersPaths configured';
@@ -797,6 +805,9 @@ export default async function runExecutor(
     console.log(`   Mode: ${mode}`);
     console.log(`   Schema: ${schemaPath}`);
     console.log(`   Converter paths: ${convertersPaths.join(', ')}`);
+    if (enforcePaths.length > 0) {
+        console.log(`   Enforce paths: ${enforcePaths.join(', ')}`);
+    }
 
     const base = resolveBase(workspaceRoot);
 
@@ -807,5 +818,5 @@ export default async function runExecutor(
     }
 
     const disableAllowed = options.disableAllowed ?? true;
-    return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, base, mode, disableAllowed);
+    return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, enforcePaths, base, mode, disableAllowed);
 }
