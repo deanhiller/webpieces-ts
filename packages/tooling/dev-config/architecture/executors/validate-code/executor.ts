@@ -57,6 +57,7 @@ export interface PrismaConverterConfig {
     disableAllowed?: boolean;
     schemaPath?: string;
     convertersPaths?: string[];
+    enforcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
 }
 
@@ -114,6 +115,7 @@ interface ParsedConfig {
     prismaConverterDisableAllowed: boolean;
     prismaConverterSchemaPath: string | undefined;
     prismaConverterConvertersPaths: string[];
+    prismaConverterEnforcePaths: string[];
     prismaConverterIgnoreEpoch: number | undefined;
     noDestructureMode: NoDestructureMode;
     noDestructureDisableAllowed: boolean;
@@ -248,6 +250,7 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         prismaConverterDisableAllowed: options.prismaConverter?.disableAllowed ?? true,
         prismaConverterSchemaPath: options.prismaConverter?.schemaPath,
         prismaConverterConvertersPaths: options.prismaConverter?.convertersPaths ?? [],
+        prismaConverterEnforcePaths: options.prismaConverter?.enforcePaths ?? [],
         prismaConverterIgnoreEpoch: options.prismaConverter?.ignoreModifiedUntilEpoch,
         noDestructureMode: options.noDestructure?.mode ?? 'OFF',
         noDestructureDisableAllowed: options.noDestructure?.disableAllowed ?? true,
@@ -355,6 +358,7 @@ export default async function runExecutor(
         disableAllowed: config.prismaConverterDisableAllowed,
         schemaPath: config.prismaConverterSchemaPath,
         convertersPaths: config.prismaConverterConvertersPaths,
+        enforcePaths: config.prismaConverterEnforcePaths,
         ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,
     }, context);
     const noDestructureResult = await runNoDestructureExecutor({

@@ -166,6 +166,11 @@
                     "items": { "type": "string" },
                     "description": "Array of directories (relative to workspace root) containing converter files"
                 },
+                "enforcePaths": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Array of directory prefixes (relative to workspace root) to scope validation to. When set, only files under these paths are checked. When empty/omitted, all changed files are checked."
+                },
                 "ignoreModifiedUntilEpoch": {
                     "type": "number",
                     "description": "Epoch seconds. Until this time, skip prisma-converter validation entirely. When expired, normal mode resumes. Omit when not needed."
