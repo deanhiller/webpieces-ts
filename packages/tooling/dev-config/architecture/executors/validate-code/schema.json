@@ -203,7 +203,7 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files.",
+                    "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. NEW_AND_MODIFIED_METHODS: violations in new/modified method/route scopes. MODIFIED_FILES: all in modified files.",
                     "default": "OFF"
                 },
                 "disableAllowed": {

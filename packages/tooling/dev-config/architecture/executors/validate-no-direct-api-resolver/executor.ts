@@ -21,9 +21,10 @@
  * ============================================================================
  * MODES (LINE-BASED)
  * ============================================================================
- * - OFF:            Skip validation entirely
- * - MODIFIED_CODE:  Flag violations on changed lines (lines in diff hunks)
- * - MODIFIED_FILES: Flag ALL violations in files that were modified
+ * - OFF:                      Skip validation entirely
+ * - MODIFIED_CODE:            Flag violations on changed lines (lines in diff hunks)
+ * - NEW_AND_MODIFIED_METHODS: Flag violations in new/modified method/route scopes
+ * - MODIFIED_FILES:           Flag ALL violations in files that were modified
  *
  * ============================================================================
  * ESCAPE HATCH
@@ -38,9 +39,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { getFileDiff, getChangedLineNumbers } from '../diff-utils';
+import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from '../diff-utils';
 
-export type NoDirectApiResolverMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
+export type NoDirectApiResolverMode = 'OFF' | 'MODIFIED_CODE' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
 export interface ValidateNoDirectApiResolverOptions {
     mode?: NoDirectApiResolverMode;
@@ -332,6 +333,191 @@ function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: str
     return violations;
 }
 
+interface RangeInfo {
+    name: string;
+    startLine: number;
+    endLine: number;
+}
+
+/**
+ * Find route object ranges in *.routes.ts files.
+ * A route object is an ObjectLiteralExpression that contains (directly or in descendants)
+ * a `resolve` property. Returns the line range of each such top-level route object.
+ */
+function findRouteObjectRanges(filePath: string, workspaceRoot: string): RangeInfo[] {
+    const fullPath = path.join(workspaceRoot, filePath);
+    if (!fs.existsSync(fullPath)) return [];
+
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
+
+    const ranges: RangeInfo[] = [];
+
+    function hasResolveProperty(node: ts.Node): boolean {
+        if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === 'resolve') {
+            return true;
+        }
+        let found = false;
+        ts.forEachChild(node, (child) => {
+            if (hasResolveProperty(child)) {
+                found = true;
+            }
+        });
+        return found;
+    }
+
+    function visitTopLevel(node: ts.Node): void {
+        if (ts.isObjectLiteralExpression(node) && hasResolveProperty(node)) {
+            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+            ranges.push({
+                name: `route@${start.line + 1}`,
+                startLine: start.line + 1,
+                endLine: end.line + 1,
+            });
+            return;
+        }
+        ts.forEachChild(node, visitTopLevel);
+    }
+
+    visitTopLevel(sourceFile);
+    return ranges;
+}
+
+/**
+ * Find method/function ranges in *.component.ts files.
+ * Returns ranges for class methods, function declarations, and arrow functions in variable declarations.
+ */
+function findMethodRanges(filePath: string, workspaceRoot: string): RangeInfo[] {
+    const fullPath = path.join(workspaceRoot, filePath);
+    if (!fs.existsSync(fullPath)) return [];
+
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
+
+    const ranges: RangeInfo[] = [];
+
+    function visit(node: ts.Node): void {
+        let methodName: string | undefined;
+        let startLine: number | undefined;
+        let endLine: number | undefined;
+
+        if (ts.isMethodDeclaration(node) && node.name) {
+            methodName = node.name.getText(sourceFile);
+            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+            startLine = start.line + 1;
+            endLine = end.line + 1;
+        } else if (ts.isFunctionDeclaration(node) && node.name) {
+            methodName = node.name.getText(sourceFile);
+            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+            startLine = start.line + 1;
+            endLine = end.line + 1;
+        } else if (ts.isArrowFunction(node)) {
+            if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) {
+                methodName = node.parent.name.getText(sourceFile);
+                const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+                const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+                startLine = start.line + 1;
+                endLine = end.line + 1;
+            }
+        }
+
+        if (methodName && startLine !== undefined && endLine !== undefined) {
+            ranges.push({ name: methodName, startLine, endLine });
+        }
+
+        ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+    return ranges;
+}
+
+/**
+ * NEW_AND_MODIFIED_METHODS mode: Flag violations in new/modified method/route scopes.
+ * - For *.routes.ts: If any line in a route object is changed, flag all inject(XxxApi) violations in that route
+ * - For *.component.ts: If a method is new/modified, flag all snapshot.data violations in that method
+ */
+// webpieces-disable max-lines-new-methods -- Method-scoped validation with route objects and component methods
+function findViolationsForModifiedMethods(
+    workspaceRoot: string,
+    changedFiles: string[],
+    base: string,
+    head: string | undefined,
+    disableAllowed: boolean
+): Violation[] {
+    const violations: Violation[] = [];
+
+    for (const file of changedFiles) {
+        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const changedLines = getChangedLineNumbers(diff);
+        const newMethodNames = findNewMethodSignaturesInDiff(diff);
+
+        if (changedLines.size === 0 && newMethodNames.size === 0) continue;
+
+        if (file.endsWith('.routes.ts')) {
+            const routeRanges = findRouteObjectRanges(file, workspaceRoot);
+            const allViolations = findDirectApiInjections(file, workspaceRoot, disableAllowed);
+
+            for (const range of routeRanges) {
+                let rangeHasChanges = false;
+                for (let line = range.startLine; line <= range.endLine; line++) {
+                    if (changedLines.has(line)) {
+                        rangeHasChanges = true;
+                        break;
+                    }
+                }
+                if (!rangeHasChanges) continue;
+
+                for (const v of allViolations) {
+                    if (disableAllowed && v.hasDisableComment) continue;
+                    if (v.line >= range.startLine && v.line <= range.endLine) {
+                        violations.push({
+                            file,
+                            line: v.line,
+                            column: v.column,
+                            context: v.context,
+                        });
+                    }
+                }
+            }
+        } else if (file.endsWith('.component.ts')) {
+            const methodRanges = findMethodRanges(file, workspaceRoot);
+            const allViolations = findSnapshotDataAccess(file, workspaceRoot, disableAllowed);
+
+            for (const range of methodRanges) {
+                const isNewMethod = newMethodNames.has(range.name);
+                let rangeHasChanges = false;
+                if (!isNewMethod) {
+                    for (let line = range.startLine; line <= range.endLine; line++) {
+                        if (changedLines.has(line)) {
+                            rangeHasChanges = true;
+                            break;
+                        }
+                    }
+                }
+                if (!isNewMethod && !rangeHasChanges) continue;
+
+                for (const v of allViolations) {
+                    if (disableAllowed && v.hasDisableComment) continue;
+                    if (v.line >= range.startLine && v.line <= range.endLine) {
+                        violations.push({
+                            file,
+                            line: v.line,
+                            column: v.column,
+                            context: v.context,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    return violations;
+}
+
 /**
  * Report violations to console.
  */
@@ -463,6 +649,8 @@ export default async function runExecutor(
 
     if (mode === 'MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
+    } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
+        violations = findViolationsForModifiedMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }

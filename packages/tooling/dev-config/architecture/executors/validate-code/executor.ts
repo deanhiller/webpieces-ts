@@ -154,7 +154,7 @@ const VALID_MODES: Record<string, string[]> = {
     validateDtos:         ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'],
     prismaConverter:      ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noDestructure:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
-    noDirectApiInResolver: ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+    noDirectApiInResolver: ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
 };
 
 /**
