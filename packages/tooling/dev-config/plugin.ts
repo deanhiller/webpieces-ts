@@ -118,7 +118,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
 };
 
 function normalizeOptions(
-    options: ArchitecturePluginOptions | undefined
+    options: ArchitecturePluginOptions | undefined,
 ): Required<ArchitecturePluginOptions> {
     const circularDeps = {
         ...DEFAULT_OPTIONS.circularDeps,
@@ -147,7 +147,7 @@ function normalizeOptions(
 async function createNodesFunction(
     projectFiles: readonly string[],
     options: ArchitecturePluginOptions | undefined,
-    context: CreateNodesContextV2
+    context: CreateNodesContextV2,
 ): Promise<CreateNodesResultV2> {
     const opts = normalizeOptions(options);
     const results: CreateNodesResultV2 = [];
@@ -165,7 +165,7 @@ function addArchitectureProject(
     results: CreateNodesResultV2,
     projectFiles: readonly string[],
     opts: Required<ArchitecturePluginOptions>,
-    context: CreateNodesContextV2
+    context: CreateNodesContextV2,
 ): void {
     if (!opts.workspace.enabled) return;
 
@@ -195,7 +195,7 @@ function addPerProjectTargets(
     results: CreateNodesResultV2,
     projectFiles: readonly string[],
     opts: Required<ArchitecturePluginOptions>,
-    context: CreateNodesContextV2
+    context: CreateNodesContextV2,
 ): void {
     // Track processed project roots to avoid duplicates when both files exist
     const processedRoots = new Set<string>();
@@ -266,14 +266,20 @@ export const createNodesV2: CreateNodesV2<ArchitecturePluginOptions> = [
 /**
  * Build list of enabled validation target names for validate-complete dependency chain
  */
-function buildValidationTargetsList(validations: Required<ArchitecturePluginOptions>['workspace']['validations']): string[] {
+function buildValidationTargetsList(
+    validations: Required<ArchitecturePluginOptions>['workspace']['validations'],
+): string[] {
     const targets: string[] = [];
     if (validations!.noCycles) targets.push('validate-no-architecture-cycles');
     if (validations!.architectureUnchanged) targets.push('validate-architecture-unchanged');
     if (validations!.noSkipLevelDeps) targets.push('validate-no-skiplevel-deps');
     if (validations!.validatePackageJson) targets.push('validate-packagejson');
     // Use combined validate-code instead of 3 separate targets
-    if (validations!.validateNewMethods || validations!.validateModifiedMethods || validations!.validateModifiedFiles) {
+    if (
+        validations!.validateNewMethods ||
+        validations!.validateModifiedMethods ||
+        validations!.validateModifiedFiles
+    ) {
         targets.push('validate-code');
     }
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
@@ -284,7 +290,9 @@ function buildValidationTargetsList(validations: Required<ArchitecturePluginOpti
  * Create workspace-level architecture validation targets WITHOUT prefix
  * Used for virtual 'architecture' project
  */
-function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
+function createWorkspaceTargetsWithoutPrefix(
+    opts: Required<ArchitecturePluginOptions>,
+): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
     const graphPath = opts.workspace.graphPath!;
     const validations = opts.workspace.validations!;
@@ -312,7 +320,11 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
     }
     // Use combined validate-code instead of 3 separate targets
     // Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
-    if (validations.validateNewMethods || validations.validateModifiedMethods || validations.validateModifiedFiles) {
+    if (
+        validations.validateNewMethods ||
+        validations.validateModifiedMethods ||
+        validations.validateModifiedFiles
+    ) {
         targets['validate-code'] = createValidateCodeTarget();
     }
     if (validations.validateVersionsLocked) {
@@ -332,7 +344,9 @@ function createWorkspaceTargetsWithoutPrefix(opts: Required<ArchitecturePluginOp
  * Create workspace-level architecture validation targets (DEPRECATED - keeping for backward compat)
  * Used when root project.json exists (old style with '.' project)
  */
-function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Record<string, TargetConfiguration> {
+function createWorkspaceTargets(
+    opts: Required<ArchitecturePluginOptions>,
+): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
     const prefix = opts.workspace.targetPrefix!;
     const graphPath = opts.workspace.graphPath!;
@@ -353,7 +367,8 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
     }
 
     if (opts.workspace.validations!.architectureUnchanged) {
-        targets[`${prefix}validate-architecture-unchanged`] = createValidateUnchangedTarget(graphPath);
+        targets[`${prefix}validate-architecture-unchanged`] =
+            createValidateUnchangedTarget(graphPath);
     }
 
     if (opts.workspace.validations!.noSkipLevelDeps) {
@@ -366,7 +381,11 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
 
     // Use combined validate-code instead of 3 separate targets
     // Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
-    if (opts.workspace.validations!.validateNewMethods || opts.workspace.validations!.validateModifiedMethods || opts.workspace.validations!.validateModifiedFiles) {
+    if (
+        opts.workspace.validations!.validateNewMethods ||
+        opts.workspace.validations!.validateModifiedMethods ||
+        opts.workspace.validations!.validateModifiedFiles
+    ) {
         targets[`${prefix}validate-code`] = createValidateCodeTarget();
     }
 
@@ -376,8 +395,7 @@ function createWorkspaceTargets(opts: Required<ArchitecturePluginOptions>): Reco
 function createGenerateTarget(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:generate',
-        cache: true,
-        inputs: ['default'],
+        cache: false,
         outputs: ['{workspaceRoot}/architecture/dependencies.json'],
         options: { graphPath },
         metadata: {
@@ -426,7 +444,7 @@ function createValidateNoCyclesTarget(): TargetConfiguration {
 function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-architecture-unchanged',
-        cache: true,
+        cache: false,
         inputs: ['default', '{workspaceRoot}/architecture/dependencies.json'],
         options: { graphPath },
         metadata: {
@@ -460,7 +478,10 @@ function createValidatePackageJsonTarget(): TargetConfiguration {
     };
 }
 
-function createValidateNewMethodsTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
+function createValidateNewMethodsTarget(
+    maxLines: number,
+    mode: 'STRICT' | 'NORMAL' | 'OFF',
+): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-new-methods',
         cache: false, // Don't cache - depends on git state
@@ -473,7 +494,10 @@ function createValidateNewMethodsTarget(maxLines: number, mode: 'STRICT' | 'NORM
     };
 }
 
-function createValidateModifiedMethodsTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
+function createValidateModifiedMethodsTarget(
+    maxLines: number,
+    mode: 'STRICT' | 'NORMAL' | 'OFF',
+): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-modified-methods',
         cache: false, // Don't cache - depends on git state
@@ -486,7 +510,10 @@ function createValidateModifiedMethodsTarget(maxLines: number, mode: 'STRICT' | 
     };
 }
 
-function createValidateModifiedFilesTarget(maxLines: number, mode: 'STRICT' | 'NORMAL' | 'OFF'): TargetConfiguration {
+function createValidateModifiedFilesTarget(
+    maxLines: number,
+    mode: 'STRICT' | 'NORMAL' | 'OFF',
+): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-modified-files',
         cache: false, // Don't cache - depends on git state
@@ -523,7 +550,8 @@ function createValidateVersionsLockedTarget(): TargetConfiguration {
         inputs: ['default'],
         metadata: {
             technologies: ['nx'],
-            description: 'Validate package.json versions are locked (no semver ranges) and consistent across projects',
+            description:
+                'Validate package.json versions are locked (no semver ranges) and consistent across projects',
         },
     };
 }
