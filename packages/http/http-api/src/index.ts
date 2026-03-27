@@ -21,16 +21,14 @@
 export {
     ApiPath,
     Endpoint,
-    Public,
-    Authenticated,
-    Roles,
+    Authentication,
+    AuthenticationConfig,
     getApiPath,
     getEndpoints,
     isApiPath,
     getAuthMeta,
     validateNoConflictingDecorators,
     AuthMeta,
-    AuthMetaType,
     RouteMetadata,
     METADATA_KEYS,
 } from './decorators';

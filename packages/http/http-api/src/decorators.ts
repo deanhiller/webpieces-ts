@@ -21,39 +21,38 @@ export class RouteMetadata {
     path: string;
     methodName: string;
     controllerClassName?: string;
+    authMeta?: AuthMeta;
 
     constructor(
         httpMethod: string,
         path: string,
         methodName: string,
         controllerClassName?: string,
+        authMeta?: AuthMeta,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
         this.methodName = methodName;
         this.controllerClassName = controllerClassName;
+        this.authMeta = authMeta;
     }
 }
 
 /**
- * Auth requirement type for an API class or method.
- */
-export enum AuthMetaType {
-    PUBLIC = 'PUBLIC',
-    AUTHENTICATED = 'AUTHENTICATED',
-    ROLES = 'ROLES',
-}
-
-/**
- * Auth metadata attached to a class or method.
+ * Auth metadata attached to a class or method via @Authentication().
+ *
+ * - authenticated=false → public endpoint (no auth check)
+ * - authenticated=true, no roles → requires authentication
+ * - authenticated=true, roles=['admin'] → requires authentication + specific roles
+ * - authenticated=false + roles → INVALID (caught at decorator time)
  */
 export class AuthMeta {
-    type: AuthMetaType;
-    roles?: string[];
+    authenticated: boolean;
+    roles: string[];
 
-    constructor(type: AuthMetaType, roles?: string[]) {
-        this.type = type;
-        this.roles = roles;
+    constructor(authenticated: boolean, roles?: string[]) {
+        this.authenticated = authenticated;
+        this.roles = roles ?? [];
     }
 }
 
@@ -63,6 +62,7 @@ export class AuthMeta {
  *
  * Usage:
  * ```typescript
+ * @Authentication({authenticated: true})
  * @ApiPath('/api/save')
  * abstract class SaveApiPrototype {
  *   @Endpoint('/item')
@@ -71,6 +71,7 @@ export class AuthMeta {
  * ```
  */
 export function ApiPath(basePath: string): ClassDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any) => {
         Reflect.defineMetadata(METADATA_KEYS.API_PATH, basePath, target);
 
@@ -107,56 +108,42 @@ export function Endpoint(path: string): MethodDecorator {
 }
 
 /**
- * @Public() - Class or method decorator marking the target as publicly accessible
- * (no authentication required).
+ * Authentication config passed to @Authentication() decorator.
  */
-export function Public(): ClassDecorator & MethodDecorator {
-    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
-    return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
-        const authMeta = new AuthMeta(AuthMetaType.PUBLIC);
+export class AuthenticationConfig {
+    authenticated: boolean;
+    roles?: string[];
 
-        if (propertyKey !== undefined) {
-            // Method decorator
-            const metadataTarget = typeof target === 'function' ? target : target.constructor;
-            validateNoConflictingDecorators(metadataTarget, propertyKey as string);
-            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
-        } else {
-            // Class decorator
-            validateNoConflictingDecorators(target, undefined);
-            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
-        }
-    };
+    constructor(authenticated: boolean, roles?: string[]) {
+        this.authenticated = authenticated;
+        this.roles = roles;
+    }
 }
 
 /**
- * @Authenticated() - Class or method decorator requiring authentication.
+ * @Authentication(config) - Class or method decorator for auth requirements.
+ *
+ * Single decorator replaces @Public/@Authenticated/@Roles:
+ * - @Authentication({authenticated: false}) → public, no auth check
+ * - @Authentication({authenticated: true}) → requires authentication
+ * - @Authentication({authenticated: true, roles: ['admin']}) → requires auth + roles
+ *
+ * Class-level is required. Methods can override class-level.
+ * Throws if authenticated=false but roles are specified (contradictory).
  */
-export function Authenticated(): ClassDecorator & MethodDecorator {
+export function Authentication(config: AuthenticationConfig): ClassDecorator & MethodDecorator {
+    // Validate: can't be public with roles
+    if (!config.authenticated && config.roles && config.roles.length > 0) {
+        throw new Error(
+            `Invalid @Authentication config: authenticated=false but roles=${JSON.stringify(config.roles)}. ` +
+            `Cannot require roles on a public endpoint. Set authenticated=true or remove roles.`
+        );
+    }
+
+    const authMeta = new AuthMeta(config.authenticated, config.roles);
+
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
-        const authMeta = new AuthMeta(AuthMetaType.AUTHENTICATED);
-
-        if (propertyKey !== undefined) {
-            // Method decorator
-            const metadataTarget = typeof target === 'function' ? target : target.constructor;
-            validateNoConflictingDecorators(metadataTarget, propertyKey as string);
-            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
-        } else {
-            // Class decorator
-            validateNoConflictingDecorators(target, undefined);
-            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
-        }
-    };
-}
-
-/**
- * @Roles(roles) - Class or method decorator requiring specific roles.
- */
-export function Roles(roles: string[]): ClassDecorator & MethodDecorator {
-    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
-    return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
-        const authMeta = new AuthMeta(AuthMetaType.ROLES, roles);
-
         if (propertyKey !== undefined) {
             // Method decorator
             const metadataTarget = typeof target === 'function' ? target : target.constructor;
@@ -215,7 +202,7 @@ export function getAuthMeta(apiClass: Function, methodName?: string): AuthMeta |
 
 /**
  * Validate that a class/method doesn't have conflicting auth decorators.
- * @throws Error if multiple auth decorators are found on the same target.
+ * @throws Error if multiple @Authentication decorators are found on the same target.
  */
 export function validateNoConflictingDecorators(apiClass: Function, methodName: string | undefined): void {
     const existing = methodName
@@ -226,9 +213,8 @@ export function validateNoConflictingDecorators(apiClass: Function, methodName: 
         const targetName = apiClass.name || 'Unknown';
         const location = methodName ? `method '${methodName}' of ${targetName}` : `class ${targetName}`;
         throw new Error(
-            `Conflicting auth decorators on ${location}. ` +
-            `Found existing @${existing.type} but another auth decorator is being applied. ` +
-            `Only one of @Public(), @Authenticated(), or @Roles() can be used per target.`
+            `Conflicting @Authentication on ${location}. ` +
+            `Only one @Authentication() decorator allowed per target.`
         );
     }
 }

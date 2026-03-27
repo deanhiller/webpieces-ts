@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, Authenticated, ValidateImplementation } from '@webpieces/http-api';
+import { ApiPath, Endpoint, Authentication, AuthenticationConfig, ValidateImplementation } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs
@@ -127,7 +127,7 @@ export interface SaveApi {
  *
  * Note: Methods throw by default to catch runtime errors if not overridden.
  */
-@Authenticated()
+@Authentication(new AuthenticationConfig(true))
 @ApiPath('/search')
 export abstract class SaveApiPrototype implements SaveApi {
     @Endpoint('/item')

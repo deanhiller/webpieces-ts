@@ -4,6 +4,7 @@ import {buildProviderModule} from '@inversifyjs/binding-decorators';
 import {
     ExpressRouteHandler,
     getApiPath,
+    getAuthMeta,
     getEndpoints,
     MethodMeta,
     provideSingleton,
@@ -333,7 +334,8 @@ export class WebpiecesServerImpl implements WebpiecesServer {
             const httpMethod = 'POST';
             const path = basePath + endpointPath;
 
-            const routeMeta = new RouteMetadata(httpMethod, path, methodName);
+            const authMeta = getAuthMeta(apiPrototype, methodName);
+            const routeMeta = new RouteMetadata(httpMethod, path, methodName, apiPrototype.name, authMeta);
 
             // Create invoker service ONCE (sets up filter chain once, not on every call!)
             const service = this.routeBuilder.createRouteInvoker(httpMethod, path);

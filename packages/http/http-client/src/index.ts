@@ -44,8 +44,7 @@ export { ContextReader } from '@webpieces/http-api';
 export {
     ApiPath,
     Endpoint,
-    Public,
-    Authenticated,
-    Roles,
+    Authentication,
+    AuthenticationConfig,
     ValidateImplementation,
 } from '@webpieces/http-api';

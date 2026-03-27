@@ -69,7 +69,7 @@ export class MethodMeta {
         this.requestHeaders = requestHeaders;
         this.requestDto = requestDto;
         this.metadata = metadata ?? new Map();
-        this.authMeta = authMeta;
+        this.authMeta = authMeta ?? routeMeta.authMeta;
     }
 
     /**

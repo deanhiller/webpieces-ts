@@ -45,45 +45,43 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
             throw new Error(`Class ${className} must be decorated with @ApiPath()`);
         }
 
-        // Validate that controllerClass implements the methods from apiMetaClass
-        this.validateControllerImplementsApi();
-    }
-
-    /**
-     * Validate that the controller implements all endpoint methods from the API.
-     */
-    private validateControllerImplementsApi(): void {
-        const endpoints = getEndpoints(this.apiMetaClass) || {};
-
-        for (const methodName of Object.keys(endpoints)) {
-            const controllerPrototype = this.controllerClass.prototype;
-
-            if (typeof controllerPrototype[methodName] !== 'function') {
-                const controllerName = this.controllerClass.name || 'Unknown';
-                const apiName = this.apiMetaClass.name || 'Unknown';
-                throw new Error(
-                    `Controller ${controllerName} must implement method ${methodName} from API ${apiName}`,
-                );
-            }
-        }
     }
 
     /**
      * Configure routes by reading @ApiPath + @Endpoint metadata.
+     * Validates controller methods and auth decorators in single loop.
      */
     configure(routeBuilder: RouteBuilder): void {
         const basePath = getApiPath(this.apiMetaClass)!;
         const endpoints = getEndpoints(this.apiMetaClass) || {};
         const controllerFilepath = this.getControllerFilepath();
+        const apiName = this.apiMetaClass.name || 'Unknown';
+        const controllerName = this.controllerClass.name || 'Unknown';
 
         for (const [methodName, endpointPath] of Object.entries(endpoints)) {
-            const fullPath = basePath + endpointPath;
+            // Validate controller implements this method
+            if (typeof this.controllerClass.prototype[methodName] !== 'function') {
+                throw new Error(
+                    `Controller ${controllerName} must implement method ${methodName} from API ${apiName}`,
+                );
+            }
 
+            // Validate auth decorator exists (class-level or method-level)
+            const authMeta = getAuthMeta(this.apiMetaClass, methodName);
+            if (!authMeta) {
+                throw new Error(
+                    `Endpoint '${methodName}' in ${apiName} has no @Authentication decorator. ` +
+                    `Add @Authentication(new AuthenticationConfig(...)) to the class or method.`,
+                );
+            }
+
+            const fullPath = basePath + endpointPath;
             const routeMeta = new RouteMetadata(
                 'POST',
                 fullPath,
                 methodName,
-                this.controllerClass.name,
+                controllerName,
+                authMeta,
             );
 
             routeBuilder.addRoute(new RouteDefinition(routeMeta, this.controllerClass, controllerFilepath));

@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, Public, ValidateImplementation } from '@webpieces/http-api';
+import { ApiPath, Endpoint, Authentication, AuthenticationConfig, ValidateImplementation } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs
@@ -43,7 +43,7 @@ export interface PublicApi {
  *
  * Defines the route metadata for the public API endpoints.
  */
-@Public()
+@Authentication(new AuthenticationConfig(false))
 @ApiPath('/public')
 export abstract class PublicApiPrototype implements PublicApi {
     @Endpoint('/info')
