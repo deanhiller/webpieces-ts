@@ -5,197 +5,230 @@ import 'reflect-metadata';
  * These keys are used by both server-side (routing) and client-side (client generation).
  */
 export const METADATA_KEYS = {
-    API_INTERFACE: 'webpieces:api-interface',
-    ROUTES: 'webpieces:routes',
-    HTTP_METHOD: 'webpieces:http-method',
-    PATH: 'webpieces:path',
+    API_PATH: 'webpieces:api-path',
+    ENDPOINTS: 'webpieces:endpoints',
+    AUTH_META: 'webpieces:auth-meta',
 };
 
 /**
- * Route metadata stored on methods.
- * Used by both server-side routing and client-side HTTP client generation.
+ * Route metadata stored per-method at runtime.
+ * Used internally by http-routing and http-client as the runtime representation
+ * of a route. Constructed from @ApiPath + @Endpoint metadata by createApiClient
+ * and ApiRoutingFactory.
  */
 export class RouteMetadata {
     httpMethod: string;
     path: string;
     methodName: string;
-    parameterTypes?: any[];
     controllerClassName?: string;
 
     constructor(
         httpMethod: string,
         path: string,
         methodName: string,
-        parameterTypes?: any[],
         controllerClassName?: string,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
         this.methodName = methodName;
-        this.parameterTypes = parameterTypes;
         this.controllerClassName = controllerClassName;
     }
 }
 
 /**
- * Mark a class as an API interface.
- * Similar to Java's JAX-RS interface pattern.
- *
- * This decorator is used by:
- * - Server: RESTApiRoutes reads it to validate API interfaces
- * - Client: Client generator reads it to identify API interfaces
+ * Auth requirement type for an API class or method.
+ */
+export enum AuthMetaType {
+    PUBLIC = 'PUBLIC',
+    AUTHENTICATED = 'AUTHENTICATED',
+    ROLES = 'ROLES',
+}
+
+/**
+ * Auth metadata attached to a class or method.
+ */
+export class AuthMeta {
+    type: AuthMetaType;
+    roles?: string[];
+
+    constructor(type: AuthMetaType, roles?: string[]) {
+        this.type = type;
+        this.roles = roles;
+    }
+}
+
+/**
+ * @ApiPath(basePath) - Class decorator that marks a class as an API definition
+ * and sets the base path for all endpoints.
  *
  * Usage:
  * ```typescript
- * @ApiInterface()
+ * @ApiPath('/api/save')
  * abstract class SaveApiPrototype {
- *   @Post()
- *   @Path('/search/item')
- *   save(request: SaveRequest): Promise<SaveResponse> {
- *     throw new Error('Must be implemented');
- *   }
+ *   @Endpoint('/item')
+ *   save(request: SaveRequest): Promise<SaveResponse> { ... }
  * }
  * ```
  */
-export function ApiInterface(): ClassDecorator {
+export function ApiPath(basePath: string): ClassDecorator {
     return (target: any) => {
-        Reflect.defineMetadata(METADATA_KEYS.API_INTERFACE, true, target);
+        Reflect.defineMetadata(METADATA_KEYS.API_PATH, basePath, target);
 
-        // Initialize routes array if not exists
-        if (!Reflect.hasMetadata(METADATA_KEYS.ROUTES, target)) {
-            Reflect.defineMetadata(METADATA_KEYS.ROUTES, [], target);
+        // Initialize endpoints map if not exists
+        if (!Reflect.hasMetadata(METADATA_KEYS.ENDPOINTS, target)) {
+            Reflect.defineMetadata(METADATA_KEYS.ENDPOINTS, {}, target);
         }
     };
 }
 
 /**
- * Internal helper to mark a method with an HTTP method.
- * Used by @Get, @Post, @Put, @Delete, @Patch decorators.
- */
-function httpMethod(method: string): MethodDecorator {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-        // For static methods, target is the constructor itself
-        // For instance methods, target is the prototype
-        const metadataTarget = typeof target === 'function' ? target : target.constructor;
-
-        const existingMetadata = Reflect.getMetadata(METADATA_KEYS.ROUTES, metadataTarget) || [];
-
-        // Find or create route metadata for this method
-        let routeMetadata = existingMetadata.find(
-            (r: RouteMetadata) => r.methodName === propertyKey,
-        );
-
-        if (!routeMetadata) {
-            routeMetadata = new RouteMetadata('', '', propertyKey as string);
-            existingMetadata.push(routeMetadata);
-        }
-
-        routeMetadata.httpMethod = method;
-
-        // Get parameter types
-        const paramTypes = Reflect.getMetadata('design:paramtypes', target, propertyKey);
-        if (paramTypes) {
-            routeMetadata.parameterTypes = paramTypes;
-        }
-
-        Reflect.defineMetadata(METADATA_KEYS.ROUTES, existingMetadata, metadataTarget);
-    };
-}
-
-/**
- * @Get decorator for GET requests.
- * Usage: @Get()
- */
-export function Get(): MethodDecorator {
-    return httpMethod('GET');
-}
-
-/**
- * @Post decorator for POST requests.
- * Usage: @Post()
- */
-export function Post(): MethodDecorator {
-    return httpMethod('POST');
-}
-
-/**
- * @Put decorator for PUT requests.
- * Usage: @Put()
- */
-export function Put(): MethodDecorator {
-    return httpMethod('PUT');
-}
-
-/**
- * @Delete decorator for DELETE requests.
- * Usage: @Delete()
- */
-export function Delete(): MethodDecorator {
-    return httpMethod('DELETE');
-}
-
-/**
- * @Patch decorator for PATCH requests.
- * Usage: @Patch()
- */
-export function Patch(): MethodDecorator {
-    return httpMethod('PATCH');
-}
-
-/**
- * @Path decorator to specify the route path.
- * Similar to JAX-RS @Path annotation.
+ * @Endpoint(path) - Method decorator that registers a POST endpoint at the given path.
  *
- * This decorator is used by:
- * - Server: To register routes at the specified path
- * - Client: To make HTTP requests to the specified path
+ * All endpoints are POST-only (matching gRPC/thrift style).
  *
  * Usage:
  * ```typescript
- * @Post()
- * @Path('/search/item')
- * save(request: SaveRequest): Promise<SaveResponse> {
- *   throw new Error('Must be implemented');
- * }
+ * @Endpoint('/item')
+ * save(request: SaveRequest): Promise<SaveResponse> { ... }
  * ```
  */
-export function Path(path: string): MethodDecorator {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-        // For static methods, target is the constructor itself
-        // For instance methods, target is the prototype
+export function Endpoint(path: string): MethodDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
         const metadataTarget = typeof target === 'function' ? target : target.constructor;
 
-        const existingMetadata = Reflect.getMetadata(METADATA_KEYS.ROUTES, metadataTarget) || [];
+        const endpoints: Record<string, string> =
+            Reflect.getMetadata(METADATA_KEYS.ENDPOINTS, metadataTarget) || {};
 
-        // Find or create route metadata for this method
-        let routeMetadata = existingMetadata.find(
-            (r: RouteMetadata) => r.methodName === propertyKey,
-        );
+        endpoints[propertyKey as string] = path;
 
-        if (!routeMetadata) {
-            routeMetadata = new RouteMetadata('', '', propertyKey as string);
-            existingMetadata.push(routeMetadata);
-        }
-
-        routeMetadata.path = path;
-
-        Reflect.defineMetadata(METADATA_KEYS.ROUTES, existingMetadata, metadataTarget);
+        Reflect.defineMetadata(METADATA_KEYS.ENDPOINTS, endpoints, metadataTarget);
     };
 }
 
 /**
- * Helper function to get all routes from an API interface class.
- * Used by both server-side routing and client-side client generation.
+ * @Public() - Class or method decorator marking the target as publicly accessible
+ * (no authentication required).
  */
-export function getRoutes(apiClass: any): RouteMetadata[] {
-    const routes = Reflect.getMetadata(METADATA_KEYS.ROUTES, apiClass);
-    return routes || [];
+export function Public(): ClassDecorator & MethodDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
+        const authMeta = new AuthMeta(AuthMetaType.PUBLIC);
+
+        if (propertyKey !== undefined) {
+            // Method decorator
+            const metadataTarget = typeof target === 'function' ? target : target.constructor;
+            validateNoConflictingDecorators(metadataTarget, propertyKey as string);
+            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
+        } else {
+            // Class decorator
+            validateNoConflictingDecorators(target, undefined);
+            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
+        }
+    };
 }
 
 /**
- * Helper function to check if a class is an API interface.
- * Used by both server-side routing and client-side client generation.
+ * @Authenticated() - Class or method decorator requiring authentication.
  */
-export function isApiInterface(apiClass: any): boolean {
-    return Reflect.getMetadata(METADATA_KEYS.API_INTERFACE, apiClass) === true;
+export function Authenticated(): ClassDecorator & MethodDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
+        const authMeta = new AuthMeta(AuthMetaType.AUTHENTICATED);
+
+        if (propertyKey !== undefined) {
+            // Method decorator
+            const metadataTarget = typeof target === 'function' ? target : target.constructor;
+            validateNoConflictingDecorators(metadataTarget, propertyKey as string);
+            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
+        } else {
+            // Class decorator
+            validateNoConflictingDecorators(target, undefined);
+            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
+        }
+    };
+}
+
+/**
+ * @Roles(roles) - Class or method decorator requiring specific roles.
+ */
+export function Roles(roles: string[]): ClassDecorator & MethodDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
+        const authMeta = new AuthMeta(AuthMetaType.ROLES, roles);
+
+        if (propertyKey !== undefined) {
+            // Method decorator
+            const metadataTarget = typeof target === 'function' ? target : target.constructor;
+            validateNoConflictingDecorators(metadataTarget, propertyKey as string);
+            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, metadataTarget, propertyKey);
+        } else {
+            // Class decorator
+            validateNoConflictingDecorators(target, undefined);
+            Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
+        }
+    };
+}
+
+// ============================================================
+// Helper functions
+// ============================================================
+
+/**
+ * Get the base path from @ApiPath decorator.
+ */
+export function getApiPath(apiClass: Function): string | undefined {
+    return Reflect.getMetadata(METADATA_KEYS.API_PATH, apiClass);
+}
+
+/**
+ * Get all endpoints from @Endpoint decorators.
+ * Returns a record of methodName -> endpoint path.
+ */
+export function getEndpoints(apiClass: Function): Record<string, string> | undefined {
+    return Reflect.getMetadata(METADATA_KEYS.ENDPOINTS, apiClass);
+}
+
+/**
+ * Check if a class has @ApiPath decorator.
+ */
+export function isApiPath(apiClass: Function): boolean {
+    return Reflect.hasMetadata(METADATA_KEYS.API_PATH, apiClass);
+}
+
+/**
+ * Get auth metadata for a specific method, falling back to class-level auth.
+ * Method-level auth takes precedence over class-level auth.
+ */
+export function getAuthMeta(apiClass: Function, methodName?: string): AuthMeta | undefined {
+    // Check method-level first
+    if (methodName) {
+        const methodAuth = Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass, methodName);
+        if (methodAuth) {
+            return methodAuth;
+        }
+    }
+
+    // Fall back to class-level
+    return Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass);
+}
+
+/**
+ * Validate that a class/method doesn't have conflicting auth decorators.
+ * @throws Error if multiple auth decorators are found on the same target.
+ */
+export function validateNoConflictingDecorators(apiClass: Function, methodName: string | undefined): void {
+    const existing = methodName
+        ? Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass, methodName)
+        : Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass);
+
+    if (existing) {
+        const targetName = apiClass.name || 'Unknown';
+        const location = methodName ? `method '${methodName}' of ${targetName}` : `class ${targetName}`;
+        throw new Error(
+            `Conflicting auth decorators on ${location}. ` +
+            `Found existing @${existing.type} but another auth decorator is being applied. ` +
+            `Only one of @Public(), @Authenticated(), or @Roles() can be used per target.`
+        );
+    }
 }

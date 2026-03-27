@@ -3,7 +3,8 @@ import {Container, ContainerModule, inject, injectable} from 'inversify';
 import {buildProviderModule} from '@inversifyjs/binding-decorators';
 import {
     ExpressRouteHandler,
-    getRoutes,
+    getApiPath,
+    getEndpoints,
     MethodMeta,
     provideSingleton,
     RouteBuilderImpl, RouteMetadata,
@@ -320,17 +321,19 @@ export class WebpiecesServerImpl implements WebpiecesServer {
             throw new Error('Server not initialized. Call initialize() before createApiClient().');
         }
 
-        // Get routes from the API prototype using decorators (loops over API methods, NOT all routes)
-        const apiMethods = getRoutes(apiPrototype);
+        // Get endpoints from the API prototype using @ApiPath/@Endpoint decorators
+        const basePath = getApiPath(apiPrototype) || '';
+        const endpoints = getEndpoints(apiPrototype) || {};
 
         // Create proxy object
         const proxy: Record<string, unknown> = {};
 
-        // Loop over API methods and create proxy functions
-        for (const routeMeta of apiMethods) {
-            const methodName = routeMeta.methodName;
-            const httpMethod = routeMeta.httpMethod.toUpperCase();
-            const path = routeMeta.path;
+        // Loop over API endpoints and create proxy functions
+        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
+            const httpMethod = 'POST';
+            const path = basePath + endpointPath;
+
+            const routeMeta = new RouteMetadata(httpMethod, path, methodName);
 
             // Create invoker service ONCE (sets up filter chain once, not on every call!)
             const service = this.routeBuilder.createRouteInvoker(httpMethod, path);
