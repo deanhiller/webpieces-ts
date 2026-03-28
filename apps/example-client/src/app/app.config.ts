@@ -4,7 +4,7 @@ import { routes } from './app.routes';
 import { ClientConfig } from '@webpieces/http-client';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
 import { SaveApiPrototype, PublicApiPrototype } from '@webpieces/example-apis';
-import { createClient } from '@webpieces/http-client';
+import { createApiClient } from '@webpieces/http-client';
 
 /**
  * Application configuration with dependency injection setup.
@@ -32,7 +32,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: SaveApiPrototype,
       useFactory: (config: ClientConfig) => {
-        return createClient(SaveApiPrototype, config);
+        return createApiClient(SaveApiPrototype, config);
       },
       deps: [ClientConfig]
     },
@@ -41,7 +41,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: PublicApiPrototype,
       useFactory: (config: ClientConfig) => {
-        return createClient(PublicApiPrototype, config);
+        return createApiClient(PublicApiPrototype, config);
       },
       deps: [ClientConfig]
     }

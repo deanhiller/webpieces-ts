@@ -19,15 +19,16 @@
 
 // API definition decorators
 export {
-    ApiInterface,
-    Get,
-    Post,
-    Put,
-    Delete,
-    Patch,
-    Path,
-    getRoutes,
-    isApiInterface,
+    ApiPath,
+    Endpoint,
+    Authentication,
+    AuthenticationConfig,
+    getApiPath,
+    getEndpoints,
+    isApiPath,
+    getAuthMeta,
+    validateNoConflictingDecorators,
+    AuthMeta,
     RouteMetadata,
     METADATA_KEYS,
 } from './decorators';

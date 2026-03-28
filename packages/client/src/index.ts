@@ -6,7 +6,7 @@
  *
  * @example
  * import { createApiClient } from '@webpieces/http-client';
- * import { ApiInterface, Post, Get } from '@webpieces/http-api';
+ * import { ApiPath, Endpoint } from '@webpieces/http-api';
  */
 
 // This file exists only to satisfy build requirements.

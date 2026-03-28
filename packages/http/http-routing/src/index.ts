@@ -1,14 +1,14 @@
 // Re-export API decorators from http-api for convenience
 export {
-    ApiInterface,
-    Get,
-    Post,
-    Put,
-    Delete,
-    Patch,
-    Path,
-    getRoutes,
-    isApiInterface,
+    ApiPath,
+    Endpoint,
+    Authentication,
+    AuthenticationConfig,
+    getApiPath,
+    getEndpoints,
+    isApiPath,
+    getAuthMeta,
+    AuthMeta,
     RouteMetadata,
     METADATA_KEYS,
     ValidateImplementation,
@@ -23,7 +23,7 @@ export {
     ROUTING_METADATA_KEYS,
 } from './decorators';
 
-export { RESTApiRoutes, ClassType } from './RESTApiRoutes';
+export { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
 
 // Core routing types (moved from core-meta)
 export {

@@ -1,4 +1,4 @@
-import { ApiInterface, Get, Path, ValidateImplementation } from '@webpieces/http-api';
+import { ApiPath, Endpoint, Authentication, AuthenticationConfig, ValidateImplementation } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs
@@ -43,10 +43,10 @@ export interface PublicApi {
  *
  * Defines the route metadata for the public API endpoints.
  */
-@ApiInterface()
+@Authentication(new AuthenticationConfig(false))
+@ApiPath('/public')
 export abstract class PublicApiPrototype implements PublicApi {
-    @Get()
-    @Path('/public/info')
+    @Endpoint('/info')
     getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
         throw new Error('Method getInfo() must be implemented by subclass');
     }

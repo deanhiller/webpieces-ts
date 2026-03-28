@@ -1,6 +1,7 @@
 import {
-    getRoutes,
-    isApiInterface,
+    isApiPath,
+    getApiPath,
+    getEndpoints,
     RouteMetadata,
     ProtocolError,
     HeaderMethods,
@@ -8,6 +9,12 @@ import {
 } from '@webpieces/http-api';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { ContextMgr } from './ContextMgr';
+
+/**
+ * Type representing a class constructor whose prototype is T.
+ * Used as the apiPrototype parameter for createApiClient.
+ */
+type ApiPrototype<T> = Function & { prototype: T };
 
 /**
  * Configuration options for HTTP client.
@@ -29,24 +36,11 @@ export class ClientConfig {
 }
 
 /**
- * Creates a type-safe HTTP client from an API interface prototype.
- *
- * This is the client-side equivalent of RESTApiRoutes.
- * - Server: RESTApiRoutes reads decorators → routes HTTP requests to controllers
- * - Client: createClient reads decorators → generates HTTP requests from method calls
- *
- * Usage:
- * ```typescript
- * const config = new ClientConfig('http://localhost:3000');
- * const client = createClient(SaveApiPrototype, config);
- * const response = await client.save({ query: 'test' }); // Type-safe!
- * ```
- *
- * @param apiPrototype - The API prototype class with decorators (e.g., SaveApiPrototype)
- * @param config - Client configuration with baseUrl
- * @param logApiCall - Optional LogApiCall instance (creates new one if not provided)
- * @returns A proxy object that implements the API interface
+ * Return type for the Proxy get trap — either an async method or undefined for framework inspection.
  */
+// webpieces-disable no-any-unknown -- Proxy get trap returns generic response promises
+type ProxyGetResult = (...args: never[]) => Promise<unknown>;
+
 /**
  * Properties accessed by DI frameworks (Angular, Vue), debuggers, Promise checks, and serializers.
  * These should return undefined instead of throwing, allowing frameworks to inspect the proxy.
@@ -79,40 +73,54 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set([
     'asymmetricMatch', // Jest matcher protocol
 ]);
 
-export function createClient<T extends object>(
-    apiPrototype: Function & { prototype: T },
+/**
+ * Creates a type-safe HTTP client from an API prototype with @ApiPath/@Endpoint decorators.
+ *
+ * This is the client-side equivalent of ApiRoutingFactory.
+ * - Server: ApiRoutingFactory reads decorators -> routes HTTP requests to controllers
+ * - Client: createApiClient reads decorators -> generates HTTP requests from method calls
+ *
+ * Usage:
+ * ```typescript
+ * const config = new ClientConfig('http://localhost:3000');
+ * const client = createApiClient(SaveApiPrototype, config);
+ * const response = await client.save({ query: 'test' }); // Type-safe!
+ * ```
+ *
+ * @param apiPrototype - The API prototype class with @ApiPath/@Endpoint decorators
+ * @param config - Client configuration with baseUrl
+ * @param contextMgr - Optional context manager for header propagation
+ * @returns A proxy object that implements the API interface
+ */
+export function createApiClient<T extends object>(
+    apiPrototype: ApiPrototype<T>,
     config: ClientConfig,
     contextMgr?: ContextMgr
 ): T {
-    // Validate that the API prototype is marked with @ApiInterface
-    if (!isApiInterface(apiPrototype)) {
+    // Validate that the API prototype is marked with @ApiPath
+    if (!isApiPath(apiPrototype)) {
         const className = apiPrototype.name || 'Unknown';
-        throw new Error(`Class ${className} must be decorated with @ApiInterface()`);
+        throw new Error(`Class ${className} must be decorated with @ApiPath()`);
     }
 
-    // Get all routes from the API prototype
-    const routes = getRoutes(apiPrototype);
+    const basePath = getApiPath(apiPrototype)!;
+    const endpoints = getEndpoints(apiPrototype) || {};
 
-    // Validate that all methods use @Post() - we only support POST for now
-    for (const route of routes) {
-        if (route.httpMethod !== 'POST') {
-            throw new Error(
-                `Method '${route.methodName}' uses @${route.httpMethod.charAt(0) + route.httpMethod.slice(1).toLowerCase()}() but we only support @Post() on methods right now. ` +
-                `This is how gRPC, thrift, etc. all work - @Get is not needed but we may add later. ` +
-                `Currently, no app has 'truly' needed it and only wanted to conform to ideals when in practice, ` +
-                `there are no issues with @Post() and in fact @Post is more flexible as it can evolve to returning stuff later which happens frequently.`
-            );
-        }
+    // Build RouteMetadata array from @ApiPath + @Endpoint metadata
+    const routes: RouteMetadata[] = [];
+    for (const [methodName, endpointPath] of Object.entries(endpoints)) {
+        const fullPath = basePath + endpointPath;
+        routes.push(new RouteMetadata('POST', fullPath, methodName));
     }
 
-    // Create ProxyClient with injected LogApiCall (or create new one)
-    //CRAP our own little DI going on here as angular and nodejs are using 2 different DI systems!!! fuck!!
+    // Create ProxyClient with injected LogApiCall
+    // Our own little DI going on here as angular and nodejs are using 2 different DI systems
     const proxyClient = new ProxyClient(
         config, new LogApiCall(), new HeaderMethods(), routes, contextMgr);
 
     // Create a proxy that intercepts method calls and makes HTTP requests
     return new Proxy({} as T, {
-        get(target, prop: string | symbol) {
+        get(target, prop: string | symbol): ProxyGetResult | undefined {
             // Symbols (Symbol.toStringTag, Symbol.iterator, etc.) - throw for now to learn if this happens
             if (typeof prop !== 'string') {
                 throw new Error(
@@ -132,7 +140,7 @@ export function createClient<T extends object>(
                 // For unknown properties (likely typos), throw a helpful error
                 throw new Error(
                     `No route found for method '${prop}'. ` +
-                    `Check for typos or ensure the method has @Post() decorator.`
+                    `Check for typos or ensure the method has @Endpoint() decorator.`
                 );
             }
 
@@ -196,27 +204,13 @@ export class ProxyClient {
     /**
      * Make an HTTP request based on route metadata and arguments.
      *
-     * Uses plain JSON.stringify/parse - no serialization library needed!
-     *
-     * Error handling:
-     * - Server: Throws HttpError → translates to ProtocolError JSON
-     * - Client: Receives ProtocolError JSON → reconstructs HttpError
-     *
-     * Automatic header propagation via ContextMgr:
-     * - If config.contextMgr is provided, reads headers from ContextReader
-     * - Adds headers to request before fetch()
-     *
-     * Logging via LogApiCall.execute():
-     * - [API-CLIENT-req] logs outgoing requests with headers (secure ones masked)
-     * - [API-CLIENT-resp-SUCCESS] logs successful responses
-     * - [API-CLIENT-resp-FAIL] logs failed responses
+     * All endpoints are POST-only. The request body is the first argument.
      */
     async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
         const { httpMethod, path } = route;
 
         // Build the full URL
         const url = `${this.config.baseUrl}${path}`;
-
 
         // Build base headers for the HTTP request
         const httpHeaders: Record<string, string> = {
@@ -244,11 +238,10 @@ export class ProxyClient {
             headers: httpHeaders,
         };
 
-        // For POST/PUT/PATCH, include the body (first argument) as JSON
+        // POST body is the first argument as JSON
         let requestDto: unknown;
-        if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && args.length > 0) {
+        if (args.length > 0) {
             requestDto = args[0];
-            // Plain JSON stringify - works with plain objects and our DateTimeDto classes
             options.body = JSON.stringify(requestDto);
         }
 

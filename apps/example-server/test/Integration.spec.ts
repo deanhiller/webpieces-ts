@@ -4,6 +4,9 @@ import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
 import { WebpiecesConfig } from '@webpieces/http-routing';
 import { ProdServerMeta } from '../src/ProdServerMeta';
 import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse, PublicApi, PublicApiPrototype, PublicInfoRequest } from '@webpieces/example-apis';
+import { RequestContext } from '@webpieces/core-context';
+import { HttpUnauthorizedError } from '@webpieces/http-api';
+import { CompanyHeaders } from '../src/modules/CompanyModule';
 import {
     RemoteApi,
     FetchValueRequest,
@@ -105,6 +108,7 @@ function createMockFetchResponse(value: string): FetchValueResponse {
 
 /**
  * Integration tests - SaveApi with mocked RemoteApi
+ * SaveApi has @Authentication(authenticated=true), so tests must set AUTHORIZATION header.
  */
 describe('SaveApi with mocked RemoteApi', () => {
     let server: WebpiecesServer;
@@ -127,26 +131,29 @@ describe('SaveApi with mocked RemoteApi', () => {
         const mockResponse = createMockFetchResponse('MOCKED: TEST_MOCK_RESPONSE for test-query');
         mockRemoteApi.addResponse('fetchValue', mockResponse);
 
-        const response = await saveApi.save({ query: 'test-query' });
-
-        expect(response).toBeDefined();
-        expect(response.success).toBe(true);
-        expect(response.query).toBe('test-query');
-        expect(response.matches).toHaveLength(1);
-        expect(response.matches![0].description).toContain('MOCKED');
-        expect(response.matches![0].description).toContain('TEST_MOCK_RESPONSE');
+        await RequestContext.run(async () => {
+            RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
+            const response = await saveApi.save({ query: 'test-query' });
+            expect(response).toBeDefined();
+            expect(response.success).toBe(true);
+            expect(response.query).toBe('test-query');
+            expect(response.matches).toHaveLength(1);
+            expect(response.matches![0].description).toContain('MOCKED');
+        });
     });
 
     it('should increment counter through filter chain', async () => {
         const defaultResponse = createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE');
         mockRemoteApi.setDefaultResponse('fetchValue', defaultResponse);
 
-        await saveApi.save({ query: 'test1' });
-        await saveApi.save({ query: 'test2' });
-
-        const container = server.getContainer();
-        const counter = container.get<any>(TYPES.Counter);
-        expect(counter.get()).toBe(2);
+        await RequestContext.run(async () => {
+            RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
+            await saveApi.save({ query: 'test1' });
+            await saveApi.save({ query: 'test2' });
+            const container = server.getContainer();
+            const counter = container.get<any>(TYPES.Counter);
+            expect(counter.get()).toBe(2);
+        });
     });
 
     it('should pass different mock values for different requests', async () => {
@@ -155,16 +162,25 @@ describe('SaveApi with mocked RemoteApi', () => {
         mockRemoteApi.addResponse('fetchValue', mockResponse1);
         mockRemoteApi.addResponse('fetchValue', mockResponse2);
 
-        const response1 = await saveApi.save({ query: 'query1' });
-        const response2 = await saveApi.save({ query: 'query2' });
+        await RequestContext.run(async () => {
+            RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
+            const response1 = await saveApi.save({ query: 'query1' });
+            const response2 = await saveApi.save({ query: 'query2' });
+            expect(response1.matches![0].description).toContain('VALUE_ONE');
+            expect(response2.matches![0].description).toContain('VALUE_TWO');
+        });
+    });
 
-        expect(response1.matches![0].description).toContain('VALUE_ONE');
-        expect(response2.matches![0].description).toContain('VALUE_TWO');
+    it('should throw HttpUnauthorizedError when no auth header on authenticated route', async () => {
+        const mockResponse = createMockFetchResponse('MOCKED: should not reach');
+        mockRemoteApi.addResponse('fetchValue', mockResponse);
+        await expect(saveApi.save({ query: 'test' })).rejects.toThrow(HttpUnauthorizedError);
     });
 });
 
 /**
  * Integration tests - PublicApi
+ * PublicApi has @Authentication(authenticated=false), so no auth header needed.
  */
 describe('PublicApi', () => {
     let server: WebpiecesServer;
@@ -182,7 +198,7 @@ describe('PublicApi', () => {
         }
     });
 
-    it('should return greeting with name', async () => {
+    it('should return greeting with name (no auth needed)', async () => {
         const response = await publicApi.getInfo({ name: 'WebPieces' });
 
         expect(response).toBeDefined();

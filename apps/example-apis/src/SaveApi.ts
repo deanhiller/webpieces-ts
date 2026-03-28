@@ -1,4 +1,4 @@
-import { ApiInterface, Post, Path, ValidateImplementation } from '@webpieces/http-api';
+import { ApiPath, Endpoint, Authentication, AuthenticationConfig, ValidateImplementation } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs
@@ -100,8 +100,8 @@ export interface SaveApi {
  * SaveApiPrototype - Abstract class with routing decorators.
  *
  * This class serves as the single source of truth for routing metadata:
- * 1. Server-side: RESTApiRoutes reads decorators to bind routes to controllers
- * 2. Client-side: Client generator reads decorators to create HTTP client proxies
+ * 1. Server-side: ApiRoutingFactory reads decorators to bind routes to controllers
+ * 2. Client-side: createApiClient reads decorators to create HTTP client proxies
  *
  * Pattern:
  * ```typescript
@@ -127,10 +127,10 @@ export interface SaveApi {
  *
  * Note: Methods throw by default to catch runtime errors if not overridden.
  */
-@ApiInterface()
+@Authentication(new AuthenticationConfig(true))
+@ApiPath('/search')
 export abstract class SaveApiPrototype implements SaveApi {
-    @Post()
-    @Path('/search/item')
+    @Endpoint('/item')
     save(request: SaveRequest): Promise<SaveResponse> {
         throw new Error('Method save() must be implemented by subclass');
     }

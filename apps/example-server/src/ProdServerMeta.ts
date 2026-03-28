@@ -4,7 +4,7 @@ import { WebpiecesModule } from '@webpieces/http-server';
 import { CompanyModule } from './modules/CompanyModule';
 import { InversifyModule } from './modules/InversifyModule';
 import { FilterRoutes } from './routes/FilterRoutes';
-import { RESTApiRoutes } from '@webpieces/http-routing';
+import { ApiRoutingFactory } from '@webpieces/http-routing';
 import { SaveApi, SaveApiPrototype, PublicApiPrototype } from '@webpieces/example-apis';
 import { SaveController } from './controllers/SaveController';
 import { PublicController } from './controllers/PublicController';
@@ -53,11 +53,11 @@ export class ProdServerMeta implements WebAppMeta {
             // Auto-wire SaveApiPrototype to SaveController
             // SaveApiPrototype is an abstract class with decorators (@Post, @Path)
             // SaveController extends SaveApiPrototype and implements SaveApi interface
-            // Type-safe: RESTApiRoutes<SaveApiPrototype, SaveController>
-            new RESTApiRoutes(SaveApiPrototype, SaveController),
+            // Type-safe: ApiRoutingFactory<SaveApiPrototype, SaveController>
+            new ApiRoutingFactory(SaveApiPrototype, SaveController),
 
             // Auto-wire PublicApiPrototype to PublicController
-            new RESTApiRoutes(PublicApiPrototype, PublicController),
+            new ApiRoutingFactory(PublicApiPrototype, PublicController),
         ];
     }
 }

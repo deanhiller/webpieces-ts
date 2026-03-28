@@ -4,6 +4,7 @@ import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { PlatformHeader, PlatformHeadersExtension, HeaderMethods, HEADER_TYPES } from '@webpieces/http-api';
 import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
+import {ContextKeys} from "../headers/ContextKeys";
 
 /**
  * ContextFilter - Transfers platform headers and stores request metadata in RequestContext.
@@ -56,9 +57,9 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         this.transferHeaders(meta);
 
         // Store request metadata in context for other filters/controllers to access
-        RequestContext.put('METHOD_META', meta);
-        RequestContext.put('REQUEST_PATH', meta.path);
-        RequestContext.put('HTTP_METHOD', meta.httpMethod);
+        RequestContext.putHeader(ContextKeys.METHOD_META, meta);
+        RequestContext.putHeader(ContextKeys.REQUEST_PATH, meta.path);
+        RequestContext.putHeader(ContextKeys.HTTP_METHOD, meta.httpMethod);
 
         // Execute next filter/controller
         return await nextFilter.invoke(meta);

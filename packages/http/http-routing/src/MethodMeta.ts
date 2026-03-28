@@ -1,4 +1,4 @@
-import { RouteMetadata } from '@webpieces/http-api';
+import { RouteMetadata, AuthMeta } from '@webpieces/http-api';
 
 /**
  * Metadata about the method being invoked.
@@ -47,6 +47,12 @@ export class MethodMeta {
     requestDto?: unknown;
 
     /**
+     * Auth metadata from @Public/@Authenticated/@Roles decorators.
+     * Populated by ApiRoutingFactory so filters can read auth requirements.
+     */
+    authMeta?: AuthMeta;
+
+    /**
      * Additional metadata for storing request-scoped data.
      * Used by filters to pass data to other filters/controllers.
      */
@@ -57,11 +63,13 @@ export class MethodMeta {
         requestHeaders?: Map<string, string[]>,
         requestDto?: unknown,
         metadata?: Map<string, unknown>,
+        authMeta?: AuthMeta,
     ) {
         this.routeMeta = routeMeta;
         this.requestHeaders = requestHeaders;
         this.requestDto = requestDto;
         this.metadata = metadata ?? new Map();
+        this.authMeta = authMeta ?? routeMeta.authMeta;
     }
 
     /**
