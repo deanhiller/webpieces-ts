@@ -6,7 +6,7 @@
  *
  * Usage in server-side controllers:
  * ```typescript
- * export class SaveController extends SaveApiPrototype implements SaveApi {
+ * export class SaveController extends SaveApi implements SaveApi {
  *   // Compile-time check: ensures all SaveApi methods are implemented
  *   private readonly __validator!: ValidateImplementation<SaveController, SaveApi>;
  *

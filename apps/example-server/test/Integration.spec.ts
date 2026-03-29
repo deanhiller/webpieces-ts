@@ -3,7 +3,7 @@ import { ContainerModule } from 'inversify';
 import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
 import { WebpiecesConfig } from '@webpieces/http-routing';
 import { ProdServerMeta } from '../src/ProdServerMeta';
-import { SaveApi, SaveApiPrototype, SaveRequest, SaveResponse, PublicApi, PublicApiPrototype, PublicInfoRequest } from '@webpieces/example-apis';
+import { SaveApi, SaveRequest, SaveResponse, PublicApi, PublicInfoRequest } from '@webpieces/example-apis';
 import { RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/http-api';
 import { CompanyHeaders } from '../src/modules/CompanyModule';
@@ -118,7 +118,7 @@ describe('SaveApi with mocked RemoteApi', () => {
     beforeEach(async () => {
         mockRemoteApi = new MockRemoteApi();
         server = await createServerWithMockRemoteApi(mockRemoteApi);
-        saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
+        saveApi = server.createApiClient<SaveApi>(SaveApi);
     });
 
     afterEach(async () => {
@@ -189,7 +189,7 @@ describe('PublicApi', () => {
     beforeEach(async () => {
         const mockRemoteApi = new MockRemoteApi();
         server = await createServerWithMockRemoteApi(mockRemoteApi);
-        publicApi = server.createApiClient<PublicApi>(PublicApiPrototype);
+        publicApi = server.createApiClient<PublicApi>(PublicApi);
     });
 
     afterEach(async () => {

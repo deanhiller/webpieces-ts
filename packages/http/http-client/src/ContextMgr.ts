@@ -24,7 +24,7 @@ import { PlatformHeader, ContextReader } from '@webpieces/http-api';
  *
  * // Both cases
  * const config = new ClientConfig('http://api.example.com', contextMgr);
- * const client = createClient(SaveApiPrototype, config);
+ * const client = createClient(SaveApi, config);
  * ```
  */
 export class ContextMgr {

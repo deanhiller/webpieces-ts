@@ -313,7 +313,7 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      *
      * Example:
      * ```typescript
-     * const saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
+     * const saveApi = server.createApiClient<SaveApi>(SaveApi);
      * const response = await saveApi.save(request);
      * ```
      */

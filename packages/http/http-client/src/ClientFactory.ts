@@ -83,7 +83,7 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set([
  * Usage:
  * ```typescript
  * const config = new ClientConfig('http://localhost:3000');
- * const client = createApiClient(SaveApiPrototype, config);
+ * const client = createApiClient(SaveApi, config);
  * const response = await client.save({ query: 'test' }); // Type-safe!
  * ```
  *

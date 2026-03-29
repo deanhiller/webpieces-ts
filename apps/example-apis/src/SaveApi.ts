@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, Authentication, AuthenticationConfig, ValidateImplementation } from '@webpieces/http-api';
+import { ApiPath, Endpoint, Authentication, AuthenticationConfig } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs
@@ -83,53 +83,22 @@ export interface SaveResponse {
 }
 
 // ============================================================
-// API Interface & Prototype
+// API Definition
 // ============================================================
 
 /**
- * SaveApi - Pure interface defining the API contract.
+ * SaveApi - Abstract class defining the API contract with routing decorators.
  *
- * This is the type-safe contract that both server and client must follow.
- * Controllers implement this interface to ensure they provide all required methods.
- */
-export interface SaveApi {
-    save(request: SaveRequest): Promise<SaveResponse>;
-}
-
-/**
- * SaveApiPrototype - Abstract class with routing decorators.
- *
- * This class serves as the single source of truth for routing metadata:
+ * This class is the single source of truth for both the contract and routing metadata:
  * 1. Server-side: ApiRoutingFactory reads decorators to bind routes to controllers
  * 2. Client-side: createApiClient reads decorators to create HTTP client proxies
+ * 3. Controllers implement this class to get compile-time enforcement
  *
- * Pattern:
- * ```typescript
- * // 1. Define interface (contract)
- * interface SaveApi { ... }
- *
- * // 2. Define prototype with decorators (metadata)
- * abstract class SaveApiPrototype { ... }
- *
- * // 3. Controller extends prototype AND implements interface
- * class SaveController extends SaveApiPrototype implements SaveApi {
- *   // MUST override all methods from SaveApi
- *   // TypeScript will error if any are missing
- * }
- * ```
- *
- * Benefits:
- * - Decorators live on the prototype, not the implementation
- * - Interface enforces that all methods are implemented
- * - Same metadata used for server routing and client generation
- * - Compile error if controller doesn't implement a method
- * - Type-safe contract between client and server
- *
- * Note: Methods throw by default to catch runtime errors if not overridden.
+ * Using abstract methods means TypeScript enforces implementation at compile time.
  */
 @Authentication(new AuthenticationConfig(true))
 @ApiPath('/search')
-export abstract class SaveApiPrototype implements SaveApi {
+export abstract class SaveApi {
     @Endpoint('/item')
     save(request: SaveRequest): Promise<SaveResponse> {
         throw new Error('Method save() must be implemented by subclass');
