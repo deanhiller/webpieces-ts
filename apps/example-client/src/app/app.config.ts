@@ -3,7 +3,7 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { ClientConfig } from '@webpieces/http-client';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
-import { SaveApiPrototype, PublicApiPrototype } from '@webpieces/example-apis';
+import { SaveApi, PublicApi } from '@webpieces/example-apis';
 import { createApiClient } from '@webpieces/http-client';
 
 /**
@@ -11,8 +11,8 @@ import { createApiClient } from '@webpieces/http-client';
  *
  * Key DI providers:
  * 1. ClientConfig - Configured with dynamic API base URL from EnvironmentConfig
- * 2. SaveApiPrototype - HTTP client proxy for SaveApi
- * 3. PublicApiPrototype - HTTP client proxy for PublicApi
+ * 2. SaveApi - HTTP client proxy for SaveApi
+ * 3. PublicApi - HTTP client proxy for PublicApi
  */
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -30,18 +30,18 @@ export const appConfig: ApplicationConfig = {
 
     // Provide SaveApi client
     {
-      provide: SaveApiPrototype,
+      provide: SaveApi,
       useFactory: (config: ClientConfig) => {
-        return createApiClient(SaveApiPrototype, config);
+        return createApiClient(SaveApi, config);
       },
       deps: [ClientConfig]
     },
 
     // Provide PublicApi client
     {
-      provide: PublicApiPrototype,
+      provide: PublicApi,
       useFactory: (config: ClientConfig) => {
-        return createApiClient(PublicApiPrototype, config);
+        return createApiClient(PublicApi, config);
       },
       deps: [ClientConfig]
     }

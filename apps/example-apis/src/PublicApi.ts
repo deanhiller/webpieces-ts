@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, Authentication, AuthenticationConfig, ValidateImplementation } from '@webpieces/http-api';
+import { ApiPath, Endpoint, Authentication, AuthenticationConfig } from '@webpieces/http-api';
 
 // ============================================================
 // Request DTOs
@@ -25,27 +25,18 @@ export interface PublicInfoResponse {
 }
 
 // ============================================================
-// API Interface & Prototype
+// API Definition
 // ============================================================
 
 /**
- * PublicApi - Pure interface defining the API contract.
+ * PublicApi - Abstract class defining the API contract with routing decorators.
  *
  * A simple public API that doesn't require authentication.
  * Used to demonstrate a second API endpoint for testing.
  */
-export interface PublicApi {
-    getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse>;
-}
-
-/**
- * PublicApiPrototype - Abstract class with routing decorators.
- *
- * Defines the route metadata for the public API endpoints.
- */
 @Authentication(new AuthenticationConfig(false))
 @ApiPath('/public')
-export abstract class PublicApiPrototype implements PublicApi {
+export abstract class PublicApi {
     @Endpoint('/info')
     getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
         throw new Error('Method getInfo() must be implemented by subclass');

@@ -2,8 +2,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import {
-  SaveApiPrototype,
-  PublicApiPrototype,
+  SaveApi,
+  PublicApi,
   SaveRequest,
   PublicInfoRequest
 } from '@webpieces/example-apis';
@@ -23,8 +23,8 @@ import { toError } from '@webpieces/core-util';
 })
 export class AppComponent implements OnInit {
   // Inject API clients and environment config
-  private saveApi = inject(SaveApiPrototype);
-  private publicApi = inject(PublicApiPrototype);
+  private saveApi = inject(SaveApi);
+  private publicApi = inject(PublicApi);
   public envConfig = inject(EnvironmentConfig); // Public for template access
 
   title = 'WebPieces Example Client';

@@ -29,7 +29,7 @@ import { WebpiecesServerImpl } from './WebpiecesServerImpl';
  *     bind(TYPES.RemoteApi).toConstantValue(mockRemoteApi);
  * });
  * const server = WebpiecesFactory.create(new ProdServerMeta(), config, appOverrides);
- * const api = server.createApiClient(SaveApiPrototype);
+ * const api = server.createApiClient(SaveApi);
  * ```
  *
  * This pattern:

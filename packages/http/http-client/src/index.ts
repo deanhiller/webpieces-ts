@@ -21,10 +21,10 @@
  * Usage:
  * ```typescript
  * import { createApiClient, ClientConfig } from '@webpieces/http-client';
- * import { SaveApiPrototype } from './api/SaveApi';
+ * import { SaveApi } from './api/SaveApi';
  *
  * const config = new ClientConfig('http://localhost:3000');
- * const client = createApiClient(SaveApiPrototype, config);
+ * const client = createApiClient(SaveApi, config);
  *
  * const response = await client.save({ query: 'test' });
  * ```

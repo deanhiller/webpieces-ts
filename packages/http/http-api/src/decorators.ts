@@ -64,7 +64,7 @@ export class AuthMeta {
  * ```typescript
  * @Authentication({authenticated: true})
  * @ApiPath('/api/save')
- * abstract class SaveApiPrototype {
+ * abstract class SaveApi {
  *   @Endpoint('/item')
  *   save(request: SaveRequest): Promise<SaveResponse> { ... }
  * }

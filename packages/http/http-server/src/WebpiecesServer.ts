@@ -20,7 +20,7 @@ import { Container } from 'inversify';
  *
  * // Testing (no HTTP needed!)
  * const server = WebpiecesFactory.create(new ProdServerMeta(), overrides);
- * const api = server.createApiClient(SaveApiPrototype);
+ * const api = server.createApiClient(SaveApi);
  * const response = await api.save(request);
  * ```
  */
@@ -58,7 +58,7 @@ export interface WebpiecesServer {
      *
      * Example:
      * ```typescript
-     * const saveApi = server.createApiClient<SaveApi>(SaveApiPrototype);
+     * const saveApi = server.createApiClient<SaveApi>(SaveApi);
      * const response = await saveApi.save(request);
      * ```
      */

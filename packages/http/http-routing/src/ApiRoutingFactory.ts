@@ -21,7 +21,7 @@ export type ClassType<T = unknown> = Function & { prototype: T };
  * // In your ServerMeta:
  * getRoutes(): Routes[] {
  *   return [
- *     new ApiRoutingFactory(SaveApiPrototype, SaveController),
+ *     new ApiRoutingFactory(SaveApi, SaveController),
  *   ];
  * }
  * ```
