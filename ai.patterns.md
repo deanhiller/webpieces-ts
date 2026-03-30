@@ -792,7 +792,7 @@ import { toError } from '@webpieces/core-util';
 
 try {
   await riskyOperation();
-} catch (err: any) {
+} catch (err: unknown) {
   const error = toError(err);
   console.error('Operation failed:', error.message);
   throw error;
@@ -801,7 +801,7 @@ try {
 
 **Requirements:**
 1. **Parameter**: Must be named `err` (or `err2`, `err3` for nested catches)
-2. **Type**: Must be typed as `any`: `catch (err: any)`
+2. **Type**: Must be typed as `unknown`: `catch (err: unknown)`
 3. **First statement**: Must call `toError(err)` immediately
 4. **Variable**: Must be named `error` (or `error2`, `error3` for nested)
 
@@ -812,7 +812,7 @@ When you intentionally want to ignore an error, comment out the toError call:
 ```typescript
 try {
   await optionalCleanup();
-} catch (err: any) {
+} catch (err: unknown) {
   //const error = toError(err);
   // Cleanup errors are non-fatal, continue execution
 }
@@ -825,13 +825,13 @@ Use numbered suffixes for nested catches:
 ```typescript
 try {
   await operation1();
-} catch (err: any) {
+} catch (err: unknown) {
   const error = toError(err);
   console.error('Operation1 failed:', error);
 
   try {
     await rollback();
-  } catch (err2: any) {
+  } catch (err2: unknown) {
     const error2 = toError(err2);
     console.error('Rollback also failed:', error2);
   }
@@ -874,7 +874,7 @@ The `@webpieces/catch-error-pattern` rule will flag these issues:
 ```typescript
 try {
   doSomething();
-} catch (e: any) {  // Error: must be 'err', not 'e'
+} catch (e: unknown) {  // Error: must be 'err', not 'e'
   const error = toError(e);
 }
 ```
@@ -883,7 +883,7 @@ try {
 ```typescript
 try {
   doSomething();
-} catch (err) {  // Error: must be 'err: any'
+} catch (err) {  // Error: must be 'err: unknown'
   const error = toError(err);
 }
 ```
@@ -892,7 +892,7 @@ try {
 ```typescript
 try {
   doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
   console.log(err);  // Error: toError(err) must be first statement
 }
 ```
@@ -901,7 +901,7 @@ try {
 ```typescript
 try {
   doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
   const e = toError(err);  // Error: must be 'error', not 'e'
 }
 ```
@@ -910,7 +910,7 @@ try {
 ```typescript
 try {
   doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
   console.log('Error occurred');
   const error = toError(err);  // Error: must be first statement
 }
@@ -927,7 +927,7 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
     try {
       const result = await this.remoteService.fetchValue(request);
       return { matches: [result] };
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       console.error('Save failed:', error.message);
       throw error;
@@ -946,12 +946,12 @@ export class TransactionFilter implements Filter {
       const action = await next.execute();
       await this.commit();
       return action;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
 
       try {
         await this.rollback();
-      } catch (err2: any) {
+      } catch (err2: unknown) {
         const error2 = toError(err2);
         console.error('Rollback failed:', error2);
       }
@@ -968,7 +968,7 @@ it('should throw error for invalid input', async () => {
   try {
     await controller.save(invalidRequest);
     fail('Should have thrown error');
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     expect(error.message).toContain('Invalid request');
   }
@@ -986,7 +986,7 @@ export function toError(err: any): Error {
   try {
     const message = JSON.stringify(err);
     return new Error(`Non-Error object thrown: ${message}`);
-  } catch (err: any) {
+  } catch (err: unknown) {
     // NOTE: Intentionally not calling toError() here to prevent infinite recursion
     return new Error('Non-Error object thrown (unable to stringify)');
   }

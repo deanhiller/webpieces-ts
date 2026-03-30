@@ -21,7 +21,7 @@ import { toError } from '@webpieces/core-util';
 
 try {
   await riskyOperation();
-} catch (err: any) {
+} catch (err: unknown) {
   const error = toError(err);
   console.error('Operation failed:', error.message);
   throw error;
@@ -49,7 +49,7 @@ WebPieces projects enforce this pattern via ESLint rule `@webpieces/catch-error-
 ```typescript
 try {
   operation();
-} catch (err: any) {
+} catch (err: unknown) {
   const error = toError(err);
   // Handle error...
 }
@@ -59,7 +59,7 @@ try {
 ```typescript
 try {
   operation();
-} catch (err: any) {
+} catch (err: unknown) {
   //const error = toError(err);
 }
 ```
@@ -71,11 +71,11 @@ For nested catches, use numbered suffixes:
 ```typescript
 try {
   operation1();
-} catch (err: any) {
+} catch (err: unknown) {
   const error = toError(err);
   try {
     rollback();
-  } catch (err2: any) {
+  } catch (err2: unknown) {
     const error2 = toError(err2);
     console.error('Rollback failed:', error2);
   }

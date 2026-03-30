@@ -19,7 +19,7 @@
  * ```typescript
  * try {
  *     riskyOperation();
- * } catch (err: any) {
+ * } catch (err: unknown) {
  *     const error = toError(err);
  *     // Handle error...
  * }
@@ -29,12 +29,12 @@
  * ```typescript
  * try {
  *     riskyOperation();
- * } catch (err: any) {
+ * } catch (err: unknown) {
  *     //const error = toError(err);
  * }
  * ```
  *
- * @param err - Unknown error from catch block (typed as any)
+ * @param err - Unknown error from catch block (typed as unknown)
  * @returns Standardized Error instance
  *
  * @example
@@ -42,7 +42,7 @@
  * // Standard usage
  * try {
  *     await riskyOperation();
- * } catch (err: any) {
+ * } catch (err: unknown) {
  *     const error = toError(err);
  *     console.error('Operation failed:', error.message);
  *     throw error;
@@ -54,18 +54,19 @@
  * // Nested catch blocks
  * try {
  *     await operation1();
- * } catch (err: any) {
+ * } catch (err: unknown) {
  *     const error = toError(err);
  *     try {
  *         await rollback();
- *     } catch (err2: any) {
+ *     } catch (err2: unknown) {
  *         const error2 = toError(err2);
  *         console.error('Rollback failed:', error2);
  *     }
  * }
  * ```
  */
-export function toError(err: any): Error {
+// webpieces-disable no-any-unknown -- toError intentionally accepts unknown to safely convert any thrown value to Error
+export function toError(err: unknown): Error {
     // If already an Error instance, return it directly
     if (err instanceof Error) {
         return err;
@@ -94,7 +95,7 @@ export function toError(err: any): Error {
         try {
             const message = JSON.stringify(err);
             return new Error(`Non-Error object thrown: ${message}`);
-        } catch (err: any) {
+        } catch (err: unknown) {
             //const error = toError(err);
             // NOTE: Intentionally not calling toError() here to prevent infinite recursion
             // in error recovery path. This is the ONLY acceptable exception to the pattern.

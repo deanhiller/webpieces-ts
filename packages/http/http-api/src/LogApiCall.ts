@@ -62,7 +62,7 @@ export class LogApiCall {
             );
 
             return response;
-        } catch (err: any) {
+        } catch (err: unknown) {
             const error = toError(err);
             const errorType = error.constructor.name;
             const errorMessage = error.message;

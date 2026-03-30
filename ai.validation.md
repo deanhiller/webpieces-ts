@@ -44,7 +44,7 @@ These are ESLint rules that run during linting, enforcing code quality and archi
 |------|-------------|--------|
 | **@webpieces/enforce-architecture** | Validates code imports match blessed `architecture/dependencies.json` | ✅ TESTED |
 | **@webpieces/no-unmanaged-exceptions** | No `try..catch` blocks except with `eslint-disable` comment | ✅ TESTED |
-| **@webpieces/catch-error-pattern** | Enforces pattern: `catch (err: any) { const error = toError(err); }` | ✅ TESTED |
+| **@webpieces/catch-error-pattern** | Enforces pattern: `catch (err: unknown) { const error = toError(err); }` | ✅ TESTED |
 | **@webpieces/max-method-lines** | Maximum lines per method (default: 70) | ✅ TESTED |
 | **@webpieces/max-file-lines** | Maximum lines per file (default: 700) | ✅ TESTED |
 

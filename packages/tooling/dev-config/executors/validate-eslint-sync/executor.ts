@@ -5,6 +5,10 @@ import { createHash } from 'crypto';
 
 export interface ValidateEslintSyncOptions {}
 
+export interface ExecutorResult {
+    success: boolean;
+}
+
 function calculateHash(content: string): string {
     return createHash('sha256').update(content).digest('hex');
 }
@@ -17,7 +21,7 @@ function normalizeContent(content: string): string {
 export default async function validateEslintSyncExecutor(
     options: ValidateEslintSyncOptions,
     context: ExecutorContext
-): Promise<{ success: boolean }> {
+): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
 
     const templatePath = join(workspaceRoot, 'packages/tooling/dev-config/templates/eslint.webpieces.config.mjs');
@@ -42,7 +46,7 @@ export default async function validateEslintSyncExecutor(
         console.log('✅ ESLint configuration sync validated - rules match!');
         return { success: true };
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         // Error occurred during validation - log and fail
         // eslint-disable-next-line @webpieces/catch-error-pattern
         console.error('❌ Error validating ESLint sync:', err);

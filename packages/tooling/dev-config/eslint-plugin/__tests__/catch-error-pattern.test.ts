@@ -24,7 +24,7 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     const error = toError(err);
 }`,
         },
@@ -32,7 +32,7 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     const error = toError(err);
     console.log('Error occurred:', error);
     throw error;
@@ -42,7 +42,7 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     //const error = toError(err);
 }`,
         },
@@ -50,7 +50,7 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     // const error = toError(err);
 }`,
         },
@@ -58,11 +58,11 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     const error = toError(err);
     try {
         cleanup();
-    } catch (err2: any) {
+    } catch (err2: unknown) {
         const error2 = toError(err2);
     }
 }`,
@@ -71,15 +71,15 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     operation1();
-} catch (err: any) {
+} catch (err: unknown) {
     const error = toError(err);
     try {
         operation2();
-    } catch (err2: any) {
+    } catch (err2: unknown) {
         const error2 = toError(err2);
         try {
             operation3();
-        } catch (err3: any) {
+        } catch (err3: unknown) {
             const error3 = toError(err3);
         }
     }
@@ -89,7 +89,7 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     const error = toError(err);
 } finally {
     cleanup();
@@ -99,7 +99,7 @@ ruleTester.run('catch-error-pattern', rule, {
         {
             code: `try {
     doSomething();
-} catch (err: any) {
+} catch (err: unknown) {
     const error = toError(err);
     logger.error(error);
     throw error;
@@ -113,7 +113,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (e: any) {
+                } catch (e: unknown) {
                     const error = toError(e);
                 }
             `,
@@ -129,7 +129,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (error: any) {
+                } catch (error: unknown) {
                     const error2 = toError(error);
                 }
             `,
@@ -159,7 +159,7 @@ ruleTester.run('catch-error-pattern', rule, {
                 },
             ],
         },
-        // Wrong type annotation (Error instead of any)
+        // Wrong type annotation (Error instead of unknown)
         {
             code: `
                 try {
@@ -174,12 +174,27 @@ ruleTester.run('catch-error-pattern', rule, {
                 },
             ],
         },
-        // Empty catch block
+        // Wrong type annotation (any instead of unknown)
         {
             code: `
                 try {
                     doSomething();
                 } catch (err: any) {
+                    const error = toError(err);
+                }
+            `,
+            errors: [
+                {
+                    messageId: 'missingTypeAnnotation',
+                },
+            ],
+        },
+        // Empty catch block
+        {
+            code: `
+                try {
+                    doSomething();
+                } catch (err: unknown) {
                 }
             `,
             errors: [
@@ -193,7 +208,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     console.log(err);
                 }
             `,
@@ -208,7 +223,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const e = toError(err);
                 }
             `,
@@ -224,7 +239,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const myError = toError(err);
                 }
             `,
@@ -240,7 +255,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     console.log('caught error');
                     const error = toError(err);
                 }
@@ -256,7 +271,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = handleError(err);
                 }
             `,
@@ -271,11 +286,11 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     operation1();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                     try {
                         operation2();
-                    } catch (e: any) {
+                    } catch (e: unknown) {
                         const error2 = toError(e);
                     }
                 }
@@ -292,11 +307,11 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     operation1();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                     try {
                         operation2();
-                    } catch (err2: any) {
+                    } catch (err2: unknown) {
                         const err = toError(err2);
                     }
                 }
@@ -328,7 +343,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error;
                 }
             `,
@@ -343,7 +358,7 @@ ruleTester.run('catch-error-pattern', rule, {
             code: `
                 try {
                     doSomething();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = new Error(err.message);
                 }
             `,
