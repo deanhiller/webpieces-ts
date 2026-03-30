@@ -3,6 +3,10 @@
         "level": 0,
         "dependsOn": []
     },
+    "architecture-validators": {
+        "level": 0,
+        "dependsOn": []
+    },
     "client": {
         "level": 3,
         "dependsOn": [
@@ -24,6 +28,13 @@
         "dependsOn": []
     },
     "dev-config": {
+        "level": 1,
+        "dependsOn": [
+            "architecture-validators",
+            "eslint-plugin"
+        ]
+    },
+    "eslint-plugin": {
         "level": 0,
         "dependsOn": []
     },
@@ -76,12 +87,6 @@
         "level": 4,
         "dependsOn": [
             "http-routing"
-        ]
-    },
-    "rules": {
-        "level": 1,
-        "dependsOn": [
-            "dev-config"
         ]
     },
     "server": {

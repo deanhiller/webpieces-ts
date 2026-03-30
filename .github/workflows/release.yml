@@ -164,7 +164,6 @@ jobs:
                       ### Umbrella Packages (NEW!)
                       - [@webpieces/server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/server/v/${{ steps.version.outputs.full_version }}) - All server dependencies
                       - [@webpieces/client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/client/v/${{ steps.version.outputs.full_version }}) - All client dependencies
-                      - [@webpieces/rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/rules/v/${{ steps.version.outputs.full_version }}) - Development tooling
 
                       View all packages: https://www.npmjs.com/search?q=%40webpieces
                   draft: false

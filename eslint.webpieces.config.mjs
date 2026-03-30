@@ -13,8 +13,8 @@ import { loadWorkspaceRules } from '@nx/eslint-plugin';
 // before dev-config has been built. loadWorkspaceRules automatically handles
 // TypeScript transpilation.
 const webpiecesRules = await loadWorkspaceRules(
-    'packages/tooling/dev-config/eslint-plugin',
-    'packages/tooling/dev-config/tsconfig.lib.json'
+    'packages/tooling/eslint-plugin/src',
+    'packages/tooling/eslint-plugin/tsconfig.lib.json'
 );
 
 const webpiecesPlugin = { rules: webpiecesRules };

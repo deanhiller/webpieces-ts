@@ -37,7 +37,7 @@
                 "default",
                 "{workspaceRoot}/eslint.config.mjs",
                 "{workspaceRoot}/architecture/dependencies.json",
-                "{workspaceRoot}/packages/tooling/dev-config/eslint-plugin/**/*"
+                "{workspaceRoot}/packages/tooling/eslint-plugin/src/**/*"
             ],
             "cache": true,
             "options": {
@@ -106,7 +106,7 @@
             }
         },
         {
-            "plugin": "./packages/tooling/dev-config/plugin.ts",
+            "plugin": "./packages/tooling/dev-config/src/plugin.ts",
             "options": {}
         },
         {

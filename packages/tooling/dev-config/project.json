@@ -1,7 +1,7 @@
 {
     "name": "dev-config",
     "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-    "sourceRoot": "packages/tooling/dev-config",
+    "sourceRoot": "packages/tooling/dev-config/src",
     "projectType": "library",
     "targets": {
         "validate-eslint-sync": {
@@ -24,6 +24,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "eslint-plugin:build", "architecture-validators:build"],
             "options": {
                 "outputPath": "dist/packages/tooling/dev-config",
                 "main": "packages/tooling/dev-config/src/index.ts",
@@ -50,19 +51,9 @@
                         "output": "config/typescript"
                     },
                     {
-                        "input": "packages/tooling/dev-config/eslint-plugin",
-                        "glob": "**/*",
-                        "output": "eslint-plugin"
-                    },
-                    {
                         "input": "packages/tooling/dev-config/patterns",
                         "glob": "**/*",
                         "output": "patterns"
-                    },
-                    {
-                        "input": "packages/tooling/dev-config/plugin",
-                        "glob": "**/*",
-                        "output": "plugin"
                     },
                     {
                         "input": "packages/tooling/dev-config/templates",
@@ -75,14 +66,9 @@
                         "output": "src/generators"
                     },
                     {
-                        "input": "packages/tooling/dev-config/executors",
-                        "glob": "**/*",
-                        "output": "executors"
-                    },
-                    {
-                        "input": "packages/tooling/dev-config/architecture",
-                        "glob": "**/*",
-                        "output": "architecture"
+                        "input": "packages/tooling/dev-config/src/executors",
+                        "glob": "**/schema.json",
+                        "output": "src/executors"
                     }
                 ]
             }

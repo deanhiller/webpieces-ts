@@ -1,0 +1,28 @@
+{
+    "name": "architecture-validators",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/architecture-validators/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/architecture-validators",
+                "main": "packages/tooling/architecture-validators/src/index.ts",
+                "tsConfig": "packages/tooling/architecture-validators/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/architecture-validators/package.json",
+                    "packages/tooling/architecture-validators/README.md",
+                    "packages/tooling/architecture-validators/executors.json",
+                    {
+                        "input": "packages/tooling/architecture-validators/src/executors",
+                        "glob": "**/schema.json",
+                        "output": "src/executors"
+                    }
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}
