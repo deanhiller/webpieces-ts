@@ -438,7 +438,8 @@ function createVisualizeTarget(prefix: string, graphPath: string): TargetConfigu
 function createValidateNoCyclesTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-no-architecture-cycles',
-        cache: false,
+        cache: true,
+        inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json'],
         metadata: {
             technologies: ['nx'],
             description: 'Validate the architecture has no circular project dependencies',
@@ -462,8 +463,8 @@ function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
 function createValidateNoSkipLevelTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-no-skiplevel-deps',
-        cache: false,
-        inputs: ['default'],
+        cache: true,
+        inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json'],
         metadata: {
             technologies: ['nx'],
             description: 'Validate no project has redundant transitive dependencies',
@@ -474,8 +475,8 @@ function createValidateNoSkipLevelTarget(): TargetConfiguration {
 function createValidatePackageJsonTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-packagejson',
-        cache: false,
-        inputs: ['default'],
+        cache: true,
+        inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/**/package.json'],
         metadata: {
             technologies: ['nx'],
             description: 'Validate package.json dependencies match project.json build dependencies',
@@ -551,7 +552,8 @@ function createValidateCodeTarget(): TargetConfiguration {
 function createValidateVersionsLockedTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-versions-locked',
-        cache: false,
+        cache: true,
+        inputs: ['{workspaceRoot}/**/package.json'],
         metadata: {
             technologies: ['nx'],
             description:
@@ -574,7 +576,7 @@ function createValidateTsInSrcTarget(): TargetConfiguration {
 function createValidateCompleteTarget(validationTargets: string[]): TargetConfiguration {
     return {
         executor: 'nx:noop',
-        cache: false,
+        cache: true,
         dependsOn: validationTargets,
         metadata: {
             technologies: ['nx'],
