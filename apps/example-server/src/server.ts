@@ -8,7 +8,7 @@ import { toError } from '@webpieces/core-util';
  * Main entry point for the application.
  * Similar to Java Server.main().
  */
-async function main() {
+async function main(): Promise<void> {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Top-level server startup needs to catch and exit on error
     try {
         console.log('[Server] Starting WebPieces TypeScript server...');
@@ -34,7 +34,7 @@ async function main() {
                 resolve(undefined);
             });
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         const error = toError(err);
         console.error('[Server] Error during startup:', error);
         process.exit(1);

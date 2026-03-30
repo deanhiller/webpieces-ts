@@ -17,6 +17,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
+import { toError } from '../../toError';
 
 export interface ValidateVersionsLockedOptions {
     // No options needed
@@ -138,9 +139,9 @@ function validatePackageJson(filePath: string): string[] {
         // We don't validate peerDependencies for semver ranges since they're meant to be flexible
 
         return errors;
-    } catch (err: any) {
-        //const error = toError(err);
-        return [`Failed to parse ${filePath}: ${err.message}`];
+    } catch (err: unknown) {
+        const error = toError(err);
+        return [`Failed to parse ${filePath}: ${error.message}`];
     }
 }
 
@@ -201,7 +202,7 @@ function collectAllDependencies(workspaceRoot: string): Map<string, DependencyUs
                     dependencyMap.get(name)!.push(usage);
                 }
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             // const error = toError(err);
             // Intentionally skip files that can't be parsed - this is expected for some package.json files
         }

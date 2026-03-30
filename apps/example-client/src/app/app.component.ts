@@ -38,7 +38,7 @@ export class AppComponent implements OnInit {
     this.apiBaseUrl = this.envConfig.apiBaseUrl();
   }
 
-  async callSaveApi() {
+  async callSaveApi(): Promise<void> {
     this.loading = true;
     this.error = null;
     this.saveResponse = null;
@@ -61,7 +61,7 @@ export class AppComponent implements OnInit {
       };
 
       this.saveResponse = await this.saveApi.save(request);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       this.error = error.message || 'Failed to call SaveApi';
       console.error('SaveApi error:', error);
@@ -70,7 +70,7 @@ export class AppComponent implements OnInit {
     }
   }
 
-  async callPublicApi() {
+  async callPublicApi(): Promise<void> {
     this.loading = true;
     this.error = null;
     this.publicResponse = null;
@@ -81,7 +81,7 @@ export class AppComponent implements OnInit {
       };
 
       this.publicResponse = await this.publicApi.getInfo(request);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       this.error = error.message || 'Failed to call PublicApi';
       console.error('PublicApi error:', error);

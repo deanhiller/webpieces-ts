@@ -36,11 +36,11 @@ export class ExpressWrapper {
         });
     }
 
-    public async executeTryCatch(req: Request, res: Response, next: NextFunction) {
+    public async executeTryCatch(req: Request, res: Response, next: NextFunction): Promise<void> {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- ExpressWrapper catches errors to translate to HTTP responses
         try {
             await this.executeImpl(req, res, next);
-        } catch (err: any) {
+        } catch (err: unknown) {
             const error = toError(err);
             // 5. Handle errors
             this.handleError(res, error);
@@ -244,7 +244,7 @@ export class WebpiecesMiddleware {
                 req.method,
                 req.path,
             );
-        } catch (err: any) {
+        } catch (err: unknown) {
             const error = toError(err);
             console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
             if (!res.headersSent) {

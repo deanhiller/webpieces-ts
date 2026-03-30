@@ -14,6 +14,7 @@
 import type { Rule } from 'eslint';
 import * as fs from 'fs';
 import * as path from 'path';
+import { toError } from '../../toError';
 
 const DEPENDENCIES_DOC_CONTENT = `# Instructions: Architecture Dependency Violation
 
@@ -164,7 +165,7 @@ function ensureDocFile(docPath: string, content: string): boolean {
         fs.mkdirSync(path.dirname(docPath), { recursive: true });
         fs.writeFileSync(docPath, content, 'utf-8');
         return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
         void err;
         console.warn(`[webpieces] Could not create doc file: ${docPath}`);
         return false;
@@ -222,7 +223,7 @@ function findWorkspaceRoot(startPath: string): string {
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
                     return currentDir;
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 //const error = toError(err);
                 void err;
             }
@@ -256,10 +257,9 @@ function loadBlessedGraph(workspaceRoot: string): EnhancedGraph | null {
         cachedGraph = JSON.parse(content) as EnhancedGraph;
         cachedGraphPath = graphPath;
         return cachedGraph;
-    } catch (err: any) {
-        //const error = toError(err);
-        // err is used below
-        console.error(`[ESLint @webpieces/enforce-architecture] Could not load graph: ${err}`);
+    } catch (err: unknown) {
+        const error = toError(err);
+        console.error(`[ESLint @webpieces/enforce-architecture] Could not load graph: ${error.message}`);
         return null;
     }
 }
@@ -380,7 +380,7 @@ function scanForProjects(
                             root: projectRoot,
                             name: projectName,
                         });
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         //const error = toError(err);
                         void err;
                     }
@@ -390,7 +390,7 @@ function scanForProjects(
                 scanForProjects(fullPath, workspaceRoot, mappings);
             }
         }
-    } catch (err: any) {
+    } catch (err: unknown) {
         //const error = toError(err);
         void err;
     }

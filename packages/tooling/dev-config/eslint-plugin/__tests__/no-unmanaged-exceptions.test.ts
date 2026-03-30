@@ -31,7 +31,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     await operation();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                     expect(error).toBeDefined();
                 }
@@ -43,7 +43,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                 try {
                     await controller.save(request);
                     fail('Should have thrown');
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                     expect(error.message).toContain('Invalid');
                 }
@@ -56,7 +56,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     await operation();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -68,7 +68,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                     try {
                         await service.process();
                         fail();
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         const error = toError(err);
                         expect(error).toBeDefined();
                     }
@@ -82,7 +82,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     await operation();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -92,7 +92,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     await runIntegrationTest();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                     console.error(error);
                 }
@@ -103,7 +103,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     const result = performAction();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -158,7 +158,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     await operation();
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -172,7 +172,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                         try {
                             const result = await this.service.save(request);
                             return result;
-                        } catch (err: any) {
+                        } catch (err: unknown) {
                             const error = toError(err);
                             throw error;
                         }
@@ -190,7 +190,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     await this.database.query(sql);
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -204,7 +204,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                         try {
                             const user = await this.db.findOne({ id });
                             return user;
-                        } catch (err: any) {
+                        } catch (err: unknown) {
                             const error = toError(err);
                             console.error('Failed to fetch user:', error);
                             return null;
@@ -223,7 +223,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
             code: `
                 try {
                     return JSON.parse(body);
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -236,7 +236,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                     async filter(meta: MethodMeta, next: NextFilter): Promise<Action> {
                         try {
                             return await next.execute();
-                        } catch (err: any) {
+                        } catch (err: unknown) {
                             const error = toError(err);
                             console.error('Filter error:', error);
                             throw error;
@@ -257,7 +257,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                     try {
                         const response = await fetch(url);
                         return await response.json();
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         const error = toError(err);
                         throw new Error(\`Fetch failed: \${error.message}\`);
                     }
@@ -275,7 +275,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                 async function operation1() {
                     try {
                         await doSomething();
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         const error = toError(err);
                     }
                 }
@@ -283,7 +283,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                 async function operation2() {
                     try {
                         await doSomethingElse();
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         const error = toError(err);
                     }
                 }
@@ -303,10 +303,10 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                 try {
                     try {
                         await operation();
-                    } catch (err2: any) {
+                    } catch (err2: unknown) {
                         const error2 = toError(err2);
                     }
-                } catch (err: any) {
+                } catch (err: unknown) {
                     const error = toError(err);
                 }
             `,
@@ -325,7 +325,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                 const handler = async () => {
                     try {
                         await doSomething();
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         const error = toError(err);
                     }
                 };
@@ -343,7 +343,7 @@ ruleTester.run('no-unmanaged-exceptions', rule, {
                     process(data: Data): Result {
                         try {
                             return this.performProcessing(data);
-                        } catch (err: any) {
+                        } catch (err: unknown) {
                             const error = toError(err);
                             return null;
                         }

@@ -229,7 +229,7 @@ interface AnyUnknownInfo {
 
 /**
  * Check if a node is in a catch clause variable declaration.
- * This allows `catch (err: any)` and `catch (err: unknown)` patterns.
+ * This allows `catch (err: unknown)` and `catch (err: unknown)` patterns.
  */
 function isInCatchClause(node: ts.Node): boolean {
     let current: ts.Node | undefined = node.parent;
@@ -272,7 +272,7 @@ function findAnyUnknownInFile(filePath: string, workspaceRoot: string): AnyUnkno
         try {
             // Detect `any` keyword
             if (node.kind === ts.SyntaxKind.AnyKeyword) {
-                // Skip catch clause variable types: catch (err: any) is allowed
+                // Skip catch clause variable types: catch (err: unknown) is allowed
                 if (isInCatchClause(node)) {
                     ts.forEachChild(node, visit);
                     return;

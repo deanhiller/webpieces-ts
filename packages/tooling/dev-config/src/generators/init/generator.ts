@@ -5,6 +5,10 @@ export interface InitGeneratorSchema {
     skipFormat?: boolean;
 }
 
+interface ProjectTarget {
+    executor?: string;
+}
+
 function calculateHash(content: string): string {
     return createHash('sha256').update(content).digest('hex');
 }
@@ -175,7 +179,7 @@ function findUsedExecutors(tree: Tree): Set<string> {
     // Scan all project.json files
     tree.listChanges(); // Force tree to be aware of all files
 
-    const scanDir = (dir: string) => {
+    const scanDir = (dir: string): void => {
         for (const child of tree.children(dir)) {
             const childPath = dir === '.' ? child : `${dir}/${child}`;
 
@@ -188,14 +192,14 @@ function findUsedExecutors(tree: Tree): Set<string> {
                             const projectJson = JSON.parse(content);
                             if (projectJson.targets) {
                                 for (const target of Object.values(projectJson.targets)) {
-                                    const executor = (target as { executor?: string })?.executor;
+                                    const executor = (target as ProjectTarget)?.executor;
                                     if (executor && buildExecutors.has(executor)) {
                                         usedExecutors.add(executor);
                                     }
                                 }
                             }
                         }
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         //const error = toError(err);
                     }
                 }

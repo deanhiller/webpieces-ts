@@ -11,6 +11,7 @@
 import type { Rule } from 'eslint';
 import * as fs from 'fs';
 import * as path from 'path';
+import { toError } from '../../toError';
 
 interface MethodLinesOptions {
     max: number;
@@ -154,7 +155,7 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
                     return dir;
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 //const error = toError(err);
                 void err;
             }
@@ -169,10 +170,9 @@ function ensureDocFile(docPath: string, content: string): boolean {
         fs.mkdirSync(path.dirname(docPath), { recursive: true });
         fs.writeFileSync(docPath, content, 'utf-8');
         return true;
-    } catch (err: any) {
-        //const error = toError(err);
-        // err is used in console.warn below
-        console.warn(`[webpieces] Could not create doc file: ${docPath}`, err);
+    } catch (err: unknown) {
+        const error = toError(err);
+        console.warn(`[webpieces] Could not create doc file: ${docPath}`, error);
         return false;
     }
 }

@@ -205,7 +205,7 @@ function writeDocFile(workspaceRoot: string): void {
     try {
         fs.mkdirSync(docDir, { recursive: true });
         fs.writeFileSync(docPath, TRANSITIVE_DEPS_DOC, 'utf-8');
-    } catch (err: any) {
+    } catch (err: unknown) {
         void err;
         console.warn(`Could not write documentation file: ${docPath}`);
     }
@@ -259,7 +259,7 @@ export default async function runExecutor(
         console.error('  5. Run: npm run build-all');
 
         return { success: false };
-    } catch (err: any) {
+    } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
         console.error('❌ Skip-level validation failed:', error.message);
         return { success: false };

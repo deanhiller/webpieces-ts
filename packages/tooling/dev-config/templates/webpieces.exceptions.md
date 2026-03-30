@@ -52,7 +52,7 @@ Without traceId in errors:
 // BAD: Catching just to rethrow without adding value
 try {
   await operation();
-} catch (err: any) {
+} catch (err: unknown) {
   const error = toError(err);
   console.error('Failed:', error);
   throw error;  // No new info added - why catch?
@@ -70,7 +70,7 @@ The key question: Are you adding meaningful information or context? If yes, it m
 // BAD: "I don't want to deal with this error"
 try {
   await riskyOperation();
-} catch (err: any) {
+} catch (err: unknown) {
   // Silence...
 }
 ```
@@ -116,7 +116,7 @@ TraceId (also called correlation ID, request ID) ties these together.
    - Is it adding context to the error before rethrowing? → May be valid (see Problem 3)
 
 3. **IF REMOVING** the try-catch block:
-   - Delete the `try {` and `} catch (err: any) { ... }` wrapper
+   - Delete the `try {` and `} catch (err: unknown) { ... }` wrapper
    - Let the code execute normally
    - Errors will bubble to global handler automatically
 
@@ -159,7 +159,7 @@ export class WebpiecesMiddleware {
       // Await catches BOTH sync throws AND rejected promises
       await next();
       console.log('[GlobalErrorHandler] Request END (success)');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       const traceId = RequestContext.get<string>('TRACE_ID');
 
@@ -279,7 +279,7 @@ async function processOrder(order: Order): Promise<void> {
   try {
     await validateOrder(order);
     await saveToDatabase(order);
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Error disappears into void - debugging nightmare!
     console.log('Order processing failed');
   }
@@ -300,7 +300,7 @@ async function fetchUserData(userId: string): Promise<User> {
   try {
     const response = await fetch(`/api/users/${userId}`);
     return await response.json();
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     // Custom message without traceId
     throw new Error(`Failed to fetch user ${userId}: ${error.message}`);
@@ -336,7 +336,7 @@ async function processOrder(order: Order): Promise<void> {
 ```typescript
 // GOOD: Global handler has full context
 // In WebpiecesMiddleware.globalErrorHandler (see Pattern 1 above)
-catch (err: any) {
+catch (err: unknown) {
   const error = toError(err);
   const traceId = RequestContext.get<string>('TRACE_ID');
 
@@ -367,7 +367,7 @@ async function callVendorApiWithRetry(request: VendorRequest): Promise<VendorRes
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await vendorApi.call(request);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       lastError = error;
       console.warn(`Retry ${i + 1}/${maxRetries} failed:`, error.message);
@@ -404,7 +404,7 @@ async function processBatch(items: Item[]): Promise<BatchResult> {
     try {
       const result = await processItem(item);
       results.push(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const error = toError(err);
       // Log individual error with traceId
       console.error(`[Batch] Item ${item.id} failed (traceId: ${traceId}):`, error);
@@ -436,7 +436,7 @@ async function processBatch(items: Item[]): Promise<BatchResult> {
 async function saveUser(user: User): Promise<void> {
   try {
     await userRepository.save(user);  // Internal call, not edge
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     console.error('Save failed:', error);
     throw error;  // No value added - why catch?
@@ -460,7 +460,7 @@ async function saveUserToDb(user: User): Promise<void> {
     logRequest('[DB] Saving user', { traceId, userId: user.id });
     await externalDbClient.save('users', user);  // EDGE: external service
     logSuccess('[DB] User saved', { traceId, userId: user.id });
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     logFailure('[DB] Save failed', { traceId, userId: user.id, error: error.message });
     throw error;  // Rethrow - logging value at the edge
@@ -505,7 +505,7 @@ app.use(async (req, res, next) => {
 
   try {
     await next();
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     // Report to Sentry/observability
     Sentry.captureException(error, { extra: { traceId } });
@@ -557,7 +557,7 @@ export class GlobalErrorHandler implements ErrorHandler {
 vendorSdk.on('event', async (data) => {
   try {
     await processVendorEvent(data);
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     const traceId = RequestContext.get<string>('TRACE_ID');
     Sentry.captureException(error, { extra: { traceId, vendorData: data } });
@@ -585,7 +585,7 @@ async function sendMail(request: MailRequest): Promise<MailResponse> {
     const response = await emailService.send(request);
     logSuccess('[Email] Sent', { traceId, messageId: response.messageId });
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
     logFailure('[Email] Failed', { traceId, error: error.message, to: request.to });
     throw error;  // Rethrow - adds logging value at the edge
@@ -626,7 +626,7 @@ async submitForm(): Promise<void> {
   try {
     await this.apiClient.saveData(this.formData);
     this.router.navigate(['/success']);
-  } catch (err: any) {
+  } catch (err: unknown) {
     const error = toError(err);
 
     if (error instanceof HttpUserError) {
