@@ -4,11 +4,12 @@
  * Validates that all .ts files in projects live inside the src/ directory.
  * This enforces the standard project structure where source code is in src/.
  *
- * Allowed exceptions:
- * - jest.config.ts (test configuration)
- * - tsconfig*.json (not .ts files anyway)
- * - test/ and __tests__/ directories (test files)
- * - plugin/ directory re-exports (backward compat shims)
+ * The only allowed exception is jest.config.ts (test configuration at project root).
+ * Everything else must be in src/.
+ *
+ * Configurable via nx.json targetDefaults:
+ *   "validate-ts-in-src": { "options": { "mode": "ON" } }
+ *   Set mode to "OFF" to skip this validation.
  *
  * Usage:
  * nx run architecture:validate-ts-in-src
@@ -18,8 +19,10 @@ import type { ExecutorContext } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export type ValidateTsInSrcMode = 'ON' | 'OFF';
+
 export interface ValidateTsInSrcOptions {
-    // No options needed
+    mode?: ValidateTsInSrcMode;
 }
 
 export interface ExecutorResult {
@@ -35,16 +38,6 @@ class Violation {
         this.projectName = projectName;
     }
 }
-
-const ALLOWED_ROOT_FILES = new Set([
-    'jest.config.ts',
-]);
-
-const ALLOWED_DIRS = new Set([
-    'test',
-    '__tests__',
-    'plugin',
-]);
 
 function findProjectDirectories(workspaceRoot: string): string[] {
     const dirs: string[] = [];
@@ -77,12 +70,11 @@ function findTsFilesOutsideSrc(projectDir: string): string[] {
         if (entry.name === 'src' || entry.name === 'node_modules' || entry.name === 'dist') continue;
 
         if (entry.isFile() && entry.name.endsWith('.ts')) {
-            if (ALLOWED_ROOT_FILES.has(entry.name)) continue;
+            if (entry.name === 'jest.config.ts') continue;
             violations.push(path.join(projectDir, entry.name));
         }
 
         if (entry.isDirectory()) {
-            if (ALLOWED_DIRS.has(entry.name)) continue;
             const tsFiles = findTsFilesRecursively(path.join(projectDir, entry.name));
             violations.push(...tsFiles);
         }
@@ -109,9 +101,16 @@ function findTsFilesRecursively(dir: string): string[] {
 }
 
 export default async function runExecutor(
-    _options: ValidateTsInSrcOptions,
+    options: ValidateTsInSrcOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
+    const mode = options.mode ?? 'ON';
+
+    if (mode === 'OFF') {
+        console.log('\n⏭️  Skipping validate-ts-in-src (mode: OFF)\n');
+        return { success: true };
+    }
+
     const workspaceRoot = context.root;
 
     console.log('\n📁 Validating TypeScript files are in src/\n');
@@ -147,8 +146,9 @@ export default async function runExecutor(
         console.error(`  ❌ ${v.filePath}`);
     }
 
-    console.error('\nTo fix: Move the .ts file(s) into the src/ directory\n');
-    console.error('Allowed exceptions: jest.config.ts, test/, __tests__/, plugin/\n');
+    console.error('\nTo fix: Move the .ts file(s) into the src/ directory');
+    console.error('Only exception: jest.config.ts at project root\n');
+    console.error('To disable: set mode to "OFF" in nx.json targetDefaults for validate-ts-in-src\n');
 
     return { success: false };
 }

@@ -3,6 +3,13 @@
     "title": "Validate TypeScript Files in src/ Executor",
     "description": "Validates that all .ts files in projects are inside the src/ directory",
     "type": "object",
-    "properties": {},
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["ON", "OFF"],
+            "default": "ON",
+            "description": "ON = enforce .ts files in src/, OFF = skip validation"
+        }
+    },
     "required": []
 }

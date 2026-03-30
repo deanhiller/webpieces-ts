@@ -438,8 +438,7 @@ function createVisualizeTarget(prefix: string, graphPath: string): TargetConfigu
 function createValidateNoCyclesTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-no-architecture-cycles',
-        cache: true,
-        inputs: ['default'],
+        cache: false,
         metadata: {
             technologies: ['nx'],
             description: 'Validate the architecture has no circular project dependencies',
@@ -463,7 +462,7 @@ function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
 function createValidateNoSkipLevelTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-no-skiplevel-deps',
-        cache: true,
+        cache: false,
         inputs: ['default'],
         metadata: {
             technologies: ['nx'],
@@ -475,7 +474,7 @@ function createValidateNoSkipLevelTarget(): TargetConfiguration {
 function createValidatePackageJsonTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-packagejson',
-        cache: true,
+        cache: false,
         inputs: ['default'],
         metadata: {
             technologies: ['nx'],
@@ -552,8 +551,7 @@ function createValidateCodeTarget(): TargetConfiguration {
 function createValidateVersionsLockedTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/dev-config:validate-versions-locked',
-        cache: true,
-        inputs: ['default'],
+        cache: false,
         metadata: {
             technologies: ['nx'],
             description:
@@ -562,10 +560,21 @@ function createValidateVersionsLockedTarget(): TargetConfiguration {
     };
 }
 
+function createValidateTsInSrcTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/architecture-validators:validate-ts-in-src',
+        cache: false,
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate all .ts files in projects are inside the src/ directory',
+        },
+    };
+}
+
 function createValidateCompleteTarget(validationTargets: string[]): TargetConfiguration {
     return {
         executor: 'nx:noop',
-        cache: true,
+        cache: false,
         dependsOn: validationTargets,
         metadata: {
             technologies: ['nx'],

@@ -1,4 +1,0 @@
-/**
- * Re-export plugin from parent directory for clean imports
- */
-export * from '../src/plugin';

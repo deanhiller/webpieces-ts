@@ -2,17 +2,17 @@ import 'reflect-metadata';
 import { ContainerModule } from 'inversify';
 import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
 import { WebpiecesConfig } from '@webpieces/http-routing';
-import { ProdServerMeta } from '../src/ProdServerMeta';
+import { ProdServerMeta } from '../ProdServerMeta';
 import { SaveApi, SaveRequest, SaveResponse, PublicApi, PublicInfoRequest } from '@webpieces/example-apis';
 import { RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/http-api';
-import { CompanyHeaders } from '../src/modules/CompanyModule';
+import { CompanyHeaders } from '../modules/CompanyModule';
 import {
     RemoteApi,
     FetchValueRequest,
     FetchValueResponse,
     TYPES,
-} from '../src/remote/RemoteApi';
+} from '../remote/RemoteApi';
 
 /**
  * Mock implementation of RemoteApi.

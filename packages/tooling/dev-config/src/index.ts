@@ -14,7 +14,7 @@
  * @packageDocumentation
  */
 
-import { createNodesV2 } from '../plugin';
+import { createNodesV2 } from './plugin';
 
 export const version = '0.0.0-dev';
 export const packageName = '@webpieces/dev-config';

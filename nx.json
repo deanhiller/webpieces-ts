@@ -90,6 +90,11 @@
                     "ignoreModifiedUntilEpoch": 1771931925
                 }
             }
+        },
+        "validate-ts-in-src": {
+            "options": {
+                "mode": "ON"
+            }
         }
     },
     "plugins": [
