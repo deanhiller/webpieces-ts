@@ -137,12 +137,13 @@ jobs:
                   npm publish dist/packages/http/http-routing --access public --provenance
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/http/http-server --access public --provenance
+                  npm publish dist/packages/tooling/eslint-plugin --access public --provenance
+                  npm publish dist/packages/tooling/architecture-validators --access public --provenance
                   npm publish dist/packages/tooling/dev-config --access public --provenance
 
                   # Publish umbrella packages (depend on all above)
                   npm publish dist/packages/server --access public --provenance
                   npm publish dist/packages/client --access public --provenance
-                  npm publish dist/packages/rules --access public --provenance
               env:
                   NPM_CONFIG_PROVENANCE: true
 
