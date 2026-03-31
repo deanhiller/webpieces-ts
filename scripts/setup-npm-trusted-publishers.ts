@@ -13,7 +13,6 @@ const packages = [
     // Umbrella packages
     '@webpieces/server',
     '@webpieces/client',
-    '@webpieces/rules',
 ];
 
 const GITHUB_OWNER = 'deanhiller';

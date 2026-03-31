@@ -1,104 +1,19 @@
 {
     "executors": {
-        "generate": {
-            "implementation": "./architecture/executors/generate/executor",
-            "schema": "./architecture/executors/generate/schema.json",
-            "description": "Generate the architecture dependency graph and save it"
-        },
-        "visualize": {
-            "implementation": "./architecture/executors/visualize/executor",
-            "schema": "./architecture/executors/visualize/schema.json",
-            "description": "Generate visual representations of the architecture graph"
-        },
-        "validate-no-architecture-cycles": {
-            "implementation": "./architecture/executors/validate-no-architecture-cycles/executor",
-            "schema": "./architecture/executors/validate-no-architecture-cycles/schema.json",
-            "description": "Validate the architecture graph has no circular project dependencies"
-        },
-        "validate-architecture-unchanged": {
-            "implementation": "./architecture/executors/validate-architecture-unchanged/executor",
-            "schema": "./architecture/executors/validate-architecture-unchanged/schema.json",
-            "description": "Validate the architecture graph matches the saved blessed graph"
-        },
-        "validate-no-skiplevel-deps": {
-            "implementation": "./architecture/executors/validate-no-skiplevel-deps/executor",
-            "schema": "./architecture/executors/validate-no-skiplevel-deps/schema.json",
-            "description": "Validate no project has redundant transitive dependencies"
-        },
-        "validate-packagejson": {
-            "implementation": "./architecture/executors/validate-packagejson/executor",
-            "schema": "./architecture/executors/validate-packagejson/schema.json",
-            "description": "Validate package.json dependencies match project.json build dependencies"
-        },
-        "validate-new-methods": {
-            "implementation": "./architecture/executors/validate-new-methods/executor",
-            "schema": "./architecture/executors/validate-new-methods/schema.json",
-            "description": "Validate new methods don't exceed max line count (only runs in affected mode)"
-        },
-        "validate-modified-methods": {
-            "implementation": "./architecture/executors/validate-modified-methods/executor",
-            "schema": "./architecture/executors/validate-modified-methods/schema.json",
-            "description": "Validate modified methods don't exceed max line count (encourages gradual cleanup)"
-        },
         "help": {
-            "implementation": "./executors/help/executor",
-            "schema": "./executors/help/schema.json",
+            "implementation": "./src/executors/help/executor",
+            "schema": "./src/executors/help/schema.json",
             "description": "Display help for @webpieces/dev-config commands and targets"
         },
         "validate-eslint-sync": {
-            "implementation": "./executors/validate-eslint-sync/executor",
-            "schema": "./executors/validate-eslint-sync/schema.json",
+            "implementation": "./src/executors/validate-eslint-sync/executor",
+            "schema": "./src/executors/validate-eslint-sync/schema.json",
             "description": "Validate that workspace and template eslint.webpieces.config.mjs files have identical rules"
         },
         "validate-versions-locked": {
-            "implementation": "./executors/validate-versions-locked/executor",
-            "schema": "./executors/validate-versions-locked/schema.json",
+            "implementation": "./src/executors/validate-versions-locked/executor",
+            "schema": "./src/executors/validate-versions-locked/schema.json",
             "description": "Validate package.json versions are locked (no semver ranges) and npm ci compatible"
-        },
-        "validate-modified-files": {
-            "implementation": "./architecture/executors/validate-modified-files/executor",
-            "schema": "./architecture/executors/validate-modified-files/schema.json",
-            "description": "Validate modified files don't exceed max line count"
-        },
-        "validate-code": {
-            "implementation": "./architecture/executors/validate-code/executor",
-            "schema": "./architecture/executors/validate-code/schema.json",
-            "description": "Combined validation for new methods, modified methods, and file sizes"
-        },
-        "validate-return-types": {
-            "implementation": "./architecture/executors/validate-return-types/executor",
-            "schema": "./architecture/executors/validate-return-types/schema.json",
-            "description": "Validate methods have explicit return type annotations"
-        },
-        "validate-no-inline-types": {
-            "implementation": "./architecture/executors/validate-no-inline-types/executor",
-            "schema": "./architecture/executors/validate-no-inline-types/schema.json",
-            "description": "Validate no inline type literals are used - prefer named types"
-        },
-        "validate-no-any-unknown": {
-            "implementation": "./architecture/executors/validate-no-any-unknown/executor",
-            "schema": "./architecture/executors/validate-no-any-unknown/schema.json",
-            "description": "Validate no any/unknown keywords are used - use specific types instead"
-        },
-        "validate-dtos": {
-            "implementation": "./architecture/executors/validate-dtos/executor",
-            "schema": "./architecture/executors/validate-dtos/schema.json",
-            "description": "Validate DTO fields match Prisma Dbo model fields"
-        },
-        "validate-prisma-converters": {
-            "implementation": "./architecture/executors/validate-prisma-converters/executor",
-            "schema": "./architecture/executors/validate-prisma-converters/schema.json",
-            "description": "Validate Prisma converter method patterns and Dto creation locations"
-        },
-        "validate-no-destructure": {
-            "implementation": "./architecture/executors/validate-no-destructure/executor",
-            "schema": "./architecture/executors/validate-no-destructure/schema.json",
-            "description": "Validate no destructuring patterns are used - use explicit property access instead"
-        },
-        "validate-no-direct-api-resolver": {
-            "implementation": "./architecture/executors/validate-no-direct-api-resolver/executor",
-            "schema": "./architecture/executors/validate-no-direct-api-resolver/schema.json",
-            "description": "Validate resolvers use services (not APIs) and components subscribe to observables (not route.snapshot.data)"
         }
     }
 }

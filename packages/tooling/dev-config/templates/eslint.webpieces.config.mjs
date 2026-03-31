@@ -7,7 +7,7 @@
 // Only includes @webpieces custom rules
 // Configure your own TypeScript and general rules in your main eslint.config.mjs as needed
 
-import webpiecesPlugin from '@webpieces/dev-config/eslint-plugin';
+import webpiecesPlugin from '@webpieces/eslint-plugin';
 
 export default [
     {

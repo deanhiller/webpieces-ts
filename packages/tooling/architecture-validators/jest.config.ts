@@ -1,5 +1,5 @@
 export default {
-    displayName: 'dev-config',
+    displayName: 'architecture-validators',
     preset: '../../../jest.preset.js',
     testEnvironment: 'node',
     transform: {
@@ -13,5 +13,5 @@ export default {
     moduleFileExtensions: ['ts', 'js', 'html'],
     testMatch: ['**/*.test.ts', '**/*.spec.ts'],
     passWithNoTests: true,
-    coverageDirectory: '../../../coverage/packages/tooling/dev-config',
+    coverageDirectory: '../../../coverage/packages/tooling/architecture-validators',
 };

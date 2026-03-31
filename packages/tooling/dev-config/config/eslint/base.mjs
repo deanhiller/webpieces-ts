@@ -1,7 +1,7 @@
 // @webpieces/dev-config base ESLint configuration
 // Consumer projects can extend this configuration
 
-import webpiecesPlugin from '../../eslint-plugin/index.js';
+import webpiecesPlugin from '@webpieces/eslint-plugin';
 
 /**
  * WebPieces base ESLint configuration using flat config format.

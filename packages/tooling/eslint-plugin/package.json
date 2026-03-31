@@ -1,0 +1,20 @@
+{
+    "name": "@webpieces/eslint-plugin",
+    "version": "0.0.0-dev",
+    "description": "ESLint plugin for WebPieces code patterns and architecture enforcement",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/eslint-plugin"
+    },
+    "peerDependencies": {
+        "eslint": ">=8.0.0"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate TypeScript Files in src/ Executor",
+    "description": "Validates that all .ts files in projects are inside the src/ directory",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["ON", "OFF"],
+            "default": "ON",
+            "description": "ON = enforce .ts files in src/, OFF = skip validation"
+        }
+    },
+    "required": []
+}
