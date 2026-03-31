@@ -60,20 +60,34 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            - name: Bootstrap dev-config (required before Nx can process project graph)
+            - name: Bootstrap tooling packages (required before Nx can process project graph)
               run: |
-                # ESLint config imports from dist/packages/tooling/dev-config/eslint-plugin/index.js
-                # This must exist before Nx can create the project graph (due to @nx/eslint/plugin)
-                # Build dev-config with tsc to a temp location, then move to expected structure
+                # ESLint config imports from @webpieces/eslint-plugin which must exist
+                # before Nx can create the project graph (due to @nx/eslint/plugin).
+                # Build all three tooling packages with tsc, then move to expected dist structure.
+
+                # 1. Build eslint-plugin
+                npx tsc -p packages/tooling/eslint-plugin/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/eslint-plugin
+                mv dist/temp-tsc/packages/tooling/eslint-plugin/* dist/packages/tooling/eslint-plugin/
+                cp packages/tooling/eslint-plugin/package.json dist/packages/tooling/eslint-plugin/
+                rm -rf dist/temp-tsc
+
+                # 2. Build architecture-validators
+                npx tsc -p packages/tooling/architecture-validators/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/architecture-validators
+                mv dist/temp-tsc/packages/tooling/architecture-validators/* dist/packages/tooling/architecture-validators/
+                cp packages/tooling/architecture-validators/package.json dist/packages/tooling/architecture-validators/
+                cp packages/tooling/architecture-validators/executors.json dist/packages/tooling/architecture-validators/
+                rm -rf dist/temp-tsc
+
+                # 3. Build dev-config
                 npx tsc -p packages/tooling/dev-config/tsconfig.lib.json --outDir dist/temp-tsc
-                # Move compiled files to expected location (tsc outputs to packages/tooling/dev-config/*)
                 mkdir -p dist/packages/tooling/dev-config
                 mv dist/temp-tsc/packages/tooling/dev-config/* dist/packages/tooling/dev-config/
-                rm -rf dist/temp-tsc
-                # Copy required assets
                 cp packages/tooling/dev-config/package.json dist/packages/tooling/dev-config/
                 cp packages/tooling/dev-config/executors.json dist/packages/tooling/dev-config/
-                cp -r packages/tooling/dev-config/architecture dist/packages/tooling/dev-config/
+                rm -rf dist/temp-tsc
 
             - name: Determine version
               id: version
