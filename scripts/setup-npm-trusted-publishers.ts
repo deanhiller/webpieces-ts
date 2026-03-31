@@ -9,6 +9,8 @@ const packages = [
     '@webpieces/http-routing',
     '@webpieces/http-client',
     '@webpieces/http-server',
+    '@webpieces/eslint-plugin',
+    '@webpieces/architecture-validators',
     '@webpieces/dev-config',
     // Umbrella packages
     '@webpieces/server',
