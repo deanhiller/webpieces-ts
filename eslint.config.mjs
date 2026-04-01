@@ -1,14 +1,19 @@
 // ESLint configuration for webpieces-ts workspace
 // Imports @webpieces custom rules from eslint.webpieces.config.mjs
+// Imports Angular-specific rules from eslint.webpieces-angular.config.mjs
 // Workspace-specific TypeScript and general rules configured here
 
 import webpiecesConfig from './eslint.webpieces.config.mjs';
+import angularConfig from './eslint.webpieces-angular.config.mjs';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 
 export default [
-    // Import @webpieces custom rules
+    // Import @webpieces base rules
     ...webpiecesConfig,
+
+    // Import Angular-specific rules (remove if not using Angular)
+    ...angularConfig,
 
     // Workspace-specific ignores
     {
@@ -57,6 +62,7 @@ export default [
             '@webpieces/catch-error-pattern': 'off',
             '@webpieces/no-unmanaged-exceptions': 'off',
             '@webpieces/max-method-lines': 'off',
+            '@webpieces/no-json-property-primitive-type': 'off',
         },
     },
     {

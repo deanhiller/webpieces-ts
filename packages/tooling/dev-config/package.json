@@ -39,7 +39,13 @@
     },
     "peerDependencies": {
         "eslint": ">=8.0.0",
-        "@nx/devkit": ">=18.0.0"
+        "@nx/devkit": ">=18.0.0",
+        "@angular-eslint/eslint-plugin-template": ">=18.0.0",
+        "@angular-eslint/template-parser": ">=18.0.0"
+    },
+    "peerDependenciesMeta": {
+        "@angular-eslint/eslint-plugin-template": { "optional": true },
+        "@angular-eslint/template-parser": { "optional": true }
     },
     "author": "Dean Hiller",
     "license": "Apache-2.0",

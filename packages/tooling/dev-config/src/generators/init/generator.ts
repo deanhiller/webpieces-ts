@@ -249,25 +249,30 @@ function addNpmScripts(tree: Tree): void {
 
 function createEslintConfig(tree: Tree): boolean {
     const webpiecesConfigPath = 'eslint.webpieces.config.mjs';
+    const angularConfigPath = 'eslint.webpieces-angular.config.mjs';
     const mainConfigPath = 'eslint.config.mjs';
 
-    // Always create eslint.webpieces.config.mjs with our rules
-    createWebpiecesEslintConfig(tree, webpiecesConfigPath);
+    // Always create/update both config files from their canonical templates
+    createConfigFromTemplate(tree, webpiecesConfigPath, getTemplateContent(tree, webpiecesConfigPath));
+    createConfigFromTemplate(tree, angularConfigPath, getTemplateContent(tree, angularConfigPath));
 
     // Check if main eslint.config.mjs exists
     const hasExistingConfig = tree.exists(mainConfigPath);
 
     if (!hasExistingConfig) {
-        // No existing config - create one that imports webpieces config
+        // No existing config - create one that imports both webpieces configs
         const mainConfig = `// ESLint configuration
 // Imports @webpieces/dev-config rules
 
 import webpiecesConfig from './eslint.webpieces.config.mjs';
+import angularConfig from './eslint.webpieces-angular.config.mjs';
 
 // Export the webpieces configuration
-// You can add your own rules after spreading webpiecesConfig
+// You can add your own rules after spreading the configs
+// If NOT using Angular: delete eslint.webpieces-angular.config.mjs and remove the angularConfig lines
 export default [
     ...webpiecesConfig,
+    ...angularConfig,
     // Add your custom ESLint configuration here
 ];
 `;
@@ -279,9 +284,8 @@ export default [
     return hasExistingConfig;
 }
 
-function getWebpiecesEslintConfigTemplate(tree: Tree): string {
-    // Read from canonical template file (single source of truth)
-    const templatePath = 'node_modules/@webpieces/dev-config/templates/eslint.webpieces.config.mjs';
+function getTemplateContent(tree: Tree, configFilename: string): string {
+    const templatePath = `node_modules/@webpieces/dev-config/templates/${configFilename}`;
     const template = tree.read(templatePath, 'utf-8');
 
     if (!template) {
@@ -310,37 +314,35 @@ function warnConfigChanges(tree: Tree, configPath: string, newConfig: string): v
     console.log('');
 }
 
-function createWebpiecesEslintConfig(tree: Tree, configPath: string): void {
-    const webpiecesConfig = getWebpiecesEslintConfigTemplate(tree);
-
+function createConfigFromTemplate(tree: Tree, configPath: string, templateContent: string): void {
     if (!tree.exists(configPath)) {
-        tree.write(configPath, webpiecesConfig);
+        tree.write(configPath, templateContent);
         console.log(`✅ Created ${configPath}`);
         return;
     }
 
     const currentContent = tree.read(configPath, 'utf-8');
     if (!currentContent) {
-        tree.write(configPath, webpiecesConfig);
+        tree.write(configPath, templateContent);
         console.log(`✅ Created ${configPath}`);
         return;
     }
 
     const currentHash = calculateHash(currentContent);
-    const newHash = calculateHash(webpiecesConfig);
+    const newHash = calculateHash(templateContent);
 
     if (currentHash === newHash) {
         console.log(`✅ ${configPath} is up to date`);
         return;
     }
 
-    warnConfigChanges(tree, configPath, webpiecesConfig);
+    warnConfigChanges(tree, configPath, templateContent);
 }
 
 function createSuccessCallback(
     installTask: ReturnType<typeof addDependenciesToPackageJson>,
     hasExistingEslintConfig: boolean
-) {
+): () => Promise<void> {
     return async () => {
         await installTask();
 
@@ -365,16 +367,20 @@ function createSuccessCallback(
             console.log('');
             console.log('📋 Existing eslint.config.mjs detected');
             console.log('');
-            console.log('To use @webpieces/dev-config ESLint rules, add this import to your eslint.config.mjs:');
+            console.log('To use @webpieces/dev-config ESLint rules, add these imports to your eslint.config.mjs:');
             console.log('');
             console.log('  import webpiecesConfig from \'./eslint.webpieces.config.mjs\';');
+            console.log('  import angularConfig from \'./eslint.webpieces-angular.config.mjs\';');
             console.log('');
-            console.log('Then spread it into your config array:');
+            console.log('Then spread them into your config array:');
             console.log('');
             console.log('  export default [');
-            console.log('    ...webpiecesConfig,  // Add this line');
+            console.log('    ...webpiecesConfig,   // Base rules');
+            console.log('    ...angularConfig,     // Angular rules (delete file + this line if not Angular)');
             console.log('    // ... your existing config');
             console.log('  ];');
+            console.log('');
+            console.log('💡 Not using Angular? Delete eslint.webpieces-angular.config.mjs and remove its import.');
         }
 
         console.log('');

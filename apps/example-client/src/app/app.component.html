@@ -16,24 +16,32 @@
     </button>
   </div>
 
-  <div class="status" *ngIf="loading">
-    <p>Loading...</p>
-  </div>
+  @if (loading) {
+    <div class="status">
+      <p>Loading...</p>
+    </div>
+  }
 
-  <div class="error" *ngIf="error">
-    <h3>Error:</h3>
-    <pre>{{ error }}</pre>
-  </div>
+  @if (error) {
+    <div class="error">
+      <h3>Error:</h3>
+      <pre>{{ error }}</pre>
+    </div>
+  }
 
-  <div class="response" *ngIf="saveResponse">
-    <h3>SaveApi Response:</h3>
-    <pre>{{ saveResponse | json }}</pre>
-  </div>
+  @if (saveResponse) {
+    <div class="response">
+      <h3>SaveApi Response:</h3>
+      <pre>{{ saveResponse | json }}</pre>
+    </div>
+  }
 
-  <div class="response" *ngIf="publicResponse">
-    <h3>PublicApi Response:</h3>
-    <pre>{{ publicResponse | json }}</pre>
-  </div>
+  @if (publicResponse) {
+    <div class="response">
+      <h3>PublicApi Response:</h3>
+      <pre>{{ publicResponse | json }}</pre>
+    </div>
+  }
 
   <router-outlet></router-outlet>
 </div>
