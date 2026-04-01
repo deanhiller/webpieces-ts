@@ -4,14 +4,14 @@
 // IMPORTANT: When modifying rules here, also update:
 // - /eslint.webpieces.config.mjs (webpieces workspace version with loadWorkspaceRules)
 //
-// Only includes @webpieces custom rules
-// Configure your own TypeScript and general rules in your main eslint.config.mjs as needed
+// Base rules only — no Angular dependencies.
+// For Angular projects, also use eslint.webpieces-angular.config.mjs
 
 import webpiecesPlugin from '@webpieces/eslint-plugin';
 
 export default [
     {
-        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx'],
+        ignores: ['**/dist', '**/node_modules', '**/coverage', '**/.nx', '**/generated'],
     },
     {
         files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -22,9 +22,10 @@ export default [
             '@webpieces/catch-error-pattern': 'error',
             // READ tmp/webpieces/webpieces.exceptions.md for AI rollout instructions and rationale
             '@webpieces/no-unmanaged-exceptions': 'error',
-            // '@webpieces/max-method-lines': ['error', { max: 70 }],
-            // '@webpieces/max-file-lines': ['error', { max: 700 }],
+            '@webpieces/max-method-lines': ['error', { max: 150 }],
+            '@webpieces/max-file-lines': ['error', { max: 901 }],
             '@webpieces/enforce-architecture': 'error',
+            '@webpieces/no-json-property-primitive-type': 'error',
         },
     },
 ];

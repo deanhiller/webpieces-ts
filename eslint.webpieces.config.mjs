@@ -3,8 +3,8 @@
 // IMPORTANT: This file must stay in sync with:
 // - packages/tooling/dev-config/templates/eslint.webpieces.config.mjs (canonical template for clients)
 //
-// Only includes @webpieces custom rules
-// Workspace-specific TypeScript and general rules are in eslint.config.mjs
+// Base rules only — no Angular dependencies.
+// For Angular rules see eslint.webpieces-angular.config.mjs
 
 import { loadWorkspaceRules } from '@nx/eslint-plugin';
 
@@ -35,6 +35,7 @@ export default [
             '@webpieces/max-method-lines': ['error', { max: 70 }],
             '@webpieces/max-file-lines': ['error', { max: 700 }],
             '@webpieces/enforce-architecture': 'error',
+            '@webpieces/no-json-property-primitive-type': 'error',
         },
     },
 ];

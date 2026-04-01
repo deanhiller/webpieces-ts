@@ -10,6 +10,9 @@
  * - max-method-lines: Enforce maximum method length (default: 70 lines)
  * - max-file-lines: Enforce maximum file length (default: 700 lines)
  * - enforce-architecture: Enforce architecture dependency boundaries
+ * - no-json-property-primitive-type: Ban @JsonProperty({ type: String/Number/Boolean })
+ * - require-typed-template: Require [templateClassType] on ng-template with let- variables (Angular)
+ * - no-mat-cell-def: Ban *matCellDef/*matHeaderCellDef — use div-grid tables (Angular)
  */
 
 import catchErrorPattern from './rules/catch-error-pattern';
@@ -17,6 +20,9 @@ import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
 import maxMethodLines from './rules/max-method-lines';
 import maxFileLines from './rules/max-file-lines';
 import enforceArchitecture from './rules/enforce-architecture';
+import noJsonPropertyPrimitiveType from './rules/no-json-property-primitive-type';
+import requireTypedTemplate from './rules/require-typed-template';
+import noMatCellDef from './rules/no-mat-cell-def';
 
 export = {
     rules: {
@@ -25,5 +31,8 @@ export = {
         'max-method-lines': maxMethodLines,
         'max-file-lines': maxFileLines,
         'enforce-architecture': enforceArchitecture,
+        'no-json-property-primitive-type': noJsonPropertyPrimitiveType,
+        'require-typed-template': requireTypedTemplate,
+        'no-mat-cell-def': noMatCellDef,
     },
 };
