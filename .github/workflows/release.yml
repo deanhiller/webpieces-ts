@@ -36,7 +36,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: '22.x'
+                  node-version: '24.x'
                   cache: 'npm'
                   registry-url: 'https://registry.npmjs.org'
 
@@ -50,7 +50,9 @@ jobs:
                       nx-${{ runner.os }}-
 
             - name: Upgrade npm for trusted publishing
-              run: npm install -g npm@latest
+              # Pinned (never @latest) so a stray npm release can't silently break CI.
+              # 11.5.1 is the first version supporting npm trusted publishing via OIDC.
+              run: npm install -g npm@11.5.1
 
             - name: Configure Git
               run: |
