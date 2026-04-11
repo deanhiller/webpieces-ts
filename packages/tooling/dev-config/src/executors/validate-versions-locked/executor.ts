@@ -46,6 +46,11 @@ function findPackageJsonFiles(dir: string, basePath = ''): string[] {
             continue;
         }
 
+        // Skip platform-specific node_modules backups (node_modules_mac, node_modules_linux, etc.)
+        if (item.startsWith('node_modules_')) {
+            continue;
+        }
+
         // Skip all hidden directories (starting with .)
         if (item.startsWith('.')) {
             continue;

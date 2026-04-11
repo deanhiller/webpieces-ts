@@ -1,21 +1,27 @@
 /**
  * Validate TypeScript Files in src/ Executor
  *
- * Validates that all .ts files in projects live inside the src/ directory.
- * This enforces the standard project structure where source code is in src/.
- *
- * The only allowed exception is jest.config.ts (test configuration at project root).
- * Everything else must be in src/.
+ * Two-layer rule:
+ *   Layer 1: every .ts file inside an Nx project must live under src/
+ *            (jest.config.ts at project root is the only exception)
+ *   Layer 2: every .ts file anywhere in the workspace must belong to some
+ *            Nx project. Orphan files (at workspace root or in a non-project
+ *            directory) fail the rule unless explicitly allowlisted.
  *
  * Configurable via nx.json targetDefaults:
- *   "validate-ts-in-src": { "options": { "mode": "ON" } }
- *   Set mode to "OFF" to skip this validation.
+ *   "validate-ts-in-src": {
+ *       "options": {
+ *           "mode": "ON",
+ *           "excludePaths": [...],
+ *           "allowedRootFiles": [...]
+ *       }
+ *   }
  *
- * Usage:
- * nx run architecture:validate-ts-in-src
+ * Usage: nx run architecture:validate-ts-in-src
  */
 
 import type { ExecutorContext } from '@nx/devkit';
+import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -23,13 +29,22 @@ export type ValidateTsInSrcMode = 'ON' | 'OFF';
 
 export interface ValidateTsInSrcOptions {
     mode?: ValidateTsInSrcMode;
+    excludePaths?: string[];
+    allowedRootFiles?: string[];
 }
 
 export interface ExecutorResult {
     success: boolean;
 }
 
-class Violation {
+const DEFAULT_EXCLUDE_PATHS: string[] = [
+    'node_modules', 'dist', '.nx', '.git',
+    'architecture', 'tmp', 'scripts',
+];
+
+const DEFAULT_ALLOWED_ROOT_FILES: string[] = ['jest.setup.ts'];
+
+class LayerOneViolation {
     filePath: string;
     projectName: string;
 
@@ -39,35 +54,44 @@ class Violation {
     }
 }
 
-function findProjectDirectories(workspaceRoot: string): string[] {
-    const dirs: string[] = [];
-    scanForProjects(workspaceRoot, workspaceRoot, dirs);
-    return dirs;
+class LayerTwoViolation {
+    filePath: string;
+
+    constructor(filePath: string) {
+        this.filePath = filePath;
+    }
 }
 
-function scanForProjects(dir: string, workspaceRoot: string, results: string[]): void {
-    if (dir !== workspaceRoot) {
-        const projPath = path.join(dir, 'project.json');
-        if (fs.existsSync(projPath)) {
-            results.push(dir);
-            return;
-        }
-    }
+function isNodeModulesDir(name: string): boolean {
+    return name === 'node_modules' || name.startsWith('node_modules_');
+}
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.nx' || entry.name === '.git' || entry.name === 'architecture') continue;
-        scanForProjects(path.join(dir, entry.name), workspaceRoot, results);
+function shouldSkipTopLevelDir(name: string, excludePaths: string[]): boolean {
+    if (isNodeModulesDir(name)) return true;
+    return excludePaths.includes(name);
+}
+
+async function getProjectRoots(workspaceRoot: string): Promise<string[]> {
+    const projectGraph = await createProjectGraphAsync();
+    const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
+    const roots: string[] = [];
+    for (const cfg of Object.values(projectsConfig.projects)) {
+        if (cfg.root === '' || cfg.root === '.') continue;
+        if (cfg.root === 'architecture') continue;
+        roots.push(path.join(workspaceRoot, cfg.root));
     }
+    return roots;
 }
 
 function findTsFilesOutsideSrc(projectDir: string): string[] {
     const violations: string[] = [];
+    if (!fs.existsSync(projectDir)) return violations;
     const entries = fs.readdirSync(projectDir, { withFileTypes: true });
 
     for (const entry of entries) {
-        if (entry.name === 'src' || entry.name === 'node_modules' || entry.name === 'dist') continue;
+        if (entry.name === 'src') continue;
+        if (isNodeModulesDir(entry.name)) continue;
+        if (entry.name === 'dist') continue;
 
         if (entry.isFile() && entry.name.endsWith('.ts')) {
             if (entry.name === 'jest.config.ts') continue;
@@ -89,7 +113,8 @@ function findTsFilesRecursively(dir: string): string[] {
 
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-        if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+        if (isNodeModulesDir(entry.name)) continue;
+        if (entry.name === 'dist') continue;
         const fullPath = path.join(dir, entry.name);
         if (entry.isFile() && entry.name.endsWith('.ts')) {
             results.push(fullPath);
@@ -100,39 +125,82 @@ function findTsFilesRecursively(dir: string): string[] {
     return results;
 }
 
-export default async function runExecutor(
-    options: ValidateTsInSrcOptions,
-    context: ExecutorContext,
-): Promise<ExecutorResult> {
-    const mode = options.mode ?? 'ON';
+function findOrphanTsFiles(
+    dir: string,
+    projectRootSet: Set<string>,
+    workspaceRoot: string,
+    results: string[],
+): void {
+    if (!fs.existsSync(dir)) return;
 
-    if (mode === 'OFF') {
-        console.log('\n⏭️  Skipping validate-ts-in-src (mode: OFF)\n');
-        return { success: true };
+    const relDir = path.relative(workspaceRoot, dir);
+    if (projectRootSet.has(relDir)) return;
+
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        if (isNodeModulesDir(entry.name)) continue;
+        if (entry.name === 'dist') continue;
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isFile() && entry.name.endsWith('.ts')) {
+            results.push(fullPath);
+        } else if (entry.isDirectory()) {
+            findOrphanTsFiles(fullPath, projectRootSet, workspaceRoot, results);
+        }
     }
+}
 
-    const workspaceRoot = context.root;
-
-    console.log('\n📁 Validating TypeScript files are in src/\n');
-
-    const projectDirs = findProjectDirectories(workspaceRoot);
-    const violations: Violation[] = [];
-
-    for (const projectDir of projectDirs) {
+function checkLayerOne(projectRoots: string[], workspaceRoot: string): LayerOneViolation[] {
+    const violations: LayerOneViolation[] = [];
+    for (const projectDir of projectRoots) {
         const projectName = path.relative(workspaceRoot, projectDir);
         const tsFiles = findTsFilesOutsideSrc(projectDir);
-
         for (const tsFile of tsFiles) {
             const relativePath = path.relative(workspaceRoot, tsFile);
-            violations.push(new Violation(relativePath, projectName));
+            violations.push(new LayerOneViolation(relativePath, projectName));
+        }
+    }
+    return violations;
+}
+
+function checkLayerTwo(
+    workspaceRoot: string,
+    projectRoots: string[],
+    excludePaths: string[],
+    allowedRootFiles: string[],
+): LayerTwoViolation[] {
+    const violations: LayerTwoViolation[] = [];
+    const projectRootSet = new Set(
+        projectRoots.map((p) => path.relative(workspaceRoot, p)),
+    );
+
+    const entries = fs.readdirSync(workspaceRoot, { withFileTypes: true });
+
+    for (const entry of entries) {
+        if (entry.isFile()) {
+            if (!entry.name.endsWith('.ts')) continue;
+            if (allowedRootFiles.includes(entry.name)) continue;
+            violations.push(new LayerTwoViolation(entry.name));
+            continue;
+        }
+        if (!entry.isDirectory()) continue;
+        if (shouldSkipTopLevelDir(entry.name, excludePaths)) continue;
+
+        const orphans: string[] = [];
+        findOrphanTsFiles(
+            path.join(workspaceRoot, entry.name),
+            projectRootSet,
+            workspaceRoot,
+            orphans,
+        );
+        for (const orphan of orphans) {
+            violations.push(new LayerTwoViolation(path.relative(workspaceRoot, orphan)));
         }
     }
 
-    if (violations.length === 0) {
-        console.log('✅ All .ts files are inside src/ directories\n');
-        return { success: true };
-    }
+    return violations;
+}
 
+function reportLayerOneFailure(violations: LayerOneViolation[]): void {
     console.error('❌ TypeScript files found outside src/ directory!\n');
     console.error('All .ts source files must be inside the project\'s src/ directory.');
     console.error('This enforces the standard project structure:\n');
@@ -148,7 +216,62 @@ export default async function runExecutor(
 
     console.error('\nTo fix: Move the .ts file(s) into the src/ directory');
     console.error('Only exception: jest.config.ts at project root\n');
-    console.error('To disable: set mode to "OFF" in nx.json targetDefaults for validate-ts-in-src\n');
+}
 
+function reportLayerTwoFailure(violations: LayerTwoViolation[]): void {
+    console.error('❌ TypeScript files found outside any Nx project!\n');
+    console.error('Every .ts file must belong to an Nx project so it is compiled,');
+    console.error('linted, and tested under a known project config. Orphan files are');
+    console.error('invisible to the build graph and will rot.\n');
+
+    for (const v of violations) {
+        console.error(`  ❌ ${v.filePath}`);
+    }
+
+    console.error('\nTo fix, pick one:');
+    console.error('  (a) Move the file into an existing project\'s src/ directory');
+    console.error('  (b) Create a new project (add project.json) that owns the directory');
+    console.error('  (c) Add the containing top-level directory to validate-ts-in-src.excludePaths');
+    console.error('      in nx.json targetDefaults, or add the filename to allowedRootFiles');
+    console.error('      if it is a legitimate workspace-root file (e.g., jest.setup.ts)\n');
+}
+
+export default async function runExecutor(
+    options: ValidateTsInSrcOptions,
+    context: ExecutorContext,
+): Promise<ExecutorResult> {
+    const mode = options.mode ?? 'ON';
+
+    if (mode === 'OFF') {
+        console.log('\n⏭️  Skipping validate-ts-in-src (mode: OFF)\n');
+        return { success: true };
+    }
+
+    const workspaceRoot = context.root;
+    const excludePaths = options.excludePaths ?? DEFAULT_EXCLUDE_PATHS;
+    const allowedRootFiles = options.allowedRootFiles ?? DEFAULT_ALLOWED_ROOT_FILES;
+
+    console.log('\n📁 Validating TypeScript files are in src/ and owned by a project\n');
+
+    const projectRoots = await getProjectRoots(workspaceRoot);
+
+    const layerOneViolations = checkLayerOne(projectRoots, workspaceRoot);
+    const layerTwoViolations = checkLayerTwo(
+        workspaceRoot, projectRoots, excludePaths, allowedRootFiles,
+    );
+
+    if (layerOneViolations.length === 0 && layerTwoViolations.length === 0) {
+        console.log('✅ All .ts files are inside a project\'s src/ directory\n');
+        return { success: true };
+    }
+
+    if (layerOneViolations.length > 0) {
+        reportLayerOneFailure(layerOneViolations);
+    }
+    if (layerTwoViolations.length > 0) {
+        reportLayerTwoFailure(layerTwoViolations);
+    }
+
+    console.error('To disable: set mode to "OFF" in nx.json targetDefaults for validate-ts-in-src\n');
     return { success: false };
 }

@@ -103,3 +103,6 @@ yarn-error.log*
 
 # Nx Cloud
 .nx/cache/
+
+# Platform-specific node_modules backups
+node_modules_*/
