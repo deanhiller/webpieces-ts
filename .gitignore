@@ -10,16 +10,6 @@ lerna-debug.log*
 dist/
 build/
 out/
-*.js
-*.js.map
-*.d.ts
-*.d.ts.map
-!jest.config.js
-!jest.preset.js
-
-# Keep configuration JavaScript files
-!*.config.js
-!.eslintrc.js
 
 # TypeScript cache
 *.tsbuildinfo

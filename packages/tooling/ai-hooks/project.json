@@ -1,0 +1,33 @@
+{
+    "name": "ai-hooks",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/ai-hooks/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/ai-hooks",
+                "main": "packages/tooling/ai-hooks/src/index.ts",
+                "tsConfig": "packages/tooling/ai-hooks/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/ai-hooks/package.json",
+                    "packages/tooling/ai-hooks/README.md",
+                    "packages/tooling/ai-hooks/openclaw.plugin.json",
+                    {
+                        "input": "packages/tooling/ai-hooks/bin",
+                        "glob": "**/*",
+                        "output": "bin"
+                    },
+                    {
+                        "input": "packages/tooling/ai-hooks/templates",
+                        "glob": "**/*",
+                        "output": "templates"
+                    }
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}
