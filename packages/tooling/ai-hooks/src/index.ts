@@ -1,14 +1,13 @@
-/**
- * @webpieces/ai-hooks
- *
- * Pluggable write-time validation framework for AI coding agents.
- * Claude Code PreToolUse and openclaw before_tool_call share one rule engine.
- *
- * Adapters:
- *   - @webpieces/ai-hooks/claude-code    (shell-command hook entry)
- *   - @webpieces/ai-hooks/openclaw-plugin (openclaw plugin handler)
- *
- * Consumers writing custom rules import types from this barrel.
- */
+export {
+    ToolKind, RuleScope, RuleOptions, IsLineDisabled,
+    Violation, NormalizedEdit, NormalizedToolInput,
+    EditContext, FileContext,
+    Rule, EditRule, FileRule,
+    RuleGroup, BlockedResult,
+    ResolvedConfig, ResolvedRuleConfig,
+} from './core/types';
 
-export const VERSION = '0.0.0-dev';
+export { run } from './core/runner';
+export { stripTsNoise } from './core/strip-ts-noise';
+export { parseDirectives, DirectiveIndex, createIsLineDisabled } from './core/disable-directives';
+export { formatReport } from './core/report';
