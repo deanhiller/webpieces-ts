@@ -1,3 +1,4 @@
+// Pluggable write-time validation framework for AI coding agents
 export {
     ToolKind, RuleScope, RuleOptions, IsLineDisabled,
     Violation, NormalizedEdit, NormalizedToolInput,
