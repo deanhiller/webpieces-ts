@@ -1,4 +1,5 @@
 import { run } from '../core/runner';
+import { logRejection } from '../core/rejection-log';
 import { NormalizedToolInput, NormalizedEdit, ToolKind } from '../core/types';
 import { toError } from '../core/to-error';
 
@@ -85,9 +86,11 @@ export async function main(): Promise<void> {
         const input = normalizeToolInput(toolKind, payload.tool_input);
         if (!input) { process.exit(0); return; }
 
-        const result = run(toolKind, input, process.cwd());
+        const cwd = process.cwd();
+        const result = run(toolKind, input, cwd);
         if (!result) { process.exit(0); return; }
 
+        logRejection(toolKind, input, result, cwd);
         process.stderr.write(result.report);
         process.exit(2);
     } catch (err: unknown) {
