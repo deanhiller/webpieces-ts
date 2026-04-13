@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Lockfile Sync Executor",
+    "description": "Validates package-lock.json is not stale relative to any package.json in the workspace (timestamp comparison)",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

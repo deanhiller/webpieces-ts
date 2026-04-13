@@ -9,7 +9,7 @@ function ws(): string {
     fs.writeFileSync(path.join(dir, 'webpieces.ai-hooks.json'), JSON.stringify({
         rules: { 'no-any-unknown': { enabled: false }, 'max-file-lines': { enabled: false },
             'file-location': { enabled: false }, 'no-destructure': { enabled: false },
-            'require-return-type': { enabled: false } },
+            'require-return-type': { enabled: false }, 'catch-error-pattern': { enabled: false } },
         rulesDir: [],
     }));
     return dir;

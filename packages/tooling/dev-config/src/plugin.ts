@@ -48,6 +48,7 @@ export interface ValidationOptions {
     validateModifiedFiles?: boolean;
     validateVersionsLocked?: boolean;
     validateTsInSrc?: boolean;
+    validateLockfileSync?: boolean;
     newMethodsMaxLines?: number;
     modifiedAndNewMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
@@ -107,6 +108,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validateModifiedFiles: true,
             validateVersionsLocked: true,
             validateTsInSrc: true,
+            validateLockfileSync: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
             modifiedFilesMaxLines: 900,
@@ -286,6 +288,7 @@ function buildValidationTargetsList(
     }
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
     if (validations!.validateTsInSrc) targets.push('validate-ts-in-src');
+    if (validations!.validateLockfileSync) targets.push('validate-lockfile-sync');
     return targets;
 }
 
@@ -335,6 +338,9 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (validations.validateTsInSrc) {
         targets['validate-ts-in-src'] = createValidateTsInSrcTarget();
+    }
+    if (validations.validateLockfileSync) {
+        targets['validate-lockfile-sync'] = createValidateLockfileSyncTarget();
     }
 
     // Add validate-complete target that runs all enabled validations
@@ -569,6 +575,19 @@ function createValidateTsInSrcTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate all .ts files in projects are inside the src/ directory',
+        },
+    };
+}
+
+function createValidateLockfileSyncTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/architecture-validators:validate-lockfile-sync',
+        cache: false, // Don't cache - depends on file timestamps
+        inputs: ['{workspaceRoot}/package-lock.json', '{workspaceRoot}/**/package.json'],
+        metadata: {
+            technologies: ['nx'],
+            description:
+                'Validate package-lock.json is not stale relative to any package.json (timestamp comparison)',
         },
     };
 }

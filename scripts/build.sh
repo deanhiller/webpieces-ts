@@ -2,13 +2,14 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────
-# build.sh — Cross-platform node_modules manager + build runner
+# build.sh — Cross-platform node_modules manager + full CI runner
+#
+# Runs the SAME checks as GitHub Actions CI:
+#   lint, build, test, architecture validation (nx affected --target=ci)
 #
 # Usage:
-#   ./scripts/build.sh              # swap to current platform & build
-#   ./scripts/build.sh swap         # just swap node_modules (no build)
-#   ./scripts/build.sh build        # just build (assume correct node_modules)
-#   ./scripts/build.sh lint         # just lint
+#   ./scripts/build.sh              # swap + lockfile check + full CI
+#   ./scripts/build.sh swap         # just swap node_modules (no CI)
 #   ./scripts/build.sh clean        # remove all node_modules (all platforms)
 # ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,40 @@ NM_PLATFORM="${NM_DIR}_${PLATFORM}"
 
 echo "📦 Platform: $PLATFORM"
 echo "📂 Project:  $PROJECT_DIR"
+
+# ─────────────────────────────────────────────────────────────────────
+# Lockfile freshness check (timestamp-based, instant)
+# ─────────────────────────────────────────────────────────────────────
+check_lockfile_freshness() {
+    if [ ! -f "package-lock.json" ]; then
+        echo "❌ package-lock.json not found — run 'npm install'"
+        exit 1
+    fi
+
+    # Check root package.json
+    if [ "package.json" -nt "package-lock.json" ]; then
+        echo "❌ package.json is newer than package-lock.json"
+        echo "   Run 'npm install' to update the lock file, then commit it."
+        exit 1
+    fi
+
+    # Check all workspace package.json files (up to 2 levels under packages/ and apps/)
+    for pkg in packages/*/package.json packages/*/*/package.json apps/*/package.json apps/*/*/package.json; do
+        if [ -f "$pkg" ] && [ "$pkg" -nt "package-lock.json" ]; then
+            echo "❌ $pkg is newer than package-lock.json"
+            echo "   Run 'npm install' to update the lock file, then commit it."
+            exit 1
+        fi
+    done
+
+    # Check if node_modules is stale relative to package-lock.json
+    if [ -d "node_modules" ] && [ "package-lock.json" -nt "node_modules" ]; then
+        echo "⚠️  package-lock.json is newer than node_modules — run 'npm install'"
+        exit 1
+    fi
+
+    echo "✅ package-lock.json is in sync"
+}
 
 ensure_gitignore() {
     # Make sure node_modules_* dirs are ignored by git and Nx
@@ -100,33 +135,16 @@ swap_node_modules() {
     fi
 }
 
-do_build() {
+do_ci() {
     echo ""
-    echo "🔨 Running build..."
-    if [ -f "nx.json" ]; then
-        NX_DAEMON=false npx nx run-many --target=build --all
-    elif grep -q '"build"' package.json 2>/dev/null; then
-        npm run build
-    else
-        echo "⚠️  No build target found (no nx.json, no 'build' script)"
-    fi
-}
-
-do_lint() {
-    echo ""
-    echo "🔍 Running lint..."
-    if [ -f "nx.json" ]; then
-        NX_DAEMON=false npx nx run-many --target=lint --all
-    elif grep -q '"lint"' package.json 2>/dev/null; then
-        npm run lint
-    else
-        echo "⚠️  No lint target found"
-    fi
+    echo "🔨 Running CI (same as GitHub Actions: lint, build, test, architecture validation)..."
+    git fetch origin main 2>/dev/null || true
+    npx nx affected --target=ci --base=origin/main
 }
 
 do_clean() {
     echo "🧹 Removing all node_modules..."
-    rm -rf node_modules node_modules_* 
+    rm -rf node_modules node_modules_*
     echo "✅ Clean"
 }
 
@@ -140,22 +158,17 @@ case "$ACTION" in
     swap)
         swap_node_modules
         ;;
-    build)
-        do_build
-        ;;
-    lint)
-        do_lint
-        ;;
     clean)
         do_clean
         ;;
     default)
         swap_node_modules
-        do_lint
+        check_lockfile_freshness
+        do_ci
         ;;
     *)
-        echo "Usage: $0 [swap|build|lint|clean]"
-        echo "  (no args) = swap + lint"
+        echo "Usage: $0 [swap|clean]"
+        echo "  (no args) = swap + lockfile check + full CI"
         exit 1
         ;;
 esac
