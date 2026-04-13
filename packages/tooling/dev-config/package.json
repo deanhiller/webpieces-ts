@@ -34,9 +34,9 @@
         "README.md"
     ],
     "dependencies": {
-        "@webpieces/eslint-plugin": "0.0.0-dev",
-        "@webpieces/architecture-validators": "0.0.0-dev",
-        "@webpieces/ai-hooks": "0.0.0-dev"
+        "@webpieces/eslint-plugin": "workspace:*",
+        "@webpieces/architecture-validators": "workspace:*",
+        "@webpieces/ai-hooks": "workspace:*"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0",

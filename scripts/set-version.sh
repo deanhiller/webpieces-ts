@@ -29,7 +29,7 @@ update_package() {
   # Update version
   jq --arg ver "$FULL_VERSION" '.version=$ver' "$pkg_file" > "$tmp_file"
 
-  # Update @webpieces/* dependencies to match
+  # Update @webpieces/* dependencies to match (handles both "workspace:*" and version strings)
   jq --arg ver "$FULL_VERSION" '
     if .dependencies then
       .dependencies |= with_entries(

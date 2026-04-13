@@ -21,6 +21,6 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/http-api": "0.0.0-dev"
+        "@webpieces/http-api": "workspace:*"
     }
 }

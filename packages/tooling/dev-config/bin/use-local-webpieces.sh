@@ -29,7 +29,7 @@ fi
 
 if [ ! -d "$WEBPIECES_ROOT/dist/packages" ]; then
   echo "❌ webpieces-ts dist/ directory not found at: $WEBPIECES_ROOT/dist/packages"
-  echo "   Have you built webpieces-ts? Run: npm run build"
+  echo "   Have you built webpieces-ts? Run: pnpm run build"
   exit 1
 fi
 

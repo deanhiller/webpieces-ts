@@ -33,20 +33,43 @@ jobs:
                   fetch-depth: 0
                   token: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+              # Version is read automatically from packageManager in package.json
+
             - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
                   node-version: '24.x'
-                  cache: 'npm'
                   registry-url: 'https://registry.npmjs.org'
+
+            - name: Cache node_modules
+              id: cache-node-modules
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+            - name: Cache pnpm store
+              if: steps.cache-node-modules.outputs.cache-hit != 'true'
+              uses: actions/cache@v4
+              with:
+                  path: ~/.local/share/pnpm/store
+                  key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+                  restore-keys: |
+                      pnpm-store-${{ runner.os }}-
+
+            - name: Install dependencies
+              if: steps.cache-node-modules.outputs.cache-hit != 'true'
+              run: pnpm install --frozen-lockfile
 
             - name: Cache Nx
               uses: actions/cache@v4
               with:
                   path: .nx/cache
-                  key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
+                  key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
                   restore-keys: |
-                      nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-
+                      nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
                       nx-${{ runner.os }}-
 
             - name: Upgrade npm for trusted publishing
@@ -59,9 +82,6 @@ jobs:
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            - name: Install dependencies
-              run: npm ci
-
             - name: Bootstrap tooling packages (required before Nx can process project graph)
               run: |
                 # ESLint config imports from @webpieces/eslint-plugin which must exist
@@ -69,14 +89,14 @@ jobs:
                 # Build all three tooling packages with tsc, then move to expected dist structure.
 
                 # 1. Build eslint-plugin
-                npx tsc -p packages/tooling/eslint-plugin/tsconfig.lib.json --outDir dist/temp-tsc
+                pnpm exec tsc -p packages/tooling/eslint-plugin/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/eslint-plugin
                 mv dist/temp-tsc/packages/tooling/eslint-plugin/* dist/packages/tooling/eslint-plugin/
                 cp packages/tooling/eslint-plugin/package.json dist/packages/tooling/eslint-plugin/
                 rm -rf dist/temp-tsc
 
                 # 2. Build architecture-validators
-                npx tsc -p packages/tooling/architecture-validators/tsconfig.lib.json --outDir dist/temp-tsc
+                pnpm exec tsc -p packages/tooling/architecture-validators/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/architecture-validators
                 mv dist/temp-tsc/packages/tooling/architecture-validators/* dist/packages/tooling/architecture-validators/
                 cp packages/tooling/architecture-validators/package.json dist/packages/tooling/architecture-validators/
@@ -84,7 +104,7 @@ jobs:
                 rm -rf dist/temp-tsc
 
                 # 3. Build ai-hooks
-                npx tsc -p packages/tooling/ai-hooks/tsconfig.lib.json --outDir dist/temp-tsc
+                pnpm exec tsc -p packages/tooling/ai-hooks/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/ai-hooks
                 mv dist/temp-tsc/packages/tooling/ai-hooks/* dist/packages/tooling/ai-hooks/
                 cp packages/tooling/ai-hooks/package.json dist/packages/tooling/ai-hooks/
@@ -94,7 +114,7 @@ jobs:
                 rm -rf dist/temp-tsc
 
                 # 4. Build dev-config
-                npx tsc -p packages/tooling/dev-config/tsconfig.lib.json --outDir dist/temp-tsc
+                pnpm exec tsc -p packages/tooling/dev-config/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/dev-config
                 mv dist/temp-tsc/packages/tooling/dev-config/* dist/packages/tooling/dev-config/
                 cp packages/tooling/dev-config/package.json dist/packages/tooling/dev-config/
@@ -128,7 +148,7 @@ jobs:
                   BUILD_NUMBER=${{ steps.version.outputs.build_number }} ./scripts/set-version.sh
 
             - name: Build all packages
-              run: npx nx run-many --target=build --all
+              run: pnpm nx run-many --target=build --all
 
             - name: Verify dist versions
               run: |

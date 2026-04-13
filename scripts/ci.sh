@@ -23,4 +23,4 @@ echo "📋 Running CI on AFFECTED projects (compared to origin/main)..."
 echo "   This mirrors: .github/workflows/ci.yml"
 echo ""
 
-npx nx affected --target=ci --base=origin/main
+pnpm nx affected --target=ci --base=origin/main

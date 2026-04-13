@@ -55,7 +55,7 @@ case "$SERVICE" in
 
         # Build the server
         echo "Building server..."
-        npx nx build example-server
+        pnpm nx build example-server
 
         if [ $? -ne 0 ]; then
             echo "❌ Build failed"
@@ -146,7 +146,7 @@ case "$SERVICE" in
 
         # Start Angular dev server
         echo "Starting Angular dev server..."
-        npx nx serve example-client --port=${CLIENT_PORT} > $LOG_FILE 2>&1 &
+        pnpm nx serve example-client --port=${CLIENT_PORT} > $LOG_FILE 2>&1 &
         CLIENT_PID=$!
 
         # Save PID

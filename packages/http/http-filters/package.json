@@ -21,6 +21,6 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/core-context": "0.0.0-dev"
+        "@webpieces/core-context": "workspace:*"
     }
 }

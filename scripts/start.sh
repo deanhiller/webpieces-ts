@@ -30,7 +30,7 @@ cd "$(dirname "$0")/.." || exit 1
 
 # Build the server
 echo "Building server..."
-npx nx build example-app
+pnpm nx build example-app
 
 if [ $? -ne 0 ]; then
     echo "❌ Build failed"
