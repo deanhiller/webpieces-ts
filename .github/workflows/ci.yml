@@ -10,41 +10,27 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
               with:
                   fetch-depth: 0
 
             - name: Install pnpm
-              uses: pnpm/action-setup@v4
+              uses: pnpm/action-setup@v5
               # Version is read automatically from packageManager in package.json
 
             - name: Setup Node.js 24
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v5
               with:
                   node-version: '24.x'
 
-            - name: Cache node_modules
-              id: cache-node-modules
-              uses: actions/cache@v4
-              with:
-                  path: node_modules
-                  key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-            - name: Cache pnpm store
-              if: steps.cache-node-modules.outputs.cache-hit != 'true'
-              uses: actions/cache@v4
-              with:
-                  path: ~/.local/share/pnpm/store
-                  key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-                  restore-keys: |
-                      pnpm-store-${{ runner.os }}-
-
             - name: Install dependencies
-              if: steps.cache-node-modules.outputs.cache-hit != 'true'
               run: pnpm install --frozen-lockfile
 
+            - name: Ensure Nx cache directory exists
+              run: mkdir -p .nx/cache
+
             - name: Cache Nx
-              uses: actions/cache@v4
+              uses: actions/cache@v5
               with:
                   path: .nx/cache
                   key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
@@ -56,7 +42,7 @@ jobs:
               run: pnpm nx affected --target=ci --base=origin/main
 
             - name: Upload coverage
-              uses: codecov/codecov-action@v4
+              uses: codecov/codecov-action@v6
               with:
                   files: ./coverage/lcov.info
                   fail_ci_if_error: false

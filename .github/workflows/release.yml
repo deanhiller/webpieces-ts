@@ -28,43 +28,29 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
               with:
                   fetch-depth: 0
                   token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Install pnpm
-              uses: pnpm/action-setup@v4
+              uses: pnpm/action-setup@v5
               # Version is read automatically from packageManager in package.json
 
             - name: Setup Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v5
               with:
                   node-version: '24.x'
                   registry-url: 'https://registry.npmjs.org'
 
-            - name: Cache node_modules
-              id: cache-node-modules
-              uses: actions/cache@v4
-              with:
-                  path: node_modules
-                  key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-            - name: Cache pnpm store
-              if: steps.cache-node-modules.outputs.cache-hit != 'true'
-              uses: actions/cache@v4
-              with:
-                  path: ~/.local/share/pnpm/store
-                  key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-                  restore-keys: |
-                      pnpm-store-${{ runner.os }}-
-
             - name: Install dependencies
-              if: steps.cache-node-modules.outputs.cache-hit != 'true'
               run: pnpm install --frozen-lockfile
 
+            - name: Ensure Nx cache directory exists
+              run: mkdir -p .nx/cache
+
             - name: Cache Nx
-              uses: actions/cache@v4
+              uses: actions/cache@v5
               with:
                   path: .nx/cache
                   key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
@@ -186,12 +172,10 @@ jobs:
                   git push origin "v${{ steps.version.outputs.full_version }}"
 
             - name: Create GitHub Release
-              uses: actions/create-release@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              uses: softprops/action-gh-release@v3
               with:
                   tag_name: v${{ steps.version.outputs.full_version }}
-                  release_name: Release ${{ steps.version.outputs.full_version }}
+                  name: Release ${{ steps.version.outputs.full_version }}
                   body: |
                       🚀 Published version ${{ steps.version.outputs.full_version }} to npm
 
@@ -215,6 +199,5 @@ jobs:
                       - [@webpieces/client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/client/v/${{ steps.version.outputs.full_version }}) - All client dependencies
 
                       View all packages: https://www.npmjs.com/search?q=%40webpieces
-                  draft: false
-                  prerelease: false
-              continue-on-error: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

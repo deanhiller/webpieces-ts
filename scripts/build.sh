@@ -38,21 +38,32 @@ echo "📦 Platform: $PLATFORM"
 echo "📂 Project:  $PROJECT_DIR"
 
 # ─────────────────────────────────────────────────────────────────────
-# Lockfile freshness check (timestamp-based, instant)
+# Helpers
 # ─────────────────────────────────────────────────────────────────────
-check_lockfile_freshness() {
+compute_lockfile_hash() {
+    if command -v sha256sum &>/dev/null; then
+        sha256sum pnpm-lock.yaml | awk '{print $1}'
+    else
+        shasum -a 256 pnpm-lock.yaml | awk '{print $1}'
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Check that pnpm-lock.yaml is not stale relative to package.json files.
+# This is a hard error — auto-install can't fix a stale lockfile.
+# ─────────────────────────────────────────────────────────────────────
+check_package_json_freshness() {
     if [ ! -f "pnpm-lock.yaml" ]; then
         echo "❌ pnpm-lock.yaml not found — run 'pnpm install'"
         exit 1
     fi
 
-    # Check 1: Any package.json newer than pnpm-lock.yaml means lock file is stale
     if [ "package.json" -nt "pnpm-lock.yaml" ]; then
         echo "❌ package.json is newer than pnpm-lock.yaml"
         echo "   Run 'pnpm install' to update the lock file, then commit it."
         exit 1
     fi
-    for pkg in packages/*/package.json packages/*/*/package.json apps/*/package.json apps/*/*/package.json; do
+    for pkg in packages/*/package.json packages/*/*/package.json apps/*/package.json apps/*/*/package.json libraries/*/package.json libraries/*/*/package.json; do
         if [ -f "$pkg" ] && [ "$pkg" -nt "pnpm-lock.yaml" ]; then
             echo "❌ $pkg is newer than pnpm-lock.yaml"
             echo "   Run 'pnpm install' to update the lock file, then commit it."
@@ -60,23 +71,34 @@ check_lockfile_freshness() {
         fi
     done
 
-    # Check 2: node_modules/.modules.yaml is written by pnpm install.
-    # If root pnpm-lock.yaml is newer, node_modules is stale.
-    if [ -f "node_modules/.modules.yaml" ]; then
-        if [ "pnpm-lock.yaml" -nt "node_modules/.modules.yaml" ]; then
-            echo "❌ pnpm-lock.yaml has been updated since last 'pnpm install'"
-            echo "   New packages may have been added that are not installed."
-            echo "   Run 'pnpm install' to install the updated dependencies."
-            exit 1
-        fi
+    echo "✅ pnpm-lock.yaml is in sync with package.json files"
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Auto-install if lockfile content changed since last pnpm install.
+# Uses a hash stored in node_modules/.lockfile-hash (per-platform
+# because the whole node_modules dir is swapped).
+# ─────────────────────────────────────────────────────────────────────
+check_and_install() {
+    local current_hash stored_hash
+    current_hash="$(compute_lockfile_hash)"
+
+    if [ -f "$NM_DIR/.lockfile-hash" ]; then
+        stored_hash="$(cat "$NM_DIR/.lockfile-hash")"
     else
-        echo "❌ node_modules/.modules.yaml not found"
-        echo "   This suggests 'pnpm install' has never been run."
-        echo "   Run 'pnpm install' to install dependencies."
-        exit 1
+        stored_hash=""
     fi
 
-    echo "✅ pnpm-lock.yaml is in sync"
+    if [ "$current_hash" = "$stored_hash" ]; then
+        echo "✅ Lockfile hash matches — node_modules is up to date"
+        return 0
+    fi
+
+    echo "🔨 Lockfile changed since last install — running pnpm install..."
+    pnpm install
+    # Recompute after install (pnpm can normalize the lockfile)
+    compute_lockfile_hash > "$NM_DIR/.lockfile-hash"
+    echo "✅ Install complete, hash recorded"
 }
 
 ensure_gitignore() {
@@ -128,6 +150,7 @@ swap_node_modules() {
         echo "🔨 No cached node_modules for $PLATFORM — running pnpm install..."
         pnpm install
         echo "$PLATFORM" > "$NM_DIR/.platform"
+        compute_lockfile_hash > "$NM_DIR/.lockfile-hash"
         echo "✅ Fresh install for $PLATFORM complete"
     fi
 }
@@ -160,7 +183,8 @@ case "$ACTION" in
         ;;
     default)
         swap_node_modules
-        check_lockfile_freshness
+        check_package_json_freshness
+        check_and_install
         do_ci
         ;;
     *)
