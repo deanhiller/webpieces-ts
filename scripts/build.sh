@@ -46,14 +46,12 @@ check_lockfile_freshness() {
         exit 1
     fi
 
-    # Check root package.json
+    # Check 1: Any package.json newer than package-lock.json means lock file is stale
     if [ "package.json" -nt "package-lock.json" ]; then
         echo "❌ package.json is newer than package-lock.json"
         echo "   Run 'npm install' to update the lock file, then commit it."
         exit 1
     fi
-
-    # Check all workspace package.json files (up to 2 levels under packages/ and apps/)
     for pkg in packages/*/package.json packages/*/*/package.json apps/*/package.json apps/*/*/package.json; do
         if [ -f "$pkg" ] && [ "$pkg" -nt "package-lock.json" ]; then
             echo "❌ $pkg is newer than package-lock.json"
@@ -61,6 +59,22 @@ check_lockfile_freshness() {
             exit 1
         fi
     done
+
+    # Check 2: node_modules/.package-lock.json is written by npm install/ci.
+    # If root package-lock.json is newer, node_modules is stale.
+    if [ -f "node_modules/.package-lock.json" ]; then
+        if [ "package-lock.json" -nt "node_modules/.package-lock.json" ]; then
+            echo "❌ package-lock.json has been updated since last 'npm install'"
+            echo "   New packages may have been added that are not installed."
+            echo "   Run 'npm install' to install the updated dependencies."
+            exit 1
+        fi
+    else
+        echo "❌ node_modules/.package-lock.json not found"
+        echo "   This suggests 'npm install' has never been run."
+        echo "   Run 'npm install' to install dependencies."
+        exit 1
+    fi
 
     echo "✅ package-lock.json is in sync"
 }
