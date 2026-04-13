@@ -21,8 +21,8 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/http-api": "0.0.0-dev",
-        "@webpieces/http-filters": "0.0.0-dev",
+        "@webpieces/http-api": "workspace:*",
+        "@webpieces/http-filters": "workspace:*",
         "inversify": "7.10.4",
         "minimatch": "10.0.1"
     }

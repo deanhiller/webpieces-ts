@@ -41,42 +41,42 @@ echo "📂 Project:  $PROJECT_DIR"
 # Lockfile freshness check (timestamp-based, instant)
 # ─────────────────────────────────────────────────────────────────────
 check_lockfile_freshness() {
-    if [ ! -f "package-lock.json" ]; then
-        echo "❌ package-lock.json not found — run 'npm install'"
+    if [ ! -f "pnpm-lock.yaml" ]; then
+        echo "❌ pnpm-lock.yaml not found — run 'pnpm install'"
         exit 1
     fi
 
-    # Check 1: Any package.json newer than package-lock.json means lock file is stale
-    if [ "package.json" -nt "package-lock.json" ]; then
-        echo "❌ package.json is newer than package-lock.json"
-        echo "   Run 'npm install' to update the lock file, then commit it."
+    # Check 1: Any package.json newer than pnpm-lock.yaml means lock file is stale
+    if [ "package.json" -nt "pnpm-lock.yaml" ]; then
+        echo "❌ package.json is newer than pnpm-lock.yaml"
+        echo "   Run 'pnpm install' to update the lock file, then commit it."
         exit 1
     fi
     for pkg in packages/*/package.json packages/*/*/package.json apps/*/package.json apps/*/*/package.json; do
-        if [ -f "$pkg" ] && [ "$pkg" -nt "package-lock.json" ]; then
-            echo "❌ $pkg is newer than package-lock.json"
-            echo "   Run 'npm install' to update the lock file, then commit it."
+        if [ -f "$pkg" ] && [ "$pkg" -nt "pnpm-lock.yaml" ]; then
+            echo "❌ $pkg is newer than pnpm-lock.yaml"
+            echo "   Run 'pnpm install' to update the lock file, then commit it."
             exit 1
         fi
     done
 
-    # Check 2: node_modules/.package-lock.json is written by npm install/ci.
-    # If root package-lock.json is newer, node_modules is stale.
-    if [ -f "node_modules/.package-lock.json" ]; then
-        if [ "package-lock.json" -nt "node_modules/.package-lock.json" ]; then
-            echo "❌ package-lock.json has been updated since last 'npm install'"
+    # Check 2: node_modules/.modules.yaml is written by pnpm install.
+    # If root pnpm-lock.yaml is newer, node_modules is stale.
+    if [ -f "node_modules/.modules.yaml" ]; then
+        if [ "pnpm-lock.yaml" -nt "node_modules/.modules.yaml" ]; then
+            echo "❌ pnpm-lock.yaml has been updated since last 'pnpm install'"
             echo "   New packages may have been added that are not installed."
-            echo "   Run 'npm install' to install the updated dependencies."
+            echo "   Run 'pnpm install' to install the updated dependencies."
             exit 1
         fi
     else
-        echo "❌ node_modules/.package-lock.json not found"
-        echo "   This suggests 'npm install' has never been run."
-        echo "   Run 'npm install' to install dependencies."
+        echo "❌ node_modules/.modules.yaml not found"
+        echo "   This suggests 'pnpm install' has never been run."
+        echo "   Run 'pnpm install' to install dependencies."
         exit 1
     fi
 
-    echo "✅ package-lock.json is in sync"
+    echo "✅ pnpm-lock.yaml is in sync"
 }
 
 ensure_gitignore() {
@@ -125,19 +125,8 @@ swap_node_modules() {
         mv "$NM_PLATFORM" "$NM_DIR"
         echo "✅ Swapped to $PLATFORM node_modules"
     else
-        echo "🔨 No cached node_modules for $PLATFORM — running npm install..."
-        npm install
-        # Install platform-specific native binaries that npm skips as optionalDeps
-        # when the lockfile was created on a different platform
-        if [ "$PLATFORM" = "linux" ] || [ "$PLATFORM" = "linux_x64" ]; then
-            # Check if Nx is used and linux binary is missing
-            if [ -d "node_modules/nx" ] && [ ! -d "node_modules/@nx/nx-linux-arm64-gnu" ] && [ "$PLATFORM" = "linux" ]; then
-                local nx_ver
-                nx_ver=$(node -pe "require('./node_modules/nx/package.json').version")
-                echo "🔧 Installing Nx linux-arm64 native binary v${nx_ver}..."
-                npm install --no-save "@nx/nx-linux-arm64-gnu@${nx_ver}" 2>/dev/null || true
-            fi
-        fi
+        echo "🔨 No cached node_modules for $PLATFORM — running pnpm install..."
+        pnpm install
         echo "$PLATFORM" > "$NM_DIR/.platform"
         echo "✅ Fresh install for $PLATFORM complete"
     fi
@@ -147,7 +136,7 @@ do_ci() {
     echo ""
     echo "🔨 Running CI (same as GitHub Actions: lint, build, test, architecture validation)..."
     git fetch origin main 2>/dev/null || true
-    npx nx affected --target=ci --base=origin/main
+    pnpm nx affected --target=ci --base=origin/main
 }
 
 do_clean() {

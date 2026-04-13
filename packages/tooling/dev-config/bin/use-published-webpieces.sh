@@ -25,7 +25,7 @@ rm -rf node_modules/@webpieces
 
 # Reinstall from npm
 echo "   Reinstalling from npm..."
-npm install
+pnpm install
 
 echo ""
 echo "✅ Successfully switched to published @webpieces packages from npm"

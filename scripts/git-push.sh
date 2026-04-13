@@ -96,7 +96,7 @@ if [ -z "$CHANGED_FILES" ]; then
     echo "No formattable files changed since fork from main."
     echo ""
     echo "Running CI validation..."
-    npm run webpieces:ci
+    pnpm run webpieces:ci
     echo ""
     echo "Pushing to origin..."
     git push -u origin "$CURRENT_BRANCH"
@@ -121,7 +121,7 @@ if [ -z "$EXISTING_FILES" ]; then
     echo "No existing formattable files to format."
     echo ""
     echo "Running CI validation..."
-    npm run webpieces:ci
+    pnpm run webpieces:ci
     echo ""
     echo "Pushing to origin..."
     git push -u origin "$CURRENT_BRANCH"
@@ -135,14 +135,14 @@ fi
 # ============================================================
 
 echo "Running prettier on changed files..."
-npx prettier --write $EXISTING_FILES
+pnpm exec prettier --write $EXISTING_FILES
 
 # Check if prettier made any changes
 if git diff --quiet; then
     echo "Prettier made no changes."
     echo ""
     echo "Running CI validation..."
-    npm run webpieces:ci
+    pnpm run webpieces:ci
     echo ""
     echo "Pushing to origin..."
     git push -u origin "$CURRENT_BRANCH"
@@ -166,7 +166,7 @@ git commit -m "prettier: format changed files"
 
 echo ""
 echo "Running CI validation..."
-npm run webpieces:ci
+pnpm run webpieces:ci
 
 echo ""
 echo "Pushing to origin..."

@@ -285,7 +285,7 @@ export class MyRoutes implements Routes {
 
 ## Build Verification (CRITICAL)
 
-**RULE: Always run `npm run build-all` after making code changes.**
+**RULE: Always run `pnpm run build-all` after making code changes.**
 
 This command runs:
 - TypeScript compilation for all packages
@@ -293,7 +293,7 @@ This command runs:
 - Circular dependency checks
 
 ```bash
-npm run build-all
+pnpm run build-all
 ```
 
 **Why this is critical:**

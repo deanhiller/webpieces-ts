@@ -14,26 +14,46 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+              # Version is read automatically from packageManager in package.json
+
             - name: Setup Node.js 24
               uses: actions/setup-node@v4
               with:
                   node-version: '24.x'
-                  cache: 'npm'
+
+            - name: Cache node_modules
+              id: cache-node-modules
+              uses: actions/cache@v4
+              with:
+                  path: node_modules
+                  key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+            - name: Cache pnpm store
+              if: steps.cache-node-modules.outputs.cache-hit != 'true'
+              uses: actions/cache@v4
+              with:
+                  path: ~/.local/share/pnpm/store
+                  key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+                  restore-keys: |
+                      pnpm-store-${{ runner.os }}-
+
+            - name: Install dependencies
+              if: steps.cache-node-modules.outputs.cache-hit != 'true'
+              run: pnpm install --frozen-lockfile
 
             - name: Cache Nx
               uses: actions/cache@v4
               with:
                   path: .nx/cache
-                  key: nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
+                  key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
                   restore-keys: |
-                      nx-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-
+                      nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
                       nx-${{ runner.os }}-
 
-            - name: Install dependencies
-              run: npm ci
-
             - name: Run all CI checks (lint, build, test, architecture validation)
-              run: npx nx affected --target=ci --base=origin/main
+              run: pnpm nx affected --target=ci --base=origin/main
 
             - name: Upload coverage
               uses: codecov/codecov-action@v4
