@@ -83,7 +83,17 @@ jobs:
                 cp packages/tooling/architecture-validators/executors.json dist/packages/tooling/architecture-validators/
                 rm -rf dist/temp-tsc
 
-                # 3. Build dev-config
+                # 3. Build ai-hooks
+                npx tsc -p packages/tooling/ai-hooks/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/ai-hooks
+                mv dist/temp-tsc/packages/tooling/ai-hooks/* dist/packages/tooling/ai-hooks/
+                cp packages/tooling/ai-hooks/package.json dist/packages/tooling/ai-hooks/
+                cp -r packages/tooling/ai-hooks/bin dist/packages/tooling/ai-hooks/
+                cp -r packages/tooling/ai-hooks/templates dist/packages/tooling/ai-hooks/
+                cp packages/tooling/ai-hooks/openclaw.plugin.json dist/packages/tooling/ai-hooks/
+                rm -rf dist/temp-tsc
+
+                # 4. Build dev-config
                 npx tsc -p packages/tooling/dev-config/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/dev-config
                 mv dist/temp-tsc/packages/tooling/dev-config/* dist/packages/tooling/dev-config/
@@ -140,6 +150,7 @@ jobs:
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/http/http-server --access public --provenance
                   npm publish dist/packages/tooling/eslint-plugin --access public --provenance
+                  npm publish dist/packages/tooling/ai-hooks --access public --provenance
                   npm publish dist/packages/tooling/architecture-validators --access public --provenance
                   npm publish dist/packages/tooling/dev-config --access public --provenance
 
@@ -176,6 +187,7 @@ jobs:
                       - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/ai-hooks@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ai-hooks/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/dev-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/dev-config/v/${{ steps.version.outputs.full_version }})
 
                       ### Umbrella Packages (NEW!)
