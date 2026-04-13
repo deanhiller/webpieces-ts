@@ -11,6 +11,10 @@ permissions:
 jobs:
     auto-approve:
         runs-on: ubuntu-latest
+        env:
+            # hmarr/auto-approve-action@v4 still uses Node 20 internally;
+            # force Node 24 runtime until it releases a Node 24 version
+            FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
         # Only auto-approve PRs from repo owner (deanhiller)
         # Other contributors will NOT get auto-approved
@@ -19,7 +23,7 @@ jobs:
         steps:
             # Step 1: Dismiss any existing approvals so we can re-approve on every push
             - name: Dismiss stale approvals
-              uses: actions/github-script@v7
+              uses: actions/github-script@v8
               continue-on-error: true  # Don't fail if no approvals exist
               with:
                   github-token: ${{ secrets.BOT_PAT }}
