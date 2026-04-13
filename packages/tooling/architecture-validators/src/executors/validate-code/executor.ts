@@ -8,6 +8,8 @@ import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from '../validate-no-any-un
 import runValidateDtosExecutor, { ValidateDtosMode } from '../validate-dtos/executor';
 import runPrismaConvertersExecutor, { PrismaConverterMode } from '../validate-prisma-converters/executor';
 import runNoDestructureExecutor, { NoDestructureMode } from '../validate-no-destructure/executor';
+import runCatchErrorPatternExecutor, { CatchErrorPatternMode } from '../validate-catch-error-pattern/executor';
+import runNoUnmanagedExceptionsExecutor, { NoUnmanagedExceptionsMode } from '../validate-no-unmanaged-exceptions/executor';
 import runNoDirectApiResolverExecutor, { NoDirectApiResolverMode } from '../validate-no-direct-api-resolver/executor';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
@@ -68,6 +70,18 @@ export interface NoDestructureConfig {
     ignoreModifiedUntilEpoch?: number;
 }
 
+export interface CatchErrorPatternConfig {
+    mode?: CatchErrorPatternMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
+export interface NoUnmanagedExceptionsConfig {
+    mode?: NoUnmanagedExceptionsMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
 export interface NoDirectApiResolverConfig {
     mode?: NoDirectApiResolverMode;
     disableAllowed?: boolean;
@@ -84,6 +98,8 @@ export interface ValidateCodeOptions {
     validateDtos?: ValidateDtosConfig;
     prismaConverter?: PrismaConverterConfig;
     noDestructure?: NoDestructureConfig;
+    catchErrorPattern?: CatchErrorPatternConfig;
+    noUnmanagedExceptions?: NoUnmanagedExceptionsConfig;
     noDirectApiInResolver?: NoDirectApiResolverConfig;
 }
 
@@ -129,6 +145,12 @@ interface ParsedConfig {
     noDestructureMode: NoDestructureMode;
     noDestructureDisableAllowed: boolean;
     noDestructureIgnoreEpoch: number | undefined;
+    catchErrorPatternMode: CatchErrorPatternMode;
+    catchErrorPatternDisableAllowed: boolean;
+    catchErrorPatternIgnoreEpoch: number | undefined;
+    noUnmanagedExceptionsMode: NoUnmanagedExceptionsMode;
+    noUnmanagedExceptionsDisableAllowed: boolean;
+    noUnmanagedExceptionsIgnoreEpoch: number | undefined;
     noDirectApiResolverMode: NoDirectApiResolverMode;
     noDirectApiResolverDisableAllowed: boolean;
     noDirectApiResolverIgnoreEpoch: number | undefined;
@@ -154,6 +176,8 @@ const VALID_MODES: Record<string, string[]> = {
     validateDtos:         ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'],
     prismaConverter:      ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noDestructure:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+    catchErrorPattern:    ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+    noUnmanagedExceptions: ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
     noDirectApiInResolver: ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
 };
 
@@ -173,6 +197,8 @@ function validateModes(options: ValidateCodeOptions): string[] {
         ['validateDtos', options.validateDtos?.mode],
         ['prismaConverter', options.prismaConverter?.mode],
         ['noDestructure', options.noDestructure?.mode],
+        ['catchErrorPattern', options.catchErrorPattern?.mode],
+        ['noUnmanagedExceptions', options.noUnmanagedExceptions?.mode],
         ['noDirectApiInResolver', options.noDirectApiInResolver?.mode],
     ];
 
@@ -273,6 +299,12 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         noDestructureMode: options.noDestructure?.mode ?? 'OFF',
         noDestructureDisableAllowed: options.noDestructure?.disableAllowed ?? true,
         noDestructureIgnoreEpoch: options.noDestructure?.ignoreModifiedUntilEpoch,
+        catchErrorPatternMode: options.catchErrorPattern?.mode ?? 'OFF',
+        catchErrorPatternDisableAllowed: options.catchErrorPattern?.disableAllowed ?? true,
+        catchErrorPatternIgnoreEpoch: options.catchErrorPattern?.ignoreModifiedUntilEpoch,
+        noUnmanagedExceptionsMode: options.noUnmanagedExceptions?.mode ?? 'OFF',
+        noUnmanagedExceptionsDisableAllowed: options.noUnmanagedExceptions?.disableAllowed ?? true,
+        noUnmanagedExceptionsIgnoreEpoch: options.noUnmanagedExceptions?.ignoreModifiedUntilEpoch,
         noDirectApiResolverMode: options.noDirectApiInResolver?.mode ?? 'OFF',
         noDirectApiResolverDisableAllowed: options.noDirectApiInResolver?.disableAllowed ?? true,
         noDirectApiResolverIgnoreEpoch: options.noDirectApiInResolver?.ignoreModifiedUntilEpoch,
@@ -297,6 +329,8 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
     console.log(`   Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
     console.log(`   No destructure: mode=${config.noDestructureMode}, disableAllowed=${config.noDestructureDisableAllowed}`);
+    console.log(`   Catch error pattern: mode=${config.catchErrorPatternMode}, disableAllowed=${config.catchErrorPatternDisableAllowed}`);
+    console.log(`   No unmanaged exceptions: mode=${config.noUnmanagedExceptionsMode}, disableAllowed=${config.noUnmanagedExceptionsDisableAllowed}`);
     console.log(`   No direct API in resolver: mode=${config.noDirectApiResolverMode}, disableAllowed=${config.noDirectApiResolverDisableAllowed}`);
     console.log('');
 }
@@ -306,6 +340,7 @@ function isAllOff(config: ParsedConfig): boolean {
         config.returnTypeMode === 'OFF' && config.noInlineTypesMode === 'OFF' &&
         config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF' &&
         config.prismaConverterMode === 'OFF' && config.noDestructureMode === 'OFF' &&
+        config.catchErrorPatternMode === 'OFF' && config.noUnmanagedExceptionsMode === 'OFF' &&
         config.noDirectApiResolverMode === 'OFF';
 }
 
@@ -325,6 +360,67 @@ async function runMethodValidators(config: ParsedConfig, context: ExecutorContex
             limit: config.methodLimit, mode: config.methodMode, disableAllowed: config.methodDisableAllowed,
         }, context));
     }
+    return results;
+}
+
+async function runAllValidators(config: ParsedConfig, context: ExecutorContext): Promise<ExecutorResult[]> {
+    const results: ExecutorResult[] = [];
+    const methodResults = await runMethodValidators(config, context);
+    results.push(...methodResults);
+    results.push(await runModifiedFilesExecutor({
+        limit: config.fileLimit, mode: config.fileMode, disableAllowed: config.fileDisableAllowed,
+    }, context));
+    results.push(await runReturnTypesExecutor({
+        mode: config.returnTypeMode,
+        disableAllowed: config.returnTypeDisableAllowed,
+        ignoreModifiedUntilEpoch: config.returnTypeIgnoreEpoch,
+    }, context));
+    results.push(await runNoInlineTypesExecutor({
+        mode: config.noInlineTypesMode,
+        disableAllowed: config.noInlineTypesDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noInlineTypesIgnoreEpoch,
+    }, context));
+    results.push(await runNoAnyUnknownExecutor({
+        mode: config.noAnyUnknownMode,
+        disableAllowed: config.noAnyUnknownDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noAnyUnknownIgnoreEpoch,
+    }, context));
+    results.push(await runValidateDtosExecutor({
+        mode: config.validateDtosMode,
+        disableAllowed: config.validateDtosDisableAllowed,
+        prismaSchemaPath: config.validateDtosPrismaPath,
+        dtoSourcePaths: config.validateDtosSrcPaths,
+        ignoreModifiedUntilEpoch: config.validateDtosIgnoreEpoch,
+    }, context));
+    results.push(await runPrismaConvertersExecutor({
+        mode: config.prismaConverterMode,
+        disableAllowed: config.prismaConverterDisableAllowed,
+        schemaPath: config.prismaConverterSchemaPath,
+        convertersPaths: config.prismaConverterConvertersPaths,
+        enforcePaths: config.prismaConverterEnforcePaths,
+        ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,
+    }, context));
+    results.push(await runNoDestructureExecutor({
+        mode: config.noDestructureMode,
+        disableAllowed: config.noDestructureDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noDestructureIgnoreEpoch,
+    }, context));
+    results.push(await runCatchErrorPatternExecutor({
+        mode: config.catchErrorPatternMode,
+        disableAllowed: config.catchErrorPatternDisableAllowed,
+        ignoreModifiedUntilEpoch: config.catchErrorPatternIgnoreEpoch,
+    }, context));
+    results.push(await runNoUnmanagedExceptionsExecutor({
+        mode: config.noUnmanagedExceptionsMode,
+        disableAllowed: config.noUnmanagedExceptionsDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noUnmanagedExceptionsIgnoreEpoch,
+    }, context));
+    results.push(await runNoDirectApiResolverExecutor({
+        mode: config.noDirectApiResolverMode,
+        disableAllowed: config.noDirectApiResolverDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noDirectApiResolverIgnoreEpoch,
+        enforcePaths: config.noDirectApiResolverEnforcePaths,
+    }, context));
     return results;
 }
 
@@ -351,57 +447,8 @@ export default async function runExecutor(
 
     logConfig(config);
 
-    const methodResults = await runMethodValidators(config, context);
-    const fileResult = await runModifiedFilesExecutor({
-        limit: config.fileLimit, mode: config.fileMode, disableAllowed: config.fileDisableAllowed,
-    }, context);
-    const returnTypesResult = await runReturnTypesExecutor({
-        mode: config.returnTypeMode,
-        disableAllowed: config.returnTypeDisableAllowed,
-        ignoreModifiedUntilEpoch: config.returnTypeIgnoreEpoch,
-    }, context);
-    const noInlineTypesResult = await runNoInlineTypesExecutor({
-        mode: config.noInlineTypesMode,
-        disableAllowed: config.noInlineTypesDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noInlineTypesIgnoreEpoch,
-    }, context);
-    const noAnyUnknownResult = await runNoAnyUnknownExecutor({
-        mode: config.noAnyUnknownMode,
-        disableAllowed: config.noAnyUnknownDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noAnyUnknownIgnoreEpoch,
-    }, context);
-    const validateDtosResult = await runValidateDtosExecutor({
-        mode: config.validateDtosMode,
-        disableAllowed: config.validateDtosDisableAllowed,
-        prismaSchemaPath: config.validateDtosPrismaPath,
-        dtoSourcePaths: config.validateDtosSrcPaths,
-        ignoreModifiedUntilEpoch: config.validateDtosIgnoreEpoch,
-    }, context);
-    const prismaConverterResult = await runPrismaConvertersExecutor({
-        mode: config.prismaConverterMode,
-        disableAllowed: config.prismaConverterDisableAllowed,
-        schemaPath: config.prismaConverterSchemaPath,
-        convertersPaths: config.prismaConverterConvertersPaths,
-        enforcePaths: config.prismaConverterEnforcePaths,
-        ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,
-    }, context);
-    const noDestructureResult = await runNoDestructureExecutor({
-        mode: config.noDestructureMode,
-        disableAllowed: config.noDestructureDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noDestructureIgnoreEpoch,
-    }, context);
-    const noDirectApiResolverResult = await runNoDirectApiResolverExecutor({
-        mode: config.noDirectApiResolverMode,
-        disableAllowed: config.noDirectApiResolverDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noDirectApiResolverIgnoreEpoch,
-        enforcePaths: config.noDirectApiResolverEnforcePaths,
-    }, context);
-
-    const allSuccess = methodResults.every((r) => r.success) &&
-        fileResult.success && returnTypesResult.success &&
-        noInlineTypesResult.success && noAnyUnknownResult.success &&
-        validateDtosResult.success && prismaConverterResult.success &&
-        noDestructureResult.success && noDirectApiResolverResult.success;
+    const results = await runAllValidators(config, context);
+    const allSuccess = results.every((r) => r.success);
 
     console.log(allSuccess ? '\n\u2705 All code validations passed\n' : '\n\u274c Some code validations failed\n');
     return { success: allSuccess };

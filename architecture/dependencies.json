@@ -1,4 +1,8 @@
 {
+    "ai-hooks": {
+        "level": 0,
+        "dependsOn": []
+    },
     "architecture": {
         "level": 0,
         "dependsOn": []

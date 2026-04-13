@@ -107,13 +107,13 @@ function ensureDocFile(docPath: string, content: string): boolean {
  * Only creates file once per lint run using module-level flag
  *
  * Reads from the template file packaged with @webpieces/dev-config
- * and copies it to tmp/webpieces/ for AI agents to read.
+ * and copies it to .webpieces/instruct-ai/ for AI agents to read.
  */
 function ensureExceptionDoc(context: Rule.RuleContext): void {
     if (exceptionDocCreated) return;
 
     const workspaceRoot = getWorkspaceRoot(context);
-    const docPath = path.join(workspaceRoot, 'tmp', 'webpieces', 'webpieces.exceptions.md');
+    const docPath = path.join(workspaceRoot, '.webpieces', 'instruct-ai', 'webpieces.exceptions.md');
 
     // Read from the template file packaged with the npm module
     // Path: from eslint-plugin/rules/ -> ../../templates/
@@ -149,7 +149,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             noUnmanagedExceptions:
-                'AI Agent: READ tmp/webpieces/webpieces.exceptions.md for context. Try-catch blocks are discouraged - use global error handlers instead. Only allowed in test files or with eslint-disable comment.',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.exceptions.md for context. Try-catch blocks are discouraged - use global error handlers instead. Only allowed in test files or with eslint-disable comment.',
         },
         fixable: undefined,
         schema: [],

@@ -37,7 +37,7 @@ interface FileViolation {
     expiredDate?: string;
 }
 
-const TMP_DIR = 'tmp/webpieces';
+const TMP_DIR = '.webpieces/instruct-ai';
 const TMP_MD_FILE = 'webpieces.filesize.md';
 
 const FILESIZE_DOC_CONTENT = `# AI Agent Instructions: File Too Long
@@ -465,7 +465,7 @@ function reportViolations(violations: FileViolation[], limit: number, disableAll
     console.error('   Delete those methods from original class.');
     console.error('   99% of files can be less than ' + limit + ' lines of code.');
     console.error('');
-    console.error('\u26a0\ufe0f  *** READ tmp/webpieces/webpieces.filesize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
+    console.error('\u26a0\ufe0f  *** READ .webpieces/instruct-ai/webpieces.filesize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
     console.error('');
 
     for (const v of violations) {

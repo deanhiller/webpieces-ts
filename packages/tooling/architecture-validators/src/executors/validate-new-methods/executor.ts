@@ -50,7 +50,7 @@ interface MethodInfo {
     hasDisableComment: boolean;
 }
 
-const TMP_DIR = 'tmp/webpieces';
+const TMP_DIR = '.webpieces/instruct-ai';
 const TMP_MD_FILE = 'webpieces.methodsize.md';
 
 const METHODSIZE_DOC_CONTENT = `# Instructions: New Method Too Long
@@ -487,7 +487,7 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
     console.error('\ud83d\udcda Methods should read like a "table of contents" - each method call');
     console.error('   describes a larger piece of work.');
     console.error('');
-    console.error('\u26a0\ufe0f  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
+    console.error('\u26a0\ufe0f  *** READ .webpieces/instruct-ai/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
     console.error('');
 
     if (disableAllowed) {

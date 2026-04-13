@@ -20,7 +20,7 @@ export default [
         },
         rules: {
             '@webpieces/catch-error-pattern': 'error',
-            // READ tmp/webpieces/webpieces.exceptions.md for AI rollout instructions and rationale
+            // READ .webpieces/instruct-ai/webpieces.exceptions.md for AI rollout instructions and rationale
             '@webpieces/no-unmanaged-exceptions': 'error',
             '@webpieces/max-method-lines': ['error', { max: 150 }],
             '@webpieces/max-file-lines': ['error', { max: 901 }],

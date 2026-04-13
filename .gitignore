@@ -10,16 +10,6 @@ lerna-debug.log*
 dist/
 build/
 out/
-*.js
-*.js.map
-*.d.ts
-*.d.ts.map
-!jest.config.js
-!jest.preset.js
-
-# Keep configuration JavaScript files
-!*.config.js
-!.eslintrc.js
 
 # TypeScript cache
 *.tsbuildinfo
@@ -106,3 +96,6 @@ yarn-error.log*
 
 # Platform-specific node_modules backups
 node_modules_*/
+
+# Generated @webpieces/ai-hooks artifacts (bootstrap, cache)
+.webpieces/

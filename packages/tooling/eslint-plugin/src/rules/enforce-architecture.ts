@@ -456,7 +456,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             illegalImport:
-                "⚠️ AI Agent: READ tmp/webpieces/webpieces.dependencies.md for resolution steps!\n\n" +
+                "⚠️ AI Agent: READ .webpieces/instruct-ai/webpieces.dependencies.md for resolution steps!\n\n" +
                 "Import '{{imported}}' violates architecture boundaries.\n\n" +
                 "Project '{{project}}' (level {{level}}) can only import from:\n" +
                 '{{allowedList}}',
