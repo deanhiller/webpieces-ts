@@ -43,6 +43,10 @@ jobs:
                   node-version: '24.x'
                   registry-url: 'https://registry.npmjs.org'
 
+            - name: Get pnpm store directory
+              id: pnpm-store
+              run: echo "path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
             - name: Cache node_modules
               id: cache-node-modules
               uses: actions/cache@v5
@@ -54,7 +58,7 @@ jobs:
               if: steps.cache-node-modules.outputs.cache-hit != 'true'
               uses: actions/cache@v5
               with:
-                  path: ~/.local/share/pnpm/store
+                  path: ${{ steps.pnpm-store.outputs.path }}
                   key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
                   restore-keys: |
                       pnpm-store-${{ runner.os }}-
@@ -62,6 +66,9 @@ jobs:
             - name: Install dependencies
               if: steps.cache-node-modules.outputs.cache-hit != 'true'
               run: pnpm install --frozen-lockfile
+
+            - name: Ensure Nx cache directory exists
+              run: mkdir -p .nx/cache
 
             - name: Cache Nx
               uses: actions/cache@v5
