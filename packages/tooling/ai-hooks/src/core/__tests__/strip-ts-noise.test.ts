@@ -1,3 +1,4 @@
+/* eslint-disable @webpieces/max-method-lines -- test describe blocks are inherently large */
 import { stripTsNoise } from '../strip-ts-noise';
 
 describe('stripTsNoise', () => {

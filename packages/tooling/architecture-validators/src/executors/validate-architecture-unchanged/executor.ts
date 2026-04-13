@@ -24,7 +24,7 @@ export interface ExecutorResult {
     success: boolean;
 }
 
-const TMP_DIR = 'tmp/webpieces';
+const TMP_DIR = '.webpieces/instruct-ai';
 const TMP_MD_FILE = 'webpieces.dependencies.md';
 
 const DEPENDENCIES_DOC_CONTENT = `# Instructions: Architecture Dependency Violation

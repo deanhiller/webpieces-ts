@@ -1,3 +1,4 @@
+/* eslint-disable @webpieces/max-method-lines -- test describe blocks are inherently large */
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -31,7 +32,7 @@ describe('core runner', () => {
             path.join(ws, 'webpieces.ai-hooks.json'),
             JSON.stringify({
                 rules: {
-                    'no-any': { enabled: false },
+                    'no-any-unknown': { enabled: false },
                     'max-file-lines': { enabled: false },
                     'file-location': { enabled: false },
                     'no-destructure': { enabled: false },
@@ -76,7 +77,7 @@ describe('core runner', () => {
             path.join(ws, 'webpieces.ai-hooks.json'),
             JSON.stringify({
                 rules: {
-                    'no-any': { enabled: false },
+                    'no-any-unknown': { enabled: false },
                     'max-file-lines': { enabled: false },
                     'file-location': { enabled: false },
                     'no-destructure': { enabled: false },
@@ -126,7 +127,7 @@ describe('core runner', () => {
             path.join(ws, 'webpieces.ai-hooks.json'),
             JSON.stringify({
                 rules: {
-                    'no-any': { enabled: false },
+                    'no-any-unknown': { enabled: false },
                     'max-file-lines': { enabled: false },
                     'file-location': { enabled: false },
                     'no-destructure': { enabled: false },
@@ -169,7 +170,7 @@ describe('core runner', () => {
             path.join(ws, 'webpieces.ai-hooks.json'),
             JSON.stringify({
                 rules: {
-                    'no-any': { enabled: false },
+                    'no-any-unknown': { enabled: false },
                     'max-file-lines': { enabled: false },
                     'file-location': { enabled: false },
                     'no-destructure': { enabled: false },
@@ -218,7 +219,7 @@ describe('core runner', () => {
             path.join(ws, 'webpieces.ai-hooks.json'),
             JSON.stringify({
                 rules: {
-                    'no-any': { enabled: false },
+                    'no-any-unknown': { enabled: false },
                     'max-file-lines': { enabled: false },
                     'file-location': { enabled: false },
                     'no-destructure': { enabled: false },
@@ -264,7 +265,7 @@ describe('core runner', () => {
             path.join(ws, 'webpieces.ai-hooks.json'),
             JSON.stringify({
                 rules: {
-                    'no-any': { enabled: false },
+                    'no-any-unknown': { enabled: false },
                     'max-file-lines': { enabled: false },
                     'file-location': { enabled: false },
                     'no-destructure': { enabled: false },

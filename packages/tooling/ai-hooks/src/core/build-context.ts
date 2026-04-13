@@ -79,7 +79,9 @@ function readCurrentFileLines(filePath: string): number {
     try {
         const content = fs.readFileSync(filePath, 'utf8');
         return countLines(content);
-    } catch (_err: unknown) {
+    } catch (err: unknown) {
+        // eslint-disable-next-line @webpieces/catch-error-pattern -- file-not-found is expected for new Write targets
+        void err;
         return 0;
     }
 }

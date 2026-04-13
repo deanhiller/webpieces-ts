@@ -1,6 +1,6 @@
 // webpieces-disable no-any-unknown -- rule options are opaque at framework level
 export const defaultRules: Record<string, Record<string, unknown>> = {
-    'no-any': { enabled: true },
+    'no-any-unknown': { enabled: true },
     'max-file-lines': { enabled: true, limit: 900 },
     'file-location': {
         enabled: true,

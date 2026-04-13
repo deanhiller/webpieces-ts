@@ -35,7 +35,8 @@
     ],
     "dependencies": {
         "@webpieces/eslint-plugin": "0.0.0-dev",
-        "@webpieces/architecture-validators": "0.0.0-dev"
+        "@webpieces/architecture-validators": "0.0.0-dev",
+        "@webpieces/ai-hooks": "0.0.0-dev"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0",

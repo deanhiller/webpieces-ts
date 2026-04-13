@@ -202,7 +202,7 @@ function findRedundantDeps(
  * Write documentation file when violations are found
  */
 function writeDocFile(workspaceRoot: string): void {
-    const docPath = path.join(workspaceRoot, 'tmp', 'webpieces', 'webpieces.transitivedeps.md');
+    const docPath = path.join(workspaceRoot, '.webpieces', 'instruct-ai', 'webpieces.transitivedeps.md');
     const docDir = path.dirname(docPath);
 
     try {
@@ -246,7 +246,7 @@ export default async function runExecutor(
 
         // Report violations
         console.error('\n❌ Redundant transitive dependencies detected!\n');
-        console.error('⚠️  AI Agent: READ tmp/webpieces/webpieces.transitivedeps.md for fix instructions!\n');
+        console.error('⚠️  AI Agent: READ .webpieces/instruct-ai/webpieces.transitivedeps.md for fix instructions!\n');
 
         for (const r of allRedundant) {
             console.error(`  ${r.project}:`);
@@ -255,7 +255,7 @@ export default async function runExecutor(
         }
 
         console.error('\nTo fix:');
-        console.error('  1. READ tmp/webpieces/webpieces.transitivedeps.md');
+        console.error('  1. READ .webpieces/instruct-ai/webpieces.transitivedeps.md');
         console.error('  2. Remove redundant deps from project.json build.dependsOn');
         console.error('  3. Remove redundant deps from package.json dependencies');
         console.error('  4. Run: npx nx run architecture:generate');

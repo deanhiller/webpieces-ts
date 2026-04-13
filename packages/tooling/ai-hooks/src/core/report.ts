@@ -15,8 +15,8 @@ export function formatReport(relativePath: string, ruleGroups: readonly RuleGrou
             lines.push(`    \u2192 ${v.message}`);
         }
         if (group.fixHint.length > 0) {
-            for (const hint of group.fixHint) {
-                lines.push(`  Fix: ${hint}`);
+            for (let i = 0; i < group.fixHint.length; i += 1) {
+                lines.push(`  Fix Option ${String(i + 1)}: ${group.fixHint[i]}`);
             }
         }
         lines.push('');

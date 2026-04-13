@@ -3,6 +3,7 @@ import * as path from 'path';
 import { buildContexts } from './build-context';
 import { loadConfig } from './load-config';
 import { loadRules, globMatches } from './load-rules';
+import { toError } from './to-error';
 import { formatReport } from './report';
 import {
     ToolKind, NormalizedToolInput, BlockedResult,
@@ -19,8 +20,8 @@ export function run(
     try {
         return runInternal(toolKind, input, cwd);
     } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[ai-hooks] runner crashed (failing open): ${msg}`);
+        const error = toError(err);
+        console.error(`[ai-hooks] runner crashed (failing open): ${error.message}`);
         return null;
     }
 }
@@ -73,8 +74,8 @@ function safeCheckEdit(rule: EditRule, ctx: EditContext): readonly Violation[] {
     try {
         return rule.check(ctx);
     } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${msg}\n`);
+        const error = toError(err);
+        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${error.message}\n`);
         return [];
     }
 }
@@ -84,8 +85,8 @@ function safeCheckFile(rule: FileRule, ctx: FileContext): readonly Violation[] {
     try {
         return rule.check(ctx);
     } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${msg}\n`);
+        const error = toError(err);
+        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${error.message}\n`);
         return [];
     }
 }

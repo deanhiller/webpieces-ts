@@ -62,7 +62,9 @@ export function loadConfig(cwd: string): ResolvedConfig {
     try {
         const raw = fs.readFileSync(configPath, 'utf8');
         consumerConfig = JSON.parse(raw) as RawConfigFile;
-    } catch (_err: unknown) {
+    } catch (err: unknown) {
+        // eslint-disable-next-line @webpieces/catch-error-pattern -- malformed config fails open
+        void err;
         return new ResolvedConfig(new Map(), [], configPath);
     }
 

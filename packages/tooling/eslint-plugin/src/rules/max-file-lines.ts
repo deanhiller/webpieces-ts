@@ -207,7 +207,7 @@ function ensureFileDoc(context: Rule.RuleContext): void {
     if (fileDocCreated) return; // Performance: only create once per lint run
 
     const workspaceRoot = getWorkspaceRoot(context);
-    const docPath = path.join(workspaceRoot, 'tmp', 'webpieces', 'webpieces.filesize.md');
+    const docPath = path.join(workspaceRoot, '.webpieces', 'instruct-ai', 'webpieces.filesize.md');
 
     if (ensureDocFile(docPath, FILE_DOC_CONTENT)) {
         fileDocCreated = true;
@@ -225,7 +225,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             tooLong:
-                'AI Agent: READ tmp/webpieces/webpieces.filesize.md for fix instructions. File has {{actual}} lines (max: {{max}})',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.filesize.md for fix instructions. File has {{actual}} lines (max: {{max}})',
         },
         fixable: undefined,
         schema: [

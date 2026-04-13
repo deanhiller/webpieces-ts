@@ -46,7 +46,7 @@ interface MethodViolation {
     expiredDate?: string;
 }
 
-const TMP_DIR = 'tmp/webpieces';
+const TMP_DIR = '.webpieces/instruct-ai';
 const TMP_MD_FILE = 'webpieces.methodsize.md';
 
 const METHODSIZE_DOC_CONTENT = `# Instructions: Method Too Long
@@ -693,7 +693,7 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
     console.error('   You can refactor to stay under the limit 50% of the time. If not feasible, use the escape hatch.');
     console.error('');
     console.error(
-        '\u26a0\ufe0f  *** READ tmp/webpieces/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f'
+        '\u26a0\ufe0f  *** READ .webpieces/instruct-ai/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f'
     );
     console.error('');
 

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { Rule, ResolvedConfig } from './types';
+import { toError } from './to-error';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file']);
@@ -14,16 +15,16 @@ export function loadRules(config: ResolvedConfig, workspaceRoot: string): readon
 }
 
 function loadBuiltInRules(): Rule[] {
-    const registry: readonly string[] = require('./rules').builtInRules;
+    const registry: readonly string[] = require('./rules/index').builtInRuleNames;
     const modules: Rule[] = [];
-    for (const relPath of registry) {
+    for (const name of registry) {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const mod = require(relPath);
+            const mod = require(`./rules/${name}`);
             modules.push(mod.default || mod);
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            process.stderr.write(`[ai-hooks] failed to load built-in rule ${relPath}: ${msg}\n`);
+            const error = toError(err);
+            process.stderr.write(`[ai-hooks] failed to load built-in rule ${name}: ${error.message}\n`);
         }
     }
     return modules;
@@ -42,8 +43,8 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
         try {
             entries = fs.readdirSync(absDir).filter((e) => e.endsWith('.js'));
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            process.stderr.write(`[ai-hooks] cannot read rulesDir ${absDir}: ${msg}\n`);
+            const error = toError(err);
+            process.stderr.write(`[ai-hooks] cannot read rulesDir ${absDir}: ${error.message}\n`);
             continue;
         }
         for (const entry of entries) {
@@ -53,8 +54,8 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
                 const mod = require(full);
                 modules.push(mod.default || mod);
             } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                process.stderr.write(`[ai-hooks] failed to load custom rule ${full}: ${msg}\n`);
+                const error = toError(err);
+                process.stderr.write(`[ai-hooks] failed to load custom rule ${full}: ${error.message}\n`);
             }
         }
     }

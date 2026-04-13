@@ -182,7 +182,7 @@ function ensureDocFile(docPath: string, content: string): boolean {
 
 function ensureMethodDoc(context: Rule.RuleContext): void {
     const workspaceRoot = getWorkspaceRoot(context);
-    const docPath = path.join(workspaceRoot, 'tmp', 'webpieces', 'webpieces.methods.md');
+    const docPath = path.join(workspaceRoot, '.webpieces', 'instruct-ai', 'webpieces.methods.md');
 
     // Check if file exists AND flag is true - if both, skip
     if (methodDocCreated && fs.existsSync(docPath)) return;
@@ -260,7 +260,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             tooLong:
-                'AI Agent: READ tmp/webpieces/webpieces.methods.md for fix instructions. Method "{{name}}" has {{actual}} lines (max: {{max}})',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.methods.md for fix instructions. Method "{{name}}" has {{actual}} lines (max: {{max}})',
         },
         fixable: undefined,
         schema: [
