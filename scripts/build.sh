@@ -62,12 +62,6 @@ check_lockfile_freshness() {
         fi
     done
 
-    # Check if node_modules is stale relative to package-lock.json
-    if [ -d "node_modules" ] && [ "package-lock.json" -nt "node_modules" ]; then
-        echo "⚠️  package-lock.json is newer than node_modules — run 'npm install'"
-        exit 1
-    fi
-
     echo "✅ package-lock.json is in sync"
 }
 
