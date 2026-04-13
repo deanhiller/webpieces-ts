@@ -65,6 +65,16 @@
             "schema": "./src/executors/validate-no-destructure/schema.json",
             "description": "Validate no destructuring patterns are used - use explicit property access instead"
         },
+        "validate-catch-error-pattern": {
+            "implementation": "./src/executors/validate-catch-error-pattern/executor",
+            "schema": "./src/executors/validate-catch-error-pattern/schema.json",
+            "description": "Validate catch blocks follow standardized pattern: catch (err: unknown) { const error = toError(err); }"
+        },
+        "validate-no-unmanaged-exceptions": {
+            "implementation": "./src/executors/validate-no-unmanaged-exceptions/executor",
+            "schema": "./src/executors/validate-no-unmanaged-exceptions/schema.json",
+            "description": "Validate try/catch blocks are not used outside chokepoints"
+        },
         "validate-no-direct-api-resolver": {
             "implementation": "./src/executors/validate-no-direct-api-resolver/executor",
             "schema": "./src/executors/validate-no-direct-api-resolver/schema.json",

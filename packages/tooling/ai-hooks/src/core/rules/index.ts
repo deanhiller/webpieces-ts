@@ -5,4 +5,5 @@ export const builtInRuleNames: readonly string[] = [
     'no-destructure',
     'require-return-type',
     'no-unmanaged-exceptions',
+    'catch-error-pattern',
 ];

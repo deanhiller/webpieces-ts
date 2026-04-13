@@ -88,6 +88,16 @@
                     "mode": "MODIFIED_CODE",
                     "disableAllowed": false,
                     "ignoreModifiedUntilEpoch": 1771931925
+                },
+                "noUnmanagedExceptions": {
+                    "mode": "MODIFIED_CODE",
+                    "disableAllowed": true,
+                    "ignoreModifiedUntilEpoch": 1771931925
+                },
+                "catchErrorPattern": {
+                    "mode": "MODIFIED_CODE",
+                    "disableAllowed": true,
+                    "ignoreModifiedUntilEpoch": 1771931925
                 }
             }
         },

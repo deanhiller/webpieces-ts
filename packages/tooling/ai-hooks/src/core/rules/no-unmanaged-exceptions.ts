@@ -3,8 +3,8 @@ import { Violation as V } from '../types';
 
 const TRY_PATTERN = /\btry\s*\{/;
 
-// Both our own directive AND the existing ESLint directive suppress this rule
-const ESLINT_DIRECTIVE = /@webpieces\/no-unmanaged-exceptions/;
+// Both webpieces-disable and the existing ESLint directive suppress this rule
+const DISABLE_PATTERN = /@webpieces\/no-unmanaged-exceptions|webpieces-disable\s+(?:[\w-]+,\s*)*no-unmanaged-exceptions/;
 
 const noUnmanagedExceptionsRule: EditRule = {
     name: 'no-unmanaged-exceptions',
@@ -14,7 +14,8 @@ const noUnmanagedExceptionsRule: EditRule = {
     defaultOptions: {},
     fixHint: [
         'Exceptions should bubble to a chokepoint (filter in node.js, globalErrorHandler in Angular). Most code should NOT catch exceptions.',
-        '// eslint-disable-next-line @webpieces/no-unmanaged-exceptions  (also suppresses the eslint rule)',
+        '// webpieces-disable no-unmanaged-exceptions -- <reason>',
+        'When try/catch IS used (after disabling), the catch block MUST use: catch (err: unknown) { const error = toError(err); ... } or //const error = toError(err); to explicitly ignore.',
     ],
 
     check(ctx: EditContext): readonly Violation[] {
@@ -24,7 +25,7 @@ const noUnmanagedExceptionsRule: EditRule = {
             if (!TRY_PATTERN.test(stripped)) continue;
             const lineNum = i + 1;
             if (ctx.isLineDisabled(lineNum, 'no-unmanaged-exceptions')) continue;
-            if (hasPrecedingEslintDisable(ctx.lines, i)) continue;
+            if (hasPrecedingDisable(ctx.lines, i)) continue;
             violations.push(new V(
                 lineNum,
                 ctx.lines[i].trim(),
@@ -35,10 +36,10 @@ const noUnmanagedExceptionsRule: EditRule = {
     },
 };
 
-function hasPrecedingEslintDisable(lines: readonly string[], idx: number): boolean {
+function hasPrecedingDisable(lines: readonly string[], idx: number): boolean {
     if (idx === 0) return false;
     const prevLine = lines[idx - 1];
-    return ESLINT_DIRECTIVE.test(prevLine);
+    return DISABLE_PATTERN.test(prevLine);
 }
 
 export default noUnmanagedExceptionsRule;

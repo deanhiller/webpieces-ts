@@ -13,6 +13,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-destructure': { enabled: true, allowTopLevel: true },
     'require-return-type': { enabled: true },
     'no-unmanaged-exceptions': { enabled: true },
+    'catch-error-pattern': { enabled: true },
 };
 
 export const defaultRulesDir: readonly string[] = [];
