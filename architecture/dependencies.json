@@ -17,6 +17,10 @@
             "http-client"
         ]
     },
+    "config": {
+        "level": 0,
+        "dependsOn": []
+    },
     "core-context": {
         "level": 1,
         "dependsOn": [

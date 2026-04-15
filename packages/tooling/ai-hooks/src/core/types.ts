@@ -1,7 +1,10 @@
+// ResolvedConfig / ResolvedRuleConfig / RuleOptions now live in @webpieces/config
+// so ai-hooks and the Nx validate-code executor share one loader and one config file.
+import { RuleOptions } from '@webpieces/config';
+export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from '@webpieces/config';
+
 export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
 export type RuleScope = 'edit' | 'file';
-// webpieces-disable no-any-unknown -- rule options are opaque at framework level; each rule casts internally
-export type RuleOptions = Record<string, unknown>;
 export type IsLineDisabled = (lineNum: number, ruleName: string) => boolean;
 
 export class Violation {
@@ -165,28 +168,3 @@ export class BlockedResult {
     }
 }
 
-export class ResolvedConfig {
-    readonly rules: Map<string, ResolvedRuleConfig>;
-    readonly rulesDir: readonly string[];
-    readonly configPath: string | null;
-
-    constructor(
-        rules: Map<string, ResolvedRuleConfig>,
-        rulesDir: readonly string[],
-        configPath: string | null,
-    ) {
-        this.rules = rules;
-        this.rulesDir = rulesDir;
-        this.configPath = configPath;
-    }
-}
-
-export class ResolvedRuleConfig {
-    readonly enabled: boolean;
-    readonly options: RuleOptions;
-
-    constructor(enabled: boolean, options: RuleOptions) {
-        this.enabled = enabled;
-        this.options = options;
-    }
-}

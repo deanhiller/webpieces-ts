@@ -322,7 +322,8 @@ function createWorkspaceTargetsWithoutPrefix(
         targets['validate-packagejson'] = createValidatePackageJsonTarget();
     }
     // Use combined validate-code instead of 3 separate targets
-    // Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
+    // Options come from webpieces.config.json at the workspace root
+    // (loaded via @webpieces/config; same source of truth as @webpieces/ai-hooks)
     if (
         validations.validateNewMethods ||
         validations.validateModifiedMethods ||
@@ -386,7 +387,8 @@ function createWorkspaceTargets(
     }
 
     // Use combined validate-code instead of 3 separate targets
-    // Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
+    // Options come from webpieces.config.json at the workspace root
+    // (loaded via @webpieces/config; same source of truth as @webpieces/ai-hooks)
     if (
         opts.workspace.validations!.validateNewMethods ||
         opts.workspace.validations!.validateModifiedMethods ||
@@ -534,14 +536,15 @@ function createValidateModifiedFilesTarget(
 
 /**
  * Create combined validate-code target
- * Options come from targetDefaults in nx.json (applied at runtime, no cache issues)
+ * Options come from webpieces.config.json at the workspace root
+ * (loaded by the executor via @webpieces/config — same source of truth as @webpieces/ai-hooks)
  */
 function createValidateCodeTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-code',
         cache: false, // Don't cache - depends on git state
-        inputs: ['default'],
-        // No options here - they come from targetDefaults at runtime
+        inputs: ['default', '{workspaceRoot}/webpieces.config.json'],
+        // No options here - they come from webpieces.config.json at runtime
         metadata: {
             technologies: ['nx'],
             description: 'Combined validation for new methods, modified methods, and file sizes',
@@ -566,6 +569,7 @@ function createValidateTsInSrcTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/architecture-validators:validate-ts-in-src',
         cache: false,
+        inputs: ['default', '{workspaceRoot}/webpieces.config.json'],
         metadata: {
             technologies: ['nx'],
             description: 'Validate all .ts files in projects are inside the src/ directory',

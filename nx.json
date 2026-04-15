@@ -48,63 +48,10 @@
             "dependsOn": ["architecture:validate-complete", "validate-no-file-import-cycles"]
         },
         "validate-code": {
-            "options": {
-                "methodMaxLimit": {
-                    "limit": 80,
-                    "mode": "NEW_AND_MODIFIED_METHODS",
-                    "disableAllowed": false,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "fileMaxLimit": {
-                    "limit": 902,
-                    "mode": "MODIFIED_FILES",
-                    "disableAllowed": false,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "requireReturnType": {
-                    "mode": "NEW_AND_MODIFIED_METHODS",
-                    "disableAllowed": false,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "noInlineTypeLiterals": {
-                    "mode": "NEW_AND_MODIFIED_METHODS",
-                    "disableAllowed": false,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "noAnyUnknown": {
-                    "mode": "MODIFIED_CODE",
-                    "disableAllowed": true,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "validateDtos": {
-                    "mode": "MODIFIED_CLASS",
-                    "disableAllowed": false
-                },
-                "prismaConverter": {
-                    "mode": "NEW_AND_MODIFIED_METHODS",
-                    "disableAllowed": false
-                },
-                "noDestructure": {
-                    "mode": "MODIFIED_CODE",
-                    "disableAllowed": false,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "noUnmanagedExceptions": {
-                    "mode": "MODIFIED_CODE",
-                    "disableAllowed": true,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                },
-                "catchErrorPattern": {
-                    "mode": "MODIFIED_CODE",
-                    "disableAllowed": true,
-                    "ignoreModifiedUntilEpoch": 1771931925
-                }
-            }
+            "inputs": ["default", "{workspaceRoot}/webpieces.config.json"]
         },
         "validate-ts-in-src": {
-            "options": {
-                "mode": "ON"
-            }
+            "inputs": ["default", "{workspaceRoot}/webpieces.config.json"]
         }
     },
     "plugins": [

@@ -28,6 +28,9 @@
         "url": "https://github.com/deanhiller/webpieces-ts.git",
         "directory": "packages/tooling/ai-hooks"
     },
+    "dependencies": {
+        "@webpieces/config": "workspace:*"
+    },
     "publishConfig": {
         "access": "public"
     }

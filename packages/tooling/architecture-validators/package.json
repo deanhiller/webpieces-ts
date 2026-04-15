@@ -12,6 +12,9 @@
         "url": "https://github.com/deanhiller/webpieces-ts.git",
         "directory": "packages/tooling/architecture-validators"
     },
+    "dependencies": {
+        "@webpieces/config": "workspace:*"
+    },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"
     },
