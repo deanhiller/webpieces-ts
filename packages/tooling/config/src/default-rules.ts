@@ -8,6 +8,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-destructure': { enabled: true, allowTopLevel: true },
     'catch-error-pattern': { enabled: true },
     'no-unmanaged-exceptions': { enabled: true },
+    'no-shell-substitution': { enabled: true },
     'validate-dtos': { enabled: true },
     'prisma-converter': { enabled: true },
     'no-direct-api-in-resolver': { enabled: true },

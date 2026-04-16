@@ -5,7 +5,7 @@ import type { Rule, ResolvedConfig } from './types';
 import { toError } from './to-error';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
-const VALID_SCOPES = new Set(['edit', 'file']);
+const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
 
 export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
     const builtIns = loadBuiltInRules();

@@ -5,7 +5,7 @@ import { stripTsNoise } from './strip-ts-noise';
 import { createIsLineDisabled } from './disable-directives';
 import {
     ToolKind, NormalizedToolInput, NormalizedEdit,
-    EditContext, FileContext,
+    EditContext, FileContext, BashContext,
 } from './types';
 
 export class BuiltContexts {
@@ -72,6 +72,10 @@ export function buildContexts(
     });
 
     return new BuiltContexts(fileContext, editContexts);
+}
+
+export function buildBashContext(command: string, workspaceRoot: string): BashContext {
+    return new BashContext(command, workspaceRoot);
 }
 
 function readCurrentFileLines(filePath: string): number {

@@ -1,9 +1,9 @@
-import { run } from '../core/runner';
+import { run, runBash } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
 import { NormalizedToolInput, NormalizedEdit, ToolKind } from '../core/types';
 import { toError } from '../core/to-error';
 
-const HANDLED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
+const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 interface ClaudeCodePayload {
     tool_name: string;
@@ -16,6 +16,7 @@ interface ClaudeCodeToolInput {
     old_string?: string;
     new_string?: string;
     edits?: ClaudeCodeEditEntry[];
+    command?: string;
 }
 
 interface ClaudeCodeEditEntry {
@@ -47,7 +48,7 @@ function safeParse(raw: string): ClaudeCodePayload | null {
 }
 
 function normalizeToolKind(toolName: string): ToolKind | null {
-    if (HANDLED_TOOLS.has(toolName)) return toolName as ToolKind;
+    if (HANDLED_FILE_TOOLS.has(toolName)) return toolName as ToolKind;
     return null;
 }
 
@@ -80,13 +81,24 @@ export async function main(): Promise<void> {
         const payload = safeParse(raw);
         if (!payload) { process.exit(0); return; }
 
+        const cwd = process.cwd();
+
+        if (payload.tool_name === 'Bash') {
+            const command = payload.tool_input.command;
+            if (!command || command.trim() === '') { process.exit(0); return; }
+            const result = runBash(command, cwd);
+            if (!result) { process.exit(0); return; }
+            process.stderr.write(result.report);
+            process.exit(2);
+            return;
+        }
+
         const toolKind = normalizeToolKind(payload.tool_name);
         if (!toolKind) { process.exit(0); return; }
 
         const input = normalizeToolInput(toolKind, payload.tool_input);
         if (!input) { process.exit(0); return; }
 
-        const cwd = process.cwd();
         const result = run(toolKind, input, cwd);
         if (!result) { process.exit(0); return; }
 
