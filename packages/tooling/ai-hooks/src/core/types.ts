@@ -4,7 +4,7 @@ import { RuleOptions } from '@webpieces/config';
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from '@webpieces/config';
 
 export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
-export type RuleScope = 'edit' | 'file';
+export type RuleScope = 'edit' | 'file' | 'bash';
 export type IsLineDisabled = (lineNum: number, ruleName: string) => boolean;
 
 export class Violation {
@@ -40,6 +40,14 @@ export class NormalizedToolInput {
     constructor(filePath: string, edits: readonly NormalizedEdit[]) {
         this.filePath = filePath;
         this.edits = edits;
+    }
+}
+
+export class NormalizedBashInput {
+    readonly command: string;
+
+    constructor(command: string) {
+        this.command = command;
     }
 }
 
@@ -84,6 +92,20 @@ export class EditContext {
         this.strippedLines = strippedLines;
         this.removedContent = removedContent;
         this.isLineDisabled = isLineDisabled;
+        this.options = {};
+    }
+}
+
+export class BashContext {
+    readonly tool: 'Bash';
+    readonly command: string;
+    readonly workspaceRoot: string;
+    options: RuleOptions;
+
+    constructor(command: string, workspaceRoot: string) {
+        this.tool = 'Bash';
+        this.command = command;
+        this.workspaceRoot = workspaceRoot;
         this.options = {};
     }
 }
@@ -139,7 +161,12 @@ export interface FileRule extends RuleBase {
     check(ctx: FileContext): readonly Violation[];
 }
 
-export type Rule = EditRule | FileRule;
+export interface BashRule extends RuleBase {
+    readonly scope: 'bash';
+    check(ctx: BashContext): readonly Violation[];
+}
+
+export type Rule = EditRule | FileRule | BashRule;
 
 export class RuleGroup {
     readonly ruleName: string;
