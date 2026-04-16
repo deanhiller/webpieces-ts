@@ -1,21 +1,29 @@
 {
     "ai-hooks": {
-        "level": 0,
-        "dependsOn": []
+        "level": 1,
+        "dependsOn": [
+            "config"
+        ]
     },
     "architecture": {
         "level": 0,
         "dependsOn": []
     },
     "architecture-validators": {
-        "level": 0,
-        "dependsOn": []
+        "level": 1,
+        "dependsOn": [
+            "config"
+        ]
     },
     "client": {
         "level": 3,
         "dependsOn": [
             "http-client"
         ]
+    },
+    "config": {
+        "level": 0,
+        "dependsOn": []
     },
     "core-context": {
         "level": 1,
@@ -32,8 +40,9 @@
         "dependsOn": []
     },
     "dev-config": {
-        "level": 1,
+        "level": 2,
         "dependsOn": [
+            "ai-hooks",
             "architecture-validators",
             "eslint-plugin"
         ]

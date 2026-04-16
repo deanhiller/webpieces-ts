@@ -249,13 +249,22 @@ importers:
         specifier: workspace:*
         version: link:../http/http-server
 
-  packages/tooling/ai-hooks: {}
+  packages/tooling/ai-hooks:
+    dependencies:
+      '@webpieces/config':
+        specifier: workspace:*
+        version: link:../config
 
   packages/tooling/architecture-validators:
     dependencies:
       '@nx/devkit':
         specifier: '>=18.0.0'
-        version: 22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.5.7(@swc/helpers@0.5.11))(@swc/types@0.1.7)(typescript@5.9.3))(@swc/core@1.5.7(@swc/helpers@0.5.11)))
+        version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.5.7(@swc/helpers@0.5.11))(@swc/types@0.1.7)(typescript@5.9.3))(@swc/core@1.5.7(@swc/helpers@0.5.11)))
+      '@webpieces/config':
+        specifier: workspace:*
+        version: link:../config
+
+  packages/tooling/config: {}
 
   packages/tooling/dev-config:
     dependencies:
@@ -267,7 +276,7 @@ importers:
         version: 20.7.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@nx/devkit':
         specifier: '>=18.0.0'
-        version: 22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.5.7(@swc/helpers@0.5.11))(@swc/types@0.1.7)(typescript@5.9.3))(@swc/core@1.5.7(@swc/helpers@0.5.11)))
+        version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.5.7(@swc/helpers@0.5.11))(@swc/types@0.1.7)(typescript@5.9.3))(@swc/core@1.5.7(@swc/helpers@0.5.11)))
       '@webpieces/ai-hooks':
         specifier: workspace:*
         version: link:../ai-hooks

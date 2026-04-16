@@ -27,7 +27,8 @@
             "@webpieces/http-filters": ["packages/http/http-filters/src/index.ts"],
             "@webpieces/http-server": ["packages/http/http-server/src/index.ts"],
             "@webpieces/http-client": ["packages/http/http-client/src/index.ts"],
-            "@webpieces/example-apis": ["apps/example-apis/src/index.ts"]
+            "@webpieces/example-apis": ["apps/example-apis/src/index.ts"],
+            "@webpieces/config": ["packages/tooling/config/src/index.ts"]
         }
     },
     "exclude": ["node_modules", "tmp"]

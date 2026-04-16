@@ -81,6 +81,14 @@ jobs:
                 cp packages/tooling/eslint-plugin/package.json dist/packages/tooling/eslint-plugin/
                 rm -rf dist/temp-tsc
 
+                # 1b. Build config (depended on by ai-hooks, architecture-validators, dev-config)
+                pnpm exec tsc -p packages/tooling/config/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/config
+                mv dist/temp-tsc/packages/tooling/config/* dist/packages/tooling/config/
+                cp packages/tooling/config/package.json dist/packages/tooling/config/
+                cp packages/tooling/config/README.md dist/packages/tooling/config/
+                rm -rf dist/temp-tsc
+
                 # 2. Build architecture-validators
                 pnpm exec tsc -p packages/tooling/architecture-validators/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/architecture-validators
@@ -156,6 +164,7 @@ jobs:
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/http/http-server --access public --provenance
                   npm publish dist/packages/tooling/eslint-plugin --access public --provenance
+                  npm publish dist/packages/tooling/config --access public --provenance
                   npm publish dist/packages/tooling/ai-hooks --access public --provenance
                   npm publish dist/packages/tooling/architecture-validators --access public --provenance
                   npm publish dist/packages/tooling/dev-config --access public --provenance
@@ -191,6 +200,7 @@ jobs:
                       - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/config/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/ai-hooks@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ai-hooks/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/dev-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/dev-config/v/${{ steps.version.outputs.full_version }})
 

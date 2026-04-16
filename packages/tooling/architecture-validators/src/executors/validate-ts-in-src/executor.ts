@@ -22,6 +22,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
+import { loadConfig } from '@webpieces/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -237,19 +238,24 @@ function reportLayerTwoFailure(violations: LayerTwoViolation[]): void {
 }
 
 export default async function runExecutor(
-    options: ValidateTsInSrcOptions,
+    _nxOptions: ValidateTsInSrcOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    const mode = options.mode ?? 'ON';
+    // Config comes from webpieces.config.json — same source as ai-hooks
+    // and validate-code — via @webpieces/config.
+    const shared = loadConfig(context.root);
+    const rule = shared.rules.get('validate-ts-in-src');
 
-    if (mode === 'OFF') {
-        console.log('\n⏭️  Skipping validate-ts-in-src (mode: OFF)\n');
+    if (rule && rule.enabled === false) {
+        console.log('\n⏭️  Skipping validate-ts-in-src (enabled: false)\n');
         return { success: true };
     }
 
     const workspaceRoot = context.root;
-    const excludePaths = options.excludePaths ?? DEFAULT_EXCLUDE_PATHS;
-    const allowedRootFiles = options.allowedRootFiles ?? DEFAULT_ALLOWED_ROOT_FILES;
+    const excludePaths =
+        (rule?.options['excludePaths'] as string[] | undefined) ?? DEFAULT_EXCLUDE_PATHS;
+    const allowedRootFiles =
+        (rule?.options['allowedRootFiles'] as string[] | undefined) ?? DEFAULT_ALLOWED_ROOT_FILES;
 
     console.log('\n📁 Validating TypeScript files are in src/ and owned by a project\n');
 
@@ -272,6 +278,6 @@ export default async function runExecutor(
         reportLayerTwoFailure(layerTwoViolations);
     }
 
-    console.error('To disable: set mode to "OFF" in nx.json targetDefaults for validate-ts-in-src\n');
+    console.error('To disable: set rules["validate-ts-in-src"].enabled to false in webpieces.config.json\n');
     return { success: false };
 }

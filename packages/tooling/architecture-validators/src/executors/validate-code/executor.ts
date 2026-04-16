@@ -1,4 +1,6 @@
 import { ExecutorContext } from '@nx/devkit';
+import { loadConfig } from '@webpieces/config';
+import { toValidateCodeOptions } from './from-shared-config';
 import runNewMethodsExecutor from '../validate-new-methods/executor';
 import runModifiedMethodsExecutor from '../validate-modified-methods/executor';
 import runModifiedFilesExecutor from '../validate-modified-files/executor';
@@ -425,9 +427,19 @@ async function runAllValidators(config: ParsedConfig, context: ExecutorContext):
 }
 
 export default async function runExecutor(
-    options: ValidateCodeOptions,
+    _nxOptions: ValidateCodeOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
+    // Config comes from webpieces.config.json at the workspace root,
+    // loaded via the shared @webpieces/config loader so ai-hooks and
+    // this executor agree on every rule's enabled/mode/options.
+    const shared = loadConfig(context.root);
+    if (!shared.configPath) {
+        console.error('\n❌ No webpieces.config.json found at workspace root (or any ancestor).\n');
+        return { success: false };
+    }
+    const options = toValidateCodeOptions(shared);
+
     const modeErrors = validateModes(options);
     if (modeErrors.length > 0) {
         console.error('');
@@ -437,6 +449,8 @@ export default async function runExecutor(
         console.error('');
         return { success: false };
     }
+
+    console.log(`\n📄 Loaded config: ${shared.configPath}`);
 
     const config = parseConfig(options);
 

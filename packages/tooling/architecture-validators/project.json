@@ -7,6 +7,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "config:build"],
             "options": {
                 "outputPath": "dist/packages/tooling/architecture-validators",
                 "main": "packages/tooling/architecture-validators/src/index.ts",

@@ -24,7 +24,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
-            "dependsOn": ["^build", "eslint-plugin:build", "architecture-validators:build"],
+            "dependsOn": ["^build", "eslint-plugin:build", "architecture-validators:build", "ai-hooks:build"],
             "options": {
                 "outputPath": "dist/packages/tooling/dev-config",
                 "main": "packages/tooling/dev-config/src/index.ts",

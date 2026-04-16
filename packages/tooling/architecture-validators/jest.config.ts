@@ -11,6 +11,9 @@ export default {
         ],
     },
     moduleFileExtensions: ['ts', 'js', 'html'],
+    moduleNameMapper: {
+        '^@webpieces/config$': '<rootDir>/../config/src/index.ts',
+    },
     testMatch: ['**/*.test.ts', '**/*.spec.ts'],
     passWithNoTests: true,
     coverageDirectory: '../../../coverage/packages/tooling/architecture-validators',

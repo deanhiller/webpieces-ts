@@ -1,0 +1,86 @@
+{
+    "rules": {
+        "max-method-lines": {
+            "enabled": true,
+            "limit": 80,
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "max-file-lines": {
+            "enabled": true,
+            "limit": 902,
+            "mode": "MODIFIED_FILES",
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "require-return-type": {
+            "enabled": true,
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "no-inline-type-literals": {
+            "enabled": true,
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "no-any-unknown": {
+            "enabled": true,
+            "mode": "MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "validate-dtos": {
+            "enabled": true,
+            "mode": "MODIFIED_CLASS",
+            "disableAllowed": false
+        },
+        "prisma-converter": {
+            "enabled": true,
+            "mode": "NEW_AND_MODIFIED_METHODS",
+            "disableAllowed": false
+        },
+        "no-destructure": {
+            "enabled": true,
+            "mode": "MODIFIED_CODE",
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "no-unmanaged-exceptions": {
+            "enabled": true,
+            "mode": "MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "catch-error-pattern": {
+            "enabled": true,
+            "mode": "MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
+        "no-direct-api-in-resolver": {
+            "enabled": true,
+            "mode": "OFF",
+            "disableAllowed": true
+        },
+        "validate-ts-in-src": {
+            "enabled": true,
+            "allowedRootFiles": ["jest.setup.ts"],
+            "excludePaths": [
+                "node_modules", "dist", ".nx", ".git",
+                "architecture", "tmp", "scripts"
+            ]
+        },
+        "file-location": {
+            "enabled": true,
+            "allowedRootFiles": ["jest.setup.ts"],
+            "excludePaths": [
+                "node_modules", "dist", ".nx", ".git",
+                "architecture", "tmp", "scripts"
+            ]
+        }
+    },
+    "rulesDir": []
+}
