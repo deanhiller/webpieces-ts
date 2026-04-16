@@ -283,9 +283,6 @@ importers:
       '@webpieces/architecture-validators':
         specifier: workspace:*
         version: link:../architecture-validators
-      '@webpieces/config':
-        specifier: workspace:*
-        version: link:../config
       '@webpieces/eslint-plugin':
         specifier: workspace:*
         version: link:../eslint-plugin

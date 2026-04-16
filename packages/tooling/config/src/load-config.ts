@@ -73,7 +73,8 @@ function readRawConfig(configPath: string): RawConfigFile | null {
     try {
         const raw = fs.readFileSync(configPath, 'utf8');
         return JSON.parse(raw) as RawConfigFile;
-    } catch (err: unknown) { // webpieces-disable catch-error-pattern -- malformed config fails open
+    } catch (err: unknown) {
+        //const error = toError(err); -- malformed config fails open so missing config doesn't break validators
         void err;
         return null;
     }

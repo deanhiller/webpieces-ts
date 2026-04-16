@@ -36,8 +36,7 @@
     "dependencies": {
         "@webpieces/eslint-plugin": "workspace:*",
         "@webpieces/architecture-validators": "workspace:*",
-        "@webpieces/ai-hooks": "workspace:*",
-        "@webpieces/config": "workspace:*"
+        "@webpieces/ai-hooks": "workspace:*"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0",
