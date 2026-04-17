@@ -50,6 +50,11 @@
             "schema": "./src/executors/validate-no-any-unknown/schema.json",
             "description": "Validate no any/unknown keywords are used - use specific types instead"
         },
+        "validate-no-implicit-any": {
+            "implementation": "./src/executors/validate-no-implicit-any/executor",
+            "schema": "./src/executors/validate-no-implicit-any/schema.json",
+            "description": "Validate no implicit-any inferences on parameters, variables, or properties"
+        },
         "validate-dtos": {
             "implementation": "./src/executors/validate-dtos/executor",
             "schema": "./src/executors/validate-dtos/schema.json",
