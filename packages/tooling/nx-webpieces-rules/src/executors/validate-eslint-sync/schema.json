@@ -1,0 +1,7 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate ESLint Sync Executor",
+    "description": "Validates that workspace and template eslint.webpieces.config.mjs files have identical rules",
+    "type": "object",
+    "properties": {}
+}

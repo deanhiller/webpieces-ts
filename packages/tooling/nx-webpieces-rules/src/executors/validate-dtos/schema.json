@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate DTOs Executor",
+    "description": "Validate DTO fields match Prisma Dbo model fields. Ensures AI agents don't invent field names.",
+    "type": "object",
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["OFF", "MODIFIED_CLASS", "MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_CLASS: only validate Dto classes with changed lines. MODIFIED_FILES: validate all Dtos in modified files.",
+            "default": "OFF"
+        },
+        "prismaSchemaPath": {
+            "type": "string",
+            "description": "Relative path from workspace root to schema.prisma"
+        },
+        "dtoSourcePaths": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of directories (relative to workspace root) containing Dto files"
+        },
+        "disableAllowed": {
+            "type": "boolean",
+            "description": "Whether @deprecated field exemption works. When false, all fields must match.",
+            "default": true
+        },
+        "ignoreModifiedUntilEpoch": {
+            "type": "number",
+            "description": "Epoch seconds. Until this time, skip DTO validation entirely. When expired, normal mode resumes. Omit when not needed."
+        }
+    },
+    "required": []
+}

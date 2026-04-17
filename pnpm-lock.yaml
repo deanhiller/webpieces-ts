@@ -249,6 +249,12 @@ importers:
         specifier: workspace:*
         version: link:../http/http-server
 
+  packages/tooling/ai-hook-rules:
+    dependencies:
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
+
   packages/tooling/ai-hooks:
     dependencies:
       '@webpieces/config':
@@ -263,6 +269,12 @@ importers:
       '@webpieces/config':
         specifier: workspace:*
         version: link:../config
+
+  packages/tooling/code-rules:
+    dependencies:
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
 
   packages/tooling/config: {}
 
@@ -292,6 +304,53 @@ importers:
 
   packages/tooling/eslint-plugin:
     dependencies:
+      eslint:
+        specifier: '>=8.0.0'
+        version: 9.39.1(jiti@1.21.7)
+
+  packages/tooling/eslint-rules:
+    dependencies:
+      eslint:
+        specifier: '>=8.0.0'
+        version: 9.39.1(jiti@1.21.7)
+
+  packages/tooling/nx-webpieces-rules:
+    dependencies:
+      '@nx/devkit':
+        specifier: '>=18.0.0'
+        version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.5.7(@swc/helpers@0.5.11))(@swc/types@0.1.7)(typescript@5.9.3))(@swc/core@1.5.7(@swc/helpers@0.5.11)))
+      '@webpieces/code-rules':
+        specifier: workspace:*
+        version: link:../code-rules
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
+      '@webpieces/webpieces-rules':
+        specifier: workspace:*
+        version: link:../webpieces-rules
+
+  packages/tooling/rules-config: {}
+
+  packages/tooling/webpieces-rules:
+    dependencies:
+      '@angular-eslint/eslint-plugin-template':
+        specifier: '>=18.0.0'
+        version: 20.7.0(@angular-eslint/template-parser@20.7.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3))(@typescript-eslint/types@8.48.0)(@typescript-eslint/utils@8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+      '@angular-eslint/template-parser':
+        specifier: '>=18.0.0'
+        version: 20.7.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+      '@webpieces/ai-hook-rules':
+        specifier: workspace:*
+        version: link:../ai-hook-rules
+      '@webpieces/code-rules':
+        specifier: workspace:*
+        version: link:../code-rules
+      '@webpieces/eslint-rules':
+        specifier: workspace:*
+        version: link:../eslint-rules
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
       eslint:
         specifier: '>=8.0.0'
         version: 9.39.1(jiti@1.21.7)

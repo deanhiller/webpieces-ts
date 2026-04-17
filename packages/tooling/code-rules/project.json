@@ -1,0 +1,22 @@
+{
+    "name": "code-rules",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/code-rules/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "rules-config:build"],
+            "options": {
+                "outputPath": "dist/packages/tooling/code-rules",
+                "main": "packages/tooling/code-rules/src/index.ts",
+                "tsConfig": "packages/tooling/code-rules/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/code-rules/package.json"
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}

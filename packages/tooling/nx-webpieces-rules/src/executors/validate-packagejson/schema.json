@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Package.json Executor",
+    "description": "Validates that package.json dependencies match project.json build dependencies",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

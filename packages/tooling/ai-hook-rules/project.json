@@ -1,0 +1,34 @@
+{
+    "name": "ai-hook-rules",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/ai-hook-rules/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "rules-config:build"],
+            "options": {
+                "outputPath": "dist/packages/tooling/ai-hook-rules",
+                "main": "packages/tooling/ai-hook-rules/src/index.ts",
+                "tsConfig": "packages/tooling/ai-hook-rules/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/ai-hook-rules/package.json",
+                    "packages/tooling/ai-hook-rules/README.md",
+                    "packages/tooling/ai-hook-rules/openclaw.plugin.json",
+                    {
+                        "input": "packages/tooling/ai-hook-rules/bin",
+                        "glob": "**/*",
+                        "output": "bin"
+                    },
+                    {
+                        "input": "packages/tooling/ai-hook-rules/templates",
+                        "glob": "**/*",
+                        "output": "templates"
+                    }
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}

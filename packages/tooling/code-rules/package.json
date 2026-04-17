@@ -1,0 +1,23 @@
+{
+    "name": "@webpieces/code-rules",
+    "version": "0.0.0-dev",
+    "description": "Standalone code validation rules extracted from architecture-validators, no Nx dependency required",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "bin": {
+        "wp-validate-code": "./src/cli.js"
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/code-rules"
+    },
+    "dependencies": {
+        "@webpieces/rules-config": "workspace:*"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

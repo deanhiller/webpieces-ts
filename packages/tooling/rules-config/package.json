@@ -1,0 +1,25 @@
+{
+    "name": "@webpieces/rules-config",
+    "version": "0.0.0-dev",
+    "description": "Shared webpieces.config.json loader. Single source of truth for validation rule configuration consumed by @webpieces/ai-hook-rules, @webpieces/code-rules, and @webpieces/nx-webpieces-rules.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src/**/*",
+        "README.md"
+    ],
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/rules-config"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

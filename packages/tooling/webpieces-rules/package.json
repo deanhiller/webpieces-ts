@@ -1,0 +1,53 @@
+{
+    "name": "@webpieces/webpieces-rules",
+    "version": "0.0.0-dev",
+    "description": "All-in-one webpieces validation rules for any TypeScript project (React, Angular, Express). Includes code validators, AI hooks, and ESLint rules.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json",
+        "./eslint": "./config/eslint/base.mjs",
+        "./jest": "./config/jest/preset.js",
+        "./tsconfig": "./config/typescript/tsconfig.base.json"
+    },
+    "bin": {
+        "wp-start": "./bin/start.sh",
+        "wp-stop": "./bin/stop.sh",
+        "wp-set-version": "./bin/set-version.sh",
+        "wp-use-local": "./bin/use-local-webpieces.sh",
+        "wp-use-published": "./bin/use-published-webpieces.sh",
+        "wp-setup-patterns": "./bin/setup-claude-patterns.sh"
+    },
+    "files": [
+        "bin/**/*",
+        "config/**/*",
+        "patterns/**/*",
+        "templates/**/*",
+        "src/**/*",
+        "README.md"
+    ],
+    "dependencies": {
+        "@webpieces/code-rules": "workspace:*",
+        "@webpieces/ai-hook-rules": "workspace:*",
+        "@webpieces/eslint-rules": "workspace:*",
+        "@webpieces/rules-config": "workspace:*"
+    },
+    "peerDependencies": {
+        "eslint": ">=8.0.0",
+        "@angular-eslint/eslint-plugin-template": ">=18.0.0",
+        "@angular-eslint/template-parser": ">=18.0.0"
+    },
+    "peerDependenciesMeta": {
+        "@angular-eslint/eslint-plugin-template": { "optional": true },
+        "@angular-eslint/template-parser": { "optional": true }
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/webpieces-rules"
+    },
+    "publishConfig": { "access": "public" }
+}

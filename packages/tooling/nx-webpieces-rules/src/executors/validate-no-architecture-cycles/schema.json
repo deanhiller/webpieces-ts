@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate No Cycles Executor",
+    "description": "Validates that the architecture graph has no circular dependencies",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

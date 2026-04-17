@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Generate Executor",
+    "description": "Generates the architecture dependency graph and saves it",
+    "type": "object",
+    "properties": {
+        "graphPath": {
+            "type": "string",
+            "description": "Path to the graph file (relative to workspace root)",
+            "default": "architecture/dependencies.json"
+        }
+    },
+    "required": []
+}

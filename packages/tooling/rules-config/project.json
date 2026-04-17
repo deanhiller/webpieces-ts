@@ -1,0 +1,22 @@
+{
+    "name": "rules-config",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/rules-config/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/rules-config",
+                "main": "packages/tooling/rules-config/src/index.ts",
+                "tsConfig": "packages/tooling/rules-config/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/rules-config/package.json",
+                    "packages/tooling/rules-config/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}

@@ -1,4 +1,10 @@
 {
+    "ai-hook-rules": {
+        "level": 1,
+        "dependsOn": [
+            "rules-config"
+        ]
+    },
     "ai-hooks": {
         "level": 1,
         "dependsOn": [
@@ -19,6 +25,12 @@
         "level": 3,
         "dependsOn": [
             "http-client"
+        ]
+    },
+    "code-rules": {
+        "level": 1,
+        "dependsOn": [
+            "rules-config"
         ]
     },
     "config": {
@@ -48,6 +60,10 @@
         ]
     },
     "eslint-plugin": {
+        "level": 0,
+        "dependsOn": []
+    },
+    "eslint-rules": {
         "level": 0,
         "dependsOn": []
     },
@@ -102,11 +118,25 @@
             "http-routing"
         ]
     },
+    "nx-webpieces-rules": {
+        "level": 2,
+        "dependsOn": [
+            "code-rules"
+        ]
+    },
+    "rules-config": {
+        "level": 0,
+        "dependsOn": []
+    },
     "server": {
         "level": 5,
         "dependsOn": [
             "core-meta",
             "http-server"
         ]
+    },
+    "webpieces-rules": {
+        "level": 0,
+        "dependsOn": []
     }
 }
