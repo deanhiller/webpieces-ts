@@ -4,6 +4,31 @@ This document describes the validation rules provided by `@webpieces/dev-config`
 
 ---
 
+## Rule Enforcement Matrix
+
+AI-hooks rules are lightweight regex/heuristic first-pass checks that run on every Write/Edit tool call. They prevent AI agents from wasting tokens by catching violations early — before the AI continues building on top of bad code and then has to waste more tokens rolling it back. Architecture-validators are the authoritative CI pass (AST/TypeChecker-based, run via `./scripts/build.sh`). AI-hooks mirrors the CI validators as a fast guard rail — CI is the last line of defense.
+
+| Rule | ESLint (lint) | Arch-Validators (CI) | AI-Hooks (Write hook) | Doc File |
+|------|:---:|:---:|:---:|---|
+| max-file-lines | ✅ | ✅ `validate-modified-files` | ✅ `max-file-lines` | `webpieces.filesize.md` |
+| max-method-lines | ✅ | ✅ `validate-new/modified-methods` | — | `webpieces.methodsize.md` |
+| no-unmanaged-exceptions | ✅ | ✅ `validate-no-unmanaged-exceptions` | ✅ `no-unmanaged-exceptions` | `webpieces.exceptions.md` |
+| catch-error-pattern | ✅ | ✅ `validate-catch-error-pattern` | ✅ `catch-error-pattern` | `webpieces.exceptions.md` |
+| no-any-unknown | — | ✅ `validate-no-any-unknown` | ✅ `no-any-unknown` | — |
+| no-implicit-any | — | ✅ `validate-no-implicit-any` | ✅ `no-implicit-any` | — |
+| require-return-type | — | ✅ `validate-return-types` | ✅ `require-return-type` | — |
+| no-inline-type-literals | — | ✅ `validate-no-inline-types` | — | — |
+| no-destructure | — | ✅ `validate-no-destructure` | ✅ `no-destructure` | — |
+| validate-dtos | — | ✅ `validate-dtos` | — | — |
+| prisma-converter | — | ✅ `validate-prisma-converters` | — | — |
+| no-direct-api-in-resolver | — | ✅ `validate-no-direct-api-resolver` | — | — |
+| file-location | — | — | ✅ `file-location` | — |
+| no-shell-substitution | — | — | ✅ `no-shell-substitution` | — |
+| enforce-architecture | ✅ | — | — | — |
+| validate-ts-in-src | — | ✅ | — | — |
+
+---
+
 ## Section 1: Workspace-Level Validations
 
 **Runs once via `architecture:validate-complete` before any builds.**
@@ -51,22 +76,48 @@ These are ESLint rules that run during linting, enforcing code quality and archi
 
 ---
 
+## Section 4: AI-Hooks (Write-Tool) Validations
+
+**Runs on every Write/Edit tool call via PreToolUse hook.**
+
+These are lightweight regex/heuristic checks that give AI agents instant feedback before CI. They prevent token waste by catching violations early.
+
+| Rule | Description | Status |
+|------|-------------|--------|
+| **no-any-unknown** | Disallow `any` keyword in new code | ✅ ACTIVE |
+| **no-implicit-any** | Disallow untyped function parameters (regex heuristic) | ✅ ACTIVE |
+| **max-file-lines** | Cap file length at configured limit | ✅ ACTIVE |
+| **file-location** | Validate .ts files are in correct project directories | ✅ ACTIVE |
+| **no-destructure** | Disallow destructuring patterns | ✅ ACTIVE |
+| **require-return-type** | Require explicit return type annotations | ✅ ACTIVE |
+| **no-unmanaged-exceptions** | Disallow try/catch outside chokepoints | ✅ ACTIVE |
+| **catch-error-pattern** | Enforce catch (err: unknown) { const error = toError(err); } pattern | ✅ ACTIVE |
+| **no-shell-substitution** | Disallow shell command substitution in Bash tool | ✅ ACTIVE |
+
+---
+
 ## How It All Fits Together
 
 ```
-build target
+Write/Edit tool call (AI agent)
+  └─> AI-Hooks PreToolUse (instant feedback):
+        • no-any-unknown, no-implicit-any, max-file-lines
+        • no-destructure, require-return-type, file-location  
+        • no-unmanaged-exceptions, catch-error-pattern
+        • no-shell-substitution
+
+build target (CI — last line of defense)
   └─> dependsOn: ["architecture:validate-complete", "validate-no-file-import-cycles", "^build"]
                        │                                    │
                        │                                    └─> Per-project: madge circular check
                        │
                        └─> Workspace-level (runs once):
+                             • validate-code (runs 12 sub-validators)
                              • validate-no-architecture-cycles
-                             • validate-architecture-unchanged
+                             • validate-architecture-unchanged  
                              • validate-no-skiplevel-deps
                              • validate-packagejson
-                             • validate-new-methods
                              • validate-versions-locked
-                             • validate-no-any-modified-code (TODO)
 
 lint target
   └─> ESLint rules:

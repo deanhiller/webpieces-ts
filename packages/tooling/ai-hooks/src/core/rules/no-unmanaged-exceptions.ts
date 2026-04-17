@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 const TRY_PATTERN = /\btry\s*\{/;
 
@@ -13,6 +14,7 @@ const noUnmanagedExceptionsRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
     fixHint: [
+        'VERY IMPORTANT: READ .webpieces/instruct-ai/webpieces.exceptions.md to understand why and how to fix this!',
         'Exceptions should bubble to a chokepoint (filter in node.js, globalErrorHandler in Angular). Most code should NOT catch exceptions.',
         '// webpieces-disable no-unmanaged-exceptions -- <reason>',
         'When try/catch IS used (after disabling), the catch block MUST use: catch (err: unknown) { const error = toError(err); ... } or //const error = toError(err); to explicitly ignore.',
@@ -32,6 +34,7 @@ const noUnmanagedExceptionsRule: EditRule = {
                 'try/catch is generally not allowed. It is only allowed in chokepoints (filter, globalErrorHandler) or other rare locations.',
             ));
         }
+        if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
         return violations;
     },
 };
