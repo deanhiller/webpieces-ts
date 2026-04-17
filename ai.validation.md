@@ -19,6 +19,7 @@ These validations check the entire workspace architecture and run only once, reg
 | **validate-new-methods** | Validates new/modified methods don't exceed max line count (git-based, affected mode) | ✅ TESTED |
 | **validate-versions-locked** | Validates package.json versions are locked (no ^, ~, *) and npm ci compatible | ✅ TESTED |
 | **validate-no-any-modified-code** | Validates new/modified methods don't use `any` type (git-based, affected mode) | ⏳ TODO |
+| **validate-no-implicit-any** | Validates parameters/variables/properties don't infer to `any` via TS compiler (TS7006/7005/7018/etc), git-based modes: OFF / MODIFIED_CODE / MODIFIED_FILES. Escape hatch: `// webpieces-disable no-implicit-any -- reason`. Pairs with `validate-no-any-unknown` (keyword ban) — together they force real types. | ✅ WIRED |
 
 ---
 

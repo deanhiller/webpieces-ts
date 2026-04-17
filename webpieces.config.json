@@ -32,6 +32,12 @@
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
+        "no-implicit-any": {
+            "enabled": true,
+            "mode": "MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
         "validate-dtos": {
             "enabled": true,
             "mode": "MODIFIED_CLASS",

@@ -1,5 +1,6 @@
 export const builtInRuleNames: readonly string[] = [
     'no-any-unknown',
+    'no-implicit-any',
     'max-file-lines',
     'file-location',
     'no-destructure',

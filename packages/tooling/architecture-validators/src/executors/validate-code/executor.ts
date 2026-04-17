@@ -7,6 +7,7 @@ import runModifiedFilesExecutor from '../validate-modified-files/executor';
 import runReturnTypesExecutor, { ReturnTypeMode } from '../validate-return-types/executor';
 import runNoInlineTypesExecutor, { NoInlineTypesMode } from '../validate-no-inline-types/executor';
 import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from '../validate-no-any-unknown/executor';
+import runNoImplicitAnyExecutor, { NoImplicitAnyMode } from '../validate-no-implicit-any/executor';
 import runValidateDtosExecutor, { ValidateDtosMode } from '../validate-dtos/executor';
 import runPrismaConvertersExecutor, { PrismaConverterMode } from '../validate-prisma-converters/executor';
 import runNoDestructureExecutor, { NoDestructureMode } from '../validate-no-destructure/executor';
@@ -45,6 +46,12 @@ export interface NoInlineTypeLiteralsConfig {
 
 export interface NoAnyUnknownConfig {
     mode?: NoAnyUnknownMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+}
+
+export interface NoImplicitAnyConfig {
+    mode?: NoImplicitAnyMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
 }
@@ -97,6 +104,7 @@ export interface ValidateCodeOptions {
     requireReturnType?: RequireReturnTypeConfig;
     noInlineTypeLiterals?: NoInlineTypeLiteralsConfig;
     noAnyUnknown?: NoAnyUnknownConfig;
+    noImplicitAny?: NoImplicitAnyConfig;
     validateDtos?: ValidateDtosConfig;
     prismaConverter?: PrismaConverterConfig;
     noDestructure?: NoDestructureConfig;
@@ -133,6 +141,9 @@ interface ParsedConfig {
     noAnyUnknownMode: NoAnyUnknownMode;
     noAnyUnknownDisableAllowed: boolean;
     noAnyUnknownIgnoreEpoch: number | undefined;
+    noImplicitAnyMode: NoImplicitAnyMode;
+    noImplicitAnyDisableAllowed: boolean;
+    noImplicitAnyIgnoreEpoch: number | undefined;
     validateDtosMode: ValidateDtosMode;
     validateDtosDisableAllowed: boolean;
     validateDtosPrismaPath: string | undefined;
@@ -175,6 +186,7 @@ const VALID_MODES: Record<string, string[]> = {
     requireReturnType:    ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noInlineTypeLiterals: ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noAnyUnknown:         ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
+    noImplicitAny:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
     validateDtos:         ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'],
     prismaConverter:      ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
     noDestructure:        ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
@@ -196,6 +208,7 @@ function validateModes(options: ValidateCodeOptions): string[] {
         ['requireReturnType', options.requireReturnType?.mode],
         ['noInlineTypeLiterals', options.noInlineTypeLiterals?.mode],
         ['noAnyUnknown', options.noAnyUnknown?.mode],
+        ['noImplicitAny', options.noImplicitAny?.mode],
         ['validateDtos', options.validateDtos?.mode],
         ['prismaConverter', options.prismaConverter?.mode],
         ['noDestructure', options.noDestructure?.mode],
@@ -287,6 +300,9 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         noAnyUnknownMode: options.noAnyUnknown?.mode ?? 'OFF',
         noAnyUnknownDisableAllowed: options.noAnyUnknown?.disableAllowed ?? true,
         noAnyUnknownIgnoreEpoch: options.noAnyUnknown?.ignoreModifiedUntilEpoch,
+        noImplicitAnyMode: options.noImplicitAny?.mode ?? 'OFF',
+        noImplicitAnyDisableAllowed: options.noImplicitAny?.disableAllowed ?? true,
+        noImplicitAnyIgnoreEpoch: options.noImplicitAny?.ignoreModifiedUntilEpoch,
         validateDtosMode: options.validateDtos?.mode ?? 'OFF',
         validateDtosDisableAllowed: options.validateDtos?.disableAllowed ?? true,
         validateDtosPrismaPath: options.validateDtos?.prismaSchemaPath,
@@ -328,6 +344,7 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   Require return types: mode=${config.returnTypeMode}, disableAllowed=${config.returnTypeDisableAllowed}`);
     console.log(`   No inline type literals: mode=${config.noInlineTypesMode}, disableAllowed=${config.noInlineTypesDisableAllowed}`);
     console.log(`   No any/unknown: mode=${config.noAnyUnknownMode}, disableAllowed=${config.noAnyUnknownDisableAllowed}`);
+    console.log(`   No implicit any: mode=${config.noImplicitAnyMode}, disableAllowed=${config.noImplicitAnyDisableAllowed}`);
     console.log(`   Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
     console.log(`   Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
     console.log(`   No destructure: mode=${config.noDestructureMode}, disableAllowed=${config.noDestructureDisableAllowed}`);
@@ -340,7 +357,8 @@ function logConfig(config: ParsedConfig): void {
 function isAllOff(config: ParsedConfig): boolean {
     return config.methodMode === 'OFF' && config.fileMode === 'OFF' &&
         config.returnTypeMode === 'OFF' && config.noInlineTypesMode === 'OFF' &&
-        config.noAnyUnknownMode === 'OFF' && config.validateDtosMode === 'OFF' &&
+        config.noAnyUnknownMode === 'OFF' && config.noImplicitAnyMode === 'OFF' &&
+        config.validateDtosMode === 'OFF' &&
         config.prismaConverterMode === 'OFF' && config.noDestructureMode === 'OFF' &&
         config.catchErrorPatternMode === 'OFF' && config.noUnmanagedExceptionsMode === 'OFF' &&
         config.noDirectApiResolverMode === 'OFF';
@@ -386,6 +404,11 @@ async function runAllValidators(config: ParsedConfig, context: ExecutorContext):
         mode: config.noAnyUnknownMode,
         disableAllowed: config.noAnyUnknownDisableAllowed,
         ignoreModifiedUntilEpoch: config.noAnyUnknownIgnoreEpoch,
+    }, context));
+    results.push(await runNoImplicitAnyExecutor({
+        mode: config.noImplicitAnyMode,
+        disableAllowed: config.noImplicitAnyDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noImplicitAnyIgnoreEpoch,
     }, context));
     results.push(await runValidateDtosExecutor({
         mode: config.validateDtosMode,

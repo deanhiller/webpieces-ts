@@ -12,6 +12,7 @@
  *   require-return-type      → requireReturnType
  *   no-inline-type-literals  → noInlineTypeLiterals
  *   no-any-unknown           → noAnyUnknown
+ *   no-implicit-any          → noImplicitAny
  *   validate-dtos            → validateDtos
  *   prisma-converter         → prismaConverter
  *   no-destructure           → noDestructure
@@ -71,6 +72,11 @@ export function toValidateCodeOptions(shared: ResolvedConfig): ValidateCodeOptio
             mode: modeOrOff(r('no-any-unknown')),
             disableAllowed: opt<boolean>(r('no-any-unknown'), 'disableAllowed'),
             ignoreModifiedUntilEpoch: opt<number>(r('no-any-unknown'), 'ignoreModifiedUntilEpoch'),
+        },
+        noImplicitAny: {
+            mode: modeOrOff(r('no-implicit-any')),
+            disableAllowed: opt<boolean>(r('no-implicit-any'), 'disableAllowed'),
+            ignoreModifiedUntilEpoch: opt<number>(r('no-implicit-any'), 'ignoreModifiedUntilEpoch'),
         },
         validateDtos: {
             mode: modeOrOff(r('validate-dtos')),
