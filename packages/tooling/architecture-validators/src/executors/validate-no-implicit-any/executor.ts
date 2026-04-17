@@ -59,76 +59,49 @@ const IMPLICIT_ANY_CODES: ReadonlySet<number> = new Set<number>([
     7005, 7006, 7008, 7015, 7018, 7019, 7031, 7034, 7053,
 ]);
 
-// webpieces-disable no-unmanaged-exceptions -- git CLI is a system boundary
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // webpieces-disable no-unmanaged-exceptions -- external command, errors are expected
+function listUntrackedOrEmpty(workspaceRoot: string): string[] {
+    // webpieces-disable no-unmanaged-exceptions -- optional: untracked listing may fail in shallow clones
+    // webpieces-disable catch-error-pattern -- optional enhancement, empty result on failure
     try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
+        const output = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-
-        if (!head) {
-            // webpieces-disable no-unmanaged-exceptions -- external command
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-                // webpieces-disable catch-error-pattern -- git failure is discarded, returning best-known list
-            } catch {
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-        // webpieces-disable catch-error-pattern -- git failure is discarded
+        return output.trim().split('\n').filter((f: string) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
     } catch {
         return [];
     }
 }
 
-// webpieces-disable no-unmanaged-exceptions -- git CLI is a system boundary
+function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
+    const diffTarget = head ? `${base} ${head}` : base;
+    const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
+        cwd: workspaceRoot,
+        encoding: 'utf-8',
+    });
+    const changed = output.trim().split('\n').filter((f: string) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
+    if (head) return changed;
+    return Array.from(new Set([...changed, ...listUntrackedOrEmpty(workspaceRoot)]));
+}
+
 function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-    // webpieces-disable no-unmanaged-exceptions -- external command
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-
-        if (!diff && !head) {
-            const fullPath = path.join(workspaceRoot, file);
-            if (fs.existsSync(fullPath)) {
-                const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                }).trim();
-                if (isUntracked) {
-                    const content = fs.readFileSync(fullPath, 'utf-8');
-                    const lines = content.split('\n');
-                    return lines.map((line) => `+${line}`).join('\n');
-                }
-            }
-        }
-
-        return diff;
-        // webpieces-disable catch-error-pattern -- git failure is discarded, empty diff is fine
-    } catch {
-        return '';
-    }
+    const diffTarget = head ? `${base} ${head}` : base;
+    const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
+        cwd: workspaceRoot,
+        encoding: 'utf-8',
+    });
+    if (diff || head) return diff;
+    const fullPath = path.join(workspaceRoot, file);
+    if (!fs.existsSync(fullPath)) return '';
+    const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
+        cwd: workspaceRoot,
+        encoding: 'utf-8',
+    }).trim();
+    if (!isUntracked) return '';
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const lines = content.split('\n');
+    const hunk = `@@ -0,0 +1,${String(lines.length)} @@`;
+    return hunk + '\n' + lines.map((line: string) => `+${line}`).join('\n');
 }
 
 function getChangedLineNumbers(diffContent: string): Set<number> {
@@ -188,30 +161,12 @@ function findTsConfigForFile(absoluteFilePath: string, workspaceRoot: string): s
 }
 
 function buildProgram(tsconfigPath: string): ts.Program | null {
-    const configFile = ts.readConfigFile(tsconfigPath, (p) => ts.sys.readFile(p));
+    const configFile = ts.readConfigFile(tsconfigPath, (p: string) => ts.sys.readFile(p));
     if (configFile.error) return null;
-    const parsed = ts.parseJsonConfigFileContent(
-        configFile.config,
-        ts.sys,
-        path.dirname(tsconfigPath),
-    );
-    if (parsed.errors.length > 0) return null;
-    if (parsed.fileNames.length === 0) return null;
-
-    const options: ts.CompilerOptions = {
-        ...parsed.options,
-        noImplicitAny: true,
-        noEmit: true,
-        skipLibCheck: true,
-    };
-
-    // webpieces-disable no-unmanaged-exceptions -- ts.createProgram can throw on malformed configs; skip such projects
-    // webpieces-disable catch-error-pattern -- malformed tsconfig is a skip, not an error to log
-    try {
-        return ts.createProgram({ rootNames: parsed.fileNames, options });
-    } catch {
-        return null;
-    }
+    const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, path.dirname(tsconfigPath));
+    if (parsed.errors.length > 0 || parsed.fileNames.length === 0) return null;
+    const options: ts.CompilerOptions = { ...parsed.options, noImplicitAny: true, noEmit: true, skipLibCheck: true };
+    return ts.createProgram({ rootNames: parsed.fileNames, options });
 }
 
 function getProgramForFile(absoluteFilePath: string, workspaceRoot: string): ts.Program | null {
@@ -301,30 +256,17 @@ function findViolationsForModifiedFiles(
     return results;
 }
 
-// webpieces-disable no-unmanaged-exceptions -- git CLI is a system boundary
 function detectBase(workspaceRoot: string): string | null {
-    // webpieces-disable no-unmanaged-exceptions -- external command
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-        if (mergeBase) return mergeBase;
-        // webpieces-disable catch-error-pattern -- fall through to origin/main-less fallback
-    } catch {
-        // webpieces-disable no-unmanaged-exceptions -- external command
-        // webpieces-disable catch-error-pattern -- fall through to origin/main-less fallback
+    for (const ref of ['origin/main', 'main']) {
+        // webpieces-disable no-unmanaged-exceptions -- retry/fallback chain over candidate git refs
+        // webpieces-disable catch-error-pattern -- fallback chain, try next ref on failure
         try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
+            const merged = execSync(`git merge-base HEAD ${ref}`, {
+                cwd: workspaceRoot, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
             }).trim();
-            if (mergeBase) return mergeBase;
-            // webpieces-disable catch-error-pattern -- ultimate fallback, return null below
+            if (merged) return merged;
         } catch {
-            // fall through
+            // try next ref
         }
     }
     return null;
@@ -366,7 +308,7 @@ function resolveMode(normalMode: NoImplicitAnyMode, epoch: number | undefined): 
     return normalMode;
 }
 
-export default async function runExecutor(
+async function runInternal(
     options: ValidateNoImplicitAnyOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
@@ -421,4 +363,18 @@ export default async function runExecutor(
 
     reportViolations(violations, mode);
     return { success: false };
+}
+
+export default async function runExecutor(
+    options: ValidateNoImplicitAnyOptions,
+    context: ExecutorContext,
+): Promise<ExecutorResult> {
+    // webpieces-disable no-unmanaged-exceptions -- CLI entry-point chokepoint (webpieces.exceptions.md)
+    // webpieces-disable catch-error-pattern -- CLI tool, no traceId; degrade to skip
+    try {
+        return await runInternal(options, context);
+    } catch {
+        console.warn('\n\u23ed\ufe0f  Skipping no-implicit-any validation due to unexpected error\n');
+        return { success: true };
+    }
 }

@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**
  * Matches a catch clause opening: } catch (paramName: typeAnnotation) {
@@ -20,6 +21,7 @@ const catchErrorPatternRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
     fixHint: [
+        'VERY IMPORTANT: READ .webpieces/instruct-ai/webpieces.exceptions.md to understand why and how to fix this!',
         'catch (err: unknown) { const error = toError(err); ... }',
         'Or to explicitly ignore: catch (err: unknown) { //const error = toError(err); }',
         'For nested catches: catch (err2: unknown) { const error2 = toError(err2); }',
@@ -92,7 +94,7 @@ const catchErrorPatternRule: EditRule = {
                 }
             }
         }
-
+        if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
         return violations;
     },
 };

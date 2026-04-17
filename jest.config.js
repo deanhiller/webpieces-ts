@@ -1,6 +1,8 @@
 module.exports = {
     preset: 'ts-jest',
     testEnvironment: 'node',
+    maxWorkers: 2,
+    workerIdleMemoryLimit: '1GB',
     roots: ['<rootDir>/apps', '<rootDir>/packages'],
     testMatch: ['**/*.spec.ts', '**/*.test.ts'],
     transform: {
