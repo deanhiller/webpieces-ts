@@ -161,6 +161,7 @@ let dependenciesDocCreated = false;
  * Ensure a documentation file exists at the given path.
  */
 function ensureDocFile(docPath: string, content: string): boolean {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         fs.mkdirSync(path.dirname(docPath), { recursive: true });
         fs.writeFileSync(docPath, content, 'utf-8');
@@ -218,6 +219,7 @@ function findWorkspaceRoot(startPath: string): string {
     for (let i = 0; i < 20; i++) {
         const packagePath = path.join(currentDir, 'package.json');
         if (fs.existsSync(packagePath)) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
@@ -252,6 +254,7 @@ function loadBlessedGraph(workspaceRoot: string): EnhancedGraph | null {
         return null;
     }
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const content = fs.readFileSync(graphPath, 'utf-8');
         cachedGraph = JSON.parse(content) as EnhancedGraph;
@@ -275,13 +278,15 @@ function buildWorkspacePackageNames(workspaceRoot: string): Set<string> {
     for (const mapping of mappings) {
         const pkgJsonPath = path.join(workspaceRoot, mapping.root, 'package.json');
         if (fs.existsSync(pkgJsonPath)) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
                 if (pkgJson.name) {
                     packageNames.add(pkgJson.name);
                 }
-            } catch {
-                // Ignore parse errors
+            } catch (err: unknown) {
+                //const error = toError(err);
+                void err; // Ignore parse errors
             }
         }
     }
@@ -309,13 +314,15 @@ function getProjectNameFromPackageName(packageName: string, workspaceRoot: strin
     for (const mapping of mappings) {
         const pkgJsonPath = path.join(workspaceRoot, mapping.root, 'package.json');
         if (fs.existsSync(pkgJsonPath)) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
                 if (pkgJson.name === packageName) {
                     return mapping.name; // Return project name
                 }
-            } catch {
-                // Ignore parse errors
+            } catch (err: unknown) {
+                //const error = toError(err);
+                void err; // Ignore parse errors
             }
         }
     }
@@ -359,6 +366,7 @@ function scanForProjects(
     workspaceRoot: string,
     mappings: ProjectMapping[]
 ): void {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
 
@@ -369,6 +377,7 @@ function scanForProjects(
                 // Check for project.json in this directory
                 const projectJsonPath = path.join(fullPath, 'project.json');
                 if (fs.existsSync(projectJsonPath)) {
+                    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
                     try {
                         const projectJson = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
                         const projectRoot = path.relative(workspaceRoot, fullPath);

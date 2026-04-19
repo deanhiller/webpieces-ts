@@ -11,6 +11,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { loadBlessedGraph } from '../../lib/graph-loader';
 import { writeVisualization, openVisualization } from '../../lib/graph-visualizer';
+import { toError } from '../../toError';
 
 export interface VisualizeExecutorOptions {
     graphPath?: string;
@@ -29,6 +30,7 @@ export default async function runExecutor(
 
     console.log('\n🎨 Architecture Visualization\n');
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Load the saved graph
         console.log('📂 Loading saved graph...');
@@ -56,7 +58,7 @@ export default async function runExecutor(
 
         return { success: true };
     } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = toError(err);
         console.error('❌ Visualization failed:', error.message);
         return { success: false };
     }

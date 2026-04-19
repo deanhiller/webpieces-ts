@@ -15,6 +15,7 @@ import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { compareGraphs } from '../../lib/graph-comparator';
 import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
+import { toError } from '../../toError';
 
 export interface ValidateArchitectureUnchangedOptions {
     graphPath?: string;
@@ -190,6 +191,7 @@ export default async function runExecutor(
 
     console.log('\n🔍 Validating Architecture Unchanged\n');
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Check if saved graph exists
         if (!graphFileExists(workspaceRoot, graphPath)) {
@@ -244,7 +246,7 @@ export default async function runExecutor(
             return { success: false };
         }
     } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = toError(err);
         console.error('❌ Architecture validation failed:', error.message);
         return { success: false };
     }

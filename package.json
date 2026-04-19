@@ -20,7 +20,7 @@
     },
     "keywords": [],
     "author": "",
-    "license": "ISC",
+    "license": "MPL-2.0",
     "type": "commonjs",
     "devDependencies": {
         "@angular-eslint/eslint-plugin-template": "20.7.0",

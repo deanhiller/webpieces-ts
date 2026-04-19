@@ -153,6 +153,7 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
     while (dir !== path.dirname(dir)) {
         const pkgPath = path.join(dir, 'package.json');
         if (fs.existsSync(pkgPath)) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
@@ -169,6 +170,7 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
 }
 
 function ensureDocFile(docPath: string, content: string): boolean {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         fs.mkdirSync(path.dirname(docPath), { recursive: true });
         fs.writeFileSync(docPath, content, 'utf-8');

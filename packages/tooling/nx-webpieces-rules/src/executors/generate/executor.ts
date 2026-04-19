@@ -11,6 +11,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
+import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
     graphPath?: string;
@@ -29,6 +30,7 @@ export default async function runExecutor(
 
     console.log('\n📊 Architecture Graph Generator\n');
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Step 1: Generate current graph from project.json files
         console.log('📊 Generating dependency graph from project.json files...');
@@ -52,7 +54,7 @@ export default async function runExecutor(
 
         return { success: true };
     } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = toError(err);
         console.error('❌ Graph generation failed:', error.message);
         return { success: false };
     }

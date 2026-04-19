@@ -11,6 +11,7 @@ import {
     createProjectGraphAsync,
     readProjectsConfigurationFromProjectGraph,
 } from '@nx/devkit';
+import { toError } from '../toError';
 
 /**
  * Validation result for a single project
@@ -42,6 +43,7 @@ function readPackageJsonDeps(workspaceRoot: string, projectRoot: string): string
         return null; // No package.json - skip validation for this project
     }
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
         const deps: string[] = [];
@@ -58,6 +60,8 @@ function readPackageJsonDeps(workspaceRoot: string, projectRoot: string): string
 
         return deps.sort();
     } catch (err: unknown) {
+        //const error = toError(err);
+        void err;
         console.warn(`Could not read package.json at ${packageJsonPath}`);
         return [];
     }
@@ -78,12 +82,15 @@ function buildProjectToPackageMap(
     for (const [projectName, config] of Object.entries<any>(projectsConfig.projects)) {
         const packageJsonPath = path.join(workspaceRoot, config.root, 'package.json');
         if (fs.existsSync(packageJsonPath)) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
                 if (packageJson.name) {
                     map.set(projectName, packageJson.name);
                 }
-            } catch {
+            } catch (err: unknown) {
+                //const error = toError(err);
+                void err;
                 // Ignore parse errors
             }
         }

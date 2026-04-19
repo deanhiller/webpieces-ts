@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { EnhancedGraph } from './graph-sorter';
+import { toError } from '../toError';
 
 /**
  * Default path for the dependencies file (relative to workspace root)
@@ -31,11 +32,13 @@ export function loadBlessedGraph(
         return null;
     }
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const content = fs.readFileSync(fullPath, 'utf-8');
         return JSON.parse(content) as EnhancedGraph;
     } catch (err: unknown) {
-        throw new Error(`Failed to load graph from ${fullPath}: ${err}`);
+        const error = toError(err);
+        throw new Error(`Failed to load graph from ${fullPath}: ${error.message}`);
     }
 }
 

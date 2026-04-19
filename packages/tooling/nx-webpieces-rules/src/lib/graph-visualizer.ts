@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
+import { toError } from '../toError';
 
 /**
  * Level colors for visualization
@@ -229,6 +230,7 @@ export function writeVisualization(
  * Open the HTML visualization in the default browser
  */
 export function openVisualization(htmlPath: string): boolean {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const platform = process.platform;
         let openCommand: string;
@@ -244,6 +246,8 @@ export function openVisualization(htmlPath: string): boolean {
         execSync(openCommand, { stdio: 'ignore' });
         return true;
     } catch (err: unknown) {
+        //const error = toError(err);
+        void err;
         return false;
     }
 }

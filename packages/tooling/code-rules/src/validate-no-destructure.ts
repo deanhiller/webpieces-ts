@@ -69,6 +69,7 @@ interface DestructureViolation {
  */
 // webpieces-disable max-lines-new-methods -- Git command handling with untracked files requires multiple code paths
 function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const diffTarget = head ? `${base} ${head}` : base;
         const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
@@ -81,6 +82,7 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
             .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
 
         if (!head) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
                     cwd: workspaceRoot,
@@ -92,13 +94,15 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
                     .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
                 const allFiles = new Set([...changedFiles, ...untrackedFiles]);
                 return Array.from(allFiles);
-            } catch {
+            } catch (err: unknown) {
+                //const error = toError(err);
                 return changedFiles;
             }
         }
 
         return changedFiles;
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         return [];
     }
 }
@@ -107,6 +111,7 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
  * Get the diff content for a specific file.
  */
 function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const diffTarget = head ? `${base} ${head}` : base;
         const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
@@ -131,7 +136,8 @@ function getFileDiff(workspaceRoot: string, file: string, base: string, head?: s
         }
 
         return diff;
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         return '';
     }
 }
@@ -269,6 +275,7 @@ function findDestructuringInFile(filePath: string, workspaceRoot: string, disabl
 
     // webpieces-disable max-lines-new-methods -- AST visitor needs to handle object/array binding patterns in declarations, for-of, and parameters
     function visit(node: ts.Node): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             // Check ObjectBindingPattern
             if (ts.isObjectBindingPattern(node)) {
@@ -299,7 +306,8 @@ function findDestructuringInFile(filePath: string, workspaceRoot: string, disabl
                 const context = getDestructureContext(node);
                 recordViolation(node, context, fileLines, sourceFile, violations, disableAllowed);
             }
-        } catch {
+        } catch (err: unknown) {
+            //const error = toError(err);
             // Skip nodes that cause errors during analysis
         }
 
@@ -427,6 +435,7 @@ function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: str
  * Auto-detect the base branch by finding the merge-base with origin/main.
  */
 function detectBase(workspaceRoot: string): string | null {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const mergeBase = execSync('git merge-base HEAD origin/main', {
             cwd: workspaceRoot,
@@ -437,7 +446,9 @@ function detectBase(workspaceRoot: string): string | null {
         if (mergeBase) {
             return mergeBase;
         }
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const mergeBase = execSync('git merge-base HEAD main', {
                 cwd: workspaceRoot,
@@ -448,7 +459,8 @@ function detectBase(workspaceRoot: string): string | null {
             if (mergeBase) {
                 return mergeBase;
             }
-        } catch {
+        } catch (err2: unknown) {
+            //const error2 = toError(err2);
             // Ignore
         }
     }

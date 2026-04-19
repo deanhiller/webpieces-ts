@@ -59,15 +59,15 @@ const IMPLICIT_ANY_CODES: ReadonlySet<number> = new Set<number>([
 ]);
 
 function listUntrackedOrEmpty(workspaceRoot: string): string[] {
-    // webpieces-disable no-unmanaged-exceptions -- optional: untracked listing may fail in shallow clones
-    // webpieces-disable catch-error-pattern -- optional enhancement, empty result on failure
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const output = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
         return output.trim().split('\n').filter((f: string) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         return [];
     }
 }
@@ -257,14 +257,14 @@ function findViolationsForModifiedFiles(
 
 function detectBase(workspaceRoot: string): string | null {
     for (const ref of ['origin/main', 'main']) {
-        // webpieces-disable no-unmanaged-exceptions -- retry/fallback chain over candidate git refs
-        // webpieces-disable catch-error-pattern -- fallback chain, try next ref on failure
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const merged = execSync(`git merge-base HEAD ${ref}`, {
                 cwd: workspaceRoot, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
             }).trim();
             if (merged) return merged;
-        } catch {
+        } catch (err: unknown) {
+            //const error = toError(err);
             // try next ref
         }
     }
@@ -367,11 +367,11 @@ export default async function runValidator(
     options: ValidateNoImplicitAnyOptions,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    // webpieces-disable no-unmanaged-exceptions -- CLI entry-point chokepoint (webpieces.exceptions.md)
-    // webpieces-disable catch-error-pattern -- CLI tool, no traceId; degrade to skip
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         return await runInternal(options, workspaceRoot);
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         console.warn('\n\u23ed\ufe0f  Skipping no-implicit-any validation due to unexpected error\n');
         return { success: true };
     }

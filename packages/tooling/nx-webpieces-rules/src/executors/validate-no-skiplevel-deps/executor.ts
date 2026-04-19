@@ -15,6 +15,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import * as fs from 'fs';
 import * as path from 'path';
+import { toError } from '../../toError';
 
 export interface ValidateNoSkipLevelDepsOptions {
     // No options needed
@@ -205,10 +206,12 @@ function writeDocFile(workspaceRoot: string): void {
     const docPath = path.join(workspaceRoot, '.webpieces', 'instruct-ai', 'webpieces.transitivedeps.md');
     const docDir = path.dirname(docPath);
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         fs.mkdirSync(docDir, { recursive: true });
         fs.writeFileSync(docPath, TRANSITIVE_DEPS_DOC, 'utf-8');
     } catch (err: unknown) {
+        //const error = toError(err);
         void err;
         console.warn(`Could not write documentation file: ${docPath}`);
     }
@@ -220,6 +223,7 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     console.log('\n🔄 Validating No Skip-Level Dependencies\n');
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Step 1: Generate current graph from project.json files
         console.log('📊 Generating dependency graph from project.json files...');
@@ -263,7 +267,7 @@ export default async function runExecutor(
 
         return { success: false };
     } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = toError(err);
         console.error('❌ Skip-level validation failed:', error.message);
         return { success: false };
     }

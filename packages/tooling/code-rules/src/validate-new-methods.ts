@@ -187,6 +187,7 @@ function writeTmpInstructions(workspaceRoot: string): string {
  * When head is NOT specified, also includes untracked files (matching nx affected behavior).
  */
 function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // If head is specified, diff base to head; otherwise diff base to working tree
         const diffTarget = head ? `${base} ${head}` : base;
@@ -202,6 +203,7 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
         // When comparing to working tree (no head specified), also include untracked files
         // This matches what nx affected does: "All modified files not yet committed or tracked will also be added"
         if (!head) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
                     cwd: workspaceRoot,
@@ -214,14 +216,16 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
                 // Merge and dedupe
                 const allFiles = new Set([...changedFiles, ...untrackedFiles]);
                 return Array.from(allFiles);
-            } catch {
+            } catch (err: unknown) {
+                //const error = toError(err);
                 // If ls-files fails, just return the changed files
                 return changedFiles;
             }
         }
 
         return changedFiles;
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         return [];
     }
 }
@@ -232,6 +236,7 @@ function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: s
  * For untracked files, returns the entire file content as additions.
  */
 function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // If head is specified, diff base to head; otherwise diff base to working tree
         const diffTarget = head ? `${base} ${head}` : base;
@@ -261,7 +266,8 @@ function getFileDiff(workspaceRoot: string, file: string, base: string, head?: s
         }
 
         return diff;
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         return '';
     }
 }
@@ -446,6 +452,7 @@ function findViolations(
  * This allows the executor to run even when NX_BASE isn't set (e.g., via dependsOn).
  */
 function detectBase(workspaceRoot: string): string | null {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // First, try to get merge-base with origin/main
         const mergeBase = execSync('git merge-base HEAD origin/main', {
@@ -457,8 +464,10 @@ function detectBase(workspaceRoot: string): string | null {
         if (mergeBase) {
             return mergeBase;
         }
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         // origin/main might not exist, try main
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const mergeBase = execSync('git merge-base HEAD main', {
                 cwd: workspaceRoot,
@@ -469,7 +478,8 @@ function detectBase(workspaceRoot: string): string | null {
             if (mergeBase) {
                 return mergeBase;
             }
-        } catch {
+        } catch (err2: unknown) {
+            //const error2 = toError(err2);
             // Ignore - will return null
         }
     }
@@ -550,6 +560,7 @@ export default async function runValidator(
     console.log(`   Limit for new methods: ${limit} lines (${disableAllowed ? 'can escape' : 'NO escape possible'})`);
     console.log('');
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Get changed TypeScript files (base to head, or working tree if head not set)
         const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
@@ -575,6 +586,7 @@ export default async function runValidator(
 
         return { success: false };
     } catch (err: unknown) {
+        //const error = toError(err);
         const error = err instanceof Error ? err : new Error(String(err));
         console.error('\u274c New method validation failed:', error.message);
         return { success: false };

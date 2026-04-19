@@ -11,8 +11,7 @@ import * as path from 'path';
  * Get the diff content for a specific file.
  */
 export function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-    // webpieces-disable no-unmanaged-exceptions -- git command may fail for valid reasons (file not in repo)
-    // webpieces-disable catch-error-pattern -- intentional swallow of git command failure
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const diffTarget = head ? `${base} ${head}` : base;
         const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
@@ -37,7 +36,8 @@ export function getFileDiff(workspaceRoot: string, file: string, base: string, h
         }
 
         return diff;
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
         return '';
     }
 }

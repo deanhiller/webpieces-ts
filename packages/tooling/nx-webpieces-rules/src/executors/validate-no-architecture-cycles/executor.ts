@@ -11,6 +11,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
+import { toError } from '../../toError';
 
 export interface ValidateNoCyclesOptions {
     // No options needed
@@ -26,6 +27,7 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     console.log('\n🔄 Validating No Circular Dependencies\n');
 
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Step 1: Generate current graph from project.json files
         console.log('📊 Generating dependency graph from project.json files...');
@@ -33,6 +35,7 @@ export default async function runExecutor(
 
         // Step 2: Topological sort (validates acyclic)
         console.log('🔄 Checking for cycles (topological sort)...');
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             sortGraphTopologically(rawGraph);
             console.log('✅ No circular dependencies detected!');
@@ -43,7 +46,7 @@ export default async function runExecutor(
 
             return { success: true };
         } catch (err: unknown) {
-            const error = err instanceof Error ? err : new Error(String(err));
+            const error = toError(err);
             console.error('❌ Circular dependency detected!');
             console.error(error.message);
             console.error('\nTo fix:');
@@ -53,7 +56,7 @@ export default async function runExecutor(
             return { success: false };
         }
     } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = toError(err);
         console.error('❌ Cycle validation failed:', error.message);
         return { success: false };
     }

@@ -21,6 +21,7 @@
 import type { Rule } from 'eslint';
 import * as fs from 'fs';
 import * as path from 'path';
+import { toError } from '../toError';
 
 // webpieces-disable no-any-unknown -- ESTree AST node interface
 interface TryStatementNode {
@@ -59,14 +60,16 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
     for (let i = 0; i < 10; i++) {
         const pkgPath = path.join(dir, 'package.json');
         if (fs.existsSync(pkgPath)) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
                 // Check if this is the root workspace
                 if (pkg.workspaces || pkg.name === 'webpieces-ts') {
                     return dir;
                 }
-            } catch {
-                // Invalid JSON, keep searching
+            } catch (err: unknown) {
+                //const error = toError(err);
+                void err; // Invalid JSON, keep searching
             }
         }
 
@@ -84,6 +87,7 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
  * Creates parent directories if needed
  */
 function ensureDocFile(docPath: string, content: string): boolean {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const dir = path.dirname(docPath);
         if (!fs.existsSync(dir)) {
@@ -96,8 +100,9 @@ function ensureDocFile(docPath: string, content: string): boolean {
         }
 
         return true;
-    } catch (error) {
-        // Silently fail - don't break linting if file creation fails
+    } catch (err: unknown) {
+        //const error = toError(err);
+        void err; // Silently fail - don't break linting if file creation fails
         return false;
     }
 }
@@ -120,9 +125,12 @@ function ensureExceptionDoc(context: Rule.RuleContext): void {
     const templatePath = path.join(__dirname, '..', '..', 'templates', 'webpieces.exceptions.md');
 
     let content: string;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         content = fs.readFileSync(templatePath, 'utf-8');
-    } catch {
+    } catch (err: unknown) {
+        //const error = toError(err);
+        void err;
         // Fallback message if template not found (shouldn't happen in published package)
         content = `# Exception Documentation Not Found\n\nTemplate file not found at: ${templatePath}\n\nPlease ensure @webpieces/webpieces-rules is properly installed.`;
     }
