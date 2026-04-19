@@ -167,6 +167,7 @@ function ensureDocFile(docPath: string, content: string): boolean {
         fs.writeFileSync(docPath, content, 'utf-8');
         return true;
     } catch (err: unknown) {
+        //const error = toError(err);
         void err;
         console.warn(`[webpieces] Could not create doc file: ${docPath}`);
         return false;

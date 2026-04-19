@@ -78,6 +78,7 @@ for (const order of orders) {
 \`\`\`typescript
 // GOOD: Separates success path from error handling
 async function handleRequest(req: Request): Promise<Response> {
+  // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
   try {
     return await executeRequest(req);
   } catch (err: unknown) {
