@@ -7,7 +7,7 @@ set -e
 # Detect project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/dev-config"* ]]; then
+if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/webpieces-rules"* ]]; then
   # Running in consumer project
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 else
@@ -79,9 +79,9 @@ if [ -d "$WEBPIECES_ROOT/dist/packages/http/http-api" ]; then
 fi
 
 # Tooling packages
-if [ -d "$WEBPIECES_ROOT/dist/packages/tooling/dev-config" ]; then
-  ln -sf "$WEBPIECES_ROOT/dist/packages/tooling/dev-config" node_modules/@webpieces/dev-config
-  echo "   ✅ dev-config"
+if [ -d "$WEBPIECES_ROOT/dist/packages/tooling/webpieces-rules" ]; then
+  ln -sf "$WEBPIECES_ROOT/dist/packages/tooling/webpieces-rules" node_modules/@webpieces/webpieces-rules
+  echo "   ✅ webpieces-rules"
 fi
 
 echo ""

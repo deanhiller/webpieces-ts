@@ -2,7 +2,7 @@
  * ESLint plugin for WebPieces
  * Provides rules for enforcing WebPieces code patterns
  *
- * This plugin is automatically included in @webpieces/dev-config
+ * This plugin is automatically included in @webpieces/webpieces-rules
  *
  * Available rules:
  * - catch-error-pattern: Enforce toError() usage in catch blocks (HOW to handle)

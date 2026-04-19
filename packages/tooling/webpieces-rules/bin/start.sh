@@ -29,7 +29,7 @@ fi
 # Detect project root based on where script is running from
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/dev-config"* ]]; then
+if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/webpieces-rules"* ]]; then
   # Running in consumer project (from node_modules)
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 else

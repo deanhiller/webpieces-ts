@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "Help Executor",
-    "description": "Display help for @webpieces/dev-config commands and targets",
+    "description": "Display help for @webpieces/nx-webpieces-rules commands and targets",
     "type": "object",
     "properties": {}
 }

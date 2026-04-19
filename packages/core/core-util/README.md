@@ -99,7 +99,7 @@ This package has zero dependencies and works in all modern browsers and Node.js 
 
 ## Related Packages
 
-- [@webpieces/dev-config](https://www.npmjs.com/package/@webpieces/dev-config) - Includes ESLint rule that enforces this pattern
+- [@webpieces/nx-webpieces-rules](https://www.npmjs.com/package/@webpieces/nx-webpieces-rules) - Includes ESLint rule that enforces this pattern
 - [@webpieces/core-context](https://www.npmjs.com/package/@webpieces/core-context) - Request context management
 - [@webpieces/http-server](https://www.npmjs.com/package/@webpieces/http-server) - HTTP server
 

@@ -7,14 +7,14 @@ set -e
 # Detect project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/dev-config"* ]]; then
+if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/webpieces-rules"* ]]; then
   # Running in consumer project (from node_modules)
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
   PATTERNS_DIR="$SCRIPT_DIR/../patterns"
 else
   # Running in webpieces-ts workspace
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-  PATTERNS_DIR="$PROJECT_ROOT/packages/tooling/dev-config/patterns"
+  PATTERNS_DIR="$PROJECT_ROOT/packages/tooling/webpieces-rules/patterns"
 fi
 
 cd "$PROJECT_ROOT" || exit 1
@@ -47,5 +47,5 @@ fi
 
 echo ""
 echo "✅ Claude pattern files are available in .claude/"
-echo "   These files are symlinked from @webpieces/dev-config"
+echo "   These files are symlinked from @webpieces/webpieces-rules"
 echo "   They will auto-update when you upgrade the package"

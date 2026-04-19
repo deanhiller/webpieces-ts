@@ -106,7 +106,7 @@ function ensureDocFile(docPath: string, content: string): boolean {
  * Ensures the exception documentation markdown file exists
  * Only creates file once per lint run using module-level flag
  *
- * Reads from the template file packaged with @webpieces/dev-config
+ * Reads from the template file packaged with @webpieces/webpieces-rules
  * and copies it to .webpieces/instruct-ai/ for AI agents to read.
  */
 function ensureExceptionDoc(context: Rule.RuleContext): void {
@@ -124,7 +124,7 @@ function ensureExceptionDoc(context: Rule.RuleContext): void {
         content = fs.readFileSync(templatePath, 'utf-8');
     } catch {
         // Fallback message if template not found (shouldn't happen in published package)
-        content = `# Exception Documentation Not Found\n\nTemplate file not found at: ${templatePath}\n\nPlease ensure @webpieces/dev-config is properly installed.`;
+        content = `# Exception Documentation Not Found\n\nTemplate file not found at: ${templatePath}\n\nPlease ensure @webpieces/webpieces-rules is properly installed.`;
     }
 
     if (ensureDocFile(docPath, content)) {

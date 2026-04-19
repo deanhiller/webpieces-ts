@@ -1,4 +1,4 @@
-// @webpieces/dev-config ESLint Configuration
+// @webpieces/webpieces-rules ESLint Configuration
 // This is the canonical template for external clients
 //
 // IMPORTANT: When modifying rules here, also update:

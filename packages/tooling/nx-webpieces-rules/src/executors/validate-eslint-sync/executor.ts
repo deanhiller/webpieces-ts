@@ -24,7 +24,7 @@ export default async function validateEslintSyncExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
 
-    const templatePath = join(workspaceRoot, 'packages/tooling/dev-config/templates/eslint.webpieces.config.mjs');
+    const templatePath = join(workspaceRoot, 'packages/tooling/nx-webpieces-rules/templates/eslint.webpieces.config.mjs');
     const workspacePath = join(workspaceRoot, 'eslint.webpieces.config.mjs');
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions

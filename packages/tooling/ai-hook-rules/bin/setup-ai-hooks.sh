@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# setup-ai-hooks.sh — Wires the @webpieces/ai-hooks framework into a project.
+# setup-ai-hooks.sh — Wires the @webpieces/ai-hook-rules framework into a project.
 #
 # For Claude Code: creates .webpieces/ai-hooks/claude-code-hook.js bootstrap,
 # seeds webpieces.ai-hooks.json, and merges .claude/settings.json.
@@ -12,23 +12,23 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Detect workspace vs consumer
-if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/ai-hooks"* ]]; then
+if [[ "$SCRIPT_DIR" == *"node_modules/@webpieces/ai-hook-rules"* ]]; then
     # Running in consumer project (from node_modules)
     PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-    AI_HOOKS_PKG="@webpieces/ai-hooks"
+    AI_HOOKS_PKG="@webpieces/ai-hook-rules"
     ADAPTER_REQUIRE="require('${AI_HOOKS_PKG}/claude-code').main();"
     TEMPLATES_DIR="$SCRIPT_DIR/../templates"
 else
     # Running in webpieces-ts workspace
     PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-    ADAPTER_REQUIRE="require('${PROJECT_ROOT}/dist/packages/tooling/ai-hooks/src/adapters/claude-code-hook').main();"
+    ADAPTER_REQUIRE="require('${PROJECT_ROOT}/dist/packages/tooling/ai-hook-rules/src/adapters/claude-code-hook').main();"
     TEMPLATES_DIR="$SCRIPT_DIR/../templates"
 fi
 
 cd "$PROJECT_ROOT" || exit 1
 
 echo ""
-echo "🔧 Setting up @webpieces/ai-hooks..."
+echo "🔧 Setting up @webpieces/ai-hook-rules..."
 echo "   Project root: $PROJECT_ROOT"
 echo ""
 
@@ -56,7 +56,7 @@ fi
 if [ -f ".gitignore" ]; then
     if ! grep -q "^\.webpieces/" ".gitignore" 2>/dev/null; then
         echo "" >> .gitignore
-        echo "# Generated @webpieces/ai-hooks artifacts" >> .gitignore
+        echo "# Generated @webpieces/ai-hook-rules artifacts" >> .gitignore
         echo ".webpieces/" >> .gitignore
         echo "   ✅ Added .webpieces/ to .gitignore"
     fi
@@ -131,7 +131,7 @@ echo "   Claude Code: restart your session for the hook to activate."
 echo "   Edit webpieces.ai-hooks.json to toggle rules or tune options."
 echo ""
 echo "   Openclaw: install globally with:"
-echo "     openclaw plugins install @webpieces/ai-hooks"
-echo "     openclaw plugins enable @webpieces/ai-hooks"
+echo "     openclaw plugins install @webpieces/ai-hook-rules"
+echo "     openclaw plugins enable @webpieces/ai-hook-rules"
 echo "   Then drop webpieces.ai-hooks.json into any project."
 echo ""

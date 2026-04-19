@@ -323,7 +323,7 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     // Use combined validate-code instead of 3 separate targets
     // Options come from webpieces.config.json at the workspace root
-    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hooks)
+    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)
     if (
         validations.validateNewMethods ||
         validations.validateModifiedMethods ||
@@ -388,7 +388,7 @@ function createWorkspaceTargets(
 
     // Use combined validate-code instead of 3 separate targets
     // Options come from webpieces.config.json at the workspace root
-    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hooks)
+    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)
     if (
         opts.workspace.validations!.validateNewMethods ||
         opts.workspace.validations!.validateModifiedMethods ||
@@ -537,7 +537,7 @@ function createValidateModifiedFilesTarget(
 /**
  * Create combined validate-code target
  * Options come from webpieces.config.json at the workspace root
- * (loaded by the executor via @webpieces/rules-config — same source of truth as @webpieces/ai-hooks)
+ * (loaded by the executor via @webpieces/rules-config — same source of truth as @webpieces/ai-hook-rules)
  */
 function createValidateCodeTarget(): TargetConfiguration {
     return {

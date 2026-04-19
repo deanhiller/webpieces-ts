@@ -57,7 +57,7 @@ export default [
     {
         // ESLint plugin rules - disable self-checking (false positives on AST node handlers)
         // and allow long methods for rule implementations
-        files: ['packages/tooling/eslint-plugin/src/rules/**/*.ts'],
+        files: ['packages/tooling/eslint-rules/src/rules/**/*.ts'],
         rules: {
             '@webpieces/catch-error-pattern': 'off',
             '@webpieces/no-unmanaged-exceptions': 'off',
@@ -67,7 +67,7 @@ export default [
     },
     {
         // ESLint plugin tests - relaxed rules for test infrastructure
-        files: ['packages/tooling/eslint-plugin/src/__tests__/**/*.ts'],
+        files: ['packages/tooling/eslint-rules/src/__tests__/**/*.ts'],
         rules: {
             '@webpieces/catch-error-pattern': 'off',
         },
@@ -77,7 +77,7 @@ export default [
         files: [
             '**/architecture/executors/**/*.ts',
             '**/architecture/lib/**/*.ts',
-            'packages/tooling/architecture-validators/src/**/*.ts',
+            'packages/tooling/code-rules/src/**/*.ts',
         ],
         rules: {
             '@webpieces/catch-error-pattern': 'off',

@@ -70,49 +70,49 @@ jobs:
 
             - name: Bootstrap tooling packages (required before Nx can process project graph)
               run: |
-                # ESLint config imports from @webpieces/eslint-plugin which must exist
+                # ESLint config imports from @webpieces/eslint-rules which must exist
                 # before Nx can create the project graph (due to @nx/eslint/plugin).
-                # Build all three tooling packages with tsc, then move to expected dist structure.
+                # Build all tooling packages with tsc, then move to expected dist structure.
 
-                # 1. Build eslint-plugin
-                pnpm exec tsc -p packages/tooling/eslint-plugin/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/eslint-plugin
-                mv dist/temp-tsc/packages/tooling/eslint-plugin/* dist/packages/tooling/eslint-plugin/
-                cp packages/tooling/eslint-plugin/package.json dist/packages/tooling/eslint-plugin/
+                # 1. Build eslint-rules
+                pnpm exec tsc -p packages/tooling/eslint-rules/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/eslint-rules
+                mv dist/temp-tsc/packages/tooling/eslint-rules/* dist/packages/tooling/eslint-rules/
+                cp packages/tooling/eslint-rules/package.json dist/packages/tooling/eslint-rules/
                 rm -rf dist/temp-tsc
 
-                # 1b. Build config (depended on by ai-hooks, architecture-validators, dev-config)
-                pnpm exec tsc -p packages/tooling/config/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/config
-                mv dist/temp-tsc/packages/tooling/config/* dist/packages/tooling/config/
-                cp packages/tooling/config/package.json dist/packages/tooling/config/
-                cp packages/tooling/config/README.md dist/packages/tooling/config/
+                # 1b. Build rules-config (depended on by ai-hook-rules, code-rules, nx-webpieces-rules)
+                pnpm exec tsc -p packages/tooling/rules-config/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/rules-config
+                mv dist/temp-tsc/packages/tooling/rules-config/* dist/packages/tooling/rules-config/
+                cp packages/tooling/rules-config/package.json dist/packages/tooling/rules-config/
+                cp packages/tooling/rules-config/README.md dist/packages/tooling/rules-config/
                 rm -rf dist/temp-tsc
 
-                # 2. Build architecture-validators
-                pnpm exec tsc -p packages/tooling/architecture-validators/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/architecture-validators
-                mv dist/temp-tsc/packages/tooling/architecture-validators/* dist/packages/tooling/architecture-validators/
-                cp packages/tooling/architecture-validators/package.json dist/packages/tooling/architecture-validators/
-                cp packages/tooling/architecture-validators/executors.json dist/packages/tooling/architecture-validators/
+                # 2. Build code-rules
+                pnpm exec tsc -p packages/tooling/code-rules/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/code-rules
+                mv dist/temp-tsc/packages/tooling/code-rules/* dist/packages/tooling/code-rules/
+                cp packages/tooling/code-rules/package.json dist/packages/tooling/code-rules/
+                cp packages/tooling/code-rules/executors.json dist/packages/tooling/code-rules/
                 rm -rf dist/temp-tsc
 
-                # 3. Build ai-hooks
-                pnpm exec tsc -p packages/tooling/ai-hooks/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/ai-hooks
-                mv dist/temp-tsc/packages/tooling/ai-hooks/* dist/packages/tooling/ai-hooks/
-                cp packages/tooling/ai-hooks/package.json dist/packages/tooling/ai-hooks/
-                cp -r packages/tooling/ai-hooks/bin dist/packages/tooling/ai-hooks/
-                cp -r packages/tooling/ai-hooks/templates dist/packages/tooling/ai-hooks/
-                cp packages/tooling/ai-hooks/openclaw.plugin.json dist/packages/tooling/ai-hooks/
+                # 3. Build ai-hook-rules
+                pnpm exec tsc -p packages/tooling/ai-hook-rules/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/ai-hook-rules
+                mv dist/temp-tsc/packages/tooling/ai-hook-rules/* dist/packages/tooling/ai-hook-rules/
+                cp packages/tooling/ai-hook-rules/package.json dist/packages/tooling/ai-hook-rules/
+                cp -r packages/tooling/ai-hook-rules/bin dist/packages/tooling/ai-hook-rules/
+                cp -r packages/tooling/ai-hook-rules/templates dist/packages/tooling/ai-hook-rules/
+                cp packages/tooling/ai-hook-rules/openclaw.plugin.json dist/packages/tooling/ai-hook-rules/
                 rm -rf dist/temp-tsc
 
-                # 4. Build dev-config
-                pnpm exec tsc -p packages/tooling/dev-config/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/dev-config
-                mv dist/temp-tsc/packages/tooling/dev-config/* dist/packages/tooling/dev-config/
-                cp packages/tooling/dev-config/package.json dist/packages/tooling/dev-config/
-                cp packages/tooling/dev-config/executors.json dist/packages/tooling/dev-config/
+                # 4. Build nx-webpieces-rules
+                pnpm exec tsc -p packages/tooling/nx-webpieces-rules/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/nx-webpieces-rules
+                mv dist/temp-tsc/packages/tooling/nx-webpieces-rules/* dist/packages/tooling/nx-webpieces-rules/
+                cp packages/tooling/nx-webpieces-rules/package.json dist/packages/tooling/nx-webpieces-rules/
+                cp packages/tooling/nx-webpieces-rules/executors.json dist/packages/tooling/nx-webpieces-rules/
                 rm -rf dist/temp-tsc
 
             - name: Determine version
@@ -163,11 +163,11 @@ jobs:
                   npm publish dist/packages/http/http-routing --access public --provenance
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/http/http-server --access public --provenance
-                  npm publish dist/packages/tooling/eslint-plugin --access public --provenance
-                  npm publish dist/packages/tooling/config --access public --provenance
-                  npm publish dist/packages/tooling/ai-hooks --access public --provenance
-                  npm publish dist/packages/tooling/architecture-validators --access public --provenance
-                  npm publish dist/packages/tooling/dev-config --access public --provenance
+                  npm publish dist/packages/tooling/rules-config --access public --provenance
+                  npm publish dist/packages/tooling/eslint-rules --access public --provenance
+                  npm publish dist/packages/tooling/ai-hook-rules --access public --provenance
+                  npm publish dist/packages/tooling/code-rules --access public --provenance
+                  npm publish dist/packages/tooling/nx-webpieces-rules --access public --provenance
 
                   # Publish umbrella packages (depend on all above)
                   npm publish dist/packages/server --access public --provenance
@@ -200,9 +200,11 @@ jobs:
                       - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
-                      - [@webpieces/config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/config/v/${{ steps.version.outputs.full_version }})
-                      - [@webpieces/ai-hooks@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ai-hooks/v/${{ steps.version.outputs.full_version }})
-                      - [@webpieces/dev-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/dev-config/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/rules-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/rules-config/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/eslint-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/eslint-rules/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/ai-hook-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ai-hook-rules/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/code-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/code-rules/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/nx-webpieces-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/nx-webpieces-rules/v/${{ steps.version.outputs.full_version }})
 
                       ### Umbrella Packages (NEW!)
                       - [@webpieces/server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/server/v/${{ steps.version.outputs.full_version }}) - All server dependencies

@@ -97,5 +97,5 @@ yarn-error.log*
 # Platform-specific node_modules backups
 node_modules_*/
 
-# Generated @webpieces/ai-hooks artifacts (bootstrap, cache)
+# Generated @webpieces/ai-hook-rules artifacts (bootstrap, cache)
 .webpieces/

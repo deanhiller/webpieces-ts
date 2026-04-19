@@ -37,7 +37,7 @@
                 "default",
                 "{workspaceRoot}/eslint.config.mjs",
                 "{workspaceRoot}/architecture/dependencies.json",
-                "{workspaceRoot}/packages/tooling/eslint-plugin/src/**/*"
+                "{workspaceRoot}/packages/tooling/eslint-rules/src/**/*"
             ],
             "cache": true,
             "options": {
@@ -68,11 +68,11 @@
             }
         },
         {
-            "plugin": "./packages/tooling/dev-config/src/plugin.ts",
+            "plugin": "./packages/tooling/nx-webpieces-rules/src/plugin.ts",
             "options": {}
         },
         {
-            "plugin": "@webpieces/dev-config",
+            "plugin": "@webpieces/nx-webpieces-rules",
             "options": {}
         }
     ]

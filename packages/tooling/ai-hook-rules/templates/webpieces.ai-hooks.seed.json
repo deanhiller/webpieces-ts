@@ -1,5 +1,5 @@
 {
-    "extends": "@webpieces/ai-hooks/default",
+    "extends": "@webpieces/ai-hook-rules/default",
     "rules": {
         "no-any": { "enabled": true },
         "max-file-lines": { "enabled": true, "limit": 900 },
