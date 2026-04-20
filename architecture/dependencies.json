@@ -91,9 +91,9 @@
         ]
     },
     "nx-webpieces-rules": {
-        "level": 2,
+        "level": 3,
         "dependsOn": [
-            "code-rules"
+            "webpieces-rules"
         ]
     },
     "rules-config": {
@@ -108,7 +108,11 @@
         ]
     },
     "webpieces-rules": {
-        "level": 0,
-        "dependsOn": []
+        "level": 2,
+        "dependsOn": [
+            "ai-hook-rules",
+            "code-rules",
+            "eslint-rules"
+        ]
     }
 }

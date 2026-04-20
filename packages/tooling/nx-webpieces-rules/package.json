@@ -13,8 +13,7 @@
     },
     "files": ["src/**/*", "executors.json", "README.md"],
     "dependencies": {
-        "@webpieces/webpieces-rules": "workspace:*",
-        "@webpieces/code-rules": "workspace:*"
+        "@webpieces/webpieces-rules": "workspace:*"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"

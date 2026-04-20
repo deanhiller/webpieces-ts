@@ -30,8 +30,7 @@
     "dependencies": {
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/ai-hook-rules": "workspace:*",
-        "@webpieces/eslint-rules": "workspace:*",
-        "@webpieces/rules-config": "workspace:*"
+        "@webpieces/eslint-rules": "workspace:*"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0",
