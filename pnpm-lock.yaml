@@ -272,9 +272,6 @@ importers:
       '@nx/devkit':
         specifier: '>=18.0.0'
         version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.5.7(@swc/helpers@0.5.11))(@swc/types@0.1.7)(typescript@5.9.3))(@swc/core@1.5.7(@swc/helpers@0.5.11)))
-      '@webpieces/code-rules':
-        specifier: workspace:*
-        version: link:../code-rules
       '@webpieces/webpieces-rules':
         specifier: workspace:*
         version: link:../webpieces-rules
@@ -298,9 +295,6 @@ importers:
       '@webpieces/eslint-rules':
         specifier: workspace:*
         version: link:../eslint-rules
-      '@webpieces/rules-config':
-        specifier: workspace:*
-        version: link:../rules-config
       eslint:
         specifier: '>=8.0.0'
         version: 9.39.1(jiti@1.21.7)

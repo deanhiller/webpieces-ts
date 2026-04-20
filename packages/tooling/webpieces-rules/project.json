@@ -7,6 +7,12 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
+            "dependsOn": [
+                "^build",
+                "code-rules:build",
+                "ai-hook-rules:build",
+                "eslint-rules:build"
+            ],
             "options": {
                 "outputPath": "dist/packages/tooling/webpieces-rules",
                 "main": "packages/tooling/webpieces-rules/src/index.ts",

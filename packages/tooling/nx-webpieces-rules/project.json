@@ -7,7 +7,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
-            "dependsOn": ["^build", "code-rules:build"],
+            "dependsOn": ["^build", "webpieces-rules:build"],
             "options": {
                 "outputPath": "dist/packages/tooling/nx-webpieces-rules",
                 "main": "packages/tooling/nx-webpieces-rules/src/index.ts",
