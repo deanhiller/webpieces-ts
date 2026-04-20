@@ -1,0 +1,37 @@
+{
+    "name": "@webpieces/ai-hook-rules",
+    "version": "0.0.0-dev",
+    "description": "Pluggable write-time validation framework for AI coding agents (@webpieces/ai-hook-rules). Claude Code PreToolUse + openclaw before_tool_call adapters share one rule engine.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "bin": {
+        "wp-setup-ai-hooks": "./bin/setup-ai-hooks.sh"
+    },
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json",
+        "./claude-code": "./src/adapters/claude-code-hook.js",
+        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js",
+        "./default": "./src/core/configs/default.js"
+    },
+    "files": [
+        "src/**/*",
+        "bin/**/*",
+        "templates/**/*",
+        "openclaw.plugin.json",
+        "README.md"
+    ],
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/ai-hook-rules"
+    },
+    "dependencies": {
+        "@webpieces/rules-config": "workspace:*"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

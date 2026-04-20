@@ -1,5 +1,5 @@
 {
-    "extends": "@webpieces/ai-hooks/default",
+    "extends": "@webpieces/ai-hook-rules/default",
     "rules": {
         "no-any-unknown": { "enabled": true },
         "no-implicit-any": { "enabled": true },

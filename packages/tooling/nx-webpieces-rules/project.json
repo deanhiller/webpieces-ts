@@ -1,0 +1,29 @@
+{
+    "name": "nx-webpieces-rules",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/nx-webpieces-rules/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "code-rules:build"],
+            "options": {
+                "outputPath": "dist/packages/tooling/nx-webpieces-rules",
+                "main": "packages/tooling/nx-webpieces-rules/src/index.ts",
+                "tsConfig": "packages/tooling/nx-webpieces-rules/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/nx-webpieces-rules/package.json",
+                    "packages/tooling/nx-webpieces-rules/README.md",
+                    "packages/tooling/nx-webpieces-rules/executors.json",
+                    {
+                        "input": "packages/tooling/nx-webpieces-rules/src/executors",
+                        "glob": "**/schema.json",
+                        "output": "src/executors"
+                    }
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}

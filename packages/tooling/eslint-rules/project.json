@@ -1,0 +1,22 @@
+{
+    "name": "eslint-rules",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/eslint-rules/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/eslint-rules",
+                "main": "packages/tooling/eslint-rules/src/index.ts",
+                "tsConfig": "packages/tooling/eslint-rules/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/eslint-rules/package.json",
+                    "packages/tooling/eslint-rules/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["type:tooling"]
+}

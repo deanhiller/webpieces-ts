@@ -1,0 +1,119 @@
+/**
+ * Graph Loader
+ *
+ * Handles loading and saving the blessed dependency graph file.
+ * The graph is stored at architecture/dependencies.json in the workspace root.
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import type { EnhancedGraph } from './graph-sorter';
+import { toError } from '../toError';
+
+/**
+ * Default path for the dependencies file (relative to workspace root)
+ */
+export const DEFAULT_GRAPH_PATH = 'architecture/dependencies.json';
+
+/**
+ * Load the blessed graph from disk
+ *
+ * @param workspaceRoot - Absolute path to workspace root
+ * @param graphPath - Relative path to graph file (default: .graphs/dependencies.json)
+ * @returns The blessed graph, or null if file doesn't exist
+ */
+export function loadBlessedGraph(
+    workspaceRoot: string,
+    graphPath: string = DEFAULT_GRAPH_PATH
+): EnhancedGraph | null {
+    const fullPath = path.join(workspaceRoot, graphPath);
+
+    if (!fs.existsSync(fullPath)) {
+        return null;
+    }
+
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        return JSON.parse(content) as EnhancedGraph;
+    } catch (err: unknown) {
+        const error = toError(err);
+        throw new Error(`Failed to load graph from ${fullPath}: ${error.message}`);
+    }
+}
+
+/**
+ * Format a graph as JSON with multi-line arrays for readability
+ */
+function formatGraphJson(graph: EnhancedGraph): string {
+    const lines: string[] = ['{'];
+    const keys = Object.keys(graph).sort();
+
+    keys.forEach((key, index) => {
+        const entry = graph[key];
+        const isLast = index === keys.length - 1;
+        const comma = isLast ? '' : ',';
+
+        lines.push(`    "${key}": {`);
+        lines.push(`        "level": ${entry.level},`);
+
+        if (entry.dependsOn.length === 0) {
+            lines.push(`        "dependsOn": []`);
+        } else {
+            lines.push(`        "dependsOn": [`);
+            entry.dependsOn.forEach((dep, depIndex) => {
+                const depComma = depIndex === entry.dependsOn.length - 1 ? '' : ',';
+                lines.push(`            "${dep}"${depComma}`);
+            });
+            lines.push(`        ]`);
+        }
+
+        lines.push(`    }${comma}`);
+
+    });
+
+    lines.push('}');
+    return lines.join('\n') + '\n';
+}
+
+/**
+ * Save the graph to disk
+ *
+ * @param graph - The graph to save
+ * @param workspaceRoot - Absolute path to workspace root
+ * @param graphPath - Relative path to graph file (default: .graphs/dependencies.json)
+ */
+export function saveGraph(
+    graph: EnhancedGraph,
+    workspaceRoot: string,
+    graphPath: string = DEFAULT_GRAPH_PATH
+): void {
+    const fullPath = path.join(workspaceRoot, graphPath);
+    const dir = path.dirname(fullPath);
+
+    // Ensure directory exists
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Sort keys for deterministic output
+    const sortedGraph: EnhancedGraph = {};
+    const sortedKeys = Object.keys(graph).sort();
+    for (const key of sortedKeys) {
+        sortedGraph[key] = graph[key];
+    }
+
+    const content = formatGraphJson(sortedGraph);
+    fs.writeFileSync(fullPath, content, 'utf-8');
+}
+
+/**
+ * Check if the graph file exists
+ */
+export function graphFileExists(
+    workspaceRoot: string,
+    graphPath: string = DEFAULT_GRAPH_PATH
+): boolean {
+    const fullPath = path.join(workspaceRoot, graphPath);
+    return fs.existsSync(fullPath);
+}

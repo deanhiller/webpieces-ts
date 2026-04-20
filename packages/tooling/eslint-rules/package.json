@@ -1,0 +1,20 @@
+{
+    "name": "@webpieces/eslint-rules",
+    "version": "0.0.0-dev",
+    "description": "ESLint rules for WebPieces code patterns and architecture enforcement",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/eslint-rules"
+    },
+    "peerDependencies": {
+        "eslint": ">=8.0.0"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

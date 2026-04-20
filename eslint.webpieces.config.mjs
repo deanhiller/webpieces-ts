@@ -1,7 +1,7 @@
-// @webpieces/dev-config ESLint Configuration for webpieces-ts workspace
+// @webpieces/nx-webpieces-rules ESLint Configuration for webpieces-ts workspace
 //
 // IMPORTANT: This file must stay in sync with:
-// - packages/tooling/dev-config/templates/eslint.webpieces.config.mjs (canonical template for clients)
+// - packages/tooling/nx-webpieces-rules/templates/eslint.webpieces.config.mjs (canonical template for clients)
 //
 // Base rules only — no Angular dependencies.
 // For Angular rules see eslint.webpieces-angular.config.mjs
@@ -13,8 +13,8 @@ import { loadWorkspaceRules } from '@nx/eslint-plugin';
 // before dev-config has been built. loadWorkspaceRules automatically handles
 // TypeScript transpilation.
 const webpiecesRules = await loadWorkspaceRules(
-    'packages/tooling/eslint-plugin/src',
-    'packages/tooling/eslint-plugin/tsconfig.lib.json'
+    'packages/tooling/eslint-rules/src',
+    'packages/tooling/eslint-rules/tsconfig.lib.json'
 );
 
 const webpiecesPlugin = { rules: webpiecesRules };

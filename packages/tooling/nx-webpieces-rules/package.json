@@ -1,0 +1,30 @@
+{
+    "name": "@webpieces/nx-webpieces-rules",
+    "version": "0.0.0-dev",
+    "description": "Nx-specific webpieces validation rules. Includes all rules from @webpieces/webpieces-rules plus Nx graph validators and inference plugin.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "executors": "./executors.json",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json",
+        "./plugin": "./src/plugin.js",
+        "./executors.json": "./executors.json"
+    },
+    "files": ["src/**/*", "executors.json", "README.md"],
+    "dependencies": {
+        "@webpieces/webpieces-rules": "workspace:*",
+        "@webpieces/code-rules": "workspace:*"
+    },
+    "peerDependencies": {
+        "@nx/devkit": ">=18.0.0"
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/nx-webpieces-rules"
+    },
+    "publishConfig": { "access": "public" }
+}
