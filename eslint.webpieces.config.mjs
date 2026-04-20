@@ -6,18 +6,7 @@
 // Base rules only — no Angular dependencies.
 // For Angular rules see eslint.webpieces-angular.config.mjs
 
-import { loadWorkspaceRules } from '@nx/eslint-plugin';
-
-// Load webpieces plugin directly from TypeScript source using loadWorkspaceRules
-// This avoids the chicken-egg problem where ESLint config needs the plugin
-// before dev-config has been built. loadWorkspaceRules automatically handles
-// TypeScript transpilation.
-const webpiecesRules = await loadWorkspaceRules(
-    'packages/tooling/eslint-rules/src',
-    'packages/tooling/eslint-rules/tsconfig.lib.json'
-);
-
-const webpiecesPlugin = { rules: webpiecesRules };
+import webpiecesPlugin from '@webpieces/eslint-rules';
 
 export default [
     {

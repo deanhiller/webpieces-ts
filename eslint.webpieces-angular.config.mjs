@@ -9,16 +9,9 @@
 // │   2. Remove its import from eslint.config.mjs                          │
 // └─────────────────────────────────────────────────────────────────────────┘
 
-import { loadWorkspaceRules } from '@nx/eslint-plugin';
+import webpiecesPlugin from '@webpieces/eslint-rules';
 import angularTemplatePlugin from '@angular-eslint/eslint-plugin-template';
 import angularTemplateParser from '@angular-eslint/template-parser';
-
-const webpiecesRules = await loadWorkspaceRules(
-    'packages/tooling/eslint-rules/src',
-    'packages/tooling/eslint-rules/tsconfig.lib.json'
-);
-
-const webpiecesPlugin = { rules: webpiecesRules };
 
 export default [
     // ─── Angular HTML template rules ────────────────────────────────────────
