@@ -21,7 +21,11 @@
                     "packages/tooling/nx-webpieces-rules/package.json",
                     "packages/tooling/nx-webpieces-rules/README.md",
                     "packages/tooling/nx-webpieces-rules/executors.json",
-                    "packages/tooling/nx-webpieces-rules/templates",
+                    {
+                        "input": "packages/tooling/nx-webpieces-rules/templates",
+                        "glob": "**/*",
+                        "output": "templates"
+                    },
                     {
                         "input": "packages/tooling/nx-webpieces-rules/src/executors",
                         "glob": "**/schema.json",
