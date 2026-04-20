@@ -1,15 +1,16 @@
+import { vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 type DevkitType = typeof import('@nx/devkit');
 
-jest.mock('@nx/devkit', () => {
-    const actual = jest.requireActual<DevkitType>('@nx/devkit');
+vi.mock('@nx/devkit', async () => {
+    const actual = await vi.importActual<DevkitType>('@nx/devkit');
     return {
         ...actual,
-        createProjectGraphAsync: jest.fn(),
-        readProjectsConfigurationFromProjectGraph: jest.fn(),
+        createProjectGraphAsync: vi.fn(),
+        readProjectsConfigurationFromProjectGraph: vi.fn(),
     };
 });
 
@@ -45,19 +46,19 @@ function setupFixture(projects: ProjectConfig[]): Fixture {
         ),
     };
 
-    (createProjectGraphAsync as jest.Mock).mockResolvedValue({});
-    (readProjectsConfigurationFromProjectGraph as jest.Mock).mockReturnValue(projectsConfig);
+    (createProjectGraphAsync as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (readProjectsConfigurationFromProjectGraph as ReturnType<typeof vi.fn>).mockReturnValue(projectsConfig);
 
     return {
         tmpDir,
         cleanup: (): void => {
             fs.rmSync(tmpDir, { recursive: true, force: true });
-            jest.clearAllMocks();
+            vi.clearAllMocks();
         },
     };
 }
 
-afterEach(() => jest.clearAllMocks());
+afterEach(() => vi.clearAllMocks());
 
 describe('validatePackageJsonDependencies — missing dep', () => {
     it('errors when package.json is missing a graph-declared workspace dep', async () => {

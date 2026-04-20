@@ -4,6 +4,12 @@
     "sourceRoot": "packages/tooling/rules-config/src",
     "projectType": "library",
     "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/tooling/rules-config/"
+            }
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],

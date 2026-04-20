@@ -4,6 +4,12 @@
     "sourceRoot": "packages/core/core-util/src",
     "projectType": "library",
     "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/core/core-util/"
+            }
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],

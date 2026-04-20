@@ -4,6 +4,12 @@
     "sourceRoot": "packages/tooling/nx-webpieces-rules/src",
     "projectType": "library",
     "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/tooling/nx-webpieces-rules/"
+            }
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
