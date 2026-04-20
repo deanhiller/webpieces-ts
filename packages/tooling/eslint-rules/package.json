@@ -4,12 +4,25 @@
     "description": "ESLint rules for WebPieces code patterns and architecture enforcement",
     "type": "commonjs",
     "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./recommended": "./recommended.mjs",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src/**/*",
+        "recommended.mjs",
+        "README.md"
+    ],
     "author": "Dean Hiller",
     "license": "Apache-2.0",
     "repository": {
         "type": "git",
         "url": "https://github.com/deanhiller/webpieces-ts.git",
         "directory": "packages/tooling/eslint-rules"
+    },
+    "dependencies": {
+        "@webpieces/rules-config": "workspace:*"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0"

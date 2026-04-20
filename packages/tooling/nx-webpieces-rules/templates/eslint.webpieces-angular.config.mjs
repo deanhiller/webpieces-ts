@@ -1,4 +1,4 @@
-// @webpieces/webpieces-rules Angular ESLint Configuration
+// @webpieces/nx-webpieces-rules Angular ESLint Configuration
 // This is the canonical template for Angular projects using external clients
 //
 // IMPORTANT: When modifying rules here, also update:

@@ -13,7 +13,8 @@
                 "tsConfig": "packages/tooling/rules-config/tsconfig.lib.json",
                 "assets": [
                     "packages/tooling/rules-config/package.json",
-                    "packages/tooling/rules-config/README.md"
+                    "packages/tooling/rules-config/README.md",
+                    "packages/tooling/rules-config/templates"
                 ]
             }
         }

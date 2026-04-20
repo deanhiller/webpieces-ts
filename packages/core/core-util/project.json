@@ -16,14 +16,6 @@
                     "packages/core/core-util/README.md"
                 ]
             }
-        },
-        "test": {
-            "executor": "@nx/jest:jest",
-            "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
-            "options": {
-                "jestConfig": "jest.config.js",
-                "passWithNoTests": false
-            }
         }
     },
     "tags": ["type:util"]
