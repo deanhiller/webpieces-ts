@@ -86,7 +86,6 @@ jobs:
                 mkdir -p dist/packages/tooling/rules-config
                 mv dist/temp-tsc/packages/tooling/rules-config/* dist/packages/tooling/rules-config/
                 cp packages/tooling/rules-config/package.json dist/packages/tooling/rules-config/
-                cp packages/tooling/rules-config/README.md dist/packages/tooling/rules-config/
                 rm -rf dist/temp-tsc
 
                 # 2. Build code-rules
@@ -94,7 +93,6 @@ jobs:
                 mkdir -p dist/packages/tooling/code-rules
                 mv dist/temp-tsc/packages/tooling/code-rules/* dist/packages/tooling/code-rules/
                 cp packages/tooling/code-rules/package.json dist/packages/tooling/code-rules/
-                cp packages/tooling/code-rules/executors.json dist/packages/tooling/code-rules/
                 rm -rf dist/temp-tsc
 
                 # 3. Build ai-hook-rules
@@ -107,7 +105,18 @@ jobs:
                 cp packages/tooling/ai-hook-rules/openclaw.plugin.json dist/packages/tooling/ai-hook-rules/
                 rm -rf dist/temp-tsc
 
-                # 4. Build nx-webpieces-rules
+                # 4. Build webpieces-rules (umbrella)
+                pnpm exec tsc -p packages/tooling/webpieces-rules/tsconfig.lib.json --outDir dist/temp-tsc
+                mkdir -p dist/packages/tooling/webpieces-rules
+                mv dist/temp-tsc/packages/tooling/webpieces-rules/* dist/packages/tooling/webpieces-rules/
+                cp packages/tooling/webpieces-rules/package.json dist/packages/tooling/webpieces-rules/
+                cp -r packages/tooling/webpieces-rules/config dist/packages/tooling/webpieces-rules/
+                cp -r packages/tooling/webpieces-rules/bin dist/packages/tooling/webpieces-rules/
+                cp -r packages/tooling/webpieces-rules/patterns dist/packages/tooling/webpieces-rules/
+                cp -r packages/tooling/webpieces-rules/templates dist/packages/tooling/webpieces-rules/
+                rm -rf dist/temp-tsc
+
+                # 5. Build nx-webpieces-rules
                 pnpm exec tsc -p packages/tooling/nx-webpieces-rules/tsconfig.lib.json --outDir dist/temp-tsc
                 mkdir -p dist/packages/tooling/nx-webpieces-rules
                 mv dist/temp-tsc/packages/tooling/nx-webpieces-rules/* dist/packages/tooling/nx-webpieces-rules/
@@ -167,6 +176,7 @@ jobs:
                   npm publish dist/packages/tooling/eslint-rules --access public --provenance
                   npm publish dist/packages/tooling/ai-hook-rules --access public --provenance
                   npm publish dist/packages/tooling/code-rules --access public --provenance
+                  npm publish dist/packages/tooling/webpieces-rules --access public --provenance
                   npm publish dist/packages/tooling/nx-webpieces-rules --access public --provenance
 
                   # Publish umbrella packages (depend on all above)
@@ -204,6 +214,7 @@ jobs:
                       - [@webpieces/eslint-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/eslint-rules/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/ai-hook-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ai-hook-rules/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/code-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/code-rules/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/webpieces-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/webpieces-rules/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/nx-webpieces-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/nx-webpieces-rules/v/${{ steps.version.outputs.full_version }})
 
                       ### Umbrella Packages (NEW!)
