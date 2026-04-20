@@ -14,7 +14,11 @@
                 "assets": [
                     "packages/tooling/rules-config/package.json",
                     "packages/tooling/rules-config/README.md",
-                    "packages/tooling/rules-config/templates"
+                    {
+                        "input": "packages/tooling/rules-config/templates",
+                        "glob": "**/*",
+                        "output": "templates"
+                    }
                 ]
             }
         }
