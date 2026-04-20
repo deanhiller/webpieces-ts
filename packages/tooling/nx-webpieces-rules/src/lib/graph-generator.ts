@@ -14,7 +14,7 @@ import {
 /**
  * Projects to exclude from graph validation (tools, configs, etc.)
  */
-const EXCLUDED_PROJECTS = new Set<string>([]);
+const EXCLUDED_PROJECTS = new Set<string>(['architecture']);
 
 /**
  * Extract project dependencies from project.json's build.dependsOn and implicitDependencies

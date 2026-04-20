@@ -1,7 +1,7 @@
 {
     "name": "@webpieces/nx-webpieces-rules",
     "version": "0.0.0-dev",
-    "description": "Nx-specific webpieces validation rules. Includes all rules from @webpieces/webpieces-rules plus Nx graph validators and inference plugin.",
+    "description": "Nx-specific webpieces validation rules and graph tooling. Bundles all @webpieces rule packages with Nx graph validators and an inference plugin.",
     "type": "commonjs",
     "main": "./src/index.js",
     "executors": "./executors.json",
@@ -11,9 +11,12 @@
         "./plugin": "./src/plugin.js",
         "./executors.json": "./executors.json"
     },
-    "files": ["src/**/*", "executors.json", "README.md"],
+    "files": ["src/**/*", "templates/**/*", "executors.json", "README.md"],
     "dependencies": {
-        "@webpieces/webpieces-rules": "workspace:*"
+        "@webpieces/ai-hook-rules": "workspace:*",
+        "@webpieces/code-rules": "workspace:*",
+        "@webpieces/eslint-rules": "workspace:*",
+        "@webpieces/rules-config": "workspace:*"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"

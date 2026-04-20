@@ -20,6 +20,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { writeTemplate } from '@webpieces/rules-config';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
@@ -49,136 +50,14 @@ interface MethodInfo {
     hasDisableComment: boolean;
 }
 
-const TMP_DIR = '.webpieces/instruct-ai';
 const TMP_MD_FILE = 'webpieces.methodsize.md';
 
-const METHODSIZE_DOC_CONTENT = `# Instructions: New Method Too Long
-
-## Requirement
-
-**~99% of the time**, you can stay under the \`limit\` from nx.json
-by extracting logical units into well-named methods.
-Nearly all software can be written with methods under this size.
-
-## The "Table of Contents" Principle
-
-Good code reads like a book's table of contents:
-- Chapter titles (method names) tell you WHAT happens
-- Reading chapter titles gives you the full story
-- You can dive into chapters (implementations) for details
-
-## Why Limit New Methods?
-
-Methods under the limit are:
-- Easy to review in a single screen
-- Simple to understand without scrolling
-- Quick for AI to analyze and suggest improvements
-- More testable in isolation
-- Self-documenting through well-named extracted methods
-
-Extracting logical units into well-named methods makes code more readable for both
-AI and humans.
-
-## How to Refactor
-
-Instead of:
-\`\`\`typescript
-async processOrder(order: Order): Promise<Result> {
-    // 50 lines of validation, transformation, saving, notifications...
-}
-\`\`\`
-
-Write:
-\`\`\`typescript
-async processOrder(order: Order): Promise<Result> {
-    const validated = this.validateOrder(order);
-    const transformed = this.applyBusinessRules(validated);
-    const saved = await this.saveToDatabase(transformed);
-    await this.notifyStakeholders(saved);
-    return this.buildResult(saved);
-}
-\`\`\`
-
-Now the main method is a "table of contents" - each line tells part of the story!
-
-## Patterns for Extraction
-
-### Pattern 1: Extract Loop Bodies
-\`\`\`typescript
-// BEFORE
-for (const item of items) {
-    // 20 lines of processing
-}
-
-// AFTER
-for (const item of items) {
-    this.processItem(item);
-}
-\`\`\`
-
-### Pattern 2: Extract Conditional Blocks
-\`\`\`typescript
-// BEFORE
-if (isAdmin(user)) {
-    // 15 lines of admin logic
-}
-
-// AFTER
-if (isAdmin(user)) {
-    this.handleAdminUser(user);
-}
-\`\`\`
-
-### Pattern 3: Extract Data Transformations
-\`\`\`typescript
-// BEFORE
-const result = {
-    // 10+ lines of object construction
-};
-
-// AFTER
-const result = this.buildResultObject(data);
-\`\`\`
-
-## If Refactoring Is Not Feasible
-
-Sometimes methods genuinely need to be longer (complex algorithms, state machines, etc.).
-
-**Escape hatch**: Add a webpieces-disable comment with justification:
-
-\`\`\`typescript
-// webpieces-disable max-lines-new-methods -- Complex state machine, splitting reduces clarity
-async complexStateMachine(): Promise<void> {
-    // ... longer method with justification
-}
-\`\`\`
-
-## AI Agent Action Steps
-
-1. **READ** the method to understand its logical sections
-2. **IDENTIFY** logical units that can be extracted
-3. **EXTRACT** into well-named private methods
-4. **VERIFY** the main method now reads like a table of contents
-5. **IF NOT FEASIBLE**: Add webpieces-disable max-lines-new-methods comment with clear justification
-
-## Remember
-
-- Every method you write today will be read many times tomorrow
-- The best code explains itself through structure
-- When in doubt, extract and name it
-`;
-
 /**
- * Write the instructions documentation to tmp directory
+ * Write the instructions documentation to .webpieces/instruct-ai/.
+ * Sourced from @webpieces/rules-config.
  */
 function writeTmpInstructions(workspaceRoot: string): string {
-    const tmpDir = path.join(workspaceRoot, TMP_DIR);
-    const mdPath = path.join(tmpDir, TMP_MD_FILE);
-
-    fs.mkdirSync(tmpDir, { recursive: true });
-    fs.writeFileSync(mdPath, METHODSIZE_DOC_CONTENT);
-
-    return mdPath;
+    return writeTemplate(workspaceRoot, TMP_MD_FILE);
 }
 
 /**

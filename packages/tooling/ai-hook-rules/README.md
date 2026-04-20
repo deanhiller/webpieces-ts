@@ -18,7 +18,7 @@ Both share the same rules and the same `webpieces.ai-hooks.json` config file.
 ## Install (Claude Code, per project)
 
 ```bash
-npm install --save-dev @webpieces/webpieces-rules  # pulls in ai-hook-rules transitively
+npm install --save-dev @webpieces/nx-webpieces-rules  # pulls in ai-hook-rules transitively
 npx wp-setup-ai-hooks
 # Restart your Claude Code session
 ```

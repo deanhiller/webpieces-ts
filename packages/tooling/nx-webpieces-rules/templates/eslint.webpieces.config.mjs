@@ -1,4 +1,4 @@
-// @webpieces/webpieces-rules ESLint Configuration
+// @webpieces/nx-webpieces-rules ESLint Configuration
 // This is the canonical template for external clients
 //
 // IMPORTANT: When modifying rules here, also update:
@@ -22,8 +22,8 @@ export default [
             '@webpieces/catch-error-pattern': 'error',
             // READ .webpieces/instruct-ai/webpieces.exceptions.md for AI rollout instructions and rationale
             '@webpieces/no-unmanaged-exceptions': 'error',
-            '@webpieces/max-method-lines': ['error', { max: 150 }],
-            '@webpieces/max-file-lines': ['error', { max: 901 }],
+            '@webpieces/max-method-lines': ['error', { max: 70 }],
+            '@webpieces/max-file-lines': ['error', { max: 700 }],
             '@webpieces/enforce-architecture': 'error',
             '@webpieces/no-json-property-primitive-type': 'error',
         },

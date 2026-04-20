@@ -5,10 +5,6 @@
             "rules-config"
         ]
     },
-    "architecture": {
-        "level": 0,
-        "dependsOn": []
-    },
     "client": {
         "level": 3,
         "dependsOn": [
@@ -36,8 +32,10 @@
         "dependsOn": []
     },
     "eslint-rules": {
-        "level": 0,
-        "dependsOn": []
+        "level": 1,
+        "dependsOn": [
+            "rules-config"
+        ]
     },
     "example-apis": {
         "level": 2,
@@ -91,9 +89,11 @@
         ]
     },
     "nx-webpieces-rules": {
-        "level": 3,
+        "level": 2,
         "dependsOn": [
-            "webpieces-rules"
+            "ai-hook-rules",
+            "code-rules",
+            "eslint-rules"
         ]
     },
     "rules-config": {
@@ -105,14 +105,6 @@
         "dependsOn": [
             "core-meta",
             "http-server"
-        ]
-    },
-    "webpieces-rules": {
-        "level": 2,
-        "dependsOn": [
-            "ai-hook-rules",
-            "code-rules",
-            "eslint-rules"
         ]
     }
 }

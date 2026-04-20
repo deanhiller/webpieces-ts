@@ -13,7 +13,6 @@ const packages = [
     '@webpieces/ai-hook-rules',
     '@webpieces/eslint-rules',
     '@webpieces/code-rules',
-    '@webpieces/webpieces-rules',
     '@webpieces/nx-webpieces-rules',
     // Umbrella packages
     '@webpieces/server',

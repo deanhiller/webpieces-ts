@@ -21,6 +21,7 @@
 import type { Rule } from 'eslint';
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeTemplateIfMissing } from '@webpieces/rules-config';
 import { toError } from '../toError';
 
 // webpieces-disable no-any-unknown -- ESTree AST node interface
@@ -83,60 +84,18 @@ function getWorkspaceRoot(context: Rule.RuleContext): string {
 }
 
 /**
- * Ensures a documentation file exists at the given path
- * Creates parent directories if needed
- */
-function ensureDocFile(docPath: string, content: string): boolean {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const dir = path.dirname(docPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-
-        // Only write if file doesn't exist or is empty
-        if (!fs.existsSync(docPath) || fs.readFileSync(docPath, 'utf-8').trim() === '') {
-            fs.writeFileSync(docPath, content, 'utf-8');
-        }
-
-        return true;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        void err; // Silently fail - don't break linting if file creation fails
-        return false;
-    }
-}
-
-/**
- * Ensures the exception documentation markdown file exists
- * Only creates file once per lint run using module-level flag
- *
- * Reads from the template file packaged with @webpieces/webpieces-rules
- * and copies it to .webpieces/instruct-ai/ for AI agents to read.
+ * Ensures the exception documentation markdown file exists at
+ * .webpieces/instruct-ai/webpieces.exceptions.md. Sourced from @webpieces/rules-config.
  */
 function ensureExceptionDoc(context: Rule.RuleContext): void {
     if (exceptionDocCreated) return;
-
     const workspaceRoot = getWorkspaceRoot(context);
-    const docPath = path.join(workspaceRoot, '.webpieces', 'instruct-ai', 'webpieces.exceptions.md');
-
-    // Read from the template file packaged with the npm module
-    // Path: from eslint-plugin/rules/ -> ../../templates/
-    const templatePath = path.join(__dirname, '..', '..', 'templates', 'webpieces.exceptions.md');
-
-    let content: string;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        content = fs.readFileSync(templatePath, 'utf-8');
-    } catch (err: unknown) {
-        //const error = toError(err);
-        void err;
-        // Fallback message if template not found (shouldn't happen in published package)
-        content = `# Exception Documentation Not Found\n\nTemplate file not found at: ${templatePath}\n\nPlease ensure @webpieces/webpieces-rules is properly installed.`;
-    }
-
-    if (ensureDocFile(docPath, content)) {
+        writeTemplateIfMissing(workspaceRoot, 'webpieces.exceptions.md');
         exceptionDocCreated = true;
+    } catch (err: unknown) {
+        void err;
     }
 }
 

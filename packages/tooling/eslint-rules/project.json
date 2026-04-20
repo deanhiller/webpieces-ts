@@ -7,13 +7,15 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
+            "dependsOn": ["^build", "rules-config:build"],
             "options": {
                 "outputPath": "dist/packages/tooling/eslint-rules",
                 "main": "packages/tooling/eslint-rules/src/index.ts",
                 "tsConfig": "packages/tooling/eslint-rules/tsconfig.lib.json",
                 "assets": [
                     "packages/tooling/eslint-rules/package.json",
-                    "packages/tooling/eslint-rules/README.md"
+                    "packages/tooling/eslint-rules/README.md",
+                    "packages/tooling/eslint-rules/recommended.mjs"
                 ]
             }
         }
