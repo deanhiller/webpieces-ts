@@ -3,28 +3,47 @@ import * as path from 'path';
 
 import type { Rule, ResolvedConfig } from './types';
 import { toError } from './to-error';
+import { builtInRuleNames } from './rules/index';
+import noAnyUnknown from './rules/no-any-unknown';
+import noImplicitAny from './rules/no-implicit-any';
+import maxFileLines from './rules/max-file-lines';
+import fileLocation from './rules/file-location';
+import noDestructure from './rules/no-destructure';
+import requireReturnType from './rules/require-return-type';
+import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
+import catchErrorPattern from './rules/catch-error-pattern';
+import noShellSubstitution from './rules/no-shell-substitution';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
 
+const BUILT_IN_RULE_MAP: Record<string, Rule> = {
+    'no-any-unknown': noAnyUnknown as Rule,
+    'no-implicit-any': noImplicitAny as Rule,
+    'max-file-lines': maxFileLines as Rule,
+    'file-location': fileLocation as Rule,
+    'no-destructure': noDestructure as Rule,
+    'require-return-type': requireReturnType as Rule,
+    'no-unmanaged-exceptions': noUnmanagedExceptions as Rule,
+    'catch-error-pattern': catchErrorPattern as Rule,
+    'no-shell-substitution': noShellSubstitution as Rule,
+};
+
 export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
     const builtIns = loadBuiltInRules();
     const custom = loadCustomRules(config.rulesDir, workspaceRoot);
-    const all = [...builtIns, ...custom];
-    return all.filter((rule) => validateRule(rule));
+    const all: Rule[] = [...builtIns, ...custom];
+    return all.filter((rule: Rule) => validateRule(rule));
 }
 
 function loadBuiltInRules(): Rule[] {
-    const registry: readonly string[] = require('./rules/index').builtInRuleNames;
     const modules: Rule[] = [];
-    for (const name of registry) {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mod = require(`./rules/${name}`);
-            modules.push(mod.default || mod);
-        } catch (err: unknown) {
-            const error = toError(err);
-            process.stderr.write(`[ai-hooks] failed to load built-in rule ${name}: ${error.message}\n`);
+    for (const name of builtInRuleNames) {
+        const mod = BUILT_IN_RULE_MAP[name];
+        if (mod) {
+            modules.push(mod);
+        } else {
+            process.stderr.write(`[ai-hooks] unknown built-in rule: ${name}\n`);
         }
     }
     return modules;

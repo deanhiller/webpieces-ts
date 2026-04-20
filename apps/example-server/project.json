@@ -4,6 +4,12 @@
     "sourceRoot": "apps/example-server/src",
     "projectType": "application",
     "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run apps/example-server/"
+            }
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
