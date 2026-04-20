@@ -115,6 +115,128 @@ interface GraphEntry {
     dependsOn: string[];
 }
 
+interface DepClassification {
+    missingInPackageJson: string[];
+    extraInPackageJson: string[];
+    extraWorkspaceDeps: string[];
+}
+
+/**
+ * Compute the transitive closure of a project's dependencies in the graph.
+ * Example: server → [core-meta, http-server]; transitive closure includes
+ * http-server and everything http-server reaches (http-routing, http-filters,
+ * core-context, core-util, http-api).
+ *
+ * Used to allow package.json entries for transitive deps (a legitimate pattern:
+ * npm install brings the whole dependency tree, so a consumer may list any
+ * reachable package directly).
+ */
+function computeTransitiveClosure(
+    projectName: string,
+    graph: Record<string, GraphEntry>
+): Set<string> {
+    const closure = new Set<string>();
+    const stack = [projectName];
+    while (stack.length > 0) {
+        const current = stack.pop()!;
+        const entry = graph[current];
+        if (!entry) continue;
+        for (const dep of entry.dependsOn) {
+            if (!closure.has(dep)) {
+                closure.add(dep);
+                stack.push(dep);
+            }
+        }
+    }
+    return closure;
+}
+
+interface SingleProjectValidation {
+    result: ProjectValidationResult;
+    errors: string[];
+}
+
+function classifyDeps(
+    packageJsonDeps: string[],
+    entry: GraphEntry,
+    transitiveClosure: Set<string>,
+    projectToPackage: Map<string, string>,
+    packageToProject: Map<string, string>
+): DepClassification {
+    const missingInPackageJson: string[] = [];
+    for (const depProjectName of entry.dependsOn) {
+        const depPackageName = projectToPackage.get(depProjectName) || depProjectName;
+        if (!packageJsonDeps.includes(depPackageName)) {
+            missingInPackageJson.push(depProjectName);
+        }
+    }
+
+    // Workspace extras are OK if reachable via transitive closure (matches the
+    // ESLint enforce-architecture rule which also allows transitive imports).
+    // Only flag extras that are NOT reachable at all — real graph drift.
+    const extraInPackageJson: string[] = [];
+    const extraWorkspaceDeps: string[] = [];
+    for (const dep of packageJsonDeps) {
+        const depProjectName = packageToProject.get(dep);
+        if (depProjectName === undefined) {
+            extraInPackageJson.push(dep);
+            continue;
+        }
+        if (entry.dependsOn.includes(depProjectName)) continue;
+        if (transitiveClosure.has(depProjectName)) continue;
+        extraWorkspaceDeps.push(dep);
+    }
+
+    return { missingInPackageJson, extraInPackageJson, extraWorkspaceDeps };
+}
+
+function validateSingleProject(
+    projectName: string,
+    entry: GraphEntry,
+    projectRoot: string,
+    packageJsonDeps: string[],
+    graph: Record<string, GraphEntry>,
+    projectToPackage: Map<string, string>,
+    packageToProject: Map<string, string>
+): SingleProjectValidation {
+    const transitiveClosure = computeTransitiveClosure(projectName, graph);
+    const classification = classifyDeps(
+        packageJsonDeps,
+        entry,
+        transitiveClosure,
+        projectToPackage,
+        packageToProject
+    );
+
+    const errors: string[] = [];
+    if (classification.missingInPackageJson.length > 0) {
+        errors.push(
+            `Project ${projectName} (${projectRoot}/package.json) is missing dependencies: ${classification.missingInPackageJson.join(', ')}\n` +
+                `  Fix: Add these to package.json dependencies`
+        );
+    }
+    for (const extraPkg of classification.extraWorkspaceDeps) {
+        const extraProject = packageToProject.get(extraPkg);
+        errors.push(
+            `Project ${projectName} (${projectRoot}/package.json) has "${extraPkg}" in package.json but architecture/dependencies.json has no path ${projectName} → ${extraProject} (not even transitively).\n` +
+                `  Fix: Either add "${extraProject}:build" to project.json:build.dependsOn (then run \`nx run architecture:generate\`), or remove "${extraPkg}" from package.json dependencies.`
+        );
+    }
+
+    const valid =
+        classification.missingInPackageJson.length === 0 &&
+        classification.extraWorkspaceDeps.length === 0;
+    return {
+        result: {
+            project: projectName,
+            valid,
+            missingInPackageJson: classification.missingInPackageJson,
+            extraInPackageJson: classification.extraInPackageJson,
+        },
+        errors,
+    };
+}
+
 export async function validatePackageJsonDependencies(
     graph: Record<string, GraphEntry>,
     workspaceRoot: string
@@ -122,63 +244,34 @@ export async function validatePackageJsonDependencies(
     const projectGraph = await createProjectGraphAsync();
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
 
-    // Build map: project name → package name
     const projectToPackage = buildProjectToPackageMap(workspaceRoot, projectsConfig);
+    const packageToProject = new Map<string, string>();
+    for (const [projName, pkgName] of projectToPackage.entries()) {
+        packageToProject.set(pkgName, projName);
+    }
 
     const errors: string[] = [];
     const projectResults: ProjectValidationResult[] = [];
 
     for (const [projectName, entry] of Object.entries(graph)) {
-        // Find the project config using project name directly
         const projectConfig = projectsConfig.projects[projectName];
-        if (!projectConfig) {
-            continue;
-        }
+        if (!projectConfig) continue;
 
-        const projectRoot = projectConfig.root;
-        const packageJsonDeps = readPackageJsonDeps(workspaceRoot, projectRoot);
+        const packageJsonDeps = readPackageJsonDeps(workspaceRoot, projectConfig.root);
+        if (packageJsonDeps === null) continue;
 
-        if (packageJsonDeps === null) {
-            continue;
-        }
-
-        // Convert graph dependencies (project names) to package names for comparison
-        const missingInPackageJson: string[] = [];
-        for (const depProjectName of entry.dependsOn) {
-            const depPackageName = projectToPackage.get(depProjectName) || depProjectName;
-            if (!packageJsonDeps.includes(depPackageName)) {
-                missingInPackageJson.push(depProjectName);
-            }
-        }
-
-        // Check for extra dependencies in package.json (not critical, just informational)
-        const extraInPackageJson: string[] = [];
-        for (const dep of packageJsonDeps) {
-            if (!entry.dependsOn.includes(dep)) {
-                extraInPackageJson.push(dep);
-            }
-        }
-
-        const valid = missingInPackageJson.length === 0;
-
-        if (!valid) {
-            errors.push(
-                `Project ${projectName} (${projectRoot}/package.json) is missing dependencies: ${missingInPackageJson.join(', ')}\n` +
-                    `  Fix: Add these to package.json dependencies`
-            );
-        }
-
-        projectResults.push({
-            project: projectName,
-            valid,
-            missingInPackageJson,
-            extraInPackageJson,
-        });
+        const validation = validateSingleProject(
+            projectName,
+            entry,
+            projectConfig.root,
+            packageJsonDeps,
+            graph,
+            projectToPackage,
+            packageToProject
+        );
+        projectResults.push(validation.result);
+        errors.push(...validation.errors);
     }
 
-    return {
-        valid: errors.length === 0,
-        errors,
-        projectResults,
-    };
+    return { valid: errors.length === 0, errors, projectResults };
 }
