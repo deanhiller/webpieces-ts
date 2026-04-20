@@ -68,52 +68,6 @@ jobs:
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            - name: Bootstrap tooling packages (required before Nx can process project graph)
-              run: |
-                # ESLint config imports from @webpieces/eslint-rules which must exist
-                # before Nx can create the project graph (due to @nx/eslint/plugin).
-                # Build all tooling packages with tsc, then move to expected dist structure.
-
-                # 1. Build eslint-rules
-                pnpm exec tsc -p packages/tooling/eslint-rules/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/eslint-rules
-                mv dist/temp-tsc/packages/tooling/eslint-rules/* dist/packages/tooling/eslint-rules/
-                cp packages/tooling/eslint-rules/package.json dist/packages/tooling/eslint-rules/
-                rm -rf dist/temp-tsc
-
-                # 1b. Build rules-config (depended on by ai-hook-rules, code-rules, nx-webpieces-rules)
-                pnpm exec tsc -p packages/tooling/rules-config/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/rules-config
-                mv dist/temp-tsc/packages/tooling/rules-config/* dist/packages/tooling/rules-config/
-                cp packages/tooling/rules-config/package.json dist/packages/tooling/rules-config/
-                rm -rf dist/temp-tsc
-
-                # 2. Build code-rules
-                pnpm exec tsc -p packages/tooling/code-rules/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/code-rules
-                mv dist/temp-tsc/packages/tooling/code-rules/* dist/packages/tooling/code-rules/
-                cp packages/tooling/code-rules/package.json dist/packages/tooling/code-rules/
-                rm -rf dist/temp-tsc
-
-                # 3. Build ai-hook-rules
-                pnpm exec tsc -p packages/tooling/ai-hook-rules/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/ai-hook-rules
-                mv dist/temp-tsc/packages/tooling/ai-hook-rules/* dist/packages/tooling/ai-hook-rules/
-                cp packages/tooling/ai-hook-rules/package.json dist/packages/tooling/ai-hook-rules/
-                cp -r packages/tooling/ai-hook-rules/bin dist/packages/tooling/ai-hook-rules/
-                cp -r packages/tooling/ai-hook-rules/templates dist/packages/tooling/ai-hook-rules/
-                cp packages/tooling/ai-hook-rules/openclaw.plugin.json dist/packages/tooling/ai-hook-rules/
-                rm -rf dist/temp-tsc
-
-                # 4. Build nx-webpieces-rules
-                pnpm exec tsc -p packages/tooling/nx-webpieces-rules/tsconfig.lib.json --outDir dist/temp-tsc
-                mkdir -p dist/packages/tooling/nx-webpieces-rules
-                mv dist/temp-tsc/packages/tooling/nx-webpieces-rules/* dist/packages/tooling/nx-webpieces-rules/
-                cp packages/tooling/nx-webpieces-rules/package.json dist/packages/tooling/nx-webpieces-rules/
-                cp packages/tooling/nx-webpieces-rules/executors.json dist/packages/tooling/nx-webpieces-rules/
-                cp -r packages/tooling/nx-webpieces-rules/templates dist/packages/tooling/nx-webpieces-rules/
-                rm -rf dist/temp-tsc
-
             - name: Determine version
               id: version
               run: |
