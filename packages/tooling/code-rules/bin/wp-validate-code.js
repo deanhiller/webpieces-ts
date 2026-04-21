@@ -4,11 +4,12 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const compiled = path.join(__dirname, '..', 'src', 'cli.js');
 
-try {
+if (fs.existsSync(compiled)) {
     require(compiled);
-} catch (e) {
+} else {
     console.error('  [code-rules] Package not built yet. Run the build first, or install from npm.');
     process.exit(1);
 }

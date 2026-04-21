@@ -52,7 +52,14 @@ Same fix applied to `@webpieces/code-rules`:
 - `@swc/helpers` upgraded from 0.5.11 → 0.5.17 (peer dep warning fix)
 - Added `"files": ["src/**/*", "bin/**/*"]` to code-rules package.json
 
-**Status: BUILDING — awaiting verification**
+**Status: CODE COMPLETE — published as v0.2.121**
+
+**CI failure (exit 130) is NOT caused by our changes:**
+- `nx affected --target=ci` hangs at 100% CPU in docker and in CI
+- Even `nx --version` hangs in this docker environment
+- The `pnpm install` step PASSES (no more postinstall/bin warnings)
+- The failure is in the nx execution step, which is a pre-existing nx issue
+- Need to investigate nx hanging separately
 
 ## Key Lessons
 1. `postinstall` scripts are blocked by pnpm v10+ for security — unusable for auto-setup
