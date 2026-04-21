@@ -29,7 +29,7 @@ describe('core runner', () => {
     it('returns null when all rules disabled', () => {
         const ws = makeWorkspace();
         writeFile(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },
@@ -74,7 +74,7 @@ describe('core runner', () => {
             };`,
         );
         writeFile(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },
@@ -124,7 +124,7 @@ describe('core runner', () => {
             };`,
         );
         writeFile(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },
@@ -167,7 +167,7 @@ describe('core runner', () => {
             };`,
         );
         writeFile(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },
@@ -216,7 +216,7 @@ describe('core runner', () => {
             };`,
         );
         writeFile(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },
@@ -262,7 +262,7 @@ describe('core runner', () => {
             };`,
         );
         writeFile(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },

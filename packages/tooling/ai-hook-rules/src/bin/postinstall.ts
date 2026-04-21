@@ -29,14 +29,14 @@ function createBridgeFile(projectRoot: string): void {
 }
 
 function seedConfigIfMissing(projectRoot: string): void {
-    const configPath = path.join(projectRoot, 'webpieces.ai-hooks.json');
+    const configPath = path.join(projectRoot, 'webpieces.config.json');
     if (fs.existsSync(configPath)) return;
 
-    const templatePath = path.join(__dirname, '..', '..', 'templates', 'webpieces.ai-hooks.seed.json');
+    const templatePath = path.join(__dirname, '..', '..', 'templates', 'webpieces.config.seed.json');
     if (!fs.existsSync(templatePath)) return;
 
     fs.copyFileSync(templatePath, configPath);
-    console.log('  [ai-hook-rules] Created webpieces.ai-hooks.json (default config)');
+    console.log('  [ai-hook-rules] Created webpieces.config.json (default config)');
 }
 
 function settingsAlreadyHasHook(settingsPath: string): boolean {

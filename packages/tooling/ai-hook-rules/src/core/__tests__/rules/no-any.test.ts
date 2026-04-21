@@ -6,7 +6,7 @@ import * as path from 'path';
 
 function ws(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-any-'));
-    fs.writeFileSync(path.join(dir, 'webpieces.ai-hooks.json'), JSON.stringify({
+    fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify({
         rules: { 'max-file-lines': { enabled: false }, 'file-location': { enabled: false },
             'no-destructure': { enabled: false }, 'require-return-type': { enabled: false },
             'no-unmanaged-exceptions': { enabled: false } },

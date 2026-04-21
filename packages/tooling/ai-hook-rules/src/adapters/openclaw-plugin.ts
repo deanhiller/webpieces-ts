@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 
+import { CONFIG_FILENAME } from '@webpieces/rules-config';
 import { run } from '../core/runner';
 import { NormalizedToolInput, NormalizedEdit, ToolKind } from '../core/types';
 import { toError } from '../core/to-error';
@@ -55,7 +56,7 @@ function mapToolInput(toolName: string, args: Record<string, unknown>): Normaliz
 function findWorkspaceRoot(filePath: string): string | null {
     let dir = path.dirname(filePath);
     while (true) {
-        if (fs.existsSync(path.join(dir, 'webpieces.ai-hooks.json'))) return dir;
+        if (fs.existsSync(path.join(dir, CONFIG_FILENAME))) return dir;
         const parent = path.dirname(dir);
         if (parent === dir) return null;
         dir = parent;

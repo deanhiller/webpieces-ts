@@ -8,7 +8,7 @@ import { runBash } from '../../runner';
 function makeWorkspace(): string {
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hooks-bash-test-'));
     fs.writeFileSync(
-        path.join(ws, 'webpieces.ai-hooks.json'),
+        path.join(ws, 'webpieces.config.json'),
         JSON.stringify({
             rules: {
                 'no-any-unknown': { enabled: false },
@@ -82,7 +82,7 @@ describe('no-shell-substitution', () => {
     it('returns null when rule is disabled', () => {
         const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hooks-bash-disabled-'));
         fs.writeFileSync(
-            path.join(ws, 'webpieces.ai-hooks.json'),
+            path.join(ws, 'webpieces.config.json'),
             JSON.stringify({
                 rules: {
                     'no-any-unknown': { enabled: false },

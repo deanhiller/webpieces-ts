@@ -5,7 +5,6 @@ import { defaultRules } from './default-rules';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 
 export const CONFIG_FILENAME = 'webpieces.config.json';
-const LEGACY_AI_HOOKS_FILENAME = 'webpieces.ai-hooks.json';
 
 // webpieces-disable no-any-unknown -- consumer JSON config has opaque rule option values
 interface RawConfigFile {
@@ -15,34 +14,17 @@ interface RawConfigFile {
 }
 
 /**
- * Walk up from `startDir` looking for webpieces.config.json. Falls back to
- * the legacy webpieces.ai-hooks.json (with a one-time warning) so old
- * setups keep working during migration.
+ * Walk up from `startDir` looking for webpieces.config.json.
  */
 export function findConfigFile(startDir: string): string | null {
     let dir = startDir;
     while (true) {
         const primary = path.join(dir, CONFIG_FILENAME);
         if (fs.existsSync(primary)) return primary;
-        const legacy = path.join(dir, LEGACY_AI_HOOKS_FILENAME);
-        if (fs.existsSync(legacy)) {
-            warnLegacyOnce(legacy);
-            return legacy;
-        }
         const parent = path.dirname(dir);
         if (parent === dir) return null;
         dir = parent;
     }
-}
-
-let legacyWarned = false;
-function warnLegacyOnce(legacyPath: string): void {
-    if (legacyWarned) return;
-    legacyWarned = true;
-    process.stderr.write(
-        `[webpieces/config] Using legacy ${LEGACY_AI_HOOKS_FILENAME} at ${legacyPath}. ` +
-        `Rename to ${CONFIG_FILENAME} to silence this warning.\n`,
-    );
 }
 
 // webpieces-disable no-any-unknown -- merging opaque option bags from config JSON
