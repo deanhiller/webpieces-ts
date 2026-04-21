@@ -23,11 +23,6 @@
                     "packages/tooling/ai-hook-rules/README.md",
                     "packages/tooling/ai-hook-rules/openclaw.plugin.json",
                     {
-                        "input": "packages/tooling/ai-hook-rules/bin",
-                        "glob": "**/*",
-                        "output": "bin"
-                    },
-                    {
                         "input": "packages/tooling/ai-hook-rules/templates",
                         "glob": "**/*",
                         "output": "templates"

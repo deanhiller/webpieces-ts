@@ -7,6 +7,9 @@
     "bin": {
         "wp-validate-code": "./src/cli.js"
     },
+    "files": [
+        "src/**/*"
+    ],
     "author": "Dean Hiller",
     "license": "Apache-2.0",
     "repository": {
