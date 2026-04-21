@@ -7,7 +7,7 @@ const BRIDGE_CONTENT = `#!/usr/bin/env node\nrequire('@webpieces/ai-hook-rules/c
 
 function findProjectRoot(): string | null {
     // Walk up from this file's location to escape node_modules
-    // e.g. /project/node_modules/@webpieces/ai-hook-rules/src/bin/postinstall.js → /project
+    // e.g. /project/node_modules/@webpieces/ai-hook-rules/src/bin/postinstall.js -> /project
     let dir = __dirname;
     while (dir !== path.dirname(dir)) {
         dir = path.dirname(dir);
@@ -152,10 +152,10 @@ function promptUser(settingsPath: string): Promise<void> {
     });
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
     const projectRoot = findProjectRoot();
     if (!projectRoot) {
-        // Not running from node_modules (maybe local dev) — skip
+        // Not running from node_modules (maybe local dev / workspace) — skip
         return;
     }
 
@@ -182,7 +182,9 @@ async function main(): Promise<void> {
 }
 
 // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-main().catch((err: Error) => {
-    // Fail open — don't break pnpm install if postinstall crashes
-    console.error('  [ai-hook-rules] postinstall warning:', err.message);
-});
+if (require.main === module) {
+    main().catch((err: Error) => {
+        // Fail open — don't break pnpm install if postinstall crashes
+        console.error('  [ai-hook-rules] postinstall warning:', err.message);
+    });
+}
