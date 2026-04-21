@@ -5,7 +5,7 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-setup-ai-hooks": "./src/bin/postinstall.js"
+        "wp-setup-ai-hooks": "./bin/wp-setup-ai-hooks.js"
     },
     "exports": {
         ".": "./src/index.js",
@@ -16,6 +16,7 @@
     },
     "files": [
         "src/**/*",
+        "bin/**/*",
         "templates/**/*",
         "openclaw.plugin.json",
         "README.md"
