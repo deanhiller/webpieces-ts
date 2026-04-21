@@ -11,7 +11,5 @@ const fs = require('fs');
 
 const compiled = path.join(__dirname, '..', 'src', 'bin', 'postinstall.js');
 if (fs.existsSync(compiled)) {
-    require(compiled).main().catch(function (err) {
-        console.error('  [ai-hook-rules] postinstall warning:', err.message);
-    });
+    require(compiled).main();
 }
