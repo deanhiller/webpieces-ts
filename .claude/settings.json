@@ -1,15 +1,2 @@
 {
-    "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "Write|Edit|MultiEdit|Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "node .webpieces/ai-hooks/claude-code-hook.js"
-                    }
-                ]
-            }
-        ]
-    }
 }

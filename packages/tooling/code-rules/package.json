@@ -5,10 +5,11 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-validate-code": "./src/cli.js"
+        "wp-validate-code": "./bin/wp-validate-code.js"
     },
     "files": [
-        "src/**/*"
+        "src/**/*",
+        "bin/**/*"
     ],
     "author": "Dean Hiller",
     "license": "Apache-2.0",
