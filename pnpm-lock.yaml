@@ -154,19 +154,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/http/http-api
 
-  packages/client:
-    dependencies:
-      '@webpieces/http-client':
-        specifier: workspace:*
-        version: link:../http/http-client
-
   packages/core/core-context:
     dependencies:
       '@webpieces/core-util':
         specifier: '*'
         version: 0.2.104
-
-  packages/core/core-meta: {}
 
   packages/core/core-util: {}
 
@@ -215,30 +207,6 @@ importers:
       '@types/cors':
         specifier: 2.8.19
         version: 2.8.19
-
-  packages/server:
-    dependencies:
-      '@webpieces/core-context':
-        specifier: workspace:*
-        version: link:../core/core-context
-      '@webpieces/core-meta':
-        specifier: workspace:*
-        version: link:../core/core-meta
-      '@webpieces/core-util':
-        specifier: workspace:*
-        version: link:../core/core-util
-      '@webpieces/http-api':
-        specifier: workspace:*
-        version: link:../http/http-api
-      '@webpieces/http-filters':
-        specifier: workspace:*
-        version: link:../http/http-filters
-      '@webpieces/http-routing':
-        specifier: workspace:*
-        version: link:../http/http-routing
-      '@webpieces/http-server':
-        specifier: workspace:*
-        version: link:../http/http-server
 
   packages/tooling/ai-hook-rules:
     dependencies:

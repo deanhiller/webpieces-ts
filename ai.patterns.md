@@ -366,7 +366,7 @@ export class SaveController extends SaveApiPrototype implements SaveApi {
 
 ```typescript
 import { FilterMatcher } from './FilterMatcher';
-import { FilterDefinition } from '@webpieces/core-meta';
+import { FilterDefinition } from '@webpieces/http-routing';
 
 describe('FilterMatcher', () => {
   it('should match admin controllers', () => {

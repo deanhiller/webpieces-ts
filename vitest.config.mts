@@ -5,7 +5,6 @@ export default defineConfig({
     resolve: {
         alias: {
             '@webpieces/core-context': path.resolve(__dirname, 'packages/core/core-context/src/index.ts'),
-            '@webpieces/core-meta': path.resolve(__dirname, 'packages/core/core-meta/src/index.ts'),
             '@webpieces/core-util': path.resolve(__dirname, 'packages/core/core-util/src/index.ts'),
             '@webpieces/http-api': path.resolve(__dirname, 'packages/http/http-api/src/index.ts'),
             '@webpieces/http-routing': path.resolve(__dirname, 'packages/http/http-routing/src/index.ts'),

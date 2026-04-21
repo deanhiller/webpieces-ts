@@ -2,7 +2,6 @@ import { chromium } from '@playwright/test';
 
 const packages = [
     '@webpieces/core-context',
-    '@webpieces/core-meta',
     '@webpieces/core-util',
     '@webpieces/http-api',
     '@webpieces/http-filters',
@@ -14,9 +13,6 @@ const packages = [
     '@webpieces/eslint-rules',
     '@webpieces/code-rules',
     '@webpieces/nx-webpieces-rules',
-    // Umbrella packages
-    '@webpieces/server',
-    '@webpieces/client',
 ];
 
 const GITHUB_OWNER = 'deanhiller';

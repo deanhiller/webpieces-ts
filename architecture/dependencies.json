@@ -5,12 +5,6 @@
             "rules-config"
         ]
     },
-    "client": {
-        "level": 3,
-        "dependsOn": [
-            "http-client"
-        ]
-    },
     "code-rules": {
         "level": 1,
         "dependsOn": [
@@ -22,10 +16,6 @@
         "dependsOn": [
             "core-util"
         ]
-    },
-    "core-meta": {
-        "level": 0,
-        "dependsOn": []
     },
     "core-util": {
         "level": 0,
@@ -99,12 +89,5 @@
     "rules-config": {
         "level": 0,
         "dependsOn": []
-    },
-    "server": {
-        "level": 5,
-        "dependsOn": [
-            "core-meta",
-            "http-server"
-        ]
     }
 }
