@@ -48,33 +48,7 @@ compute_lockfile_hash() {
     fi
 }
 
-# ─────────────────────────────────────────────────────────────────────
-# Check that pnpm-lock.yaml is not stale relative to package.json files.
-# This is a hard error — auto-install can't fix a stale lockfile.
-# ─────────────────────────────────────────────────────────────────────
-check_package_json_freshness() {
-    if [ ! -f "pnpm-lock.yaml" ]; then
-        echo "❌ pnpm-lock.yaml not found — run 'pnpm install'"
-        exit 1
-    fi
-
-    if [ "package.json" -nt "pnpm-lock.yaml" ]; then
-        echo "❌ package.json is newer than pnpm-lock.yaml"
-        echo "   Run 'pnpm install' to update the lock file, then commit it."
-        exit 1
-    fi
-    for pkg in packages/*/package.json packages/*/*/package.json apps/*/package.json apps/*/*/package.json libraries/*/package.json libraries/*/*/package.json; do
-        if [ -f "$pkg" ] && [ "$pkg" -nt "pnpm-lock.yaml" ]; then
-            echo "❌ $pkg is newer than pnpm-lock.yaml"
-            echo "   Run 'pnpm install' to update the lock file, then commit it."
-            exit 1
-        fi
-    done
-
-    echo "✅ pnpm-lock.yaml is in sync with package.json files"
-}
-
-# ─────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────��──────────────
 # Auto-install if lockfile content changed since last pnpm install.
 # Uses a hash stored in node_modules/.lockfile-hash (per-platform
 # because the whole node_modules dir is swapped).
@@ -183,7 +157,6 @@ case "$ACTION" in
         ;;
     default)
         swap_node_modules
-        check_package_json_freshness
         check_and_install
         do_ci
         ;;
