@@ -156,7 +156,7 @@ function isWorkspaceImport(importPath: string, workspaceRoot: string): boolean {
 
 /**
  * Get project name from package name
- * e.g., '@webpieces/client' → 'client', 'apis' → 'apis'
+ * e.g., '@webpieces/http-client' → 'http-client', 'apis' → 'apis'
  */
 function getProjectNameFromPackageName(packageName: string, workspaceRoot: string): string {
     const mappings = buildProjectMappings(workspaceRoot);

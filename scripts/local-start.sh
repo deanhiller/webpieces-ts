@@ -70,7 +70,6 @@ case "$SERVICE" in
         mkdir -p node_modules/@webpieces
 
         ln -sf "$(pwd)/dist/packages/core/core-context" node_modules/@webpieces/core-context
-        ln -sf "$(pwd)/dist/packages/core/core-meta" node_modules/@webpieces/core-meta
         ln -sf "$(pwd)/dist/packages/core/core-util" node_modules/@webpieces/core-util
         ln -sf "$(pwd)/dist/packages/http/http-api" node_modules/@webpieces/http-api
         ln -sf "$(pwd)/dist/packages/http/http-routing" node_modules/@webpieces/http-routing

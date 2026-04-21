@@ -1,6 +1,4 @@
 packages:
-  - 'packages/server'
-  - 'packages/client'
   - 'packages/rules'
   - 'packages/core/*'
   - 'packages/http/*'

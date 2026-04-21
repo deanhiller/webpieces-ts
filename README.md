@@ -54,7 +54,7 @@ packages/
 The `WebAppMeta` interface is the entry point for configuring your application:
 
 ```typescript
-import { WebAppMeta } from '@webpieces/core-meta';
+import { WebAppMeta } from '@webpieces/http-routing';
 import { ContainerModule } from 'inversify';
 
 export class ProdServerMeta implements WebAppMeta {
