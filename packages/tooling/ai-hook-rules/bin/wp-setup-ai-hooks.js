@@ -9,10 +9,7 @@ const fs = require('fs');
 const compiled = path.join(__dirname, '..', 'src', 'bin', 'postinstall.js');
 
 if (fs.existsSync(compiled)) {
-    require(compiled).main().catch(function (err) {
-        console.error('  [ai-hook-rules] error:', err.message);
-        process.exit(1);
-    });
+    require(compiled).main();
 } else {
     console.error('  [ai-hook-rules] Package not built yet. Run the build first, or install from npm.');
     process.exit(1);

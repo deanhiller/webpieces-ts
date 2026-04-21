@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import * as path from 'path';
-import * as readline from 'readline';
 
 const BRIDGE_CONTENT = `#!/usr/bin/env node\nrequire('@webpieces/ai-hook-rules/claude-code').main();\n`;
 
@@ -99,60 +98,15 @@ function backupSettings(settingsPath: string): void {
     }
 }
 
-function printManualInstructions(): void {
-    console.log('');
-    console.log('  [ai-hook-rules] To enable AI code-quality hooks, add this to .claude/settings.json:');
-    console.log('');
-    console.log('  {');
-    console.log('      "hooks": {');
-    console.log('          "PreToolUse": [{');
-    console.log('              "matcher": "Write|Edit|MultiEdit|Bash",');
-    console.log('              "hooks": [{');
-    console.log('                  "type": "command",');
-    console.log('                  "command": "node .webpieces/ai-hooks/claude-code-hook.js"');
-    console.log('              }]');
-    console.log('          }]');
-    console.log('      }');
-    console.log('  }');
-    console.log('');
+
+function setupSettings(settingsPath: string): void {
+    // pnpm hides all postinstall output, so no point prompting or logging.
+    // The user already consented by running `pnpm approve-builds`.
+    backupSettings(settingsPath);
+    mergeHookIntoSettings(settingsPath);
 }
 
-function promptUser(settingsPath: string): Promise<void> {
-    return new Promise((resolve: () => void) => {
-        const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
-        if (!isInteractive) {
-            console.log('  [ai-hook-rules] Non-interactive terminal detected, skipping .claude/settings.json setup.');
-            printManualInstructions();
-            resolve();
-            return;
-        }
-
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-        console.log('');
-        console.log('  [ai-hook-rules] Would like to add a PreToolUse hook to .claude/settings.json');
-        console.log('  This enables AI code-quality validation (rules configured in webpieces.ai-hooks.json).');
-        if (fs.existsSync(settingsPath)) {
-            console.log('  Your current settings.json will be backed up to .claude/settings.json.bak');
-        }
-        console.log('');
-
-        rl.question('  Proceed? [y/N] ', (answer: string) => {
-            rl.close();
-            const yes = answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes';
-            if (yes) {
-                backupSettings(settingsPath);
-                mergeHookIntoSettings(settingsPath);
-                console.log('  [ai-hook-rules] Added PreToolUse hook to .claude/settings.json');
-            } else {
-                printManualInstructions();
-            }
-            resolve();
-        });
-    });
-}
-
-export async function main(): Promise<void> {
+export function main(): void {
     const projectRoot = findProjectRoot();
     if (!projectRoot) {
         // Not running from node_modules (maybe local dev / workspace) — skip
@@ -177,14 +131,10 @@ export async function main(): Promise<void> {
         return;
     }
 
-    // 5. Prompt user to add the hook
-    await promptUser(settingsPath);
+    // 5. Backup and add the hook (user consented via pnpm approve-builds)
+    setupSettings(settingsPath);
 }
 
-// eslint-disable-next-line @webpieces/no-unmanaged-exceptions
 if (require.main === module) {
-    main().catch((err: Error) => {
-        // Fail open — don't break pnpm install if postinstall crashes
-        console.error('  [ai-hook-rules] postinstall warning:', err.message);
-    });
+    main();
 }
