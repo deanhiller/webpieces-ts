@@ -1,13 +1,11 @@
 {
-    "extends": "@webpieces/ai-hook-rules/default",
     "rules": {
-        "no-any-unknown": { "enabled": true },
-        "no-implicit-any": { "enabled": true },
+        "no-any": { "enabled": true },
         "max-file-lines": { "enabled": true, "limit": 900 },
         "file-location": {
             "enabled": true,
             "allowedRootFiles": ["jest.setup.ts"],
-            "excludePaths": []
+            "excludePaths": ["scripts", "tmp", "architecture"]
         },
         "no-destructure": { "enabled": true },
         "require-return-type": { "enabled": true },

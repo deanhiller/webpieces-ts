@@ -13,7 +13,7 @@ Intercepts AI file writes before they happen. Runs a configurable rule set again
 - **Claude Code** — via `PreToolUse` hook in `.claude/settings.json`
 - **openclaw** — via `before_tool_call` plugin hook
 
-Both share the same rules and the same `webpieces.ai-hooks.json` config file.
+Both share the same rules and the same `webpieces.config.json` config file.
 
 ## Install (Claude Code, per project)
 
@@ -28,7 +28,7 @@ npx wp-setup-ai-hooks
 ```bash
 openclaw plugins install @webpieces/ai-hook-rules
 openclaw plugins enable @webpieces/ai-hook-rules
-# Drop webpieces.ai-hooks.json into any project you want checked
+# Drop webpieces.config.json into any project you want checked
 ```
 
 ## Starter rules
@@ -40,4 +40,4 @@ openclaw plugins enable @webpieces/ai-hook-rules
 - `require-return-type` — every function declares its return type
 - `no-unmanaged-exceptions` — `try/catch` requires an explicit disable comment
 
-See `webpieces.ai-hooks.json` at your project root to toggle rules or tune options.
+See `webpieces.config.json` at your project root to toggle rules or tune options.

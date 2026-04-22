@@ -39,7 +39,7 @@ const fileLocationRule: FileRule = {
     },
     fixHint: [
         'Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.',
-        'Add the dir to file-location.excludePaths in webpieces.ai-hooks.json',
+        'Add the dir to file-location.excludePaths in webpieces.config.json',
     ],
 
     check(ctx: FileContext): readonly Violation[] {
