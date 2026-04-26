@@ -45,6 +45,21 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
             throw new Error(`Class ${className} must be decorated with @ApiPath()`);
         }
 
+        // Validate that controllerClass actually extends apiMetaClass.
+        // TypeScript's structural typing won't catch a missing `extends` here, so we check
+        // the runtime prototype chain. Without this, a controller can silently drift from
+        // the API contract (wrong method names, wrong signatures) and only fail later as a
+        // confusing routing or method-not-found error.
+        const apiName = apiMetaClass.name || 'Unknown';
+        const controllerName = controllerClass.name || 'Unknown';
+        if (!(apiMetaClass.prototype as object).isPrototypeOf(controllerClass.prototype as object)) {
+            throw new Error(
+                `Controller ${controllerName} must extend ${apiName}. ` +
+                `Change the class declaration to: ` +
+                `'export class ${controllerName} extends ${apiName} { ... }'`,
+            );
+        }
+
     }
 
     /**

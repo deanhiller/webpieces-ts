@@ -1,5 +1,5 @@
 import { Controller, provideSingleton } from '@webpieces/http-routing';
-import { PublicInfoRequest, PublicInfoResponse } from '@webpieces/example-apis';
+import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '@webpieces/example-apis';
 
 /**
  * PublicController - Implements PublicApi.
@@ -9,9 +9,9 @@ import { PublicInfoRequest, PublicInfoResponse } from '@webpieces/example-apis';
  */
 @provideSingleton()
 @Controller()
-export class PublicController {
+export class PublicController extends PublicApi {
 
-    async getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
+    override async getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
         return {
             greeting: `Hello, ${request.name ?? 'World'}!`,
             serverTime: new Date().toISOString(),
