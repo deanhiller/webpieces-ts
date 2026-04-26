@@ -1,6 +1,7 @@
 import { injectable, inject } from 'inversify';
 import { Controller, provideSingleton } from '@webpieces/http-routing';
 import {
+    SaveApi,
     SaveRequest,
     SaveResponse,
     TheMatch,
@@ -45,7 +46,7 @@ export class SimpleCounter implements Counter {
  */
 @provideSingleton()
 @Controller()
-export class SaveController {
+export class SaveController extends SaveApi {
     private counter: Counter;
     private remoteService: RemoteApi;
 
@@ -53,11 +54,12 @@ export class SaveController {
         @inject(TYPES.Counter) counter: Counter,
         @inject(TYPES.RemoteApi) remoteService: RemoteApi,
     ) {
+        super();
         this.counter = counter;
         this.remoteService = remoteService;
     }
 
-    async save(request: SaveRequest): Promise<SaveResponse> {
+    override async save(request: SaveRequest): Promise<SaveResponse> {
         // Increment counter
         this.counter.inc();
 
