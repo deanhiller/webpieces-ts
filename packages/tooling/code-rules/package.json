@@ -5,7 +5,8 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-validate-code": "./bin/wp-validate-code.js"
+        "wp-validate-code": "./src/cli.js",
+        "wp-ci": "./src/wp-ci.js"
     },
     "files": [
         "src/**/*",

@@ -9,7 +9,8 @@
         },
         "no-destructure": {},
         "require-return-type": {},
-        "no-unmanaged-exceptions": {}
+        "no-unmanaged-exceptions": {},
+        "nx-wiring": { "mode": "ON" }
     },
     "rulesDir": []
 }

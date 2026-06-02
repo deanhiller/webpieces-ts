@@ -18,14 +18,7 @@
                 "outputPath": "dist/packages/tooling/code-rules",
                 "main": "packages/tooling/code-rules/src/index.ts",
                 "tsConfig": "packages/tooling/code-rules/tsconfig.lib.json",
-                "assets": [
-                    "packages/tooling/code-rules/package.json",
-                    {
-                        "input": "packages/tooling/code-rules/bin",
-                        "glob": "**/*",
-                        "output": "bin"
-                    }
-                ]
+                "assets": ["packages/tooling/code-rules/package.json"]
             }
         }
     },

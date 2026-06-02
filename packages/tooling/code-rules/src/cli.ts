@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { loadConfig } from '@webpieces/rules-config';
 import { toValidateCodeOptions } from './from-shared-config';
 import runValidateCode from './validate-code';

@@ -26,6 +26,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'validate-dtos': {},
     'prisma-converter': {},
     'no-direct-api-in-resolver': {},
+    'nx-wiring': { mode: 'ON' },
     'file-location': {
         mode: 'ON',
         allowedRootFiles: ['jest.setup.ts'],
