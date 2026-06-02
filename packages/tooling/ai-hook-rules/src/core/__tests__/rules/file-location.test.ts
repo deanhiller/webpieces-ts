@@ -8,10 +8,10 @@ import * as path from 'path';
 function ws(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-loc-'));
     fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify({
-        rules: { 'no-any-unknown': { enabled: false }, 'max-file-lines': { enabled: false },
-            'no-destructure': { enabled: false }, 'require-return-type': { enabled: false },
-            'no-unmanaged-exceptions': { enabled: false },
-            'file-location': { enabled: true, allowedRootFiles: ['jest.setup.ts'], excludePaths: ['scripts', 'tmp'] } },
+        rules: { 'no-any-unknown': { mode: 'OFF' }, 'max-file-lines': { mode: 'OFF' },
+            'no-destructure': { mode: 'OFF' }, 'require-return-type': { mode: 'OFF' },
+            'no-unmanaged-exceptions': { mode: 'OFF' },
+            'file-location': { mode: 'ON', allowedRootFiles: ['jest.setup.ts'], excludePaths: ['scripts', 'tmp', '**/*.d.ts', '**/jest.config.ts'] } },
         rulesDir: [],
     }));
     return dir;

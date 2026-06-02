@@ -1,23 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { isPathExcluded } from '@webpieces/rules-config';
+
 import type { FileRule, FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',
     'architecture', 'tmp', 'scripts',
+    '**/*.d.ts', '**/jest.config.ts',
 ];
 const DEFAULT_ALLOWED_ROOT_FILES = ['jest.setup.ts'];
-
-function isNodeModulesDir(name: string): boolean {
-    return name === 'node_modules' || name.startsWith('node_modules_');
-}
-
-function shouldSkipDir(name: string, excludePaths: readonly string[]): boolean {
-    if (isNodeModulesDir(name)) return true;
-    return excludePaths.indexOf(name) >= 0;
-}
 
 function findProjectRoot(filePath: string, workspaceRoot: string): string | null {
     let dir = path.dirname(filePath);
@@ -39,7 +33,7 @@ const fileLocationRule: FileRule = {
     },
     fixHint: [
         'Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.',
-        'Add the dir to file-location.excludePaths in webpieces.config.json',
+        'Add a dir or glob (e.g. "**/codegen.ts") to file-location.excludePaths in webpieces.config.json',
     ],
 
     check(ctx: FileContext): readonly Violation[] {
@@ -52,10 +46,10 @@ const fileLocationRule: FileRule = {
             ? ctx.options['allowedRootFiles'] as string[]
             : DEFAULT_ALLOWED_ROOT_FILES;
 
-        const relParts = ctx.relativePath.split(path.sep);
-        const topDir = relParts[0];
+        // Holistic exclusion (Layer 1 + Layer 2): bare dir names + globs.
+        if (isPathExcluded(ctx.relativePath, excludePaths)) return [];
 
-        if (topDir && shouldSkipDir(topDir, excludePaths)) return [];
+        const relParts = ctx.relativePath.split(path.sep);
         if (relParts.length === 1 && allowedRootFiles.indexOf(relParts[0]) >= 0) return [];
 
         const projectRoot = findProjectRoot(ctx.filePath, ctx.workspaceRoot);
@@ -69,8 +63,6 @@ const fileLocationRule: FileRule = {
         }
 
         const relToProject = path.relative(projectRoot, ctx.filePath);
-        const fileName = path.basename(ctx.filePath);
-        if (fileName === 'jest.config.ts') return [];
         if (!relToProject.startsWith('src' + path.sep) && relToProject !== 'src') {
             const projectName = path.relative(ctx.workspaceRoot, projectRoot);
             return [new V(

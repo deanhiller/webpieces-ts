@@ -23,11 +23,11 @@ describe('loadConfig', () => {
         expect(typeof (config.configPath === null || typeof config.configPath === 'string')).toBe('boolean');
     });
 
-    it('merges defaults with overrides and honors enabled:false', () => {
+    it('merges defaults with overrides and honors mode:OFF', () => {
         const body = JSON.stringify({
             rules: {
-                'max-file-lines': { enabled: true, limit: 500, mode: 'MODIFIED_FILES' },
-                'no-any-unknown': { enabled: false },
+                'max-file-lines': { limit: 500, mode: 'MODIFIED_FILES' },
+                'no-any-unknown': { mode: 'OFF' },
             },
         });
         const dir = mktmp({ [CONFIG_FILENAME]: body });
@@ -37,20 +37,20 @@ describe('loadConfig', () => {
 
         const maxFileLines = config.rules.get('max-file-lines');
         expect(maxFileLines).toBeDefined();
-        expect(maxFileLines!.enabled).toBe(true);
+        expect(maxFileLines!.isOff).toBe(false);
         expect(maxFileLines!.options['limit']).toBe(500);
         expect(maxFileLines!.options['mode']).toBe('MODIFIED_FILES');
 
         const noAnyUnknown = config.rules.get('no-any-unknown');
         expect(noAnyUnknown).toBeDefined();
-        expect(noAnyUnknown!.enabled).toBe(false);
+        expect(noAnyUnknown!.isOff).toBe(true);
+        expect(noAnyUnknown!.mode).toBe('OFF');
     });
 
     it('preserves unknown option keys for consumers that understand them', () => {
         const body = JSON.stringify({
             rules: {
                 'no-destructure': {
-                    enabled: true,
                     mode: 'MODIFIED_CODE',
                     disableAllowed: false,
                     ignoreModifiedUntilEpoch: 12345,

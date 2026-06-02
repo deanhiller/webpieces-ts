@@ -1,15 +1,15 @@
 {
     "rules": {
-        "no-any": { "enabled": true },
-        "max-file-lines": { "enabled": true, "limit": 900 },
+        "no-any": {},
+        "max-file-lines": { "limit": 900 },
         "file-location": {
-            "enabled": true,
+            "mode": "ON",
             "allowedRootFiles": ["jest.setup.ts"],
-            "excludePaths": ["scripts", "tmp", "architecture"]
+            "excludePaths": ["scripts", "tmp", "architecture", "**/*.d.ts"]
         },
-        "no-destructure": { "enabled": true },
-        "require-return-type": { "enabled": true },
-        "no-unmanaged-exceptions": { "enabled": true }
+        "no-destructure": {},
+        "require-return-type": {},
+        "no-unmanaged-exceptions": {}
     },
     "rulesDir": []
 }

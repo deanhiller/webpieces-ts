@@ -20,8 +20,8 @@
  *   no-unmanaged-exceptions  -> noUnmanagedExceptions
  *   no-direct-api-in-resolver -> noDirectApiInResolver
  *
- * A rule entry with enabled:false is surfaced as mode:'OFF' so the
- * downstream executor short-circuits the same way it did before.
+ * On/off is driven entirely by `mode`: a `mode:'OFF'` entry flows straight
+ * through to the downstream executor, which short-circuits on it.
  */
 
 import type { ResolvedConfig, ResolvedRuleConfig } from '@webpieces/rules-config';
@@ -37,7 +37,6 @@ function opt<T>(rule: ResolvedRuleConfig | undefined, key: string): T | undefine
 
 function modeOrOff<T extends string>(rule: ResolvedRuleConfig | undefined): T | undefined {
     if (!rule) return undefined;
-    if (rule.enabled === false) return 'OFF' as T;
     const mode = rule.options['mode'];
     return (mode as T) ?? undefined;
 }
