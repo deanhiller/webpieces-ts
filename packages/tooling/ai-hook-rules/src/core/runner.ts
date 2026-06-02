@@ -99,7 +99,7 @@ function runBashRules(
     for (const rule of rules) {
         if (rule.scope !== 'bash') continue;
         const ruleConfig = config.rules.get(rule.name);
-        if (!ruleConfig || ruleConfig.enabled === false) continue;
+        if (!ruleConfig || ruleConfig.isOff) continue;
         bashContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
         const vs = safeCheckBash(rule as BashRule, bashContext);
         if (vs.length > 0) {
@@ -123,7 +123,8 @@ function mergeOptions(defaultOptions: RuleOptions, ruleConfig: ResolvedRuleConfi
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(defaultOptions)) out[key] = defaultOptions[key];
     for (const key of Object.keys(ruleConfig.options)) {
-        if (key === 'enabled') continue;
+        // 'mode' is the framework-level on/off switch, not a rule option.
+        if (key === 'mode') continue;
         out[key] = ruleConfig.options[key];
     }
     return out;
@@ -160,7 +161,7 @@ function runEditRules(
     for (const rule of rules) {
         if (rule.scope !== 'edit') continue;
         const ruleConfig = config.rules.get(rule.name);
-        if (!ruleConfig || ruleConfig.enabled === false) continue;
+        if (!ruleConfig || ruleConfig.isOff) continue;
         const allViolations: Violation[] = [];
         for (const ctx of editContexts) {
             if (!ruleMatchesFile(rule, ctx.relativePath)) continue;
@@ -191,7 +192,7 @@ function runFileRules(
     for (const rule of rules) {
         if (rule.scope !== 'file') continue;
         const ruleConfig = config.rules.get(rule.name);
-        if (!ruleConfig || ruleConfig.enabled === false) continue;
+        if (!ruleConfig || ruleConfig.isOff) continue;
         if (!ruleMatchesFile(rule, fileContext.relativePath)) continue;
         fileContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
         const vs = safeCheckFile(rule as FileRule, fileContext);

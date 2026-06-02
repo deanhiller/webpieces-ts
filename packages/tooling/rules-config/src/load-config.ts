@@ -34,20 +34,15 @@ function mergeRule(
     // webpieces-disable no-any-unknown -- opaque option bag
     overrideRule: Record<string, unknown> | undefined,
 ): ResolvedRuleConfig {
-    if (!baseRule && !overrideRule) return new ResolvedRuleConfig(false, {});
-    if (!baseRule) return new ResolvedRuleConfig(enabledOf(overrideRule!), overrideRule as RuleOptions);
-    if (!overrideRule) return new ResolvedRuleConfig(enabledOf(baseRule), baseRule as RuleOptions);
+    if (!baseRule && !overrideRule) return new ResolvedRuleConfig({ mode: 'OFF' });
+    if (!baseRule) return new ResolvedRuleConfig(overrideRule! as RuleOptions);
+    if (!overrideRule) return new ResolvedRuleConfig(baseRule as RuleOptions);
 
     // webpieces-disable no-any-unknown -- building merged option bag
     const merged: Record<string, unknown> = {};
     for (const key of Object.keys(baseRule)) merged[key] = baseRule[key];
     for (const key of Object.keys(overrideRule)) merged[key] = overrideRule[key];
-    return new ResolvedRuleConfig(enabledOf(merged), merged as RuleOptions);
-}
-
-// webpieces-disable no-any-unknown -- opaque option bag
-function enabledOf(bag: Record<string, unknown>): boolean {
-    return bag['enabled'] !== false;
+    return new ResolvedRuleConfig(merged as RuleOptions);
 }
 
 function readRawConfig(configPath: string): RawConfigFile | null {

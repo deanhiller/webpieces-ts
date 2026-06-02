@@ -1,33 +1,40 @@
+// Default holistic exclude list for the file-location / validate-ts-in-src
+// rules. Bare names match a directory segment at any depth; globs match the
+// workspace-relative path. `**/*.d.ts` (ambient declarations) and
+// `**/jest.config.ts` legitimately live outside src/ and are exempt here.
+const DEFAULT_EXCLUDE_PATHS: readonly string[] = [
+    'node_modules', 'dist', '.nx', '.git',
+    'architecture', 'tmp', 'scripts',
+    '**/*.d.ts', '**/jest.config.ts',
+];
+
+// On/off is driven by `mode` ("OFF" disables; an absent mode leaves a rule
+// on). Code-rules entries omit `mode` so each executor keeps its own default
+// scope; simple on/off rules declare `mode: 'ON'` explicitly.
 // webpieces-disable no-any-unknown -- rule options are opaque at framework level
 export const defaultRules: Record<string, Record<string, unknown>> = {
-    'no-any-unknown': { enabled: true },
-    'no-implicit-any': { enabled: true },
-    'max-file-lines': { enabled: true, limit: 900 },
-    'max-method-lines': { enabled: true, limit: 80 },
-    'require-return-type': { enabled: true },
-    'no-inline-type-literals': { enabled: true },
-    'no-destructure': { enabled: true, allowTopLevel: true },
-    'catch-error-pattern': { enabled: true },
-    'no-unmanaged-exceptions': { enabled: true },
-    'no-shell-substitution': { enabled: true },
-    'validate-dtos': { enabled: true },
-    'prisma-converter': { enabled: true },
-    'no-direct-api-in-resolver': { enabled: true },
+    'no-any-unknown': {},
+    'no-implicit-any': {},
+    'max-file-lines': { limit: 900 },
+    'max-method-lines': { limit: 80 },
+    'require-return-type': {},
+    'no-inline-type-literals': {},
+    'no-destructure': { allowTopLevel: true },
+    'catch-error-pattern': {},
+    'no-unmanaged-exceptions': {},
+    'no-shell-substitution': { mode: 'ON' },
+    'validate-dtos': {},
+    'prisma-converter': {},
+    'no-direct-api-in-resolver': {},
     'file-location': {
-        enabled: true,
+        mode: 'ON',
         allowedRootFiles: ['jest.setup.ts'],
-        excludePaths: [
-            'node_modules', 'dist', '.nx', '.git',
-            'architecture', 'tmp', 'scripts',
-        ],
+        excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
     'validate-ts-in-src': {
-        enabled: true,
+        mode: 'ON',
         allowedRootFiles: ['jest.setup.ts'],
-        excludePaths: [
-            'node_modules', 'dist', '.nx', '.git',
-            'architecture', 'tmp', 'scripts',
-        ],
+        excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
 };
 

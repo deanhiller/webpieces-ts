@@ -3,18 +3,18 @@
  *
  * Two-layer rule:
  *   Layer 1: every .ts file inside an Nx project must live under src/
- *            (jest.config.ts at project root is the only exception)
  *   Layer 2: every .ts file anywhere in the workspace must belong to some
  *            Nx project. Orphan files (at workspace root or in a non-project
  *            directory) fail the rule unless explicitly allowlisted.
  *
- * Configurable via nx.json targetDefaults:
+ * `excludePaths` is holistic — its bare dir names and globs exempt files
+ * from BOTH layers. Defaults exempt **\/*.d.ts and **\/jest.config.ts.
+ *
+ * Configurable via webpieces.config.json:
  *   "validate-ts-in-src": {
- *       "options": {
- *           "mode": "ON",
- *           "excludePaths": [...],
- *           "allowedRootFiles": [...]
- *       }
+ *       "mode": "ON",            // "OFF" disables the rule
+ *       "excludePaths": [...],   // dir names + globs, e.g. "**\/codegen.ts"
+ *       "allowedRootFiles": [...]
  *   }
  *
  * Usage: nx run architecture:validate-ts-in-src
@@ -22,7 +22,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadConfig } from '@webpieces/rules-config';
+import { loadConfig, isPathExcluded } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -41,6 +41,7 @@ export interface ExecutorResult {
 const DEFAULT_EXCLUDE_PATHS: string[] = [
     'node_modules', 'dist', '.nx', '.git',
     'architecture', 'tmp', 'scripts',
+    '**/*.d.ts', '**/jest.config.ts',
 ];
 
 const DEFAULT_ALLOWED_ROOT_FILES: string[] = ['jest.setup.ts'];
@@ -95,7 +96,6 @@ function findTsFilesOutsideSrc(projectDir: string): string[] {
         if (entry.name === 'dist') continue;
 
         if (entry.isFile() && entry.name.endsWith('.ts')) {
-            if (entry.name === 'jest.config.ts') continue;
             violations.push(path.join(projectDir, entry.name));
         }
 
@@ -150,13 +150,18 @@ function findOrphanTsFiles(
     }
 }
 
-function checkLayerOne(projectRoots: string[], workspaceRoot: string): LayerOneViolation[] {
+function checkLayerOne(
+    projectRoots: string[],
+    workspaceRoot: string,
+    excludePaths: string[],
+): LayerOneViolation[] {
     const violations: LayerOneViolation[] = [];
     for (const projectDir of projectRoots) {
         const projectName = path.relative(workspaceRoot, projectDir);
         const tsFiles = findTsFilesOutsideSrc(projectDir);
         for (const tsFile of tsFiles) {
             const relativePath = path.relative(workspaceRoot, tsFile);
+            if (isPathExcluded(relativePath, excludePaths)) continue;
             violations.push(new LayerOneViolation(relativePath, projectName));
         }
     }
@@ -180,6 +185,7 @@ function checkLayerTwo(
         if (entry.isFile()) {
             if (!entry.name.endsWith('.ts')) continue;
             if (allowedRootFiles.includes(entry.name)) continue;
+            if (isPathExcluded(entry.name, excludePaths)) continue;
             violations.push(new LayerTwoViolation(entry.name));
             continue;
         }
@@ -194,7 +200,9 @@ function checkLayerTwo(
             orphans,
         );
         for (const orphan of orphans) {
-            violations.push(new LayerTwoViolation(path.relative(workspaceRoot, orphan)));
+            const relativePath = path.relative(workspaceRoot, orphan);
+            if (isPathExcluded(relativePath, excludePaths)) continue;
+            violations.push(new LayerTwoViolation(relativePath));
         }
     }
 
@@ -215,8 +223,11 @@ function reportLayerOneFailure(violations: LayerOneViolation[]): void {
         console.error(`  ❌ ${v.filePath}`);
     }
 
-    console.error('\nTo fix: Move the .ts file(s) into the src/ directory');
-    console.error('Only exception: jest.config.ts at project root\n');
+    console.error('\nTo fix, pick one:');
+    console.error('  (a) Move the .ts file(s) into the src/ directory');
+    console.error('  (b) Add a glob/dir to validate-ts-in-src.excludePaths in');
+    console.error('      webpieces.config.json (e.g. "**/codegen.ts"). Defaults already');
+    console.error('      exempt **/*.d.ts and **/jest.config.ts.\n');
 }
 
 function reportLayerTwoFailure(violations: LayerTwoViolation[]): void {
@@ -246,8 +257,8 @@ export default async function runExecutor(
     const shared = loadConfig(context.root);
     const rule = shared.rules.get('validate-ts-in-src');
 
-    if (rule && rule.enabled === false) {
-        console.log('\n⏭️  Skipping validate-ts-in-src (enabled: false)\n');
+    if (rule && rule.isOff) {
+        console.log('\n⏭️  Skipping validate-ts-in-src (mode: OFF)\n');
         return { success: true };
     }
 
@@ -261,7 +272,7 @@ export default async function runExecutor(
 
     const projectRoots = await getProjectRoots(workspaceRoot);
 
-    const layerOneViolations = checkLayerOne(projectRoots, workspaceRoot);
+    const layerOneViolations = checkLayerOne(projectRoots, workspaceRoot, excludePaths);
     const layerTwoViolations = checkLayerTwo(
         workspaceRoot, projectRoots, excludePaths, allowedRootFiles,
     );
@@ -278,6 +289,6 @@ export default async function runExecutor(
         reportLayerTwoFailure(layerTwoViolations);
     }
 
-    console.error('To disable: set rules["validate-ts-in-src"].enabled to false in webpieces.config.json\n');
+    console.error('To disable: set rules["validate-ts-in-src"].mode to "OFF" in webpieces.config.json\n');
     return { success: false };
 }
