@@ -48,6 +48,7 @@ export interface ValidationOptions {
     validateModifiedFiles?: boolean;
     validateVersionsLocked?: boolean;
     validateTsInSrc?: boolean;
+    validateNxWiring?: boolean;
     newMethodsMaxLines?: number;
     modifiedAndNewMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
@@ -107,6 +108,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validateModifiedFiles: true,
             validateVersionsLocked: true,
             validateTsInSrc: true,
+            validateNxWiring: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
             modifiedFilesMaxLines: 900,
@@ -286,6 +288,7 @@ function buildValidationTargetsList(
     }
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
     if (validations!.validateTsInSrc) targets.push('validate-ts-in-src');
+    if (validations!.validateNxWiring) targets.push('validate-nx-wiring');
     return targets;
 }
 
@@ -336,6 +339,9 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (validations.validateTsInSrc) {
         targets['validate-ts-in-src'] = createValidateTsInSrcTarget();
+    }
+    if (validations.validateNxWiring) {
+        targets['validate-nx-wiring'] = createValidateNxWiringTarget();
     }
 
     // Add validate-complete target that runs all enabled validations
@@ -573,6 +579,18 @@ function createValidateTsInSrcTarget(): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate all .ts files in projects are inside the src/ directory',
+        },
+    };
+}
+
+function createValidateNxWiringTarget(): TargetConfiguration {
+    return {
+        executor: '@webpieces/nx-webpieces-rules:validate-nx-wiring',
+        cache: false, // Cheap; depends on nx.json + project graph, not worth caching
+        inputs: ['{workspaceRoot}/nx.json', '{workspaceRoot}/webpieces.config.json'],
+        metadata: {
+            technologies: ['nx'],
+            description: 'Validate the webpieces validators are wired into the build via nx.json dependsOn',
         },
     };
 }

@@ -1,0 +1,19 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Nx Wiring Executor",
+    "description": "Validates that the webpieces validators are wired into the build via nx.json targetDefaults dependsOn, so a build cannot pass while running zero validators.",
+    "type": "object",
+    "properties": {
+        "requiredDeps": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Target names that each compile executor's dependsOn must include. Defaults: architecture:validate-complete, validate-no-file-import-cycles."
+        },
+        "compileExecutors": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Compile executors to require wiring on, but only when actually used in the project graph. Defaults: @nx/js:tsc, @angular/build:application."
+        }
+    },
+    "required": []
+}

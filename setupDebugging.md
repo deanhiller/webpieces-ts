@@ -35,6 +35,17 @@ When a consumer runs `pnpm install` in their project, `@webpieces/ai-hook-rules`
 - Warning: `Failed to create bin at .../wp-setup-ai-hooks. ENOENT: no such file or directory, chmod '.../src/bin/postinstall.js'`
 - Same problem affects `@webpieces/code-rules` with `"bin": { "wp-validate-code": "./src/cli.js" }`
 
+> **Clarification (retest — see Attempt 7):** This ENOENT is **WORKSPACE-ONLY**. It
+> happens only in THIS source monorepo, where the package is symlinked to its source dir
+> and the compiled `src/*.js` does not exist at `pnpm install` time (the build runs after
+> install). **CLIENT projects are NOT affected:** they install the *published npm tarball*,
+> which ships the compiled `src/cli.js` / `src/wp-ci.js` (the `files` field includes
+> `src/**/*`), so the bin target exists, `chmod` succeeds, and there is no warning. With
+> `#!/usr/bin/env node` as the first line of the `.ts` entry, tsc preserves the shebang into
+> the compiled output, so the file is directly executable. So for the *manual-command* bins
+> (no install-time need), pointing `bin` at the compiled `.js` is viable for consumers — the
+> shim was only ever guarding the workspace pre-build window.
+
 ## Attempt 5: Plain JS shim as bin entry (CURRENT)
 **What we did:** Same pattern as TypeScript's own `bin/tsc` → `lib/tsc.js`:
 - `bin/wp-setup-ai-hooks.js` — plain JS file that always exists (not compiled from TS)
@@ -80,6 +91,37 @@ Same fix applied to `@webpieces/code-rules`:
 - Removed `check_package_json_freshness()` from `scripts/build.sh` — false positives on non-dependency package.json changes (like bin entries) because it used file timestamps instead of content comparison
 
 **Status: IMPLEMENTING**
+
+## Attempt 7: De-shim the MANUAL-command bins only (keep the postinstall shims)
+**Insight:** Attempt 5's shims were applied uniformly, but only bins that run at
+*install time* (before any build) actually need a checked-in plain-JS shim. The
+manual-command bins have no install-time catch-22 — they run only after a build (workspace)
+or from a prebuilt package (consumer).
+
+**What we did:**
+- `@webpieces/code-rules` — dropped both shims. Added `#!/usr/bin/env node` to the top of
+  `src/wp-ci.ts` and `src/cli.ts` (tsc preserves it), set
+  `"bin": { "wp-ci": "./src/wp-ci.js", "wp-validate-code": "./src/cli.js" }`, deleted
+  `bin/wp-ci.js`, `bin/wp-validate-code.js`, and the now-empty `bin/` build asset in
+  project.json.
+
+**Kept as shims (genuine install-time catch-22 — do NOT de-shim):**
+- `ai-hook-rules/bin/postinstall.js` — wired to `postinstall`, runs during `pnpm install`
+  before any build.
+- `ai-hook-rules/bin/wp-setup-ai-hooks.js` — run for THIS project in a pre-build context;
+  shares the same compiled `src/bin/postinstall.js`.
+- `packages/rules/postinstall.js` — plain-JS install-time message; no TS behind it.
+
+**Expectation / verification plan:**
+- CLIENT projects (published version): clean — compiled `.js` ships in the tarball, so the
+  bin resolves and runs. This is the intended win.
+- THIS monorepo: a cosmetic `ENOENT chmod` warning may appear during `pnpm install`
+  (workspace pre-build window; these bins aren't used at install). See the Attempt-4
+  clarification above.
+- **To confirm:** publish this branch, install the published version in a client, verify no
+  ENOENT and that `wp-ci` / `wp-validate-code` execute.
+
+**Status: TESTING ON CLIENTS**
 
 ## Key Lessons
 1. `postinstall` scripts are blocked by pnpm v10+ — but this is the STANDARD pattern (prisma, sharp, esbuild do the same)
