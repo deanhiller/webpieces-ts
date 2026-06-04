@@ -3,114 +3,33 @@ import { toValidateCodeOptions } from './from-shared-config';
 import runNewMethodsExecutor from './validate-new-methods';
 import runModifiedMethodsExecutor from './validate-modified-methods';
 import runModifiedFilesExecutor from './validate-modified-files';
-import runReturnTypesExecutor, { ReturnTypeMode } from './validate-return-types';
-import runNoInlineTypesExecutor, { NoInlineTypesMode } from './validate-no-inline-types';
-import runNoAnyUnknownExecutor, { NoAnyUnknownMode } from './validate-no-any-unknown';
-import runNoImplicitAnyExecutor, { NoImplicitAnyMode } from './validate-no-implicit-any';
-import runValidateDtosExecutor, { ValidateDtosMode } from './validate-dtos';
-import runPrismaConvertersExecutor, { PrismaConverterMode } from './validate-prisma-converters';
-import runNoDestructureExecutor, { NoDestructureMode } from './validate-no-destructure';
-import runCatchErrorPatternExecutor, { CatchErrorPatternMode } from './validate-catch-error-pattern';
-import runNoUnmanagedExceptionsExecutor, { NoUnmanagedExceptionsMode } from './validate-no-unmanaged-exceptions';
-import runNoDirectApiResolverExecutor, { NoDirectApiResolverMode } from './validate-no-direct-api-resolver';
-
-export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
-
-export interface MethodMaxLimitConfig {
-    limit?: number;
-    mode?: MethodMaxLimitMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface FileMaxLimitConfig {
-    limit?: number;
-    mode?: FileMaxLimitMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface RequireReturnTypeConfig {
-    mode?: ReturnTypeMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface NoInlineTypeLiteralsConfig {
-    mode?: NoInlineTypesMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface NoAnyUnknownConfig {
-    mode?: NoAnyUnknownMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface NoImplicitAnyConfig {
-    mode?: NoImplicitAnyMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface ValidateDtosConfig {
-    mode?: ValidateDtosMode;
-    disableAllowed?: boolean;
-    prismaSchemaPath?: string;
-    dtoSourcePaths?: string[];
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface PrismaConverterConfig {
-    mode?: PrismaConverterMode;
-    disableAllowed?: boolean;
-    schemaPath?: string;
-    convertersPaths?: string[];
-    enforcePaths?: string[];
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface NoDestructureConfig {
-    mode?: NoDestructureMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface CatchErrorPatternConfig {
-    mode?: CatchErrorPatternMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface NoUnmanagedExceptionsConfig {
-    mode?: NoUnmanagedExceptionsMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-}
-
-export interface NoDirectApiResolverConfig {
-    mode?: NoDirectApiResolverMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    enforcePaths?: string[];
-}
-
-export interface ValidateCodeOptions {
-    methodMaxLimit?: MethodMaxLimitConfig;
-    fileMaxLimit?: FileMaxLimitConfig;
-    requireReturnType?: RequireReturnTypeConfig;
-    noInlineTypeLiterals?: NoInlineTypeLiteralsConfig;
-    noAnyUnknown?: NoAnyUnknownConfig;
-    noImplicitAny?: NoImplicitAnyConfig;
-    validateDtos?: ValidateDtosConfig;
-    prismaConverter?: PrismaConverterConfig;
-    noDestructure?: NoDestructureConfig;
-    catchErrorPattern?: CatchErrorPatternConfig;
-    noUnmanagedExceptions?: NoUnmanagedExceptionsConfig;
-    noDirectApiInResolver?: NoDirectApiResolverConfig;
-}
+import runReturnTypesExecutor from './validate-return-types';
+import runNoInlineTypesExecutor from './validate-no-inline-types';
+import runNoAnyUnknownExecutor from './validate-no-any-unknown';
+import runNoImplicitAnyExecutor from './validate-no-implicit-any';
+import runValidateDtosExecutor from './validate-dtos';
+import runPrismaConvertersExecutor from './validate-prisma-converters';
+import runNoDestructureExecutor from './validate-no-destructure';
+import runCatchErrorPatternExecutor from './validate-catch-error-pattern';
+import runNoUnmanagedExceptionsExecutor from './validate-no-unmanaged-exceptions';
+import runNoDirectApiResolverExecutor from './validate-no-direct-api-resolver';
+import type {
+    MethodMaxLimitMode,
+    FileMaxLimitMode,
+    ReturnTypeMode,
+    NoInlineTypesMode,
+    NoAnyUnknownMode,
+    NoImplicitAnyMode,
+    ValidateDtosMode,
+    PrismaConverterMode,
+    NoDestructureMode,
+    CatchErrorPatternMode,
+    NoUnmanagedExceptionsMode,
+    NoDirectApiResolverMode,
+    MethodMaxLimitConfig,
+    FileMaxLimitConfig,
+    ValidateCodeOptions,
+} from './validate-code-options';
 
 export interface ExecutorResult {
     success: boolean;

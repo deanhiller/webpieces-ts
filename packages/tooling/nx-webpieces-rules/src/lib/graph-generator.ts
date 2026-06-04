@@ -1,15 +1,20 @@
 /**
  * Graph Generator
  *
- * Generates dependency graph from project.json files in the workspace.
- * Reads build.dependsOn and implicitDependencies to determine project relationships.
+ * Builds the workspace dependency graph from nx's OWN project graph
+ * (createProjectGraphAsync). nx already derives those edges from BOTH source
+ * imports AND package.json workspace deps, so there is no hand-maintained edge
+ * list and no separate import scan — we consume what nx already computed.
+ *
+ *  - generateGraph()        → the FULL graph (every workspace edge nx knows).
+ *                             This is what build order follows via `^build`.
+ *  - generateReducedGraph() → transitive reduction of the full graph: the minimal
+ *                             edge set with identical reachability, used as the
+ *                             architecture VIEW written to dependencies.json.
  */
 
-import {
-    createProjectGraphAsync,
-    readProjectsConfigurationFromProjectGraph,
-    ProjectConfiguration,
-} from '@nx/devkit';
+import { createProjectGraphAsync } from '@nx/devkit';
+import { transitiveReduction } from './transitive-reduction';
 
 /**
  * Projects to exclude from graph validation (tools, configs, etc.)
@@ -17,81 +22,59 @@ import {
 const EXCLUDED_PROJECTS = new Set<string>(['architecture']);
 
 /**
- * Extract project dependencies from project.json's build.dependsOn and implicitDependencies
- */
-function extractBuildDependencies(projectConfig: ProjectConfiguration): string[] {
-    const deps: string[] = [];
-
-    // 1. Read from build.dependsOn
-    const buildTarget = projectConfig.targets?.['build'];
-    if (buildTarget && buildTarget.dependsOn) {
-        for (const dep of buildTarget.dependsOn) {
-            if (typeof dep === 'string') {
-                // Format: "project-name:build" or just "build" (for self)
-                const match = dep.match(/^([^:]+):build$/);
-                if (match) {
-                    deps.push(match[1]);
-                }
-            }
-        }
-    }
-
-    // 2. Also read from implicitDependencies
-    if (projectConfig.implicitDependencies && Array.isArray(projectConfig.implicitDependencies)) {
-        for (const dep of projectConfig.implicitDependencies) {
-            if (typeof dep === 'string' && !deps.includes(dep)) {
-                deps.push(dep);
-            }
-        }
-    }
-
-    return deps.sort();
-}
-
-/**
- * Generate raw dependency graph from project.json files
- * Returns: { projectName: [dependencyNames] }
+ * Build the full dependency graph from nx's project graph.
+ *
+ * nx's `projectGraph.nodes` are the workspace projects; `projectGraph.dependencies`
+ * holds every edge nx inferred (imports + package.json). We keep only edges whose
+ * target is another workspace project (dropping `npm:` externals) and drop excluded
+ * projects.
+ *
+ * Returns: { projectName: [workspaceDependencyNames] } (deps sorted, deduped)
  */
 export async function generateRawGraph(): Promise<Record<string, string[]>> {
     const projectGraph = await createProjectGraphAsync();
-    const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
+    const workspaceProjects = new Set(Object.keys(projectGraph.nodes));
+
     const rawDeps: Record<string, string[]> = {};
 
-    for (const [projectName, projectConfig] of Object.entries(projectsConfig.projects)) {
-        // Skip excluded projects (tools, plugins)
+    for (const projectName of workspaceProjects) {
         if (EXCLUDED_PROJECTS.has(projectName)) {
             continue;
         }
 
-        // Extract dependencies from build.dependsOn in project.json
-        const deps = extractBuildDependencies(projectConfig);
-        rawDeps[projectName] = deps;
+        const edges = projectGraph.dependencies[projectName] ?? [];
+        const deps = new Set<string>();
+        for (const edge of edges) {
+            const target = edge.target;
+            // Keep only workspace→workspace edges; skip self and excluded projects.
+            if (target === projectName) continue;
+            if (!workspaceProjects.has(target)) continue; // drops npm: externals
+            if (EXCLUDED_PROJECTS.has(target)) continue;
+            deps.add(target);
+        }
+
+        rawDeps[projectName] = Array.from(deps).sort();
     }
 
     return rawDeps;
 }
 
 /**
- * Transform project names (sorting dependencies only - no scope transformation)
+ * The full workspace dependency graph (every edge nx knows).
  */
-export function transformGraph(rawGraph: Record<string, string[]>): Record<string, string[]> {
-    const result: Record<string, string[]> = {};
-
-    for (const [projectName, deps] of Object.entries(rawGraph)) {
-        // Use project names as-is - don't force @webpieces scope on client projects
-        const transformedName = projectName;
-        const transformedDeps = deps.sort();
-
-        result[transformedName] = transformedDeps;
-    }
-
-    return result;
+export async function generateGraph(): Promise<Record<string, string[]>> {
+    return generateRawGraph();
 }
 
 /**
- * Generate complete dependency graph with transformations
+ * The transitively-reduced view of the full graph. This is the canonical
+ * "architecture graph" written to and validated against dependencies.json.
+ *
+ * Reduction is undefined on cycles; callers that care about cycles
+ * (validate-no-architecture-cycles) run on the FULL graph and throw first. For the
+ * view executors, the downstream topological sort also throws on any cycle.
  */
-export async function generateGraph(): Promise<Record<string, string[]>> {
-    const rawGraph = await generateRawGraph();
-    return transformGraph(rawGraph);
+export async function generateReducedGraph(): Promise<Record<string, string[]>> {
+    const full = await generateGraph();
+    return transitiveReduction(full);
 }

@@ -15,10 +15,7 @@
                     "packages/http/http-server/package.json",
                     "packages/http/http-server/README.md"
                 ]
-            },
-            "dependsOn": [
-                "http-routing:build"
-            ]
+            }
         }
     },
     "tags": []

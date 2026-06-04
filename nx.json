@@ -43,7 +43,11 @@
             }
         },
         "@angular/build:application": {
-            "dependsOn": ["architecture:validate-complete", "validate-no-file-import-cycles"]
+            "dependsOn": [
+                "architecture:validate-complete",
+                "validate-no-file-import-cycles",
+                "^build"
+            ]
         },
         "validate-code": {
             "inputs": ["default", "{workspaceRoot}/webpieces.config.json"]

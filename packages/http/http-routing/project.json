@@ -15,8 +15,7 @@
                     "packages/http/http-routing/package.json",
                     "packages/http/http-routing/README.md"
                 ]
-            },
-            "dependsOn": ["http-api:build", "http-filters:build"]
+            }
         }
     },
     "tags": []

@@ -41,8 +41,7 @@
           "sourceMap": true
         }
       },
-      "defaultConfiguration": "production",
-      "dependsOn": ["example-apis:build", "http-client:build"]
+      "defaultConfiguration": "production"
     },
     "serve": {
       "executor": "@angular/build:dev-server",

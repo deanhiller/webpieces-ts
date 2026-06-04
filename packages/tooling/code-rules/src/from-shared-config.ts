@@ -25,7 +25,7 @@
  */
 
 import type { ResolvedConfig, ResolvedRuleConfig } from '@webpieces/rules-config';
-import type { ValidateCodeOptions } from './validate-code';
+import type { ValidateCodeOptions } from './validate-code-options';
 
 // webpieces-disable no-any-unknown -- coerces opaque option values pulled from JSON
 function opt<T>(rule: ResolvedRuleConfig | undefined, key: string): T | undefined {
