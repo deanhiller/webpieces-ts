@@ -13,12 +13,7 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
-            "dependsOn": [
-                "^build",
-                "ai-hook-rules:build",
-                "code-rules:build",
-                "eslint-rules:build"
-            ],
+            "dependsOn": ["^build"],
             "options": {
                 "outputPath": "dist/packages/tooling/nx-webpieces-rules",
                 "main": "packages/tooling/nx-webpieces-rules/src/index.ts",

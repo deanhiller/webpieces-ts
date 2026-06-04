@@ -10,7 +10,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { writeTemplate } from '@webpieces/rules-config';
-import { generateGraph } from '../../lib/graph-generator';
+import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { compareGraphs } from '../../lib/graph-comparator';
 import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
@@ -59,13 +59,13 @@ export default async function runExecutor(
             return { success: false };
         }
 
-        // Step 1: Generate current graph from project.json files
+        // Step 1: Build the full graph from nx, then transitively reduce it
         console.log('📊 Generating current dependency graph...');
-        const rawGraph = await generateGraph();
+        const reducedGraph = await generateReducedGraph();
 
         // Step 2: Topological sort (to get enhanced graph with levels)
         console.log('🔄 Computing topological layers...');
-        const currentGraph = sortGraphTopologically(rawGraph);
+        const currentGraph = sortGraphTopologically(reducedGraph);
 
         // Step 3: Load saved graph
         console.log('📂 Loading saved graph...');

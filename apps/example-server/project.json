@@ -18,11 +18,7 @@
                 "main": "apps/example-server/src/server.ts",
                 "tsConfig": "apps/example-server/tsconfig.app.json",
                 "assets": []
-            },
-            "dependsOn": [
-                "http-server:build",
-                "example-apis:build"
-            ]
+            }
         },
         "serve": {
             "continuous": true,

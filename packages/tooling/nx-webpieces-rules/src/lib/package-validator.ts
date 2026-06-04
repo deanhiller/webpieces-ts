@@ -25,10 +25,20 @@ export interface ProjectValidationResult {
 
 /**
  * Overall validation result
+ *
+ * `errors` fail the build; their only fix is ADDITIVE ("add to package.json"), so they can
+ * never push a user toward removing a runtime-required dependency.
+ *
+ * `warnings` never fail the build. Workspace deps in package.json that the architecture graph
+ * can't reach are reported here, NOT as errors: a transitively-reachable or even unreachable
+ * entry can still be a real runtime dependency (e.g. a peerDependency or a generated client
+ * that nx's import analysis doesn't traverse). Erroring on these is the "runtime-validity trap"
+ * that previously forced a bad package.json edit — so we only warn.
  */
 export interface ValidationResult {
     valid: boolean;
     errors: string[];
+    warnings: string[];
     projectResults: ProjectValidationResult[];
 }
 
@@ -154,6 +164,7 @@ function computeTransitiveClosure(
 interface SingleProjectValidation {
     result: ProjectValidationResult;
     errors: string[];
+    warnings: string[];
 }
 
 function classifyDeps(
@@ -215,17 +226,21 @@ function validateSingleProject(
                 `  Fix: Add these to package.json dependencies`
         );
     }
+
+    // Unreachable workspace extras are WARN-ONLY: they may be real runtime deps that nx's
+    // import analysis can't see (peerDependency / generated client). Never error — that is
+    // the runtime-validity trap. We surface them so genuine drift is still visible.
+    const warnings: string[] = [];
     for (const extraPkg of classification.extraWorkspaceDeps) {
         const extraProject = packageToProject.get(extraPkg);
-        errors.push(
-            `Project ${projectName} (${projectRoot}/package.json) has "${extraPkg}" in package.json but architecture/dependencies.json has no path ${projectName} → ${extraProject} (not even transitively).\n` +
-                `  Fix: Either add "${extraProject}:build" to project.json:build.dependsOn (then run \`nx run architecture:generate\`), or remove "${extraPkg}" from package.json dependencies.`
+        warnings.push(
+            `Project ${projectName} (${projectRoot}/package.json) has "${extraPkg}" but the architecture graph has no path ${projectName} → ${extraProject}.\n` +
+                `  This is allowed (it may be a runtime-only/peer dependency). If it is genuinely unused, you may remove it.`
         );
     }
 
-    const valid =
-        classification.missingInPackageJson.length === 0 &&
-        classification.extraWorkspaceDeps.length === 0;
+    // extraWorkspaceDeps do NOT affect validity — only missing (additive-fix) errors do.
+    const valid = classification.missingInPackageJson.length === 0;
     return {
         result: {
             project: projectName,
@@ -234,6 +249,7 @@ function validateSingleProject(
             extraInPackageJson: classification.extraInPackageJson,
         },
         errors,
+        warnings,
     };
 }
 
@@ -251,6 +267,7 @@ export async function validatePackageJsonDependencies(
     }
 
     const errors: string[] = [];
+    const warnings: string[] = [];
     const projectResults: ProjectValidationResult[] = [];
 
     for (const [projectName, entry] of Object.entries(graph)) {
@@ -271,7 +288,8 @@ export async function validatePackageJsonDependencies(
         );
         projectResults.push(validation.result);
         errors.push(...validation.errors);
+        warnings.push(...validation.warnings);
     }
 
-    return { valid: errors.length === 0, errors, projectResults };
+    return { valid: errors.length === 0, errors, warnings, projectResults };
 }

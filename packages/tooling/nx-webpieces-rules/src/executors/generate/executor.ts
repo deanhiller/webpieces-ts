@@ -8,7 +8,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { generateGraph } from '../../lib/graph-generator';
+import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { toError } from '../../toError';
@@ -32,13 +32,13 @@ export default async function runExecutor(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        // Step 1: Generate current graph from project.json files
-        console.log('📊 Generating dependency graph from project.json files...');
-        const rawGraph = await generateGraph();
+        // Step 1: Build the full graph from nx, then transitively reduce it to the view
+        console.log("📊 Generating dependency graph from nx's project graph...");
+        const reducedGraph = await generateReducedGraph();
 
         // Step 2: Topological sort (to assign levels for visualization)
         console.log('🔄 Computing topological layers...');
-        const enhancedGraph = sortGraphTopologically(rawGraph);
+        const enhancedGraph = sortGraphTopologically(reducedGraph);
 
         // Step 3: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');

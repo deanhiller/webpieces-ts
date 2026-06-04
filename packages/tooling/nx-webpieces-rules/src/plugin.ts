@@ -100,7 +100,10 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
         graphPath: 'architecture/dependencies.json',
         validations: {
             noCycles: true,
-            noSkipLevelDeps: true,
+            // Retired: the architecture graph is now auto-reduced in `generate`, so the
+            // committed graph can never contain a skip-level edge. Defaults off; the
+            // executor is a no-op kept for one release. See validate-no-skiplevel-deps.
+            noSkipLevelDeps: false,
             architectureUnchanged: true,
             validatePackageJson: true,
             validateNewMethods: true,

@@ -15,8 +15,7 @@
                     "packages/http/http-client/package.json",
                     "packages/http/http-client/README.md"
                 ]
-            },
-            "dependsOn": ["http-api:build"]
+            }
         }
     },
     "tags": []

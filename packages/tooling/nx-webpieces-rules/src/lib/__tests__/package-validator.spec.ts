@@ -74,8 +74,10 @@ describe('validatePackageJsonDependencies — missing dep', () => {
     });
 });
 
-describe('validatePackageJsonDependencies — unreachable extra', () => {
-    it('errors when package.json has a workspace extra not reachable via graph', async () => {
+describe('validatePackageJsonDependencies — unreachable extra (warn-only)', () => {
+    it('warns but does NOT fail when a workspace extra is not reachable via graph', async () => {
+        // This is the runtime-validity trap: an unreachable package.json entry may still be a
+        // real runtime/peer dependency, so it must never fail the build — only warn.
         const fx = setupFixture([
             {
                 root: 'packages/a',
@@ -88,8 +90,9 @@ describe('validatePackageJsonDependencies — unreachable extra', () => {
         ]);
         const graph = { a: { level: 0, dependsOn: [] }, b: { level: 0, dependsOn: [] } };
         const result = await validatePackageJsonDependencies(graph, fx.tmpDir);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.includes('a → b'))).toBe(true);
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+        expect(result.warnings.some((w) => w.includes('a → b'))).toBe(true);
         fx.cleanup();
     });
 });

@@ -43,7 +43,11 @@
             }
         },
         "@angular/build:application": {
-            "dependsOn": ["architecture:validate-complete", "validate-no-file-import-cycles"]
+            "dependsOn": [
+                "architecture:validate-complete",
+                "validate-no-file-import-cycles",
+                "^build"
+            ]
         },
         "validate-code": {
             "inputs": ["default", "{workspaceRoot}/webpieces.config.json"]
@@ -61,7 +65,15 @@
         },
         {
             "plugin": "@webpieces/nx-webpieces-rules",
-            "options": {}
+            "options": {
+                "_bootstrapNote": "TEMPORARY: architectureUnchanged + validatePackageJson are disabled to bootstrap the new graph model. The currently-published plugin builds the graph from build.dependsOn (now removed), so it cannot validate this commit. Re-enable (delete this options block) in the follow-up PR after bumping to the new published plugin version.",
+                "workspace": {
+                    "validations": {
+                        "architectureUnchanged": false,
+                        "validatePackageJson": false
+                    }
+                }
+            }
         }
     ]
 }

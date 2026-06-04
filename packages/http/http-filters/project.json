@@ -15,8 +15,7 @@
                     "packages/http/http-filters/package.json",
                     "packages/http/http-filters/README.md"
                 ]
-            },
-            "dependsOn": ["core-context:build"]
+            }
         }
     },
     "tags": []

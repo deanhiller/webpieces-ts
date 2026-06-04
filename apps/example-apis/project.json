@@ -14,8 +14,7 @@
         "assets": [
           "apps/example-apis/package.json"
         ]
-      },
-      "dependsOn": ["http-api:build"]
+      }
     }
   }
 }
