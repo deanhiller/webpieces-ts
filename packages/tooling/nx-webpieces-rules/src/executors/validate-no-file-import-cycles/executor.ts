@@ -47,6 +47,7 @@ const RULE_NAME = 'no-file-import-cycles';
 // webpieces-disable no-any-unknown -- minimal hand-typed surface for an untyped dependency
 interface MadgeOptions {
     fileExtensions: string[];
+    excludeRegExp?: string[];
     detectiveOptions?: Record<string, unknown>;
 }
 interface MadgeInstance {
@@ -85,8 +86,19 @@ function isFailingActive(epoch: number | undefined): boolean {
     return true;
 }
 
+// Never scan build output or declaration files. A project that compiles into a
+// local `dist/` (or build/out/coverage) would otherwise report cycles among the
+// emitted `*.d.ts` files instead of — or in addition to — the real source
+// cycles, so the gate would flag compiled-output noise and could diverge from a
+// plain `madge src` run. Excluding these makes the gate scan source only.
+const EXCLUDE_BUILD_DIRS = '(^|/)(node_modules|dist|build|out|coverage|\\.nx|\\.next)(/|$)';
+const EXCLUDE_DECLARATION_FILES = '\\.d\\.ts$';
+
 function buildMadgeOptions(ignoreTypeOnly: boolean): MadgeOptions {
-    const options: MadgeOptions = { fileExtensions: ['ts', 'tsx'] };
+    const options: MadgeOptions = {
+        fileExtensions: ['ts', 'tsx'],
+        excludeRegExp: [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES],
+    };
     if (ignoreTypeOnly) {
         // dependency-tree's TS detective drops `import type {...}` edges with this flag.
         options.detectiveOptions = {
