@@ -10,6 +10,21 @@
             "schema": "./src/executors/visualize/schema.json",
             "description": "Generate visual representations of the architecture graph"
         },
+        "visualize-runtime": {
+            "implementation": "./src/executors/visualize-runtime/executor",
+            "schema": "./src/executors/visualize-runtime/schema.json",
+            "description": "Render the runtime microservice graph (runtime-dependencies.json)"
+        },
+        "validate-runtime-markers": {
+            "implementation": "./src/executors/validate-runtime-markers/executor",
+            "schema": "./src/executors/validate-runtime-markers/schema.json",
+            "description": "Per-project: validate live.json matches the project's api-project dependencies"
+        },
+        "validate-runtime-architecture": {
+            "implementation": "./src/executors/validate-runtime-architecture/executor",
+            "schema": "./src/executors/validate-runtime-architecture/schema.json",
+            "description": "Validate the runtime microservice graph: no disallowed cycles, unchanged vs committed"
+        },
         "validate-no-architecture-cycles": {
             "implementation": "./src/executors/validate-no-architecture-cycles/executor",
             "schema": "./src/executors/validate-no-architecture-cycles/schema.json",

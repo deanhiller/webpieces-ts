@@ -24,6 +24,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-unmanaged-exceptions': {},
     'no-shell-substitution': { mode: 'ON' },
     'no-file-import-cycles': { mode: 'ON' },
+    'runtime-architecture': { mode: 'ON', apiProjectPaths: [], allowedCycles: [] },
     'validate-dtos': {},
     'prisma-converter': {},
     'no-direct-api-in-resolver': {},

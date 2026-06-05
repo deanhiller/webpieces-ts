@@ -25,6 +25,11 @@ import type {
     CreateNodesResult,
     TargetConfiguration,
 } from '@nx/devkit';
+import {
+    createVisualizeRuntimeTarget,
+    createValidateRuntimeArchitectureTarget,
+    createValidateRuntimeMarkersTarget,
+} from './runtime-targets';
 
 /**
  * Circular dependency checking options
@@ -49,6 +54,7 @@ export interface ValidationOptions {
     validateVersionsLocked?: boolean;
     validateTsInSrc?: boolean;
     validateNxWiring?: boolean;
+    runtimeArchitecture?: boolean;
     newMethodsMaxLines?: number;
     modifiedAndNewMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
@@ -67,6 +73,7 @@ export interface ValidationOptions {
 export interface FeatureOptions {
     generate?: boolean;
     visualize?: boolean;
+    visualizeRuntime?: boolean;
 }
 
 /**
@@ -112,6 +119,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validateVersionsLocked: true,
             validateTsInSrc: true,
             validateNxWiring: true,
+            runtimeArchitecture: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
             modifiedFilesMaxLines: 900,
@@ -120,6 +128,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
         features: {
             generate: true,
             visualize: true,
+            visualizeRuntime: true,
         },
     },
 };
@@ -162,7 +171,10 @@ async function createNodesFunction(
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
 
-    // Add per-project targets (circular-deps, ci)
+    // Add the microsvc virtual project (runtime graph visualize)
+    addMicrosvcProject(results, projectFiles, opts, context);
+
+    // Add per-project targets (circular-deps, ci, runtime-markers)
     addPerProjectTargets(results, projectFiles, opts, context);
 
     return results;
@@ -188,6 +200,46 @@ function addArchitectureProject(
                 name: 'architecture',
                 root: 'architecture',
                 targets: workspaceTargets,
+            },
+        },
+    };
+
+    const firstProjectFile = projectFiles[0];
+    if (firstProjectFile) {
+        results.push([firstProjectFile, result] as const);
+    }
+}
+
+/**
+ * Add the virtual `microsvc` project, exposing `microsvc:visualize` for the
+ * runtime microservice graph (alongside `architecture:visualize`).
+ */
+function addMicrosvcProject(
+    results: CreateNodesResultV2,
+    projectFiles: readonly string[],
+    opts: Required<ArchitecturePluginOptions>,
+    context: CreateNodesContextV2,
+): void {
+    if (!opts.workspace.enabled) return;
+    if (!opts.workspace.features!.visualizeRuntime) return;
+
+    const archDirPath = join(context.workspaceRoot, 'architecture');
+    if (!existsSync(archDirPath)) return;
+
+    // Root at a dedicated `microsvc/` dir so it does not collide with the
+    // `architecture` project's root. The committed runtime graph still lives in
+    // architecture/runtime-dependencies.json (read via the workspace root).
+    const microsvcDirPath = join(context.workspaceRoot, 'microsvc');
+    if (!existsSync(microsvcDirPath)) return;
+
+    const result: CreateNodesResult = {
+        projects: {
+            microsvc: {
+                name: 'microsvc',
+                root: 'microsvc',
+                targets: {
+                    visualize: createVisualizeRuntimeTarget(),
+                },
             },
         },
     };
@@ -241,6 +293,12 @@ function addPerProjectTargets(
             }
         }
 
+        // Add per-project runtime-marker validation (validates this project's
+        // live.json against its own api-project deps, independently).
+        if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
+            targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
+        }
+
         // Add ci target to ALL projects (both project.json and package.json)
         targets['ci'] = createCiTarget();
 
@@ -292,6 +350,7 @@ function buildValidationTargetsList(
     if (validations!.validateVersionsLocked) targets.push('validate-versions-locked');
     if (validations!.validateTsInSrc) targets.push('validate-ts-in-src');
     if (validations!.validateNxWiring) targets.push('validate-nx-wiring');
+    if (validations!.runtimeArchitecture) targets.push('validate-runtime-architecture');
     return targets;
 }
 
@@ -346,6 +405,9 @@ function createWorkspaceTargetsWithoutPrefix(
     if (validations.validateNxWiring) {
         targets['validate-nx-wiring'] = createValidateNxWiringTarget();
     }
+    if (validations.runtimeArchitecture) {
+        targets['validate-runtime-architecture'] = createValidateRuntimeArchitectureTarget();
+    }
 
     // Add validate-complete target that runs all enabled validations
     const validationTargets = buildValidationTargetsList(validations);
@@ -356,68 +418,19 @@ function createWorkspaceTargetsWithoutPrefix(
     return targets;
 }
 
-/**
- * Create workspace-level architecture validation targets (DEPRECATED - keeping for backward compat)
- * Used when root project.json exists (old style with '.' project)
- */
-function createWorkspaceTargets(
-    opts: Required<ArchitecturePluginOptions>,
-): Record<string, TargetConfiguration> {
-    const targets: Record<string, TargetConfiguration> = {};
-    const prefix = opts.workspace.targetPrefix!;
-    const graphPath = opts.workspace.graphPath!;
-
-    // Add help target (always available)
-    targets[`${prefix}help`] = createHelpTarget();
-
-    if (opts.workspace.features!.generate) {
-        targets[`${prefix}generate`] = createGenerateTarget(graphPath);
-    }
-
-    if (opts.workspace.features!.visualize) {
-        targets[`${prefix}visualize`] = createVisualizeTarget(prefix, graphPath);
-    }
-
-    if (opts.workspace.validations!.noCycles) {
-        targets[`${prefix}validate-no-architecture-cycles`] = createValidateNoCyclesTarget();
-    }
-
-    if (opts.workspace.validations!.architectureUnchanged) {
-        targets[`${prefix}validate-architecture-unchanged`] =
-            createValidateUnchangedTarget(graphPath);
-    }
-
-    if (opts.workspace.validations!.noSkipLevelDeps) {
-        targets[`${prefix}validate-no-skiplevel-deps`] = createValidateNoSkipLevelTarget();
-    }
-
-    if (opts.workspace.validations!.validatePackageJson) {
-        targets[`${prefix}validate-packagejson`] = createValidatePackageJsonTarget();
-    }
-
-    // Use combined validate-code instead of 3 separate targets
-    // Options come from webpieces.config.json at the workspace root
-    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)
-    if (
-        opts.workspace.validations!.validateNewMethods ||
-        opts.workspace.validations!.validateModifiedMethods ||
-        opts.workspace.validations!.validateModifiedFiles
-    ) {
-        targets[`${prefix}validate-code`] = createValidateCodeTarget();
-    }
-
-    return targets;
-}
-
 function createGenerateTarget(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:generate',
         cache: false,
-        outputs: ['{workspaceRoot}/architecture/dependencies.json'],
+        outputs: [
+            '{workspaceRoot}/architecture/dependencies.json',
+            '{workspaceRoot}/architecture/runtime-dependencies.json',
+        ],
         options: { graphPath },
         metadata: {
             technologies: ['nx'],
-            description: 'Generate the architecture dependency graph from project.json files',
+            description:
+                'Generate the architecture dependency graph and the runtime microservice graph',
         },
     };
 }
@@ -426,18 +439,6 @@ function createVisualizeTargetWithoutPrefix(graphPath: string): TargetConfigurat
     return {
         executor: '@webpieces/nx-webpieces-rules:visualize',
         dependsOn: ['generate'],
-        options: { graphPath },
-        metadata: {
-            technologies: ['nx'],
-            description: 'Generate visual representations of the architecture graph',
-        },
-    };
-}
-
-function createVisualizeTarget(prefix: string, graphPath: string): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:visualize',
-        dependsOn: [`${prefix}generate`],
         options: { graphPath },
         metadata: {
             technologies: ['nx'],

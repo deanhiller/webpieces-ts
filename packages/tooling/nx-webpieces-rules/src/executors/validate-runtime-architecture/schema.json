@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Runtime Architecture Executor",
+    "description": "Workspace: validate the runtime microservice graph has no disallowed cycles and matches the committed runtime-dependencies.json. Config from webpieces.config.json (runtime-architecture).",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

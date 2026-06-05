@@ -1,0 +1,42 @@
+{
+    "services": {
+        "example-client": {
+            "level": 1,
+            "implements": [],
+            "uses": [
+                "example-apis"
+            ],
+            "dependsOn": [
+                "example-server"
+            ]
+        },
+        "example-server": {
+            "level": 0,
+            "implements": [
+                "example-apis"
+            ],
+            "uses": [],
+            "dependsOn": []
+        }
+    },
+    "apis": {
+        "example-apis": {
+            "implementedBy": [
+                "example-server"
+            ],
+            "usedBy": [
+                "example-client"
+            ]
+        }
+    },
+    "runtimeEdges": [
+        {
+            "from": "example-client",
+            "to": "example-server",
+            "via": [
+                "example-apis"
+            ]
+        }
+    ],
+    "unresolvedUses": []
+}
