@@ -16,7 +16,8 @@
         "@webpieces/ai-hook-rules": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
-        "@webpieces/rules-config": "workspace:*"
+        "@webpieces/rules-config": "workspace:*",
+        "madge": "8.0.0"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"
