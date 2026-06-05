@@ -1,15 +1,14 @@
 name: Release
 
 on:
+    # Always release on every push to main. A previous `paths:` filter skipped
+    # releases when a publish-relevant change lived only in pnpm-lock.yaml (a new
+    # dependency was added but the lockfile-only PR didn't match any path), so the
+    # new dep never got published. Versioning is automatic (VERSION + run number),
+    # so releasing on every main push is safe; the cost is a noop-version publish
+    # on pure docs/CI changes, which is acceptable to never silently skip a release.
     push:
         branches: [main]
-        paths:
-            - 'packages/**'
-            - 'VERSION'
-            - 'nx.json'
-            - 'package.json'
-            - 'tsconfig.base.json'
-            - 'apps/**/tsconfig*.json'
     workflow_dispatch:
         inputs:
             build_number:
