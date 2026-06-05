@@ -13,7 +13,6 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
-            "dependsOn": ["^build"],
             "options": {
                 "outputPath": "dist/packages/tooling/eslint-rules",
                 "main": "packages/tooling/eslint-rules/src/index.ts",
