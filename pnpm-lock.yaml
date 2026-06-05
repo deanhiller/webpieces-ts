@@ -246,6 +246,9 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      madge:
+        specifier: 8.0.0
+        version: 8.0.0(typescript@5.9.3)
 
   packages/tooling/rules-config:
     dependencies:
