@@ -13,7 +13,6 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
-            "dependsOn": ["^build"],
             "options": {
                 "outputPath": "dist/packages/tooling/ai-hook-rules",
                 "main": "packages/tooling/ai-hook-rules/src/index.ts",

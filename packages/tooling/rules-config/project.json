@@ -13,7 +13,6 @@
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],
-            "dependsOn": ["^build"],
             "options": {
                 "outputPath": "dist/packages/tooling/rules-config",
                 "main": "packages/tooling/rules-config/src/index.ts",
