@@ -23,6 +23,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'catch-error-pattern': {},
     'no-unmanaged-exceptions': {},
     'no-shell-substitution': { mode: 'ON' },
+    'no-file-import-cycles': { mode: 'ON' },
     'validate-dtos': {},
     'prisma-converter': {},
     'no-direct-api-in-resolver': {},

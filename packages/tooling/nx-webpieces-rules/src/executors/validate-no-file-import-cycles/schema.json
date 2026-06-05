@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate No File Import Cycles Executor",
+    "description": "Checks a project for circular file imports with madge. On/off and a time-boxed grace window come from webpieces.config.json (rule: no-file-import-cycles).",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

@@ -59,6 +59,10 @@
             "mode": "OFF",
             "disableAllowed": true
         },
+        "no-file-import-cycles": {
+            "mode": "ON",
+            "ignoreTypeOnly": false
+        },
         "validate-ts-in-src": {
             "mode": "ON",
             "allowedRootFiles": ["jest.setup.ts"],

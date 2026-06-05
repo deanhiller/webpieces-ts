@@ -641,22 +641,26 @@ function createHelpTarget(): TargetConfiguration {
 }
 
 /**
- * Create per-project circular dependency checking target
- * Runs on project root (.) to check ALL TypeScript files in the project
+ * Create per-project circular dependency checking target.
+ *
+ * Uses the `validate-no-file-import-cycles` executor (which bundles madge as a
+ * dependency) rather than a runtime `npx madge` fetch. The executor reads
+ * webpieces.config.json so the gate can be turned on/off (`mode`) and
+ * time-boxed (`ignoreModifiedUntilEpoch`) like every other webpieces rule.
+ *
+ * Note `projectRoot` is intentionally unused now — the executor derives the
+ * project root from the Nx context — but the param is kept for call-site
+ * symmetry with the rest of the per-project target factories.
  */
-function createCircularDepsTarget(projectRoot: string, targetName: string): TargetConfiguration {
+function createCircularDepsTarget(_projectRoot: string, _targetName: string): TargetConfiguration {
     return {
-        executor: 'nx:run-commands',
+        executor: '@webpieces/nx-webpieces-rules:validate-no-file-import-cycles',
         cache: true,
-        inputs: ['default'],
+        inputs: ['default', '{workspaceRoot}/webpieces.config.json'],
         outputs: [] as string[],
-        options: {
-            command: 'npx madge --circular --extensions ts,tsx .',
-            cwd: projectRoot,
-        },
         metadata: {
             technologies: ['madge'],
-            description: 'Check for circular dependencies using madge',
+            description: 'Check for circular file-import dependencies using madge',
         },
     };
 }
