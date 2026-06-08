@@ -31,12 +31,12 @@ export interface ExecutorResult {
  */
 async function generateRuntimeGraph(workspaceRoot: string): Promise<void> {
     const config = loadRuntimeConfig(workspaceRoot);
-    if (config.off || config.apiProjectPaths.length === 0) {
-        console.log('⏭️  Runtime graph skipped (runtime-architecture OFF or no apiProjectPaths)');
+    if (config.off || config.servicePaths.length === 0) {
+        console.log('⏭️  Runtime graph skipped (runtime-architecture OFF or no servicePaths)');
         return;
     }
-    console.log('📡 Generating runtime graph from live.json markers...');
-    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths);
+    console.log('📡 Generating runtime graph from service-contract.json files...');
+    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths, config.servicePaths);
     const runtimeGraph = assembleRuntimeGraph(model, workspaceRoot);
     saveRuntimeGraph(runtimeGraph, workspaceRoot);
     const serviceCount = Object.keys(runtimeGraph.services).length;

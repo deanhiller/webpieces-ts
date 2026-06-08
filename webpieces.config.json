@@ -65,6 +65,7 @@
         },
         "runtime-architecture": {
             "mode": "ON",
+            "servicePaths": ["apps/*"],
             "apiProjectPaths": ["apps/example-apis"],
             "allowedCycles": []
         },

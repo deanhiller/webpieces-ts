@@ -1,8 +1,9 @@
 /**
  * Runtime Graph
  *
- * Assembles the runtime microservice graph from the per-service `live.json`
- * markers, and saves/loads the committed `architecture/runtime-dependencies.json`.
+ * Assembles the runtime microservice graph from the per-service
+ * `service-contract.json` files, and saves/loads the committed
+ * `architecture/runtime-dependencies.json`.
  *
  * The runtime edge Z -> X (Z depends on X at runtime) is INFERRED: Z `uses` api
  * Y and X `implements` api Y. This edge does not exist in the compile-time
@@ -12,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { sortGraphTopologically } from './graph-sorter';
-import { readLiveMarker, resolvePackageNames } from './runtime-markers';
+import { readServiceContract, resolvePackageNames } from './runtime-markers';
 import type { WorkspaceModel } from './runtime-markers';
 import { toError } from '../toError';
 
@@ -60,16 +61,20 @@ interface EdgeResult {
     unresolved: RuntimeUnresolved[];
 }
 
-/** Collect every project that has a live.json, with its declarations resolved to projects. */
+/** Collect every service project (servicePaths), with its declarations resolved to projects. */
 function collectServiceDecls(model: WorkspaceModel, workspaceRoot: string): ServiceDecl[] {
     const decls: ServiceDecl[] = [];
     for (const info of model.projects.values()) {
-        const marker = readLiveMarker(workspaceRoot, info.root);
-        if (!marker) continue;
+        if (!info.isService) continue;
+        // A service missing its contract still appears as a node (empty edges);
+        // validate-runtime-markers fails it separately for the missing file.
+        const contract = readServiceContract(workspaceRoot, info.root);
+        const implementsPkgs = contract ? contract.implements : [];
+        const usesPkgs = contract ? contract.uses : [];
         decls.push({
             name: info.name,
-            implements: resolvePackageNames(model, marker.implements).projects.sort(),
-            uses: resolvePackageNames(model, marker.uses).projects.sort(),
+            implements: resolvePackageNames(model, implementsPkgs).projects.sort(),
+            uses: resolvePackageNames(model, usesPkgs).projects.sort(),
         });
     }
     return decls.sort((a: ServiceDecl, b: ServiceDecl) => a.name.localeCompare(b.name));
@@ -161,7 +166,7 @@ function assignLevels(adjacency: Record<string, string[]>): Record<string, numbe
     return levels;
 }
 
-/** Assemble the full runtime graph from the workspace model + live.json markers. */
+/** Assemble the full runtime graph from the workspace model + service contracts. */
 export function assembleRuntimeGraph(model: WorkspaceModel, workspaceRoot: string): RuntimeGraph {
     const decls = collectServiceDecls(model, workspaceRoot);
     const apis = buildApiIndex(decls);

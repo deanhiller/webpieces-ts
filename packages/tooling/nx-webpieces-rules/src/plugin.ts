@@ -294,7 +294,7 @@ function addPerProjectTargets(
         }
 
         // Add per-project runtime-marker validation (validates this project's
-        // live.json against its own api-project deps, independently).
+        // service-contract.json against its own api-project deps, independently).
         if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
             targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
         }

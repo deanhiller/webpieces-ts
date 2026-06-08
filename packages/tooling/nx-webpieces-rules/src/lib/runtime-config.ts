@@ -25,6 +25,7 @@ export interface AllowedCycle {
 export interface RuntimeRuleConfig {
     off: boolean;
     apiProjectPaths: string[];
+    servicePaths: string[];
     ignoreModifiedUntilEpoch?: number;
     allowedCycles: AllowedCycle[];
 }
@@ -36,6 +37,7 @@ export interface RuntimeRuleConfig {
  */
 interface RuntimeRuleRaw {
     apiProjectPaths?: string[];
+    servicePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
     allowedCycles?: AllowedCycle[];
 }
@@ -52,6 +54,7 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
     return {
         off: rule?.isOff ?? false,
         apiProjectPaths: Array.isArray(raw.apiProjectPaths) ? raw.apiProjectPaths : [],
+        servicePaths: Array.isArray(raw.servicePaths) ? raw.servicePaths : [],
         ignoreModifiedUntilEpoch:
             typeof raw.ignoreModifiedUntilEpoch === 'number' ? raw.ignoreModifiedUntilEpoch : undefined,
         allowedCycles: Array.isArray(raw.allowedCycles) ? raw.allowedCycles.filter(isUsableCycle) : [],

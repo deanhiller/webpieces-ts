@@ -85,13 +85,13 @@ export default async function runExecutor(
         console.log(`\n⏭️  Skipping ${RUNTIME_RULE_NAME} (mode: OFF)\n`);
         return { success: true };
     }
-    if (config.apiProjectPaths.length === 0) {
-        console.log(`\n⏭️  ${RUNTIME_RULE_NAME}: no apiProjectPaths configured — nothing to validate\n`);
+    if (config.servicePaths.length === 0) {
+        console.log(`\n⏭️  ${RUNTIME_RULE_NAME}: no servicePaths configured — nothing to validate\n`);
         return { success: true };
     }
 
     console.log('\n📡 Validating runtime microservice architecture\n');
-    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths);
+    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths, config.servicePaths);
     const graph = assembleRuntimeGraph(model, workspaceRoot);
 
     const problems: string[] = checkCycles(graph, config.allowedCycles);

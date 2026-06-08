@@ -1,18 +1,21 @@
 /**
  * Runtime Markers
  *
- * Reads the per-service `live.json` marker files and builds a workspace model
- * used to assemble the runtime microservice graph and to validate each service
- * independently.
+ * Reads the per-service `service-contract.json` files and builds a workspace
+ * model used to assemble the runtime microservice graph and to validate each
+ * service independently.
  *
- * `live.json` (at a project root) declares, at api-PROJECT granularity (by
- * package name), which api projects a service IMPLEMENTS (serves) and which it
- * USES (calls as a client):
+ * `service-contract.json` (at a service's project root) declares, at api-PROJECT
+ * granularity (by package name), which api projects a service IMPLEMENTS (serves)
+ * and which it USES (calls as a client):
  *
  *   { "implements": ["@scope/checkout-api"], "uses": ["@scope/payments-api"] }
  *
- * An "api project" is any project whose workspace-relative root matches one of
- * the `apiProjectPaths` globs from webpieces.config.json (e.g. "libraries/apis/*").
+ * Classification (from webpieces.config.json globs):
+ *   - api project: root matches `apiProjectPaths` (e.g. "libraries/apis/*").
+ *   - service:     root matches `servicePaths` (e.g. "services/*") AND is not an
+ *                  api project (api classification wins, so the lists may overlap
+ *                  harmlessly). Every service must have a service-contract.json.
  */
 
 import * as fs from 'fs';
@@ -21,10 +24,10 @@ import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } fr
 import { isPathExcluded } from '@webpieces/rules-config';
 import { toError } from '../toError';
 
-export const LIVE_MARKER_FILENAME = 'live.json';
+export const SERVICE_CONTRACT_FILENAME = 'service-contract.json';
 
-/** Parsed `live.json` contents (package names). */
-export interface LiveMarker {
+/** Parsed `service-contract.json` contents (api package names). */
+export interface ServiceContract {
     implements: string[];
     uses: string[];
 }
@@ -35,6 +38,7 @@ export interface ProjectInfo {
     root: string;
     packageName: string | null;
     isApi: boolean;
+    isService: boolean;
     /** Workspace project names this project depends on (from the Nx graph). */
     deps: string[];
 }
@@ -55,7 +59,7 @@ export interface ResolvedNames {
 interface PackageJsonShape {
     name?: string;
 }
-interface LiveMarkerShape {
+interface ServiceContractShape {
     implements?: string[];
     uses?: string[];
 }
@@ -64,13 +68,10 @@ interface GraphEdge {
     target: string;
 }
 
-/**
- * A project root is an "api project" when it matches one of the apiProjectPaths
- * globs. Reuses the shared glob matcher (segment / glob / dir-prefix semantics).
- */
-function isApiRoot(root: string, apiProjectPaths: string[]): boolean {
-    if (apiProjectPaths.length === 0) return false;
-    return isPathExcluded(root, apiProjectPaths);
+/** True when a project root matches one of the given globs (segment/glob/dir-prefix). */
+function matchesGlobs(root: string, globs: string[]): boolean {
+    if (globs.length === 0) return false;
+    return isPathExcluded(root, globs);
 }
 
 function readPackageName(workspaceRoot: string, projectRoot: string): string | null {
@@ -110,6 +111,7 @@ function collectDeps(
 export async function buildWorkspaceModel(
     workspaceRoot: string,
     apiProjectPaths: string[],
+    servicePaths: string[],
 ): Promise<WorkspaceModel> {
     const projectGraph = await createProjectGraphAsync();
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
@@ -123,11 +125,14 @@ export async function buildWorkspaceModel(
         if (root === '' || root === '.') continue;
 
         const packageName = readPackageName(workspaceRoot, root);
+        const isApi = matchesGlobs(root, apiProjectPaths);
         projects.set(name, {
             name,
             root,
             packageName,
-            isApi: isApiRoot(root, apiProjectPaths),
+            isApi,
+            // api classification wins, so servicePaths and apiProjectPaths may overlap.
+            isService: !isApi && matchesGlobs(root, servicePaths),
             deps: collectDeps(name, projectGraph.dependencies, workspaceNames),
         });
         if (packageName) byPackageName.set(packageName, name);
@@ -136,28 +141,28 @@ export async function buildWorkspaceModel(
     return { projects, byPackageName };
 }
 
-/** Read and normalize a project's `live.json`, or null if it has none. */
-export function readLiveMarker(workspaceRoot: string, projectRoot: string): LiveMarker | null {
-    const fullPath = path.join(workspaceRoot, projectRoot, LIVE_MARKER_FILENAME);
+/** Read and normalize a project's `service-contract.json`, or null if it has none. */
+export function readServiceContract(workspaceRoot: string, projectRoot: string): ServiceContract | null {
+    const fullPath = path.join(workspaceRoot, projectRoot, SERVICE_CONTRACT_FILENAME);
     if (!fs.existsSync(fullPath)) return null;
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const raw = fs.readFileSync(fullPath, 'utf-8');
-        const parsed = JSON.parse(raw) as LiveMarkerShape;
+        const parsed = JSON.parse(raw) as ServiceContractShape;
         return {
             implements: Array.isArray(parsed.implements) ? parsed.implements : [],
             uses: Array.isArray(parsed.uses) ? parsed.uses : [],
         };
     } catch (err: unknown) {
         const error = toError(err);
-        throw new Error(`Failed to parse ${projectRoot}/${LIVE_MARKER_FILENAME}: ${error.message}`);
+        throw new Error(`Failed to parse ${projectRoot}/${SERVICE_CONTRACT_FILENAME}: ${error.message}`);
     }
 }
 
 /**
- * Map a list of api package names (from live.json) to workspace project names.
- * Unknown names (not a workspace package) are returned in `unknown`.
+ * Map a list of api package names (from a service contract) to workspace project
+ * names. Unknown names (not a workspace package) are returned in `unknown`.
  */
 export function resolvePackageNames(
     model: WorkspaceModel,

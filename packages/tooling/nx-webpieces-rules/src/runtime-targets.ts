@@ -24,7 +24,7 @@ export function createValidateRuntimeArchitectureTarget(): TargetConfiguration {
         cache: false,
         inputs: [
             'default',
-            '{workspaceRoot}/**/live.json',
+            '{workspaceRoot}/**/service-contract.json',
             '{workspaceRoot}/architecture/runtime-dependencies.json',
             '{workspaceRoot}/webpieces.config.json',
         ],
@@ -35,15 +35,15 @@ export function createValidateRuntimeArchitectureTarget(): TargetConfiguration {
     };
 }
 
-/** Per-project: validate this project's live.json matches its api-project deps. */
+/** Per-project: validate this project's service-contract.json matches its api-project deps. */
 export function createValidateRuntimeMarkersTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-runtime-markers',
         cache: true,
-        inputs: ['default', '{workspaceRoot}/**/live.json', '{workspaceRoot}/webpieces.config.json'],
+        inputs: ['default', '{workspaceRoot}/**/service-contract.json', '{workspaceRoot}/webpieces.config.json'],
         metadata: {
             technologies: ['nx'],
-            description: "Validate this project's live.json matches its api-project dependencies",
+            description: "Validate this service's service-contract.json matches its api-project dependencies",
         },
     };
 }
