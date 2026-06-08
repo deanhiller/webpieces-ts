@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Visualize Runtime Executor",
+    "description": "Render the runtime microservice graph (runtime-dependencies.json) to DOT + HTML.",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

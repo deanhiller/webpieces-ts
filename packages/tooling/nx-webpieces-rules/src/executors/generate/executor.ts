@@ -11,6 +11,9 @@ import type { ExecutorContext } from '@nx/devkit';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
+import { buildWorkspaceModel } from '../../lib/runtime-markers';
+import { assembleRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
+import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
@@ -19,6 +22,27 @@ export interface GenerateExecutorOptions {
 
 export interface ExecutorResult {
     success: boolean;
+}
+
+/**
+ * Generate the runtime microservice graph alongside the compile-time graph, so
+ * one regenerate produces both committed files. Skipped when the
+ * runtime-architecture rule is OFF or no apiProjectPaths are configured.
+ */
+async function generateRuntimeGraph(workspaceRoot: string): Promise<void> {
+    const config = loadRuntimeConfig(workspaceRoot);
+    if (config.off || config.servicePaths.length === 0) {
+        console.log('⏭️  Runtime graph skipped (runtime-architecture OFF or no servicePaths)');
+        return;
+    }
+    console.log('📡 Generating runtime graph from service-contract.json files...');
+    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths, config.servicePaths);
+    const runtimeGraph = assembleRuntimeGraph(model, workspaceRoot);
+    saveRuntimeGraph(runtimeGraph, workspaceRoot);
+    const serviceCount = Object.keys(runtimeGraph.services).length;
+    console.log(
+        `✅ Runtime graph saved (${serviceCount} services, ${runtimeGraph.runtimeEdges.length} runtime edges)`,
+    );
 }
 
 export default async function runExecutor(
@@ -44,6 +68,9 @@ export default async function runExecutor(
         console.log('💾 Saving graph to architecture/dependencies.json...');
         saveGraph(enhancedGraph, workspaceRoot, graphPath);
         console.log('✅ Graph saved successfully');
+
+        // Step 4: Generate the runtime microservice graph at the same time
+        await generateRuntimeGraph(workspaceRoot);
 
         // Print summary
         const projectCount = Object.keys(enhancedGraph).length;

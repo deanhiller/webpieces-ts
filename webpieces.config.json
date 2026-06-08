@@ -63,6 +63,12 @@
             "mode": "ON",
             "ignoreTypeOnly": false
         },
+        "runtime-architecture": {
+            "mode": "ON",
+            "servicePaths": ["apps/*"],
+            "apiProjectPaths": ["apps/example-apis"],
+            "allowedCycles": []
+        },
         "validate-ts-in-src": {
             "mode": "ON",
             "allowedRootFiles": ["jest.setup.ts"],
