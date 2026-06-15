@@ -127,21 +127,29 @@ routeBuilder.addRoute(
 
 **Use Inversify for DI:**
 - `@injectable()` - Mark classes as injectable
-- `@inject(TYPES.Something)` - Inject dependencies
-- `@provideSingleton()` - Register singleton in container
+- `@provideSingleton()` - Register singleton in container (preferred over `@injectable` alone)
 - `@unmanaged()` - Mark constructor params that aren't injected
 
-**Pattern:**
+**Prefer inject-by-type over Symbol tokens:**
+
+Annotate the implementation class with `@provideSingleton()` and inject it by its concrete class type — no `Symbol()` token, no `@inject(TOKEN)` call needed:
+
 ```typescript
 @provideSingleton()
-@Controller()
-export class SaveController {
-  constructor(
-    @inject(TYPES.Counter) private counter: Counter,
-    @inject(TYPES.RemoteApi) private remoteService: RemoteApi
-  ) {}
+export class IdentityResolver { ... }
+
+@provideSingleton()
+export class MyService {
+  constructor(private readonly identityResolver: IdentityResolver) {}
 }
 ```
+
+**`Symbol()` DI tokens are blocked by `no-symbol-di-tokens`** (enforced via `@webpieces/ai-hook-rules` PreToolUse hook and `@webpieces/code-rules` MODIFIED_CODE gate). Symbols are only allowed in:
+- `libraries/apis/**` — bind a generated client to its API contract
+- `libraries/apis-external/**` — bind an impl to an external-SDK API
+- `packages/http/http-api/**` — framework primitives (e.g. `Symbol.for` multiInject)
+
+For a swappable default-impl-behind-an-interface inside those packages, use `@provideSingletonAs(TOKEN)`. Anywhere else, add `// webpieces-disable no-symbol-di-tokens -- <reason>` to the line if absolutely necessary.
 
 ### 6. Decorators
 

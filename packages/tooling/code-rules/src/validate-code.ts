@@ -13,6 +13,7 @@ import runNoDestructureExecutor from './validate-no-destructure';
 import runCatchErrorPatternExecutor from './validate-catch-error-pattern';
 import runNoUnmanagedExceptionsExecutor from './validate-no-unmanaged-exceptions';
 import runNoDirectApiResolverExecutor from './validate-no-direct-api-resolver';
+import runNoSymbolDiTokensExecutor from './validate-no-symbol-di-tokens';
 import type {
     MethodMaxLimitMode,
     FileMaxLimitMode,
@@ -26,6 +27,7 @@ import type {
     CatchErrorPatternMode,
     NoUnmanagedExceptionsMode,
     NoDirectApiResolverMode,
+    NoSymbolDiTokensMode,
     MethodMaxLimitConfig,
     FileMaxLimitConfig,
     ValidateCodeOptions,
@@ -86,6 +88,10 @@ interface ParsedConfig {
     noDirectApiResolverDisableAllowed: boolean;
     noDirectApiResolverIgnoreEpoch: number | undefined;
     noDirectApiResolverEnforcePaths: string[];
+    noSymbolDiTokensMode: NoSymbolDiTokensMode;
+    noSymbolDiTokensDisableAllowed: boolean;
+    noSymbolDiTokensIgnoreEpoch: number | undefined;
+    noSymbolDiTokensAllowedPaths: string[];
 }
 
 interface ResolvedMethodMode {
@@ -111,6 +117,7 @@ const VALID_MODES: Record<string, string[]> = {
     catchErrorPattern:    ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
     noUnmanagedExceptions: ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
     noDirectApiInResolver: ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'],
+    noSymbolDiTokens: ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'],
 };
 
 /**
@@ -133,6 +140,7 @@ function validateModes(options: ValidateCodeOptions): string[] {
         ['catchErrorPattern', options.catchErrorPattern?.mode],
         ['noUnmanagedExceptions', options.noUnmanagedExceptions?.mode],
         ['noDirectApiInResolver', options.noDirectApiInResolver?.mode],
+        ['noSymbolDiTokens', options.noSymbolDiTokens?.mode],
     ];
 
     for (const entry of modeEntries) {
@@ -245,6 +253,10 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         noDirectApiResolverDisableAllowed: options.noDirectApiInResolver?.disableAllowed ?? true,
         noDirectApiResolverIgnoreEpoch: options.noDirectApiInResolver?.ignoreModifiedUntilEpoch,
         noDirectApiResolverEnforcePaths: options.noDirectApiInResolver?.enforcePaths ?? [],
+        noSymbolDiTokensMode: options.noSymbolDiTokens?.mode ?? 'OFF',
+        noSymbolDiTokensDisableAllowed: options.noSymbolDiTokens?.disableAllowed ?? true,
+        noSymbolDiTokensIgnoreEpoch: options.noSymbolDiTokens?.ignoreModifiedUntilEpoch,
+        noSymbolDiTokensAllowedPaths: options.noSymbolDiTokens?.allowedPaths ?? [],
     };
 }
 
@@ -269,6 +281,7 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   Catch error pattern: mode=${config.catchErrorPatternMode}, disableAllowed=${config.catchErrorPatternDisableAllowed}`);
     console.log(`   No unmanaged exceptions: mode=${config.noUnmanagedExceptionsMode}, disableAllowed=${config.noUnmanagedExceptionsDisableAllowed}`);
     console.log(`   No direct API in resolver: mode=${config.noDirectApiResolverMode}, disableAllowed=${config.noDirectApiResolverDisableAllowed}`);
+    console.log(`   No Symbol DI tokens: mode=${config.noSymbolDiTokensMode}, disableAllowed=${config.noSymbolDiTokensDisableAllowed}`);
     console.log('');
 }
 
@@ -279,7 +292,7 @@ function isAllOff(config: ParsedConfig): boolean {
         config.validateDtosMode === 'OFF' &&
         config.prismaConverterMode === 'OFF' && config.noDestructureMode === 'OFF' &&
         config.catchErrorPatternMode === 'OFF' && config.noUnmanagedExceptionsMode === 'OFF' &&
-        config.noDirectApiResolverMode === 'OFF';
+        config.noDirectApiResolverMode === 'OFF' && config.noSymbolDiTokensMode === 'OFF';
 }
 
 async function runMethodValidators(config: ParsedConfig, workspaceRoot: string): Promise<ExecutorResult[]> {
@@ -363,6 +376,12 @@ async function runAllValidators(config: ParsedConfig, workspaceRoot: string): Pr
         disableAllowed: config.noDirectApiResolverDisableAllowed,
         ignoreModifiedUntilEpoch: config.noDirectApiResolverIgnoreEpoch,
         enforcePaths: config.noDirectApiResolverEnforcePaths,
+    }, workspaceRoot));
+    results.push(await runNoSymbolDiTokensExecutor({
+        mode: config.noSymbolDiTokensMode,
+        disableAllowed: config.noSymbolDiTokensDisableAllowed,
+        ignoreModifiedUntilEpoch: config.noSymbolDiTokensIgnoreEpoch,
+        allowedPaths: config.noSymbolDiTokensAllowedPaths,
     }, workspaceRoot));
     return results;
 }

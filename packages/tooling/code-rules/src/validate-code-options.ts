@@ -20,6 +20,7 @@ import type { NoDestructureMode } from './validate-no-destructure';
 import type { CatchErrorPatternMode } from './validate-catch-error-pattern';
 import type { NoUnmanagedExceptionsMode } from './validate-no-unmanaged-exceptions';
 import type { NoDirectApiResolverMode } from './validate-no-direct-api-resolver';
+import type { NoSymbolDiTokensMode } from './validate-no-symbol-di-tokens';
 
 export type {
     ReturnTypeMode,
@@ -32,6 +33,7 @@ export type {
     CatchErrorPatternMode,
     NoUnmanagedExceptionsMode,
     NoDirectApiResolverMode,
+    NoSymbolDiTokensMode,
 };
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
@@ -117,6 +119,13 @@ export interface NoDirectApiResolverConfig {
     enforcePaths?: string[];
 }
 
+export interface NoSymbolDiTokensConfig {
+    mode?: NoSymbolDiTokensMode;
+    disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+    allowedPaths?: string[];
+}
+
 export interface ValidateCodeOptions {
     methodMaxLimit?: MethodMaxLimitConfig;
     fileMaxLimit?: FileMaxLimitConfig;
@@ -130,4 +139,5 @@ export interface ValidateCodeOptions {
     catchErrorPattern?: CatchErrorPatternConfig;
     noUnmanagedExceptions?: NoUnmanagedExceptionsConfig;
     noDirectApiInResolver?: NoDirectApiResolverConfig;
+    noSymbolDiTokens?: NoSymbolDiTokensConfig;
 }

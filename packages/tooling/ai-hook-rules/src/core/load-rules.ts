@@ -13,6 +13,7 @@ import requireReturnType from './rules/require-return-type';
 import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
 import catchErrorPattern from './rules/catch-error-pattern';
 import noShellSubstitution from './rules/no-shell-substitution';
+import noSymbolDiTokens from './rules/no-symbol-di-tokens';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
@@ -27,6 +28,7 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'no-unmanaged-exceptions': noUnmanagedExceptions as Rule,
     'catch-error-pattern': catchErrorPattern as Rule,
     'no-shell-substitution': noShellSubstitution as Rule,
+    'no-symbol-di-tokens': noSymbolDiTokens as Rule,
 };
 
 export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
