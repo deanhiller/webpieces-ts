@@ -28,6 +28,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'validate-dtos': {},
     'prisma-converter': {},
     'no-direct-api-in-resolver': {},
+    'no-symbol-di-tokens': {},
     'nx-wiring': { mode: 'ON' },
     'file-location': {
         mode: 'ON',

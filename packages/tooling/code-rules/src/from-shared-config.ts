@@ -113,5 +113,11 @@ export function toValidateCodeOptions(shared: ResolvedConfig): ValidateCodeOptio
             ignoreModifiedUntilEpoch: opt<number>(r('no-direct-api-in-resolver'), 'ignoreModifiedUntilEpoch'),
             enforcePaths: opt<string[]>(r('no-direct-api-in-resolver'), 'enforcePaths'),
         },
+        noSymbolDiTokens: {
+            mode: modeOrOff(r('no-symbol-di-tokens')),
+            disableAllowed: opt<boolean>(r('no-symbol-di-tokens'), 'disableAllowed'),
+            ignoreModifiedUntilEpoch: opt<number>(r('no-symbol-di-tokens'), 'ignoreModifiedUntilEpoch'),
+            allowedPaths: opt<string[]>(r('no-symbol-di-tokens'), 'allowedPaths'),
+        },
     };
 }
