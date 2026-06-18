@@ -6,9 +6,9 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["ON", "OFF"],
+            "enum": ["ON", "OFF", "MODIFIED_FILES"],
             "default": "ON",
-            "description": "ON = enforce both layers, OFF = skip validation. This is the single on/off switch (the legacy 'enabled' boolean has been removed)."
+            "description": "ON = enforce both layers, OFF = skip validation, MODIFIED_FILES = only check new/changed .ts files from git diff. This is the single on/off switch (the legacy 'enabled' boolean has been removed)."
         },
         "excludePaths": {
             "type": "array",

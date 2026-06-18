@@ -2,7 +2,7 @@
 export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-any-unknown': { mode: 'ON' },
     'max-file-lines': { mode: 'ON', limit: 900 },
-    'file-location': {
+    'validate-ts-in-src': {
         mode: 'ON',
         allowedRootFiles: ['jest.setup.ts'],
         excludePaths: [

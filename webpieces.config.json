@@ -32,7 +32,7 @@
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
-        "validate-dtos": {
+        "prisma-validate-dtos": {
             "mode": "MODIFIED_CLASS",
             "disableAllowed": false
         },
@@ -55,7 +55,7 @@
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
-        "no-direct-api-in-resolver": {
+        "angular-no-direct-api-in-resolver": {
             "mode": "OFF",
             "disableAllowed": true
         },
@@ -76,16 +76,8 @@
             "allowedCycles": []
         },
         "validate-ts-in-src": {
-            "mode": "ON",
-            "allowedRootFiles": ["jest.setup.ts"],
-            "excludePaths": [
-                "node_modules", "dist", ".nx", ".git",
-                "architecture", "tmp", "scripts",
-                "**/*.d.ts", "**/jest.config.ts", "**/codegen.ts"
-            ]
-        },
-        "file-location": {
-            "mode": "ON",
+            "mode": "MODIFIED_FILES",
+            "ignoreModifiedUntilEpoch": 1771931925,
             "allowedRootFiles": ["jest.setup.ts"],
             "excludePaths": [
                 "node_modules", "dist", ".nx", ".git",

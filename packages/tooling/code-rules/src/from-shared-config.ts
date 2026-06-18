@@ -13,12 +13,12 @@
  *   no-inline-type-literals  -> noInlineTypeLiterals
  *   no-any-unknown           -> noAnyUnknown
  *   no-implicit-any          -> noImplicitAny
- *   validate-dtos            -> validateDtos
- *   prisma-converter         -> prismaConverter
- *   no-destructure           -> noDestructure
- *   catch-error-pattern      -> catchErrorPattern
- *   no-unmanaged-exceptions  -> noUnmanagedExceptions
- *   no-direct-api-in-resolver -> noDirectApiInResolver
+ *   prisma-validate-dtos      -> validateDtos
+ *   prisma-converter          -> prismaConverter
+ *   no-destructure            -> noDestructure
+ *   catch-error-pattern       -> catchErrorPattern
+ *   no-unmanaged-exceptions   -> noUnmanagedExceptions
+ *   angular-no-direct-api-in-resolver -> noDirectApiInResolver
  *
  * On/off is driven entirely by `mode`: a `mode:'OFF'` entry flows straight
  * through to the downstream executor, which short-circuits on it.
@@ -78,11 +78,11 @@ export function toValidateCodeOptions(shared: ResolvedConfig): ValidateCodeOptio
             ignoreModifiedUntilEpoch: opt<number>(r('no-implicit-any'), 'ignoreModifiedUntilEpoch'),
         },
         validateDtos: {
-            mode: modeOrOff(r('validate-dtos')),
-            disableAllowed: opt<boolean>(r('validate-dtos'), 'disableAllowed'),
-            prismaSchemaPath: opt<string>(r('validate-dtos'), 'prismaSchemaPath'),
-            dtoSourcePaths: opt<string[]>(r('validate-dtos'), 'dtoSourcePaths'),
-            ignoreModifiedUntilEpoch: opt<number>(r('validate-dtos'), 'ignoreModifiedUntilEpoch'),
+            mode: modeOrOff(r('prisma-validate-dtos')),
+            disableAllowed: opt<boolean>(r('prisma-validate-dtos'), 'disableAllowed'),
+            prismaSchemaPath: opt<string>(r('prisma-validate-dtos'), 'prismaSchemaPath'),
+            dtoSourcePaths: opt<string[]>(r('prisma-validate-dtos'), 'dtoSourcePaths'),
+            ignoreModifiedUntilEpoch: opt<number>(r('prisma-validate-dtos'), 'ignoreModifiedUntilEpoch'),
         },
         prismaConverter: {
             mode: modeOrOff(r('prisma-converter')),
@@ -108,10 +108,10 @@ export function toValidateCodeOptions(shared: ResolvedConfig): ValidateCodeOptio
             ignoreModifiedUntilEpoch: opt<number>(r('no-unmanaged-exceptions'), 'ignoreModifiedUntilEpoch'),
         },
         noDirectApiInResolver: {
-            mode: modeOrOff(r('no-direct-api-in-resolver')),
-            disableAllowed: opt<boolean>(r('no-direct-api-in-resolver'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-direct-api-in-resolver'), 'ignoreModifiedUntilEpoch'),
-            enforcePaths: opt<string[]>(r('no-direct-api-in-resolver'), 'enforcePaths'),
+            mode: modeOrOff(r('angular-no-direct-api-in-resolver')),
+            disableAllowed: opt<boolean>(r('angular-no-direct-api-in-resolver'), 'disableAllowed'),
+            ignoreModifiedUntilEpoch: opt<number>(r('angular-no-direct-api-in-resolver'), 'ignoreModifiedUntilEpoch'),
+            enforcePaths: opt<string[]>(r('angular-no-direct-api-in-resolver'), 'enforcePaths'),
         },
         noSymbolDiTokens: {
             mode: modeOrOff(r('no-symbol-di-tokens')),

@@ -7,7 +7,7 @@ import { builtInRuleNames } from './rules/index';
 import noAnyUnknown from './rules/no-any-unknown';
 import noImplicitAny from './rules/no-implicit-any';
 import maxFileLines from './rules/max-file-lines';
-import fileLocation from './rules/file-location';
+import validateTsInSrc from './rules/validate-ts-in-src';
 import noDestructure from './rules/no-destructure';
 import requireReturnType from './rules/require-return-type';
 import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
@@ -22,7 +22,7 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'no-any-unknown': noAnyUnknown as Rule,
     'no-implicit-any': noImplicitAny as Rule,
     'max-file-lines': maxFileLines as Rule,
-    'file-location': fileLocation as Rule,
+    'validate-ts-in-src': validateTsInSrc as Rule,
     'no-destructure': noDestructure as Rule,
     'require-return-type': requireReturnType as Rule,
     'no-unmanaged-exceptions': noUnmanagedExceptions as Rule,

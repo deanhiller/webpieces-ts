@@ -275,12 +275,12 @@ function logConfig(config: ParsedConfig): void {
     console.log(`   No inline type literals: mode=${config.noInlineTypesMode}, disableAllowed=${config.noInlineTypesDisableAllowed}`);
     console.log(`   No any/unknown: mode=${config.noAnyUnknownMode}, disableAllowed=${config.noAnyUnknownDisableAllowed}`);
     console.log(`   No implicit any: mode=${config.noImplicitAnyMode}, disableAllowed=${config.noImplicitAnyDisableAllowed}`);
-    console.log(`   Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
-    console.log(`   Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
+    console.log(`   [Prisma] Validate DTOs: mode=${config.validateDtosMode}, disableAllowed=${config.validateDtosDisableAllowed}`);
+    console.log(`   [Prisma] Prisma converters: mode=${config.prismaConverterMode}, disableAllowed=${config.prismaConverterDisableAllowed}`);
     console.log(`   No destructure: mode=${config.noDestructureMode}, disableAllowed=${config.noDestructureDisableAllowed}`);
     console.log(`   Catch error pattern: mode=${config.catchErrorPatternMode}, disableAllowed=${config.catchErrorPatternDisableAllowed}`);
     console.log(`   No unmanaged exceptions: mode=${config.noUnmanagedExceptionsMode}, disableAllowed=${config.noUnmanagedExceptionsDisableAllowed}`);
-    console.log(`   No direct API in resolver: mode=${config.noDirectApiResolverMode}, disableAllowed=${config.noDirectApiResolverDisableAllowed}`);
+    console.log(`   [Angular] No direct API in resolver: mode=${config.noDirectApiResolverMode}, disableAllowed=${config.noDirectApiResolverDisableAllowed}`);
     console.log(`   No Symbol DI tokens: mode=${config.noSymbolDiTokensMode}, disableAllowed=${config.noSymbolDiTokensDisableAllowed}`);
     console.log('');
 }

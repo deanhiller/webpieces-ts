@@ -13,7 +13,7 @@ function makeWorkspace(): string {
             rules: {
                 'no-any-unknown': { mode: 'OFF' },
                 'max-file-lines': { mode: 'OFF' },
-                'file-location': { mode: 'OFF' },
+                'validate-ts-in-src': { mode: 'OFF' },
                 'no-destructure': { mode: 'OFF' },
                 'require-return-type': { mode: 'OFF' },
                 'no-unmanaged-exceptions': { mode: 'OFF' },
@@ -87,7 +87,7 @@ describe('no-shell-substitution', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },

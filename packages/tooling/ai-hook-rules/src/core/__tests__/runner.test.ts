@@ -34,7 +34,7 @@ describe('core runner', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },
@@ -79,7 +79,7 @@ describe('core runner', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },
@@ -129,7 +129,7 @@ describe('core runner', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },
@@ -172,7 +172,7 @@ describe('core runner', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },
@@ -221,7 +221,7 @@ describe('core runner', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },
@@ -267,7 +267,7 @@ describe('core runner', () => {
                 rules: {
                     'no-any-unknown': { mode: 'OFF' },
                     'max-file-lines': { mode: 'OFF' },
-                    'file-location': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
                     'no-destructure': { mode: 'OFF' },
                     'require-return-type': { mode: 'OFF' },
                     'no-unmanaged-exceptions': { mode: 'OFF' },
