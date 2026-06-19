@@ -22,8 +22,8 @@ function findProjectRoot(filePath: string, workspaceRoot: string): string | null
     return null;
 }
 
-const fileLocationRule: FileRule = {
-    name: 'file-location',
+const validateTsInSrcRule: FileRule = {
+    name: 'validate-ts-in-src',
     description: 'Every .ts file must belong to a project\'s src/ directory.',
     scope: 'file',
     files: ['**/*.ts', '**/*.tsx'],
@@ -33,7 +33,7 @@ const fileLocationRule: FileRule = {
     },
     fixHint: [
         'Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.',
-        'Add a dir or glob (e.g. "**/codegen.ts") to file-location.excludePaths in webpieces.config.json',
+        'Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in webpieces.config.json',
     ],
 
     check(ctx: FileContext): readonly Violation[] {
@@ -50,7 +50,7 @@ const fileLocationRule: FileRule = {
         if (isPathExcluded(ctx.relativePath, excludePaths)) return [];
 
         const relParts = ctx.relativePath.split(path.sep);
-        if (relParts.length === 1 && allowedRootFiles.indexOf(relParts[0]) >= 0) return [];
+        if (relParts.length === 1 && allowedRootFiles.indexOf(relParts[0] ?? '') >= 0) return [];
 
         const projectRoot = findProjectRoot(ctx.filePath, ctx.workspaceRoot);
 
@@ -76,4 +76,4 @@ const fileLocationRule: FileRule = {
     },
 };
 
-export default fileLocationRule;
+export default validateTsInSrcRule;

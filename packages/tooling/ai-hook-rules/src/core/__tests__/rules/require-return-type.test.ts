@@ -8,7 +8,7 @@ function ws(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ret-type-'));
     fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify({
         rules: { 'no-any-unknown': { mode: 'OFF' }, 'max-file-lines': { mode: 'OFF' },
-            'file-location': { mode: 'OFF' }, 'no-destructure': { mode: 'OFF' },
+            'validate-ts-in-src': { mode: 'OFF' }, 'no-destructure': { mode: 'OFF' },
             'no-unmanaged-exceptions': { mode: 'OFF' } },
         rulesDir: [],
     }));

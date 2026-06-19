@@ -2,7 +2,7 @@ export const builtInRuleNames: readonly string[] = [
     'no-any-unknown',
     'no-implicit-any',
     'max-file-lines',
-    'file-location',
+    'validate-ts-in-src',
     'no-destructure',
     'require-return-type',
     'no-unmanaged-exceptions',

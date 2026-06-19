@@ -1,4 +1,4 @@
-// Default holistic exclude list for the file-location / validate-ts-in-src
+// Default holistic exclude list for the validate-ts-in-src
 // rules. Bare names match a directory segment at any depth; globs match the
 // workspace-relative path. `**/*.d.ts` (ambient declarations) and
 // `**/jest.config.ts` legitimately live outside src/ and are exempt here.
@@ -25,16 +25,11 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-shell-substitution': { mode: 'ON' },
     'no-file-import-cycles': { mode: 'ON' },
     'runtime-architecture': { mode: 'ON', servicePaths: [], apiProjectPaths: [], allowedCycles: [] },
-    'validate-dtos': {},
+    'prisma-validate-dtos': {},
     'prisma-converter': {},
-    'no-direct-api-in-resolver': {},
+    'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
     'nx-wiring': { mode: 'ON' },
-    'file-location': {
-        mode: 'ON',
-        allowedRootFiles: ['jest.setup.ts'],
-        excludePaths: [...DEFAULT_EXCLUDE_PATHS],
-    },
     'validate-ts-in-src': {
         mode: 'ON',
         allowedRootFiles: ['jest.setup.ts'],

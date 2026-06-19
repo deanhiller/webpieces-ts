@@ -6,23 +6,23 @@ import * as os from 'os';
 import * as path from 'path';
 
 function ws(): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-loc-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'validate-ts-in-src-'));
     fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify({
         rules: { 'no-any-unknown': { mode: 'OFF' }, 'max-file-lines': { mode: 'OFF' },
             'no-destructure': { mode: 'OFF' }, 'require-return-type': { mode: 'OFF' },
             'no-unmanaged-exceptions': { mode: 'OFF' },
-            'file-location': { mode: 'ON', allowedRootFiles: ['jest.setup.ts'], excludePaths: ['scripts', 'tmp', '**/*.d.ts', '**/jest.config.ts'] } },
+            'validate-ts-in-src': { mode: 'ON', allowedRootFiles: ['jest.setup.ts'], excludePaths: ['scripts', 'tmp', '**/*.d.ts', '**/jest.config.ts'] } },
         rulesDir: [],
     }));
     return dir;
 }
 
-describe('file-location rule', () => {
+describe('validate-ts-in-src rule', () => {
     it('blocks Write to root (orphan)', () => {
         const w = ws();
         const r = run('Write', new NormalizedToolInput(path.join(w, 'orphan.ts'), [new NormalizedEdit('', 'const x = 1;')]), w);
         expect(r).not.toBeNull();
-        expect(r!.report).toContain('file-location');
+        expect(r!.report).toContain('validate-ts-in-src');
         expect(r!.report).toContain('not inside any Nx project');
     });
 

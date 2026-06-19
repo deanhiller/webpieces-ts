@@ -7,7 +7,7 @@ import * as path from 'path';
 function ws(limit: number = 10): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'max-file-'));
     fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify({
-        rules: { 'no-any-unknown': { mode: 'OFF' }, 'file-location': { mode: 'OFF' },
+        rules: { 'no-any-unknown': { mode: 'OFF' }, 'validate-ts-in-src': { mode: 'OFF' },
             'no-destructure': { mode: 'OFF' }, 'require-return-type': { mode: 'OFF' },
             'no-unmanaged-exceptions': { mode: 'OFF' },
             'max-file-lines': { mode: 'ON', limit } },
