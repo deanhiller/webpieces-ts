@@ -24,6 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { writeTemplate } from '@webpieces/rules-config';
+import { shouldSkipRule } from './resolve-mode';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
@@ -31,6 +32,8 @@ export interface ValidateModifiedMethodsOptions {
     limit?: number;
     mode?: MethodMaxLimitMode;
     disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -616,12 +619,16 @@ export default async function runValidator(
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const limit = options.limit ?? 80;
-    const mode: MethodMaxLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
     const disableAllowed = options.disableAllowed ?? true;
+
+    const rawMode: MethodMaxLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
+    const mode: MethodMaxLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
-        console.log('\n\u23ed\ufe0f  Skipping modified method validation (mode: OFF)');
+        const reason = skip.skip ? skip.reason : 'mode: OFF';
+        console.log(`\n\u23ed\ufe0f  Skipping modified method validation (${reason})`);
         console.log('');
         return { success: true };
     }

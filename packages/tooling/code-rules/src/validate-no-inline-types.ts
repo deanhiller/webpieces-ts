@@ -83,6 +83,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { shouldSkipRule } from './resolve-mode';
 
 export type NoInlineTypesMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
@@ -90,6 +91,7 @@ export interface ValidateNoInlineTypesOptions {
     mode?: NoInlineTypesMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -710,14 +712,13 @@ function reportViolations(violations: InlineTypeViolation[], mode: NoInlineTypes
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: NoInlineTypesMode, epoch: number | undefined): NoInlineTypesMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(normalMode: NoInlineTypesMode, epoch: number | undefined, branchPattern: string | undefined): NoInlineTypesMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n⏭️  Skipping no-inline-types validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n⏭️  Skipping no-inline-types validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -728,7 +729,7 @@ export default async function runValidator(
     options: ValidateNoInlineTypesOptions,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoInlineTypesMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode: NoInlineTypesMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

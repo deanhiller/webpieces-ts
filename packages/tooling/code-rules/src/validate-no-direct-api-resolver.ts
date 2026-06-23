@@ -39,6 +39,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from './diff-utils';
+import { shouldSkipRule } from './resolve-mode';
 
 export type NoDirectApiResolverMode = 'OFF' | 'MODIFIED_CODE' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
@@ -46,6 +47,7 @@ export interface ValidateNoDirectApiResolverOptions {
     mode?: NoDirectApiResolverMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
     enforcePaths?: string[];
 }
 
@@ -576,14 +578,13 @@ function reportViolations(violations: Violation[], mode: NoDirectApiResolverMode
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: NoDirectApiResolverMode, epoch: number | undefined): NoDirectApiResolverMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(normalMode: NoDirectApiResolverMode, epoch: number | undefined, branchPattern: string | undefined): NoDirectApiResolverMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n\u23ed\ufe0f  Skipping no-direct-api-resolver validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n\u23ed\ufe0f  Skipping no-direct-api-resolver validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -615,7 +616,7 @@ export default async function runValidator(
     options: ValidateNoDirectApiResolverOptions,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoDirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode: NoDirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

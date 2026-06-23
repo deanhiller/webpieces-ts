@@ -50,6 +50,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from './diff-utils';
+import { shouldSkipRule } from './resolve-mode';
 
 export type PrismaConverterMode = 'OFF' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
 
@@ -60,6 +61,7 @@ export interface ValidatePrismaConvertersOptions {
     convertersPaths?: string[];
     enforcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -771,15 +773,15 @@ function validateChangedFiles(
  */
 function resolvePrismaConverterMode(
     normalMode: PrismaConverterMode,
-    epoch: number | undefined
+    epoch: number | undefined,
+    branchPattern: string | undefined
 ): PrismaConverterMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n⏭️  Skipping prisma-converter validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n⏭️  Skipping prisma-converter validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -790,7 +792,7 @@ export default async function runValidator(
     options: ValidatePrismaConvertersOptions,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping prisma-converter validation (mode: OFF)');
