@@ -41,82 +41,50 @@ function modeOrOff<T extends string>(rule: ResolvedRuleConfig | undefined): T | 
     return (mode as T) ?? undefined;
 }
 
+interface SkipOpts {
+    disableAllowed: boolean | undefined;
+    ignoreModifiedUntilEpoch: number | undefined;
+    ignoreRuleWhileOnBranch: string | undefined;
+}
+
+function skipOpts(rule: ResolvedRuleConfig | undefined): SkipOpts {
+    return {
+        disableAllowed: opt<boolean>(rule, 'disableAllowed'),
+        ignoreModifiedUntilEpoch: opt<number>(rule, 'ignoreModifiedUntilEpoch'),
+        ignoreRuleWhileOnBranch: opt<string>(rule, 'ignoreRuleWhileOnBranch'),
+    };
+}
+
 export function toValidateCodeOptions(shared: ResolvedConfig): ValidateCodeOptions {
     const r = (name: string): ResolvedRuleConfig | undefined => shared.rules.get(name);
 
     return {
-        methodMaxLimit: {
-            limit: opt<number>(r('max-method-lines'), 'limit'),
-            mode: modeOrOff(r('max-method-lines')),
-            disableAllowed: opt<boolean>(r('max-method-lines'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('max-method-lines'), 'ignoreModifiedUntilEpoch'),
-        },
-        fileMaxLimit: {
-            limit: opt<number>(r('max-file-lines'), 'limit'),
-            mode: modeOrOff(r('max-file-lines')),
-            disableAllowed: opt<boolean>(r('max-file-lines'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('max-file-lines'), 'ignoreModifiedUntilEpoch'),
-        },
-        requireReturnType: {
-            mode: modeOrOff(r('require-return-type')),
-            disableAllowed: opt<boolean>(r('require-return-type'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('require-return-type'), 'ignoreModifiedUntilEpoch'),
-        },
-        noInlineTypeLiterals: {
-            mode: modeOrOff(r('no-inline-type-literals')),
-            disableAllowed: opt<boolean>(r('no-inline-type-literals'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-inline-type-literals'), 'ignoreModifiedUntilEpoch'),
-        },
-        noAnyUnknown: {
-            mode: modeOrOff(r('no-any-unknown')),
-            disableAllowed: opt<boolean>(r('no-any-unknown'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-any-unknown'), 'ignoreModifiedUntilEpoch'),
-        },
-        noImplicitAny: {
-            mode: modeOrOff(r('no-implicit-any')),
-            disableAllowed: opt<boolean>(r('no-implicit-any'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-implicit-any'), 'ignoreModifiedUntilEpoch'),
-        },
+        methodMaxLimit: { mode: modeOrOff(r('max-method-lines')), ...skipOpts(r('max-method-lines')), limit: opt<number>(r('max-method-lines'), 'limit') },
+        fileMaxLimit: { mode: modeOrOff(r('max-file-lines')), ...skipOpts(r('max-file-lines')), limit: opt<number>(r('max-file-lines'), 'limit') },
+        requireReturnType: { mode: modeOrOff(r('require-return-type')), ...skipOpts(r('require-return-type')) },
+        noInlineTypeLiterals: { mode: modeOrOff(r('no-inline-type-literals')), ...skipOpts(r('no-inline-type-literals')) },
+        noAnyUnknown: { mode: modeOrOff(r('no-any-unknown')), ...skipOpts(r('no-any-unknown')) },
+        noImplicitAny: { mode: modeOrOff(r('no-implicit-any')), ...skipOpts(r('no-implicit-any')) },
         validateDtos: {
-            mode: modeOrOff(r('prisma-validate-dtos')),
-            disableAllowed: opt<boolean>(r('prisma-validate-dtos'), 'disableAllowed'),
+            mode: modeOrOff(r('prisma-validate-dtos')), ...skipOpts(r('prisma-validate-dtos')),
             prismaSchemaPath: opt<string>(r('prisma-validate-dtos'), 'prismaSchemaPath'),
             dtoSourcePaths: opt<string[]>(r('prisma-validate-dtos'), 'dtoSourcePaths'),
-            ignoreModifiedUntilEpoch: opt<number>(r('prisma-validate-dtos'), 'ignoreModifiedUntilEpoch'),
         },
         prismaConverter: {
-            mode: modeOrOff(r('prisma-converter')),
-            disableAllowed: opt<boolean>(r('prisma-converter'), 'disableAllowed'),
+            mode: modeOrOff(r('prisma-converter')), ...skipOpts(r('prisma-converter')),
             schemaPath: opt<string>(r('prisma-converter'), 'schemaPath'),
             convertersPaths: opt<string[]>(r('prisma-converter'), 'convertersPaths'),
             enforcePaths: opt<string[]>(r('prisma-converter'), 'enforcePaths'),
-            ignoreModifiedUntilEpoch: opt<number>(r('prisma-converter'), 'ignoreModifiedUntilEpoch'),
         },
-        noDestructure: {
-            mode: modeOrOff(r('no-destructure')),
-            disableAllowed: opt<boolean>(r('no-destructure'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-destructure'), 'ignoreModifiedUntilEpoch'),
-        },
-        catchErrorPattern: {
-            mode: modeOrOff(r('catch-error-pattern')),
-            disableAllowed: opt<boolean>(r('catch-error-pattern'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('catch-error-pattern'), 'ignoreModifiedUntilEpoch'),
-        },
-        noUnmanagedExceptions: {
-            mode: modeOrOff(r('no-unmanaged-exceptions')),
-            disableAllowed: opt<boolean>(r('no-unmanaged-exceptions'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-unmanaged-exceptions'), 'ignoreModifiedUntilEpoch'),
-        },
+        noDestructure: { mode: modeOrOff(r('no-destructure')), ...skipOpts(r('no-destructure')) },
+        catchErrorPattern: { mode: modeOrOff(r('catch-error-pattern')), ...skipOpts(r('catch-error-pattern')) },
+        noUnmanagedExceptions: { mode: modeOrOff(r('no-unmanaged-exceptions')), ...skipOpts(r('no-unmanaged-exceptions')) },
         noDirectApiInResolver: {
-            mode: modeOrOff(r('angular-no-direct-api-in-resolver')),
-            disableAllowed: opt<boolean>(r('angular-no-direct-api-in-resolver'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('angular-no-direct-api-in-resolver'), 'ignoreModifiedUntilEpoch'),
+            mode: modeOrOff(r('angular-no-direct-api-in-resolver')), ...skipOpts(r('angular-no-direct-api-in-resolver')),
             enforcePaths: opt<string[]>(r('angular-no-direct-api-in-resolver'), 'enforcePaths'),
         },
         noSymbolDiTokens: {
-            mode: modeOrOff(r('no-symbol-di-tokens')),
-            disableAllowed: opt<boolean>(r('no-symbol-di-tokens'), 'disableAllowed'),
-            ignoreModifiedUntilEpoch: opt<number>(r('no-symbol-di-tokens'), 'ignoreModifiedUntilEpoch'),
+            mode: modeOrOff(r('no-symbol-di-tokens')), ...skipOpts(r('no-symbol-di-tokens')),
             allowedPaths: opt<string[]>(r('no-symbol-di-tokens'), 'allowedPaths'),
         },
     };

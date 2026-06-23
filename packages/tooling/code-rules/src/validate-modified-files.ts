@@ -17,6 +17,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { writeTemplate } from '@webpieces/rules-config';
+import { shouldSkipRule } from './resolve-mode';
 
 export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
 
@@ -24,6 +25,8 @@ export interface ValidateModifiedFilesOptions {
     limit?: number;
     mode?: FileMaxLimitMode;
     disableAllowed?: boolean;
+    ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -340,12 +343,16 @@ export default async function runValidator(
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const limit = options.limit ?? 900;
-    const mode: FileMaxLimitMode = options.mode ?? 'MODIFIED_FILES';
     const disableAllowed = options.disableAllowed ?? true;
+
+    const rawMode: FileMaxLimitMode = options.mode ?? 'MODIFIED_FILES';
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
+    const mode: FileMaxLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
-        console.log('\n\u23ed\ufe0f  Skipping modified files validation (mode: OFF)');
+        const reason = skip.skip ? skip.reason : 'mode: OFF';
+        console.log(`\n\u23ed\ufe0f  Skipping modified files validation (${reason})`);
         console.log('');
         return { success: true };
     }

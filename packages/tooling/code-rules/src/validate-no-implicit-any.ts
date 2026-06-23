@@ -29,6 +29,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { shouldSkipRule } from './resolve-mode';
 
 export type NoImplicitAnyMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
 
@@ -36,6 +37,7 @@ export interface ValidateNoImplicitAnyOptions {
     mode?: NoImplicitAnyMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -293,14 +295,13 @@ function reportViolations(violations: ImplicitAnyViolation[], mode: NoImplicitAn
     console.error('');
 }
 
-function resolveMode(normalMode: NoImplicitAnyMode, epoch: number | undefined): NoImplicitAnyMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(normalMode: NoImplicitAnyMode, epoch: number | undefined, branchPattern: string | undefined): NoImplicitAnyMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n\u23ed\ufe0f  Skipping no-implicit-any validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n\u23ed\ufe0f  Skipping no-implicit-any validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -311,7 +312,7 @@ async function runInternal(
     options: ValidateNoImplicitAnyOptions,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: NoImplicitAnyMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode: NoImplicitAnyMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

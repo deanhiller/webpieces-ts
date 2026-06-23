@@ -35,6 +35,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { shouldSkipRule } from './resolve-mode';
 
 export type NoUnmanagedExceptionsMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
 
@@ -42,6 +43,7 @@ export interface ValidateNoUnmanagedExceptionsOptions {
     mode?: NoUnmanagedExceptionsMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -356,14 +358,13 @@ function reportViolations(violations: TryCatchViolation[], mode: NoUnmanagedExce
 /**
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  */
-function resolveMode(normalMode: NoUnmanagedExceptionsMode, epoch: number | undefined): NoUnmanagedExceptionsMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(normalMode: NoUnmanagedExceptionsMode, epoch: number | undefined, branchPattern: string | undefined): NoUnmanagedExceptionsMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n\u23ed\ufe0f  Skipping no-unmanaged-exceptions validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n\u23ed\ufe0f  Skipping no-unmanaged-exceptions validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -374,7 +375,7 @@ export default async function runValidator(
     options: ValidateNoUnmanagedExceptionsOptions,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoUnmanagedExceptionsMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode: NoUnmanagedExceptionsMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

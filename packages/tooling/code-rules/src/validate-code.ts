@@ -1,5 +1,6 @@
 import { loadConfig } from '@webpieces/rules-config';
 import { toValidateCodeOptions } from './from-shared-config';
+import { shouldSkipRule } from './resolve-mode';
 import runNewMethodsExecutor from './validate-new-methods';
 import runModifiedMethodsExecutor from './validate-modified-methods';
 import runModifiedFilesExecutor from './validate-modified-files';
@@ -40,7 +41,7 @@ export interface ExecutorResult {
 interface OverrideInfo {
     active: boolean;
     normalMode: string;
-    expiresDate: string;
+    reason: string;
 }
 
 interface ParsedConfig {
@@ -55,42 +56,53 @@ interface ParsedConfig {
     returnTypeMode: ReturnTypeMode;
     returnTypeDisableAllowed: boolean;
     returnTypeIgnoreEpoch: number | undefined;
+    returnTypeIgnoreBranch: string | undefined;
     noInlineTypesMode: NoInlineTypesMode;
     noInlineTypesDisableAllowed: boolean;
     noInlineTypesIgnoreEpoch: number | undefined;
+    noInlineTypesIgnoreBranch: string | undefined;
     noAnyUnknownMode: NoAnyUnknownMode;
     noAnyUnknownDisableAllowed: boolean;
     noAnyUnknownIgnoreEpoch: number | undefined;
+    noAnyUnknownIgnoreBranch: string | undefined;
     noImplicitAnyMode: NoImplicitAnyMode;
     noImplicitAnyDisableAllowed: boolean;
     noImplicitAnyIgnoreEpoch: number | undefined;
+    noImplicitAnyIgnoreBranch: string | undefined;
     validateDtosMode: ValidateDtosMode;
     validateDtosDisableAllowed: boolean;
     validateDtosPrismaPath: string | undefined;
     validateDtosSrcPaths: string[];
     validateDtosIgnoreEpoch: number | undefined;
+    validateDtosIgnoreBranch: string | undefined;
     prismaConverterMode: PrismaConverterMode;
     prismaConverterDisableAllowed: boolean;
     prismaConverterSchemaPath: string | undefined;
     prismaConverterConvertersPaths: string[];
     prismaConverterEnforcePaths: string[];
     prismaConverterIgnoreEpoch: number | undefined;
+    prismaConverterIgnoreBranch: string | undefined;
     noDestructureMode: NoDestructureMode;
     noDestructureDisableAllowed: boolean;
     noDestructureIgnoreEpoch: number | undefined;
+    noDestructureIgnoreBranch: string | undefined;
     catchErrorPatternMode: CatchErrorPatternMode;
     catchErrorPatternDisableAllowed: boolean;
     catchErrorPatternIgnoreEpoch: number | undefined;
+    catchErrorPatternIgnoreBranch: string | undefined;
     noUnmanagedExceptionsMode: NoUnmanagedExceptionsMode;
     noUnmanagedExceptionsDisableAllowed: boolean;
     noUnmanagedExceptionsIgnoreEpoch: number | undefined;
+    noUnmanagedExceptionsIgnoreBranch: string | undefined;
     noDirectApiResolverMode: NoDirectApiResolverMode;
     noDirectApiResolverDisableAllowed: boolean;
     noDirectApiResolverIgnoreEpoch: number | undefined;
+    noDirectApiResolverIgnoreBranch: string | undefined;
     noDirectApiResolverEnforcePaths: string[];
     noSymbolDiTokensMode: NoSymbolDiTokensMode;
     noSymbolDiTokensDisableAllowed: boolean;
     noSymbolDiTokensIgnoreEpoch: number | undefined;
+    noSymbolDiTokensIgnoreBranch: string | undefined;
     noSymbolDiTokensAllowedPaths: string[];
 }
 
@@ -156,45 +168,35 @@ function validateModes(options: ValidateCodeOptions): string[] {
     return errors;
 }
 
-function formatEpochDate(epoch: number): string {
-    return new Date(epoch * 1000).toISOString().split('T')[0];
-}
-
 function resolveMethodMode(
-    normalMode: MethodMaxLimitMode, epoch: number | undefined
+    normalMode: MethodMaxLimitMode, epoch: number | undefined, branchPattern: string | undefined
 ): ResolvedMethodMode {
-    if (epoch === undefined) {
-        return { mode: normalMode, override: undefined };
+    if (normalMode === 'OFF') {
+        return { mode: 'OFF', override: undefined };
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        // Active: downgrade to skip modified checking
-        const downgraded: MethodMaxLimitMode =
-            normalMode === 'OFF' ? 'OFF' : 'NEW_METHODS';
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
         return {
-            mode: downgraded,
-            override: { active: true, normalMode, expiresDate: formatEpochDate(epoch) },
+            mode: 'OFF',
+            override: { active: true, normalMode, reason: skip.reason! },
         };
     }
-    // Expired
     return { mode: normalMode, override: undefined };
 }
 
 function resolveFileMode(
-    normalMode: FileMaxLimitMode, epoch: number | undefined
+    normalMode: FileMaxLimitMode, epoch: number | undefined, branchPattern: string | undefined
 ): ResolvedFileMode {
-    if (epoch === undefined) {
-        return { mode: normalMode, override: undefined };
+    if (normalMode === 'OFF') {
+        return { mode: 'OFF', override: undefined };
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        // Active: file checking is inherently about modified files, so skip entirely
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
         return {
             mode: 'OFF',
-            override: { active: true, normalMode, expiresDate: formatEpochDate(epoch) },
+            override: { active: true, normalMode, reason: skip.reason! },
         };
     }
-    // Expired
     return { mode: normalMode, override: undefined };
 }
 
@@ -205,8 +207,8 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
     const normalMethodMode = methodConfig.mode ?? 'NEW_AND_MODIFIED_METHODS';
     const normalFileMode = fileConfig.mode ?? 'MODIFIED_FILES';
 
-    const methodResolved = resolveMethodMode(normalMethodMode, methodConfig.ignoreModifiedUntilEpoch);
-    const fileResolved = resolveFileMode(normalFileMode, fileConfig.ignoreModifiedUntilEpoch);
+    const methodResolved = resolveMethodMode(normalMethodMode, methodConfig.ignoreModifiedUntilEpoch, methodConfig.ignoreRuleWhileOnBranch);
+    const fileResolved = resolveFileMode(normalFileMode, fileConfig.ignoreModifiedUntilEpoch, fileConfig.ignoreRuleWhileOnBranch);
 
     return {
         methodLimit: methodConfig.limit ?? 80,
@@ -220,42 +222,53 @@ function parseConfig(options: ValidateCodeOptions): ParsedConfig {
         returnTypeMode: options.requireReturnType?.mode ?? 'OFF',
         returnTypeDisableAllowed: options.requireReturnType?.disableAllowed ?? true,
         returnTypeIgnoreEpoch: options.requireReturnType?.ignoreModifiedUntilEpoch,
+        returnTypeIgnoreBranch: options.requireReturnType?.ignoreRuleWhileOnBranch,
         noInlineTypesMode: options.noInlineTypeLiterals?.mode ?? 'OFF',
         noInlineTypesDisableAllowed: options.noInlineTypeLiterals?.disableAllowed ?? true,
         noInlineTypesIgnoreEpoch: options.noInlineTypeLiterals?.ignoreModifiedUntilEpoch,
+        noInlineTypesIgnoreBranch: options.noInlineTypeLiterals?.ignoreRuleWhileOnBranch,
         noAnyUnknownMode: options.noAnyUnknown?.mode ?? 'OFF',
         noAnyUnknownDisableAllowed: options.noAnyUnknown?.disableAllowed ?? true,
         noAnyUnknownIgnoreEpoch: options.noAnyUnknown?.ignoreModifiedUntilEpoch,
+        noAnyUnknownIgnoreBranch: options.noAnyUnknown?.ignoreRuleWhileOnBranch,
         noImplicitAnyMode: options.noImplicitAny?.mode ?? 'OFF',
         noImplicitAnyDisableAllowed: options.noImplicitAny?.disableAllowed ?? true,
         noImplicitAnyIgnoreEpoch: options.noImplicitAny?.ignoreModifiedUntilEpoch,
+        noImplicitAnyIgnoreBranch: options.noImplicitAny?.ignoreRuleWhileOnBranch,
         validateDtosMode: options.validateDtos?.mode ?? 'OFF',
         validateDtosDisableAllowed: options.validateDtos?.disableAllowed ?? true,
         validateDtosPrismaPath: options.validateDtos?.prismaSchemaPath,
         validateDtosSrcPaths: options.validateDtos?.dtoSourcePaths ?? [],
         validateDtosIgnoreEpoch: options.validateDtos?.ignoreModifiedUntilEpoch,
+        validateDtosIgnoreBranch: options.validateDtos?.ignoreRuleWhileOnBranch,
         prismaConverterMode: options.prismaConverter?.mode ?? 'OFF',
         prismaConverterDisableAllowed: options.prismaConverter?.disableAllowed ?? true,
         prismaConverterSchemaPath: options.prismaConverter?.schemaPath,
         prismaConverterConvertersPaths: options.prismaConverter?.convertersPaths ?? [],
         prismaConverterEnforcePaths: options.prismaConverter?.enforcePaths ?? [],
         prismaConverterIgnoreEpoch: options.prismaConverter?.ignoreModifiedUntilEpoch,
+        prismaConverterIgnoreBranch: options.prismaConverter?.ignoreRuleWhileOnBranch,
         noDestructureMode: options.noDestructure?.mode ?? 'OFF',
         noDestructureDisableAllowed: options.noDestructure?.disableAllowed ?? true,
         noDestructureIgnoreEpoch: options.noDestructure?.ignoreModifiedUntilEpoch,
+        noDestructureIgnoreBranch: options.noDestructure?.ignoreRuleWhileOnBranch,
         catchErrorPatternMode: options.catchErrorPattern?.mode ?? 'OFF',
         catchErrorPatternDisableAllowed: options.catchErrorPattern?.disableAllowed ?? true,
         catchErrorPatternIgnoreEpoch: options.catchErrorPattern?.ignoreModifiedUntilEpoch,
+        catchErrorPatternIgnoreBranch: options.catchErrorPattern?.ignoreRuleWhileOnBranch,
         noUnmanagedExceptionsMode: options.noUnmanagedExceptions?.mode ?? 'OFF',
         noUnmanagedExceptionsDisableAllowed: options.noUnmanagedExceptions?.disableAllowed ?? true,
         noUnmanagedExceptionsIgnoreEpoch: options.noUnmanagedExceptions?.ignoreModifiedUntilEpoch,
+        noUnmanagedExceptionsIgnoreBranch: options.noUnmanagedExceptions?.ignoreRuleWhileOnBranch,
         noDirectApiResolverMode: options.noDirectApiInResolver?.mode ?? 'OFF',
         noDirectApiResolverDisableAllowed: options.noDirectApiInResolver?.disableAllowed ?? true,
         noDirectApiResolverIgnoreEpoch: options.noDirectApiInResolver?.ignoreModifiedUntilEpoch,
+        noDirectApiResolverIgnoreBranch: options.noDirectApiInResolver?.ignoreRuleWhileOnBranch,
         noDirectApiResolverEnforcePaths: options.noDirectApiInResolver?.enforcePaths ?? [],
         noSymbolDiTokensMode: options.noSymbolDiTokens?.mode ?? 'OFF',
         noSymbolDiTokensDisableAllowed: options.noSymbolDiTokens?.disableAllowed ?? true,
         noSymbolDiTokensIgnoreEpoch: options.noSymbolDiTokens?.ignoreModifiedUntilEpoch,
+        noSymbolDiTokensIgnoreBranch: options.noSymbolDiTokens?.ignoreRuleWhileOnBranch,
         noSymbolDiTokensAllowedPaths: options.noSymbolDiTokens?.allowedPaths ?? [],
     };
 }
@@ -264,7 +277,7 @@ function formatOverride(override: OverrideInfo | undefined): string {
     if (!override) {
         return '';
     }
-    return ` (override active, normal: ${override.normalMode}, expires: ${override.expiresDate})`;
+    return ` (override active, normal: ${override.normalMode}, ${override.reason})`;
 }
 
 function logConfig(config: ParsedConfig): void {
@@ -314,75 +327,38 @@ async function runMethodValidators(config: ParsedConfig, workspaceRoot: string):
     return results;
 }
 
+async function runLintStyleValidators(config: ParsedConfig, workspaceRoot: string): Promise<ExecutorResult[]> {
+    const r: ExecutorResult[] = [];
+    r.push(await runNoDestructureExecutor({ mode: config.noDestructureMode, disableAllowed: config.noDestructureDisableAllowed, ignoreModifiedUntilEpoch: config.noDestructureIgnoreEpoch, ignoreRuleWhileOnBranch: config.noDestructureIgnoreBranch }, workspaceRoot));
+    r.push(await runCatchErrorPatternExecutor({ mode: config.catchErrorPatternMode, disableAllowed: config.catchErrorPatternDisableAllowed, ignoreModifiedUntilEpoch: config.catchErrorPatternIgnoreEpoch, ignoreRuleWhileOnBranch: config.catchErrorPatternIgnoreBranch }, workspaceRoot));
+    r.push(await runNoUnmanagedExceptionsExecutor({ mode: config.noUnmanagedExceptionsMode, disableAllowed: config.noUnmanagedExceptionsDisableAllowed, ignoreModifiedUntilEpoch: config.noUnmanagedExceptionsIgnoreEpoch, ignoreRuleWhileOnBranch: config.noUnmanagedExceptionsIgnoreBranch }, workspaceRoot));
+    r.push(await runNoDirectApiResolverExecutor({ mode: config.noDirectApiResolverMode, disableAllowed: config.noDirectApiResolverDisableAllowed, ignoreModifiedUntilEpoch: config.noDirectApiResolverIgnoreEpoch, ignoreRuleWhileOnBranch: config.noDirectApiResolverIgnoreBranch, enforcePaths: config.noDirectApiResolverEnforcePaths }, workspaceRoot));
+    r.push(await runNoSymbolDiTokensExecutor({ mode: config.noSymbolDiTokensMode, disableAllowed: config.noSymbolDiTokensDisableAllowed, ignoreModifiedUntilEpoch: config.noSymbolDiTokensIgnoreEpoch, ignoreRuleWhileOnBranch: config.noSymbolDiTokensIgnoreBranch, allowedPaths: config.noSymbolDiTokensAllowedPaths }, workspaceRoot));
+    return r;
+}
+
 async function runAllValidators(config: ParsedConfig, workspaceRoot: string): Promise<ExecutorResult[]> {
     const results: ExecutorResult[] = [];
-    const methodResults = await runMethodValidators(config, workspaceRoot);
-    results.push(...methodResults);
+    results.push(...await runMethodValidators(config, workspaceRoot));
     results.push(await runModifiedFilesExecutor({
         limit: config.fileLimit, mode: config.fileMode, disableAllowed: config.fileDisableAllowed,
     }, workspaceRoot));
-    results.push(await runReturnTypesExecutor({
-        mode: config.returnTypeMode,
-        disableAllowed: config.returnTypeDisableAllowed,
-        ignoreModifiedUntilEpoch: config.returnTypeIgnoreEpoch,
-    }, workspaceRoot));
-    results.push(await runNoInlineTypesExecutor({
-        mode: config.noInlineTypesMode,
-        disableAllowed: config.noInlineTypesDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noInlineTypesIgnoreEpoch,
-    }, workspaceRoot));
-    results.push(await runNoAnyUnknownExecutor({
-        mode: config.noAnyUnknownMode,
-        disableAllowed: config.noAnyUnknownDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noAnyUnknownIgnoreEpoch,
-    }, workspaceRoot));
-    results.push(await runNoImplicitAnyExecutor({
-        mode: config.noImplicitAnyMode,
-        disableAllowed: config.noImplicitAnyDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noImplicitAnyIgnoreEpoch,
-    }, workspaceRoot));
+    results.push(await runReturnTypesExecutor({ mode: config.returnTypeMode, disableAllowed: config.returnTypeDisableAllowed, ignoreModifiedUntilEpoch: config.returnTypeIgnoreEpoch, ignoreRuleWhileOnBranch: config.returnTypeIgnoreBranch }, workspaceRoot));
+    results.push(await runNoInlineTypesExecutor({ mode: config.noInlineTypesMode, disableAllowed: config.noInlineTypesDisableAllowed, ignoreModifiedUntilEpoch: config.noInlineTypesIgnoreEpoch, ignoreRuleWhileOnBranch: config.noInlineTypesIgnoreBranch }, workspaceRoot));
+    results.push(await runNoAnyUnknownExecutor({ mode: config.noAnyUnknownMode, disableAllowed: config.noAnyUnknownDisableAllowed, ignoreModifiedUntilEpoch: config.noAnyUnknownIgnoreEpoch, ignoreRuleWhileOnBranch: config.noAnyUnknownIgnoreBranch }, workspaceRoot));
+    results.push(await runNoImplicitAnyExecutor({ mode: config.noImplicitAnyMode, disableAllowed: config.noImplicitAnyDisableAllowed, ignoreModifiedUntilEpoch: config.noImplicitAnyIgnoreEpoch, ignoreRuleWhileOnBranch: config.noImplicitAnyIgnoreBranch }, workspaceRoot));
     results.push(await runValidateDtosExecutor({
-        mode: config.validateDtosMode,
-        disableAllowed: config.validateDtosDisableAllowed,
-        prismaSchemaPath: config.validateDtosPrismaPath,
-        dtoSourcePaths: config.validateDtosSrcPaths,
-        ignoreModifiedUntilEpoch: config.validateDtosIgnoreEpoch,
+        mode: config.validateDtosMode, disableAllowed: config.validateDtosDisableAllowed,
+        prismaSchemaPath: config.validateDtosPrismaPath, dtoSourcePaths: config.validateDtosSrcPaths,
+        ignoreModifiedUntilEpoch: config.validateDtosIgnoreEpoch, ignoreRuleWhileOnBranch: config.validateDtosIgnoreBranch,
     }, workspaceRoot));
     results.push(await runPrismaConvertersExecutor({
-        mode: config.prismaConverterMode,
-        disableAllowed: config.prismaConverterDisableAllowed,
-        schemaPath: config.prismaConverterSchemaPath,
-        convertersPaths: config.prismaConverterConvertersPaths,
+        mode: config.prismaConverterMode, disableAllowed: config.prismaConverterDisableAllowed,
+        schemaPath: config.prismaConverterSchemaPath, convertersPaths: config.prismaConverterConvertersPaths,
         enforcePaths: config.prismaConverterEnforcePaths,
-        ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch,
+        ignoreModifiedUntilEpoch: config.prismaConverterIgnoreEpoch, ignoreRuleWhileOnBranch: config.prismaConverterIgnoreBranch,
     }, workspaceRoot));
-    results.push(await runNoDestructureExecutor({
-        mode: config.noDestructureMode,
-        disableAllowed: config.noDestructureDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noDestructureIgnoreEpoch,
-    }, workspaceRoot));
-    results.push(await runCatchErrorPatternExecutor({
-        mode: config.catchErrorPatternMode,
-        disableAllowed: config.catchErrorPatternDisableAllowed,
-        ignoreModifiedUntilEpoch: config.catchErrorPatternIgnoreEpoch,
-    }, workspaceRoot));
-    results.push(await runNoUnmanagedExceptionsExecutor({
-        mode: config.noUnmanagedExceptionsMode,
-        disableAllowed: config.noUnmanagedExceptionsDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noUnmanagedExceptionsIgnoreEpoch,
-    }, workspaceRoot));
-    results.push(await runNoDirectApiResolverExecutor({
-        mode: config.noDirectApiResolverMode,
-        disableAllowed: config.noDirectApiResolverDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noDirectApiResolverIgnoreEpoch,
-        enforcePaths: config.noDirectApiResolverEnforcePaths,
-    }, workspaceRoot));
-    results.push(await runNoSymbolDiTokensExecutor({
-        mode: config.noSymbolDiTokensMode,
-        disableAllowed: config.noSymbolDiTokensDisableAllowed,
-        ignoreModifiedUntilEpoch: config.noSymbolDiTokensIgnoreEpoch,
-        allowedPaths: config.noSymbolDiTokensAllowedPaths,
-    }, workspaceRoot));
+    results.push(...await runLintStyleValidators(config, workspaceRoot));
     return results;
 }
 

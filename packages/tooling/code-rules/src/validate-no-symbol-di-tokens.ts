@@ -38,6 +38,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { shouldSkipRule } from './resolve-mode';
 
 export type NoSymbolDiTokensMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
 
@@ -45,6 +46,7 @@ export interface ValidateNoSymbolDiTokensOptions {
     mode?: NoSymbolDiTokensMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
     allowedPaths?: string[];
 }
 
@@ -379,14 +381,13 @@ function reportViolations(violations: SymbolViolation[], mode: NoSymbolDiTokensM
     console.error('');
 }
 
-function resolveMode(normalMode: NoSymbolDiTokensMode, epoch: number | undefined): NoSymbolDiTokensMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(normalMode: NoSymbolDiTokensMode, epoch: number | undefined, branchPattern: string | undefined): NoSymbolDiTokensMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n⏭️  Skipping no-symbol-di-tokens validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n⏭️  Skipping no-symbol-di-tokens validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -397,7 +398,7 @@ export default async function runNoSymbolDiTokensExecutor(
     options: ValidateNoSymbolDiTokensOptions,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: NoSymbolDiTokensMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode: NoSymbolDiTokensMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [
         'libraries/apis/**',

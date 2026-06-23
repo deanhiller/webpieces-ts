@@ -44,6 +44,7 @@ export interface MethodMaxLimitConfig {
     mode?: MethodMaxLimitMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface FileMaxLimitConfig {
@@ -51,30 +52,35 @@ export interface FileMaxLimitConfig {
     mode?: FileMaxLimitMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface RequireReturnTypeConfig {
     mode?: ReturnTypeMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface NoInlineTypeLiteralsConfig {
     mode?: NoInlineTypesMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface NoAnyUnknownConfig {
     mode?: NoAnyUnknownMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface NoImplicitAnyConfig {
     mode?: NoImplicitAnyMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ValidateDtosConfig {
@@ -83,6 +89,7 @@ export interface ValidateDtosConfig {
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface PrismaConverterConfig {
@@ -92,30 +99,35 @@ export interface PrismaConverterConfig {
     convertersPaths?: string[];
     enforcePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface NoDestructureConfig {
     mode?: NoDestructureMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface CatchErrorPatternConfig {
     mode?: CatchErrorPatternMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface NoUnmanagedExceptionsConfig {
     mode?: NoUnmanagedExceptionsMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface NoDirectApiResolverConfig {
     mode?: NoDirectApiResolverMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
     enforcePaths?: string[];
 }
 
@@ -123,6 +135,7 @@ export interface NoSymbolDiTokensConfig {
     mode?: NoSymbolDiTokensMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
     allowedPaths?: string[];
 }
 

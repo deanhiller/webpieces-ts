@@ -34,6 +34,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { shouldSkipRule } from './resolve-mode';
 
 export type NoAnyUnknownMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
 
@@ -41,6 +42,7 @@ export interface ValidateNoAnyUnknownOptions {
     mode?: NoAnyUnknownMode;
     disableAllowed?: boolean;
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
 }
 
 export interface ExecutorResult {
@@ -477,14 +479,13 @@ function reportViolations(violations: AnyUnknownViolation[], mode: NoAnyUnknownM
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: NoAnyUnknownMode, epoch: number | undefined): NoAnyUnknownMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(normalMode: NoAnyUnknownMode, epoch: number | undefined, branchPattern: string | undefined): NoAnyUnknownMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n⏭️  Skipping no-any-unknown validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    const skip = shouldSkipRule(epoch, branchPattern);
+    if (skip.skip) {
+        console.log(`\n⏭️  Skipping no-any-unknown validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -495,7 +496,7 @@ export default async function runValidator(
     options: ValidateNoAnyUnknownOptions,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoAnyUnknownMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch);
+    const mode: NoAnyUnknownMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
