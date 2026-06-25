@@ -23,14 +23,9 @@ const noSymbolDiTokensRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
     fixHint: [
-        'Do not create a dependency-injection token with Symbol(). Symbol() for DI is allowed in ONLY two places:',
-        '  1. INTERNAL apis (libraries/apis/**)          — bind the generated client to its API.',
-        '  2. EXTERNAL apis (libraries/apis-external/**)  — bind the impl to its API (impl wraps the external SDK).',
-        'EVERYWHERE ELSE, do NOT define a Symbol token and do NOT use @inject(TOKEN).',
-        'Instead: annotate the implementation class with @provideSingleton() and inject it by its concrete class TYPE,',
-        'e.g.  constructor(private readonly identityResolver: IdentityResolver) {}   // no Symbol, no @inject.',
-        'For a swappable default-impl-behind-an-interface, use @provideSingletonAs(TOKEN) — only inside libraries/apis(-external).',
-        'If this specific line is a legitimate binding or framework primitive, append:  // webpieces-disable no-symbol-di-tokens -- <reason>',
+        '(PREFERRED) Use @provideSingleton() on the class and inject that class directly — no Symbol needed.',
+        'Interface+impl pair (e.g. FirestoreApi/FirestoreImpl): co-locate the Symbol with the Api file and add // webpieces-disable no-symbol-di-tokens -- <reason>',
+        'External lib creating a class needing binding: put Symbol in a symbols file and add // webpieces-disable no-symbol-di-tokens -- <reason> on each one.',
     ],
 
     check(ctx: EditContext): readonly Violation[] {
@@ -45,7 +40,7 @@ const noSymbolDiTokensRule: EditRule = {
             violations.push(new V(
                 lineNum,
                 ctx.lines[i]?.trim() ?? '',
-                'Symbol() used as a DI token. Use @provideSingleton() + inject by concrete class type instead.',
+                'Symbol() used as a DI token. Mostly we avoid Symbol if we can — see fix options below.',
             ));
         }
         return violations;

@@ -14,10 +14,8 @@ const noUnmanagedExceptionsRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
     fixHint: [
-        'VERY IMPORTANT: READ .webpieces/instruct-ai/webpieces.exceptions.md to understand why and how to fix this!',
-        'Exceptions should bubble to a chokepoint (filter in node.js, globalErrorHandler in Angular). Most code should NOT catch exceptions.',
-        '// webpieces-disable no-unmanaged-exceptions -- <reason>',
-        'When try/catch IS used (after disabling), the catch block MUST use: catch (err: unknown) { const error = toError(err); ... } or //const error = toError(err); to explicitly ignore.',
+        'Remove the try/catch — let the exception bubble to a chokepoint (filter, globalErrorHandler).',
+        'If this IS a legitimate chokepoint, add on the line above: // webpieces-disable no-unmanaged-exceptions -- <reason>',
     ],
 
     check(ctx: EditContext): readonly Violation[] {
@@ -31,7 +29,7 @@ const noUnmanagedExceptionsRule: EditRule = {
             violations.push(new V(
                 lineNum,
                 ctx.lines[i].trim(),
-                'try/catch is generally not allowed. It is only allowed in chokepoints (filter, globalErrorHandler) or other rare locations.',
+                'try/catch is generally not allowed. READ .webpieces/instruct-ai/webpieces.exceptions.md to understand why. Only chokepoints (filter, globalErrorHandler) may catch exceptions.',
             ));
         }
         if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');

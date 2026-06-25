@@ -21,11 +21,10 @@ const catchErrorPatternRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
     fixHint: [
-        'VERY IMPORTANT: READ .webpieces/instruct-ai/webpieces.exceptions.md to understand why and how to fix this!',
-        'catch (err: unknown) { const error = toError(err); ... }',
-        'Or to explicitly ignore: catch (err: unknown) { //const error = toError(err); }',
-        'For nested catches: catch (err2: unknown) { const error2 = toError(err2); }',
-        '// webpieces-disable catch-error-pattern -- <reason>',
+        'Add as first statement inside the catch block: const error = toError(err);',
+        'To explicitly ignore the error: //const error = toError(err);',
+        'For nested catches use numbered names: catch (err2: unknown) { const error2 = toError(err2); }',
+        'To suppress this rule: // webpieces-disable catch-error-pattern -- <reason>',
     ],
 
     check(ctx: EditContext): readonly Violation[] {
