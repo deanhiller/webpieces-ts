@@ -553,7 +553,7 @@ function createValidateCodeTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-code',
         cache: false, // Don't cache - depends on git state
-        inputs: ['default', '{workspaceRoot}/webpieces.config.json'],
+        inputs: ['default'],
         // No options here - they come from webpieces.config.json at runtime
         metadata: {
             technologies: ['nx'],
@@ -579,7 +579,7 @@ function createValidateTsInSrcTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-ts-in-src',
         cache: false,
-        inputs: ['default', '{workspaceRoot}/webpieces.config.json'],
+        inputs: ['default'],
         metadata: {
             technologies: ['nx'],
             description: 'Validate all .ts files in projects are inside the src/ directory',
@@ -591,7 +591,7 @@ function createValidateNxWiringTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-nx-wiring',
         cache: false, // Cheap; depends on nx.json + project graph, not worth caching
-        inputs: ['{workspaceRoot}/nx.json', '{workspaceRoot}/webpieces.config.json'],
+        inputs: ['{workspaceRoot}/nx.json'],
         metadata: {
             technologies: ['nx'],
             description: 'Validate the webpieces validators are wired into the build via nx.json dependsOn',
@@ -657,7 +657,7 @@ function createCircularDepsTarget(_projectRoot: string, _targetName: string): Ta
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-no-file-import-cycles',
         cache: true,
-        inputs: ['default', '{workspaceRoot}/webpieces.config.json'],
+        inputs: ['default'],
         outputs: [] as string[],
         metadata: {
             technologies: ['madge'],
