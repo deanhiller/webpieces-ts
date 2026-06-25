@@ -10,7 +10,7 @@
  * On/off + a whole-rule grace window come from webpieces.config.json
  * (rule: runtime-architecture).
  *
- * Usage: nx run microsvc:validate-runtime-architecture
+ * Usage: nx run architecture:validate-runtime-architecture
  */
 
 import type { ExecutorContext } from '@nx/devkit';

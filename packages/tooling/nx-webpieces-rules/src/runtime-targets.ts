@@ -5,7 +5,7 @@
 
 import type { TargetConfiguration } from '@nx/devkit';
 
-/** `microsvc:visualize` — render the runtime microservice graph. */
+/** `architecture:visualize-runtime` — render the runtime microservice graph. */
 export function createVisualizeRuntimeTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:visualize-runtime',

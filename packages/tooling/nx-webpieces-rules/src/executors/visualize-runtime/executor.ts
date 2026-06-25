@@ -4,7 +4,7 @@
  * Renders the runtime microservice graph (committed
  * architecture/runtime-dependencies.json) to DOT + HTML and opens it.
  *
- * Usage: nx run microsvc:visualize
+ * Usage: nx run architecture:visualize-runtime
  */
 
 import type { ExecutorContext } from '@nx/devkit';

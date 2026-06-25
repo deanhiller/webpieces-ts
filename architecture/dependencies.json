@@ -78,10 +78,6 @@
             "http-routing"
         ]
     },
-    "microsvc": {
-        "level": 0,
-        "dependsOn": []
-    },
     "nx-webpieces-rules": {
         "level": 2,
         "dependsOn": [
