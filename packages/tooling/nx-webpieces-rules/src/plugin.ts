@@ -171,9 +171,6 @@ async function createNodesFunction(
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
 
-    // Add the microsvc virtual project (runtime graph visualize)
-    addMicrosvcProject(results, projectFiles, opts, context);
-
     // Add per-project targets (circular-deps, ci, runtime-markers)
     addPerProjectTargets(results, projectFiles, opts, context);
 
@@ -210,45 +207,6 @@ function addArchitectureProject(
     }
 }
 
-/**
- * Add the virtual `microsvc` project, exposing `microsvc:visualize` for the
- * runtime microservice graph (alongside `architecture:visualize`).
- */
-function addMicrosvcProject(
-    results: CreateNodesResultV2,
-    projectFiles: readonly string[],
-    opts: Required<ArchitecturePluginOptions>,
-    context: CreateNodesContextV2,
-): void {
-    if (!opts.workspace.enabled) return;
-    if (!opts.workspace.features!.visualizeRuntime) return;
-
-    const archDirPath = join(context.workspaceRoot, 'architecture');
-    if (!existsSync(archDirPath)) return;
-
-    // Root at a dedicated `microsvc/` dir so it does not collide with the
-    // `architecture` project's root. The committed runtime graph still lives in
-    // architecture/runtime-dependencies.json (read via the workspace root).
-    const microsvcDirPath = join(context.workspaceRoot, 'microsvc');
-    if (!existsSync(microsvcDirPath)) return;
-
-    const result: CreateNodesResult = {
-        projects: {
-            microsvc: {
-                name: 'microsvc',
-                root: 'microsvc',
-                targets: {
-                    visualize: createVisualizeRuntimeTarget(),
-                },
-            },
-        },
-    };
-
-    const firstProjectFile = projectFiles[0];
-    if (firstProjectFile) {
-        results.push([firstProjectFile, result] as const);
-    }
-}
 
 function addPerProjectTargets(
     results: CreateNodesResultV2,
@@ -373,6 +331,9 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (opts.workspace.features!.visualize) {
         targets['visualize'] = createVisualizeTargetWithoutPrefix(graphPath);
+    }
+    if (opts.workspace.features!.visualizeRuntime) {
+        targets['visualize-runtime'] = createVisualizeRuntimeTarget();
     }
     if (validations.noCycles) {
         targets['validate-no-architecture-cycles'] = createValidateNoCyclesTarget();
