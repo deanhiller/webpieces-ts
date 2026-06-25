@@ -103,14 +103,84 @@ function escapeRegex(s: string): string {
     return s.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
+class TsconfigCompilerOptions {
+    paths?: Record<string, string[]>;
+}
+class TsconfigBase {
+    compilerOptions?: TsconfigCompilerOptions;
+}
+
+/** Read tsconfig.base.json compilerOptions.paths from the workspace root, or null on failure. */
+function readTsconfigPaths(workspaceRoot: string): Record<string, string[]> | null {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort read; null on any failure
+    try {
+        const tsconfigPath = path.join(workspaceRoot, 'tsconfig.base.json');
+        const content = fs.readFileSync(tsconfigPath, 'utf8');
+        const tsconfig = JSON.parse(content) as TsconfigBase;
+        return tsconfig?.compilerOptions?.paths ?? null;
+    // webpieces-disable catch-error-pattern -- file missing or malformed JSON; caller handles null
+    } catch (err: unknown) {
+        //const error = toError(err);
+        return null;
+    }
+}
+
+/**
+ * Walk up from startPath to find the nearest ancestor directory that contains
+ * a package.json. Returns that directory path, or null if none found.
+ */
+function findPackageRoot(startPath: string): string | null {
+    let dir = fs.statSync(startPath).isDirectory() ? startPath : path.dirname(startPath);
+    const fsRoot = path.parse(dir).root;
+    while (dir !== fsRoot) {
+        if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+        dir = path.dirname(dir);
+    }
+    return null;
+}
+
 function resolvePackageDir(pkgName: string, workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- resolution failure is expected for unknown packages; warn and skip
+    // First try require.resolve (works for installed / symlinked packages).
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- resolution failure is expected; fall through to tsconfig path lookup
     try {
         const pkgJson = require.resolve(`${pkgName}/package.json`, { paths: [workspaceRoot] });
         return fs.realpathSync(path.dirname(pkgJson));
+    // webpieces-disable catch-error-pattern -- expected for non-installed packages; fall through to tsconfig path lookup
+    } catch (err: unknown) {
+        //const error = toError(err);
+        // Fall through to tsconfig path resolution for pnpm workspace packages.
+    }
+
+    // Fallback: resolve via tsconfig.base.json compilerOptions.paths.
+    // pnpm workspace packages are not in node_modules, so require.resolve fails above;
+    // tsconfig.base.json maps e.g. "@mealco-internal/kami" → ["libraries/kami/index.ts"].
+    const tsconfigPaths = readTsconfigPaths(workspaceRoot);
+    const entries = tsconfigPaths?.[pkgName];
+    if (!entries || entries.length === 0) {
+        console.warn(
+            `⚠️  no-file-import-cycles: could not resolve excludePackages entry "${pkgName}"` +
+                ` — not found in node_modules or tsconfig.base.json paths. Skipping.`,
+        );
+        return null;
+    }
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort fallback; warn on any failure
+    try {
+        const resolved = path.resolve(workspaceRoot, entries[0]);
+        const pkgRoot = findPackageRoot(resolved);
+        if (!pkgRoot) {
+            console.warn(
+                `⚠️  no-file-import-cycles: resolved "${pkgName}" → "${resolved}"` +
+                    ` but found no package.json in parent directories — skipping.`,
+            );
+            return null;
+        }
+        return pkgRoot;
     } catch (err: unknown) {
         const error = toError(err);
-        console.warn(`⚠️  no-file-import-cycles: could not resolve excludePackages entry "${pkgName}" (${error.message}) — skipping`);
+        console.warn(
+            `⚠️  no-file-import-cycles: could not resolve excludePackages entry "${pkgName}"` +
+                ` via tsconfig paths (${error.message}) — skipping.`,
+        );
         return null;
     }
 }
