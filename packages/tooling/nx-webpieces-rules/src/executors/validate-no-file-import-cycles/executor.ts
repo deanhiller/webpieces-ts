@@ -16,8 +16,11 @@
  *       "ignoreModifiedUntilEpoch": 1771931925,  // epoch SECONDS; while now < epoch,
  *                                            //   cycles are reported but the gate PASSES
  *                                            //   (warn, don't fail). After it, fails again.
- *       "ignoreTypeOnly": true              // ignore `import type` re-export cycles
+ *       "ignoreTypeOnly": true,             // ignore `import type` re-export cycles
  *                                            //   (erased at compile time, harmless at runtime)
+ *       "excludePackages": ["@kami/entities"] // npm package names whose source trees madge
+ *                                            //   should NOT traverse (stops foreign cycles
+ *                                            //   from leaking into this project's report)
  *   }
  *
  * Mirrors the dated-disable model already used for the method/file-size rules:
@@ -29,7 +32,9 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { loadConfig } from '@webpieces/rules-config';
+import * as fs from 'fs';
 import * as path from 'path';
+import { toError } from '../../toError';
 
 export type ValidateNoFileImportCyclesMode = 'ON' | 'OFF';
 
@@ -94,10 +99,31 @@ function isFailingActive(epoch: number | undefined): boolean {
 const EXCLUDE_BUILD_DIRS = '(^|/)(node_modules|dist|build|out|coverage|\\.nx|\\.next)(/|$)';
 const EXCLUDE_DECLARATION_FILES = '\\.d\\.ts$';
 
-function buildMadgeOptions(ignoreTypeOnly: boolean): MadgeOptions {
+function escapeRegex(s: string): string {
+    return s.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+function resolvePackageDir(pkgName: string, workspaceRoot: string): string | null {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- resolution failure is expected for unknown packages; warn and skip
+    try {
+        const pkgJson = require.resolve(`${pkgName}/package.json`, { paths: [workspaceRoot] });
+        return fs.realpathSync(path.dirname(pkgJson));
+    } catch (err: unknown) {
+        const error = toError(err);
+        console.warn(`⚠️  no-file-import-cycles: could not resolve excludePackages entry "${pkgName}" (${error.message}) — skipping`);
+        return null;
+    }
+}
+
+function buildMadgeOptions(ignoreTypeOnly: boolean, excludePackages: string[], workspaceRoot: string): MadgeOptions {
+    const excludeRegExp = [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES];
+    for (const pkg of excludePackages) {
+        const dir = resolvePackageDir(pkg, workspaceRoot);
+        if (dir) excludeRegExp.push(`^${escapeRegex(dir)}(/|$)`);
+    }
     const options: MadgeOptions = {
         fileExtensions: ['ts', 'tsx'],
-        excludeRegExp: [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES],
+        excludeRegExp,
     };
     if (ignoreTypeOnly) {
         // dependency-tree's TS detective drops `import type {...}` edges with this flag.
@@ -138,11 +164,12 @@ export default async function runExecutor(
 
     const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
     const ignoreTypeOnly = (rule?.options['ignoreTypeOnly'] as boolean | undefined) ?? false;
+    const excludePackages = (rule?.options['excludePackages'] as string[] | undefined) ?? [];
 
     console.log(`\n🔁 Checking import cycles in ${projectName} (madge)\n`);
 
     const madge = loadMadge();
-    const result = await madge(projectRoot, buildMadgeOptions(ignoreTypeOnly));
+    const result = await madge(projectRoot, buildMadgeOptions(ignoreTypeOnly, excludePackages, context.root));
     const cycles = result.circular();
 
     if (cycles.length === 0) {
