@@ -8,7 +8,10 @@
         "postinstall": "node bin/postinstall.js"
     },
     "bin": {
-        "wp-setup-ai-hooks": "./bin/wp-setup-ai-hooks.js"
+        "wp-setup-ai-hooks": "./bin/wp-setup-ai-hooks.js",
+        "wp-git-update": "./src/scripts/git-updateFromMain.js",
+        "wp-git-gather": "./src/scripts/git-gatherInfo.js",
+        "wp-git-merge-complete": "./src/scripts/git-mergeComplete.js"
     },
     "exports": {
         ".": "./src/index.js",
