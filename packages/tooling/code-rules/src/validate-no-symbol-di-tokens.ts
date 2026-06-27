@@ -16,7 +16,7 @@
  * ALLOWED
  * ============================================================================
  *
- * - Files under allowedPaths (e.g. libraries/apis/**, libraries/apis-external/**)
+ * - Files under allowedPaths (configured in webpieces.config.json, defaults to [])
  * - Test files (*.test.ts, *.spec.ts, __tests__/**)
  * - Lines with // webpieces-disable no-symbol-di-tokens -- <reason> (when disableAllowed: true)
  *
@@ -56,20 +56,17 @@ export interface ExecutorResult {
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
-const SHARED_MESSAGE = `Do not create a dependency-injection token with Symbol(). Symbol() for DI is allowed in ONLY two places:
-  1. API definitions (libraries/apis/**)          — define the Symbol token alongside the API interface.
-  2. Framework primitives (packages/http/http-api/**)
-EVERYWHERE ELSE, choose the right pattern:
-  A) OWN class: annotate it with @provideSingleton() and inject by concrete class TYPE — no Symbol, no @inject.
+const SHARED_MESSAGE = `Do not create a dependency-injection token with Symbol(). Choose the right pattern:
+Option 1: OWN class — annotate it with @provideSingleton() and inject by concrete class TYPE — no Symbol, no @inject.
        constructor(private readonly myService: MyService) {}
-  B) EXTERNAL library impl (libraries/apis-external/**): import the Symbol from libraries/apis/** and use:
+Option 2: API IMPLEMENTATION — import the Symbol from the API definition file and use:
        @provideSingletonAs(SOME_API_TOKEN)
        export class SomeApiImpl implements SomeApi { ... }
-  C) EXTERNAL library class you cannot decorate (DataSource, Anthropic, etc.):
+Option 3: External lib class you cannot decorate (DataSource, Anthropic, etc.):
        bind in a ContainerModule using the class itself as token — no Symbol needed:
          bind<Anthropic>(Anthropic).toDynamicValue(() => new Anthropic({ apiKey: ... })).inSingletonScope()
        Then inject by type — no Symbol, no @inject.
-If this specific line is a legitimate binding or framework primitive, append:  // webpieces-disable no-symbol-di-tokens -- <reason>`;
+Option 4 (last resort): append // webpieces-disable no-symbol-di-tokens -- <reason> to justify this specific line.`;
 
 interface SymbolViolation {
     file: string;
@@ -406,10 +403,7 @@ export default async function runNoSymbolDiTokensExecutor(
 ): Promise<ExecutorResult> {
     const mode: NoSymbolDiTokensMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
-    const allowedPaths = options.allowedPaths ?? [
-        'libraries/apis/**',
-        'packages/http/http-api/**',
-    ];
+    const allowedPaths = options.allowedPaths ?? [];
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping no-symbol-di-tokens validation (mode: OFF)');
