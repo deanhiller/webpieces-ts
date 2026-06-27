@@ -1,9 +1,9 @@
 # Conflict Test File
 
 ## Section A
-This is the original section A content.
-Line 2 of section A.
-Line 3 of section A.
+This is BRANCH A's modified section A content.
+Line 2 of section A - updated by someone else's PR.
+Line 3 of section A - someone else added extra context here.
 
 ## Section B
 This is the original section B content.
