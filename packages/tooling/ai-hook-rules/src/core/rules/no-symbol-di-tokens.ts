@@ -49,10 +49,10 @@ const noSymbolDiTokensRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: { allowedPaths: [] },
     fixHint: [
-        '(OWN class) Use @provideSingleton() on the class and inject by type — no Symbol needed.',
-        '(apis-external impl) Import the Symbol from libraries/apis/** and annotate with @provideSingletonAs(TOKEN).',
-        '(External lib class: DataSource, Anthropic, etc.) bind<Cls>(Cls).toDynamicValue(...) in a ContainerModule — no Symbol needed.',
-        'Last resort: add // webpieces-disable no-symbol-di-tokens -- <reason> with a clear justification.',
+        'Option 1: Use @provideSingleton() on the class and inject by type — no Symbol needed.',
+        'Option 2: Implement an API interface — import the Symbol from the API definition and use @provideSingletonAs(TOKEN).',
+        'Option 3: External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.',
+        'Option 4 (last resort): // webpieces-disable no-symbol-di-tokens -- <reason>',
     ],
 
     check(ctx: EditContext): readonly Violation[] {
