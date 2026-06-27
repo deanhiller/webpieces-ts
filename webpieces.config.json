@@ -65,6 +65,15 @@
             "ignoreModifiedUntilEpoch": 1771931925,
             "allowedPaths": ["libraries/apis/**", "packages/http/http-api/**"]
         },
+        "branch-creation-guard": {
+            "mode": "ON"
+        },
+        "pr-creation-guard": {
+            "mode": "ON"
+        },
+        "no-direct-main-update": {
+            "mode": "ON"
+        },
         "no-file-import-cycles": {
             "mode": "ON",
             "ignoreTypeOnly": false

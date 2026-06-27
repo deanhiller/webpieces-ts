@@ -9,4 +9,7 @@ export const builtInRuleNames: readonly string[] = [
     'catch-error-pattern',
     'no-shell-substitution',
     'no-symbol-di-tokens',
+    'branch-creation-guard',
+    'pr-creation-guard',
+    'no-direct-main-update',
 ];

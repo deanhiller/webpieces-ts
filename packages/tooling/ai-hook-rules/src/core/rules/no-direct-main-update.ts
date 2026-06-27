@@ -1,0 +1,61 @@
+import { execSync } from 'child_process';
+import type { BashRule, BashContext, Violation } from '../types';
+import { Violation as V } from '../types';
+
+const FIX_HINT: readonly string[] = [
+    'Do not merge or rebase from main directly on a feature branch.',
+    'This breaks the 3-point fork-point system (A=fork point, B=feature HEAD, C=main HEAD).',
+    '',
+    'Use the squash-update process instead:',
+    '  ./scripts/git-updateFromMain.sh',
+    '',
+    'See docs/git-workflow.md for the full process.',
+];
+
+const WRONG_UPDATE_PATTERNS: RegExp[] = [
+    /git\s+merge\s+(origin\/main|main)\b/,
+    /git\s+rebase\s+(origin\/main|main)\b/,
+    /git\s+pull\s+origin\s+main\b/,
+];
+
+const noDirectMainUpdate: BashRule = {
+    name: 'no-direct-main-update',
+    description: 'Block direct git merge/rebase/pull from main on feature branches. Use the squash-update process instead.',
+    scope: 'bash',
+    files: [],
+    defaultOptions: {},
+    fixHint: FIX_HINT,
+
+    check(ctx: BashContext): readonly Violation[] {
+        const matched = WRONG_UPDATE_PATTERNS.some((p: RegExp) => p.test(ctx.command));
+        if (!matched) return [];
+
+        const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+            cwd: ctx.workspaceRoot,
+            encoding: 'utf8',
+        }).trim();
+
+        if (currentBranch === 'main') {
+            return [];
+        }
+
+        return [new V(
+            1,
+            truncate(ctx.command),
+            [
+                `Direct merge/rebase from main on branch '${currentBranch}' is blocked.`,
+                'This breaks the 3-point fork-point system.',
+                'Use the squash-update process instead:',
+                '  ./scripts/git-updateFromMain.sh',
+                'See docs/git-workflow.md for details.',
+            ].join('\n'),
+        )];
+    },
+};
+
+function truncate(s: string): string {
+    const MAX = 120;
+    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+}
+
+export default noDirectMainUpdate;
