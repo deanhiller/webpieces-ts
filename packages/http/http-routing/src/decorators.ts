@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { provide } from '@inversifyjs/binding-decorators';
+import type { BindInWhenOnFluentSyntax, ServiceIdentifier } from 'inversify';
 
 /**
  * Metadata keys for server-side routing.
@@ -74,6 +75,22 @@ export function provideSingleton() {
     return (target: any) => {
         return provide(target, (bind) => bind.inSingletonScope())(target);
     };
+}
+
+/**
+ * Provides a singleton-scoped dependency bound to a specific token (Symbol or abstract class).
+ * Use this in libraries/apis-external/** to bind an impl to the Symbol defined in libraries/apis/**.
+ *
+ * Usage:
+ * ```typescript
+ * import { SOME_API_TOKEN } from '@myorg/some-api';
+ *
+ * @provideSingletonAs(SOME_API_TOKEN)
+ * export class SomeApiImpl implements SomeApi { ... }
+ * ```
+ */
+export function provideSingletonAs<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
+    return provide(serviceIdentifier, (bind: BindInWhenOnFluentSyntax<T>) => bind.inSingletonScope());
 }
 
 /**

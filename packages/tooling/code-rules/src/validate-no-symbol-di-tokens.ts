@@ -57,12 +57,18 @@ export interface ExecutorResult {
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
 const SHARED_MESSAGE = `Do not create a dependency-injection token with Symbol(). Symbol() for DI is allowed in ONLY two places:
-  1. INTERNAL apis (libraries/apis/**)          — bind the generated client to its API.
-  2. EXTERNAL apis (libraries/apis-external/**)  — bind the impl to its API (impl wraps the external SDK).
-EVERYWHERE ELSE, do NOT define a Symbol token and do NOT use @inject(TOKEN).
-Instead: annotate the implementation class with @provideSingleton() and inject it by its concrete class TYPE,
-e.g.  constructor(private readonly identityResolver: IdentityResolver) {}   // no Symbol, no @inject.
-For a swappable default-impl-behind-an-interface, use @provideSingletonAs(TOKEN) — only inside libraries/apis(-external).
+  1. API definitions (libraries/apis/**)          — define the Symbol token alongside the API interface.
+  2. Framework primitives (packages/http/http-api/**)
+EVERYWHERE ELSE, choose the right pattern:
+  A) OWN class: annotate it with @provideSingleton() and inject by concrete class TYPE — no Symbol, no @inject.
+       constructor(private readonly myService: MyService) {}
+  B) EXTERNAL library impl (libraries/apis-external/**): import the Symbol from libraries/apis/** and use:
+       @provideSingletonAs(SOME_API_TOKEN)
+       export class SomeApiImpl implements SomeApi { ... }
+  C) EXTERNAL library class you cannot decorate (DataSource, Anthropic, etc.):
+       bind in a ContainerModule using the class itself as token — no Symbol needed:
+         bind<Anthropic>(Anthropic).toDynamicValue(() => new Anthropic({ apiKey: ... })).inSingletonScope()
+       Then inject by type — no Symbol, no @inject.
 If this specific line is a legitimate binding or framework primitive, append:  // webpieces-disable no-symbol-di-tokens -- <reason>`;
 
 interface SymbolViolation {
@@ -402,7 +408,6 @@ export default async function runNoSymbolDiTokensExecutor(
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [
         'libraries/apis/**',
-        'libraries/apis-external/**',
         'packages/http/http-api/**',
     ];
 

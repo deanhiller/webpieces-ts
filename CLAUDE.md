@@ -144,12 +144,15 @@ export class MyService {
 }
 ```
 
-**`Symbol()` DI tokens are blocked by `no-symbol-di-tokens`** (enforced via `@webpieces/ai-hook-rules` PreToolUse hook and `@webpieces/code-rules` MODIFIED_CODE gate). Symbols are only allowed in:
-- `libraries/apis/**` — bind a generated client to its API contract
-- `libraries/apis-external/**` — bind an impl to an external-SDK API
+**`Symbol()` DI tokens are blocked by `no-symbol-di-tokens`** (enforced via `@webpieces/ai-hook-rules` PreToolUse hook and `@webpieces/code-rules` MODIFIED_CODE gate). Allowed paths are configured in `webpieces.config.json` under `no-symbol-di-tokens.allowedPaths`. Defaults:
+- `libraries/apis/**` — define Symbol token alongside the API interface
 - `packages/http/http-api/**` — framework primitives (e.g. `Symbol.for` multiInject)
 
-For a swappable default-impl-behind-an-interface inside those packages, use `@provideSingletonAs(TOKEN)`. Anywhere else, add `// webpieces-disable no-symbol-di-tokens -- <reason>` to the line if absolutely necessary.
+Choose the right pattern by use case:
+- **Own class** → `@provideSingleton()` + inject by type. No Symbol.
+- **`libraries/apis-external/**` impl** → import the Symbol from `libraries/apis/**` and annotate with `@provideSingletonAs(TOKEN)`. No new Symbol creation in `apis-external`.
+- **External library class you cannot decorate** (DataSource, Anthropic SDK, etc.) → bind in a ContainerModule using the class itself as the token: `bind<Anthropic>(Anthropic).toDynamicValue(() => new Anthropic({...})).inSingletonScope()`. Inject by type — no Symbol, no `@inject`.
+- **Unavoidable** → add `// webpieces-disable no-symbol-di-tokens -- <reason>` to the line.
 
 ### 6. Decorators
 
@@ -161,7 +164,8 @@ For a swappable default-impl-behind-an-interface inside those packages, use `@pr
 **Server-only Decorators:**
 - `@Controller()` - Mark controller class
 - `@SourceFile('path/to/controller.ts')` - Explicit filepath for filter matching
-- `@provideSingleton()` - Register as singleton
+- `@provideSingleton()` - Register as singleton (binds class to itself)
+- `@provideSingletonAs(TOKEN)` - Register as singleton bound to TOKEN; use in `libraries/apis-external/**` with a Symbol imported from `libraries/apis/**`
 
 ### 7. Testing
 

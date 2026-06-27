@@ -19,6 +19,7 @@ export {
     Controller,
     isController,
     provideSingleton,
+    provideSingletonAs,
     provideTransient,
     ROUTING_METADATA_KEYS,
 } from './decorators';

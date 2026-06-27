@@ -3,33 +3,61 @@ import { Violation as V } from '../types';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
-const ALLOWED_PATHS: RegExp[] = [
-    /^libraries\/apis\//,
-    /^libraries\/apis-external\//,
-    /^packages\/http\/http-api\//,
-];
-
 const TEST_PATHS: RegExp[] = [/\.test\.ts$/, /\.spec\.ts$/, /__tests__\//];
 
-function isAllowedPath(relativePath: string): boolean {
-    return ALLOWED_PATHS.some((re: RegExp) => re.test(relativePath)) ||
-        TEST_PATHS.some((re: RegExp) => re.test(relativePath));
+function globToRegex(pattern: string): RegExp {
+    let re = '';
+    let i = 0;
+    while (i < pattern.length) {
+        const ch = pattern[i];
+        if (ch === '*') {
+            if (pattern[i + 1] === '*') {
+                re += '.*';
+                i += 2;
+                if (pattern[i] === '/') i += 1;
+                continue;
+            }
+            re += '[^/]*';
+            i += 1;
+            continue;
+        }
+        if (ch === '?') {
+            re += '[^/]';
+            i += 1;
+            continue;
+        }
+        if ('.+^$(){}|[]\\'.includes(ch)) {
+            re += '\\' + ch;
+            i += 1;
+            continue;
+        }
+        re += ch;
+        i += 1;
+    }
+    return new RegExp('^' + re + '$');
+}
+
+function isAllowedPath(relativePath: string, allowedPaths: readonly string[]): boolean {
+    if (TEST_PATHS.some((re: RegExp) => re.test(relativePath))) return true;
+    return allowedPaths.some((pattern: string) => globToRegex(pattern).test(relativePath));
 }
 
 const noSymbolDiTokensRule: EditRule = {
     name: 'no-symbol-di-tokens',
-    description: 'Disallow Symbol() DI tokens outside api(-external) packages. Use @provideSingleton() + inject-by-type instead.',
+    description: 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @provideSingleton() + inject-by-type instead.',
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: {},
+    defaultOptions: { allowedPaths: [] },
     fixHint: [
-        '(PREFERRED) Use @provideSingleton() on the class and inject that class directly — no Symbol needed.',
-        'Interface+impl pair (e.g. FirestoreApi/FirestoreImpl): co-locate the Symbol with the Api file and add // webpieces-disable no-symbol-di-tokens -- <reason>',
-        'External lib creating a class needing binding: put Symbol in a symbols file and add // webpieces-disable no-symbol-di-tokens -- <reason> on each one.',
+        '(OWN class) Use @provideSingleton() on the class and inject by type — no Symbol needed.',
+        '(apis-external impl) Import the Symbol from libraries/apis/** and annotate with @provideSingletonAs(TOKEN).',
+        '(External lib class: DataSource, Anthropic, etc.) bind<Cls>(Cls).toDynamicValue(...) in a ContainerModule — no Symbol needed.',
+        'Last resort: add // webpieces-disable no-symbol-di-tokens -- <reason> with a clear justification.',
     ],
 
     check(ctx: EditContext): readonly Violation[] {
-        if (isAllowedPath(ctx.relativePath)) return [];
+        const allowedPaths = (ctx.options['allowedPaths'] as string[] | undefined) ?? [];
+        if (isAllowedPath(ctx.relativePath, allowedPaths)) return [];
 
         const violations: V[] = [];
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
