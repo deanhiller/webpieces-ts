@@ -1,0 +1,131 @@
+/* eslint-disable @webpieces/max-method-lines -- test describe blocks are inherently large */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { execSync } from 'child_process';
+
+import { runBash } from '../../runner';
+
+function makeWorkspace(): string {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hooks-branch-guard-'));
+    fs.writeFileSync(
+        path.join(ws, 'webpieces.config.json'),
+        JSON.stringify({
+            rules: {
+                'no-any-unknown': { mode: 'OFF' },
+                'max-file-lines': { mode: 'OFF' },
+                'validate-ts-in-src': { mode: 'OFF' },
+                'no-destructure': { mode: 'OFF' },
+                'require-return-type': { mode: 'OFF' },
+                'no-unmanaged-exceptions': { mode: 'OFF' },
+                'catch-error-pattern': { mode: 'OFF' },
+                'branch-creation-guard': { mode: 'ON' },
+            },
+            rulesDir: [],
+        }),
+    );
+
+    execSync('git init', { cwd: ws });
+    execSync('git config user.email "test@test.com"', { cwd: ws });
+    execSync('git config user.name "Test"', { cwd: ws });
+    fs.writeFileSync(path.join(ws, 'README.md'), 'test');
+    execSync('git add .', { cwd: ws });
+    execSync('git commit -m "init"', { cwd: ws });
+    execSync('git branch -M main', { cwd: ws });
+    return ws;
+}
+
+describe('branch-creation-guard', () => {
+    describe('when not a branch-creation command', () => {
+        it('allows git checkout of an existing branch', () => {
+            const ws = makeWorkspace();
+            expect(runBash('git checkout my-branch', ws)).toBeNull();
+        });
+
+        it('allows git branch --list', () => {
+            const ws = makeWorkspace();
+            expect(runBash('git branch --list', ws)).toBeNull();
+        });
+
+        it('allows git branch -d feature', () => {
+            const ws = makeWorkspace();
+            expect(runBash('git branch -d feature', ws)).toBeNull();
+        });
+
+        it('allows git status', () => {
+            const ws = makeWorkspace();
+            expect(runBash('git status', ws)).toBeNull();
+        });
+    });
+
+    describe('when on a non-main branch', () => {
+        function makeNonMainWorkspace(): string {
+            const ws = makeWorkspace();
+            execSync('git checkout -b feature/my-work', { cwd: ws });
+            return ws;
+        }
+
+        it('blocks git checkout -b without sub/ prefix', () => {
+            const ws = makeNonMainWorkspace();
+            const result = runBash('git checkout -b new-branch', ws);
+            expect(result).not.toBeNull();
+            expect(result!.report).toContain('branch-creation-guard');
+            expect(result!.report).toContain('sub/');
+            expect(result!.report).toContain('sub/new-branch');
+        });
+
+        it('blocks git switch -c without sub/ prefix', () => {
+            const ws = makeNonMainWorkspace();
+            const result = runBash('git switch -c new-branch', ws);
+            expect(result).not.toBeNull();
+            expect(result!.report).toContain('sub/new-branch');
+        });
+
+        it('allows git checkout -b with sub/ prefix', () => {
+            const ws = makeNonMainWorkspace();
+            expect(runBash('git checkout -b sub/new-branch', ws)).toBeNull();
+        });
+
+        it('allows git switch -c with sub/ prefix', () => {
+            const ws = makeNonMainWorkspace();
+            expect(runBash('git switch -c sub/child-branch', ws)).toBeNull();
+        });
+    });
+
+    describe('when on main without a remote', () => {
+        it('fails open (allows) when fetch throws due to no remote — runner catches rule crashes', () => {
+            const ws = makeWorkspace();
+            // No remote — fetch throws, runner catches and fails open (returns null = allowed).
+            // This is intentional: if the hook infrastructure fails, don't block the AI.
+            expect(runBash('git checkout -b new-branch', ws)).toBeNull();
+        });
+    });
+
+    it('returns null when rule is disabled', () => {
+        const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hooks-branch-off-'));
+        fs.writeFileSync(
+            path.join(ws, 'webpieces.config.json'),
+            JSON.stringify({
+                rules: {
+                    'no-any-unknown': { mode: 'OFF' },
+                    'max-file-lines': { mode: 'OFF' },
+                    'validate-ts-in-src': { mode: 'OFF' },
+                    'no-destructure': { mode: 'OFF' },
+                    'require-return-type': { mode: 'OFF' },
+                    'no-unmanaged-exceptions': { mode: 'OFF' },
+                    'catch-error-pattern': { mode: 'OFF' },
+                    'branch-creation-guard': { mode: 'OFF' },
+                },
+                rulesDir: [],
+            }),
+        );
+        execSync('git init', { cwd: ws });
+        execSync('git config user.email "test@test.com"', { cwd: ws });
+        execSync('git config user.name "Test"', { cwd: ws });
+        fs.writeFileSync(path.join(ws, 'README.md'), 'test');
+        execSync('git add .', { cwd: ws });
+        execSync('git commit -m "init"', { cwd: ws });
+        execSync('git checkout -b feature', { cwd: ws });
+        expect(runBash('git checkout -b another-branch', ws)).toBeNull();
+    });
+});

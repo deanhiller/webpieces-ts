@@ -14,8 +14,14 @@ const noUnmanagedExceptionsRule: EditRule = {
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
     fixHint: [
-        'Remove the try/catch — let the exception bubble to a chokepoint (filter, globalErrorHandler).',
-        'If this IS a legitimate chokepoint, add on the line above: // webpieces-disable no-unmanaged-exceptions -- <reason>',
+        'Fix Option 1 (preferred): Remove the try/catch — let the exception bubble to the top-level chokepoint (filter, globalErrorHandler) where it is already logged and handled.',
+        'Fix Option 2 (ask the human first): If you genuinely believe this IS a chokepoint, STOP and tell the human:',
+        '  - What exception could be thrown here',
+        '  - What the current top-level chokepoint is (the try/catch at the top of the call stack)',
+        '  - Why throwing to that chokepoint would be wrong in this specific case',
+        '  Then ask: "Should I add a disable comment or remove the try/catch?"',
+        '  Only add // webpieces-disable no-unmanaged-exceptions -- <reason> if the human says yes.',
+        'NOTE: If the code is calling an external process (execSync, fs, network), the correct answer is almost always Option 1 — let it throw. Hooks have a top-level runner that reports errors properly.',
     ],
 
     check(ctx: EditContext): readonly Violation[] {

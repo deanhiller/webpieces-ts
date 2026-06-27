@@ -14,6 +14,9 @@ import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
 import catchErrorPattern from './rules/catch-error-pattern';
 import noShellSubstitution from './rules/no-shell-substitution';
 import noSymbolDiTokens from './rules/no-symbol-di-tokens';
+import branchCreationGuard from './rules/branch-creation-guard';
+import prCreationGuard from './rules/pr-creation-guard';
+import noDirectMainUpdate from './rules/no-direct-main-update';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
@@ -29,6 +32,9 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'catch-error-pattern': catchErrorPattern as Rule,
     'no-shell-substitution': noShellSubstitution as Rule,
     'no-symbol-di-tokens': noSymbolDiTokens as Rule,
+    'branch-creation-guard': branchCreationGuard as Rule,
+    'pr-creation-guard': prCreationGuard as Rule,
+    'no-direct-main-update': noDirectMainUpdate as Rule,
 };
 
 export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
