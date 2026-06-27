@@ -99,3 +99,6 @@ node_modules_*/
 
 # Generated @webpieces/ai-hook-rules artifacts (bootstrap, cache)
 .webpieces/
+
+# Webpieces git workflow temp directory (30-day retention)
+webpiecesTmp/

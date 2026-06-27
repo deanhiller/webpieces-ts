@@ -90,3 +90,81 @@ If this shows any commits, the squash-update process was bypassed. Fix by runnin
 | Sub-branch from a feature branch | `sub/sub-feature-name` |
 
 The `sub/` prefix tells the `branch-creation-guard` AI hook that you intentionally branched from a non-main branch. Without it, the hook will block and ask you to rename.
+
+---
+
+## Merge conflict resolution script reference
+
+| Script | Purpose |
+|--------|---------|
+| `./scripts/git-updateFromMain.sh` | Main entry point — squash-merge from main with optional AI conflict resolution |
+| `./scripts/git-gatherInfo.sh` | Validates tree state and gathers A/B/C hash points (called by updateFromMain) |
+| `./scripts/git-mergeComplete.sh` | Stages all resolved files after AI conflict resolution |
+| `./scripts/.workflow/git-findForkPoint.sh` | Calculates fork point and detects illegal merge commits |
+| `./scripts/.workflow/git-readAiBranchName.sh` | Converts branch name to safe directory name |
+| `./scripts/.workflow/git-validateUpToDate.sh` | Verifies branch is up-to-date with origin/main |
+| `./scripts/.workflow/cleanTmp.sh` | Removes webpiecesTmp/ entries older than 30 days |
+
+Merge context is saved to `webpiecesTmp/merge-{branch-name}/` (gitignored, 30-day retention). When AI resolves conflicts, it reads A-forkpoint.txt, B-feature.txt, C-main.txt, B-A.diff, and C-A.diff for each conflicted file, then writes a `merge-summary.md` for human review.
+
+The AI merge command lives at `.claude/commands/wp-merge.md` and is launched with:
+```
+/wp-merge
+```
+
+---
+
+## Installing `@webpieces/ai-hook-rules` in a new project
+
+### Single-package project
+
+```bash
+pnpm add -D @webpieces/ai-hook-rules
+# If pnpm build approval is required:
+pnpm approve-builds
+```
+
+The postinstall script automatically:
+1. Creates `.webpieces/ai-hooks/claude-code-hook.js` (bridge to the npm package)
+2. Merges a `PreToolUse` hook entry into `.claude/settings.json` if `.claude/` exists
+3. Seeds `webpieces.config.json` if missing
+
+### Monorepo-nx project
+
+Add the package to the **root** `package.json` devDependencies (not a workspace package):
+
+```bash
+# From the monorepo root:
+pnpm add -D @webpieces/ai-hook-rules
+pnpm approve-builds   # if prompted
+# Verify:
+cat .webpieces/ai-hooks/claude-code-hook.js
+```
+
+In a pnpm workspace, the package is hoisted to the root `node_modules/`, so the postinstall fires once for the monorepo root. The hook file is created at the root `.webpieces/ai-hooks/claude-code-hook.js`.
+
+### Global dispatch (machine-level, run once)
+
+The global dispatch script (`~/.webpieces/ai-hooks/global-dispatch.js`) delegates to each project's own hook, so any project with `.webpieces/ai-hooks/claude-code-hook.js` gets the rules automatically — even without a per-project `.claude/settings.json` entry.
+
+To set up global dispatch:
+```bash
+mkdir -p ~/.webpieces/ai-hooks
+# Copy global-dispatch.js to ~/.webpieces/ai-hooks/global-dispatch.js
+# Then add to ~/.claude/settings.json:
+```
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [{ "type": "command", "command": "node /Users/YOUR_USER/.webpieces/ai-hooks/global-dispatch.js" }]
+      }
+    ]
+  }
+}
+```
+
+The dispatch automatically skips projects that already have `claude-code-hook.js` in their `.claude/settings.json` to avoid double-firing.
