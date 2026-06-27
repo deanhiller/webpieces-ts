@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';

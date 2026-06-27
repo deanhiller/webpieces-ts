@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
