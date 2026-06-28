@@ -84,19 +84,39 @@ function runBashInternal(command: string, cwd: string): BlockedResult | null {
 }
 
 function checkConfigSync(rules: readonly Rule[], config: ResolvedConfig): BlockedResult | null {
-    const unconfigured = rules.filter((r: Rule) => !config.rules.has(r.name)).map((r: Rule) => r.name);
-    if (unconfigured.length === 0) return null;
+    const unconfiguredRules = rules.filter((r: Rule) => !config.rules.has(r.name));
+    if (unconfiguredRules.length === 0) return null;
 
     const lines = [
-        'webpieces.config.json is out of sync — new rules have been added that are not yet configured.',
+        'webpieces.config.json is out of sync — new built-in rules are present that have no entry in webpieces.config.json.',
         '',
-        `Unconfigured rules: ${unconfigured.join(', ')}`,
+        'Tell the human: the following rules need to be configured. Ask for each one:',
+        '  - Should this rule be ON, OFF, MODIFIED_CODE, or MODIFIED_FILES?',
+        '  - What values do you want for the options listed below?',
+        'Then update webpieces.config.json and retry.',
         '',
-        'Ask the human: for each rule above, do you want it ON or OFF (and any specific options)?',
-        'Then run `./node_modules/.bin/wp-setup-ai-hooks --sync` to add missing rules (defaults to OFF),',
-        'or edit webpieces.config.json manually to add an entry for each rule.',
-        'Do not proceed until webpieces.config.json is updated.',
+        'Do NOT proceed until webpieces.config.json has an entry for every rule below.',
+        '',
     ];
+
+    for (const rule of unconfiguredRules) {
+        lines.push(`--- ${rule.name} ---`);
+        lines.push(`Description: ${rule.description}`);
+        const opts = rule.defaultOptions;
+        const optKeys = Object.keys(opts);
+        if (optKeys.length > 0) {
+            lines.push(`Available options (suggested defaults shown):`);
+            for (const key of optKeys) {
+                lines.push(`  ${key}: ${JSON.stringify(opts[key])}`);
+            }
+        } else {
+            lines.push('Available options: none beyond mode');
+        }
+        lines.push(`Example entry for webpieces.config.json:`);
+        lines.push(`  "${rule.name}": { "mode": "ON" }`);
+        lines.push('');
+    }
+
     return new BlockedResult(lines.join('\n'));
 }
 

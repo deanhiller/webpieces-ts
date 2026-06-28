@@ -8,10 +8,12 @@ export const builtInRuleNames: readonly string[] = [
     'require-return-type',
     'no-unmanaged-exceptions',
     'catch-error-pattern',
+    'throw-cause-required',
     'no-shell-substitution',
     'no-symbol-di-tokens',
     'branch-creation-guard',
     'pr-creation-guard',
     'pr-merge-cleanup',
     'no-direct-main-update',
+    'no-edit-on-main',
 ];

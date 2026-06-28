@@ -55,6 +55,11 @@
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
+        "throw-cause-required": {
+            "mode": "MODIFIED_CODE",
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 1771931925
+        },
         "angular-no-direct-api-in-resolver": {
             "mode": "OFF",
             "disableAllowed": true
@@ -77,6 +82,10 @@
         "no-direct-main-update": {
             "mode": "ON"
         },
+        "no-edit-on-main": {
+            "mode": "ON",
+            "branchNamingConvention": "{whoami}/{featurename}"
+        },
         "no-file-import-cycles": {
             "mode": "ON",
             "ignoreTypeOnly": false
@@ -91,6 +100,9 @@
             "mode": "ON",
             "allowedPaths": []
         },
+"no-shell-substitution": {
+    "mode": "ON"
+},
         "validate-ts-in-src": {
             "mode": "MODIFIED_FILES",
             "ignoreModifiedUntilEpoch": 1771931925,
