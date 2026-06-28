@@ -71,6 +71,9 @@
         "pr-creation-guard": {
             "mode": "ON"
         },
+        "pr-merge-cleanup": {
+            "mode": "ON"
+        },
         "no-direct-main-update": {
             "mode": "ON"
         },
