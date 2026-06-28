@@ -58,7 +58,7 @@ function run(rawInput: string): void {
     const localHook = join(cwd, 'node_modules', '.bin', 'wp-ai-hook');
     if (existsSync(localHook)) {
         const result = spawnSync(localHook, [], {
-            input: rawInput,
+            input: Buffer.from(rawInput),
             encoding: 'buffer',
         });
         if (result.stdout?.length) process.stdout.write(result.stdout);
