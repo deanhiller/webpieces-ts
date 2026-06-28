@@ -66,12 +66,13 @@ export function loadConfig(cwd: string): ResolvedConfig {
     const configPath = findConfigFile(cwd);
 
     if (!configPath) {
-        return new ResolvedConfig(new Map(), new Set(), [], null);
+        return new ResolvedConfig(new Map(), new Set(), new Map(), [], null);
     }
 
     const consumerConfig = readRawConfig(configPath);
     const overrideRules = consumerConfig.rules || {};
     const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
+    const rawUserRules = new Map<string, Readonly<Record<string, unknown>>>(Object.entries(overrideRules));
     const mergedRules = new Map<string, ResolvedRuleConfig>();
 
     const allRuleNames = new Set([
@@ -84,5 +85,5 @@ export function loadConfig(cwd: string): ResolvedConfig {
 
     const rulesDir = consumerConfig.rulesDir ?? [];
 
-    return new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
+    return new ResolvedConfig(mergedRules, userConfiguredRuleNames, rawUserRules, rulesDir, configPath);
 }

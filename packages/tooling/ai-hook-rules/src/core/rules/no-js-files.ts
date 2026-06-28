@@ -1,7 +1,7 @@
 import { isPathExcluded } from '@webpieces/rules-config';
 
 import type { FileRule, FileContext, Violation } from '../types';
-import { Violation as V } from '../types';
+import { Violation as V, FieldSchema } from '../types';
 
 const noJsFiles: FileRule = {
     name: 'no-js-files',
@@ -11,6 +11,9 @@ const noJsFiles: FileRule = {
     defaultOptions: {
         allowedPaths: [],
     },
+    configSchema: {
+        allowedPaths: new FieldSchema('string[]', 'Glob patterns for .js/.jsx paths that are exempt from the rule'),
+    },
     fixHint: [
         'Write a .ts or .tsx file instead of .js/.jsx.',
         'If this path must be .js (e.g. a generated or legacy file), add it to no-js-files.allowedPaths in webpieces.config.json',
@@ -19,9 +22,7 @@ const noJsFiles: FileRule = {
     check(ctx: FileContext): readonly Violation[] {
         if (ctx.tool !== 'Write') return [];
 
-        const allowedPaths = Array.isArray(ctx.options['allowedPaths'])
-            ? ctx.options['allowedPaths'] as string[]
-            : [];
+        const allowedPaths = ctx.options['allowedPaths'] as string[];
 
         if (isPathExcluded(ctx.relativePath, allowedPaths)) return [];
 

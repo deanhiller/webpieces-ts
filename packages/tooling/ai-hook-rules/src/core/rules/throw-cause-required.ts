@@ -23,6 +23,7 @@ const throwCauseRequiredRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
+    configSchema: {},
     fixHint: [
         'Option 1 — Remove the try-catch entirely. Letting the original exception bubble is usually the best option.',
         'Option 2 — throw new Error("add more info here", { cause: error }); chains the error and preserves the full stack trace.',

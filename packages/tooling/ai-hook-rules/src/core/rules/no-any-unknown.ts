@@ -10,6 +10,7 @@ const noAnyRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
+    configSchema: {},
     fixHint: [
         'Prefer: interface MyData { ... }   or   class MyData { ... }',
         '// webpieces-disable no-any-unknown -- <one-line reason>',

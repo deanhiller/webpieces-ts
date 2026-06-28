@@ -41,6 +41,7 @@ const noImplicitAnyRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
+    configSchema: {},
     fixHint: [
         'Add explicit types: (x: string) => ...   or   function foo(x: number)',
         '// webpieces-disable no-implicit-any -- <one-line reason>',
