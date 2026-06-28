@@ -1,5 +1,8 @@
+import * as path from 'path';
+
 import { run, runBash } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
+import { CONFIG_FILENAME } from '../core/load-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError } from '../core/types';
 import { toError } from '../core/to-error';
 
@@ -97,6 +100,9 @@ export async function main(): Promise<void> {
 
         const input = normalizeToolInput(toolKind, payload.tool_input);
         if (!input) { process.exit(0); return; }
+
+        // Always allow edits to webpieces.config.json — it's the fix target when the config is broken
+        if (path.basename(input.filePath) === CONFIG_FILENAME) { process.exit(0); return; }
 
         const result = run(toolKind, input, cwd);
         if (!result) { process.exit(0); return; }
