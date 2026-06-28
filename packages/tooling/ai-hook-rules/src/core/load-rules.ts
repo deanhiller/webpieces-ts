@@ -13,6 +13,7 @@ import noDestructure from './rules/no-destructure';
 import requireReturnType from './rules/require-return-type';
 import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
 import catchErrorPattern from './rules/catch-error-pattern';
+import throwCauseRequired from './rules/throw-cause-required';
 import noShellSubstitution from './rules/no-shell-substitution';
 import noSymbolDiTokens from './rules/no-symbol-di-tokens';
 import branchCreationGuard from './rules/branch-creation-guard';
@@ -20,6 +21,7 @@ import prCreationGuard from './rules/pr-creation-guard';
 import prMergeCleanup from './rules/pr-merge-cleanup';
 import noDirectMainUpdate from './rules/no-direct-main-update';
 import noJsFiles from './rules/no-js-files';
+import noEditOnMain from './rules/no-edit-on-main';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
@@ -33,6 +35,7 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'require-return-type': requireReturnType as Rule,
     'no-unmanaged-exceptions': noUnmanagedExceptions as Rule,
     'catch-error-pattern': catchErrorPattern as Rule,
+    'throw-cause-required': throwCauseRequired as Rule,
     'no-shell-substitution': noShellSubstitution as Rule,
     'no-symbol-di-tokens': noSymbolDiTokens as Rule,
     'branch-creation-guard': branchCreationGuard as Rule,
@@ -40,6 +43,7 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'pr-merge-cleanup': prMergeCleanup as Rule,
     'no-direct-main-update': noDirectMainUpdate as Rule,
     'no-js-files': noJsFiles as Rule,
+    'no-edit-on-main': noEditOnMain as Rule,
 };
 
 export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
@@ -76,7 +80,7 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
             entries = fs.readdirSync(absDir).filter((e) => e.endsWith('.js'));
         } catch (err: unknown) {
             const error = toError(err);
-            throw new InformAiError(`Cannot read custom rules directory '${absDir}': ${error.message}`);
+            throw new InformAiError(`Cannot read custom rules directory '${absDir}'`, { cause: error });
         }
         for (const entry of entries) {
             const full = path.join(absDir, entry);
@@ -86,7 +90,7 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
                 modules.push(mod.default || mod);
             } catch (err: unknown) {
                 const error = toError(err);
-                throw new InformAiError(`Cannot load custom rule '${full}': ${error.message}`);
+                throw new InformAiError(`Cannot load custom rule '${full}'`, { cause: error });
             }
         }
     }

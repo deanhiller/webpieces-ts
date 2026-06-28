@@ -156,7 +156,7 @@ export function readServiceContract(workspaceRoot: string, projectRoot: string):
         };
     } catch (err: unknown) {
         const error = toError(err);
-        throw new Error(`Failed to parse ${projectRoot}/${SERVICE_CONTRACT_FILENAME}: ${error.message}`);
+        throw new Error(`Failed to parse ${projectRoot}/${SERVICE_CONTRACT_FILENAME}`, { cause: error });
     }
 }
 

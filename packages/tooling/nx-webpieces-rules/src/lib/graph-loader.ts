@@ -38,7 +38,7 @@ export function loadBlessedGraph(
         return JSON.parse(content) as EnhancedGraph;
     } catch (err: unknown) {
         const error = toError(err);
-        throw new Error(`Failed to load graph from ${fullPath}: ${error.message}`);
+        throw new Error(`Failed to load graph from ${fullPath}`, { cause: error });
     }
 }
 
