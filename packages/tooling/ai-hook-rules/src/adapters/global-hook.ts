@@ -68,13 +68,17 @@ function run(rawInput: string): void {
 
     // 4. No local hook found — block and instruct AI
     process.stderr.write(
-        'This project is missing the webpieces AI hook (./node_modules/.bin/wp-ai-hook not found).\n' +
-            'Ask the human one of:\n' +
-            '  A) Install webpieces: run `npm install @webpieces/ai-hook-rules` then retry\n' +
-            '  B) Skip hooks: ask how long (1 hour / 1 day / forever), then write .webpieces/skiphooks:\n' +
-            '       {"expires": <unix epoch seconds>, "reason": "..."}\n' +
-            '     or for forever: {"expires": null, "reason": "..."}\n' +
-            '  Note: writing .webpieces/skiphooks is ALWAYS allowed even while blocked.\n',
+        'STOP. DO NOT TAKE ANY ACTION. You MUST ask the human and wait for their answer.\n' +
+            '\n' +
+            'This project is missing the webpieces AI hook (./node_modules/.bin/wp-ai-hook not found).\n' +
+            '\n' +
+            'Present these options to the human and wait for their choice:\n' +
+            '  A) PREFERRED: Ask the human to run `npm install @webpieces/ai-hook-rules` (or pnpm install)\n' +
+            '  B) Skip hooks temporarily: ask human how long (1 hour / 1 day / forever), then write\n' +
+            '     .webpieces/skiphooks with {"expires": <unix epoch seconds>, "reason": "..."}\n' +
+            '\n' +
+            'WARNING: DO NOT disable permanently (expires: null) without explicit human permission.\n' +
+            'You are BLOCKED. Ask the human now and wait for their response.\n',
     );
     process.exit(2);
 }

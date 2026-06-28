@@ -35,6 +35,12 @@ function runInternal(
     }
 
     const workspaceRoot = path.dirname(config.configPath);
+
+    // Always allow edits to webpieces.config.json — it's the fix target when out of sync
+    if (path.resolve(input.filePath) === path.resolve(config.configPath)) {
+        return null;
+    }
+
     const rules = loadRules(config, workspaceRoot);
     if (rules.length === 0) return null;
 
