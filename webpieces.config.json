@@ -106,9 +106,6 @@
             "mode": "ON",
             "allowedPaths": []
         },
-"no-shell-substitution": {
-    "mode": "ON"
-},
         "validate-ts-in-src": {
             "mode": "MODIFIED_FILES",
             "ignoreModifiedUntilEpoch": 1771931925,
