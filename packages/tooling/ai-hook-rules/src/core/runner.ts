@@ -84,7 +84,7 @@ function runBashInternal(command: string, cwd: string): BlockedResult | null {
 }
 
 function checkConfigSync(rules: readonly Rule[], config: ResolvedConfig): BlockedResult | null {
-    const unconfigured = rules.filter((r: Rule) => !config.rules.has(r.name)).map((r: Rule) => r.name);
+    const unconfigured = rules.filter((r: Rule) => !config.userConfiguredRuleNames.has(r.name)).map((r: Rule) => r.name);
     if (unconfigured.length === 0) return null;
 
     const lines = [

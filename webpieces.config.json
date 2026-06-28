@@ -65,8 +65,12 @@
             "ignoreModifiedUntilEpoch": 1771931925,
             "allowedPaths": ["libraries/apis/**", "packages/http/http-api/**"]
         },
-        "branch-creation-guard": {
+        "no-shell-substitution": {
             "mode": "ON"
+        },
+        "branch-creation-guard": {
+            "mode": "ON",
+            "subBranchNaming": "feature/<ticket>/<short-description>"
         },
         "pr-creation-guard": {
             "mode": "ON"

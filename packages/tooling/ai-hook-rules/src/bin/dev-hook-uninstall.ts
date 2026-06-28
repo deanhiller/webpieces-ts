@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
@@ -20,6 +20,7 @@ interface DevHookBackup {
 }
 
 export function main(): void {
+    const cwd = process.cwd();
     const homeDir = homedir();
     const backupPath = join(homeDir, '.webpieces', 'dev-hook-backup.json');
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
@@ -45,8 +46,17 @@ export function main(): void {
     writeFileSync(claudeSettingsPath, JSON.stringify(settings, null, 4) + '\n');
     rmSync(backupPath);
 
+    // Remove the symlink created during install
+    const overrideDir = join(cwd, 'dist', 'packages', 'tooling', 'node_modules', '@webpieces');
+    const overrideLink = join(overrideDir, 'rules-config');
+    if (existsSync(overrideLink)) {
+        rmSync(overrideLink, { recursive: true });
+    }
+    if (existsSync(overrideDir) && readdirSync(overrideDir).length === 0) {
+        rmSync(overrideDir, { recursive: true });
+    }
+
     console.log('  Dev hook removed. Previous hook configuration restored.');
-    console.log('  RESTART Claude Code to return to normal hook.');
 }
 
 if (require.main === module) {

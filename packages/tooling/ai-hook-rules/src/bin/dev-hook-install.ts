@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 
@@ -19,13 +19,36 @@ interface DevHookBackup {
     previousHooks: ClaudeSettings['hooks'] | null;
 }
 
+function wireLocalRulesConfig(cwd: string, distRulesConfigPath: string): void {
+    // Place the symlink in dist/packages/tooling/node_modules/ — one level above
+    // the ai-hook-rules package output but still below the workspace root node_modules.
+    // Node's require() resolution walks up from the requiring file and finds this
+    // node_modules entry before reaching the workspace root's stale published package.
+    // This directory is NOT wiped by any individual package build (each build only
+    // cleans its own output subfolder), so it survives pnpm run build-all.
+    const overrideDir = join(cwd, 'dist', 'packages', 'tooling', 'node_modules', '@webpieces');
+    const overrideLink = join(overrideDir, 'rules-config');
+    mkdirSync(overrideDir, { recursive: true });
+    if (existsSync(overrideLink)) {
+        rmSync(overrideLink, { recursive: true });
+    }
+    symlinkSync(distRulesConfigPath, overrideLink);
+}
+
 export function main(): void {
     const cwd = process.cwd();
     const distHookPath = join(cwd, 'dist', 'packages', 'tooling', 'ai-hook-rules', 'src', 'adapters', 'claude-code-hook.js');
 
     if (!existsSync(distHookPath)) {
         console.error(`[wp-dev-hook-install] Local build not found at: ${distHookPath}`);
-        console.error('  Run `nx build ai-hook-rules` first.');
+        console.error('  Run `pnpm run build-all` first.');
+        process.exit(1);
+    }
+
+    const distRulesConfigPath = join(cwd, 'dist', 'packages', 'tooling', 'rules-config');
+    if (!existsSync(distRulesConfigPath)) {
+        console.error(`[wp-dev-hook-install] Local rules-config build not found at: ${distRulesConfigPath}`);
+        console.error('  Run `pnpm run build-all` first.');
         process.exit(1);
     }
 
@@ -40,6 +63,8 @@ export function main(): void {
         process.exit(1);
     }
 
+    wireLocalRulesConfig(cwd, distRulesConfigPath);
+
     let settings: ClaudeSettings = {};
     if (existsSync(claudeSettingsPath)) {
         settings = JSON.parse(readFileSync(claudeSettingsPath, 'utf8')) as ClaudeSettings;
@@ -52,7 +77,6 @@ export function main(): void {
     }
     writeFileSync(backupPath, JSON.stringify(backup, null, 4) + '\n');
 
-    // Replace hooks with a single entry pointing at the local dist build
     const hookCommand = `node ${distHookPath}`;
     settings.hooks = {
         PreToolUse: [
@@ -67,8 +91,6 @@ export function main(): void {
     writeFileSync(claudeSettingsPath, JSON.stringify(settings, null, 4) + '\n');
 
     console.log(`  Dev hook installed → ${hookCommand}`);
-    console.log('');
-    console.log('  RESTART Claude Code to activate the local build hook.');
     console.log('  Run `wp-dev-hook-uninstall` when done testing.');
 }
 

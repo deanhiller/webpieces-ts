@@ -35,8 +35,9 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
         excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
     'no-js-files': { mode: 'OFF' },
-    'branch-creation-guard': { mode: 'ON' },
+    'branch-creation-guard': { mode: 'ON', subBranchNaming: 'feature/<ticket>/<short-description>' },
     'pr-creation-guard': { mode: 'ON' },
+    'pr-merge-cleanup': { mode: 'ON' },
     'no-direct-main-update': { mode: 'ON' },
 };
 
