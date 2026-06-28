@@ -514,7 +514,7 @@ function createValidateCodeTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-code',
         cache: false, // Don't cache - depends on git state
-        inputs: ['default'],
+        inputs: ['default', '{workspaceRoot}/webpieces.config.json', {'runtime': 'node -e "process.stdout.write(String(Math.random()))"'}],
         // No options here - they come from webpieces.config.json at runtime
         metadata: {
             technologies: ['nx'],
@@ -540,7 +540,7 @@ function createValidateTsInSrcTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-ts-in-src',
         cache: false,
-        inputs: ['default'],
+        inputs: ['default', '{workspaceRoot}/webpieces.config.json', {'runtime': 'node -e "process.stdout.write(String(Math.random()))"'}],
         metadata: {
             technologies: ['nx'],
             description: 'Validate all .ts files in projects are inside the src/ directory',

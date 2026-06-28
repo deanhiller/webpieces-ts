@@ -7,7 +7,7 @@ import { Violation as V } from '../types';
 const FIX_HINT: readonly string[] = [
     'Branch is not up-to-date with origin/main.',
     'Run the squash-update process to sync with main first:',
-    '  ./scripts/git-updateFromMain.sh',
+    '  pnpm wp-git-update',
     'Then retry: gh pr create ...',
     '',
     'Do NOT use "git merge origin/main" or "git rebase" — these break the 3-point fork-point system.',
@@ -40,7 +40,7 @@ const prCreationGuard: BashRule = {
                 [
                     'Branch is not up-to-date with origin/main.',
                     'Run the squash-update process first:',
-                    '  ./scripts/git-updateFromMain.sh',
+                    '  pnpm wp-git-update',
                     'Do NOT use "git merge origin/main" or "git rebase" — these break the 3-point fork-point system.',
                     'See docs/git-workflow.md for details.',
                     'Then retry: gh pr create',

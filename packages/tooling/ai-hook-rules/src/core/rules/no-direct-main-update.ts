@@ -3,7 +3,7 @@ import type { BashRule, BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 
 const FIX_HINT: readonly string[] = [
-    "Run './scripts/git-updateFromMain.sh' to squash-update from main. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.",
+    "Run 'pnpm wp-git-update' to squash-update from main. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.",
 ];
 
 const WRONG_UPDATE_PATTERNS: RegExp[] = [
@@ -45,7 +45,7 @@ const noDirectMainUpdate: BashRule = {
                 `Direct merge/rebase from main on branch '${currentBranch}' is blocked.`,
                 'This breaks the 3-point fork-point system.',
                 'Use the squash-update process instead:',
-                '  ./scripts/git-updateFromMain.sh',
+                '  pnpm wp-git-update',
                 'See docs/git-workflow.md for details.',
             ].join('\n'),
         )];
