@@ -11,6 +11,9 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
+      '@webpieces/ai-hook-rules':
+        specifier: ^0.3.169
+        version: 0.3.169
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -3107,6 +3110,10 @@ packages:
     resolution: {integrity: sha512-vgZRjqhJOfLsWAv1k7OoYzrvSTK6A0ohJdUbM0nphvK62m01fDKOGCkTwM2reRt9aM54AnlxtmLXPygcoLG9CA==}
     hasBin: true
 
+  '@webpieces/ai-hook-rules@0.3.169':
+    resolution: {integrity: sha512-mqymQInkrhPmFR1MUNTW/howuenspgN4f27tHABmj6VU73Z4mUSTjy/oxtsR3hOfnbWR0iWooQtOEExI4faTyg==}
+    hasBin: true
+
   '@webpieces/code-rules@0.3.164':
     resolution: {integrity: sha512-+x+wPJS19/FpnUPJlL8MdkkkHC31HNf09AOeF7cF82eEsSFbNIKCWayWNqwqj66vXM3MDutM98e+734asjIqdg==}
     hasBin: true
@@ -3126,6 +3133,9 @@ packages:
 
   '@webpieces/rules-config@0.3.164':
     resolution: {integrity: sha512-IqAkGSbrBzE009HxIw/YMvaXB9grJBpgzxBq+BQPtcBF9VVE9IEnBnmKAzDCejHgOwpvmJQdQ4Z2X03K1sllSw==}
+
+  '@webpieces/rules-config@0.3.169':
+    resolution: {integrity: sha512-NfKZP+VII1uRP41nbzuy0MVl1fCNyhYpK8xNrVlUggGCOwMC/XbUC/pxscWKwK5APNNtA84firIJoR7YmBJhUA==}
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -10711,6 +10721,10 @@ snapshots:
     dependencies:
       '@webpieces/rules-config': 0.3.164
 
+  '@webpieces/ai-hook-rules@0.3.169':
+    dependencies:
+      '@webpieces/rules-config': 0.3.169
+
   '@webpieces/code-rules@0.3.164':
     dependencies:
       '@webpieces/rules-config': 0.3.164
@@ -10736,6 +10750,10 @@ snapshots:
       - typescript
 
   '@webpieces/rules-config@0.3.164':
+    dependencies:
+      minimatch: 10.0.1
+
+  '@webpieces/rules-config@0.3.169':
     dependencies:
       minimatch: 10.0.1
 
