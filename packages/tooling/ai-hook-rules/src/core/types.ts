@@ -143,24 +143,11 @@ export class FileContext {
     }
 }
 
-export type FieldType = 'string' | 'number' | 'boolean' | 'string[]';
-
-export class FieldSchema {
-    readonly type: FieldType;
-    readonly description: string;
-
-    constructor(type: FieldType, description: string) {
-        this.type = type;
-        this.description = description;
-    }
-}
-
 interface RuleBase {
     readonly name: string;
     readonly description: string;
     readonly files: readonly string[];
     readonly defaultOptions: RuleOptions;
-    readonly configSchema: Record<string, FieldSchema>;
     readonly fixHint: readonly string[];
 }
 
