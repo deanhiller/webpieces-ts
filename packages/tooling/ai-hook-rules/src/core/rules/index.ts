@@ -11,5 +11,6 @@ export const builtInRuleNames: readonly string[] = [
     'no-symbol-di-tokens',
     'branch-creation-guard',
     'pr-creation-guard',
+    'pr-merge-cleanup',
     'no-direct-main-update',
 ];

@@ -16,6 +16,7 @@ import noShellSubstitution from './rules/no-shell-substitution';
 import noSymbolDiTokens from './rules/no-symbol-di-tokens';
 import branchCreationGuard from './rules/branch-creation-guard';
 import prCreationGuard from './rules/pr-creation-guard';
+import prMergeCleanup from './rules/pr-merge-cleanup';
 import noDirectMainUpdate from './rules/no-direct-main-update';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
@@ -34,6 +35,7 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'no-symbol-di-tokens': noSymbolDiTokens as Rule,
     'branch-creation-guard': branchCreationGuard as Rule,
     'pr-creation-guard': prCreationGuard as Rule,
+    'pr-merge-cleanup': prMergeCleanup as Rule,
     'no-direct-main-update': noDirectMainUpdate as Rule,
 };
 
