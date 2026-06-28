@@ -67,7 +67,7 @@ function run(rawInput: string): void {
     }
 
     // 4. No local hook found — block and instruct AI
-    process.stdout.write(
+    process.stderr.write(
         'This project is missing the webpieces AI hook (./node_modules/.bin/wp-ai-hook not found).\n' +
             'Ask the human one of:\n' +
             '  A) Install webpieces: run `npm install @webpieces/ai-hook-rules` then retry\n' +
