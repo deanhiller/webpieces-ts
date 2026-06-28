@@ -65,7 +65,7 @@
     },
     "dependencies": {
         "@inversifyjs/binding-decorators": "1.1.5",
-        "@webpieces/ai-hook-rules": "^0.3.169",
+        "@webpieces/ai-hook-rules": "0.3.168",
         "class-transformer": "0.5.1",
         "class-validator": "0.14.2",
         "express": "5.1.0",
