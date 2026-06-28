@@ -228,7 +228,7 @@ export function loadRuntimeGraph(
         return JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as RuntimeGraph;
     } catch (err: unknown) {
         const error = toError(err);
-        throw new Error(`Failed to load runtime graph from ${fullPath}: ${error.message}`);
+        throw new Error(`Failed to load runtime graph from ${fullPath}`, { cause: error });
     }
 }
 

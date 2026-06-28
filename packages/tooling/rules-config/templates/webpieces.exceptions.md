@@ -671,6 +671,51 @@ If you believe you have a legitimate use case for try-catch:
 
 4. **Be prepared to justify** - 99% of try-catch can be removed
 
+## Rule: throw-cause-required
+
+When you catch an exception and rethrow with additional context, you MUST chain the original
+exception using `{ cause: error }`. Embedding `error.message` in a string loses the original
+stack trace and is banned.
+
+### BAD (triggers violation)
+```typescript
+} catch (err: unknown) {
+  const error = toError(err);
+  throw new InformAiError(`Cannot load config: ${error.message}`);  // ← BANNED
+}
+```
+
+### Why it's bad
+The original stack trace is gone. Debugging tools only see the new error; the root cause
+and its call stack have been discarded.
+
+### Fix Options
+
+**Option 1 — Remove the try-catch (usually best)**
+```typescript
+// Just let it bubble — the global handler logs it with full context
+const config = JSON.parse(raw);
+```
+
+**Option 2 — Rethrow with cause (generic)**
+```typescript
+} catch (err: unknown) {
+  const error = toError(err);
+  throw new Error(`Cannot load config`, { cause: error });
+}
+```
+
+**Option 3 — Rethrow with specific error class + cause**
+```typescript
+} catch (err: unknown) {
+  const error = toError(err);
+  throw new InformAiError(`Cannot load config — fix the JSON then retry`, { cause: error });
+}
+```
+
+The `cause` field is available on the original error object and will appear in stack traces
+and in `/debugLocal/{traceId}` responses.
+
 ## Summary
 
 **The webpieces philosophy**: Errors should bubble to the global handler where they are logged with traceId and stored for debugging. Local try-catch blocks break this architecture and create blind spots in production.
