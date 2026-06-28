@@ -9,14 +9,15 @@ const FIX_HINT_STALE_MAIN: readonly string[] = [
 ];
 
 const FIX_HINT_NON_MAIN: readonly string[] = [
-    'You are not on main. Sub-branches must use the "sub/" prefix.',
-    'Example: instead of "my-feature", use "sub/my-feature".',
-    'Create it now with the corrected name. Do NOT ask the user.',
+    'You should only branch off main, not off a feature branch!',
+    'Run: git checkout main && git pull origin main',
+    'Then create your branch from main.',
+    'If you truly need to branch off a non-main branch, a human must approve that — it is highly unusual.',
 ];
 
 const branchCreationGuard: BashRule = {
     name: 'branch-creation-guard',
-    description: 'Block new-branch creation when main is stale, or enforce sub/ prefix when branching from non-main.',
+    description: 'Block new-branch creation when main is stale, or when not on main.',
     scope: 'bash',
     files: [],
     defaultOptions: {},
@@ -35,14 +36,10 @@ const branchCreationGuard: BashRule = {
             return checkMainIsUpToDate(ctx, requestedName);
         }
 
-        if (requestedName.startsWith('sub/')) {
-            return [];
-        }
-
         return [new V(
             1,
             truncate(ctx.command),
-            `You are on '${currentBranch}', not main. Branch names created from non-main branches MUST use the "sub/" prefix. Required name: "sub/${requestedName}". Create it now with that name. Do NOT ask the user.`,
+            `You are on '${currentBranch}', not main. You should only branch off main! Switch to main first: git checkout main && git pull origin main. If you truly need to branch off a non-main branch, a human must approve that — it is highly unusual.`,
         )];
     },
 };
