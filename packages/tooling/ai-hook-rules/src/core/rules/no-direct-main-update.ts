@@ -3,13 +3,7 @@ import type { BashRule, BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 
 const FIX_HINT: readonly string[] = [
-    'Do not merge or rebase from main directly on a feature branch.',
-    'This breaks the 3-point fork-point system (A=fork point, B=feature HEAD, C=main HEAD).',
-    '',
-    'Use the squash-update process instead:',
-    '  ./scripts/git-updateFromMain.sh',
-    '',
-    'See docs/git-workflow.md for the full process.',
+    "Run './scripts/git-updateFromMain.sh' to squash-update from main. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.",
 ];
 
 const WRONG_UPDATE_PATTERNS: RegExp[] = [
@@ -29,6 +23,11 @@ const noDirectMainUpdate: BashRule = {
     check(ctx: BashContext): readonly Violation[] {
         const matched = WRONG_UPDATE_PATTERNS.some((p: RegExp) => p.test(ctx.command));
         if (!matched) return [];
+
+        // Allow 'git checkout main && git pull origin main' — switching to main first is the recommended workflow
+        if (/git\s+(?:checkout|switch)\s+main\b/.test(ctx.command)) {
+            return [];
+        }
 
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,

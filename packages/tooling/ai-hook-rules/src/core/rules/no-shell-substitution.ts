@@ -2,11 +2,9 @@ import type { BashRule, BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 
 const FIX_HINT: readonly string[] = [
-    'Shell substitutions trigger Claude Code "simple_expansion" permission prompts that interrupt the user.',
-    'Instead:',
-    '  • Build payload files with Write, then: node script.js < /path/to/payload',
-    '  • Use Read, Grep, or Glob instead of piping shell output through $(...)',
-    '  • Write a small script file with Write and execute it: bash /path/to/script.sh',
+    'Build a payload file with the Write tool and pass it as stdin: node script.js < /path/to/payload.json',
+    'Use the Read, Grep, or Glob tools directly instead of capturing output with $(...)',
+    'Write a small script file with the Write tool and execute it directly: bash /path/to/script.sh',
 ];
 
 const noShellSubstitutionRule: BashRule = {

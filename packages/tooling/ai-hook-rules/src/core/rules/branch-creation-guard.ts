@@ -2,17 +2,9 @@ import { execSync } from 'child_process';
 import type { BashRule, BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 
-const FIX_HINT_STALE_MAIN: readonly string[] = [
-    'Local main is behind origin/main.',
-    'Run: git checkout main && git pull origin main',
-    'Then switch back to main and create your branch.',
-];
-
-const FIX_HINT_NON_MAIN: readonly string[] = [
-    'You should only branch off main, not off a feature branch!',
-    'Run: git checkout main && git pull origin main',
-    'Then create your branch from main.',
-    'If you truly need to branch off a non-main branch, a human must approve that — it is highly unusual.',
+const FIX_HINT: readonly string[] = [
+    "Run 'git checkout main && git pull origin main', then create your branch from main",
+    "If you truly need a sub-branch (requires human approval), name it using the convention in webpieces.config.json 'branch-creation-guard.subBranchNaming'",
 ];
 
 const branchCreationGuard: BashRule = {
@@ -20,8 +12,8 @@ const branchCreationGuard: BashRule = {
     description: 'Block new-branch creation when main is stale, or when not on main.',
     scope: 'bash',
     files: [],
-    defaultOptions: {},
-    fixHint: [...FIX_HINT_STALE_MAIN, ...FIX_HINT_NON_MAIN],
+    defaultOptions: { subBranchNaming: 'feature/<ticket>/<short-description>' },
+    fixHint: FIX_HINT,
 
     check(ctx: BashContext): readonly Violation[] {
         const requestedName = extractBranchName(ctx.command);
@@ -39,7 +31,7 @@ const branchCreationGuard: BashRule = {
         return [new V(
             1,
             truncate(ctx.command),
-            `You are on '${currentBranch}', not main. You should only branch off main! Switch to main first: git checkout main && git pull origin main. If you truly need to branch off a non-main branch, a human must approve that — it is highly unusual.`,
+            `You are on '${currentBranch}', not main. Branches must be created from main.`,
         )];
     },
 };
