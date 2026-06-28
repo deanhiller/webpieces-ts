@@ -6,7 +6,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const compiled = path.join(__dirname, '..', 'src', 'bin', 'global-setup.js');
+const compiled = path.join(__dirname, '..', 'src', 'adapters', 'claude-code-hook.js');
 
 if (fs.existsSync(compiled)) {
     require(compiled).main();
