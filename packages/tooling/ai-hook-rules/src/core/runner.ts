@@ -176,7 +176,9 @@ function defaultForType(type: FieldSchema['type']): string | number | boolean | 
     if (type === 'string') return '';
     if (type === 'number') return 0;
     if (type === 'boolean') return false;
-    return [];
+    if (type === 'string[]') return [];
+    const exhaustive: never = type;
+    throw new Error(`Unhandled FieldSchema type: ${exhaustive}`);
 }
 
 // N-legs pattern: each rule runs independently; crash → visible violation so AI sees it, not silent []
