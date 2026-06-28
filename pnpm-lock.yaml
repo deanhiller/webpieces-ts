@@ -11,9 +11,6 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/ai-hook-rules':
-        specifier: 0.3.174
-        version: 0.3.174
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -114,6 +111,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: 8.48.0
         version: 8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+      '@webpieces/ai-hook-rules':
+        specifier: 0.3.174
+        version: 0.3.174
       '@webpieces/nx-webpieces-rules':
         specifier: 0.3.174
         version: 0.3.174(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
