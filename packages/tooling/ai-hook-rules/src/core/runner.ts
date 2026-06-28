@@ -137,12 +137,9 @@ function validateRuleEntry(rule: Rule, name: string, config: ResolvedConfig): st
         }
     }
 
-    const knownKeys = new Set(['mode', ...Object.keys(rule.configSchema)]);
-    for (const key of Object.keys(rawEntry ?? {})) {
-        if (!knownKeys.has(key)) {
-            errs.push(`  ✗ Unknown key "${key}" — remove it. Valid keys: [${[...knownKeys].join(', ')}]`);
-        }
-    }
+    // Do NOT check for unknown keys — webpieces.config.json is shared across multiple rule
+    // systems (ai-hook-rules, code-rules, nx-webpieces-rules). Keys belonging to other
+    // systems must be left alone. Full typed validation will come via WebpiecesConfig redesign.
     return errs;
 }
 
