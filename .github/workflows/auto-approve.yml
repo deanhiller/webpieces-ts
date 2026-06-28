@@ -37,7 +37,7 @@ jobs:
                       // Dismiss all APPROVED reviews from the bot
                       const approvals = reviews.filter(review =>
                         review.state === 'APPROVED' &&
-                        review.user.login === 'deanhiller-bot'
+                        review.user.login === 'webpieces-bot'
                       );
 
                       for (const review of approvals) {
