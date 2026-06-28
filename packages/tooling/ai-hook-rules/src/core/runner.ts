@@ -146,15 +146,15 @@ function validateRuleEntry(rule: Rule, name: string, config: ResolvedConfig): st
     return errs;
 }
 
-function getRawUserEntry(config: ResolvedConfig, name: string): Record<string, unknown> | undefined {
-    return config.rawUserRules.get(name) as Record<string, unknown> | undefined;
+function getRawUserEntry(config: ResolvedConfig, name: string): RuleOptions | undefined {
+    return config.rawUserRules.get(name);
 }
 
-function matchesType(val: unknown, type: FieldSchema['type']): boolean {
+function matchesType(val: RuleOptions[string], type: FieldSchema['type']): boolean {
     if (type === 'string') return typeof val === 'string';
     if (type === 'number') return typeof val === 'number';
     if (type === 'boolean') return typeof val === 'boolean';
-    if (type === 'string[]') return Array.isArray(val) && val.every((v: unknown) => typeof v === 'string');
+    if (type === 'string[]') return Array.isArray(val) && val.every((v: RuleOptions[string]) => typeof v === 'string');
     return false;
 }
 
@@ -165,19 +165,18 @@ function schemaFieldList(schema: Record<string, FieldSchema>): string {
 }
 
 function buildExampleEntry(rule: Rule): string {
-    const obj: Record<string, unknown> = { mode: 'ON' };
+    const obj: RuleOptions = { mode: 'ON' };
     for (const [key, schema] of Object.entries(rule.configSchema)) {
         obj[key] = rule.defaultOptions[key] ?? defaultForType(schema.type);
     }
     return `"${rule.name}": ${JSON.stringify(obj)}`;
 }
 
-function defaultForType(type: FieldSchema['type']): unknown {
+function defaultForType(type: FieldSchema['type']): string | number | boolean | string[] {
     if (type === 'string') return '';
     if (type === 'number') return 0;
     if (type === 'boolean') return false;
-    if (type === 'string[]') return [];
-    return null;
+    return [];
 }
 
 // N-legs pattern: each rule runs independently; crash → visible violation so AI sees it, not silent []

@@ -45,14 +45,14 @@ export class ResolvedRuleConfig {
 export class ResolvedConfig {
     readonly rules: Map<string, ResolvedRuleConfig>;
     readonly userConfiguredRuleNames: ReadonlySet<string>;
-    readonly rawUserRules: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+    readonly rawUserRules: ReadonlyMap<string, RuleOptions>;
     readonly rulesDir: readonly string[];
     readonly configPath: string | null;
 
     constructor(
         rules: Map<string, ResolvedRuleConfig>,
         userConfiguredRuleNames: ReadonlySet<string>,
-        rawUserRules: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+        rawUserRules: ReadonlyMap<string, RuleOptions>,
         rulesDir: readonly string[],
         configPath: string | null,
     ) {

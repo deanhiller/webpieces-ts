@@ -72,7 +72,7 @@ export function loadConfig(cwd: string): ResolvedConfig {
     const consumerConfig = readRawConfig(configPath);
     const overrideRules = consumerConfig.rules || {};
     const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
-    const rawUserRules = new Map<string, Readonly<Record<string, unknown>>>(Object.entries(overrideRules));
+    const rawUserRules = new Map<string, RuleOptions>(Object.entries(overrideRules));
     const mergedRules = new Map<string, ResolvedRuleConfig>();
 
     const allRuleNames = new Set([
