@@ -9,7 +9,7 @@ import {
     ToolKind, NormalizedToolInput, BlockedResult,
     Rule, EditRule, FileRule, BashRule, Violation, RuleGroup,
     EditContext, FileContext, BashContext,
-    ResolvedConfig, ResolvedRuleConfig, RuleOptions,
+    ResolvedConfig, ResolvedRuleConfig, RuleOptions, FieldSchema,
 } from './types';
 
 export function run(
@@ -44,7 +44,7 @@ function runInternal(
     const rules = loadRules(config, workspaceRoot);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, config);
+    const outOfSync = validateConfig(rules, config);
     if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot);
@@ -78,7 +78,7 @@ function runBashInternal(command: string, cwd: string): BlockedResult | null {
     const rules = loadRules(config, workspaceRoot);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, config);
+    const outOfSync = validateConfig(rules, config);
     if (outOfSync) return outOfSync;
 
     const ctx = buildBashContext(command, workspaceRoot);
@@ -89,41 +89,96 @@ function runBashInternal(command: string, cwd: string): BlockedResult | null {
     return new BlockedResult(report);
 }
 
-function checkConfigSync(rules: readonly Rule[], config: ResolvedConfig): BlockedResult | null {
-    const unconfiguredRules = rules.filter((r: Rule) => !config.userConfiguredRuleNames.has(r.name));
-    if (unconfiguredRules.length === 0) return null;
+function validateConfig(rules: readonly Rule[], config: ResolvedConfig): BlockedResult | null {
+    const errors: string[] = [];
 
-    const lines = [
-        'webpieces.config.json is out of sync — new built-in rules are present that have no entry in webpieces.config.json.',
-        '',
-        'Tell the human: the following rules need to be configured. Ask for each one:',
-        '  - Should this rule be ON, OFF, MODIFIED_CODE, or MODIFIED_FILES?',
-        '  - What values do you want for the options listed below?',
-        'Then update webpieces.config.json and retry.',
-        '',
-        'Do NOT proceed until webpieces.config.json has an entry for every rule below.',
-        '',
-    ];
-
-    for (const rule of unconfiguredRules) {
-        lines.push(`--- ${rule.name} ---`);
-        lines.push(`Description: ${rule.description}`);
-        const opts = rule.defaultOptions;
-        const optKeys = Object.keys(opts);
-        if (optKeys.length > 0) {
-            lines.push(`Available options (suggested defaults shown):`);
-            for (const key of optKeys) {
-                lines.push(`  ${key}: ${JSON.stringify(opts[key])}`);
-            }
-        } else {
-            lines.push('Available options: none beyond mode');
-        }
-        lines.push(`Example entry for webpieces.config.json:`);
-        lines.push(`  "${rule.name}": { "mode": "ON" }`);
-        lines.push('');
+    // Pass 1 — unconfigured rules
+    const unconfigured = rules.filter((r: Rule) => !config.userConfiguredRuleNames.has(r.name));
+    for (const rule of unconfigured) {
+        errors.push(
+            `[${rule.name}] UNCONFIGURED — add an entry to webpieces.config.json`,
+            `  Description: ${rule.description}`,
+            `  Required fields: mode ("ON" or "OFF")${schemaFieldList(rule.configSchema)}`,
+            `  Example: ${buildExampleEntry(rule)}`,
+            '',
+        );
     }
 
-    return new BlockedResult(lines.join('\n'));
+    // Pass 2 — validate configured rules
+    for (const name of config.userConfiguredRuleNames) {
+        const rule = rules.find((r: Rule) => r.name === name);
+        if (!rule) continue;
+        const entryErrors = validateRuleEntry(rule, name, config);
+        if (entryErrors.length > 0) {
+            errors.push(`[${name}] INVALID entry in webpieces.config.json:`, ...entryErrors, `  Correct example: ${buildExampleEntry(rule)}`, '');
+        }
+    }
+
+    if (errors.length === 0) return null;
+    return new BlockedResult(['STOP. DO NOT PROCEED. webpieces.config.json has validation errors.', 'Fix ALL of the following, then retry:', '', ...errors].join('\n'));
+}
+
+function validateRuleEntry(rule: Rule, name: string, config: ResolvedConfig): string[] {
+    const entry = config.rules.get(name);
+    const rawEntry = getRawUserEntry(config, name);
+    const errs: string[] = [];
+
+    if (typeof entry?.options['mode'] !== 'string' || entry.options['mode'] === '') {
+        const found = rawEntry ? Object.keys(rawEntry) : [];
+        errs.push(`  ✗ "mode" is required (must be "ON" or "OFF"). Found keys: [${found.join(', ') || 'none'}]`);
+    }
+
+    for (const [key, schema] of Object.entries(rule.configSchema)) {
+        const val = rawEntry?.[key];
+        if (val === undefined) {
+            errs.push(`  ✗ "${key}" is required (type: ${schema.type}) — ${schema.description}`);
+        } else if (!matchesType(val, schema.type)) {
+            errs.push(`  ✗ "${key}" must be type ${schema.type}, got ${typeof val}`);
+        }
+    }
+
+    const knownKeys = new Set(['mode', ...Object.keys(rule.configSchema)]);
+    for (const key of Object.keys(rawEntry ?? {})) {
+        if (!knownKeys.has(key)) {
+            errs.push(`  ✗ Unknown key "${key}" — remove it. Valid keys: [${[...knownKeys].join(', ')}]`);
+        }
+    }
+    return errs;
+}
+
+function getRawUserEntry(config: ResolvedConfig, name: string): RuleOptions | undefined {
+    return config.rawUserRules.get(name);
+}
+
+function matchesType(val: RuleOptions[string], type: FieldSchema['type']): boolean {
+    if (type === 'string') return typeof val === 'string';
+    if (type === 'number') return typeof val === 'number';
+    if (type === 'boolean') return typeof val === 'boolean';
+    if (type === 'string[]') return Array.isArray(val) && val.every((v: RuleOptions[string]) => typeof v === 'string');
+    return false;
+}
+
+function schemaFieldList(schema: Record<string, FieldSchema>): string {
+    const keys = Object.keys(schema);
+    if (keys.length === 0) return '';
+    return ', ' + keys.map((k: string) => `${k} (${schema[k].type})`).join(', ');
+}
+
+function buildExampleEntry(rule: Rule): string {
+    const obj: RuleOptions = { mode: 'ON' };
+    for (const [key, schema] of Object.entries(rule.configSchema)) {
+        obj[key] = rule.defaultOptions[key] ?? defaultForType(schema.type);
+    }
+    return `"${rule.name}": ${JSON.stringify(obj)}`;
+}
+
+function defaultForType(type: FieldSchema['type']): string | number | boolean | string[] {
+    if (type === 'string') return '';
+    if (type === 'number') return 0;
+    if (type === 'boolean') return false;
+    if (type === 'string[]') return [];
+    const exhaustive: never = type;
+    throw new Error(`Unhandled FieldSchema type: ${exhaustive}`);
 }
 
 // N-legs pattern: each rule runs independently; crash → visible violation so AI sees it, not silent []

@@ -1,5 +1,5 @@
 import type { EditRule, EditContext, Violation } from '../types';
-import { Violation as V } from '../types';
+import { Violation as V, FieldSchema } from '../types';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
@@ -48,6 +48,9 @@ const noSymbolDiTokensRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: { allowedPaths: [] },
+    configSchema: {
+        allowedPaths: new FieldSchema('string[]', 'Glob patterns for paths exempt from the Symbol DI token rule'),
+    },
     fixHint: [
         'Option 1: Use @provideSingleton() on the class and inject by type — no Symbol needed.',
         'Option 2: Implement an API interface — import the Symbol from the API definition and use @provideSingletonAs(TOKEN).',
@@ -56,7 +59,7 @@ const noSymbolDiTokensRule: EditRule = {
     ],
 
     check(ctx: EditContext): readonly Violation[] {
-        const allowedPaths = (ctx.options['allowedPaths'] as string[] | undefined) ?? [];
+        const allowedPaths = ctx.options['allowedPaths'] as string[];
         if (isAllowedPath(ctx.relativePath, allowedPaths)) return [];
 
         const violations: V[] = [];
