@@ -73,7 +73,9 @@ function run(rawInput: string): void {
             'This project is missing the webpieces AI hook (./node_modules/.bin/wp-ai-hook not found).\n' +
             '\n' +
             'Present these options to the human and wait for their choice:\n' +
-            '  A) PREFERRED: Ask the human to run `npm install @webpieces/ai-hook-rules` (or pnpm install)\n' +
+            '  A) PREFERRED: Run from the monorepo root: `pnpm add -Dw @webpieces/ai-hook-rules`\n' +
+            '     (the -D flag makes it a devDependency, -w adds it to the workspace root)\n' +
+            '     If not a pnpm workspace, run from the project root: `npm install --save-dev @webpieces/ai-hook-rules`\n' +
             '  B) Skip hooks temporarily: ask human how long (1 hour / 1 day / forever), then write\n' +
             '     .webpieces/skiphooks with {"expires": <unix epoch seconds>, "reason": "..."}\n' +
             '\n' +

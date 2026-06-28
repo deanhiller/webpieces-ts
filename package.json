@@ -50,7 +50,8 @@
         "@types/node": "24.9.2",
         "@typescript-eslint/eslint-plugin": "8.48.0",
         "@typescript-eslint/parser": "8.48.0",
-        "@webpieces/nx-webpieces-rules": "0.3.168",
+        "@webpieces/ai-hook-rules": "0.3.174",
+        "@webpieces/nx-webpieces-rules": "0.3.174",
         "eslint": "9.39.1",
         "madge": "8.0.0",
         "nx": "22.0.2",
@@ -65,7 +66,6 @@
     },
     "dependencies": {
         "@inversifyjs/binding-decorators": "1.1.5",
-        "@webpieces/ai-hook-rules": "0.3.168",
         "class-transformer": "0.5.1",
         "class-validator": "0.14.2",
         "express": "5.1.0",

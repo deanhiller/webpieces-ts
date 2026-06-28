@@ -55,11 +55,31 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };
 
+function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>): string {
+    const lines = Object.keys(schema).map(field => {
+        const def = schema[field];
+        const valueHint = def.enumValues
+            ? `"${def.enumValues.join(' | ')}"`
+            : def.type === 'string[]' ? '["<string>", ...]'
+            : def.type === 'number'   ? '<number>'
+            : def.type === 'boolean'  ? '<boolean>'
+            : '"<string>"';
+        return `    "${field}": ${valueHint}`;
+    });
+    return (
+        `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "rules" section\n` +
+        `(choose values appropriate for your project):\n\n` +
+        `  "${ruleName}": {\n${lines.join(',\n')}\n  }`
+    );
+}
+
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually
 export function validateWebpiecesConfig(
     rawRules: Record<string, Record<string, unknown>>,
 ): string[] {
     const errors: string[] = [];
+
+    // Check field-level correctness for rules that are present
     for (const [ruleName, entry] of Object.entries(rawRules)) {
         const schema = RULE_SCHEMAS[ruleName];
         if (!schema) continue; // custom/unknown rule — no schema to validate against
@@ -79,5 +99,15 @@ export function validateWebpiecesConfig(
             }
         }
     }
+
+    // Every built-in rule must be explicitly configured — no silent defaults.
+    // When a new rule is added to the framework, this check surfaces it immediately
+    // with a ready-to-copy snippet so AI can configure it in one pass.
+    for (const [ruleName, schema] of Object.entries(RULE_SCHEMAS)) {
+        if (!(ruleName in rawRules)) {
+            errors.push(missingRuleSnippet(ruleName, schema));
+        }
+    }
+
     return errors;
 }
