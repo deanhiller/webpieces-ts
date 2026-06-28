@@ -73,7 +73,9 @@
             "subBranchNaming": "feature/<ticket>/<short-description>"
         },
         "pr-creation-guard": {
-            "mode": "ON"
+            "mode": "ON",
+            "buildCommand": "pnpm nx affected --target=ci",
+            "requireTextInPr": "I ran pnpm nx affected --target=ci and all checks passed"
         },
         "pr-merge-cleanup": {
             "mode": "ON"
