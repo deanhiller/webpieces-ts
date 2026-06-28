@@ -5,6 +5,8 @@ import { defaultRules } from './default-rules';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
+import { validateWebpiecesConfig } from './validate-config';
+import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 
 export const CONFIG_FILENAME = 'webpieces.config.json';
 
@@ -71,6 +73,15 @@ export function loadConfig(cwd: string): ResolvedConfig {
 
     const consumerConfig = readRawConfig(configPath);
     const overrideRules = consumerConfig.rules || {};
+
+    const validationErrors = validateWebpiecesConfig(overrideRules);
+    if (validationErrors.length > 0) {
+        throw new InformAiError(
+            `webpieces.config.json has ${validationErrors.length} validation error(s) — fix ALL, then retry:\n\n` +
+            validationErrors.map(e => `  • ${e}`).join('\n'),
+        );
+    }
+
     const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
     const mergedRules = new Map<string, ResolvedRuleConfig>();
 
@@ -85,4 +96,42 @@ export function loadConfig(cwd: string): ResolvedConfig {
     const rulesDir = consumerConfig.rulesDir ?? [];
 
     return new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
+}
+
+export interface LoadedWebpiecesConfig {
+    readonly config: WebpiecesRulesConfig;
+    readonly configPath: string;
+}
+
+function buildWebpiecesRulesConfig(
+    // webpieces-disable no-any-unknown -- JSON values are opaque until assigned to typed fields
+    rawRules: Record<string, Record<string, unknown>>,
+    rulesDir: string[],
+): WebpiecesRulesConfig {
+    const typed = new WebpiecesRulesConfig();
+    for (const key of Object.keys(rawRules)) {
+        // webpieces-disable no-any-unknown -- dynamic key assignment to typed class
+        (typed as Record<string, unknown>)[key] = rawRules[key];
+    }
+    typed.rulesDir = rulesDir;
+    return typed;
+}
+
+export function loadWebpiecesRulesConfig(cwd: string): LoadedWebpiecesConfig | null {
+    const configPath = findConfigFile(cwd);
+    if (!configPath) return null;
+
+    const consumerConfig = readRawConfig(configPath);
+    const overrideRules = consumerConfig.rules || {};
+
+    const validationErrors = validateWebpiecesConfig(overrideRules);
+    if (validationErrors.length > 0) {
+        throw new InformAiError(
+            `webpieces.config.json has ${validationErrors.length} validation error(s) — fix ALL, then retry:\n\n` +
+            validationErrors.map(e => `  • ${e}`).join('\n'),
+        );
+    }
+
+    const rulesDir = consumerConfig.rulesDir ?? [];
+    return { config: buildWebpiecesRulesConfig(overrideRules, rulesDir), configPath };
 }

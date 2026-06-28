@@ -1,4 +1,4 @@
-import { loadConfig } from '@webpieces/rules-config';
+import { loadWebpiecesRulesConfig } from '@webpieces/rules-config';
 import { toValidateCodeOptions } from './from-shared-config';
 import { shouldSkipRule } from './resolve-mode';
 import runNewMethodsExecutor from './validate-new-methods';
@@ -369,12 +369,12 @@ export default async function runValidator(
     // Config comes from webpieces.config.json at the workspace root,
     // loaded via the shared @webpieces/rules-config loader so ai-hooks and
     // this executor agree on every rule's enabled/mode/options.
-    const shared = loadConfig(workspaceRoot);
-    if (!shared.configPath) {
+    const loaded = loadWebpiecesRulesConfig(workspaceRoot);
+    if (!loaded) {
         console.error('\n❌ No webpieces.config.json found at workspace root (or any ancestor).\n');
         return { success: false };
     }
-    const options = toValidateCodeOptions(shared);
+    const options = toValidateCodeOptions(loaded.config);
 
     const modeErrors = validateModes(options);
     if (modeErrors.length > 0) {
@@ -386,7 +386,7 @@ export default async function runValidator(
         return { success: false };
     }
 
-    console.log(`\n📄 Loaded config: ${shared.configPath}`);
+    console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
     const config = parseConfig(options);
 

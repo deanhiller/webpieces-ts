@@ -19,7 +19,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { loadConfig, InformAiError, toError } from '@webpieces/rules-config';
+import { loadWebpiecesRulesConfig, InformAiError, toError } from '@webpieces/rules-config';
 import { toValidateCodeOptions } from './from-shared-config';
 import runValidateCode from './validate-code';
 
@@ -76,13 +76,13 @@ function runNx(root: string, args: string[]): number {
 }
 
 async function runStandalone(cwd: string): Promise<number> {
-    const shared = loadConfig(cwd);
-    if (!shared.configPath) {
+    const loaded = loadWebpiecesRulesConfig(cwd);
+    if (!loaded) {
         console.log('ℹ️  Not an Nx repo and no webpieces.config.json found — nothing to validate.');
         return 0;
     }
     console.log('ℹ️  Not an Nx repo — running standalone webpieces code validators.\n');
-    const options = toValidateCodeOptions(shared);
+    const options = toValidateCodeOptions(loaded.config);
     const result = await runValidateCode(options, cwd);
     return result.success ? 0 : 1;
 }

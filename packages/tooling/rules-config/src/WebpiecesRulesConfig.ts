@@ -1,0 +1,54 @@
+import {
+    MaxMethodLinesConfig,
+    MaxFileLinesConfig,
+    RequireReturnTypeConfig,
+    NoInlineTypeLiteralsConfig,
+    NoAnyUnknownConfig,
+    NoImplicitAnyConfig,
+    PrismaValidateDtosConfig,
+    PrismaConverterConfig,
+    NoDestructureConfig,
+    NoUnmanagedExceptionsConfig,
+    CatchErrorPatternConfig,
+    ThrowCauseRequiredConfig,
+    AngularNoDirectApiInResolverConfig,
+    NoSymbolDiTokensConfig,
+    NoShellSubstitutionConfig,
+    BranchCreationGuardConfig,
+    PrCreationGuardConfig,
+    PrMergeCleanupConfig,
+    NoDirectMainUpdateConfig,
+    NoEditOnMainConfig,
+    NoFileImportCyclesConfig,
+    RuntimeArchitectureConfig,
+    NoJsFilesConfig,
+    ValidateTsInSrcConfig,
+} from './rule-configs';
+
+export class WebpiecesRulesConfig {
+    'max-method-lines'?: MaxMethodLinesConfig;
+    'max-file-lines'?: MaxFileLinesConfig;
+    'require-return-type'?: RequireReturnTypeConfig;
+    'no-inline-type-literals'?: NoInlineTypeLiteralsConfig;
+    'no-any-unknown'?: NoAnyUnknownConfig;
+    'no-implicit-any'?: NoImplicitAnyConfig;
+    'prisma-validate-dtos'?: PrismaValidateDtosConfig;
+    'prisma-converter'?: PrismaConverterConfig;
+    'no-destructure'?: NoDestructureConfig;
+    'no-unmanaged-exceptions'?: NoUnmanagedExceptionsConfig;
+    'catch-error-pattern'?: CatchErrorPatternConfig;
+    'throw-cause-required'?: ThrowCauseRequiredConfig;
+    'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
+    'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
+    'no-shell-substitution'?: NoShellSubstitutionConfig;
+    'branch-creation-guard'?: BranchCreationGuardConfig;
+    'pr-creation-guard'?: PrCreationGuardConfig;
+    'pr-merge-cleanup'?: PrMergeCleanupConfig;
+    'no-direct-main-update'?: NoDirectMainUpdateConfig;
+    'no-edit-on-main'?: NoEditOnMainConfig;
+    'no-file-import-cycles'?: NoFileImportCyclesConfig;
+    'runtime-architecture'?: RuntimeArchitectureConfig;
+    'no-js-files'?: NoJsFilesConfig;
+    'validate-ts-in-src'?: ValidateTsInSrcConfig;
+    rulesDir?: string[];
+}
