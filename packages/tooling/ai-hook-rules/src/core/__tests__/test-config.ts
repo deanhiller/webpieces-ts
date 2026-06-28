@@ -1,6 +1,6 @@
 import { builtInRuleNames } from '../rules/index';
 
-export function makeFullConfig(overrides?: Record<string, object>): string {
+export function makeFullConfig(overrides?: Record<string, object>, rulesDir?: string[]): string {
     const rules: Record<string, object> = {};
     for (const name of builtInRuleNames) {
         rules[name] = { mode: 'OFF' };
@@ -8,5 +8,5 @@ export function makeFullConfig(overrides?: Record<string, object>): string {
     if (overrides) {
         Object.assign(rules, overrides);
     }
-    return JSON.stringify({ rules, rulesDir: [] });
+    return JSON.stringify({ rules, rulesDir: rulesDir ?? [] });
 }

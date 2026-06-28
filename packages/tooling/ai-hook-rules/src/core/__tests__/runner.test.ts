@@ -5,6 +5,7 @@ import * as path from 'path';
 
 import { run } from '../runner';
 import { NormalizedToolInput, NormalizedEdit } from '../types';
+import { makeFullConfig } from './test-config';
 
 function makeWorkspace(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hooks-runner-test-'));
@@ -30,20 +31,7 @@ describe('core runner', () => {
 
     it('returns null when all rules disabled', () => {
         const ws = makeWorkspace();
-        writeFile(
-            path.join(ws, 'webpieces.config.json'),
-            JSON.stringify({
-                rules: {
-                    'no-any-unknown': { mode: 'OFF' },
-                    'max-file-lines': { mode: 'OFF' },
-                    'validate-ts-in-src': { mode: 'OFF' },
-                    'no-destructure': { mode: 'OFF' },
-                    'require-return-type': { mode: 'OFF' },
-                    'no-unmanaged-exceptions': { mode: 'OFF' },
-                },
-                rulesDir: [],
-            }),
-        );
+        writeFile(path.join(ws, 'webpieces.config.json'), makeFullConfig());
         const input = new NormalizedToolInput(
             path.join(ws, 'foo.ts'),
             [new NormalizedEdit('', 'const x: number = 1;')],
@@ -77,18 +65,7 @@ describe('core runner', () => {
         );
         writeFile(
             path.join(ws, 'webpieces.config.json'),
-            JSON.stringify({
-                rules: {
-                    'no-any-unknown': { mode: 'OFF' },
-                    'max-file-lines': { mode: 'OFF' },
-                    'validate-ts-in-src': { mode: 'OFF' },
-                    'no-destructure': { mode: 'OFF' },
-                    'require-return-type': { mode: 'OFF' },
-                    'no-unmanaged-exceptions': { mode: 'OFF' },
-                    'ban-foo': { mode: 'ON' },
-                },
-                rulesDir: ['ai-hooks-rules'],
-            }),
+            makeFullConfig({ 'ban-foo': { mode: 'ON' } }, ['ai-hooks-rules']),
         );
         const input = new NormalizedToolInput(
             path.join(ws, 'evil.ts'),
@@ -127,18 +104,7 @@ describe('core runner', () => {
         );
         writeFile(
             path.join(ws, 'webpieces.config.json'),
-            JSON.stringify({
-                rules: {
-                    'no-any-unknown': { mode: 'OFF' },
-                    'max-file-lines': { mode: 'OFF' },
-                    'validate-ts-in-src': { mode: 'OFF' },
-                    'no-destructure': { mode: 'OFF' },
-                    'require-return-type': { mode: 'OFF' },
-                    'no-unmanaged-exceptions': { mode: 'OFF' },
-                    'ban-foo': { mode: 'ON' },
-                },
-                rulesDir: ['ai-hooks-rules'],
-            }),
+            makeFullConfig({ 'ban-foo': { mode: 'ON' } }, ['ai-hooks-rules']),
         );
         const input = new NormalizedToolInput(
             path.join(ws, 'allowed.ts'),
@@ -170,18 +136,7 @@ describe('core runner', () => {
         );
         writeFile(
             path.join(ws, 'webpieces.config.json'),
-            JSON.stringify({
-                rules: {
-                    'no-any-unknown': { mode: 'OFF' },
-                    'max-file-lines': { mode: 'OFF' },
-                    'validate-ts-in-src': { mode: 'OFF' },
-                    'no-destructure': { mode: 'OFF' },
-                    'require-return-type': { mode: 'OFF' },
-                    'no-unmanaged-exceptions': { mode: 'OFF' },
-                    'max-five': { mode: 'ON' },
-                },
-                rulesDir: ['ai-hooks-rules'],
-            }),
+            makeFullConfig({ 'max-five': { mode: 'ON' } }, ['ai-hooks-rules']),
         );
         const longContent = Array(10).fill('const x = 1;').join('\n');
         const input = new NormalizedToolInput(
@@ -219,18 +174,7 @@ describe('core runner', () => {
         );
         writeFile(
             path.join(ws, 'webpieces.config.json'),
-            JSON.stringify({
-                rules: {
-                    'no-any-unknown': { mode: 'OFF' },
-                    'max-file-lines': { mode: 'OFF' },
-                    'validate-ts-in-src': { mode: 'OFF' },
-                    'no-destructure': { mode: 'OFF' },
-                    'require-return-type': { mode: 'OFF' },
-                    'no-unmanaged-exceptions': { mode: 'OFF' },
-                    'ban-foo': { mode: 'ON' },
-                },
-                rulesDir: ['ai-hooks-rules'],
-            }),
+            makeFullConfig({ 'ban-foo': { mode: 'ON' } }, ['ai-hooks-rules']),
         );
         const input = new NormalizedToolInput(target, [
             new NormalizedEdit('const a = 1;', 'const a = foo;'),
@@ -265,18 +209,7 @@ describe('core runner', () => {
         );
         writeFile(
             path.join(ws, 'webpieces.config.json'),
-            JSON.stringify({
-                rules: {
-                    'no-any-unknown': { mode: 'OFF' },
-                    'max-file-lines': { mode: 'OFF' },
-                    'validate-ts-in-src': { mode: 'OFF' },
-                    'no-destructure': { mode: 'OFF' },
-                    'require-return-type': { mode: 'OFF' },
-                    'no-unmanaged-exceptions': { mode: 'OFF' },
-                    'ban-foo': { mode: 'ON' },
-                },
-                rulesDir: ['ai-hooks-rules'],
-            }),
+            makeFullConfig({ 'ban-foo': { mode: 'ON' } }, ['ai-hooks-rules']),
         );
         const input = new NormalizedToolInput(target, [
             new NormalizedEdit('const a = 1;', 'const a = 11;'),
