@@ -65,30 +65,35 @@ describe('branch-creation-guard', () => {
             return ws;
         }
 
-        it('blocks git checkout -b without sub/ prefix', () => {
+        it('blocks git checkout -b from a non-main branch', () => {
             const ws = makeNonMainWorkspace();
             const result = runBash('git checkout -b new-branch', ws);
             expect(result).not.toBeNull();
             expect(result!.report).toContain('branch-creation-guard');
-            expect(result!.report).toContain('sub/');
-            expect(result!.report).toContain('sub/new-branch');
+            expect(result!.report).toContain('only branch off main');
+            expect(result!.report).toContain('human');
         });
 
-        it('blocks git switch -c without sub/ prefix', () => {
+        it('blocks git switch -c from a non-main branch', () => {
             const ws = makeNonMainWorkspace();
             const result = runBash('git switch -c new-branch', ws);
             expect(result).not.toBeNull();
-            expect(result!.report).toContain('sub/new-branch');
+            expect(result!.report).toContain('only branch off main');
+            expect(result!.report).toContain('human');
         });
 
-        it('allows git checkout -b with sub/ prefix', () => {
+        it('blocks git checkout -b even with sub/ prefix from a non-main branch', () => {
             const ws = makeNonMainWorkspace();
-            expect(runBash('git checkout -b sub/new-branch', ws)).toBeNull();
+            const result = runBash('git checkout -b sub/new-branch', ws);
+            expect(result).not.toBeNull();
+            expect(result!.report).toContain('only branch off main');
         });
 
-        it('allows git switch -c with sub/ prefix', () => {
+        it('blocks git switch -c even with sub/ prefix from a non-main branch', () => {
             const ws = makeNonMainWorkspace();
-            expect(runBash('git switch -c sub/child-branch', ws)).toBeNull();
+            const result = runBash('git switch -c sub/child-branch', ws);
+            expect(result).not.toBeNull();
+            expect(result!.report).toContain('only branch off main');
         });
     });
 
