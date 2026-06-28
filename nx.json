@@ -50,12 +50,6 @@
                 "validate-runtime-markers",
                 "^build"
             ]
-        },
-        "validate-code": {
-            "inputs": ["default", "{workspaceRoot}/webpieces.config.json"]
-        },
-        "validate-ts-in-src": {
-            "inputs": ["default", "{workspaceRoot}/webpieces.config.json"]
         }
     },
     "plugins": [

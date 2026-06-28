@@ -40,7 +40,7 @@ function validateCleanTree(currentBranch: string): void {
     process.stderr.write('\n');
     process.stderr.write('Or to stash them temporarily:\n');
     process.stderr.write('  git stash\n');
-    process.stderr.write('  ./scripts/git-updateFromMain.sh\n');
+    process.stderr.write('  pnpm wp-git-update\n');
     process.stderr.write('  git stash pop\n');
     process.stderr.write('\n');
     process.stderr.write(SEP);

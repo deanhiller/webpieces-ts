@@ -52,7 +52,7 @@ export async function main(): Promise<void> {
     process.stdout.write('\n');
     process.stdout.write('⚠️  REVIEW CAREFULLY before committing!\n');
     process.stdout.write('\n');
-    process.stdout.write('When ready to commit, the git-updateFromMain.sh script will continue.\n');
+    process.stdout.write('When ready to commit, pnpm wp-git-update will continue.\n');
     process.stdout.write('\n');
 }
 
