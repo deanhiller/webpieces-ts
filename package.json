@@ -76,7 +76,6 @@
         "onlyBuiltDependencies": [
             "@parcel/watcher",
             "@swc/core",
-            "@webpieces/ai-hook-rules",
             "esbuild",
             "lmdb",
             "msgpackr-extract",
