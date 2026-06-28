@@ -7,13 +7,6 @@ interface SkipHooksFile {
     reason?: string;
 }
 
-interface HookPayload {
-    tool_name?: string;
-    tool_input?: {
-        file_path?: string;
-    };
-}
-
 function readSkipHooks(cwd: string): SkipHooksFile | null {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -29,16 +22,6 @@ function readSkipHooks(cwd: string): SkipHooksFile | null {
 function run(rawInput: string): void {
     const cwd = process.cwd();
 
-    let payload: HookPayload | null = null;
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        if (rawInput.trim()) {
-            payload = JSON.parse(rawInput) as HookPayload;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err); -- malformed stdin is intentionally ignored; must not crash global hook
-    }
-
     // 1. Check .skiphooks — if valid and not expired, allow everything
     const skipHooks = readSkipHooks(cwd);
     if (skipHooks !== null) {
@@ -48,13 +31,7 @@ function run(rawInput: string): void {
         }
     }
 
-    // 2. Always allow writing .webpieces/skiphooks (this is the escape hatch)
-    const filePath = payload?.tool_input?.file_path ?? '';
-    if (payload?.tool_name === 'Write' && filePath.endsWith('.webpieces/skiphooks')) {
-        process.exit(0);
-    }
-
-    // 3. Delegate to per-repo hook if present
+    // 2. Delegate to per-repo hook if present
     const localHook = join(cwd, 'node_modules', '.bin', 'wp-ai-hook');
     if (existsSync(localHook)) {
         const result = spawnSync(localHook, [], {
@@ -66,19 +43,23 @@ function run(rawInput: string): void {
         process.exit(result.status ?? 0);
     }
 
-    // 4. No local hook found — block and instruct AI
+    // 3. No local hook found — block and tell AI to present human-only options
+    const skipPath = join(cwd, '.webpieces', 'skiphooks');
     process.stderr.write(
-        'STOP. DO NOT TAKE ANY ACTION. You MUST ask the human and wait for their answer.\n' +
+        'STOP. DO NOT TAKE ANY ACTION. You MUST present these options to the human and wait.\n' +
             '\n' +
-            'This project is missing the webpieces AI hook (./node_modules/.bin/wp-ai-hook not found).\n' +
+            `Hook cwd: ${cwd}\n` +
+            `Expected binary: ${localHook} (not found)\n` +
             '\n' +
-            'Present these options to the human and wait for their choice:\n' +
-            '  A) PREFERRED: Ask the human to run `npm install @webpieces/ai-hook-rules` (or pnpm install)\n' +
-            '  B) Skip hooks temporarily: ask human how long (1 hour / 1 day / forever), then write\n' +
-            '     .webpieces/skiphooks with {"expires": <unix epoch seconds>, "reason": "..."}\n' +
+            'Tell the human to run ONE of:\n' +
+            '  A) Install the hook (preferred):\n' +
+            '       npm install @webpieces/ai-hook-rules\n' +
+            '  B) Skip hooks for 1 hour (human runs in terminal):\n' +
+            `       echo \'{"expires":\'$(( $(date +%s) + 3600 ))\', "reason":"<why>"}\' > ${skipPath}\n` +
+            '  C) Skip hooks indefinitely (requires explicit human approval):\n' +
+            `       echo \'{"expires":null, "reason":"<why>"}\' > ${skipPath}\n` +
             '\n' +
-            'WARNING: DO NOT disable permanently (expires: null) without explicit human permission.\n' +
-            'You are BLOCKED. Ask the human now and wait for their response.\n',
+            'You are BLOCKED until the human runs one of the above commands.\n',
     );
     process.exit(2);
 }

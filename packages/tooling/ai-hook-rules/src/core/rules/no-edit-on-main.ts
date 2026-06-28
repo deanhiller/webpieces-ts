@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import type { FileRule, FileContext, Violation } from '../types';
-import { Violation as V } from '../types';
+import { Violation as V, FieldSchema } from '../types';
 import { toError } from '../to-error';
 
 const noEditOnMain: FileRule = {
@@ -10,6 +10,9 @@ const noEditOnMain: FileRule = {
     files: ['**/*'],
     defaultOptions: {
         branchNamingConvention: '{whoami}/{featurename}',
+    },
+    configSchema: {
+        branchNamingConvention: new FieldSchema('string', 'Branch name template shown to AI when it tries to edit on main'),
     },
     fixHint: [
         'You should not be working on main.',
@@ -36,8 +39,7 @@ const noEditOnMain: FileRule = {
 
         if (currentBranch !== 'main') return [];
 
-        const convention = (ctx.options['branchNamingConvention'] as string | undefined)
-            ?? 'feature/<ticket-id>-<short-description>';
+        const convention = ctx.options['branchNamingConvention'] as string;
 
         return [new V(
             1,

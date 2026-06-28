@@ -8,7 +8,8 @@ const noDestructureRule: EditRule = {
     description: 'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.',
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: { allowTopLevel: true },
+    defaultOptions: {},
+    configSchema: {},
     fixHint: [
         'Instead of: const { x, y } = methodCall(); prefer const obj = methodCall(); then pass obj to other methods or use obj.x',
         '// webpieces-disable no-destructure -- <reason>',
