@@ -35,7 +35,7 @@ describe('pr-creation-guard', () => {
         expect(runBash('gh pr list', ws)).toBeNull();
     });
 
-    it('fails open (allows) when fetch throws due to no remote — runner catches rule crashes', () => {
+    it('shows crash violation (fails visible) when fetch throws due to no remote', () => {
         const ws = makeWorkspace();
         execSync('git init', { cwd: ws });
         execSync('git config user.email "test@test.com"', { cwd: ws });
@@ -43,9 +43,10 @@ describe('pr-creation-guard', () => {
         fs.writeFileSync(path.join(ws, 'README.md'), 'test');
         execSync('git add .', { cwd: ws });
         execSync('git commit -m "init"', { cwd: ws });
-        // No remote — fetch throws, runner catches and fails open (returns null = allowed).
-        // This is intentional: if the hook infrastructure fails, don't block the AI.
-        expect(runBash('gh pr create --title "test"', ws)).toBeNull();
+        // No remote — fetch throws. Rule crash is surfaced as a visible violation so AI sees it.
+        const result = runBash('gh pr create --title "test"', ws);
+        expect(result).not.toBeNull();
+        expect(result!.report).toContain('crashed:');
     });
 
     it('returns null when rule is disabled', () => {

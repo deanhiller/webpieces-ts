@@ -16,14 +16,16 @@ function writeFile(p: string, content: string): void {
 }
 
 describe('core runner', () => {
-    it('returns null when no config in tree', () => {
+    it('blocks with helpful message when no config in tree', () => {
         const ws = makeWorkspace();
         const input = new NormalizedToolInput(
             path.join(ws, 'foo.ts'),
             [new NormalizedEdit('', 'const x: number = 1;')],
         );
         const result = run('Write', input, ws);
-        expect(result).toBeNull();
+        expect(result).not.toBeNull();
+        expect(result!.report).toContain('webpieces.config.json not found');
+        expect(result!.report).toContain('wp-setup-ai-hooks');
     });
 
     it('returns null when all rules disabled', () => {

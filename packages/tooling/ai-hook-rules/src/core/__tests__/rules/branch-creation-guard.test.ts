@@ -98,11 +98,12 @@ describe('branch-creation-guard', () => {
     });
 
     describe('when on main without a remote', () => {
-        it('fails open (allows) when fetch throws due to no remote — runner catches rule crashes', () => {
+        it('shows crash violation (fails visible) when fetch throws due to no remote', () => {
             const ws = makeWorkspace();
-            // No remote — fetch throws, runner catches and fails open (returns null = allowed).
-            // This is intentional: if the hook infrastructure fails, don't block the AI.
-            expect(runBash('git checkout -b new-branch', ws)).toBeNull();
+            // No remote — fetch throws. Rule crash is surfaced as a visible violation so AI sees it.
+            const result = runBash('git checkout -b new-branch', ws);
+            expect(result).not.toBeNull();
+            expect(result!.report).toContain("crashed:");
         });
     });
 

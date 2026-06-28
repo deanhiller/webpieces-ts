@@ -4,7 +4,6 @@
 // `**/jest.config.ts` legitimately live outside src/ and are exempt here.
 const DEFAULT_EXCLUDE_PATHS: readonly string[] = [
     'node_modules', 'dist', '.nx', '.git',
-    'architecture', 'tmp', 'scripts',
     '**/*.d.ts', '**/jest.config.ts',
 ];
 
@@ -35,6 +34,10 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
         allowedRootFiles: ['jest.setup.ts'],
         excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
+    'no-js-files': { mode: 'OFF' },
+    'branch-creation-guard': { mode: 'ON' },
+    'pr-creation-guard': { mode: 'ON' },
+    'no-direct-main-update': { mode: 'ON' },
 };
 
 export const defaultRulesDir: readonly string[] = [];

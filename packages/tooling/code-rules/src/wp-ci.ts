@@ -19,7 +19,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { loadConfig } from '@webpieces/rules-config';
+import { loadConfig, InformAiError, toError } from '@webpieces/rules-config';
 import { toValidateCodeOptions } from './from-shared-config';
 import runValidateCode from './validate-code';
 
@@ -52,17 +52,15 @@ function pluginEntryMatches(entry: NxPluginEntry): boolean {
 }
 
 function isPluginRegistered(nxJsonPath: string): boolean {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    const raw = fs.readFileSync(nxJsonPath, 'utf8');
+    // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
     try {
-        const raw = fs.readFileSync(nxJsonPath, 'utf8');
         const parsed = JSON.parse(raw) as RawNxJson;
         const plugins = parsed.plugins ?? [];
         return plugins.some((entry: NxPluginEntry) => pluginEntryMatches(entry));
-        // webpieces-disable catch-error-pattern -- malformed nx.json should report as "not registered" with guidance
     } catch (err: unknown) {
-        //const error = toError(err); -- malformed nx.json reports as "not registered"
-        void err;
-        return false;
+        const error = toError(err);
+        throw new InformAiError(`nx.json has invalid JSON — fix the file, then retry.\nParse error: ${error.message}\nFile: ${nxJsonPath}`);
     }
 }
 
@@ -96,32 +94,43 @@ function reportPluginMissing(): void {
     console.error('   (or add it manually to the "plugins" array in nx.json).\n');
 }
 
+// webpieces-disable no-unmanaged-exceptions -- global entry point for wp-ci CLI
 async function main(): Promise<void> {
-    const cwd = process.cwd();
-    const passthrough = process.argv.slice(2);
+    try {
+        const cwd = process.cwd();
+        const passthrough = process.argv.slice(2);
 
-    const nxJsonPath = findUp('nx.json', cwd);
-    if (!nxJsonPath) {
-        const code = await runStandalone(cwd);
-        process.exit(code);
-    }
+        const nxJsonPath = findUp('nx.json', cwd);
+        if (!nxJsonPath) {
+            const code = await runStandalone(cwd);
+            process.exit(code);
+        }
 
-    const root = path.dirname(nxJsonPath);
-    if (!isPluginRegistered(nxJsonPath)) {
-        reportPluginMissing();
+        const root = path.dirname(nxJsonPath);
+        if (!isPluginRegistered(nxJsonPath)) {
+            reportPluginMissing();
+            process.exit(1);
+        }
+
+        // Run the architecture + code validators first (this also runs the wiring guard,
+        // which fails loudly if nx.json no longer wires validators into the build).
+        if (fs.existsSync(path.join(root, 'architecture'))) {
+            const validateCode = runNx(root, ['run', 'architecture:validate-complete']);
+            if (validateCode !== 0) process.exit(validateCode);
+        }
+
+        // Then the Gradle-style ci composite (lint + build + test) across affected projects.
+        const ciCode = runNx(root, ['affected', '--target=ci', ...passthrough]);
+        process.exit(ciCode);
+    } catch (err: unknown) {
+        const error = toError(err);
+        if (err instanceof InformAiError) {
+            console.error(error.message);
+        } else {
+            console.error(`[wp-ci] unexpected error: ${error.message}`);
+        }
         process.exit(1);
     }
-
-    // Run the architecture + code validators first (this also runs the wiring guard,
-    // which fails loudly if nx.json no longer wires validators into the build).
-    if (fs.existsSync(path.join(root, 'architecture'))) {
-        const validateCode = runNx(root, ['run', 'architecture:validate-complete']);
-        if (validateCode !== 0) process.exit(validateCode);
-    }
-
-    // Then the Gradle-style ci composite (lint + build + test) across affected projects.
-    const ciCode = runNx(root, ['affected', '--target=ci', ...passthrough]);
-    process.exit(ciCode);
 }
 
 void main();

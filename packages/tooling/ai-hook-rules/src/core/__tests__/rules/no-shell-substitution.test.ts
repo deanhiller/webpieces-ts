@@ -101,10 +101,11 @@ describe('no-shell-substitution', () => {
         expect(result).toBeNull();
     });
 
-    it('returns null when no config in tree', () => {
+    it('blocks with helpful message when no config in tree', () => {
         const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hooks-bash-noconfig-'));
         const result = runBash('echo $(date)', ws);
-        expect(result).toBeNull();
+        expect(result).not.toBeNull();
+        expect(result!.report).toContain('webpieces.config.json not found');
     });
 
     it('reports multiple violation categories for combined command', () => {

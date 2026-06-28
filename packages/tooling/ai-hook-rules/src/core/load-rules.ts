@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { Rule, ResolvedConfig } from './types';
+import { InformAiError } from './types';
 import { toError } from './to-error';
 import { builtInRuleNames } from './rules/index';
 import noAnyUnknown from './rules/no-any-unknown';
@@ -17,6 +18,7 @@ import noSymbolDiTokens from './rules/no-symbol-di-tokens';
 import branchCreationGuard from './rules/branch-creation-guard';
 import prCreationGuard from './rules/pr-creation-guard';
 import noDirectMainUpdate from './rules/no-direct-main-update';
+import noJsFiles from './rules/no-js-files';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
@@ -35,6 +37,7 @@ const BUILT_IN_RULE_MAP: Record<string, Rule> = {
     'branch-creation-guard': branchCreationGuard as Rule,
     'pr-creation-guard': prCreationGuard as Rule,
     'no-direct-main-update': noDirectMainUpdate as Rule,
+    'no-js-files': noJsFiles as Rule,
 };
 
 export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
@@ -71,8 +74,7 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
             entries = fs.readdirSync(absDir).filter((e) => e.endsWith('.js'));
         } catch (err: unknown) {
             const error = toError(err);
-            process.stderr.write(`[ai-hooks] cannot read rulesDir ${absDir}: ${error.message}\n`);
-            continue;
+            throw new InformAiError(`Cannot read custom rules directory '${absDir}': ${error.message}`);
         }
         for (const entry of entries) {
             const full = path.join(absDir, entry);
@@ -82,7 +84,7 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
                 modules.push(mod.default || mod);
             } catch (err: unknown) {
                 const error = toError(err);
-                process.stderr.write(`[ai-hooks] failed to load custom rule ${full}: ${error.message}\n`);
+                throw new InformAiError(`Cannot load custom rule '${full}': ${error.message}`);
             }
         }
     }

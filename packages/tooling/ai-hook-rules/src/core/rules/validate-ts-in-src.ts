@@ -8,7 +8,6 @@ import { Violation as V } from '../types';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',
-    'architecture', 'tmp', 'scripts',
     '**/*.d.ts', '**/jest.config.ts',
 ];
 const DEFAULT_ALLOWED_ROOT_FILES = ['jest.setup.ts'];

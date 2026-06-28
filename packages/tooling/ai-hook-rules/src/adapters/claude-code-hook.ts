@@ -1,6 +1,6 @@
 import { run, runBash } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
-import { NormalizedToolInput, NormalizedEdit, ToolKind } from '../core/types';
+import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError } from '../core/types';
 import { toError } from '../core/to-error';
 
 const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
@@ -42,8 +42,7 @@ function safeParse(raw: string): ClaudeCodePayload | null {
         return JSON.parse(raw) as ClaudeCodePayload;
     } catch (err: unknown) {
         const error = toError(err);
-        void error;
-        return null;
+        throw new InformAiError(`Malformed hook input from Claude Code stdin: ${error.message}`);
     }
 }
 
@@ -107,8 +106,12 @@ export async function main(): Promise<void> {
         process.exit(2);
     } catch (err: unknown) {
         const error = toError(err);
-        process.stderr.write(`[ai-hooks] claude-code adapter crashed (failing open): ${error.message}\n`);
-        process.exit(0);
+        if (err instanceof InformAiError) {
+            process.stderr.write(error.message + '\n');
+        } else {
+            process.stderr.write(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}\n`);
+        }
+        process.exit(2);
     }
 }
 

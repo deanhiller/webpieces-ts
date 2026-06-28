@@ -1,7 +1,7 @@
 // ResolvedConfig / ResolvedRuleConfig / RuleOptions now live in @webpieces/rules-config
 // so ai-hooks and the Nx validate-code executor share one loader and one config file.
 import { RuleOptions } from '@webpieces/rules-config';
-export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from '@webpieces/rules-config';
+export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError } from '@webpieces/rules-config';
 
 export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
 export type RuleScope = 'edit' | 'file' | 'bash';
@@ -194,3 +194,4 @@ export class BlockedResult {
         this.report = report;
     }
 }
+

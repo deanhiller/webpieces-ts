@@ -1,5 +1,7 @@
 import { execSync } from 'child_process';
 
+import { InformAiError, toError } from '@webpieces/rules-config';
+
 export interface SkipRuleResult {
     skip: boolean;
     reason?: string;
@@ -14,12 +16,12 @@ export function getCurrentBranch(): string {
         process.env['CI_COMMIT_BRANCH'] ||
         process.env['CIRCLE_BRANCH'];
     if (envBranch) return envBranch;
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
     try {
         return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
-    // webpieces-disable catch-error-pattern -- intentional swallow of git command failure; no useful error to surface
-    } catch {
-        return '';
+    } catch (err: unknown) {
+        const error = toError(err);
+        throw new InformAiError(`Failed to determine current git branch: ${error.message}`);
     }
 }
 
