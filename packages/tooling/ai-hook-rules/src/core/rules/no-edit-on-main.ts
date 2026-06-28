@@ -20,6 +20,9 @@ const noEditOnMain: FileRule = {
     ],
 
     check(ctx: FileContext): readonly Violation[] {
+        // Only apply to files inside the workspace root
+        if (ctx.relativePath.startsWith('..')) return [];
+
         let currentBranch: string;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
