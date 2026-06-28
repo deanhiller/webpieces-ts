@@ -87,13 +87,16 @@
             "apiProjectPaths": ["apps/example-apis"],
             "allowedCycles": []
         },
+        "no-js-files": {
+            "mode": "ON",
+            "allowedPaths": []
+        },
         "validate-ts-in-src": {
             "mode": "MODIFIED_FILES",
             "ignoreModifiedUntilEpoch": 1771931925,
             "allowedRootFiles": ["jest.setup.ts"],
             "excludePaths": [
                 "node_modules", "dist", ".nx", ".git",
-                "architecture", "tmp", "scripts",
                 "**/*.d.ts", "**/jest.config.ts", "**/codegen.ts"
             ]
         }

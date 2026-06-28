@@ -66,10 +66,8 @@ describe('loadConfig', () => {
         expect(rule.options['ignoreModifiedUntilEpoch']).toBe(12345);
     });
 
-    it('fails open on malformed JSON', () => {
+    it('throws InformAiError on malformed JSON', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: '{ this is not json' });
-        const config = loadConfig(dir);
-        expect(config.configPath).toBe(path.join(dir, CONFIG_FILENAME));
-        expect(config.rules.size).toBe(0);
+        expect(() => loadConfig(dir)).toThrow('webpieces.config.json has invalid JSON');
     });
 });

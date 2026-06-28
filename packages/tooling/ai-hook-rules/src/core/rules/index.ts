@@ -3,6 +3,7 @@ export const builtInRuleNames: readonly string[] = [
     'no-implicit-any',
     'max-file-lines',
     'validate-ts-in-src',
+    'no-js-files',
     'no-destructure',
     'require-return-type',
     'no-unmanaged-exceptions',

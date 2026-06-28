@@ -6,7 +6,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const compiled = path.join(__dirname, '..', 'src', 'bin', 'setup.js');
+const compiled = path.join(__dirname, '..', 'src', 'bin', 'global-setup.js');
 
 if (fs.existsSync(compiled)) {
     require(compiled).main();

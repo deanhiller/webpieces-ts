@@ -17,14 +17,7 @@ export function run(
     input: NormalizedToolInput,
     cwd: string,
 ): BlockedResult | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return runInternal(toolKind, input, cwd);
-    } catch (err: unknown) {
-        const error = toError(err);
-        console.error(`[ai-hooks] runner crashed (failing open): ${error.message}`);
-        return null;
-    }
+    return runInternal(toolKind, input, cwd);
 }
 
 function runInternal(
@@ -33,11 +26,20 @@ function runInternal(
     cwd: string,
 ): BlockedResult | null {
     const config = loadConfig(cwd);
-    if (!config.configPath) return null;
+    if (!config.configPath) {
+        return new BlockedResult(
+            'webpieces.config.json not found.\n' +
+            'Tell the human: run `./node_modules/.bin/wp-setup-ai-hooks` to initialize the project configuration.\n' +
+            'Do not proceed until the human has done this.',
+        );
+    }
 
     const workspaceRoot = path.dirname(config.configPath);
     const rules = loadRules(config, workspaceRoot);
     if (rules.length === 0) return null;
+
+    const outOfSync = checkConfigSync(rules, config);
+    if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot);
     const relativePath = path.relative(workspaceRoot, input.filePath);
@@ -53,23 +55,25 @@ function runInternal(
 }
 
 export function runBash(command: string, cwd: string): BlockedResult | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return runBashInternal(command, cwd);
-    } catch (err: unknown) {
-        const error = toError(err);
-        console.error(`[ai-hooks] bash runner crashed (failing open): ${error.message}`);
-        return null;
-    }
+    return runBashInternal(command, cwd);
 }
 
 function runBashInternal(command: string, cwd: string): BlockedResult | null {
     const config = loadConfig(cwd);
-    if (!config.configPath) return null;
+    if (!config.configPath) {
+        return new BlockedResult(
+            'webpieces.config.json not found.\n' +
+            'Tell the human: run `./node_modules/.bin/wp-setup-ai-hooks` to initialize the project configuration.\n' +
+            'Do not proceed until the human has done this.',
+        );
+    }
 
     const workspaceRoot = path.dirname(config.configPath);
     const rules = loadRules(config, workspaceRoot);
     if (rules.length === 0) return null;
+
+    const outOfSync = checkConfigSync(rules, config);
+    if (outOfSync) return outOfSync;
 
     const ctx = buildBashContext(command, workspaceRoot);
     const groups = runBashRules(rules, ctx, config);
@@ -79,14 +83,31 @@ function runBashInternal(command: string, cwd: string): BlockedResult | null {
     return new BlockedResult(report);
 }
 
-function safeCheckBash(rule: BashRule, ctx: BashContext): readonly Violation[] {
+function checkConfigSync(rules: readonly Rule[], config: ResolvedConfig): BlockedResult | null {
+    const unconfigured = rules.filter((r: Rule) => !config.rules.has(r.name)).map((r: Rule) => r.name);
+    if (unconfigured.length === 0) return null;
+
+    const lines = [
+        'webpieces.config.json is out of sync — new rules have been added that are not yet configured.',
+        '',
+        `Unconfigured rules: ${unconfigured.join(', ')}`,
+        '',
+        'Ask the human: for each rule above, do you want it ON or OFF (and any specific options)?',
+        'Then run `./node_modules/.bin/wp-setup-ai-hooks --sync` to add missing rules (defaults to OFF),',
+        'or edit webpieces.config.json manually to add an entry for each rule.',
+        'Do not proceed until webpieces.config.json is updated.',
+    ];
+    return new BlockedResult(lines.join('\n'));
+}
+
+// N-legs pattern: each rule runs independently; crash → visible violation so AI sees it, not silent []
+function runRuleCheck(rule: Rule, ctx: EditContext | FileContext | BashContext): readonly Violation[] {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        return rule.check(ctx);
+        return (rule as EditRule | FileRule | BashRule).check(ctx as never);
     } catch (err: unknown) {
         const error = toError(err);
-        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${error.message}\n`);
-        return [];
+        return [new Violation(0, '', `Rule '${rule.name}' crashed: ${error.message}`)];
     }
 }
 
@@ -101,7 +122,7 @@ function runBashRules(
         const ruleConfig = config.rules.get(rule.name);
         if (!ruleConfig || ruleConfig.isOff) continue;
         bashContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
-        const vs = safeCheckBash(rule as BashRule, bashContext);
+        const vs = runRuleCheck(rule, bashContext);
         if (vs.length > 0) {
             groups.push(new RuleGroup(
                 rule.name, rule.description, [...rule.fixHint], [...vs],
@@ -130,28 +151,6 @@ function mergeOptions(defaultOptions: RuleOptions, ruleConfig: ResolvedRuleConfi
     return out;
 }
 
-function safeCheckEdit(rule: EditRule, ctx: EditContext): readonly Violation[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return rule.check(ctx);
-    } catch (err: unknown) {
-        const error = toError(err);
-        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${error.message}\n`);
-        return [];
-    }
-}
-
-function safeCheckFile(rule: FileRule, ctx: FileContext): readonly Violation[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return rule.check(ctx);
-    } catch (err: unknown) {
-        const error = toError(err);
-        process.stderr.write(`[ai-hooks] rule ${rule.name} crashed: ${error.message}\n`);
-        return [];
-    }
-}
-
 function runEditRules(
     rules: readonly Rule[],
     editContexts: readonly EditContext[],
@@ -166,7 +165,7 @@ function runEditRules(
         for (const ctx of editContexts) {
             if (!ruleMatchesFile(rule, ctx.relativePath)) continue;
             ctx.options = mergeOptions(rule.defaultOptions, ruleConfig);
-            const vs = safeCheckEdit(rule as EditRule, ctx);
+            const vs = runRuleCheck(rule, ctx);
             for (const v of vs) {
                 const copy = new Violation(v.line, v.snippet, v.message);
                 copy.editIndex = ctx.editIndex;
@@ -195,7 +194,7 @@ function runFileRules(
         if (!ruleConfig || ruleConfig.isOff) continue;
         if (!ruleMatchesFile(rule, fileContext.relativePath)) continue;
         fileContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
-        const vs = safeCheckFile(rule as FileRule, fileContext);
+        const vs = runRuleCheck(rule, fileContext);
         if (vs.length > 0) {
             groups.push(new RuleGroup(
                 rule.name, rule.description, [...rule.fixHint], [...vs],

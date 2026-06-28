@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { defaultRules } from './default-rules';
+import { InformAiError } from './inform-ai-error';
+import { toError } from './to-error';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 
 export const CONFIG_FILENAME = 'webpieces.config.json';
@@ -45,16 +47,18 @@ function mergeRule(
     return new ResolvedRuleConfig(merged as RuleOptions);
 }
 
-function readRawConfig(configPath: string): RawConfigFile | null {
+function readRawConfig(configPath: string): RawConfigFile {
+    const raw = fs.readFileSync(configPath, 'utf8');
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const raw = fs.readFileSync(configPath, 'utf8');
         return JSON.parse(raw) as RawConfigFile;
-        // webpieces-disable catch-error-pattern -- malformed config fails open so missing config doesn't break validators
     } catch (err: unknown) {
-        //const error = toError(err);
-        void err;
-        return null;
+        const error = toError(err);
+        throw new InformAiError(
+            `webpieces.config.json has invalid JSON — fix the file, then retry.\n` +
+            `Parse error: ${error.message}\n` +
+            `File: ${configPath}`,
+        );
     }
 }
 
@@ -66,10 +70,6 @@ export function loadConfig(cwd: string): ResolvedConfig {
     }
 
     const consumerConfig = readRawConfig(configPath);
-    if (!consumerConfig) {
-        return new ResolvedConfig(new Map(), [], configPath);
-    }
-
     const overrideRules = consumerConfig.rules || {};
     const mergedRules = new Map<string, ResolvedRuleConfig>();
 

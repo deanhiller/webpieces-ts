@@ -6,7 +6,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "node .webpieces/ai-hooks/claude-code-hook.js"
+                        "command": "./node_modules/.bin/wp-ai-hook"
                     }
                 ]
             }
