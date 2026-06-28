@@ -6,11 +6,11 @@
 
 const path = require('path');
 const fs = require('fs');
-const compiled = path.join(__dirname, '..', 'src', 'bin', 'global-setup.js');
+const compiled = path.join(__dirname, '..', 'src', 'bin', 'dev-hook-install.js');
 
 if (fs.existsSync(compiled)) {
     require(compiled).main();
 } else {
-    console.error('  [ai-hook-rules] Package not built yet. Run the build first, or install from npm.');
+    console.error('  [ai-hook-rules] Package not built yet. Run `nx build ai-hook-rules` first.');
     process.exit(1);
 }
