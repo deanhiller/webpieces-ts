@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import type { BashRule, BashContext, Violation } from '../types';
-import { Violation as V, FieldSchema } from '../types';
+import { Violation as V } from '../types';
 
 const FIX_HINT: readonly string[] = [
     'Branch is not up-to-date with origin/main.',
@@ -20,10 +20,6 @@ const prCreationGuard: BashRule = {
     scope: 'bash',
     files: [],
     defaultOptions: { buildCommand: '', requireTextInPr: '' },
-    configSchema: {
-        buildCommand: new FieldSchema('string', 'Build/test command AI must run before creating a PR (empty string disables the check)'),
-        requireTextInPr: new FieldSchema('string', 'Exact text AI must include in the PR body to confirm the build passed (empty string disables)'),
-    },
     fixHint: FIX_HINT,
 
     check(ctx: BashContext): readonly Violation[] {

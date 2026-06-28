@@ -13,7 +13,6 @@ const noUnmanagedExceptionsRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
-    configSchema: {},
     fixHint: [
         'Fix Option 1 (preferred): Remove the try/catch — let the exception bubble to the top-level chokepoint (filter, globalErrorHandler) where it is already logged and handled.',
         'Fix Option 2 (ask the human first): If you genuinely believe this IS a chokepoint, STOP and tell the human:',

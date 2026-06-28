@@ -20,7 +20,6 @@ const catchErrorPatternRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
-    configSchema: {},
     fixHint: [
         'Add as first statement inside the catch block: const error = toError(err);',
         'To explicitly ignore the error: //const error = toError(err);',

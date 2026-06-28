@@ -4,7 +4,7 @@ import * as path from 'path';
 import { isPathExcluded } from '@webpieces/rules-config';
 
 import type { FileRule, FileContext, Violation } from '../types';
-import { Violation as V, FieldSchema } from '../types';
+import { Violation as V } from '../types';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',
@@ -30,10 +30,6 @@ const validateTsInSrcRule: FileRule = {
         excludePaths: DEFAULT_EXCLUDE_PATHS,
         allowedRootFiles: DEFAULT_ALLOWED_ROOT_FILES,
     },
-    configSchema: {
-        excludePaths: new FieldSchema('string[]', 'Paths/globs excluded from the src/ validation check'),
-        allowedRootFiles: new FieldSchema('string[]', 'Filenames allowed at the workspace root (outside any project src/)'),
-    },
     fixHint: [
         'Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.',
         'Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in webpieces.config.json',
@@ -42,8 +38,12 @@ const validateTsInSrcRule: FileRule = {
     check(ctx: FileContext): readonly Violation[] {
         if (ctx.tool !== 'Write') return [];
 
-        const excludePaths = ctx.options['excludePaths'] as string[];
-        const allowedRootFiles = ctx.options['allowedRootFiles'] as string[];
+        const excludePaths = Array.isArray(ctx.options['excludePaths'])
+            ? ctx.options['excludePaths'] as string[]
+            : DEFAULT_EXCLUDE_PATHS;
+        const allowedRootFiles = Array.isArray(ctx.options['allowedRootFiles'])
+            ? ctx.options['allowedRootFiles'] as string[]
+            : DEFAULT_ALLOWED_ROOT_FILES;
 
         // Holistic exclusion (Layer 1 + Layer 2): bare dir names + globs.
         if (isPathExcluded(ctx.relativePath, excludePaths)) return [];

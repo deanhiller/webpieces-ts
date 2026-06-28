@@ -8,7 +8,6 @@ const prMergeCleanup: BashRule = {
     scope: 'bash',
     files: [],
     defaultOptions: {},
-    configSchema: {},
     fixHint: [
         'After merging a PR you must clean up the local branch.',
         'Run this combined command instead:',

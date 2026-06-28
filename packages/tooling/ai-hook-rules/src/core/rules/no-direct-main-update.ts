@@ -18,7 +18,6 @@ const noDirectMainUpdate: BashRule = {
     scope: 'bash',
     files: [],
     defaultOptions: {},
-    configSchema: {},
     fixHint: FIX_HINT,
 
     check(ctx: BashContext): readonly Violation[] {

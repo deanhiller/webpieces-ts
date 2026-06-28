@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import type { BashRule, BashContext, Violation } from '../types';
-import { Violation as V, FieldSchema } from '../types';
+import { Violation as V } from '../types';
 
 const FIX_HINT: readonly string[] = [
     "Run 'git checkout main && git pull origin main', then create your branch from main",
@@ -13,9 +13,6 @@ const branchCreationGuard: BashRule = {
     scope: 'bash',
     files: [],
     defaultOptions: { subBranchNaming: 'feature/<ticket>/<short-description>' },
-    configSchema: {
-        subBranchNaming: new FieldSchema('string', 'Naming convention shown when human approves a sub-branch off a feature branch'),
-    },
     fixHint: FIX_HINT,
 
     check(ctx: BashContext): readonly Violation[] {

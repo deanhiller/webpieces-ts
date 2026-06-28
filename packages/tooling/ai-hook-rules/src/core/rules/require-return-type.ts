@@ -23,7 +23,6 @@ const requireReturnTypeRule: EditRule = {
     scope: 'edit',
     files: ['**/*.ts', '**/*.tsx'],
     defaultOptions: {},
-    configSchema: {},
     fixHint: [
         'Add return type: function foo(x: T): ReturnType { ... }',
         '// webpieces-disable require-return-type -- <reason>',
