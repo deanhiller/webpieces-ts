@@ -3,9 +3,14 @@ import { createInterface } from 'readline';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 
+interface HookCommand {
+    type: string;
+    command: string;
+}
+
 interface HookEntry {
     matcher: string;
-    hooks: Array<{ type: string; command: string }>;
+    hooks: Array<HookCommand>;
 }
 
 interface ClaudeSettings {
@@ -28,7 +33,7 @@ function prompt(question: string): Promise<string> {
 
 function isWired(settings: ClaudeSettings): boolean {
     return (settings.hooks?.PreToolUse ?? []).some((e: HookEntry) =>
-        e.hooks.some((h: { type: string; command: string }) => h.command.includes('global-hook.js')),
+        e.hooks.some((h: HookCommand) => h.command.includes('global-hook.js')),
     );
 }
 
@@ -56,7 +61,7 @@ function installHook(settings: ClaudeSettings, shimSource: string, globalHookDes
 function uninstallHook(settings: ClaudeSettings, globalHookDest: string, claudeSettingsPath: string): void {
     if (settings.hooks?.PreToolUse) {
         settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter((e: HookEntry) =>
-            !e.hooks.some((h: { type: string; command: string }) => h.command.includes('global-hook.js')),
+            !e.hooks.some((h: HookCommand) => h.command.includes('global-hook.js')),
         );
     }
     writeFileSync(claudeSettingsPath, JSON.stringify(settings, null, 4) + '\n');
@@ -100,8 +105,5 @@ export async function main(): Promise<void> {
 }
 
 if (require.main === module) {
-    main().catch((err: unknown) => {
-        console.error(String(err));
-        process.exit(1);
-    });
+    void main();
 }
