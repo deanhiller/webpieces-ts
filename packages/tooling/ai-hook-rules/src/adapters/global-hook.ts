@@ -1,10 +1,29 @@
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname, parse } from 'path';
 import { spawnSync } from 'child_process';
 
 interface SkipHooksFile {
     expires: number | null;
     reason?: string;
+}
+
+/**
+ * Walk up from `startDir` until we find the directory containing `.git`, which marks
+ * the root of the repo. Claude can `cd` into a sub-package before running a Bash tool,
+ * which moves process.cwd() away from the repo root; without this traversal the hook
+ * would look for `.webpieces/skiphooks` and `node_modules/.bin/wp-ai-hook` in the wrong
+ * place and wrongly report webpieces as "not installed". `.git` can be a directory
+ * (normal clone) or a file (worktree / submodule), so we accept either.
+ * Falls back to `startDir` when no `.git` is found anywhere up the tree.
+ */
+function findRepoRoot(startDir: string): string {
+    let dir = startDir;
+    const fsRoot = parse(dir).root;
+    while (true) {
+        if (existsSync(join(dir, '.git'))) return dir;
+        if (dir === fsRoot) return startDir;
+        dir = dirname(dir);
+    }
 }
 
 interface HookPayload {
@@ -27,7 +46,7 @@ function readSkipHooks(cwd: string): SkipHooksFile | null {
 }
 
 function run(rawInput: string): void {
-    const cwd = process.cwd();
+    const cwd = findRepoRoot(process.cwd());
 
     let payload: HookPayload | null = null;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -60,6 +79,7 @@ function run(rawInput: string): void {
         const result = spawnSync(localHook, [], {
             input: Buffer.from(rawInput),
             encoding: 'buffer',
+            cwd,
         });
         if (result.stdout?.length) process.stdout.write(result.stdout);
         if (result.stderr?.length) process.stderr.write(result.stderr);
