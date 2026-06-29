@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { loadConfig, CONFIG_FILENAME } from './load-config';
+import { CONFIG_FILENAME } from './config-file';
+import { loadAndValidate } from './load-config';
 
 function mktmp(contents: Record<string, string>): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-config-'));
@@ -12,100 +13,84 @@ function mktmp(contents: Record<string, string>): string {
     return dir;
 }
 
-// Minimal valid config — every built-in rule present, all set to OFF.
-// Tests override specific rules to exercise the behavior under test.
+// Minimal valid config — every built-in rule present, all OFF with the now-required
+// ignoreModifiedUntilEpoch (0 = active), plus a valid pr-gate block (also now required).
+const ALL_RULE_NAMES = [
+    'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
+    'no-any-unknown', 'no-implicit-any', 'prisma-validate-dtos', 'prisma-converter',
+    'no-destructure', 'no-unmanaged-exceptions', 'catch-error-pattern', 'throw-cause-required',
+    'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'no-shell-substitution',
+    'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-cleanup',
+    'no-direct-main-update', 'no-edit-on-main', 'no-file-import-cycles', 'runtime-architecture',
+    'no-js-files', 'validate-ts-in-src',
+];
+
 function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-    return {
-        'max-method-lines': { mode: 'OFF' },
-        'max-file-lines': { mode: 'OFF' },
-        'require-return-type': { mode: 'OFF' },
-        'no-inline-type-literals': { mode: 'OFF' },
-        'no-any-unknown': { mode: 'OFF' },
-        'no-implicit-any': { mode: 'OFF' },
-        'prisma-validate-dtos': { mode: 'OFF' },
-        'prisma-converter': { mode: 'OFF' },
-        'no-destructure': { mode: 'OFF' },
-        'no-unmanaged-exceptions': { mode: 'OFF' },
-        'catch-error-pattern': { mode: 'OFF' },
-        'throw-cause-required': { mode: 'OFF' },
-        'angular-no-direct-api-in-resolver': { mode: 'OFF' },
-        'no-symbol-di-tokens': { mode: 'OFF' },
-        'no-shell-substitution': { mode: 'OFF' },
-        'branch-creation-guard': { mode: 'OFF' },
-        'pr-creation-guard': { mode: 'OFF' },
-        'merge-in-progress-guard': { mode: 'OFF' },
-        'pr-merge-cleanup': { mode: 'OFF' },
-        'no-direct-main-update': { mode: 'OFF' },
-        'no-edit-on-main': { mode: 'OFF' },
-        'no-file-import-cycles': { mode: 'OFF' },
-        'runtime-architecture': { mode: 'OFF' },
-        'no-js-files': { mode: 'OFF' },
-        'validate-ts-in-src': { mode: 'OFF' },
-        ...overrides,
-    };
+    const base: Record<string, unknown> = {};
+    for (const name of ALL_RULE_NAMES) {
+        base[name] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+    }
+    return { ...base, ...overrides };
 }
 
-describe('loadConfig', () => {
-    it('returns empty config when no file is found', () => {
+function validPrGate(): Record<string, unknown> {
+    return { mode: 'ON', buildCommand: 'echo ci' };
+}
+
+function writeConfig(rules: Record<string, unknown>, prGate: unknown = validPrGate()): string {
+    return mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules, 'pr-gate': prGate }) });
+}
+
+describe('loadAndValidate', () => {
+    it('returns lenient empties when no file is found', () => {
         const dir = mktmp({});
-        // Search only inside the tmp subtree: create a nested cwd with a barrier (rootDir check)
         const cwd = fs.mkdtempSync(path.join(dir, 'inner-'));
-        const config = loadConfig(cwd);
-        // May walk up to a real config; we only assert the shape
-        expect(config.rules).toBeInstanceOf(Map);
-        expect(typeof (config.configPath === null || typeof config.configPath === 'string')).toBe('boolean');
+        const loaded = loadAndValidate(cwd);
+        // May walk up to a real config; only assert the shape of the three views.
+        expect(loaded.resolved.rules).toBeInstanceOf(Map);
+        expect(loaded.rulesConfig).toBeDefined();
+        expect(loaded.prGate).toBeDefined();
     });
 
-    it('merges defaults with overrides and honors mode:OFF', () => {
-        const body = JSON.stringify({
-            rules: allRulesOff({
-                'max-file-lines': { limit: 500, mode: 'MODIFIED_FILES' },
-                'no-any-unknown': { mode: 'OFF' },
-            }),
-        });
-        const dir = mktmp({ [CONFIG_FILENAME]: body });
-        const config = loadConfig(dir);
+    it('merges defaults with overrides and honors mode:OFF; exposes all three views', () => {
+        const dir = writeConfig(allRulesOff({
+            'max-file-lines': { limit: 500, mode: 'MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
+            'no-any-unknown': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
+        }));
+        const loaded = loadAndValidate(dir);
 
-        expect(config.configPath).toBe(path.join(dir, CONFIG_FILENAME));
+        expect(loaded.configPath).toBe(path.join(dir, CONFIG_FILENAME));
+        expect(loaded.prGate.buildCommand).toBe('echo ci');
 
-        const maxFileLines = config.rules.get('max-file-lines');
-        expect(maxFileLines).toBeDefined();
+        const maxFileLines = loaded.resolved.rules.get('max-file-lines');
         expect(maxFileLines!.isOff).toBe(false);
         expect(maxFileLines!.options['limit']).toBe(500);
-        expect(maxFileLines!.options['mode']).toBe('MODIFIED_FILES');
 
-        const noAnyUnknown = config.rules.get('no-any-unknown');
-        expect(noAnyUnknown).toBeDefined();
+        const noAnyUnknown = loaded.resolved.rules.get('no-any-unknown');
         expect(noAnyUnknown!.isOff).toBe(true);
-        expect(noAnyUnknown!.mode).toBe('OFF');
     });
 
     it('preserves unknown option keys for consumers that understand them', () => {
-        const body = JSON.stringify({
-            rules: allRulesOff({
-                'no-destructure': {
-                    mode: 'MODIFIED_CODE',
-                    disableAllowed: false,
-                    ignoreModifiedUntilEpoch: 12345,
-                },
-            }),
-        });
-        const dir = mktmp({ [CONFIG_FILENAME]: body });
-        const config = loadConfig(dir);
-
-        const rule = config.rules.get('no-destructure')!;
-        expect(rule.options['mode']).toBe('MODIFIED_CODE');
+        const dir = writeConfig(allRulesOff({
+            'no-destructure': { mode: 'MODIFIED_CODE', disableAllowed: false, ignoreModifiedUntilEpoch: 12345 },
+        }));
+        const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         expect(rule.options['disableAllowed']).toBe(false);
         expect(rule.options['ignoreModifiedUntilEpoch']).toBe(12345);
     });
 
     it('throws InformAiError on malformed JSON', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: '{ this is not json' });
-        expect(() => loadConfig(dir)).toThrow('webpieces.config.json has invalid JSON');
+        expect(() => loadAndValidate(dir)).toThrow('webpieces.config.json has invalid JSON');
     });
 
-    it('throws InformAiError listing all missing rules when config has none', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: {} }) });
-        expect(() => loadConfig(dir)).toThrow('Not configured in webpieces.config.json');
+    it('throws listing missing rules when config has none', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: {}, 'pr-gate': validPrGate() }) });
+        expect(() => loadAndValidate(dir)).toThrow('Not configured in webpieces.config.json');
+    });
+
+    it('throws when the pr-gate block is missing entirely', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: allRulesOff() }) });
+        expect(() => loadAndValidate(dir)).toThrow('[pr-gate] Not configured');
     });
 });

@@ -1,35 +1,10 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
+import { findConfigFile, readRawConfig } from './config-file';
 import { defaultRules } from './default-rules';
 import { InformAiError } from './inform-ai-error';
-import { toError } from './to-error';
+import { buildPrGateConfig, PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
-import { validateWebpiecesConfig } from './validate-config';
+import { validatePrGateSection, validateWebpiecesConfig } from './validate-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
-
-export const CONFIG_FILENAME = 'webpieces.config.json';
-
-// webpieces-disable no-any-unknown -- consumer JSON config has opaque rule option values
-interface RawConfigFile {
-    extends?: string;
-    rules?: Record<string, Record<string, unknown>>;
-    rulesDir?: string[];
-}
-
-/**
- * Walk up from `startDir` looking for webpieces.config.json.
- */
-export function findConfigFile(startDir: string): string | null {
-    let dir = startDir;
-    while (true) {
-        const primary = path.join(dir, CONFIG_FILENAME);
-        if (fs.existsSync(primary)) return primary;
-        const parent = path.dirname(dir);
-        if (parent === dir) return null;
-        dir = parent;
-    }
-}
 
 // webpieces-disable no-any-unknown -- merging opaque option bags from config JSON
 function mergeRule(
@@ -49,60 +24,6 @@ function mergeRule(
     return new ResolvedRuleConfig(merged as RuleOptions);
 }
 
-function readRawConfig(configPath: string): RawConfigFile {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return JSON.parse(raw) as RawConfigFile;
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new InformAiError(
-            `webpieces.config.json has invalid JSON — fix the file, then retry.\n` +
-            `Parse error: ${error.message}\n` +
-            `File: ${configPath}`,
-        );
-    }
-}
-
-export function loadConfig(cwd: string): ResolvedConfig {
-    const configPath = findConfigFile(cwd);
-
-    if (!configPath) {
-        return new ResolvedConfig(new Map(), new Set(), [], null);
-    }
-
-    const consumerConfig = readRawConfig(configPath);
-    const overrideRules = consumerConfig.rules || {};
-
-    const validationErrors = validateWebpiecesConfig(overrideRules);
-    if (validationErrors.length > 0) {
-        throw new InformAiError(
-            `webpieces.config.json has ${validationErrors.length} validation error(s) — fix ALL, then retry:\n\n` +
-            validationErrors.map(e => `  • ${e}`).join('\n'),
-        );
-    }
-
-    const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
-    const mergedRules = new Map<string, ResolvedRuleConfig>();
-
-    const allRuleNames = new Set([
-        ...Object.keys(defaultRules),
-        ...Object.keys(overrideRules),
-    ]);
-    for (const name of allRuleNames) {
-        mergedRules.set(name, mergeRule(defaultRules[name], overrideRules[name]));
-    }
-
-    const rulesDir = consumerConfig.rulesDir ?? [];
-
-    return new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
-}
-
-export interface LoadedWebpiecesConfig {
-    readonly config: WebpiecesRulesConfig;
-    readonly configPath: string;
-}
-
 function buildWebpiecesRulesConfig(
     // webpieces-disable no-any-unknown -- JSON values are opaque until assigned to typed fields
     rawRules: Record<string, Record<string, unknown>>,
@@ -117,21 +38,69 @@ function buildWebpiecesRulesConfig(
     return typed;
 }
 
-export function loadWebpiecesRulesConfig(cwd: string): LoadedWebpiecesConfig | null {
+/**
+ * Everything a consumer might need from webpieces.config.json, produced from ONE parse + ONE
+ * validation pass. Data-only (per CLAUDE.md, classes for data):
+ *  - `resolved`    — Map-based view merged with defaultRules (nx executors).
+ *  - `rulesConfig` — typed WebpiecesRulesConfig (ai-hook-rules, code-rules).
+ *  - `prGate`      — the pr-gate section (pr-gate scripts).
+ *  - `configPath`  — absolute path, or null when no config file was found.
+ */
+export class LoadedConfig {
+    constructor(
+        readonly resolved: ResolvedConfig,
+        readonly rulesConfig: WebpiecesRulesConfig,
+        readonly prGate: PrGateConfig,
+        readonly configPath: string | null,
+    ) {}
+}
+
+/**
+ * The single load+validate entry point for ALL consumers (ai-hook-rules, code-rules,
+ * nx-webpieces-rules, pr-gate scripts). Reads webpieces.config.json once, validates BOTH the `rules`
+ * map and the top-level `pr-gate` block, and throws one InformAiError listing every error. When no
+ * config file is found it returns lenient empties/defaults (matching prior no-file behavior).
+ */
+export function loadAndValidate(cwd: string): LoadedConfig {
     const configPath = findConfigFile(cwd);
-    if (!configPath) return null;
+    if (!configPath) {
+        return new LoadedConfig(
+            new ResolvedConfig(new Map(), new Set(), [], null),
+            new WebpiecesRulesConfig(),
+            buildPrGateConfig(undefined),
+            null,
+        );
+    }
 
     const consumerConfig = readRawConfig(configPath);
     const overrideRules = consumerConfig.rules || {};
 
-    const validationErrors = validateWebpiecesConfig(overrideRules);
-    if (validationErrors.length > 0) {
+    const errors = [
+        ...validateWebpiecesConfig(overrideRules),
+        ...validatePrGateSection(consumerConfig['pr-gate']),
+    ];
+    if (errors.length > 0) {
         throw new InformAiError(
-            `webpieces.config.json has ${validationErrors.length} validation error(s) — fix ALL, then retry:\n\n` +
-            validationErrors.map(e => `  • ${e}`).join('\n'),
+            `webpieces.config.json has ${errors.length} validation error(s) — fix ALL, then retry:\n\n` +
+            errors.map(e => `  • ${e}`).join('\n'),
         );
     }
 
     const rulesDir = consumerConfig.rulesDir ?? [];
-    return { config: buildWebpiecesRulesConfig(overrideRules, rulesDir), configPath };
+
+    const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
+    const mergedRules = new Map<string, ResolvedRuleConfig>();
+    const allRuleNames = new Set([
+        ...Object.keys(defaultRules),
+        ...Object.keys(overrideRules),
+    ]);
+    for (const name of allRuleNames) {
+        mergedRules.set(name, mergeRule(defaultRules[name], overrideRules[name]));
+    }
+    const resolved = new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
+
+    const rulesConfig = buildWebpiecesRulesConfig(overrideRules, rulesDir);
+    const prGate = buildPrGateConfig(consumerConfig['pr-gate']);
+
+    return new LoadedConfig(resolved, rulesConfig, prGate, configPath);
 }

@@ -1,4 +1,4 @@
-import { validateWebpiecesConfig } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection } from './validate-config';
 
 // Helper: errors mentioning a given rule name.
 function errorsFor(rule: string, errors: string[]): string[] {
@@ -40,18 +40,107 @@ describe('validateWebpiecesConfig', () => {
         }
     });
 
-    it('missing-rule snippet lists mode as required and escape hatches as optional', () => {
+    it('missing-rule snippet lists mode + ignoreModifiedUntilEpoch as required, ignoreRuleWhileOnBranch as optional', () => {
         // Omit no-file-import-cycles so the snippet is emitted for it.
         const errors = validateWebpiecesConfig({});
         const snippet = errors.find(e => e.includes('[no-file-import-cycles] Not configured'));
         expect(snippet).toBeDefined();
         // Required block contains mode...
         expect(snippet!).toContain('"mode"');
-        // ...and the escape hatches appear under the optional section, not the required entry.
         const [requiredBlock, optionalBlock] = snippet!.split('Optional fields you may add');
         expect(optionalBlock).toBeDefined();
+        // ignoreModifiedUntilEpoch is now REQUIRED — it appears in the required copy-paste entry.
+        expect(requiredBlock).toContain('ignoreModifiedUntilEpoch');
+        expect(optionalBlock).not.toContain('ignoreModifiedUntilEpoch');
+        // ignoreRuleWhileOnBranch stays optional.
         expect(requiredBlock).not.toContain('ignoreRuleWhileOnBranch');
         expect(optionalBlock).toContain('ignoreRuleWhileOnBranch');
-        expect(optionalBlock).toContain('ignoreModifiedUntilEpoch');
+    });
+});
+
+describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
+    it('rejects a present rule that is missing the required ignoreModifiedUntilEpoch', () => {
+        const errors = validateWebpiecesConfig({
+            'no-shell-substitution': { mode: 'ON' },
+        });
+        expect(
+            errorsFor('no-shell-substitution', errors).some(
+                e => e.includes('Missing required field "ignoreModifiedUntilEpoch"'),
+            ),
+        ).toBe(true);
+    });
+
+    it('rejects a present rule that is missing the required mode', () => {
+        const errors = validateWebpiecesConfig({
+            'no-shell-substitution': { ignoreModifiedUntilEpoch: 0 },
+        });
+        expect(
+            errorsFor('no-shell-substitution', errors).some(
+                e => e.includes('Missing required field "mode"'),
+            ),
+        ).toBe(true);
+    });
+
+    it('accepts a fully-specified rule (mode + ignoreModifiedUntilEpoch)', () => {
+        const errors = validateWebpiecesConfig({
+            'no-shell-substitution': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
+        });
+        expect(errorsFor('no-shell-substitution', errors)).toEqual([]);
+    });
+
+    it('branch-creation-guard accepts ON_NO_SUBBRANCHES mode and branchFormat', () => {
+        const errors = validateWebpiecesConfig({
+            'branch-creation-guard': {
+                mode: 'ON_NO_SUBBRANCHES',
+                branchFormat: 'Name it {whoami}/<feature>',
+                subBranchNaming: 'feature/<ticket>/<desc>',
+                ignoreModifiedUntilEpoch: 0,
+            },
+        });
+        expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
+    });
+
+    it('branch-creation-guard rejects an invalid mode', () => {
+        const errors = validateWebpiecesConfig({
+            'branch-creation-guard': { mode: 'SOMETIMES', ignoreModifiedUntilEpoch: 0 },
+        });
+        expect(
+            errorsFor('branch-creation-guard', errors).some(
+                e => e.includes('"mode" = "SOMETIMES" is not valid'),
+            ),
+        ).toBe(true);
+    });
+});
+
+describe('validatePrGateSection', () => {
+    it('errors with a copy-paste example when the block is missing', () => {
+        const errors = validatePrGateSection(undefined);
+        expect(errors.some(e => e.includes('[pr-gate] Not configured'))).toBe(true);
+        expect(errors.some(e => e.includes('"buildCommand"'))).toBe(true);
+    });
+
+    it('requires buildCommand when mode is ON', () => {
+        const errors = validatePrGateSection({ mode: 'ON' });
+        expect(errors.some(e => e.includes('Missing required field "buildCommand"'))).toBe(true);
+    });
+
+    it('does not require buildCommand when mode is OFF', () => {
+        expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
+    });
+
+    it('accepts a full valid block', () => {
+        const errors = validatePrGateSection({
+            mode: 'ON',
+            buildCommand: 'pnpm nx affected --target=ci',
+            gates: [{ name: 'API', patterns: ['**/*Api.ts'], severity: 'warn' }],
+        });
+        expect(errors).toEqual([]);
+    });
+
+    it('rejects an invalid mode and malformed gates', () => {
+        const bad = validatePrGateSection({ mode: 'MAYBE', buildCommand: 'x', gates: [{ patterns: 'nope' }] });
+        expect(bad.some(e => e.includes('"mode" = "MAYBE" is not valid'))).toBe(true);
+        expect(bad.some(e => e.includes('gates[0].name must be a string'))).toBe(true);
+        expect(bad.some(e => e.includes('gates[0].patterns must be string[]'))).toBe(true);
     });
 });

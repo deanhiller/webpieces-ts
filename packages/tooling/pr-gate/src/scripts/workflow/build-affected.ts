@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { loadPrGateConfig } from '@webpieces/rules-config';
+import { loadAndValidate } from '@webpieces/rules-config';
 
 // Single source of truth for the build gate. Both `wp-build-affected` (CI + local) and the
 // merge validation gate (`wp-git-merge-complete`) run THIS, so "what CI runs" and "what the
@@ -36,5 +36,5 @@ export function runBuildAffected(repoRoot: string, buildCommand?: string): numbe
  * Returns the exit code; callers print their own re-run hint.
  */
 export function runConfiguredBuildGate(repoRoot: string): number {
-    return runBuildAffected(repoRoot, loadPrGateConfig(repoRoot).buildCommand);
+    return runBuildAffected(repoRoot, loadAndValidate(repoRoot).prGate.buildCommand);
 }

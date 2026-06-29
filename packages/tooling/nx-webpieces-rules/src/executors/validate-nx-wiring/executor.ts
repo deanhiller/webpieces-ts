@@ -30,7 +30,7 @@ import type {
     TargetDependencyConfig,
 } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadConfig } from '@webpieces/rules-config';
+import { loadAndValidate } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -216,7 +216,7 @@ export default async function runExecutor(
     options: ValidateNxWiringOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    const shared = loadConfig(context.root);
+    const shared = loadAndValidate(context.root).resolved;
     const rule = shared.rules.get('nx-wiring');
     if (rule && rule.isOff) {
         console.log('\n⏭️  Skipping validate-nx-wiring (mode: OFF)\n');

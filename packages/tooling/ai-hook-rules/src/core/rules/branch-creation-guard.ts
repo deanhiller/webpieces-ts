@@ -6,10 +6,12 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 
-const FIX_HINT: readonly string[] = [
-    "Run 'git checkout main && git pull origin main', then create your branch from main",
-    "If you truly need a sub-branch (requires human approval), name it using the convention in webpieces.config.json 'branch-creation-guard.subBranchNaming'",
-];
+// Defaults used when the rule has no explicit value in webpieces.config.json.
+// branchFormat is a human sentence telling the AI how to name a branch created off main; it is
+// intentionally NOT the sub-branch convention (sub-branches are a separate, human-approved path).
+const DEFAULT_BRANCH_FORMAT =
+    'Name it {whoami}/<short-feature-description> — lowercase, no version numbers, no sub/ prefix (e.g. dean/upgrade-webpieces)';
+const DEFAULT_SUB_BRANCH_NAMING = 'feature/<ticket>/<short-description>';
 
 const BRANCH_PATTERNS: RegExp[] = [
     /git\s+checkout\s+-[bB]\s+([^\s]+)/,
@@ -53,9 +55,40 @@ function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly 
 export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardConfig> {
     constructor(config: BranchCreationGuardConfig) { super(config, 'branch-creation-guard'); }
 
-    readonly description = 'Block new-branch creation when main is stale, or when not on main.';
-    override readonly defaultOptions = { subBranchNaming: 'feature/<ticket>/<short-description>' };
-    readonly fixHint = FIX_HINT;
+    readonly description = 'Block new-branch creation when main is stale, or when branching off a non-main branch.';
+    override readonly defaultOptions = {
+        subBranchNaming: DEFAULT_SUB_BRANCH_NAMING,
+        branchFormat: DEFAULT_BRANCH_FORMAT,
+    };
+
+    private get branchFormat(): string {
+        return this.config.branchFormat ?? DEFAULT_BRANCH_FORMAT;
+    }
+
+    private get subBranchNaming(): string {
+        return this.config.subBranchNaming ?? DEFAULT_SUB_BRANCH_NAMING;
+    }
+
+    // Mode-aware fix hints. Branches off main follow branchFormat — never the sub-branch
+    // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
+    // hard-blocks it and points instead at the ignoreModifiedUntilEpoch escape hatch.
+    get fixHint(): readonly string[] {
+        const hints = [
+            "Run 'git checkout main && git pull origin main', then create your branch FROM main",
+            `Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`,
+        ];
+        if (this.config.mode === 'ON_NO_SUBBRANCHES') {
+            hints.push(
+                'Sub-branches (branching off another feature branch) are disabled. To temporarily allow one, set ' +
+                "branch-creation-guard.ignoreModifiedUntilEpoch to a future epoch in webpieces.config.json",
+            );
+        } else {
+            hints.push(
+                `If you truly need a stacked sub-branch (requires human approval), name it per branch-creation-guard.subBranchNaming: ${this.subBranchNaming}`,
+            );
+        }
+        return hints;
+    }
 
     check(ctx: BashContext): readonly Violation[] {
         const requestedName = extractBranchName(ctx.command);
@@ -70,10 +103,26 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             return checkMainIsUpToDate(ctx, requestedName);
         }
 
+        // Not on main: creating this branch would stack it on a feature branch (a sub-branch).
+        if (this.config.mode === 'ON_NO_SUBBRANCHES') {
+            return [new V(
+                1,
+                truncate(ctx.command),
+                `You are on '${currentBranch}', not main. You need to run ` +
+                `git checkout main && git pull && git checkout -b ${requestedName} ` +
+                `instead of branching from this branch!!! ${this.branchFormat}. ` +
+                `You can temporarily turn this off if you truly need a sub-branch by setting ` +
+                `branch-creation-guard.ignoreModifiedUntilEpoch (a future epoch) in webpieces.config.json.`,
+            )];
+        }
+
         return [new V(
             1,
             truncate(ctx.command),
-            `You are on '${currentBranch}', not main. Branches must be created from main.`,
+            `You are on '${currentBranch}', not main. Branches must be created from main: ` +
+            `git checkout main && git pull && git checkout -b ${requestedName}. ${this.branchFormat}. ` +
+            `If you truly need a stacked sub-branch (requires human approval), name it per ` +
+            `branch-creation-guard.subBranchNaming ('${this.subBranchNaming}').`,
         )];
     }
 }

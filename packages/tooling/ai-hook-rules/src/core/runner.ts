@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadWebpiecesRulesConfig, WebpiecesRulesConfig } from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { loadRules, globMatches } from './load-rules';
@@ -30,8 +30,8 @@ function runInternal(
     input: NormalizedToolInput,
     cwd: string,
 ): BlockedResult | null {
-    const loaded = loadWebpiecesRulesConfig(cwd);
-    if (!loaded) return new BlockedResult(CONFIG_MISSING_REPORT);
+    const loaded = loadAndValidate(cwd);
+    if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
@@ -40,10 +40,10 @@ function runInternal(
         return null;
     }
 
-    const rules = loadRules(loaded.config, workspaceRoot);
+    const rules = loadRules(loaded.rulesConfig, workspaceRoot);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, loaded.config);
+    const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot);
@@ -64,14 +64,14 @@ export function runBash(command: string, cwd: string): BlockedResult | null {
 }
 
 function runBashInternal(command: string, cwd: string): BlockedResult | null {
-    const loaded = loadWebpiecesRulesConfig(cwd);
-    if (!loaded) return new BlockedResult(CONFIG_MISSING_REPORT);
+    const loaded = loadAndValidate(cwd);
+    if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 
     const workspaceRoot = path.dirname(loaded.configPath);
-    const rules = loadRules(loaded.config, workspaceRoot);
+    const rules = loadRules(loaded.rulesConfig, workspaceRoot);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, loaded.config);
+    const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
     const ctx = buildBashContext(command, workspaceRoot);

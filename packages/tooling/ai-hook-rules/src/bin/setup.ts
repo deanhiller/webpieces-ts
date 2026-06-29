@@ -22,6 +22,18 @@ interface ClaudeSettings {
 interface RulesConfig {
     rules: Record<string, object>;
     rulesDir?: string[];
+    'pr-gate'?: object;
+}
+
+// ignoreModifiedUntilEpoch is required on every rule (0 = active). A freshly seeded rule is OFF.
+function seedRule(): object {
+    return { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+}
+
+// pr-gate is a required top-level block; seed it OFF (opt-out) with a ready-to-use buildCommand so
+// flipping it ON is a one-line edit.
+function seedPrGate(): object {
+    return { mode: 'OFF', buildCommand: 'pnpm nx affected --target=ci --base=origin/main', gates: [] };
 }
 
 function settingsAlreadyHasHook(settingsPath: string): boolean {
@@ -72,10 +84,10 @@ function seedConfig(projectRoot: string): void {
 
     const rules: Record<string, object> = {};
     for (const name of builtInRuleNames) {
-        rules[name] = { mode: 'OFF' };
+        rules[name] = seedRule();
     }
 
-    const config: RulesConfig = { rules, rulesDir: [] };
+    const config: RulesConfig = { rules, rulesDir: [], 'pr-gate': seedPrGate() };
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4) + '\n');
     console.log(`  [ai-hook-rules] Created ${CONFIG_FILENAME} with all rules set to OFF.`);
     console.log('  Review and enable the rules you want by changing "mode" to "ON" or "MODIFIED_CODE" etc.');
@@ -93,17 +105,24 @@ function syncConfig(projectRoot: string): void {
     const added: string[] = [];
     for (const name of builtInRuleNames) {
         if (!Object.prototype.hasOwnProperty.call(config.rules, name)) {
-            config.rules[name] = { mode: 'OFF' };
+            config.rules[name] = seedRule();
             added.push(name);
         }
     }
 
-    if (added.length === 0) {
+    let addedPrGate = false;
+    if (!Object.prototype.hasOwnProperty.call(config, 'pr-gate')) {
+        config['pr-gate'] = seedPrGate();
+        addedPrGate = true;
+    }
+
+    if (added.length === 0 && !addedPrGate) {
         console.log(`  [ai-hook-rules] ${CONFIG_FILENAME} is already up to date — no new rules to add.`);
         return;
     }
 
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4) + '\n');
+    if (addedPrGate) console.log(`  [ai-hook-rules] Added the required "pr-gate" block (mode OFF) to ${CONFIG_FILENAME}.`);
     console.log(`  [ai-hook-rules] Added ${added.length} new rule(s) to ${CONFIG_FILENAME} (set to OFF):`);
     for (const name of added) {
         console.log(`    - ${name}`);

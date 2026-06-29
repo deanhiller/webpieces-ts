@@ -19,7 +19,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { loadWebpiecesRulesConfig, InformAiError, toError } from '@webpieces/rules-config';
+import { loadAndValidate, InformAiError, toError } from '@webpieces/rules-config';
 import runValidateCode from './validate-code';
 
 const NX_PLUGIN_NAME = '@webpieces/nx-webpieces-rules';
@@ -75,8 +75,8 @@ function runNx(root: string, args: string[]): number {
 }
 
 async function runStandalone(cwd: string): Promise<number> {
-    const loaded = loadWebpiecesRulesConfig(cwd);
-    if (!loaded) {
+    const loaded = loadAndValidate(cwd);
+    if (loaded.configPath === null) {
         console.log('ℹ️  Not an Nx repo and no webpieces.config.json found — nothing to validate.');
         return 0;
     }

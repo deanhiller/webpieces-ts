@@ -34,11 +34,13 @@
         },
         "prisma-validate-dtos": {
             "mode": "MODIFIED_CLASS",
-            "disableAllowed": false
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 0
         },
         "prisma-converter": {
             "mode": "NEW_AND_MODIFIED_METHODS",
-            "disableAllowed": false
+            "disableAllowed": false,
+            "ignoreModifiedUntilEpoch": 0
         },
         "no-destructure": {
             "mode": "MODIFIED_CODE",
@@ -62,7 +64,8 @@
         },
         "angular-no-direct-api-in-resolver": {
             "mode": "OFF",
-            "disableAllowed": true
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 0
         },
         "no-symbol-di-tokens": {
             "mode": "MODIFIED_CODE",
@@ -71,41 +74,51 @@
             "allowedPaths": ["libraries/apis/**", "packages/http/http-api/**"]
         },
         "no-shell-substitution": {
-            "mode": "OFF"
+            "mode": "OFF",
+            "ignoreModifiedUntilEpoch": 0
         },
         "branch-creation-guard": {
             "mode": "ON",
-            "subBranchNaming": "feature/<ticket>/<short-description>"
+            "subBranchNaming": "feature/<ticket>/<short-description>",
+            "ignoreModifiedUntilEpoch": 0
         },
         "pr-creation-guard": {
-            "mode": "ON"
+            "mode": "ON",
+            "ignoreModifiedUntilEpoch": 0
         },
         "merge-in-progress-guard": {
-            "mode": "ON"
+            "mode": "ON",
+            "ignoreModifiedUntilEpoch": 0
         },
         "pr-merge-cleanup": {
-            "mode": "ON"
+            "mode": "ON",
+            "ignoreModifiedUntilEpoch": 0
         },
         "no-direct-main-update": {
-            "mode": "ON"
+            "mode": "ON",
+            "ignoreModifiedUntilEpoch": 0
         },
         "no-edit-on-main": {
             "mode": "ON",
-            "branchNamingConvention": "{whoami}/{featurename}"
+            "branchNamingConvention": "{whoami}/{featurename}",
+            "ignoreModifiedUntilEpoch": 0
         },
         "no-file-import-cycles": {
             "mode": "ON",
-            "ignoreTypeOnly": false
+            "ignoreTypeOnly": false,
+            "ignoreModifiedUntilEpoch": 0
         },
         "runtime-architecture": {
             "mode": "ON",
             "servicePaths": ["apps/*"],
             "apiProjectPaths": ["apps/example-apis"],
-            "allowedCycles": []
+            "allowedCycles": [],
+            "ignoreModifiedUntilEpoch": 0
         },
         "no-js-files": {
             "mode": "ON",
-            "allowedPaths": []
+            "allowedPaths": [],
+            "ignoreModifiedUntilEpoch": 0
         },
         "validate-ts-in-src": {
             "mode": "MODIFIED_FILES",

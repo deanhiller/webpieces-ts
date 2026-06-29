@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { loadPrGateConfig } from '@webpieces/rules-config';
+import { loadAndValidate } from '@webpieces/rules-config';
 import { runBuildAffected } from './workflow/build-affected';
 
 // Single shared build entry point. CI runs this AND the PR command runs this, so the two can
@@ -8,7 +8,7 @@ import { runBuildAffected } from './workflow/build-affected';
 // "pr-gate" section), defaulting to `pnpm nx affected --target=ci --base=origin/main`.
 export function main(): void {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-    const config = loadPrGateConfig(repoRoot);
+    const config = loadAndValidate(repoRoot).prGate;
     const code = runBuildAffected(repoRoot, config.buildCommand);
     process.exit(code);
 }

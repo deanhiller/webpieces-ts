@@ -1,5 +1,5 @@
 import {
-    loadWebpiecesRulesConfig,
+    loadAndValidate,
     WebpiecesRulesConfig,
     BaseRuleConfig,
     MaxMethodLinesConfig,
@@ -37,7 +37,7 @@ export { ExecutorResult } from './code-validator';
  * Build every code validator from the typed WebpiecesRulesConfig. Each validator is
  * constructed with its own `*Config` (the genuinely-consumed config class), so the
  * config types are exercised at compile time. Missing rule keys fall back to an empty
- * config instance — `loadWebpiecesRulesConfig` already validates that configured rules
+ * config instance — `loadAndValidate` already validates that configured rules
  * carry an explicit `mode`, so in practice every key is present.
  */
 function buildValidators(config: WebpiecesRulesConfig): CodeValidator<BaseRuleConfig>[] {
@@ -67,15 +67,15 @@ function buildValidators(config: WebpiecesRulesConfig): CodeValidator<BaseRuleCo
  * `shouldRun()` is true (i.e. its mode is not OFF and no branch/epoch escape hatch matches).
  */
 export default async function runValidator(workspaceRoot: string): Promise<ExecutorResult> {
-    const loaded = loadWebpiecesRulesConfig(workspaceRoot);
-    if (!loaded) {
+    const loaded = loadAndValidate(workspaceRoot);
+    if (loaded.configPath === null) {
         console.error('\n❌ No webpieces.config.json found at workspace root (or any ancestor).\n');
         return { success: false };
     }
 
     console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
-    const validators = buildValidators(loaded.config);
+    const validators = buildValidators(loaded.rulesConfig);
     const active = validators.filter((v: CodeValidator<BaseRuleConfig>) => v.shouldRun());
 
     if (active.length === 0) {
