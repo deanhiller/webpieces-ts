@@ -68,18 +68,29 @@ function run(rawInput: string): void {
 
     // 4. No local hook found — block and instruct AI
     process.stderr.write(
-        'STOP. DO NOT TAKE ANY ACTION. You MUST ask the human and wait for their answer.\n' +
+        'STOP. You MUST ask the human to run one of 3 commands to continue.\n' +
             '\n' +
             'This project is missing the webpieces AI hook (./node_modules/.bin/wp-ai-hook not found).\n' +
             '\n' +
-            'Present these options to the human and wait for their choice:\n' +
-            '  A) PREFERRED: Run from the monorepo root: `pnpm add -Dw @webpieces/ai-hook-rules`\n' +
-            '     (the -D flag makes it a devDependency, -w adds it to the workspace root)\n' +
-            '     If not a pnpm workspace, run from the project root: `npm install --save-dev @webpieces/ai-hook-rules`\n' +
-            '  B) Skip hooks temporarily: ask human how long (1 hour / 1 day / forever), then write\n' +
-            '     .webpieces/skiphooks with {"expires": <unix epoch seconds>, "reason": "..."}\n' +
+            'Present these THREE options to the human verbatim and wait for them to pick one.\n' +
+            'Each option is a command the human can copy-paste into their own terminal:\n' +
             '\n' +
-            'WARNING: DO NOT disable permanently (expires: null) without explicit human permission.\n' +
+            '  A) PREFERRED — install the hook.\n' +
+            '     If this is a pnpm workspace, run from the monorepo root:\n' +
+            '         pnpm add -Dw @webpieces/ai-hook-rules\n' +
+            '     Otherwise, run from the project root:\n' +
+            '         npm install --save-dev @webpieces/ai-hook-rules\n' +
+            '\n' +
+            '  B) Skip hooks temporarily (auto-expires). Ask the human how long, then have them run\n' +
+            '     ONE of these from the project root:\n' +
+            '       1 hour:  mkdir -p .webpieces && printf \'{"expires": %s, "reason": "temporary skip"}\' "$(($(date +%s) + 3600))" > .webpieces/skiphooks\n' +
+            '       1 week:  mkdir -p .webpieces && printf \'{"expires": %s, "reason": "temporary skip"}\' "$(($(date +%s) + 604800))" > .webpieces/skiphooks\n' +
+            '\n' +
+            '  C) Disable permanently (NEVER expires — hooks stay off until this file is deleted).\n' +
+            '     Only choose this if the human explicitly wants it. Have them run from the project root:\n' +
+            '         mkdir -p .webpieces && printf \'{"expires": null, "reason": "permanently disabled"}\' > .webpieces/skiphooks\n' +
+            '     To re-enable later: rm .webpieces/skiphooks\n' +
+            '\n' +
             'You are BLOCKED. Ask the human now and wait for their response.\n',
     );
     process.exit(2);
