@@ -21,21 +21,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, RequireReturnTypeConfig, ReturnTypeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type ReturnTypeMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-
-export interface ValidateReturnTypesOptions {
-    mode?: ReturnTypeMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface MethodViolation {
     file: string;
@@ -471,8 +459,8 @@ function resolveMode(normalMode: ReturnTypeMode, epoch: number | undefined, bran
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateReturnTypesOptions,
+async function runValidatorImpl(
+    options: RequireReturnTypeConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const mode: ReturnTypeMode = resolveMode(options.mode ?? 'NEW_METHODS', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
@@ -531,4 +519,14 @@ export default async function runValidator(
     reportViolations(violations, mode);
 
     return { success: false };
+}
+
+export class RequireReturnTypeValidator extends CodeValidator<RequireReturnTypeConfig> {
+    constructor(config: RequireReturnTypeConfig) {
+        super(config, 'require-return-type');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

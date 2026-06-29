@@ -15,8 +15,7 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./claude-code": "./src/adapters/claude-code-hook.js",
-        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js",
-        "./default": "./src/core/configs/default.js"
+        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js"
     },
     "files": [
         "src/**/*",

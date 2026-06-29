@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateNoInlineTypes } from '@webpieces/code-rules';
+import { NoInlineTypeLiteralsValidator } from '@webpieces/code-rules';
+import { NoInlineTypeLiteralsConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: NoInlineTypeLiteralsConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateNoInlineTypes(options, context.root);
+    return new NoInlineTypeLiteralsValidator(options).run(context.root);
 }

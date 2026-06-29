@@ -16,22 +16,9 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { writeTemplate, hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { writeTemplate, hasDisable, RULE_NAMES, MaxFileLinesConfig, FileLimitMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
-
-export interface ValidateModifiedFilesOptions {
-    limit?: number;
-    mode?: FileMaxLimitMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface FileViolation {
     file: string;
@@ -338,16 +325,16 @@ function reportViolations(violations: FileViolation[], limit: number, disableAll
     }
 }
 
-export default async function runValidator(
-    options: ValidateModifiedFilesOptions,
+async function runValidatorImpl(
+    options: MaxFileLinesConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const limit = options.limit ?? 900;
     const disableAllowed = options.disableAllowed ?? true;
 
-    const rawMode: FileMaxLimitMode = options.mode ?? 'MODIFIED_FILES';
+    const rawMode: FileLimitMode = options.mode ?? 'MODIFIED_FILES';
     const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
-    const mode: FileMaxLimitMode = skip.skip ? 'OFF' : rawMode;
+    const mode: FileLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
@@ -409,5 +396,15 @@ export default async function runValidator(
         const error = err instanceof Error ? err : new Error(String(err));
         console.error('\u274c Modified files validation failed:', error.message);
         return { success: false };
+    }
+}
+
+export class MaxFileLinesValidator extends CodeValidator<MaxFileLinesConfig> {
+    constructor(config: MaxFileLinesConfig) {
+        super(config, 'max-file-lines');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
     }
 }

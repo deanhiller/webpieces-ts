@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateDtos } from '@webpieces/code-rules';
+import { PrismaValidateDtosValidator } from '@webpieces/code-rules';
+import { PrismaValidateDtosConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: PrismaValidateDtosConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateDtos(options, context.root);
+    return new PrismaValidateDtosValidator(options).run(context.root);
 }

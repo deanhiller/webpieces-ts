@@ -29,21 +29,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoImplicitAnyMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
-
-export interface ValidateNoImplicitAnyOptions {
-    mode?: NoImplicitAnyMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface ImplicitAnyViolation {
     file: string;
@@ -274,7 +262,7 @@ function detectBase(workspaceRoot: string): string | null {
     return null;
 }
 
-function reportViolations(violations: ImplicitAnyViolation[], mode: NoImplicitAnyMode): void {
+function reportViolations(violations: ImplicitAnyViolation[], mode: ModifiedCodeMode): void {
     console.error('');
     console.error('\u274c Implicit-any inferences found! Add explicit type annotations.');
     console.error('');
@@ -296,7 +284,7 @@ function reportViolations(violations: ImplicitAnyViolation[], mode: NoImplicitAn
     console.error('');
 }
 
-function resolveMode(normalMode: NoImplicitAnyMode, epoch: number | undefined, branchPattern: string | undefined): NoImplicitAnyMode {
+function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -310,10 +298,10 @@ function resolveMode(normalMode: NoImplicitAnyMode, epoch: number | undefined, b
 }
 
 async function runInternal(
-    options: ValidateNoImplicitAnyOptions,
+    options: NoImplicitAnyConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: NoImplicitAnyMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -365,8 +353,8 @@ async function runInternal(
     return { success: false };
 }
 
-export default async function runValidator(
-    options: ValidateNoImplicitAnyOptions,
+async function runValidatorImpl(
+    options: NoImplicitAnyConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -376,5 +364,15 @@ export default async function runValidator(
         //const error = toError(err);
         console.warn('\n\u23ed\ufe0f  Skipping no-implicit-any validation due to unexpected error\n');
         return { success: true };
+    }
+}
+
+export class NoImplicitAnyValidator extends CodeValidator<NoImplicitAnyConfig> {
+    constructor(config: NoImplicitAnyConfig) {
+        super(config, 'no-implicit-any');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
     }
 }

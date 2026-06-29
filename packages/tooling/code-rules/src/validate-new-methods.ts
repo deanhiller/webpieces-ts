@@ -20,22 +20,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE } from '@webpieces/rules-config';
+import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE, MaxMethodLinesConfig, MethodLimitMode } from '@webpieces/rules-config';
+import { ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-
-export interface ValidateNewMethodsOptions {
-    limit?: number;
-    mode?: MethodMaxLimitMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface MethodViolation {
     file: string;
@@ -400,16 +387,16 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
     console.error('');
 }
 
-export default async function runValidator(
-    options: ValidateNewMethodsOptions,
+export async function runNewMethods(
+    options: MaxMethodLinesConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const limit = options.limit ?? 80;
     const disableAllowed = options.disableAllowed ?? true;
 
-    const rawMode: MethodMaxLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
+    const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
     const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
-    const mode: MethodMaxLimitMode = skip.skip ? 'OFF' : rawMode;
+    const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {

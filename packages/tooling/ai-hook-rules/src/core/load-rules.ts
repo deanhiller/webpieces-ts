@@ -1,75 +1,112 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import type { Rule, ResolvedConfig } from './types';
+import {
+    BaseRuleConfig, RuleOptions, WebpiecesRulesConfig,
+    NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig,
+    NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
+    CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoShellSubstitutionConfig,
+    NoSymbolDiTokensConfig, BranchCreationGuardConfig, PrCreationGuardConfig,
+    MergeInProgressGuardConfig, PrMergeCleanupConfig, NoDirectMainUpdateConfig,
+    NoJsFilesConfig, NoEditOnMainConfig,
+} from '@webpieces/rules-config';
+
+import type { Rule, PlainRule } from './types';
 import { InformAiError } from './types';
 import { toError } from './to-error';
+import { EmptyRuleConfig } from './rule-base';
+import { CustomRuleAdapter } from './custom-rule-adapter';
 import { builtInRuleNames } from './rules/index';
-import noAnyUnknown from './rules/no-any-unknown';
-import noImplicitAny from './rules/no-implicit-any';
-import maxFileLines from './rules/max-file-lines';
-import validateTsInSrc from './rules/validate-ts-in-src';
-import noDestructure from './rules/no-destructure';
-import requireReturnType from './rules/require-return-type';
-import noUnmanagedExceptions from './rules/no-unmanaged-exceptions';
-import catchErrorPattern from './rules/catch-error-pattern';
-import throwCauseRequired from './rules/throw-cause-required';
-import noShellSubstitution from './rules/no-shell-substitution';
-import noSymbolDiTokens from './rules/no-symbol-di-tokens';
-import branchCreationGuard from './rules/branch-creation-guard';
-import prCreationGuard from './rules/pr-creation-guard';
-import mergeInProgressGuard from './rules/merge-in-progress-guard';
-import prMergeCleanup from './rules/pr-merge-cleanup';
-import noDirectMainUpdate from './rules/no-direct-main-update';
-import noJsFiles from './rules/no-js-files';
-import noEditOnMain from './rules/no-edit-on-main';
+import { NoAnyUnknownRule } from './rules/no-any-unknown';
+import { NoImplicitAnyRule } from './rules/no-implicit-any';
+import { MaxFileLinesRule } from './rules/max-file-lines';
+import { ValidateTsInSrcRule } from './rules/validate-ts-in-src';
+import { NoDestructureRule } from './rules/no-destructure';
+import { RequireReturnTypeRule } from './rules/require-return-type';
+import { NoUnmanagedExceptionsRule } from './rules/no-unmanaged-exceptions';
+import { CatchErrorPatternRule } from './rules/catch-error-pattern';
+import { ThrowCauseRequiredRule } from './rules/throw-cause-required';
+import { NoShellSubstitutionRule } from './rules/no-shell-substitution';
+import { NoSymbolDiTokensRule } from './rules/no-symbol-di-tokens';
+import { BranchCreationGuardRule } from './rules/branch-creation-guard';
+import { PrCreationGuardRule } from './rules/pr-creation-guard';
+import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
+import { PrMergeCleanupRule } from './rules/pr-merge-cleanup';
+import { NoDirectMainUpdateRule } from './rules/no-direct-main-update';
+import { NoJsFilesRule } from './rules/no-js-files';
+import { NoEditOnMainRule } from './rules/no-edit-on-main';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
 
-const BUILT_IN_RULE_MAP: Record<string, Rule> = {
-    'no-any-unknown': noAnyUnknown as Rule,
-    'no-implicit-any': noImplicitAny as Rule,
-    'max-file-lines': maxFileLines as Rule,
-    'validate-ts-in-src': validateTsInSrc as Rule,
-    'no-destructure': noDestructure as Rule,
-    'require-return-type': requireReturnType as Rule,
-    'no-unmanaged-exceptions': noUnmanagedExceptions as Rule,
-    'catch-error-pattern': catchErrorPattern as Rule,
-    'throw-cause-required': throwCauseRequired as Rule,
-    'no-shell-substitution': noShellSubstitution as Rule,
-    'no-symbol-di-tokens': noSymbolDiTokens as Rule,
-    'branch-creation-guard': branchCreationGuard as Rule,
-    'pr-creation-guard': prCreationGuard as Rule,
-    'merge-in-progress-guard': mergeInProgressGuard as Rule,
-    'pr-merge-cleanup': prMergeCleanup as Rule,
-    'no-direct-main-update': noDirectMainUpdate as Rule,
-    'no-js-files': noJsFiles as Rule,
-    'no-edit-on-main': noEditOnMain as Rule,
+// Each built-in rule is constructed from its typed *Config (the entry in webpieces.config.json).
+// The config arrives as a plain object structurally typed as the *Config class, so the `as`
+// narrows the shared BaseRuleConfig param back to the concrete config the rule consumes.
+type RuleFactory = (config: BaseRuleConfig) => Rule;
+
+const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
+    'no-any-unknown': (c: BaseRuleConfig) => new NoAnyUnknownRule(c as NoAnyUnknownConfig),
+    'no-implicit-any': (c: BaseRuleConfig) => new NoImplicitAnyRule(c as NoImplicitAnyConfig),
+    'max-file-lines': (c: BaseRuleConfig) => new MaxFileLinesRule(c as MaxFileLinesConfig),
+    'validate-ts-in-src': (c: BaseRuleConfig) => new ValidateTsInSrcRule(c as ValidateTsInSrcConfig),
+    'no-destructure': (c: BaseRuleConfig) => new NoDestructureRule(c as NoDestructureConfig),
+    'require-return-type': (c: BaseRuleConfig) => new RequireReturnTypeRule(c as RequireReturnTypeConfig),
+    'no-unmanaged-exceptions': (c: BaseRuleConfig) => new NoUnmanagedExceptionsRule(c as NoUnmanagedExceptionsConfig),
+    'catch-error-pattern': (c: BaseRuleConfig) => new CatchErrorPatternRule(c as CatchErrorPatternConfig),
+    'throw-cause-required': (c: BaseRuleConfig) => new ThrowCauseRequiredRule(c as ThrowCauseRequiredConfig),
+    'no-shell-substitution': (c: BaseRuleConfig) => new NoShellSubstitutionRule(c as NoShellSubstitutionConfig),
+    'no-symbol-di-tokens': (c: BaseRuleConfig) => new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig),
+    'branch-creation-guard': (c: BaseRuleConfig) => new BranchCreationGuardRule(c as BranchCreationGuardConfig),
+    'pr-creation-guard': (c: BaseRuleConfig) => new PrCreationGuardRule(c as PrCreationGuardConfig),
+    'merge-in-progress-guard': (c: BaseRuleConfig) => new MergeInProgressGuardRule(c as MergeInProgressGuardConfig),
+    'pr-merge-cleanup': (c: BaseRuleConfig) => new PrMergeCleanupRule(c as PrMergeCleanupConfig),
+    'no-direct-main-update': (c: BaseRuleConfig) => new NoDirectMainUpdateRule(c as NoDirectMainUpdateConfig),
+    'no-js-files': (c: BaseRuleConfig) => new NoJsFilesRule(c as NoJsFilesConfig),
+    'no-edit-on-main': (c: BaseRuleConfig) => new NoEditOnMainRule(c as NoEditOnMainConfig),
 };
 
-export function loadRules(config: ResolvedConfig, workspaceRoot: string): readonly Rule[] {
-    const builtIns = loadBuiltInRules();
-    const custom = loadCustomRules(config.rulesDir, workspaceRoot);
-    const all: Rule[] = [...builtIns, ...custom];
-    return all.filter((rule: Rule) => validateRule(rule));
+// Index the typed config by rule name. Each value is the rule's *Config (a plain object from
+// JSON), or undefined when the rule has no entry yet (the sync check reports those).
+function asConfigMap(config: WebpiecesRulesConfig): Record<string, BaseRuleConfig | undefined> {
+    // webpieces-disable no-any-unknown -- index the typed config by dynamic rule name
+    return config as unknown as Record<string, BaseRuleConfig | undefined>;
 }
 
-function loadBuiltInRules(): Rule[] {
-    const modules: Rule[] = [];
+export function loadRules(config: WebpiecesRulesConfig, workspaceRoot: string): readonly Rule[] {
+    const builtIns = loadBuiltInRules(config);
+    const custom = loadCustomRules(config, workspaceRoot);
+    return [...builtIns, ...custom];
+}
+
+function loadBuiltInRules(config: WebpiecesRulesConfig): Rule[] {
+    const map = asConfigMap(config);
+    const rules: Rule[] = [];
     for (const name of builtInRuleNames) {
-        const mod = BUILT_IN_RULE_MAP[name];
-        if (mod) {
-            modules.push(mod);
-        } else {
+        const factory = BUILT_IN_RULE_MAP[name];
+        if (!factory) {
             process.stderr.write(`[ai-hooks] unknown built-in rule: ${name}\n`);
+            continue;
         }
+        const ruleConfig = map[name] ?? new EmptyRuleConfig();
+        rules.push(factory(ruleConfig));
     }
-    return modules;
+    return rules;
 }
 
-function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): Rule[] {
-    const modules: Rule[] = [];
+function loadCustomRules(config: WebpiecesRulesConfig, workspaceRoot: string): Rule[] {
+    const dirs = config.rulesDir ?? [];
+    // webpieces-disable no-any-unknown -- index the typed config by dynamic custom-rule name
+    const map = config as unknown as Record<string, RuleOptions | undefined>;
+    const rules: Rule[] = [];
+    for (const plain of loadCustomPlainRules(dirs, workspaceRoot)) {
+        const rawConfig = map[plain.name] ?? {};
+        rules.push(new CustomRuleAdapter(plain, rawConfig));
+    }
+    return rules;
+}
+
+function loadCustomPlainRules(rulesDirs: readonly string[], workspaceRoot: string): PlainRule[] {
+    const modules: PlainRule[] = [];
     for (const dir of rulesDirs) {
         const absDir = path.isAbsolute(dir) ? dir : path.join(workspaceRoot, dir);
         if (!fs.existsSync(absDir)) {
@@ -79,7 +116,7 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
         let entries: string[];
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            entries = fs.readdirSync(absDir).filter((e) => e.endsWith('.js'));
+            entries = fs.readdirSync(absDir).filter((e: string) => e.endsWith('.js'));
         } catch (err: unknown) {
             const error = toError(err);
             throw new InformAiError(`Cannot read custom rules directory '${absDir}'`, { cause: error });
@@ -89,7 +126,8 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
                 const mod = require(full);
-                modules.push(mod.default || mod);
+                const candidate = mod.default || mod;
+                if (validateRule(candidate)) modules.push(candidate);
             } catch (err: unknown) {
                 const error = toError(err);
                 throw new InformAiError(`Cannot load custom rule '${full}'`, { cause: error });
@@ -100,7 +138,7 @@ function loadCustomRules(rulesDirs: readonly string[], workspaceRoot: string): R
 }
 
 // webpieces-disable no-any-unknown -- validates untrusted require() output at system boundary
-function validateRule(rule: unknown): rule is Rule {
+function validateRule(rule: unknown): rule is PlainRule {
     if (!rule || typeof rule !== 'object') {
         process.stderr.write('[ai-hooks] rule is not an object, skipping\n');
         return false;

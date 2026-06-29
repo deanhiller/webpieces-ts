@@ -1,6 +1,8 @@
-import type { EditRule, EditContext, Violation } from '../types';
+import { ThrowCauseRequiredConfig, RULE_NAMES } from '@webpieces/rules-config';
+
+import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { RULE_NAMES } from '@webpieces/rules-config';
+import { EditRuleBase } from '../rule-base';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**
@@ -18,18 +20,17 @@ const ERROR_MESSAGE_PATTERN = /\berror\d*\.message\b/;
  */
 const CAUSE_PATTERN = /\bcause\s*:\s*error\d*\b/;
 
-const throwCauseRequiredRule: EditRule = {
-    name: 'throw-cause-required',
-    description: 'When rethrowing with added context, chain the original exception: throw new Error("msg", { cause: error })',
-    scope: 'edit',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: {},
-    fixHint: [
+export class ThrowCauseRequiredRule extends EditRuleBase<ThrowCauseRequiredConfig> {
+    constructor(config: ThrowCauseRequiredConfig) { super(config, 'throw-cause-required'); }
+
+    readonly description = 'When rethrowing with added context, chain the original exception: throw new Error("msg", { cause: error })';
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    readonly fixHint = [
         'Option 1 — Remove the try-catch entirely. Letting the original exception bubble is usually the best option.',
         'Option 2 — throw new Error("add more info here", { cause: error }); chains the error and preserves the full stack trace.',
         'Option 3 — throw new SpecificError("add info here", { cause: error }); e.g. new InformAiError("what happened for AI", { cause: error }).',
         '[Only if disableAllowed:true] Option 4 — // webpieces-disable throw-cause-required -- <reason>',
-    ],
+    ];
 
     check(ctx: EditContext): readonly Violation[] {
         const violations: V[] = [];
@@ -53,7 +54,5 @@ const throwCauseRequiredRule: EditRule = {
 
         if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
         return violations;
-    },
-};
-
-export default throwCauseRequiredRule;
+    }
+}

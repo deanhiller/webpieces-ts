@@ -83,21 +83,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoInlineTypeLiteralsConfig, InlineTypeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoInlineTypesMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-
-export interface ValidateNoInlineTypesOptions {
-    mode?: NoInlineTypesMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface InlineTypeViolation {
     file: string;
@@ -679,7 +667,7 @@ function detectBase(workspaceRoot: string): string | null {
 /**
  * Report violations to console.
  */
-function reportViolations(violations: InlineTypeViolation[], mode: NoInlineTypesMode): void {
+function reportViolations(violations: InlineTypeViolation[], mode: InlineTypeMode): void {
     console.error('');
     console.error('❌ Inline type literals found! Use named types instead.');
     console.error('');
@@ -713,7 +701,7 @@ function reportViolations(violations: InlineTypeViolation[], mode: NoInlineTypes
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: NoInlineTypesMode, epoch: number | undefined, branchPattern: string | undefined): NoInlineTypesMode {
+function resolveMode(normalMode: InlineTypeMode, epoch: number | undefined, branchPattern: string | undefined): InlineTypeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -726,11 +714,11 @@ function resolveMode(normalMode: NoInlineTypesMode, epoch: number | undefined, b
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateNoInlineTypesOptions,
+async function runValidatorImpl(
+    options: NoInlineTypeLiteralsConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoInlineTypesMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: InlineTypeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -786,4 +774,14 @@ export default async function runValidator(
     reportViolations(violations, mode);
 
     return { success: false };
+}
+
+export class NoInlineTypeLiteralsValidator extends CodeValidator<NoInlineTypeLiteralsConfig> {
+    constructor(config: NoInlineTypeLiteralsConfig) {
+        super(config, 'no-inline-type-literals');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

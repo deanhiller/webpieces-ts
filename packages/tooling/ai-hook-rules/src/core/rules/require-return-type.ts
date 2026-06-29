@@ -1,6 +1,8 @@
-import type { EditRule, EditContext, Violation } from '../types';
+import { RequireReturnTypeConfig, RULE_NAMES } from '@webpieces/rules-config';
+
+import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { RULE_NAMES } from '@webpieces/rules-config';
+import { EditRuleBase } from '../rule-base';
 
 // Matches function/method signatures that don't have `: ReturnType` before the `{` body opener.
 // Pattern: function name(<params>) { — missing `: Type` between `)` and `{`
@@ -18,16 +20,26 @@ const HAS_RETURN_TYPE = /\)\s*:\s*\S/;
 // Skip constructors, getters, setters, and control flow keywords
 const SKIP_PATTERN = /\b(?:constructor|get\s+\w+|set\s+\w+|if|else|while|for|switch|catch|return)\s*\(/;
 
-const requireReturnTypeRule: EditRule = {
-    name: 'require-return-type',
-    description: 'Every function and method must declare its return type.',
-    scope: 'edit',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: {},
-    fixHint: [
+function isMissingReturnType(line: string): boolean {
+    if (SKIP_PATTERN.test(line)) return false;
+    const isFuncLike =
+        FUNC_DECL_MISSING.test(line) ||
+        METHOD_MISSING.test(line) ||
+        ARROW_MISSING.test(line);
+    if (!isFuncLike) return false;
+    if (HAS_RETURN_TYPE.test(line)) return false;
+    return true;
+}
+
+export class RequireReturnTypeRule extends EditRuleBase<RequireReturnTypeConfig> {
+    constructor(config: RequireReturnTypeConfig) { super(config, 'require-return-type'); }
+
+    readonly description = 'Every function and method must declare its return type.';
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    readonly fixHint = [
         'Add return type: function foo(x: T): ReturnType { ... }',
         '// webpieces-disable require-return-type -- <reason>',
-    ],
+    ];
 
     check(ctx: EditContext): readonly Violation[] {
         const violations: V[] = [];
@@ -43,18 +55,5 @@ const requireReturnTypeRule: EditRule = {
             ));
         }
         return violations;
-    },
-};
-
-function isMissingReturnType(line: string): boolean {
-    if (SKIP_PATTERN.test(line)) return false;
-    const isFuncLike =
-        FUNC_DECL_MISSING.test(line) ||
-        METHOD_MISSING.test(line) ||
-        ARROW_MISSING.test(line);
-    if (!isFuncLike) return false;
-    if (HAS_RETURN_TYPE.test(line)) return false;
-    return true;
+    }
 }
-
-export default requireReturnTypeRule;

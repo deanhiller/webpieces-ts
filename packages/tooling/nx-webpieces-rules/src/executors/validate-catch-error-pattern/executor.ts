@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateCatchErrorPattern } from '@webpieces/code-rules';
+import { CatchErrorPatternValidator } from '@webpieces/code-rules';
+import { CatchErrorPatternConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: CatchErrorPatternConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateCatchErrorPattern(options, context.root);
+    return new CatchErrorPatternValidator(options).run(context.root);
 }

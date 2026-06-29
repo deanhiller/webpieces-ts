@@ -1,8 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_DIR_PREFIX, MERGE_IN_PROGRESS_FILE } from '@webpieces/rules-config';
-import type { BashRule, BashContext, Violation } from '../types';
+
+import { WEBPIECES_TMP_DIR, MERGE_DIR_PREFIX, MERGE_IN_PROGRESS_FILE, MergeInProgressGuardConfig } from '@webpieces/rules-config';
+
+import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { BashRuleBase } from '../rule-base';
 
 const FIX_HINT: readonly string[] = [
     'A 3-point merge is in progress and not yet validated.',
@@ -36,13 +39,16 @@ function isBlockedDuringMerge(cmd: string): boolean {
         || /\bgh\s+pr\s+(create|edit|merge)\b/.test(cmd);
 }
 
-const mergeInProgressGuard: BashRule = {
-    name: 'merge-in-progress-guard',
-    description: 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing pnpm wp-git-merge-complete.',
-    scope: 'bash',
-    files: [],
-    defaultOptions: {},
-    fixHint: FIX_HINT,
+function truncate(s: string): string {
+    const MAX = 120;
+    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+}
+
+export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardConfig> {
+    constructor(config: MergeInProgressGuardConfig) { super(config, 'merge-in-progress-guard'); }
+
+    readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing pnpm wp-git-merge-complete.';
+    readonly fixHint = FIX_HINT;
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isBlockedDuringMerge(ctx.command)) return [];
@@ -57,12 +63,5 @@ const mergeInProgressGuard: BashRule = {
                 'Finish resolving conflicts, then run:  pnpm wp-git-merge-complete',
             ].join('\n'),
         )];
-    },
-};
-
-function truncate(s: string): string {
-    const MAX = 120;
-    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+    }
 }
-
-export default mergeInProgressGuard;

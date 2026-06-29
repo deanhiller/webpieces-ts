@@ -1,10 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { isPathExcluded } from '@webpieces/rules-config';
+import { ValidateTsInSrcConfig, isPathExcluded } from '@webpieces/rules-config';
 
-import type { FileRule, FileContext, Violation } from '../types';
+import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { FileRuleBase } from '../rule-base';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',
@@ -21,29 +22,25 @@ function findProjectRoot(filePath: string, workspaceRoot: string): string | null
     return null;
 }
 
-const validateTsInSrcRule: FileRule = {
-    name: 'validate-ts-in-src',
-    description: 'Every .ts file must belong to a project\'s src/ directory.',
-    scope: 'file',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: {
+export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
+    constructor(config: ValidateTsInSrcConfig) { super(config, 'validate-ts-in-src'); }
+
+    readonly description = 'Every .ts file must belong to a project\'s src/ directory.';
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    override readonly defaultOptions = {
         excludePaths: DEFAULT_EXCLUDE_PATHS,
         allowedRootFiles: DEFAULT_ALLOWED_ROOT_FILES,
-    },
-    fixHint: [
+    };
+    readonly fixHint = [
         'Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.',
         'Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in webpieces.config.json',
-    ],
+    ];
 
     check(ctx: FileContext): readonly Violation[] {
         if (ctx.tool !== 'Write') return [];
 
-        const excludePaths = Array.isArray(ctx.options['excludePaths'])
-            ? ctx.options['excludePaths'] as string[]
-            : DEFAULT_EXCLUDE_PATHS;
-        const allowedRootFiles = Array.isArray(ctx.options['allowedRootFiles'])
-            ? ctx.options['allowedRootFiles'] as string[]
-            : DEFAULT_ALLOWED_ROOT_FILES;
+        const excludePaths = this.config.excludePaths ?? DEFAULT_EXCLUDE_PATHS;
+        const allowedRootFiles = this.config.allowedRootFiles ?? DEFAULT_ALLOWED_ROOT_FILES;
 
         // Holistic exclusion (Layer 1 + Layer 2): bare dir names + globs.
         if (isPathExcluded(ctx.relativePath, excludePaths)) return [];
@@ -72,7 +69,5 @@ const validateTsInSrcRule: FileRule = {
         }
 
         return [];
-    },
-};
-
-export default validateTsInSrcRule;
+    }
+}

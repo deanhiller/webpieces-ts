@@ -23,22 +23,10 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE } from '@webpieces/rules-config';
+import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE, MaxMethodLinesConfig, MethodLimitMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-
-export interface ValidateModifiedMethodsOptions {
-    limit?: number;
-    mode?: MethodMaxLimitMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
+import { runNewMethods } from './validate-new-methods';
 
 interface MethodViolation {
     file: string;
@@ -614,16 +602,16 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
     }
 }
 
-export default async function runValidator(
-    options: ValidateModifiedMethodsOptions,
+export async function runModifiedMethods(
+    options: MaxMethodLinesConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const limit = options.limit ?? 80;
     const disableAllowed = options.disableAllowed ?? true;
 
-    const rawMode: MethodMaxLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
+    const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
     const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
-    const mode: MethodMaxLimitMode = skip.skip ? 'OFF' : rawMode;
+    const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
@@ -685,5 +673,36 @@ export default async function runValidator(
         const error = err instanceof Error ? err : new Error(String(err));
         console.error('\u274c Modified method validation failed:', error.message);
         return { success: false };
+    }
+}
+
+/**
+ * MaxMethodLinesValidator — the single 'max-method-lines' validator.
+ *
+ * Reproduces the previous `runMethodValidators` orchestration: depending on the
+ * configured mode it runs the new-methods sub-check and/or the modified-methods
+ * sub-check.
+ *   - NEW_METHODS                -> new-methods only
+ *   - NEW_AND_MODIFIED_METHODS   -> new-methods + modified-methods
+ *   - MODIFIED_FILES             -> modified-methods only
+ */
+export class MaxMethodLinesValidator extends CodeValidator<MaxMethodLinesConfig> {
+    constructor(config: MaxMethodLinesConfig) {
+        super(config, 'max-method-lines');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        const mode: MethodLimitMode = this.config.mode ?? 'NEW_AND_MODIFIED_METHODS';
+        const runNew = mode === 'NEW_METHODS' || mode === 'NEW_AND_MODIFIED_METHODS';
+        const runModified = mode === 'NEW_AND_MODIFIED_METHODS' || mode === 'MODIFIED_FILES';
+
+        const results: ExecutorResult[] = [];
+        if (runNew) {
+            results.push(await runNewMethods(this.config, workspaceRoot));
+        }
+        if (runModified) {
+            results.push(await runModifiedMethods(this.config, workspaceRoot));
+        }
+        return { success: results.every((r) => r.success) };
     }
 }

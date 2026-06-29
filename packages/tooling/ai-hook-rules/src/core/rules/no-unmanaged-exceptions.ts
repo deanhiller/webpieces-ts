@@ -1,6 +1,8 @@
-import type { EditRule, EditContext, Violation } from '../types';
+import { NoUnmanagedExceptionsConfig, RULE_NAMES } from '@webpieces/rules-config';
+
+import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { RULE_NAMES } from '@webpieces/rules-config';
+import { EditRuleBase } from '../rule-base';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 const TRY_PATTERN = /\btry\s*\{/;
@@ -8,13 +10,18 @@ const TRY_PATTERN = /\btry\s*\{/;
 // Both webpieces-disable and the existing ESLint directive suppress this rule
 const DISABLE_PATTERN = /@webpieces\/no-unmanaged-exceptions|webpieces-disable\s+(?:[\w-]+,\s*)*no-unmanaged-exceptions/;
 
-const noUnmanagedExceptionsRule: EditRule = {
-    name: 'no-unmanaged-exceptions',
-    description: 'try/catch is generally not allowed. Only allowed in chokepoints (filter, globalErrorHandler) or other rare locations.',
-    scope: 'edit',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: {},
-    fixHint: [
+function hasPrecedingDisable(lines: readonly string[], idx: number): boolean {
+    if (idx === 0) return false;
+    const prevLine = lines[idx - 1];
+    return DISABLE_PATTERN.test(prevLine);
+}
+
+export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedExceptionsConfig> {
+    constructor(config: NoUnmanagedExceptionsConfig) { super(config, 'no-unmanaged-exceptions'); }
+
+    readonly description = 'try/catch is generally not allowed. Only allowed in chokepoints (filter, globalErrorHandler) or other rare locations.';
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    readonly fixHint = [
         'Fix Option 1 (preferred): Remove the try/catch — let the exception bubble to the top-level chokepoint (filter, globalErrorHandler) where it is already logged and handled.',
         'Fix Option 2 (ask the human first): If you genuinely believe this IS a chokepoint, STOP and tell the human:',
         '  - What exception could be thrown here',
@@ -23,7 +30,7 @@ const noUnmanagedExceptionsRule: EditRule = {
         '  Then ask: "Should I add a disable comment or remove the try/catch?"',
         '  Only add // webpieces-disable no-unmanaged-exceptions -- <reason> if the human says yes.',
         'NOTE: If the code is calling an external process (execSync, fs, network), the correct answer is almost always Option 1 — let it throw. Hooks have a top-level runner that reports errors properly.',
-    ],
+    ];
 
     check(ctx: EditContext): readonly Violation[] {
         const violations: V[] = [];
@@ -41,13 +48,5 @@ const noUnmanagedExceptionsRule: EditRule = {
         }
         if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
         return violations;
-    },
-};
-
-function hasPrecedingDisable(lines: readonly string[], idx: number): boolean {
-    if (idx === 0) return false;
-    const prevLine = lines[idx - 1];
-    return DISABLE_PATTERN.test(prevLine);
+    }
 }
-
-export default noUnmanagedExceptionsRule;

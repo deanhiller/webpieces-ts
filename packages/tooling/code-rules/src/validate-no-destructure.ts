@@ -44,21 +44,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoDestructureConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoDestructureMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
-
-export interface ValidateNoDestructureOptions {
-    mode?: NoDestructureMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface DestructureViolation {
     file: string;
@@ -474,7 +462,7 @@ function detectBase(workspaceRoot: string): string | null {
  * Report violations to console.
  */
 // webpieces-disable max-lines-new-methods -- Console output with examples and escape hatch information
-function reportViolations(violations: DestructureViolation[], mode: NoDestructureMode, disableAllowed: boolean): void {
+function reportViolations(violations: DestructureViolation[], mode: ModifiedCodeMode, disableAllowed: boolean): void {
     console.error('');
     console.error('\u274c Destructuring patterns found! Use explicit property access instead.');
     console.error('');
@@ -516,7 +504,7 @@ function reportViolations(violations: DestructureViolation[], mode: NoDestructur
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveNoDestructureMode(normalMode: NoDestructureMode, epoch: number | undefined, branchPattern: string | undefined): NoDestructureMode {
+function resolveNoDestructureMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -529,11 +517,11 @@ function resolveNoDestructureMode(normalMode: NoDestructureMode, epoch: number |
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateNoDestructureOptions,
+async function runValidatorImpl(
+    options: NoDestructureConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoDestructureMode = resolveNoDestructureMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveNoDestructureMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -587,4 +575,14 @@ export default async function runValidator(
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
+}
+
+export class NoDestructureValidator extends CodeValidator<NoDestructureConfig> {
+    constructor(config: NoDestructureConfig) {
+        super(config, 'no-destructure');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

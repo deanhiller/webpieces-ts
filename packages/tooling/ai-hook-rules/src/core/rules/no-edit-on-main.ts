@@ -1,23 +1,27 @@
 import { execSync } from 'child_process';
-import type { FileRule, FileContext, Violation } from '../types';
+
+import { NoEditOnMainConfig } from '@webpieces/rules-config';
+
+import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { FileRuleBase } from '../rule-base';
 import { toError } from '../to-error';
 
-const noEditOnMain: FileRule = {
-    name: 'no-edit-on-main',
-    description: 'Block file edits when on the main branch — all work must happen on a feature branch.',
-    scope: 'file',
-    files: ['**/*'],
-    defaultOptions: {
+export class NoEditOnMainRule extends FileRuleBase<NoEditOnMainConfig> {
+    constructor(config: NoEditOnMainConfig) { super(config, 'no-edit-on-main'); }
+
+    readonly description = 'Block file edits when on the main branch — all work must happen on a feature branch.';
+    override readonly files = ['**/*'];
+    override readonly defaultOptions = {
         branchNamingConvention: '{whoami}/{featurename}',
-    },
-    fixHint: [
+    };
+    readonly fixHint = [
         'You should not be working on main.',
         'Steps:',
         '  1. git pull origin main   ← get latest commits',
         '  2. git checkout -b <branch-name>   ← create feature branch',
         'Branch naming convention is defined in webpieces.config.json under no-edit-on-main.branchNamingConvention.',
-    ],
+    ];
 
     check(ctx: FileContext): readonly Violation[] {
         // Only apply to files inside the workspace root
@@ -39,8 +43,7 @@ const noEditOnMain: FileRule = {
 
         if (currentBranch !== 'main') return [];
 
-        const convention = (ctx.options['branchNamingConvention'] as string | undefined)
-            ?? 'feature/<ticket-id>-<short-description>';
+        const convention = this.config.branchNamingConvention ?? '{whoami}/{featurename}';
 
         return [new V(
             1,
@@ -52,7 +55,5 @@ const noEditOnMain: FileRule = {
                 'Example: git checkout -b ' + convention.replace(/<[^>]+>/g, 'value'),
             ].join('\n'),
         )];
-    },
-};
-
-export default noEditOnMain;
+    }
+}

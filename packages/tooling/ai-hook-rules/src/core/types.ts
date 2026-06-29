@@ -143,30 +143,28 @@ export class FileContext {
     }
 }
 
-interface RuleBase {
+/**
+ * The shape of a custom rule loaded from a `rulesDir` (a plain object returned by require()).
+ * It carries only metadata + a `check` method — no on/off logic of its own.
+ */
+export interface PlainRule {
     readonly name: string;
     readonly description: string;
+    readonly scope: RuleScope;
     readonly files: readonly string[];
     readonly defaultOptions: RuleOptions;
     readonly fixHint: readonly string[];
+    check(ctx: EditContext | FileContext | BashContext): readonly Violation[];
 }
 
-export interface EditRule extends RuleBase {
-    readonly scope: 'edit';
-    check(ctx: EditContext): readonly Violation[];
+/**
+ * The runtime contract the runner iterates. Both the built-in rule classes (which extend
+ * EditRuleBase/FileRuleBase/BashRuleBase) and the custom-rule adapter satisfy this: they add
+ * `shouldRun()` (mode + escape-hatch decision) on top of the PlainRule metadata.
+ */
+export interface Rule extends PlainRule {
+    shouldRun(): boolean;
 }
-
-export interface FileRule extends RuleBase {
-    readonly scope: 'file';
-    check(ctx: FileContext): readonly Violation[];
-}
-
-export interface BashRule extends RuleBase {
-    readonly scope: 'bash';
-    check(ctx: BashContext): readonly Violation[];
-}
-
-export type Rule = EditRule | FileRule | BashRule;
 
 export class RuleGroup {
     readonly ruleName: string;

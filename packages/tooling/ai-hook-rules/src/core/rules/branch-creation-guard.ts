@@ -1,40 +1,34 @@
 import { execSync } from 'child_process';
-import type { BashRule, BashContext, Violation } from '../types';
+
+import { BranchCreationGuardConfig } from '@webpieces/rules-config';
+
+import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { BashRuleBase } from '../rule-base';
 
 const FIX_HINT: readonly string[] = [
     "Run 'git checkout main && git pull origin main', then create your branch from main",
     "If you truly need a sub-branch (requires human approval), name it using the convention in webpieces.config.json 'branch-creation-guard.subBranchNaming'",
 ];
 
-const branchCreationGuard: BashRule = {
-    name: 'branch-creation-guard',
-    description: 'Block new-branch creation when main is stale, or when not on main.',
-    scope: 'bash',
-    files: [],
-    defaultOptions: { subBranchNaming: 'feature/<ticket>/<short-description>' },
-    fixHint: FIX_HINT,
+const BRANCH_PATTERNS: RegExp[] = [
+    /git\s+checkout\s+-[bB]\s+([^\s]+)/,
+    /git\s+switch\s+-[cC]\s+([^\s]+)/,
+    /git\s+branch\s+(?!-[dDmMrRla])([^\s-][^\s]*)/,
+];
 
-    check(ctx: BashContext): readonly Violation[] {
-        const requestedName = extractBranchName(ctx.command);
-        if (!requestedName) return [];
+function extractBranchName(command: string): string | null {
+    for (const pattern of BRANCH_PATTERNS) {
+        const m = pattern.exec(command);
+        if (m) return m[1];
+    }
+    return null;
+}
 
-        const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
-            cwd: ctx.workspaceRoot,
-            encoding: 'utf8',
-        }).trim();
-
-        if (currentBranch === 'main') {
-            return checkMainIsUpToDate(ctx, requestedName);
-        }
-
-        return [new V(
-            1,
-            truncate(ctx.command),
-            `You are on '${currentBranch}', not main. Branches must be created from main.`,
-        )];
-    },
-};
+function truncate(s: string): string {
+    const MAX = 120;
+    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+}
 
 function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly Violation[] {
     execSync('git fetch origin main --quiet', {
@@ -56,23 +50,30 @@ function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly 
     return [];
 }
 
-const BRANCH_PATTERNS: RegExp[] = [
-    /git\s+checkout\s+-[bB]\s+([^\s]+)/,
-    /git\s+switch\s+-[cC]\s+([^\s]+)/,
-    /git\s+branch\s+(?!-[dDmMrRla])([^\s-][^\s]*)/,
-];
+export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardConfig> {
+    constructor(config: BranchCreationGuardConfig) { super(config, 'branch-creation-guard'); }
 
-function extractBranchName(command: string): string | null {
-    for (const pattern of BRANCH_PATTERNS) {
-        const m = pattern.exec(command);
-        if (m) return m[1];
+    readonly description = 'Block new-branch creation when main is stale, or when not on main.';
+    override readonly defaultOptions = { subBranchNaming: 'feature/<ticket>/<short-description>' };
+    readonly fixHint = FIX_HINT;
+
+    check(ctx: BashContext): readonly Violation[] {
+        const requestedName = extractBranchName(ctx.command);
+        if (!requestedName) return [];
+
+        const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+            cwd: ctx.workspaceRoot,
+            encoding: 'utf8',
+        }).trim();
+
+        if (currentBranch === 'main') {
+            return checkMainIsUpToDate(ctx, requestedName);
+        }
+
+        return [new V(
+            1,
+            truncate(ctx.command),
+            `You are on '${currentBranch}', not main. Branches must be created from main.`,
+        )];
     }
-    return null;
 }
-
-function truncate(s: string): string {
-    const MAX = 120;
-    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
-}
-
-export default branchCreationGuard;

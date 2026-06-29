@@ -35,21 +35,9 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoUnmanagedExceptionsConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoUnmanagedExceptionsMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
-
-export interface ValidateNoUnmanagedExceptionsOptions {
-    mode?: NoUnmanagedExceptionsMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface TryCatchViolation {
     file: string;
@@ -325,7 +313,7 @@ function detectBase(workspaceRoot: string): string | null {
 /**
  * Report violations to console.
  */
-function reportViolations(violations: TryCatchViolation[], mode: NoUnmanagedExceptionsMode, disableAllowed: boolean): void {
+function reportViolations(violations: TryCatchViolation[], mode: ModifiedCodeMode, disableAllowed: boolean): void {
     console.error('');
     console.error('\u274c Unmanaged try/catch blocks found! Exceptions should bubble to chokepoints.');
     console.error('');
@@ -359,7 +347,7 @@ function reportViolations(violations: TryCatchViolation[], mode: NoUnmanagedExce
 /**
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  */
-function resolveMode(normalMode: NoUnmanagedExceptionsMode, epoch: number | undefined, branchPattern: string | undefined): NoUnmanagedExceptionsMode {
+function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -372,11 +360,11 @@ function resolveMode(normalMode: NoUnmanagedExceptionsMode, epoch: number | unde
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateNoUnmanagedExceptionsOptions,
+async function runValidatorImpl(
+    options: NoUnmanagedExceptionsConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoUnmanagedExceptionsMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -430,4 +418,14 @@ export default async function runValidator(
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
+}
+
+export class NoUnmanagedExceptionsValidator extends CodeValidator<NoUnmanagedExceptionsConfig> {
+    constructor(config: NoUnmanagedExceptionsConfig) {
+        super(config, 'no-unmanaged-exceptions');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }
