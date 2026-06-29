@@ -1,5 +1,6 @@
 // @webpieces/pr-gate — gated PR system.
 //
+// Now published to npm via the release workflow (OIDC trusted publishing).
 // Public surface is intentionally small for now. The package mainly ships bin
 // commands (wp-git-update, wp-git-gather, wp-git-merge-complete, and — added in a
 // later phase — wp-upsert-pr / wp-build-affected). Shared library exports (dashboard

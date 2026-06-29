@@ -115,6 +115,7 @@ jobs:
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/http/http-server --access public --provenance
                   npm publish dist/packages/tooling/rules-config --access public --provenance
+                  npm publish dist/packages/tooling/pr-gate --access public --provenance
                   npm publish dist/packages/tooling/eslint-rules --access public --provenance
                   npm publish dist/packages/tooling/ai-hook-rules --access public --provenance
                   npm publish dist/packages/tooling/code-rules --access public --provenance
@@ -147,6 +148,7 @@ jobs:
                       - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-server@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-server/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/rules-config@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/rules-config/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/pr-gate@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/pr-gate/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/eslint-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/eslint-rules/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/ai-hook-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/ai-hook-rules/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/code-rules@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/code-rules/v/${{ steps.version.outputs.full_version }})
