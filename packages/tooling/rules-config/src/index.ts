@@ -9,6 +9,8 @@ export { loadTemplate, writeTemplateIfMissing, writeTemplate } from './load-temp
 export { validateWebpiecesConfig } from './validate-config';
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
+export { shouldSkipRule, getCurrentBranch } from './skip-rule';
+export type { SkipRuleResult } from './skip-rule';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {
     MaxMethodLinesConfig,

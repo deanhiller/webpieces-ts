@@ -1,5 +1,7 @@
 import * as path from 'path';
 
+import { shouldSkipRule } from '@webpieces/rules-config';
+
 import { buildContexts, buildBashContext } from './build-context';
 import { loadConfig } from './load-config';
 import { loadRules, globMatches } from './load-rules';
@@ -147,6 +149,7 @@ function runBashRules(
         if (rule.scope !== 'bash') continue;
         const ruleConfig = config.rules.get(rule.name);
         if (!ruleConfig || ruleConfig.isOff) continue;
+        if (isRuleSkipped(ruleConfig)) continue;
         bashContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
         const vs = runRuleCheck(rule, bashContext);
         if (vs.length > 0) {
@@ -156,6 +159,15 @@ function runBashRules(
         }
     }
     return groups;
+}
+
+// Every rule honors the universal escape hatches: skip while on a named branch
+// (ignoreRuleWhileOnBranch) or until an epoch passes (ignoreModifiedUntilEpoch).
+function isRuleSkipped(ruleConfig: ResolvedRuleConfig): boolean {
+    return shouldSkipRule(
+        ruleConfig.options['ignoreModifiedUntilEpoch'] as number | undefined,
+        ruleConfig.options['ignoreRuleWhileOnBranch'] as string | undefined,
+    ).skip;
 }
 
 function ruleMatchesFile(rule: Rule, relativePath: string): boolean {
@@ -187,6 +199,7 @@ function runEditRules(
         if (rule.scope !== 'edit') continue;
         const ruleConfig = config.rules.get(rule.name);
         if (!ruleConfig || ruleConfig.isOff) continue;
+        if (isRuleSkipped(ruleConfig)) continue;
         const allViolations: Violation[] = [];
         for (const ctx of editContexts) {
             if (!ruleMatchesFile(rule, ctx.relativePath)) continue;
@@ -218,6 +231,7 @@ function runFileRules(
         if (rule.scope !== 'file') continue;
         const ruleConfig = config.rules.get(rule.name);
         if (!ruleConfig || ruleConfig.isOff) continue;
+        if (isRuleSkipped(ruleConfig)) continue;
         if (!ruleMatchesFile(rule, fileContext.relativePath)) continue;
         fileContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
         const vs = runRuleCheck(rule, fileContext);

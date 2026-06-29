@@ -12,7 +12,7 @@
  *   }
  */
 
-import { loadConfig } from '@webpieces/rules-config';
+import { loadConfig, shouldSkipRule, SkipRuleResult } from '@webpieces/rules-config';
 
 export const RUNTIME_RULE_NAME = 'runtime-architecture';
 
@@ -27,6 +27,7 @@ export interface RuntimeRuleConfig {
     apiProjectPaths: string[];
     servicePaths: string[];
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
     allowedCycles: AllowedCycle[];
 }
 
@@ -39,6 +40,7 @@ interface RuntimeRuleRaw {
     apiProjectPaths?: string[];
     servicePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
     allowedCycles?: AllowedCycle[];
 }
 
@@ -57,8 +59,20 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
         servicePaths: Array.isArray(raw.servicePaths) ? raw.servicePaths : [],
         ignoreModifiedUntilEpoch:
             typeof raw.ignoreModifiedUntilEpoch === 'number' ? raw.ignoreModifiedUntilEpoch : undefined,
+        ignoreRuleWhileOnBranch:
+            typeof raw.ignoreRuleWhileOnBranch === 'string' ? raw.ignoreRuleWhileOnBranch : undefined,
         allowedCycles: Array.isArray(raw.allowedCycles) ? raw.allowedCycles.filter(isUsableCycle) : [],
     };
+}
+
+/**
+ * Whole-rule report-only window honoring BOTH escape hatches: skip while on the
+ * named branch (ignoreRuleWhileOnBranch) or until the epoch passes
+ * (ignoreModifiedUntilEpoch). When `.skip` is true, problems are reported but
+ * the build is not failed.
+ */
+export function runtimeReportOnly(config: RuntimeRuleConfig): SkipRuleResult {
+    return shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch);
 }
 
 /**

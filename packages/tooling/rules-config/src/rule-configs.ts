@@ -36,289 +36,274 @@ type OnOffMode = typeof ON_OFF_MODES[number];
 const VALIDATE_TS_MODES = ['ON', 'OFF', 'MODIFIED_FILES'] as const;
 type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
 
-export class MaxMethodLinesConfig {
+// ---------------------------------------------------------------------------
+// Universal escape hatches — EVERY rule supports temporarily disabling itself
+// either while on a named git branch (ignoreRuleWhileOnBranch) or until an
+// epoch passes (ignoreModifiedUntilEpoch). Both are optional. They live on a
+// shared base class so the two fields (and their schema entries) are declared
+// once instead of repeated per rule. `mode` stays per-rule because its allowed
+// values vary (ON/OFF vs MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
+// ---------------------------------------------------------------------------
+export abstract class BaseRuleConfig {
+    ignoreModifiedUntilEpoch?: number;
+    ignoreRuleWhileOnBranch?: string;
+}
+
+export const BASE_RULE_SCHEMA = {
+    ignoreModifiedUntilEpoch: FieldDef.optional('number'),
+    ignoreRuleWhileOnBranch: FieldDef.optional('string'),
+};
+
+export class MaxMethodLinesConfig extends BaseRuleConfig {
     mode?: MethodLimitMode;
     limit?: number;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<MaxMethodLinesConfig> = {
         mode: new FieldDef('string', METHOD_LIMIT_MODES),
-        limit: new FieldDef('number'),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        limit: FieldDef.optional('number'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class MaxFileLinesConfig {
+export class MaxFileLinesConfig extends BaseRuleConfig {
     mode?: FileLimitMode;
     limit?: number;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<MaxFileLinesConfig> = {
         mode: new FieldDef('string', FILE_LIMIT_MODES),
-        limit: new FieldDef('number'),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        limit: FieldDef.optional('number'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class RequireReturnTypeConfig {
+export class RequireReturnTypeConfig extends BaseRuleConfig {
     mode?: ReturnTypeModeLocal;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<RequireReturnTypeConfig> = {
         mode: new FieldDef('string', RETURN_TYPE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoInlineTypeLiteralsConfig {
+export class NoInlineTypeLiteralsConfig extends BaseRuleConfig {
     mode?: InlineTypeModeLocal;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<NoInlineTypeLiteralsConfig> = {
         mode: new FieldDef('string', INLINE_TYPE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoAnyUnknownConfig {
+export class NoAnyUnknownConfig extends BaseRuleConfig {
     mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<NoAnyUnknownConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoImplicitAnyConfig {
+export class NoImplicitAnyConfig extends BaseRuleConfig {
     mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<NoImplicitAnyConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class PrismaValidateDtosConfig {
+export class PrismaValidateDtosConfig extends BaseRuleConfig {
     mode?: PrismaValidateDtosMode;
     disableAllowed?: boolean;
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<PrismaValidateDtosConfig> = {
         mode: new FieldDef('string', PRISMA_DTOS_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        prismaSchemaPath: new FieldDef('string'),
-        dtoSourcePaths: new FieldDef('string[]'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        prismaSchemaPath: FieldDef.optional('string'),
+        dtoSourcePaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class PrismaConverterConfig {
+export class PrismaConverterConfig extends BaseRuleConfig {
     mode?: PrismaConverterModeLocal;
     disableAllowed?: boolean;
     schemaPath?: string;
     convertersPaths?: string[];
     enforcePaths?: string[];
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<PrismaConverterConfig> = {
         mode: new FieldDef('string', PRISMA_CONVERTER_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        schemaPath: new FieldDef('string'),
-        convertersPaths: new FieldDef('string[]'),
-        enforcePaths: new FieldDef('string[]'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        schemaPath: FieldDef.optional('string'),
+        convertersPaths: FieldDef.optional('string[]'),
+        enforcePaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoDestructureConfig {
+export class NoDestructureConfig extends BaseRuleConfig {
     mode?: ModifiedCodeMode;
     allowTopLevel?: boolean;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<NoDestructureConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        allowTopLevel: new FieldDef('boolean'),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        allowTopLevel: FieldDef.optional('boolean'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoUnmanagedExceptionsConfig {
+export class NoUnmanagedExceptionsConfig extends BaseRuleConfig {
     mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<NoUnmanagedExceptionsConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class CatchErrorPatternConfig {
+export class CatchErrorPatternConfig extends BaseRuleConfig {
     mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<CatchErrorPatternConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class ThrowCauseRequiredConfig {
+export class ThrowCauseRequiredConfig extends BaseRuleConfig {
     mode?: ThrowCauseModeLocal;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
 
     static readonly SCHEMA: SchemaShape<ThrowCauseRequiredConfig> = {
         mode: new FieldDef('string', THROW_CAUSE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class AngularNoDirectApiInResolverConfig {
+export class AngularNoDirectApiInResolverConfig extends BaseRuleConfig {
     mode?: DirectApiResolverMode;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
     enforcePaths?: string[];
 
     static readonly SCHEMA: SchemaShape<AngularNoDirectApiInResolverConfig> = {
         mode: new FieldDef('string', DIRECT_API_RESOLVER_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
-        enforcePaths: new FieldDef('string[]'),
+        disableAllowed: FieldDef.optional('boolean'),
+        enforcePaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoSymbolDiTokensConfig {
+export class NoSymbolDiTokensConfig extends BaseRuleConfig {
     mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
     allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoSymbolDiTokensConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        disableAllowed: new FieldDef('boolean'),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        ignoreRuleWhileOnBranch: new FieldDef('string'),
-        allowedPaths: new FieldDef('string[]'),
+        disableAllowed: FieldDef.optional('boolean'),
+        allowedPaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoShellSubstitutionConfig {
+export class NoShellSubstitutionConfig extends BaseRuleConfig {
     mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<NoShellSubstitutionConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class BranchCreationGuardConfig {
+export class BranchCreationGuardConfig extends BaseRuleConfig {
     mode?: OnOffMode;
     subBranchNaming?: string;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        subBranchNaming: new FieldDef('string'),
+        subBranchNaming: FieldDef.optional('string'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class PrCreationGuardConfig {
+export class PrCreationGuardConfig extends BaseRuleConfig {
     mode?: OnOffMode;
     buildCommand?: string;
     requireTextInPr?: string;
 
     static readonly SCHEMA: SchemaShape<PrCreationGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        buildCommand: new FieldDef('string'),
-        requireTextInPr: new FieldDef('string'),
+        buildCommand: FieldDef.optional('string'),
+        requireTextInPr: FieldDef.optional('string'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class PrMergeCleanupConfig {
+export class PrMergeCleanupConfig extends BaseRuleConfig {
     mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<PrMergeCleanupConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoDirectMainUpdateConfig {
+export class NoDirectMainUpdateConfig extends BaseRuleConfig {
     mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<NoDirectMainUpdateConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoEditOnMainConfig {
+export class NoEditOnMainConfig extends BaseRuleConfig {
     mode?: OnOffMode;
     branchNamingConvention?: string;
 
     static readonly SCHEMA: SchemaShape<NoEditOnMainConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        branchNamingConvention: new FieldDef('string'),
+        branchNamingConvention: FieldDef.optional('string'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoFileImportCyclesConfig {
+export class NoFileImportCyclesConfig extends BaseRuleConfig {
     mode?: OnOffMode;
     ignoreTypeOnly?: boolean;
+    excludePackages?: string[];
 
     static readonly SCHEMA: SchemaShape<NoFileImportCyclesConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        ignoreTypeOnly: new FieldDef('boolean'),
+        ignoreTypeOnly: FieldDef.optional('boolean'),
+        excludePackages: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class RuntimeArchitectureConfig {
+export class RuntimeArchitectureConfig extends BaseRuleConfig {
     mode?: OnOffMode;
     servicePaths?: string[];
     apiProjectPaths?: string[];
@@ -326,32 +311,33 @@ export class RuntimeArchitectureConfig {
 
     static readonly SCHEMA: SchemaShape<RuntimeArchitectureConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        servicePaths: new FieldDef('string[]'),
-        apiProjectPaths: new FieldDef('string[]'),
-        allowedCycles: new FieldDef('string[]'),
+        servicePaths: FieldDef.optional('string[]'),
+        apiProjectPaths: FieldDef.optional('string[]'),
+        allowedCycles: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class NoJsFilesConfig {
+export class NoJsFilesConfig extends BaseRuleConfig {
     mode?: OnOffMode;
     allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoJsFilesConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        allowedPaths: new FieldDef('string[]'),
+        allowedPaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
 
-export class ValidateTsInSrcConfig {
+export class ValidateTsInSrcConfig extends BaseRuleConfig {
     mode?: ValidateTsMode;
-    ignoreModifiedUntilEpoch?: number;
     allowedRootFiles?: string[];
     excludePaths?: string[];
 
     static readonly SCHEMA: SchemaShape<ValidateTsInSrcConfig> = {
         mode: new FieldDef('string', VALIDATE_TS_MODES),
-        ignoreModifiedUntilEpoch: new FieldDef('number'),
-        allowedRootFiles: new FieldDef('string[]'),
-        excludePaths: new FieldDef('string[]'),
+        allowedRootFiles: FieldDef.optional('string[]'),
+        excludePaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
     };
 }
