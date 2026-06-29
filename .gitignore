@@ -97,8 +97,6 @@ yarn-error.log*
 # Platform-specific node_modules backups
 node_modules_*/
 
-# Generated @webpieces/ai-hook-rules artifacts (bootstrap, cache)
+# Webpieces tooling working dir: ai-hook-rules bootstrap/cache, instruct-ai docs,
+# and per-feature git workflow dirs (merge-/review-/pr-, 30-day retention)
 .webpieces/
-
-# Webpieces git workflow temp directory (30-day retention)
-webpiecesTmp/

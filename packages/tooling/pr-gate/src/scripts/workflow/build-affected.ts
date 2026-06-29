@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import { loadPrGateConfig } from '@webpieces/rules-config';
 
 // Single source of truth for the build gate. Both `wp-build-affected` (CI + local) and the
 // merge validation gate (`wp-git-merge-complete`) run THIS, so "what CI runs" and "what the
@@ -16,4 +17,14 @@ export function runBuildAffected(repoRoot: string, buildCommand?: string): numbe
     process.stdout.write(`\n▶ Build gate: ${cmd}\n\n`);
     const result = spawnSync(cmd, { stdio: 'inherit', cwd: repoRoot, shell: true });
     return result.status ?? 1;
+}
+
+/**
+ * Run the build gate using the project's configured command (PrGateConfig.buildCommand). The
+ * merge-complete gate and wp-upsert-pr both call THIS so they provably build with the same
+ * command — the resolution the AI validates is built exactly as the PR command builds it.
+ * Returns the exit code; callers print their own re-run hint.
+ */
+export function runConfiguredBuildGate(repoRoot: string): number {
+    return runBuildAffected(repoRoot, loadPrGateConfig(repoRoot).buildCommand);
 }

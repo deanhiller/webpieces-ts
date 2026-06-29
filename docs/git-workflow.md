@@ -103,9 +103,9 @@ The `sub/` prefix tells the `branch-creation-guard` AI hook that you intentional
 | `./scripts/.workflow/git-findForkPoint.sh` | Calculates fork point and detects illegal merge commits |
 | `./scripts/.workflow/git-readAiBranchName.sh` | Converts branch name to safe directory name |
 | `./scripts/.workflow/git-validateUpToDate.sh` | Verifies branch is up-to-date with origin/main |
-| `./scripts/.workflow/cleanTmp.sh` | Removes webpiecesTmp/ entries older than 30 days |
+| `./scripts/.workflow/cleanTmp.sh` | Removes .webpieces/ workflow dirs (merge-/review-/pr-) older than 30 days |
 
-Merge context is saved to `webpiecesTmp/merge-{branch-name}/` (gitignored, 30-day retention). When AI resolves conflicts, it reads A-forkpoint.txt, B-feature.txt, C-main.txt, B-A.diff, and C-A.diff for each conflicted file, then writes a `merge-summary.md` for human review.
+Merge context is saved to `.webpieces/merge-{branch-name}/` (gitignored, 30-day retention). When AI resolves conflicts, it reads A-forkpoint.txt, B-feature.txt, C-main.txt, B-A.diff, and C-A.diff for each conflicted file, then writes a `merge-summary.md` for human review.
 
 The AI merge command lives at `.claude/commands/wp-merge.md` and is launched with:
 ```
