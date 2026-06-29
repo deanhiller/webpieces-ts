@@ -8,6 +8,16 @@ import { loadPrGateConfig } from '@webpieces/rules-config';
 export const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin/main';
 
 /**
+ * Resolve the exact build command this gate will run for a repo: the project's configured
+ * PrGateConfig.buildCommand, or the default affected-ci command when none is set. Callers
+ * print this so the AI knows precisely which command to run locally to get the gate passing.
+ */
+export function resolveBuildCommand(repoRoot: string): string {
+    const configured = loadPrGateConfig(repoRoot).buildCommand;
+    return configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
+}
+
+/**
  * Run the build gate. Returns the process exit code (0 = pass). `buildCommand` overrides
  * the default (sourced from PrGateConfig.buildCommand by callers); empty/undefined uses the
  * default affected-ci command.

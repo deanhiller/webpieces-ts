@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { runGitChecked } from './workflow/git-exec';
-import { runConfiguredBuildGate } from './workflow/build-affected';
+import { runConfiguredBuildGate, resolveBuildCommand } from './workflow/build-affected';
 import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 import {
     mergeDirFor,
@@ -79,9 +79,18 @@ export async function main(): Promise<void> {
     runGitChecked(['add', '-A'], 'Failed to stage resolved files');
 
     // Build gate (authoritative). Same configured command wp-upsert-pr uses — fast on a big monorepo.
+    const buildCommand = resolveBuildCommand(repoRoot);
+    process.stdout.write(
+        `\nRunning the build gate. To get it passing, run the SAME command yourself and fix everything it reports:\n\n` +
+        `    ${buildCommand}\n\n`,
+    );
     const buildCode = runConfiguredBuildGate(repoRoot);
     if (buildCode !== 0) {
-        process.stderr.write('\n❌ Build failed. Fix the build, then re-run: pnpm wp-git-merge-complete\n');
+        process.stderr.write(
+            `\n❌ Build failed.\n\n` +
+            `Run THIS exact command to reproduce and fix all errors, then re-run pnpm wp-git-merge-complete:\n\n` +
+            `    ${buildCommand}\n\n`,
+        );
         process.exit(buildCode);
         return;
     }
