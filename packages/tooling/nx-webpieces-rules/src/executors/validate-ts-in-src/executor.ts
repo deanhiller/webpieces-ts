@@ -22,7 +22,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadConfig, isPathExcluded } from '@webpieces/rules-config';
+import { loadConfig, isPathExcluded, shouldSkipRule } from '@webpieces/rules-config';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -330,14 +330,18 @@ function checkSingleFileLayerTwo(
     return new LayerTwoViolation(relPath);
 }
 
-function resolveMode(normalMode: ValidateTsInSrcMode, epoch: number | undefined): ValidateTsInSrcMode {
-    if (epoch === undefined || normalMode === 'OFF') {
+function resolveMode(
+    normalMode: ValidateTsInSrcMode,
+    epoch: number | undefined,
+    branch: string | undefined,
+): ValidateTsInSrcMode {
+    if (normalMode === 'OFF') {
         return normalMode;
     }
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-        console.log(`\n⏭️  Skipping validate-ts-in-src validation (ignoreModifiedUntilEpoch active, expires: ${expiresDate})`);
+    // Honor the universal escape hatches: skip while on a named branch or until epoch.
+    const skip = shouldSkipRule(epoch, branch);
+    if (skip.skip) {
+        console.log(`\n⏭️  Skipping validate-ts-in-src validation (${skip.reason})`);
         console.log('');
         return 'OFF';
     }
@@ -482,7 +486,8 @@ export default async function runExecutor(
 
     const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'ON';
     const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
-    const effectiveMode = resolveMode(rawMode, epoch);
+    const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
+    const effectiveMode = resolveMode(rawMode, epoch, branch);
 
     if (effectiveMode === 'OFF' || (rule && rule.isOff)) {
         console.log('\n⏭️  Skipping validate-ts-in-src (mode: OFF)\n');

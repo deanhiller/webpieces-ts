@@ -20,7 +20,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { buildWorkspaceModel, readServiceContract, resolvePackageNames } from '../../lib/runtime-markers';
 import type { WorkspaceModel, ProjectInfo } from '../../lib/runtime-markers';
-import { loadRuntimeConfig, isGraceActive, epochDate, RUNTIME_RULE_NAME } from '../../lib/runtime-config';
+import { loadRuntimeConfig, runtimeReportOnly, RUNTIME_RULE_NAME } from '../../lib/runtime-config';
 
 export interface ValidateRuntimeMarkersOptions {
     // Config comes from webpieces.config.json at runtime.
@@ -66,8 +66,9 @@ export default async function runExecutor(
     for (const v of violations) console.error(`  - ${v}`);
     console.error(`\nFix ${info.root}/service-contract.json so "implements" ∪ "uses" equals the api projects in deps.\n`);
 
-    if (isGraceActive(config.ignoreModifiedUntilEpoch)) {
-        console.log(`⏳ Reported but not failing (ignoreModifiedUntilEpoch active, expires ${epochDate(config.ignoreModifiedUntilEpoch!)}).\n`);
+    const reportOnly = runtimeReportOnly(config);
+    if (reportOnly.skip) {
+        console.log(`⏳ Reported but not failing (${reportOnly.reason}).\n`);
         return { success: true };
     }
     return { success: false };

@@ -31,6 +31,58 @@ openclaw plugins enable @webpieces/ai-hook-rules
 # Drop webpieces.config.json into any project you want checked
 ```
 
+## Install (global hook, per user)
+
+Wires a single shim into `~/.claude/settings.json` once. The shim
+(`~/.webpieces/global-hook.js`) runs on every `Write|Edit|MultiEdit|Bash` and
+**delegates to each repo's own `./node_modules/.bin/wp-ai-hook`** — so you install the
+global hook one time and every webpieces project you have installed gets enforced
+automatically, no per-project Claude Code wiring.
+
+```bash
+# from any repo that has @webpieces/ai-hook-rules installed (e.g. this one):
+pnpm exec wp-setup-global-ai-hooks
+#   or, equivalently:
+./node_modules/.bin/wp-setup-global-ai-hooks
+# Restart your Claude Code session
+```
+
+The command is interactive:
+
+- **Not yet wired** → prompts `Install global webpieces hook…? [Y/n]`. On `Y` it copies the
+  bundled `global-hook.js` → `~/.webpieces/global-hook.js` and appends the `PreToolUse`
+  entry to `~/.claude/settings.json`.
+- **Already wired** → prompts `Global hook is already installed. Uninstall? [y/N]`. To
+  **refresh to the latest** version, run it twice: once answering `y` (uninstall), then
+  again answering `Y` (re-install the current copy).
+
+### How delegation works
+
+The shim keys off `process.cwd()` — the directory you launched Claude Code from:
+
+1. If `<cwd>/.webpieces/skiphooks` is present and unexpired → allow everything (escape hatch).
+2. Writing `<cwd>/.webpieces/skiphooks` is always allowed.
+3. If `<cwd>/node_modules/.bin/wp-ai-hook` exists → delegate the decision to it.
+4. Otherwise → block and tell the AI to install the hook (or write a skiphooks).
+
+Because resolution is cwd-based (not the edited file's path), launch Claude Code from the
+directory whose `node_modules` contains the install. In a monorepo where only a subdir is a
+webpieces project, launch from that subdir to get enforcement there.
+
+### Temporarily skipping hooks
+
+Drop a `skiphooks` file at the launch dir to bypass enforcement (e.g. for an umbrella repo
+where only some subdirs are webpieces projects):
+
+```bash
+# <cwd>/.webpieces/skiphooks
+{"expires": null, "reason": "why hooks are skipped here"}
+```
+
+`expires` is a unix-epoch-seconds number, or `null` to skip indefinitely. The check is
+**exact to the launch dir** — it does not walk up — so a skiphooks at a parent dir does not
+affect Claude Code launched from a child dir.
+
 ## Starter rules
 
 - `no-any` — disallow the `any` keyword

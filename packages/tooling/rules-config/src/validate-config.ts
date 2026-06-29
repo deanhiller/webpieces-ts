@@ -55,22 +55,36 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };
 
+function valueHint(def: FieldDef): string {
+    return def.enumValues
+        ? `"${def.enumValues.join(' | ')}"`
+        : def.type === 'string[]' ? '["<string>", ...]'
+        : def.type === 'number'   ? '<number>'
+        : def.type === 'boolean'  ? '<boolean>'
+        : '"<string>"';
+}
+
 function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>): string {
-    const lines = Object.keys(schema).map(field => {
-        const def = schema[field];
-        const valueHint = def.enumValues
-            ? `"${def.enumValues.join(' | ')}"`
-            : def.type === 'string[]' ? '["<string>", ...]'
-            : def.type === 'number'   ? '<number>'
-            : def.type === 'boolean'  ? '<boolean>'
-            : '"<string>"';
-        return `    "${field}": ${valueHint}`;
-    });
-    return (
+    // Only required fields go in the copy-paste entry. Optional fields (e.g. the
+    // universal escape hatches ignoreRuleWhileOnBranch / ignoreModifiedUntilEpoch)
+    // are listed separately so the snippet doesn't over-state what's mandatory.
+    const fields = Object.keys(schema);
+    const required = fields.filter(f => !schema[f].optional);
+    const optional = fields.filter(f => schema[f].optional);
+
+    const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f])}`);
+    let out =
         `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "rules" section\n` +
         `(choose values appropriate for your project):\n\n` +
-        `  "${ruleName}": {\n${lines.join(',\n')}\n  }`
-    );
+        `  "${ruleName}": {\n${requiredLines.join(',\n')}\n  }`;
+
+    if (optional.length > 0) {
+        const optionalLines = optional.map(f => `    "${f}": ${valueHint(schema[f])}`);
+        out +=
+            `\n\nOptional fields you may add to this rule (omit if not needed):\n` +
+            `${optionalLines.join(',\n')}`;
+    }
+    return out;
 }
 
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually

@@ -25,7 +25,7 @@ import {
 import type { RuntimeGraph } from '../../lib/runtime-graph';
 import { findRuntimeCycles, cycleKey } from '../../lib/runtime-cycles';
 import type { AllowedCycle } from '../../lib/runtime-config';
-import { loadRuntimeConfig, isGraceActive, epochDate, RUNTIME_RULE_NAME } from '../../lib/runtime-config';
+import { loadRuntimeConfig, runtimeReportOnly, RUNTIME_RULE_NAME } from '../../lib/runtime-config';
 
 export interface ValidateRuntimeArchitectureOptions {
     // Config comes from webpieces.config.json at runtime.
@@ -111,8 +111,9 @@ export default async function runExecutor(
     for (const p of problems) console.error(`  - ${p}`);
     console.error('\nAllow a cycle temporarily via runtime-architecture.allowedCycles (services + reason + until) in webpieces.config.json.\n');
 
-    if (isGraceActive(config.ignoreModifiedUntilEpoch)) {
-        console.log(`⏳ Reported but not failing (ignoreModifiedUntilEpoch active, expires ${epochDate(config.ignoreModifiedUntilEpoch!)}).\n`);
+    const reportOnly = runtimeReportOnly(config);
+    if (reportOnly.skip) {
+        console.log(`⏳ Reported but not failing (${reportOnly.reason}).\n`);
         return { success: true };
     }
     return { success: false };

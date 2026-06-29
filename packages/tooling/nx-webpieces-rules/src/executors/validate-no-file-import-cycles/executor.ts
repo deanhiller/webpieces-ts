@@ -31,7 +31,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadConfig } from '@webpieces/rules-config';
+import { loadConfig, shouldSkipRule } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { toError } from '../../toError';
@@ -74,17 +74,16 @@ function loadMadge(): MadgeFn {
 
 /**
  * Decide whether the gate should still FAIL on cycles (true) or only warn
- * (false), considering the ignoreModifiedUntilEpoch grace window. Logs a
- * one-line explanation when the grace window is active.
+ * (false), considering the universal escape hatches: the ignoreModifiedUntilEpoch
+ * grace window and ignoreRuleWhileOnBranch. Logs a one-line explanation when a
+ * hatch is active.
  */
-function isFailingActive(epoch: number | undefined): boolean {
-    if (epoch === undefined) return true;
-    const nowSeconds = Date.now() / 1000;
-    if (nowSeconds < epoch) {
-        const expires = new Date(epoch * 1000).toISOString().split('T')[0];
+function isFailingActive(epoch: number | undefined, branch: string | undefined): boolean {
+    const skip = shouldSkipRule(epoch, branch);
+    if (skip.skip) {
         console.log(
-            `\n⏳ no-file-import-cycles: ignoreModifiedUntilEpoch active (expires ${expires}).` +
-                '\n   Cycles will be reported but NOT fail the build until then.\n',
+            `\n⏳ no-file-import-cycles: ${skip.reason}.` +
+                '\n   Cycles will be reported but NOT fail the build.\n',
         );
         return false;
     }
@@ -233,6 +232,7 @@ export default async function runExecutor(
     const projectRoot = projectConfig ? path.join(context.root, projectConfig.root) : context.root;
 
     const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
+    const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
     const ignoreTypeOnly = (rule?.options['ignoreTypeOnly'] as boolean | undefined) ?? false;
     const excludePackages = (rule?.options['excludePackages'] as string[] | undefined) ?? [];
 
@@ -249,6 +249,6 @@ export default async function runExecutor(
 
     reportCycles(projectName, cycles);
 
-    // Grace window active → report but pass; otherwise fail.
-    return { success: !isFailingActive(epoch) };
+    // Grace window or branch hatch active → report but pass; otherwise fail.
+    return { success: !isFailingActive(epoch, branch) };
 }
