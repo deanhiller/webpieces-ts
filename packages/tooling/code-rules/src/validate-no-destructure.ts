@@ -44,6 +44,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type NoDestructureMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
@@ -182,7 +183,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('no-destructure')) {
+        if (hasDisable(line, RULE_NAMES.NO_DESTRUCTURE)) {
             return true;
         }
     }

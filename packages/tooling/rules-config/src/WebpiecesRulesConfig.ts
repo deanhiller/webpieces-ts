@@ -16,6 +16,7 @@ import {
     NoShellSubstitutionConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
+    MergeInProgressGuardConfig,
     PrMergeCleanupConfig,
     NoDirectMainUpdateConfig,
     NoEditOnMainConfig,
@@ -43,6 +44,7 @@ export class WebpiecesRulesConfig {
     'no-shell-substitution'?: NoShellSubstitutionConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
     'pr-creation-guard'?: PrCreationGuardConfig;
+    'merge-in-progress-guard'?: MergeInProgressGuardConfig;
     'pr-merge-cleanup'?: PrMergeCleanupConfig;
     'no-direct-main-update'?: NoDirectMainUpdateConfig;
     'no-edit-on-main'?: NoEditOnMainConfig;

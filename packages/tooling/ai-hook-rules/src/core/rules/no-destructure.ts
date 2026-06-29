@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 
 const VARIABLE_DESTRUCTURE = /\b(?:const|let|var)\s*\{/;
 
@@ -20,7 +21,7 @@ const noDestructureRule: EditRule = {
             const stripped = ctx.strippedLines[i];
             if (!VARIABLE_DESTRUCTURE.test(stripped)) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'no-destructure')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_DESTRUCTURE)) continue;
             violations.push(new V(
                 lineNum,
                 ctx.lines[i].trim(),

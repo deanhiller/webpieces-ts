@@ -83,7 +83,14 @@
         "dependsOn": [
             "ai-hook-rules",
             "code-rules",
-            "eslint-rules"
+            "eslint-rules",
+            "pr-gate"
+        ]
+    },
+    "pr-gate": {
+        "level": 1,
+        "dependsOn": [
+            "rules-config"
         ]
     },
     "rules-config": {

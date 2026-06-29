@@ -40,6 +40,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type CatchErrorPatternMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
@@ -196,7 +197,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('catch-error-pattern')) {
+        if (hasDisable(line, RULE_NAMES.CATCH_ERROR_PATTERN)) {
             return true;
         }
         if (line.includes('@webpieces/catch-error-pattern')) {
@@ -211,7 +212,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
  */
 function hasBlockLevelDisable(sourceText: string, blockStart: number, blockEnd: number): boolean {
     const blockText = sourceText.substring(blockStart, blockEnd);
-    return blockText.includes('webpieces-disable') && blockText.includes('catch-error-pattern') ||
+    return hasDisable(blockText, RULE_NAMES.CATCH_ERROR_PATTERN) ||
         blockText.includes('@webpieces/catch-error-pattern');
 }
 

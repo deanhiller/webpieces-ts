@@ -95,11 +95,11 @@ function run(rawInput: string): void {
             'Present these THREE options to the human verbatim and wait for them to pick one.\n' +
             'Each option is a command the human can copy-paste into their own terminal:\n' +
             '\n' +
-            '  A) PREFERRED — install the hook.\n' +
+            '  A) PREFERRED — install the webpieces rules bundle (one package: hook + all rules + pr-gate).\n' +
             '     If this is a pnpm workspace, run from the monorepo root:\n' +
-            '         pnpm add -Dw @webpieces/ai-hook-rules\n' +
+            '         pnpm add -Dw @webpieces/nx-webpieces-rules\n' +
             '     Otherwise, run from the project root:\n' +
-            '         npm install --save-dev @webpieces/ai-hook-rules\n' +
+            '         npm install --save-dev @webpieces/nx-webpieces-rules\n' +
             '\n' +
             '  B) Skip hooks temporarily (auto-expires). Ask the human how long, then have them run\n' +
             '     ONE of these from the project root:\n' +

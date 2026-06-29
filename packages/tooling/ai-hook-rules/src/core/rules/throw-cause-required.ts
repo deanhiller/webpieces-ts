@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**
@@ -41,7 +42,7 @@ const throwCauseRequiredRule: EditRule = {
             if (CAUSE_PATTERN.test(stripped)) continue;
 
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'throw-cause-required')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.THROW_CAUSE_REQUIRED)) continue;
 
             violations.push(new V(
                 lineNum,

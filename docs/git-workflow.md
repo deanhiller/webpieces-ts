@@ -114,12 +114,18 @@ The AI merge command lives at `.claude/commands/wp-merge.md` and is launched wit
 
 ---
 
-## Installing `@webpieces/ai-hook-rules` in a new project
+## Installing `@webpieces/nx-webpieces-rules` in a new project
+
+Install the **one** bundle package — `@webpieces/nx-webpieces-rules`. It pulls in everything:
+the AI hook (`@webpieces/ai-hook-rules`), the code validators (`@webpieces/code-rules`), the
+ESLint rules (`@webpieces/eslint-rules`), the PR-gate scripts (`@webpieces/pr-gate`), and the
+shared config (`@webpieces/rules-config`). Do **not** also add `@webpieces/ai-hook-rules`
+directly — it comes transitively, and a direct dep is redundant.
 
 ### Single-package project
 
 ```bash
-pnpm add -D @webpieces/ai-hook-rules
+pnpm add -D @webpieces/nx-webpieces-rules
 # If pnpm build approval is required:
 pnpm approve-builds
 ```
@@ -135,7 +141,7 @@ Add the package to the **root** `package.json` devDependencies (not a workspace 
 
 ```bash
 # From the monorepo root:
-pnpm add -D @webpieces/ai-hook-rules
+pnpm add -Dw @webpieces/nx-webpieces-rules
 pnpm approve-builds   # if prompted
 # Verify:
 cat .webpieces/ai-hooks/claude-code-hook.js

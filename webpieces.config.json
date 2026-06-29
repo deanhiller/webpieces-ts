@@ -78,9 +78,10 @@
             "subBranchNaming": "feature/<ticket>/<short-description>"
         },
         "pr-creation-guard": {
-            "mode": "ON",
-            "buildCommand": "pnpm nx affected --target=ci",
-            "requireTextInPr": "I ran pnpm nx affected --target=ci and all checks passed"
+            "mode": "ON"
+        },
+        "merge-in-progress-guard": {
+            "mode": "ON"
         },
         "pr-merge-cleanup": {
             "mode": "ON"
@@ -116,5 +117,15 @@
             ]
         }
     },
-    "rulesDir": []
+    "rulesDir": [],
+    "pr-gate": {
+        "mode": "ON",
+        "buildCommand": "pnpm nx affected --target=ci --base=origin/main",
+        "gates": [
+            { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "severity": "warn" },
+            { "name": "Config Files Changed", "patterns": ["**/package.json", "**/tsconfig*.json", "nx.json", "**/*.config.*"], "severity": "warn" },
+            { "name": "Dependency Graph Changed", "patterns": ["architecture/dependencies.json"], "severity": "warn" },
+            { "name": "Claude / Rules Changed", "patterns": ["**/CLAUDE.md", "**/claude.*.md", ".claude/**", "webpieces.config.json"], "severity": "warn" }
+        ]
+    }
 }

@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 const TRY_PATTERN = /\btry\s*\{/;
@@ -30,7 +31,7 @@ const noUnmanagedExceptionsRule: EditRule = {
             const stripped = ctx.strippedLines[i];
             if (!TRY_PATTERN.test(stripped)) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'no-unmanaged-exceptions')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_UNMANAGED_EXCEPTIONS)) continue;
             if (hasPrecedingDisable(ctx.lines, i)) continue;
             violations.push(new V(
                 lineNum,

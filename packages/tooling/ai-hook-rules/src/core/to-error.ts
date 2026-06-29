@@ -1,4 +1,3 @@
-// ai-hook-disable-file require-return-type -- toError is a utility copied from dev-config; function return type is on line 6
 /**
  * Lightweight duplicate of @webpieces/core-util toError.
  * ai-hooks is a standalone package and cannot depend on core-util or dev-config.

@@ -39,6 +39,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from './diff-utils';
+import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type NoDirectApiResolverMode = 'OFF' | 'MODIFIED_CODE' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
@@ -122,7 +123,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('no-direct-api-resolver')) {
+        if (hasDisable(line, RULE_NAMES.NO_DIRECT_API_RESOLVER)) {
             return true;
         }
     }

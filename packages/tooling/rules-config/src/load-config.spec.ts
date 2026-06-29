@@ -33,6 +33,7 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
         'no-shell-substitution': { mode: 'OFF' },
         'branch-creation-guard': { mode: 'OFF' },
         'pr-creation-guard': { mode: 'OFF' },
+        'merge-in-progress-guard': { mode: 'OFF' },
         'pr-merge-cleanup': { mode: 'OFF' },
         'no-direct-main-update': { mode: 'OFF' },
         'no-edit-on-main': { mode: 'OFF' },

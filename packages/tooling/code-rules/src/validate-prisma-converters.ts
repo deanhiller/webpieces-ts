@@ -50,6 +50,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from './diff-utils';
+import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type PrismaConverterMode = 'OFF' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
@@ -206,7 +207,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable') && line.includes('prisma-converter')) {
+        if (hasDisable(line, RULE_NAMES.PRISMA_CONVERTER)) {
             return true;
         }
     }
