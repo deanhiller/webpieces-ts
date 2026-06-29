@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 
 const ARROW_PARAMS_RE = /\(([^()]*)\)\s*=>/g;
 const FN_DECL_PARAMS_RE = /\bfunction\s*[\w$]*\s*\(([^()]*)\)/g;
@@ -51,7 +52,7 @@ const noImplicitAnyRule: EditRule = {
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
             const stripped = ctx.strippedLines[i];
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'no-implicit-any')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_IMPLICIT_ANY)) continue;
             const offender = findOffender(stripped);
             if (!offender) continue;
             violations.push(new V(

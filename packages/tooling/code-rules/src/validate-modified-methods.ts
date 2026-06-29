@@ -23,7 +23,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate } from '@webpieces/rules-config';
+import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
@@ -288,8 +288,8 @@ function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable')) {
-            if (line.includes('max-lines-modified')) {
+        if (line.includes(WEBPIECES_DISABLE)) {
+            if (line.includes(RULE_NAMES.MAX_LINES_MODIFIED)) {
                 // Check for date in format: max-lines-modified yyyy/mm/dd
                 const dateMatch = line.match(/max-lines-modified\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
 
@@ -319,7 +319,7 @@ function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
                 // Valid and not expired
                 return { type: 'full', isExpired: false, date: dateStr };
             }
-            if (line.includes('max-lines-new-methods')) {
+            if (line.includes(RULE_NAMES.MAX_LINES_NEW_METHODS)) {
                 // Check for date in format: max-lines-new-methods yyyy/mm/dd
                 const dateMatch = line.match(/max-lines-new-methods\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
 

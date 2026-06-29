@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
@@ -64,7 +65,7 @@ const noSymbolDiTokensRule: EditRule = {
             const stripped = ctx.strippedLines[i];
             if (!SYMBOL_DI_REGEX.test(stripped ?? '')) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'no-symbol-di-tokens')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_SYMBOL_DI_TOKENS)) continue;
             violations.push(new V(
                 lineNum,
                 ctx.lines[i]?.trim() ?? '',

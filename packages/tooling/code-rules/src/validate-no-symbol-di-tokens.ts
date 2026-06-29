@@ -38,6 +38,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type NoSymbolDiTokensMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
@@ -134,7 +135,7 @@ function stripLineComments(line: string): string {
 }
 
 function hasDisableOnLine(line: string): boolean {
-    return line.includes('webpieces-disable') && line.includes('no-symbol-di-tokens');
+    return hasDisable(line, RULE_NAMES.NO_SYMBOL_DI_TOKENS);
 }
 
 function resolveDisable(disabled: boolean, disableAllowed: boolean): boolean {

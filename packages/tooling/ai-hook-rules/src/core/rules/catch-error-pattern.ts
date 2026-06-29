@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**
@@ -37,7 +38,7 @@ const catchErrorPatternRule: EditRule = {
             if (!catchMatch) continue;
 
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'catch-error-pattern')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.CATCH_ERROR_PATTERN)) continue;
 
             const actualParam = catchMatch[1];
             const typeAnnotation = catchMatch[2];

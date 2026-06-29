@@ -36,7 +36,8 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     },
     'no-js-files': { mode: 'OFF' },
     'branch-creation-guard': { mode: 'ON', subBranchNaming: 'feature/<ticket>/<short-description>' },
-    'pr-creation-guard': { mode: 'ON', buildCommand: '', requireTextInPr: '' },
+    'pr-creation-guard': { mode: 'ON' },
+    'merge-in-progress-guard': { mode: 'ON' },
     'pr-merge-cleanup': { mode: 'ON' },
     'no-direct-main-update': { mode: 'ON' },
 };

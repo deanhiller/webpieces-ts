@@ -111,9 +111,6 @@ importers:
       '@typescript-eslint/parser':
         specifier: 8.48.0
         version: 8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
-      '@webpieces/ai-hook-rules':
-        specifier: 0.3.183
-        version: 0.3.183
       '@webpieces/nx-webpieces-rules':
         specifier: 0.3.183
         version: 0.3.183(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
@@ -246,12 +243,21 @@ importers:
       '@webpieces/eslint-rules':
         specifier: workspace:*
         version: link:../eslint-rules
+      '@webpieces/pr-gate':
+        specifier: workspace:*
+        version: link:../pr-gate
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
       madge:
         specifier: 8.0.0
         version: 8.0.0(typescript@5.9.3)
+
+  packages/tooling/pr-gate:
+    dependencies:
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
 
   packages/tooling/rules-config:
     dependencies:

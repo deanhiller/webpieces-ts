@@ -250,13 +250,18 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
 
 export class PrCreationGuardConfig extends BaseRuleConfig {
     mode?: OnOffMode;
-    buildCommand?: string;
-    requireTextInPr?: string;
 
     static readonly SCHEMA: SchemaShape<PrCreationGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        buildCommand: FieldDef.optional('string'),
-        requireTextInPr: FieldDef.optional('string'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
+export class MergeInProgressGuardConfig extends BaseRuleConfig {
+    mode?: OnOffMode;
+
+    static readonly SCHEMA: SchemaShape<MergeInProgressGuardConfig> = {
+        mode: new FieldDef('string', ON_OFF_MODES),
         ...BASE_RULE_SCHEMA,
     };
 }

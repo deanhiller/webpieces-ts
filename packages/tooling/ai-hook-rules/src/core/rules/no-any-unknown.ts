@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 
 const ANY_PATTERN =
     /(?::\s*any\b|\bas\s+any\b|<any>|any\[\]|Array<any>|Promise<any>|Map<[^,<>]+,\s*any\s*>|Record<[^,<>]+,\s*any\s*>|Set<any>)/;
@@ -21,7 +22,7 @@ const noAnyRule: EditRule = {
             const stripped = ctx.strippedLines[i];
             if (!ANY_PATTERN.test(stripped)) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'no-any-unknown')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_ANY_UNKNOWN)) continue;
             violations.push(new V(
                 lineNum,
                 ctx.lines[i].trim(),

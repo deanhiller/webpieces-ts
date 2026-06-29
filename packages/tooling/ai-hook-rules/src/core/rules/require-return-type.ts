@@ -1,5 +1,6 @@
 import type { EditRule, EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { RULE_NAMES } from '@webpieces/rules-config';
 
 // Matches function/method signatures that don't have `: ReturnType` before the `{` body opener.
 // Pattern: function name(<params>) { — missing `: Type` between `)` and `{`
@@ -34,7 +35,7 @@ const requireReturnTypeRule: EditRule = {
             const stripped = ctx.strippedLines[i];
             if (!isMissingReturnType(stripped)) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, 'require-return-type')) continue;
+            if (ctx.isLineDisabled(lineNum, RULE_NAMES.REQUIRE_RETURN_TYPE)) continue;
             violations.push(new V(
                 lineNum,
                 ctx.lines[i].trim(),

@@ -1,0 +1,30 @@
+{
+    "name": "@webpieces/pr-gate",
+    "version": "0.0.0-dev",
+    "description": "Gated PR system: 3-point squash-merge, merge validation gate, and red/yellow/green PR dashboard. Standalone scripts, no Nx dependency required.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "bin": {
+        "wp-git-update": "./src/scripts/git-updateFromMain.js",
+        "wp-git-gather": "./src/scripts/git-gatherInfo.js",
+        "wp-git-merge-complete": "./src/scripts/git-mergeComplete.js",
+        "wp-build-affected": "./src/scripts/wp-build-affected.js",
+        "wp-upsert-pr": "./src/scripts/wp-upsert-pr.js"
+    },
+    "files": [
+        "src/**/*"
+    ],
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/pr-gate"
+    },
+    "dependencies": {
+        "@webpieces/rules-config": "workspace:*"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

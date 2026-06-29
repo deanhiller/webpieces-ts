@@ -1,94 +1,53 @@
-import { execSync, spawnSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
-import { isAbsolute, join } from 'path';
 import type { BashRule, BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 
 const FIX_HINT: readonly string[] = [
-    'Branch is not up-to-date with origin/main.',
-    'Run the squash-update process to sync with main first:',
-    '  pnpm wp-git-update',
-    'Then retry: gh pr create ...',
-    '',
-    'Do NOT use "git merge origin/main" or "git rebase" — these break the 3-point fork-point system.',
-    'See docs/git-workflow.md for the full squash-merge update process.',
+    'Direct PR creation is blocked. Create or update a PR ONLY via the gated command:',
+    '  pnpm wp-upsert-pr',
+    'It updates the branch from main (3-point merge), runs the real build (nx affected), and',
+    'assembles the PR dashboard — then creates/updates the PR itself. A failing build = no PR.',
+    'There is nothing to paste or attest to; the command does the work.',
 ];
+
+// Detect every way an agent could open/update a PR directly, so the ONLY path left is
+// `pnpm wp-upsert-pr` (whose internal `gh pr create` runs as a child process the hook
+// never sees). Read-only `gh pr list` / `gh api .../pulls` GET are intentionally allowed.
+function isDirectPrCreation(cmd: string): boolean {
+    if (/\bgh\s+pr\s+(create|edit)\b/.test(cmd)) return true;
+
+    const ghApiPulls = /\bgh\s+api\b[^\n]*\/pulls\b/.test(cmd);
+    if (ghApiPulls && (/--method\s+POST/i.test(cmd) || /-X\s+POST/i.test(cmd) || /\s-f\b/.test(cmd) || /\s-F\b/.test(cmd) || /--field\b/.test(cmd))) {
+        return true;
+    }
+
+    const curlPulls = /\bcurl\b[^\n]*api\.github\.com[^\n]*\/pulls\b/.test(cmd);
+    if (curlPulls && (/-X\s*POST/i.test(cmd) || /--request\s+POST/i.test(cmd) || /(\s-d\b|--data\b)/.test(cmd))) {
+        return true;
+    }
+    return false;
+}
 
 const prCreationGuard: BashRule = {
     name: 'pr-creation-guard',
-    description: 'Block PR creation when the branch has not been updated from origin/main via the squash-merge process.',
+    description: 'Block direct PR creation/edit (gh pr / gh api / curl) so PRs go only through pnpm wp-upsert-pr.',
     scope: 'bash',
     files: [],
-    defaultOptions: { buildCommand: '', requireTextInPr: '' },
+    defaultOptions: {},
     fixHint: FIX_HINT,
 
     check(ctx: BashContext): readonly Violation[] {
-        if (!/gh\s+pr\s+create/.test(ctx.command)) return [];
-
-        execSync('git fetch origin main --quiet', { cwd: ctx.workspaceRoot, encoding: 'utf8' });
-
-        // spawnSync is used here because exit code 1 means "not an ancestor" (not an error)
-        const result = spawnSync(
-            'git', ['merge-base', '--is-ancestor', 'origin/main', 'HEAD'],
-            { cwd: ctx.workspaceRoot },
-        );
-
-        if (result.status !== 0) {
-            return [new V(
-                1,
-                truncate(ctx.command),
-                [
-                    'Branch is not up-to-date with origin/main.',
-                    'Run the squash-update process first:',
-                    '  pnpm wp-git-update',
-                    'Do NOT use "git merge origin/main" or "git rebase" — these break the 3-point fork-point system.',
-                    'See docs/git-workflow.md for details.',
-                    'Then retry: gh pr create',
-                ].join('\n'),
-            )];
-        }
-
-        const buildCmd = ctx.options['buildCommand'] as string;
-        const requireText = ctx.options['requireTextInPr'] as string;
-        if (buildCmd && requireText) {
-            const body = extractPrBody(ctx.command, ctx.workspaceRoot);
-            if (body !== null && !body.includes(requireText)) {
-                return [new V(
-                    1,
-                    truncate(ctx.command),
-                    [
-                        'PR body is missing the required CI confirmation.',
-                        'Before creating a PR you must run:',
-                        `  ${buildCmd}`,
-                        'After it passes, add this exact phrase to your PR description:',
-                        `  "${requireText}"`,
-                    ].join('\n'),
-                )];
-            }
-        }
-        return [];
+        if (!isDirectPrCreation(ctx.command)) return [];
+        return [new V(
+            1,
+            truncate(ctx.command),
+            [
+                'Direct PR creation/update is blocked.',
+                'Use the gated command instead — it runs the build and builds the dashboard:',
+                '  pnpm wp-upsert-pr',
+            ].join('\n'),
+        )];
     },
 };
-
-export function extractPrBody(command: string, workspaceRoot: string): string | null {
-    const fileMatch = /--body-file\s+(\S+)/.exec(command);
-    if (fileMatch) {
-        const resolved = isAbsolute(fileMatch[1]) ? fileMatch[1] : join(workspaceRoot, fileMatch[1]);
-        if (!existsSync(resolved)) return null;
-        return readFileSync(resolved, 'utf8');
-    }
-    // Greedy + newline-spanning ([\s\S]*) so an inline body that itself contains
-    // quote characters (e.g. a `--body "$(cat <<EOF ... )"` heredoc with prose like
-    // "not installed") is captured in full up to the LAST quote, instead of being
-    // truncated at the first embedded quote. Truncation used to drop the required CI
-    // phrase and produce a false "missing CI confirmation" block. For bodies built by
-    // command substitution from a separate file, prefer --body-file (handled above).
-    const doubleQuoteMatch = /--body\s+"([\s\S]*)"/.exec(command);
-    if (doubleQuoteMatch) return doubleQuoteMatch[1];
-    const singleQuoteMatch = /--body\s+'([\s\S]*)'/.exec(command);
-    if (singleQuoteMatch) return singleQuoteMatch[1];
-    return null;
-}
 
 function truncate(s: string): string {
     const MAX = 120;

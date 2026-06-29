@@ -20,7 +20,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate } from '@webpieces/rules-config';
+import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type MethodMaxLimitMode = 'OFF' | 'NEW_METHODS' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
@@ -206,9 +206,9 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (line.includes('webpieces-disable')) {
+        if (line.includes(WEBPIECES_DISABLE)) {
             // Either escape hatch exempts from the lowLimit new method check
-            if (line.includes('max-lines-new-methods') || line.includes('max-lines-modified')) {
+            if (line.includes(RULE_NAMES.MAX_LINES_NEW_METHODS) || line.includes(RULE_NAMES.MAX_LINES_MODIFIED)) {
                 return true;
             }
         }

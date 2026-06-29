@@ -16,7 +16,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { writeTemplate } from '@webpieces/rules-config';
+import { writeTemplate, hasDisable, RULE_NAMES } from '@webpieces/rules-config';
 import { shouldSkipRule } from './resolve-mode';
 
 export type FileMaxLimitMode = 'OFF' | 'MODIFIED_FILES';
@@ -148,7 +148,7 @@ function checkDisableComment(content: string): DisableStatus {
     const lines = content.split('\n').slice(0, 5);
 
     for (const line of lines) {
-        if (line.includes('webpieces-disable') && line.includes('max-lines-modified-files')) {
+        if (hasDisable(line, RULE_NAMES.MAX_LINES_MODIFIED_FILES)) {
             // Found disable comment, now check for date
             // Format: // webpieces-disable max-lines-modified-files yyyy/mm/dd -- reason
             const dateMatch = line.match(/max-lines-modified-files\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);

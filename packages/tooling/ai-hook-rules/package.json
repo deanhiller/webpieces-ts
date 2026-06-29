@@ -9,10 +9,7 @@
         "wp-setup-ai-hooks": "./bin/wp-setup-ai-hooks.js",
         "wp-setup-global-ai-hooks": "./bin/wp-setup-global-ai-hooks.js",
         "wp-dev-hook-install": "./bin/wp-dev-hook-install.js",
-        "wp-dev-hook-uninstall": "./bin/wp-dev-hook-uninstall.js",
-        "wp-git-update": "./src/scripts/git-updateFromMain.js",
-        "wp-git-gather": "./src/scripts/git-gatherInfo.js",
-        "wp-git-merge-complete": "./src/scripts/git-mergeComplete.js"
+        "wp-dev-hook-uninstall": "./bin/wp-dev-hook-uninstall.js"
     },
     "exports": {
         ".": "./src/index.js",
