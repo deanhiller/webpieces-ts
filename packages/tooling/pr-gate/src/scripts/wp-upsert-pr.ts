@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { loadPrGateConfig, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
-import { runConfiguredBuildGate } from './workflow/build-affected';
+import { runConfiguredBuildGate, resolveBuildCommand } from './workflow/build-affected';
 import { runGitChecked } from './workflow/git-exec';
 import {
     computeGateResults,
@@ -93,10 +93,20 @@ export function main(): void {
     runUpdateFromMain();
     ensurePushed(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
 
+    const buildCommand = resolveBuildCommand(repoRoot);
     process.stdout.write('\n' + SEP + '② Build gate (nx affected)\n' + SEP + '\n');
+    process.stdout.write(
+        `This gate runs the build command below. To get it passing BEFORE this command runs it,\n` +
+        `run the SAME command yourself first and fix everything it reports:\n\n` +
+        `    ${buildCommand}\n\n`,
+    );
     const buildCode = runConfiguredBuildGate(repoRoot);
     if (buildCode !== 0) {
-        process.stderr.write('\n❌ Build failed — no PR created/updated. Fix and re-run pnpm wp-upsert-pr.\n');
+        process.stderr.write(
+            `\n❌ Build failed — no PR created/updated.\n\n` +
+            `Run THIS exact command to reproduce and fix all errors, then re-run pnpm wp-upsert-pr:\n\n` +
+            `    ${buildCommand}\n\n`,
+        );
         process.exit(buildCode);
     }
 
