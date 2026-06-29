@@ -4,6 +4,7 @@ import {
     WEBPIECES_TMP_DIR,
     MERGE_DIR_PREFIX,
     MERGE_IN_PROGRESS_FILE,
+    MERGE_EXPLANATION_FILE,
 } from '@webpieces/rules-config';
 
 // Proof-obligation marker written when a 3-point squash-merge hits conflicts. Its mere
@@ -59,6 +60,14 @@ export function mergeDirFor(repoRoot: string, featureName: string): string {
     return path.join(repoRoot, WEBPIECES_TMP_DIR, `${MERGE_DIR_PREFIX}${featureName}`);
 }
 
+// Per-conflicted-file context dir holding A-forkpoint.txt / B-feature.txt / C-main.txt /
+// B-A.diff / C-A.diff (and the AI's merge-explanation.md). Shared so the writer
+// (saveConflictContext) and the reader (the explanation gate) agree on the layout: the conflict
+// file path with `/` → `__`, prefixed `updatemain-`.
+export function perFileContextDir(mergeDir: string, file: string): string {
+    return path.join(mergeDir, `updatemain-${file.replace(/\//g, '__')}`);
+}
+
 export function markerPath(mergeDir: string): string {
     return path.join(mergeDir, MERGE_IN_PROGRESS_FILE);
 }
@@ -103,4 +112,21 @@ export function scanConflictMarkers(repoRoot: string, files: string[]): MarkerSc
         if (CONFLICT_MARKER_RE.test(content)) filesWithMarkers.push(file);
     }
     return new MarkerScanResult(filesWithMarkers.length === 0, filesWithMarkers);
+}
+
+/**
+ * Explanation scan: every conflicted file the AI resolved must have a non-empty
+ * MERGE_EXPLANATION_FILE sitting in its per-file context dir (next to the diffs), proving the AI
+ * deliberately 3-point merged it and recording HOW. Returns the files whose explanation is
+ * missing or empty. Works for every conflicted file regardless of type — including comment-less
+ * files (JSON) and files resolved by deletion (no working-tree file to inspect).
+ */
+export function scanMergeExplanations(mergeDir: string, files: string[]): MarkerScanResult {
+    const filesMissingExplanation: string[] = [];
+    for (const file of files) {
+        const explPath = path.join(perFileContextDir(mergeDir, file), MERGE_EXPLANATION_FILE);
+        const present = fs.existsSync(explPath) && fs.readFileSync(explPath, 'utf8').trim() !== '';
+        if (!present) filesMissingExplanation.push(file);
+    }
+    return new MarkerScanResult(filesMissingExplanation.length === 0, filesMissingExplanation);
 }

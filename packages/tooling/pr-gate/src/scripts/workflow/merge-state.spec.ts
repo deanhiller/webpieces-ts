@@ -5,11 +5,14 @@ import * as path from 'path';
 import {
     MergeMarker,
     scanConflictMarkers,
+    scanMergeExplanations,
+    perFileContextDir,
     writeMergeMarker,
     readMergeMarker,
     clearMergeMarker,
     mergeDirFor,
 } from './merge-state';
+import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 
 function tmp(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-'));
@@ -30,6 +33,32 @@ describe('scanConflictMarkers', () => {
         const root = tmp();
         fs.writeFileSync(path.join(root, 'a.ts'), 'ok\n');
         expect(scanConflictMarkers(root, ['a.ts']).clean).toBe(true);
+    });
+});
+
+describe('scanMergeExplanations', () => {
+    function writeExplanation(mergeDir: string, file: string, body: string): void {
+        const dir = perFileContextDir(mergeDir, file);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, MERGE_EXPLANATION_FILE), body);
+    }
+
+    it('flags files whose explanation is missing or empty', () => {
+        const mergeDir = tmp();
+        writeExplanation(mergeDir, 'src/explained.ts', 'Took main side for imports, kept feature logic.\n');
+        writeExplanation(mergeDir, 'src/blank.ts', '   \n'); // whitespace only = empty
+        // src/none.ts has no explanation dir at all
+        const result = scanMergeExplanations(mergeDir, ['src/explained.ts', 'src/blank.ts', 'src/none.ts']);
+
+        expect(result.clean).toBe(false);
+        expect(result.filesWithMarkers).toEqual(['src/blank.ts', 'src/none.ts']);
+    });
+
+    it('is clean when every conflicted file has a non-empty explanation', () => {
+        const mergeDir = tmp();
+        writeExplanation(mergeDir, 'a.ts', 'merged both diffs\n');
+        writeExplanation(mergeDir, 'config/x.json', 'kept main version\n'); // comment-less file type
+        expect(scanMergeExplanations(mergeDir, ['a.ts', 'config/x.json']).clean).toBe(true);
     });
 });
 

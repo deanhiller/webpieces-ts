@@ -19,6 +19,7 @@ export {
     WEBPIECES_TMP_DIR,
     MERGE_DIR_PREFIX,
     MERGE_IN_PROGRESS_FILE,
+    MERGE_EXPLANATION_FILE,
 } from './constants';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {

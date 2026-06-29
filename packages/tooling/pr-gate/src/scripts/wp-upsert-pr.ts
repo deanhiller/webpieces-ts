@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { loadPrGateConfig, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
-import { runBuildAffected } from './workflow/build-affected';
+import { runConfiguredBuildGate } from './workflow/build-affected';
 import { runGitChecked } from './workflow/git-exec';
 import {
     computeGateResults,
@@ -94,8 +94,7 @@ export function main(): void {
     ensurePushed(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
 
     process.stdout.write('\n' + SEP + '② Build gate (nx affected)\n' + SEP + '\n');
-    const config = loadPrGateConfig(repoRoot);
-    const buildCode = runBuildAffected(repoRoot, config.buildCommand);
+    const buildCode = runConfiguredBuildGate(repoRoot);
     if (buildCode !== 0) {
         process.stderr.write('\n❌ Build failed — no PR created/updated. Fix and re-run pnpm wp-upsert-pr.\n');
         process.exit(buildCode);

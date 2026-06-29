@@ -4,13 +4,17 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 
-const FIX_HINT: readonly string[] = [
-    'Direct PR creation is blocked. Create or update a PR ONLY via the gated command:',
-    '  pnpm wp-upsert-pr',
-    'It updates the branch from main (3-point merge), runs the real build (nx affected), and',
-    'assembles the PR dashboard — then creates/updates the PR itself. A failing build = no PR.',
-    'There is nothing to paste or attest to; the command does the work.',
-];
+const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-upsert-pr';
+
+function fixHintFor(upsertPrCommand: string): readonly string[] {
+    return [
+        'Direct PR creation is blocked. Create or update a PR ONLY via the gated command:',
+        `  ${upsertPrCommand}`,
+        'It updates the branch from main (3-point merge), runs the real build (nx affected), and',
+        'assembles the PR dashboard — then creates/updates the PR itself. A failing build = no PR.',
+        'There is nothing to paste or attest to; the command does the work.',
+    ];
+}
 
 // Detect every way an agent could open/update a PR directly, so the ONLY path left is
 // `pnpm wp-upsert-pr` (whose internal `gh pr create` runs as a child process the hook
@@ -36,10 +40,15 @@ function truncate(s: string): string {
 }
 
 export class PrCreationGuardRule extends BashRuleBase<PrCreationGuardConfig> {
-    constructor(config: PrCreationGuardConfig) { super(config, 'pr-creation-guard'); }
+    private readonly upsertPrCommand: string;
 
-    readonly description = 'Block direct PR creation/edit (gh pr / gh api / curl) so PRs go only through pnpm wp-upsert-pr.';
-    readonly fixHint = FIX_HINT;
+    constructor(config: PrCreationGuardConfig) {
+        super(config, 'pr-creation-guard');
+        this.upsertPrCommand = config.upsertPrCommand ?? DEFAULT_UPSERT_PR_COMMAND;
+    }
+
+    readonly description = 'Block direct PR creation/edit (gh pr / gh api / curl) so PRs go only through the gated upsert-pr command.';
+    get fixHint(): readonly string[] { return fixHintFor(this.upsertPrCommand); }
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isDirectPrCreation(ctx.command)) return [];
@@ -49,7 +58,7 @@ export class PrCreationGuardRule extends BashRuleBase<PrCreationGuardConfig> {
             [
                 'Direct PR creation/update is blocked.',
                 'Use the gated command instead — it runs the build and builds the dashboard:',
-                '  pnpm wp-upsert-pr',
+                `  ${this.upsertPrCommand}`,
             ].join('\n'),
         )];
     }

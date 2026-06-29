@@ -1,6 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { getFeatureName } from './git-readAiBranchName';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -79,7 +80,7 @@ export async function findForkPoint(workflow: string): Promise<void> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
-    const outputDir = path.join(repoRoot, 'webpiecesTmp', `${workflow}-${featureName}`);
+    const outputDir = path.join(repoRoot, WEBPIECES_TMP_DIR, `${workflow}-${featureName}`);
     const prefix = workflow === 'review' ? 'review-' : 'updatemain-';
     fs.mkdirSync(outputDir, { recursive: true });
 

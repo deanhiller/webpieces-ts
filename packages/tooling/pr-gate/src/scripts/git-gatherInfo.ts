@@ -2,6 +2,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { findForkPoint } from './workflow/git-findForkPoint';
 
@@ -66,7 +67,7 @@ export async function main(): Promise<void> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     const featureName = getFeatureName();
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-    const mergeDir = path.join(repoRoot, 'webpiecesTmp', `merge-${featureName}`);
+    const mergeDir = path.join(repoRoot, WEBPIECES_TMP_DIR, `merge-${featureName}`);
     fs.mkdirSync(mergeDir, { recursive: true });
 
     validateCleanTree(currentBranch);
