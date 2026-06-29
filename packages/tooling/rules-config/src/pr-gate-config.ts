@@ -1,9 +1,7 @@
-import * as fs from 'fs';
-import { findConfigFile } from './load-config';
-
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
 // validated `rules` map (the FieldDef schema can't express nested object arrays), but as a
-// top-level `pr-gate` key in webpieces.config.json. Loaded by loadPrGateConfig with defaults.
+// top-level `pr-gate` key in webpieces.config.json. It is built and validated by
+// loadAndValidate (load-config.ts); this module holds only the data classes + defaults + toGate.
 
 export class GateDefinition {
     name: string;
@@ -56,30 +54,24 @@ interface RawPrGateSection {
     gates?: RawGate[];
 }
 
-// webpieces-disable no-any-unknown -- consumer JSON config has opaque shape until narrowed
-interface RawConfigWithPrGate {
-    'pr-gate'?: RawPrGateSection;
-}
-
 function toGate(raw: RawGate): GateDefinition {
     return new GateDefinition(raw.name ?? '', raw.patterns ?? [], raw.severity ?? 'warn');
 }
 
 /**
- * Load the `pr-gate` section from webpieces.config.json, falling back to defaults for any
- * field the consumer omits. Returns defaults entirely if no config file is found.
+ * Build a PrGateConfig from the already-parsed top-level `pr-gate` section, falling back to defaults
+ * for any field the consumer omits. Pure transform — the file read + structural validation happen in
+ * loadAndValidate (load-config.ts) so every consumer goes through one validated path. Pass undefined
+ * (no `pr-gate` key / no config file) to get full defaults.
  */
-export function loadPrGateConfig(cwd: string): PrGateConfig {
+// webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed here
+export function buildPrGateConfig(section: unknown): PrGateConfig {
     const defaults = defaultPrGateConfig();
-    const configPath = findConfigFile(cwd);
-    if (!configPath) return defaults;
+    if (section === undefined || section === null || typeof section !== 'object') return defaults;
 
-    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as RawConfigWithPrGate;
-    const section = parsed['pr-gate'];
-    if (!section) return defaults;
-
-    const mode = section.mode ?? defaults.mode;
-    const buildCommand = section.buildCommand ?? defaults.buildCommand;
-    const gates = section.gates !== undefined ? section.gates.map(toGate) : defaults.gates;
+    const raw = section as RawPrGateSection;
+    const mode = raw.mode ?? defaults.mode;
+    const buildCommand = raw.buildCommand ?? defaults.buildCommand;
+    const gates = raw.gates !== undefined ? raw.gates.map(toGate) : defaults.gates;
     return new PrGateConfig(mode, buildCommand, gates);
 }

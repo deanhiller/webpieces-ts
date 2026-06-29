@@ -2,7 +2,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadPrGateConfig, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
+import { loadAndValidate, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { runConfiguredBuildGate, resolveBuildCommand } from './workflow/build-affected';
 import { runGitChecked } from './workflow/git-exec';
@@ -45,7 +45,7 @@ function ensurePushed(currentBranch: string): void {
 }
 
 function buildDashboard(repoRoot: string, buildPassed: boolean): string {
-    const config = loadPrGateConfig(repoRoot);
+    const config = loadAndValidate(repoRoot).prGate;
     const forkPoint = gitOut(['merge-base', 'origin/main', 'HEAD']);
     const featureHead = gitOut(['rev-parse', 'HEAD']);
     const mainHead = gitOut(['rev-parse', 'origin/main']);

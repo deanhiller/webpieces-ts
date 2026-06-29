@@ -57,7 +57,10 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };
 
-function valueHint(def: FieldDef): string {
+function valueHint(def: FieldDef, key?: string): string {
+    // ignoreModifiedUntilEpoch is required on every rule; 0 keeps the rule active (epoch in the
+    // past), a future unix epoch (seconds) temporarily disables it. Spell that out for the AI.
+    if (key === 'ignoreModifiedUntilEpoch') return '0  (0 = active; future unix-epoch seconds = temporarily off)';
     return def.enumValues
         ? `"${def.enumValues.join(' | ')}"`
         : def.type === 'string[]' ? '["<string>", ...]'
@@ -74,14 +77,14 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
     const required = fields.filter(f => !schema[f].optional);
     const optional = fields.filter(f => schema[f].optional);
 
-    const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f])}`);
+    const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
     let out =
         `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "rules" section\n` +
         `(choose values appropriate for your project):\n\n` +
         `  "${ruleName}": {\n${requiredLines.join(',\n')}\n  }`;
 
     if (optional.length > 0) {
-        const optionalLines = optional.map(f => `    "${f}": ${valueHint(schema[f])}`);
+        const optionalLines = optional.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
         out +=
             `\n\nOptional fields you may add to this rule (omit if not needed):\n` +
             `${optionalLines.join(',\n')}`;
@@ -114,6 +117,14 @@ export function validateWebpiecesConfig(
                 errors.push(`[${ruleName}] "${key}" = "${value}" is not valid. Must be one of: ${fieldDef.enumValues.join(', ')}.`);
             }
         }
+        // Required fields must actually be present. Until now the loop above only checked
+        // fields that WERE present, so an entry like `{}` (or one missing `mode` /
+        // `ignoreModifiedUntilEpoch`) slipped through. Every non-optional schema field is mandatory.
+        for (const [key, fieldDef] of Object.entries(schema)) {
+            if (!fieldDef.optional && !(key in entry)) {
+                errors.push(`[${ruleName}] Missing required field "${key}". Add ${key}: ${valueHint(fieldDef, key)}.`);
+            }
+        }
     }
 
     // Every built-in rule must be explicitly configured — no silent defaults.
@@ -122,6 +133,90 @@ export function validateWebpiecesConfig(
     for (const [ruleName, schema] of Object.entries(RULE_SCHEMAS)) {
         if (!(ruleName in rawRules)) {
             errors.push(missingRuleSnippet(ruleName, schema));
+        }
+    }
+
+    return errors;
+}
+
+const PR_GATE_MODES = ['ON', 'OFF'] as const;
+
+// Copy-paste example for the top-level `pr-gate` block (sibling of `rules`). Kept inline rather
+// than imported from pr-gate-config.ts to avoid a load-config ↔ pr-gate-config import cycle.
+function prGateExample(): string {
+    return (
+        `  "pr-gate": {\n` +
+        `    "mode": "ON",\n` +
+        `    "buildCommand": "<command CI runs to validate a PR, e.g. pnpm nx affected --target=ci --base=origin/main>",\n` +
+        `    "gates": [\n` +
+        `      { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "severity": "warn" }\n` +
+        `    ]\n` +
+        `  }`
+    );
+}
+
+// webpieces-disable no-any-unknown -- one gate entry from opaque consumer JSON, validated field-by-field
+function validateGate(gate: unknown, index: number): string[] {
+    if (typeof gate !== 'object' || gate === null) {
+        return [`[pr-gate] gates[${index}] must be an object { name, patterns, severity }.`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing one opaque gate object from consumer JSON
+    const g = gate as Record<string, unknown>;
+    const errors: string[] = [];
+    if (typeof g['name'] !== 'string') errors.push(`[pr-gate] gates[${index}].name must be a string.`);
+    if (!Array.isArray(g['patterns']) || !g['patterns'].every(p => typeof p === 'string'))
+        errors.push(`[pr-gate] gates[${index}].patterns must be string[].`);
+    if (g['severity'] !== undefined && typeof g['severity'] !== 'string')
+        errors.push(`[pr-gate] gates[${index}].severity must be a string ("warn" | "block").`);
+    return errors;
+}
+
+/**
+ * Validate the top-level `pr-gate` section. It is REQUIRED (a client that opts out sets mode "OFF").
+ * `buildCommand` is required unless mode is "OFF". Returns human-readable, copy-paste-friendly errors
+ * — never throws. The pr-gate block lives outside the FieldDef-driven `rules` schema because its
+ * nested `gates` array can't be expressed there, so it gets its own structural validation here.
+ */
+// webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed below
+export function validatePrGateSection(section: unknown): string[] {
+    if (section === undefined || section === null) {
+        return [
+            `[pr-gate] Not configured in webpieces.config.json. Add this top-level block ` +
+            `(sibling of "rules"; set "mode": "OFF" to opt out):\n\n${prGateExample()}`,
+        ];
+    }
+    if (typeof section !== 'object' || Array.isArray(section)) {
+        return [`[pr-gate] Must be an object. Example:\n\n${prGateExample()}`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing the opaque pr-gate section from consumer JSON
+    const s = section as Record<string, unknown>;
+    const errors: string[] = [];
+
+    if (!('mode' in s)) {
+        errors.push(`[pr-gate] Missing required field "mode". Must be one of: ${PR_GATE_MODES.join(', ')}.`);
+    } else if (typeof s['mode'] !== 'string' || !PR_GATE_MODES.includes(s['mode'] as typeof PR_GATE_MODES[number])) {
+        errors.push(`[pr-gate] "mode" = "${String(s['mode'])}" is not valid. Must be one of: ${PR_GATE_MODES.join(', ')}.`);
+    }
+
+    // buildCommand is required whenever the gate is active (mode !== OFF).
+    if (s['mode'] !== 'OFF') {
+        const cmd = s['buildCommand'];
+        if (typeof cmd !== 'string' || cmd.trim() === '') {
+            errors.push(
+                `[pr-gate] Missing required field "buildCommand" — the command CI runs to validate a PR. ` +
+                `Add e.g. "buildCommand": "pnpm nx affected --target=ci --base=origin/main".`,
+            );
+        }
+    }
+
+    if ('gates' in s) {
+        const gates = s['gates'];
+        if (!Array.isArray(gates)) {
+            errors.push(`[pr-gate] "gates" must be an array of { name, patterns, severity }.`);
+        } else {
+            for (let i = 0; i < gates.length; i += 1) {
+                errors.push(...validateGate(gates[i], i));
+            }
         }
     }
 

@@ -1,12 +1,12 @@
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 export { InformAiError } from './inform-ai-error';
 export { toError } from './to-error';
-export { loadConfig, findConfigFile, CONFIG_FILENAME, loadWebpiecesRulesConfig } from './load-config';
-export type { LoadedWebpiecesConfig } from './load-config';
+export { loadAndValidate, LoadedConfig } from './load-config';
+export { findConfigFile, CONFIG_FILENAME } from './config-file';
 export { isPathExcluded } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate } from './load-template';
-export { validateWebpiecesConfig } from './validate-config';
+export { validateWebpiecesConfig, validatePrGateSection } from './validate-config';
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
@@ -82,5 +82,5 @@ export {
     PrGateConfig,
     defaultGates,
     defaultPrGateConfig,
-    loadPrGateConfig,
+    buildPrGateConfig,
 } from './pr-gate-config';

@@ -37,28 +37,42 @@ export type ThrowCauseMode = typeof THROW_CAUSE_MODES[number];
 export const ON_OFF_MODES = ['ON', 'OFF'] as const;
 export type OnOffMode = typeof ON_OFF_MODES[number];
 
+// branch-creation-guard modes. ON_NO_SUBBRANCHES is the strict variant: it hard-blocks
+// creating a branch off any non-main branch (no sub-branch affordance), pointing the agent
+// back to `git checkout main && git pull && git checkout -b <branch>`. Temporarily overridable
+// via the universal ignoreModifiedUntilEpoch escape hatch.
+export const BRANCH_GUARD_MODES = ['ON', 'OFF', 'ON_NO_SUBBRANCHES'] as const;
+export type BranchGuardMode = typeof BRANCH_GUARD_MODES[number];
+
 export const VALIDATE_TS_MODES = ['ON', 'OFF', 'MODIFIED_FILES'] as const;
 export type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
 
 // ---------------------------------------------------------------------------
 // Universal escape hatches — EVERY rule supports temporarily disabling itself
 // either while on a named git branch (ignoreRuleWhileOnBranch) or until an
-// epoch passes (ignoreModifiedUntilEpoch). Both are optional. They live on a
-// shared base class so the two fields (and their schema entries) are declared
-// once instead of repeated per rule. `mode` stays per-rule because its allowed
-// values vary (ON/OFF vs MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
+// epoch passes (ignoreModifiedUntilEpoch). They live on a shared base class so
+// the two fields (and their schema entries) are declared once instead of
+// repeated per rule. `mode` stays per-rule because its allowed values vary
+// (ON/OFF vs MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
+//
+// `ignoreModifiedUntilEpoch` is REQUIRED on every rule so the time-box escape
+// hatch is always present and a rule can be turned off with a one-value edit.
+// Convention: 0 = rule active (epoch is in the past, never skipped); a future
+// unix epoch IN SECONDS = rule temporarily disabled until that moment.
+// `ignoreRuleWhileOnBranch` stays optional.
 // ---------------------------------------------------------------------------
 export abstract class BaseRuleConfig {
     // `mode` is declared here (loosely typed) so the shared AbstractRule base can read it for
     // on/off. Each concrete *Config narrows it to its own union (e.g. `mode?: ModifiedCodeMode`),
     // which is an assignable (covariant) override.
     mode?: string;
+    // TS-optional, but schema-REQUIRED (see BASE_RULE_SCHEMA) — same split as `mode`.
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
 }
 
 export const BASE_RULE_SCHEMA = {
-    ignoreModifiedUntilEpoch: FieldDef.optional('number'),
+    ignoreModifiedUntilEpoch: new FieldDef('number'),
     ignoreRuleWhileOnBranch: FieldDef.optional('string'),
 };
 
@@ -246,12 +260,18 @@ export class NoShellSubstitutionConfig extends BaseRuleConfig {
 }
 
 export class BranchCreationGuardConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
+    declare mode?: BranchGuardMode;
+    // Naming pattern for stacked SUB-branches only (branches created off another feature branch,
+    // which require human approval). Never applied to branches created off main.
     subBranchNaming?: string;
+    // Human-sentence instruction telling the AI how to name a NEW branch off main. Surfaced back
+    // to the agent in the guard's fix hints. May mirror no-edit-on-main.branchNamingConvention.
+    branchFormat?: string;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
+        mode: new FieldDef('string', BRANCH_GUARD_MODES),
         subBranchNaming: FieldDef.optional('string'),
+        branchFormat: FieldDef.optional('string'),
         ...BASE_RULE_SCHEMA,
     };
 }

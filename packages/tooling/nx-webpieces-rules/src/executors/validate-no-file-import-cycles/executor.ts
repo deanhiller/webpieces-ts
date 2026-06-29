@@ -31,7 +31,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadConfig, shouldSkipRule } from '@webpieces/rules-config';
+import { loadAndValidate, shouldSkipRule } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { toError } from '../../toError';
@@ -219,7 +219,7 @@ export default async function runExecutor(
     _options: ValidateNoFileImportCyclesOptions,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    const shared = loadConfig(context.root);
+    const shared = loadAndValidate(context.root).resolved;
     const rule = shared.rules.get(RULE_NAME);
 
     if (rule && rule.isOff) {

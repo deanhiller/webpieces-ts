@@ -12,7 +12,7 @@
  *   }
  */
 
-import { loadConfig, shouldSkipRule, SkipRuleResult } from '@webpieces/rules-config';
+import { loadAndValidate, shouldSkipRule, SkipRuleResult } from '@webpieces/rules-config';
 
 export const RUNTIME_RULE_NAME = 'runtime-architecture';
 
@@ -50,7 +50,7 @@ function isUsableCycle(cycle: AllowedCycle): boolean {
 
 /** Load the runtime-architecture rule config (with safe defaults). */
 export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
-    const shared = loadConfig(workspaceRoot);
+    const shared = loadAndValidate(workspaceRoot).resolved;
     const rule = shared.rules.get(RUNTIME_RULE_NAME);
     const raw = (rule?.options ?? {}) as RuntimeRuleRaw;
     return {

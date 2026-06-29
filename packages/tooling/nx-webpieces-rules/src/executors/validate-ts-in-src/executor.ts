@@ -22,7 +22,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadConfig, isPathExcluded, shouldSkipRule } from '@webpieces/rules-config';
+import { loadAndValidate, isPathExcluded, shouldSkipRule } from '@webpieces/rules-config';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -481,7 +481,7 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     // Config comes from webpieces.config.json — same source as ai-hooks
     // and validate-code — via @webpieces/rules-config.
-    const shared = loadConfig(context.root);
+    const shared = loadAndValidate(context.root).resolved;
     const rule = shared.rules.get('validate-ts-in-src');
 
     const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'ON';
