@@ -13,7 +13,7 @@ export const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin
  * print this so the AI knows precisely which command to run locally to get the gate passing.
  */
 export function resolveBuildCommand(repoRoot: string): string {
-    const configured = loadPrGateConfig(repoRoot).buildCommand;
+    const configured = loadAndValidate(repoRoot).prGate.buildCommand;
     return configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
 }
 
