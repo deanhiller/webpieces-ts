@@ -70,16 +70,22 @@ const prCreationGuard: BashRule = {
     },
 };
 
-function extractPrBody(command: string, workspaceRoot: string): string | null {
+export function extractPrBody(command: string, workspaceRoot: string): string | null {
     const fileMatch = /--body-file\s+(\S+)/.exec(command);
     if (fileMatch) {
         const resolved = isAbsolute(fileMatch[1]) ? fileMatch[1] : join(workspaceRoot, fileMatch[1]);
         if (!existsSync(resolved)) return null;
         return readFileSync(resolved, 'utf8');
     }
-    const doubleQuoteMatch = /--body\s+"((?:[^"\\]|\\.)*)"/.exec(command);
+    // Greedy + newline-spanning ([\s\S]*) so an inline body that itself contains
+    // quote characters (e.g. a `--body "$(cat <<EOF ... )"` heredoc with prose like
+    // "not installed") is captured in full up to the LAST quote, instead of being
+    // truncated at the first embedded quote. Truncation used to drop the required CI
+    // phrase and produce a false "missing CI confirmation" block. For bodies built by
+    // command substitution from a separate file, prefer --body-file (handled above).
+    const doubleQuoteMatch = /--body\s+"([\s\S]*)"/.exec(command);
     if (doubleQuoteMatch) return doubleQuoteMatch[1];
-    const singleQuoteMatch = /--body\s+'((?:[^'\\]|\\.)*)'/.exec(command);
+    const singleQuoteMatch = /--body\s+'([\s\S]*)'/.exec(command);
     if (singleQuoteMatch) return singleQuoteMatch[1];
     return null;
 }
