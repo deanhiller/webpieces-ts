@@ -39,22 +39,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from './diff-utils';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, AngularNoDirectApiInResolverConfig, DirectApiResolverMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoDirectApiResolverMode = 'OFF' | 'MODIFIED_CODE' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-
-export interface ValidateNoDirectApiResolverOptions {
-    mode?: NoDirectApiResolverMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-    enforcePaths?: string[];
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface Violation {
     file: string;
@@ -536,7 +523,7 @@ function findViolationsForModifiedMethods(
  * Report violations to console.
  */
 // webpieces-disable max-lines-new-methods -- Console output with examples and escape hatch information
-function reportViolations(violations: Violation[], mode: NoDirectApiResolverMode, disableAllowed: boolean): void {
+function reportViolations(violations: Violation[], mode: DirectApiResolverMode, disableAllowed: boolean): void {
     console.error('');
     console.error('\u274c Direct API usage in resolvers or snapshot.data in components found!');
     console.error('');
@@ -579,7 +566,7 @@ function reportViolations(violations: Violation[], mode: NoDirectApiResolverMode
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: NoDirectApiResolverMode, epoch: number | undefined, branchPattern: string | undefined): NoDirectApiResolverMode {
+function resolveMode(normalMode: DirectApiResolverMode, epoch: number | undefined, branchPattern: string | undefined): DirectApiResolverMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -613,11 +600,11 @@ function filterRelevantFiles(changedFiles: string[]): string[] {
     );
 }
 
-export default async function runValidator(
-    options: ValidateNoDirectApiResolverOptions,
+async function runValidatorImpl(
+    options: AngularNoDirectApiInResolverConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoDirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: DirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -675,4 +662,14 @@ export default async function runValidator(
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
+}
+
+export class NoDirectApiResolverValidator extends CodeValidator<AngularNoDirectApiInResolverConfig> {
+    constructor(config: AngularNoDirectApiInResolverConfig) {
+        super(config, 'angular-no-direct-api-in-resolver');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

@@ -3,9 +3,9 @@ import { ExecutorResult } from '../../executor-result';
 import { validateCode } from '@webpieces/code-rules';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    // webpieces-disable no-any-unknown -- schema options accepted but validateCode loads its own config
+    _options: Record<string, unknown>,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateCode(options, context.root);
+    return validateCode(context.root);
 }

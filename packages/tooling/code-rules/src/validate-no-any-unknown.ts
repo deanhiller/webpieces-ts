@@ -34,21 +34,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoAnyUnknownConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoAnyUnknownMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
-
-export interface ValidateNoAnyUnknownOptions {
-    mode?: NoAnyUnknownMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface AnyUnknownViolation {
     file: string;
@@ -448,7 +436,7 @@ function detectBase(workspaceRoot: string): string | null {
 /**
  * Report violations to console.
  */
-function reportViolations(violations: AnyUnknownViolation[], mode: NoAnyUnknownMode): void {
+function reportViolations(violations: AnyUnknownViolation[], mode: ModifiedCodeMode): void {
     console.error('');
     console.error('❌ `any` and `unknown` keywords found! Use specific types instead.');
     console.error('');
@@ -480,7 +468,7 @@ function reportViolations(violations: AnyUnknownViolation[], mode: NoAnyUnknownM
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: NoAnyUnknownMode, epoch: number | undefined, branchPattern: string | undefined): NoAnyUnknownMode {
+function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -493,11 +481,11 @@ function resolveMode(normalMode: NoAnyUnknownMode, epoch: number | undefined, br
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateNoAnyUnknownOptions,
+async function runValidatorImpl(
+    options: NoAnyUnknownConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: NoAnyUnknownMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -551,4 +539,14 @@ export default async function runValidator(
     reportViolations(violations, mode);
 
     return { success: false };
+}
+
+export class NoAnyUnknownValidator extends CodeValidator<NoAnyUnknownConfig> {
+    constructor(config: NoAnyUnknownConfig) {
+        super(config, 'no-any-unknown');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

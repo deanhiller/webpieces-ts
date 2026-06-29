@@ -40,21 +40,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, CatchErrorPatternConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type CatchErrorPatternMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
-
-export interface ValidateCatchErrorPatternOptions {
-    mode?: CatchErrorPatternMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface CatchViolation {
     file: string;
@@ -526,7 +514,7 @@ function detectBase(workspaceRoot: string): string | null {
  * Report violations to console.
  */
 // webpieces-disable max-lines-new-methods -- Console output with pattern examples and escape hatch
-function reportViolations(violations: CatchViolation[], mode: CatchErrorPatternMode, disableAllowed: boolean): void {
+function reportViolations(violations: CatchViolation[], mode: ModifiedCodeMode, disableAllowed: boolean): void {
     console.error('');
     console.error('\u274c Catch blocks must follow the standardized error handling pattern!');
     console.error('');
@@ -567,7 +555,7 @@ function reportViolations(violations: CatchViolation[], mode: CatchErrorPatternM
 /**
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  */
-function resolveMode(normalMode: CatchErrorPatternMode, epoch: number | undefined, branchPattern: string | undefined): CatchErrorPatternMode {
+function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -580,11 +568,11 @@ function resolveMode(normalMode: CatchErrorPatternMode, epoch: number | undefine
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateCatchErrorPatternOptions,
+async function runValidatorImpl(
+    options: CatchErrorPatternConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: CatchErrorPatternMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
@@ -638,4 +626,14 @@ export default async function runValidator(
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
+}
+
+export class CatchErrorPatternValidator extends CodeValidator<CatchErrorPatternConfig> {
+    constructor(config: CatchErrorPatternConfig) {
+        super(config, 'catch-error-pattern');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

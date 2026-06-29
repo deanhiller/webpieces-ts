@@ -11,6 +11,7 @@ export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
 export type { SkipRuleResult } from './skip-rule';
+export { AbstractRule } from './abstract-rule';
 export {
     WEBPIECES_DISABLE,
     RULE_NAMES,
@@ -46,6 +47,34 @@ export {
     RuntimeArchitectureConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
+    BaseRuleConfig,
+} from './rule-configs';
+// Mode unions + their value arrays — the single source of truth shared with code-rules.
+export {
+    METHOD_LIMIT_MODES,
+    FILE_LIMIT_MODES,
+    RETURN_TYPE_MODES,
+    INLINE_TYPE_MODES,
+    MODIFIED_CODE_MODES,
+    PRISMA_DTOS_MODES,
+    PRISMA_CONVERTER_MODES,
+    DIRECT_API_RESOLVER_MODES,
+    THROW_CAUSE_MODES,
+    ON_OFF_MODES,
+    VALIDATE_TS_MODES,
+} from './rule-configs';
+export type {
+    MethodLimitMode,
+    FileLimitMode,
+    ReturnTypeMode,
+    InlineTypeMode,
+    ModifiedCodeMode,
+    PrismaValidateDtosMode,
+    PrismaConverterMode,
+    DirectApiResolverMode,
+    ThrowCauseMode,
+    OnOffMode,
+    ValidateTsMode,
 } from './rule-configs';
 export {
     GateDefinition,

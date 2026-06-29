@@ -1,18 +1,21 @@
 import * as path from 'path';
 
-import { shouldSkipRule } from '@webpieces/rules-config';
+import { loadWebpiecesRulesConfig, WebpiecesRulesConfig } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
-import { loadConfig } from './load-config';
 import { loadRules, globMatches } from './load-rules';
 import { toError } from './to-error';
 import { formatReport } from './report';
 import {
     ToolKind, NormalizedToolInput, BlockedResult,
-    Rule, EditRule, FileRule, BashRule, Violation, RuleGroup,
+    Rule, Violation, RuleGroup,
     EditContext, FileContext, BashContext,
-    ResolvedConfig, ResolvedRuleConfig, RuleOptions,
 } from './types';
+
+const CONFIG_MISSING_REPORT =
+    'webpieces.config.json not found.\n' +
+    'Tell the human: run `./node_modules/.bin/wp-setup-ai-hooks` to initialize the project configuration.\n' +
+    'Do not proceed until the human has done this.';
 
 export function run(
     toolKind: ToolKind,
@@ -27,33 +30,27 @@ function runInternal(
     input: NormalizedToolInput,
     cwd: string,
 ): BlockedResult | null {
-    const config = loadConfig(cwd);
-    if (!config.configPath) {
-        return new BlockedResult(
-            'webpieces.config.json not found.\n' +
-            'Tell the human: run `./node_modules/.bin/wp-setup-ai-hooks` to initialize the project configuration.\n' +
-            'Do not proceed until the human has done this.',
-        );
-    }
+    const loaded = loadWebpiecesRulesConfig(cwd);
+    if (!loaded) return new BlockedResult(CONFIG_MISSING_REPORT);
 
-    const workspaceRoot = path.dirname(config.configPath);
+    const workspaceRoot = path.dirname(loaded.configPath);
 
     // Always allow edits to webpieces.config.json — it's the fix target when out of sync
-    if (path.resolve(input.filePath) === path.resolve(config.configPath)) {
+    if (path.resolve(input.filePath) === path.resolve(loaded.configPath)) {
         return null;
     }
 
-    const rules = loadRules(config, workspaceRoot);
+    const rules = loadRules(loaded.config, workspaceRoot);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, config);
+    const outOfSync = checkConfigSync(rules, loaded.config);
     if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot);
     const relativePath = path.relative(workspaceRoot, input.filePath);
 
-    const editGroups = runEditRules(rules, contexts.editContexts, config);
-    const fileGroups = runFileRules(rules, contexts.fileContext, config);
+    const editGroups = runEditRules(rules, contexts.editContexts);
+    const fileGroups = runFileRules(rules, contexts.fileContext);
     const allGroups = [...editGroups, ...fileGroups];
 
     if (allGroups.length === 0) return null;
@@ -67,32 +64,32 @@ export function runBash(command: string, cwd: string): BlockedResult | null {
 }
 
 function runBashInternal(command: string, cwd: string): BlockedResult | null {
-    const config = loadConfig(cwd);
-    if (!config.configPath) {
-        return new BlockedResult(
-            'webpieces.config.json not found.\n' +
-            'Tell the human: run `./node_modules/.bin/wp-setup-ai-hooks` to initialize the project configuration.\n' +
-            'Do not proceed until the human has done this.',
-        );
-    }
+    const loaded = loadWebpiecesRulesConfig(cwd);
+    if (!loaded) return new BlockedResult(CONFIG_MISSING_REPORT);
 
-    const workspaceRoot = path.dirname(config.configPath);
-    const rules = loadRules(config, workspaceRoot);
+    const workspaceRoot = path.dirname(loaded.configPath);
+    const rules = loadRules(loaded.config, workspaceRoot);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, config);
+    const outOfSync = checkConfigSync(rules, loaded.config);
     if (outOfSync) return outOfSync;
 
     const ctx = buildBashContext(command, workspaceRoot);
-    const groups = runBashRules(rules, ctx, config);
+    const groups = runBashRules(rules, ctx);
     if (groups.length === 0) return null;
 
     const report = formatReport('<bash>', groups);
     return new BlockedResult(report);
 }
 
-function checkConfigSync(rules: readonly Rule[], config: ResolvedConfig): BlockedResult | null {
-    const unconfiguredRules = rules.filter((r: Rule) => !config.userConfiguredRuleNames.has(r.name));
+// The set of rule names explicitly present in webpieces.config.json (every key except rulesDir).
+function configuredRuleNames(config: WebpiecesRulesConfig): ReadonlySet<string> {
+    return new Set(Object.keys(config).filter((k: string) => k !== 'rulesDir'));
+}
+
+function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): BlockedResult | null {
+    const configured = configuredRuleNames(config);
+    const unconfiguredRules = rules.filter((r: Rule) => !configured.has(r.name));
     if (unconfiguredRules.length === 0) return null;
 
     const lines = [
@@ -132,25 +129,25 @@ function checkConfigSync(rules: readonly Rule[], config: ResolvedConfig): Blocke
 function runRuleCheck(rule: Rule, ctx: EditContext | FileContext | BashContext): readonly Violation[] {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        return (rule as EditRule | FileRule | BashRule).check(ctx as never);
+        return rule.check(ctx);
     } catch (err: unknown) {
         const error = toError(err);
         return [new Violation(0, '', `Rule '${rule.name}' crashed: ${error.message}`)];
     }
 }
 
-function runBashRules(
-    rules: readonly Rule[],
-    bashContext: BashContext,
-    config: ResolvedConfig,
-): readonly RuleGroup[] {
+function ruleMatchesFile(rule: Rule, relativePath: string): boolean {
+    for (const pattern of rule.files) {
+        if (globMatches(pattern, relativePath)) return true;
+    }
+    return false;
+}
+
+function runBashRules(rules: readonly Rule[], bashContext: BashContext): readonly RuleGroup[] {
     const groups: RuleGroup[] = [];
     for (const rule of rules) {
         if (rule.scope !== 'bash') continue;
-        const ruleConfig = config.rules.get(rule.name);
-        if (!ruleConfig || ruleConfig.isOff) continue;
-        if (isRuleSkipped(ruleConfig)) continue;
-        bashContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
+        if (!rule.shouldRun()) continue;
         const vs = runRuleCheck(rule, bashContext);
         if (vs.length > 0) {
             groups.push(new RuleGroup(
@@ -161,49 +158,14 @@ function runBashRules(
     return groups;
 }
 
-// Every rule honors the universal escape hatches: skip while on a named branch
-// (ignoreRuleWhileOnBranch) or until an epoch passes (ignoreModifiedUntilEpoch).
-function isRuleSkipped(ruleConfig: ResolvedRuleConfig): boolean {
-    return shouldSkipRule(
-        ruleConfig.options['ignoreModifiedUntilEpoch'] as number | undefined,
-        ruleConfig.options['ignoreRuleWhileOnBranch'] as string | undefined,
-    ).skip;
-}
-
-function ruleMatchesFile(rule: Rule, relativePath: string): boolean {
-    for (const pattern of rule.files) {
-        if (globMatches(pattern, relativePath)) return true;
-    }
-    return false;
-}
-
-function mergeOptions(defaultOptions: RuleOptions, ruleConfig: ResolvedRuleConfig): RuleOptions {
-    // webpieces-disable no-any-unknown -- building an options bag from opaque RuleOptions
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(defaultOptions)) out[key] = defaultOptions[key];
-    for (const key of Object.keys(ruleConfig.options)) {
-        // 'mode' is the framework-level on/off switch, not a rule option.
-        if (key === 'mode') continue;
-        out[key] = ruleConfig.options[key];
-    }
-    return out;
-}
-
-function runEditRules(
-    rules: readonly Rule[],
-    editContexts: readonly EditContext[],
-    config: ResolvedConfig,
-): readonly RuleGroup[] {
+function runEditRules(rules: readonly Rule[], editContexts: readonly EditContext[]): readonly RuleGroup[] {
     const groups: RuleGroup[] = [];
     for (const rule of rules) {
         if (rule.scope !== 'edit') continue;
-        const ruleConfig = config.rules.get(rule.name);
-        if (!ruleConfig || ruleConfig.isOff) continue;
-        if (isRuleSkipped(ruleConfig)) continue;
+        if (!rule.shouldRun()) continue;
         const allViolations: Violation[] = [];
         for (const ctx of editContexts) {
             if (!ruleMatchesFile(rule, ctx.relativePath)) continue;
-            ctx.options = mergeOptions(rule.defaultOptions, ruleConfig);
             const vs = runRuleCheck(rule, ctx);
             for (const v of vs) {
                 const copy = new Violation(v.line, v.snippet, v.message);
@@ -221,19 +183,12 @@ function runEditRules(
     return groups;
 }
 
-function runFileRules(
-    rules: readonly Rule[],
-    fileContext: FileContext,
-    config: ResolvedConfig,
-): readonly RuleGroup[] {
+function runFileRules(rules: readonly Rule[], fileContext: FileContext): readonly RuleGroup[] {
     const groups: RuleGroup[] = [];
     for (const rule of rules) {
         if (rule.scope !== 'file') continue;
-        const ruleConfig = config.rules.get(rule.name);
-        if (!ruleConfig || ruleConfig.isOff) continue;
-        if (isRuleSkipped(ruleConfig)) continue;
+        if (!rule.shouldRun()) continue;
         if (!ruleMatchesFile(rule, fileContext.relativePath)) continue;
-        fileContext.options = mergeOptions(rule.defaultOptions, ruleConfig);
         const vs = runRuleCheck(rule, fileContext);
         if (vs.length > 0) {
             groups.push(new RuleGroup(

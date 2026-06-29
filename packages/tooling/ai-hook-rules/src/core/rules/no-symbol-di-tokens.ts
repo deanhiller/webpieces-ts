@@ -1,6 +1,8 @@
-import type { EditRule, EditContext, Violation } from '../types';
+import { NoSymbolDiTokensConfig, RULE_NAMES } from '@webpieces/rules-config';
+
+import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { RULE_NAMES } from '@webpieces/rules-config';
+import { EditRuleBase } from '../rule-base';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
@@ -43,21 +45,21 @@ function isAllowedPath(relativePath: string, allowedPaths: readonly string[]): b
     return allowedPaths.some((pattern: string) => globToRegex(pattern).test(relativePath));
 }
 
-const noSymbolDiTokensRule: EditRule = {
-    name: 'no-symbol-di-tokens',
-    description: 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @provideSingleton() + inject-by-type instead.',
-    scope: 'edit',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: { allowedPaths: [] },
-    fixHint: [
+export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
+    constructor(config: NoSymbolDiTokensConfig) { super(config, 'no-symbol-di-tokens'); }
+
+    readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @provideSingleton() + inject-by-type instead.';
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    override readonly defaultOptions = { allowedPaths: [] };
+    readonly fixHint = [
         'Option 1: Use @provideSingleton() on the class and inject by type — no Symbol needed.',
         'Option 2: Implement an API interface — import the Symbol from the API definition and use @provideSingletonAs(TOKEN).',
         'Option 3: External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.',
         'Option 4 (last resort): // webpieces-disable no-symbol-di-tokens -- <reason>',
-    ],
+    ];
 
     check(ctx: EditContext): readonly Violation[] {
-        const allowedPaths = (ctx.options['allowedPaths'] as string[] | undefined) ?? [];
+        const allowedPaths = this.config.allowedPaths ?? [];
         if (isAllowedPath(ctx.relativePath, allowedPaths)) return [];
 
         const violations: V[] = [];
@@ -73,7 +75,5 @@ const noSymbolDiTokensRule: EditRule = {
             ));
         }
         return violations;
-    },
-};
-
-export default noSymbolDiTokensRule;
+    }
+}

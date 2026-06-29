@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validatePrismaConverters } from '@webpieces/code-rules';
+import { PrismaConverterValidator } from '@webpieces/code-rules';
+import { PrismaConverterConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: PrismaConverterConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validatePrismaConverters(options, context.root);
+    return new PrismaConverterValidator(options).run(context.root);
 }

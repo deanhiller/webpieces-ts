@@ -1,6 +1,8 @@
-import type { EditRule, EditContext, Violation } from '../types';
+import { CatchErrorPatternConfig, RULE_NAMES } from '@webpieces/rules-config';
+
+import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { RULE_NAMES } from '@webpieces/rules-config';
+import { EditRuleBase } from '../rule-base';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**
@@ -15,18 +17,39 @@ const CATCH_PATTERN = /\bcatch\s*\(\s*(\w+)(?:\s*:\s*(\w+))?\s*\)/;
  */
 const TO_ERROR_PATTERN = /^\s*(?:\/\/\s*)?const\s+(\w+)\s*=\s*toError\(\s*(\w+)\s*\)\s*;?\s*$/;
 
-const catchErrorPatternRule: EditRule = {
-    name: 'catch-error-pattern',
-    description: 'Catch blocks must use: catch (err: unknown) { const error = toError(err); }',
-    scope: 'edit',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: {},
-    fixHint: [
+interface ToErrorMatch {
+    varName: string;
+    paramName: string;
+    lineIndex: number;
+}
+
+function findToErrorStatement(lines: readonly string[], startIndex: number): ToErrorMatch | 'not-found' | 'end-of-content' {
+    for (let j = startIndex; j < lines.length; j += 1) {
+        const line = lines[j].trim();
+        if (line === '' || line === '{') continue;
+
+        const match = TO_ERROR_PATTERN.exec(line);
+        if (match) {
+            return { varName: match[1], paramName: match[2], lineIndex: j };
+        }
+        // First non-blank line is not a toError call
+        return 'not-found';
+    }
+    // Ran off the end of the edit content — can't validate further
+    return 'end-of-content';
+}
+
+export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig> {
+    constructor(config: CatchErrorPatternConfig) { super(config, 'catch-error-pattern'); }
+
+    readonly description = 'Catch blocks must use: catch (err: unknown) { const error = toError(err); }'; // webpieces-disable catch-error-pattern -- example text in a description string
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    readonly fixHint = [
         'Add as first statement inside the catch block: const error = toError(err);',
         'To explicitly ignore the error: //const error = toError(err);',
-        'For nested catches use numbered names: catch (err2: unknown) { const error2 = toError(err2); }',
+        'For nested catches use numbered names: catch (err2: unknown) { const error2 = toError(err2); }', // webpieces-disable catch-error-pattern -- example text in a hint string
         'To suppress this rule: // webpieces-disable catch-error-pattern -- <reason>',
-    ],
+    ];
 
     check(ctx: EditContext): readonly Violation[] {
         const violations: V[] = [];
@@ -96,29 +119,5 @@ const catchErrorPatternRule: EditRule = {
         }
         if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
         return violations;
-    },
-};
-
-interface ToErrorMatch {
-    varName: string;
-    paramName: string;
-    lineIndex: number;
-}
-
-function findToErrorStatement(lines: readonly string[], startIndex: number): ToErrorMatch | 'not-found' | 'end-of-content' {
-    for (let j = startIndex; j < lines.length; j += 1) {
-        const line = lines[j].trim();
-        if (line === '' || line === '{') continue;
-
-        const match = TO_ERROR_PATTERN.exec(line);
-        if (match) {
-            return { varName: match[1], paramName: match[2], lineIndex: j };
-        }
-        // First non-blank line is not a toError call
-        return 'not-found';
     }
-    // Ran off the end of the edit content — can't validate further
-    return 'end-of-content';
 }
-
-export default catchErrorPatternRule;

@@ -3,38 +3,42 @@ import { FieldDef, SchemaShape } from './field-def';
 // Mode const arrays — TypeScript union types derived from them, and FieldDef enum
 // values reference the same array. Impossible for the type and runtime check to diverge.
 
-const METHOD_LIMIT_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
-type MethodLimitMode = typeof METHOD_LIMIT_MODES[number];
+// Single source of truth for rule "mode" values. Exported so code-rules (and any other
+// consumer) imports these instead of re-declaring the same unions — a rename here ripples
+// everywhere at compile time. The FieldDef SCHEMA below references the same arrays, so the
+// type and the runtime validation can never diverge.
+export const METHOD_LIMIT_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export type MethodLimitMode = typeof METHOD_LIMIT_MODES[number];
 
-const FILE_LIMIT_MODES = ['OFF', 'MODIFIED_FILES'] as const;
-type FileLimitMode = typeof FILE_LIMIT_MODES[number];
+export const FILE_LIMIT_MODES = ['OFF', 'MODIFIED_FILES'] as const;
+export type FileLimitMode = typeof FILE_LIMIT_MODES[number];
 
-const RETURN_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
-type ReturnTypeModeLocal = typeof RETURN_TYPE_MODES[number];
+export const RETURN_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export type ReturnTypeMode = typeof RETURN_TYPE_MODES[number];
 
-const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
-type InlineTypeModeLocal = typeof INLINE_TYPE_MODES[number];
+export const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export type InlineTypeMode = typeof INLINE_TYPE_MODES[number];
 
-const MODIFIED_CODE_MODES = ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'] as const;
-type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
+export const MODIFIED_CODE_MODES = ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'] as const;
+export type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
 
-const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'] as const;
-type PrismaValidateDtosMode = typeof PRISMA_DTOS_MODES[number];
+export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'] as const;
+export type PrismaValidateDtosMode = typeof PRISMA_DTOS_MODES[number];
 
-const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
-type PrismaConverterModeLocal = typeof PRISMA_CONVERTER_MODES[number];
+export const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export type PrismaConverterMode = typeof PRISMA_CONVERTER_MODES[number];
 
-const DIRECT_API_RESOLVER_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
-type DirectApiResolverMode = typeof DIRECT_API_RESOLVER_MODES[number];
+export const DIRECT_API_RESOLVER_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export type DirectApiResolverMode = typeof DIRECT_API_RESOLVER_MODES[number];
 
-const THROW_CAUSE_MODES = ['ON', 'OFF', 'MODIFIED_CODE'] as const;
-type ThrowCauseModeLocal = typeof THROW_CAUSE_MODES[number];
+export const THROW_CAUSE_MODES = ['ON', 'OFF', 'MODIFIED_CODE'] as const;
+export type ThrowCauseMode = typeof THROW_CAUSE_MODES[number];
 
-const ON_OFF_MODES = ['ON', 'OFF'] as const;
-type OnOffMode = typeof ON_OFF_MODES[number];
+export const ON_OFF_MODES = ['ON', 'OFF'] as const;
+export type OnOffMode = typeof ON_OFF_MODES[number];
 
-const VALIDATE_TS_MODES = ['ON', 'OFF', 'MODIFIED_FILES'] as const;
-type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
+export const VALIDATE_TS_MODES = ['ON', 'OFF', 'MODIFIED_FILES'] as const;
+export type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
 
 // ---------------------------------------------------------------------------
 // Universal escape hatches — EVERY rule supports temporarily disabling itself
@@ -45,6 +49,10 @@ type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
 // values vary (ON/OFF vs MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
 // ---------------------------------------------------------------------------
 export abstract class BaseRuleConfig {
+    // `mode` is declared here (loosely typed) so the shared AbstractRule base can read it for
+    // on/off. Each concrete *Config narrows it to its own union (e.g. `mode?: ModifiedCodeMode`),
+    // which is an assignable (covariant) override.
+    mode?: string;
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
 }
@@ -55,7 +63,7 @@ export const BASE_RULE_SCHEMA = {
 };
 
 export class MaxMethodLinesConfig extends BaseRuleConfig {
-    mode?: MethodLimitMode;
+    declare mode?: MethodLimitMode;
     limit?: number;
     disableAllowed?: boolean;
 
@@ -68,7 +76,7 @@ export class MaxMethodLinesConfig extends BaseRuleConfig {
 }
 
 export class MaxFileLinesConfig extends BaseRuleConfig {
-    mode?: FileLimitMode;
+    declare mode?: FileLimitMode;
     limit?: number;
     disableAllowed?: boolean;
 
@@ -81,7 +89,7 @@ export class MaxFileLinesConfig extends BaseRuleConfig {
 }
 
 export class RequireReturnTypeConfig extends BaseRuleConfig {
-    mode?: ReturnTypeModeLocal;
+    declare mode?: ReturnTypeMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<RequireReturnTypeConfig> = {
@@ -92,7 +100,7 @@ export class RequireReturnTypeConfig extends BaseRuleConfig {
 }
 
 export class NoInlineTypeLiteralsConfig extends BaseRuleConfig {
-    mode?: InlineTypeModeLocal;
+    declare mode?: InlineTypeMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<NoInlineTypeLiteralsConfig> = {
@@ -103,7 +111,7 @@ export class NoInlineTypeLiteralsConfig extends BaseRuleConfig {
 }
 
 export class NoAnyUnknownConfig extends BaseRuleConfig {
-    mode?: ModifiedCodeMode;
+    declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<NoAnyUnknownConfig> = {
@@ -114,7 +122,7 @@ export class NoAnyUnknownConfig extends BaseRuleConfig {
 }
 
 export class NoImplicitAnyConfig extends BaseRuleConfig {
-    mode?: ModifiedCodeMode;
+    declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<NoImplicitAnyConfig> = {
@@ -125,7 +133,7 @@ export class NoImplicitAnyConfig extends BaseRuleConfig {
 }
 
 export class PrismaValidateDtosConfig extends BaseRuleConfig {
-    mode?: PrismaValidateDtosMode;
+    declare mode?: PrismaValidateDtosMode;
     disableAllowed?: boolean;
     prismaSchemaPath?: string;
     dtoSourcePaths?: string[];
@@ -140,7 +148,7 @@ export class PrismaValidateDtosConfig extends BaseRuleConfig {
 }
 
 export class PrismaConverterConfig extends BaseRuleConfig {
-    mode?: PrismaConverterModeLocal;
+    declare mode?: PrismaConverterMode;
     disableAllowed?: boolean;
     schemaPath?: string;
     convertersPaths?: string[];
@@ -157,7 +165,7 @@ export class PrismaConverterConfig extends BaseRuleConfig {
 }
 
 export class NoDestructureConfig extends BaseRuleConfig {
-    mode?: ModifiedCodeMode;
+    declare mode?: ModifiedCodeMode;
     allowTopLevel?: boolean;
     disableAllowed?: boolean;
 
@@ -170,7 +178,7 @@ export class NoDestructureConfig extends BaseRuleConfig {
 }
 
 export class NoUnmanagedExceptionsConfig extends BaseRuleConfig {
-    mode?: ModifiedCodeMode;
+    declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<NoUnmanagedExceptionsConfig> = {
@@ -181,7 +189,7 @@ export class NoUnmanagedExceptionsConfig extends BaseRuleConfig {
 }
 
 export class CatchErrorPatternConfig extends BaseRuleConfig {
-    mode?: ModifiedCodeMode;
+    declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<CatchErrorPatternConfig> = {
@@ -192,7 +200,7 @@ export class CatchErrorPatternConfig extends BaseRuleConfig {
 }
 
 export class ThrowCauseRequiredConfig extends BaseRuleConfig {
-    mode?: ThrowCauseModeLocal;
+    declare mode?: ThrowCauseMode;
     disableAllowed?: boolean;
 
     static readonly SCHEMA: SchemaShape<ThrowCauseRequiredConfig> = {
@@ -203,7 +211,7 @@ export class ThrowCauseRequiredConfig extends BaseRuleConfig {
 }
 
 export class AngularNoDirectApiInResolverConfig extends BaseRuleConfig {
-    mode?: DirectApiResolverMode;
+    declare mode?: DirectApiResolverMode;
     disableAllowed?: boolean;
     enforcePaths?: string[];
 
@@ -216,7 +224,7 @@ export class AngularNoDirectApiInResolverConfig extends BaseRuleConfig {
 }
 
 export class NoSymbolDiTokensConfig extends BaseRuleConfig {
-    mode?: ModifiedCodeMode;
+    declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
     allowedPaths?: string[];
 
@@ -229,7 +237,7 @@ export class NoSymbolDiTokensConfig extends BaseRuleConfig {
 }
 
 export class NoShellSubstitutionConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<NoShellSubstitutionConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
@@ -238,7 +246,7 @@ export class NoShellSubstitutionConfig extends BaseRuleConfig {
 }
 
 export class BranchCreationGuardConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
     subBranchNaming?: string;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
@@ -249,7 +257,7 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
 }
 
 export class PrCreationGuardConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<PrCreationGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
@@ -258,7 +266,7 @@ export class PrCreationGuardConfig extends BaseRuleConfig {
 }
 
 export class MergeInProgressGuardConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<MergeInProgressGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
@@ -267,7 +275,7 @@ export class MergeInProgressGuardConfig extends BaseRuleConfig {
 }
 
 export class PrMergeCleanupConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<PrMergeCleanupConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
@@ -276,7 +284,7 @@ export class PrMergeCleanupConfig extends BaseRuleConfig {
 }
 
 export class NoDirectMainUpdateConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
 
     static readonly SCHEMA: SchemaShape<NoDirectMainUpdateConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
@@ -285,7 +293,7 @@ export class NoDirectMainUpdateConfig extends BaseRuleConfig {
 }
 
 export class NoEditOnMainConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
     branchNamingConvention?: string;
 
     static readonly SCHEMA: SchemaShape<NoEditOnMainConfig> = {
@@ -296,7 +304,7 @@ export class NoEditOnMainConfig extends BaseRuleConfig {
 }
 
 export class NoFileImportCyclesConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
     ignoreTypeOnly?: boolean;
     excludePackages?: string[];
 
@@ -309,7 +317,7 @@ export class NoFileImportCyclesConfig extends BaseRuleConfig {
 }
 
 export class RuntimeArchitectureConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
     servicePaths?: string[];
     apiProjectPaths?: string[];
     allowedCycles?: string[];
@@ -324,7 +332,7 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
 }
 
 export class NoJsFilesConfig extends BaseRuleConfig {
-    mode?: OnOffMode;
+    declare mode?: OnOffMode;
     allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoJsFilesConfig> = {
@@ -335,7 +343,7 @@ export class NoJsFilesConfig extends BaseRuleConfig {
 }
 
 export class ValidateTsInSrcConfig extends BaseRuleConfig {
-    mode?: ValidateTsMode;
+    declare mode?: ValidateTsMode;
     allowedRootFiles?: string[];
     excludePaths?: string[];
 

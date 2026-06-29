@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateNoAnyUnknown } from '@webpieces/code-rules';
+import { NoAnyUnknownValidator } from '@webpieces/code-rules';
+import { NoAnyUnknownConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: NoAnyUnknownConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateNoAnyUnknown(options, context.root);
+    return new NoAnyUnknownValidator(options).run(context.root);
 }

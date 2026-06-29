@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateReturnTypes } from '@webpieces/code-rules';
+import { RequireReturnTypeValidator } from '@webpieces/code-rules';
+import { RequireReturnTypeConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: RequireReturnTypeConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateReturnTypes(options, context.root);
+    return new RequireReturnTypeValidator(options).run(context.root);
 }

@@ -6,10 +6,15 @@ import {
     WEBPIECES_TMP_DIR,
     MERGE_DIR_PREFIX,
     MERGE_IN_PROGRESS_FILE,
+    PrCreationGuardConfig,
+    MergeInProgressGuardConfig,
 } from '@webpieces/rules-config';
 import type { BashContext } from '../types';
-import prCreationGuard from './pr-creation-guard';
-import mergeInProgressGuard from './merge-in-progress-guard';
+import { PrCreationGuardRule } from './pr-creation-guard';
+import { MergeInProgressGuardRule } from './merge-in-progress-guard';
+
+const prCreationGuard = new PrCreationGuardRule(new PrCreationGuardConfig());
+const mergeInProgressGuard = new MergeInProgressGuardRule(new MergeInProgressGuardConfig());
 
 function ctx(command: string, workspaceRoot: string): BashContext {
     return { command, workspaceRoot, options: {} } as BashContext;

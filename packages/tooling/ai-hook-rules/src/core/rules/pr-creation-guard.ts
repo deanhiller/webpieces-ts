@@ -1,5 +1,8 @@
-import type { BashRule, BashContext, Violation } from '../types';
+import { PrCreationGuardConfig } from '@webpieces/rules-config';
+
+import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { BashRuleBase } from '../rule-base';
 
 const FIX_HINT: readonly string[] = [
     'Direct PR creation is blocked. Create or update a PR ONLY via the gated command:',
@@ -27,13 +30,16 @@ function isDirectPrCreation(cmd: string): boolean {
     return false;
 }
 
-const prCreationGuard: BashRule = {
-    name: 'pr-creation-guard',
-    description: 'Block direct PR creation/edit (gh pr / gh api / curl) so PRs go only through pnpm wp-upsert-pr.',
-    scope: 'bash',
-    files: [],
-    defaultOptions: {},
-    fixHint: FIX_HINT,
+function truncate(s: string): string {
+    const MAX = 120;
+    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+}
+
+export class PrCreationGuardRule extends BashRuleBase<PrCreationGuardConfig> {
+    constructor(config: PrCreationGuardConfig) { super(config, 'pr-creation-guard'); }
+
+    readonly description = 'Block direct PR creation/edit (gh pr / gh api / curl) so PRs go only through pnpm wp-upsert-pr.';
+    readonly fixHint = FIX_HINT;
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isDirectPrCreation(ctx.command)) return [];
@@ -46,12 +52,5 @@ const prCreationGuard: BashRule = {
                 '  pnpm wp-upsert-pr',
             ].join('\n'),
         )];
-    },
-};
-
-function truncate(s: string): string {
-    const MAX = 120;
-    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+    }
 }
-
-export default prCreationGuard;

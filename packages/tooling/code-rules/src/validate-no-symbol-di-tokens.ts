@@ -38,22 +38,9 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoSymbolDiTokensConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type NoSymbolDiTokensMode = 'OFF' | 'MODIFIED_CODE' | 'MODIFIED_FILES';
-
-export interface ValidateNoSymbolDiTokensOptions {
-    mode?: NoSymbolDiTokensMode;
-    disableAllowed?: boolean;
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-    allowedPaths?: string[];
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
@@ -361,7 +348,7 @@ function detectBase(workspaceRoot: string): string | null {
 }
 
 // webpieces-disable max-lines-new-methods -- Console output with guidance message and violation list
-function reportViolations(violations: SymbolViolation[], mode: NoSymbolDiTokensMode, disableAllowed: boolean): void {
+function reportViolations(violations: SymbolViolation[], mode: ModifiedCodeMode, disableAllowed: boolean): void {
     console.error('');
     console.error('❌ Symbol() DI tokens are not allowed outside api(-external) packages!');
     console.error('');
@@ -385,7 +372,7 @@ function reportViolations(violations: SymbolViolation[], mode: NoSymbolDiTokensM
     console.error('');
 }
 
-function resolveMode(normalMode: NoSymbolDiTokensMode, epoch: number | undefined, branchPattern: string | undefined): NoSymbolDiTokensMode {
+function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -398,11 +385,11 @@ function resolveMode(normalMode: NoSymbolDiTokensMode, epoch: number | undefined
     return normalMode;
 }
 
-export default async function runNoSymbolDiTokensExecutor(
-    options: ValidateNoSymbolDiTokensOptions,
+async function runValidatorImpl(
+    options: NoSymbolDiTokensConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: NoSymbolDiTokensMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [];
 
@@ -457,4 +444,14 @@ export default async function runNoSymbolDiTokensExecutor(
     reportViolations(violations, mode, disableAllowed);
 
     return { success: false };
+}
+
+export class NoSymbolDiTokensValidator extends CodeValidator<NoSymbolDiTokensConfig> {
+    constructor(config: NoSymbolDiTokensConfig) {
+        super(config, 'no-symbol-di-tokens');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

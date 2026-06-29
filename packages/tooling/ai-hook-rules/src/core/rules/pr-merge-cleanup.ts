@@ -1,18 +1,25 @@
 import { execSync } from 'child_process';
-import type { BashRule, BashContext, Violation } from '../types';
-import { Violation as V } from '../types';
 
-const prMergeCleanup: BashRule = {
-    name: 'pr-merge-cleanup',
-    description: 'After merging a PR, require switching to main, pulling, and deleting the local branch.',
-    scope: 'bash',
-    files: [],
-    defaultOptions: {},
-    fixHint: [
+import { PrMergeCleanupConfig } from '@webpieces/rules-config';
+
+import type { BashContext, Violation } from '../types';
+import { Violation as V } from '../types';
+import { BashRuleBase } from '../rule-base';
+
+function truncate(s: string): string {
+    const MAX = 120;
+    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+}
+
+export class PrMergeCleanupRule extends BashRuleBase<PrMergeCleanupConfig> {
+    constructor(config: PrMergeCleanupConfig) { super(config, 'pr-merge-cleanup'); }
+
+    readonly description = 'After merging a PR, require switching to main, pulling, and deleting the local branch.';
+    readonly fixHint = [
         'After merging a PR you must clean up the local branch.',
         'Run this combined command instead:',
         '  gh pr merge --squash && git checkout main && git pull && git branch -d <current-branch>',
-    ],
+    ];
 
     check(ctx: BashContext): readonly Violation[] {
         if (!/gh\s+pr\s+merge/.test(ctx.command)) return [];
@@ -36,12 +43,5 @@ const prMergeCleanup: BashRule = {
                 `  gh pr merge --squash && git checkout main && git pull && git branch -d ${currentBranch}`,
             ].join('\n'),
         )];
-    },
-};
-
-function truncate(s: string): string {
-    const MAX = 120;
-    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+    }
 }
-
-export default prMergeCleanup;

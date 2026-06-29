@@ -20,7 +20,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { loadWebpiecesRulesConfig, InformAiError, toError } from '@webpieces/rules-config';
-import { toValidateCodeOptions } from './from-shared-config';
 import runValidateCode from './validate-code';
 
 const NX_PLUGIN_NAME = '@webpieces/nx-webpieces-rules';
@@ -82,8 +81,7 @@ async function runStandalone(cwd: string): Promise<number> {
         return 0;
     }
     console.log('ℹ️  Not an Nx repo — running standalone webpieces code validators.\n');
-    const options = toValidateCodeOptions(loaded.config);
-    const result = await runValidateCode(options, cwd);
+    const result = await runValidateCode(cwd);
     return result.success ? 0 : 1;
 }
 

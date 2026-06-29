@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateNewMethods } from '@webpieces/code-rules';
+import { runNewMethods } from '@webpieces/code-rules';
+import { MaxMethodLinesConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: MaxMethodLinesConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateNewMethods(options, context.root);
+    return runNewMethods(options, context.root);
 }

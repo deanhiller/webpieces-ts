@@ -32,22 +32,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { PrismaValidateDtosConfig, PrismaValidateDtosMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type ValidateDtosMode = 'OFF' | 'MODIFIED_CLASS' | 'MODIFIED_FILES';
-
-export interface ValidateDtosOptions {
-    mode?: ValidateDtosMode;
-    disableAllowed?: boolean;
-    prismaSchemaPath?: string;
-    dtoSourcePaths?: string[];
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface DtoFieldInfo {
     name: string;
@@ -576,7 +563,7 @@ function validateDtoFiles(
     prismaSchemaPath: string,
     changedFiles: string[],
     dtoSourcePaths: string[],
-    mode: ValidateDtosMode,
+    mode: PrismaValidateDtosMode,
     base: string,
     head?: string
 ): ExecutorResult {
@@ -639,7 +626,7 @@ function validateDtoFiles(
  * Resolve mode considering ignoreModifiedUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
-function resolveMode(normalMode: ValidateDtosMode, epoch: number | undefined, branchPattern: string | undefined): ValidateDtosMode {
+function resolveMode(normalMode: PrismaValidateDtosMode, epoch: number | undefined, branchPattern: string | undefined): PrismaValidateDtosMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -652,8 +639,8 @@ function resolveMode(normalMode: ValidateDtosMode, epoch: number | undefined, br
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidateDtosOptions,
+async function runValidatorImpl(
+    options: PrismaValidateDtosConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const mode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
@@ -695,4 +682,14 @@ export default async function runValidator(
     const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
     return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
+}
+
+export class PrismaValidateDtosValidator extends CodeValidator<PrismaValidateDtosConfig> {
+    constructor(config: PrismaValidateDtosConfig) {
+        super(config, 'prisma-validate-dtos');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

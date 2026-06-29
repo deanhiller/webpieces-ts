@@ -1,6 +1,10 @@
 import { execSync } from 'child_process';
-import type { BashRule, BashContext, Violation } from '../types';
+
+import { NoDirectMainUpdateConfig } from '@webpieces/rules-config';
+
+import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
+import { BashRuleBase } from '../rule-base';
 
 const FIX_HINT: readonly string[] = [
     "Run 'pnpm wp-git-update' to squash-update from main. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.",
@@ -12,13 +16,16 @@ const WRONG_UPDATE_PATTERNS: RegExp[] = [
     /git\s+pull\s+origin\s+main\b/,
 ];
 
-const noDirectMainUpdate: BashRule = {
-    name: 'no-direct-main-update',
-    description: 'Block direct git merge/rebase/pull from main on feature branches. Use the squash-update process instead.',
-    scope: 'bash',
-    files: [],
-    defaultOptions: {},
-    fixHint: FIX_HINT,
+function truncate(s: string): string {
+    const MAX = 120;
+    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+}
+
+export class NoDirectMainUpdateRule extends BashRuleBase<NoDirectMainUpdateConfig> {
+    constructor(config: NoDirectMainUpdateConfig) { super(config, 'no-direct-main-update'); }
+
+    readonly description = 'Block direct git merge/rebase/pull from main on feature branches. Use the squash-update process instead.';
+    readonly fixHint = FIX_HINT;
 
     check(ctx: BashContext): readonly Violation[] {
         const matched = WRONG_UPDATE_PATTERNS.some((p: RegExp) => p.test(ctx.command));
@@ -49,12 +56,5 @@ const noDirectMainUpdate: BashRule = {
                 'See docs/git-workflow.md for details.',
             ].join('\n'),
         )];
-    },
-};
-
-function truncate(s: string): string {
-    const MAX = 120;
-    return s.length <= MAX ? s : s.slice(0, MAX) + '…';
+    }
 }
-
-export default noDirectMainUpdate;

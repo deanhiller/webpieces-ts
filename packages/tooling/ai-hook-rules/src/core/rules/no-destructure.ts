@@ -1,19 +1,21 @@
-import type { EditRule, EditContext, Violation } from '../types';
+import { NoDestructureConfig, RULE_NAMES } from '@webpieces/rules-config';
+
+import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
-import { RULE_NAMES } from '@webpieces/rules-config';
+import { EditRuleBase } from '../rule-base';
 
 const VARIABLE_DESTRUCTURE = /\b(?:const|let|var)\s*\{/;
 
-const noDestructureRule: EditRule = {
-    name: 'no-destructure',
-    description: 'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.',
-    scope: 'edit',
-    files: ['**/*.ts', '**/*.tsx'],
-    defaultOptions: { allowTopLevel: true },
-    fixHint: [
+export class NoDestructureRule extends EditRuleBase<NoDestructureConfig> {
+    constructor(config: NoDestructureConfig) { super(config, 'no-destructure'); }
+
+    readonly description = 'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.';
+    override readonly files = ['**/*.ts', '**/*.tsx'];
+    override readonly defaultOptions = { allowTopLevel: true };
+    readonly fixHint = [
         'Instead of: const { x, y } = methodCall(); prefer const obj = methodCall(); then pass obj to other methods or use obj.x',
         '// webpieces-disable no-destructure -- <reason>',
-    ],
+    ];
 
     check(ctx: EditContext): readonly Violation[] {
         const violations: V[] = [];
@@ -29,7 +31,5 @@ const noDestructureRule: EditRule = {
             ));
         }
         return violations;
-    },
-};
-
-export default noDestructureRule;
+    }
+}

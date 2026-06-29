@@ -50,24 +50,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from './diff-utils';
-import { hasDisable, RULE_NAMES } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, PrismaConverterConfig, PrismaConverterMode } from '@webpieces/rules-config';
+import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
-
-export type PrismaConverterMode = 'OFF' | 'NEW_AND_MODIFIED_METHODS' | 'MODIFIED_FILES';
-
-export interface ValidatePrismaConvertersOptions {
-    mode?: PrismaConverterMode;
-    disableAllowed?: boolean;
-    schemaPath?: string;
-    convertersPaths?: string[];
-    enforcePaths?: string[];
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-}
-
-export interface ExecutorResult {
-    success: boolean;
-}
 
 interface PrismaConverterViolation {
     file: string;
@@ -789,8 +774,8 @@ function resolvePrismaConverterMode(
     return normalMode;
 }
 
-export default async function runValidator(
-    options: ValidatePrismaConvertersOptions,
+async function runValidatorImpl(
+    options: PrismaConverterConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
     const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
@@ -830,4 +815,14 @@ export default async function runValidator(
 
     const disableAllowed = options.disableAllowed ?? true;
     return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, enforcePaths, base, mode, disableAllowed);
+}
+
+export class PrismaConverterValidator extends CodeValidator<PrismaConverterConfig> {
+    constructor(config: PrismaConverterConfig) {
+        super(config, 'prisma-converter');
+    }
+
+    async run(workspaceRoot: string): Promise<ExecutorResult> {
+        return runValidatorImpl(this.config, workspaceRoot);
+    }
 }

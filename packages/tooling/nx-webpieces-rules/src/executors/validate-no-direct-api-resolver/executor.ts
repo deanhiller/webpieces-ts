@@ -1,11 +1,11 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
-import { validateNoDirectApiResolver } from '@webpieces/code-rules';
+import { NoDirectApiResolverValidator } from '@webpieces/code-rules';
+import { AngularNoDirectApiInResolverConfig } from '@webpieces/rules-config';
 
 export default async function runExecutor(
-    // webpieces-disable no-any-unknown -- options are passed through to code-rules validators
-    options: Record<string, unknown>,
+    options: AngularNoDirectApiInResolverConfig,
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
-    return validateNoDirectApiResolver(options, context.root);
+    return new NoDirectApiResolverValidator(options).run(context.root);
 }
