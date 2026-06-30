@@ -19,7 +19,7 @@
  * MODES (LINE-BASED)
  * ============================================================================
  * - OFF:            Skip validation entirely
- * - MODIFIED_CODE:  Flag any/unknown on changed lines (lines in diff hunks)
+ * - NEW_AND_MODIFIED_CODE:  Flag any/unknown on changed lines (lines in diff hunks)
  * - NEW_AND_MODIFIED_FILES: Flag ALL any/unknown in files that were modified
  *
  * ============================================================================
@@ -226,7 +226,7 @@ function findAnyUnknownInFile(filePath: string, workspaceRoot: string): AnyUnkno
 }
 
 /**
- * MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
+ * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  * This is LINE-BASED detection.
  */
 // webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
@@ -382,7 +382,7 @@ async function runValidatorImpl(
 
     let violations: AnyUnknownViolation[] = [];
 
-    if (mode === 'MODIFIED_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

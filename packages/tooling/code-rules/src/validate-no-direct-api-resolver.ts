@@ -22,7 +22,7 @@
  * MODES (LINE-BASED)
  * ============================================================================
  * - OFF:                      Skip validation entirely
- * - MODIFIED_CODE:            Flag violations on changed lines (lines in diff hunks)
+ * - NEW_AND_MODIFIED_CODE:            Flag violations on changed lines (lines in diff hunks)
  * - NEW_AND_MODIFIED_METHODS: Flag violations in new/modified method/route scopes
  * - NEW_AND_MODIFIED_FILES:           Flag ALL violations in files that were modified
  *
@@ -192,7 +192,7 @@ function findViolationsInFile(filePath: string, workspaceRoot: string, disableAl
 }
 
 /**
- * MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
+ * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
 // webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
 function findViolationsForModifiedCode(
@@ -565,7 +565,7 @@ async function runValidatorImpl(
 
     let violations: Violation[] = [];
 
-    if (mode === 'MODIFIED_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
         violations = findViolationsForModifiedMethods(workspaceRoot, changedFiles, base, head, disableAllowed);

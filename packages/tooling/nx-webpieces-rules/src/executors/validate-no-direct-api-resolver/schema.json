@@ -6,8 +6,8 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_CODE", "NEW_AND_MODIFIED_METHODS", "NEW_AND_MODIFIED_FILES"],
-            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. NEW_AND_MODIFIED_METHODS: violations in new/modified method/route scopes. NEW_AND_MODIFIED_FILES: all in modified files.",
+            "enum": ["OFF", "NEW_AND_MODIFIED_CODE", "NEW_AND_MODIFIED_METHODS", "NEW_AND_MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_AND_MODIFIED_CODE: only changed lines in diff. NEW_AND_MODIFIED_METHODS: violations in new/modified method/route scopes. NEW_AND_MODIFIED_FILES: all in modified files.",
             "default": "OFF"
         },
         "disableAllowed": {

@@ -19,7 +19,7 @@ export type ReturnTypeMode = typeof RETURN_TYPE_MODES[number];
 export const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type InlineTypeMode = typeof INLINE_TYPE_MODES[number];
 
-export const MODIFIED_CODE_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_FILES'] as const;
+export const MODIFIED_CODE_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
 
 export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'NEW_AND_MODIFIED_FILES'] as const;
@@ -28,10 +28,10 @@ export type PrismaValidateDtosMode = typeof PRISMA_DTOS_MODES[number];
 export const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type PrismaConverterMode = typeof PRISMA_CONVERTER_MODES[number];
 
-export const DIRECT_API_RESOLVER_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
+export const DIRECT_API_RESOLVER_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type DirectApiResolverMode = typeof DIRECT_API_RESOLVER_MODES[number];
 
-export const THROW_CAUSE_MODES = ['OFF', 'MODIFIED_CODE'] as const;
+export const THROW_CAUSE_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE'] as const;
 export type ThrowCauseMode = typeof THROW_CAUSE_MODES[number];
 
 export const ON_OFF_MODES = ['ON', 'OFF'] as const;
@@ -60,7 +60,7 @@ export type StructuralMode = typeof STRUCTURAL_MODES[number];
 // epoch passes (ignoreModifiedUntilEpoch). They live on a shared base class so
 // the two fields (and their schema entries) are declared once instead of
 // repeated per rule. `mode` stays per-rule because its allowed values vary
-// (ON/OFF vs MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
+// (ON/OFF vs NEW_AND_MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
 //
 // `ignoreModifiedUntilEpoch` is REQUIRED on every rule so the time-box escape
 // hatch is always present and a rule can be turned off with a one-value edit.

@@ -25,7 +25,7 @@
  * MODES (LINE-BASED)
  * ============================================================================
  * - OFF:            Skip validation entirely
- * - MODIFIED_CODE:  Flag catch violations on changed lines (lines in diff hunks)
+ * - NEW_AND_MODIFIED_CODE:  Flag catch violations on changed lines (lines in diff hunks)
  * - NEW_AND_MODIFIED_FILES: Flag ALL catch violations in files that were modified
  *
  * ============================================================================
@@ -305,7 +305,7 @@ function findCatchViolationsInFile(
 }
 
 /**
- * MODIFIED_CODE mode: Flag violations on changed lines.
+ * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines.
  */
 function findViolationsForModifiedCode(
     workspaceRoot: string,
@@ -459,7 +459,7 @@ async function runValidatorImpl(
 
     let violations: CatchViolation[] = [];
 
-    if (mode === 'MODIFIED_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

@@ -20,7 +20,7 @@ describe('migrate', () => {
     it('moves guards from rules → hookGuards and a top-level pr-gate → commands', () => {
         const result = migrate({
             rules: {
-                'no-any-unknown': { mode: 'MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+                'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
                 'pr-creation-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
             },
             'pr-gate': { mode: 'OFF', buildCommand: 'echo ci', gates: [] },
