@@ -1,2 +1,24 @@
 {
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "./node_modules/.bin/wp-ai-rules-hook"
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "./node_modules/.bin/wp-ai-guards-hook"
+                    }
+                ]
+            }
+        ]
+    }
 }
