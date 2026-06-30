@@ -140,6 +140,12 @@
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
+        "feature-branch-guard": {
+            "mode": "ON",
+            "branchNamingConvention": "{whoami}/{featurename}",
+            "hangTimeoutMinutes": 5,
+            "ignoreModifiedUntilEpoch": 0
+        },
         "no-edit-on-main": {
             "mode": "ON",
             "branchNamingConvention": "{whoami}/{featurename}",

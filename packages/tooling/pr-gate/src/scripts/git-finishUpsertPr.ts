@@ -9,6 +9,7 @@ import {
     loadReviewJson,
     reviewJsonPath,
     ReviewJson,
+    stampCleanMainSyncStatus,
 } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { runGitChecked } from './workflow/git-exec';
@@ -102,6 +103,8 @@ function completeMergeIfInProgress(repoRoot: string, mergeDir: string): void {
     marker.validated = true;
     writeMergeMarker(mergeDir, marker);
     fs.writeFileSync(path.join(mergeDir, 'conflicts-resolved'), '');
+    // Conflicts resolved + committed onto fresh main — stamp clean so the guard stops blocking edits.
+    stampCleanMainSyncStatus(repoRoot);
     process.stdout.write('\n✅ Merge validated and committed.\n');
 }
 

@@ -45,7 +45,7 @@ export {
     MergeInProgressGuardConfig,
     PrMergeCleanupConfig,
     NoDirectMainUpdateConfig,
-    NoEditOnMainConfig,
+    FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NoJsFilesConfig,
@@ -92,6 +92,24 @@ export {
     reviewJsonPath,
     reviewJsonSchemaHint,
 } from './review-json';
+export {
+    MainSyncStatus,
+    MainSyncLock,
+    DEFAULT_HANG_TIMEOUT_MINUTES,
+    mainSyncStatusPath,
+    mainSyncLockPath,
+    readMainSyncStatus,
+    writeMainSyncStatus,
+    readMainSyncLock,
+    writeMainSyncLock,
+    isLockStale,
+    isRefreshInProgress,
+    inProcessLock,
+    finishedLock,
+    computeMainSyncStatus,
+    stampCleanMainSyncStatus,
+    squashRecoverySteps,
+} from './main-sync-status';
 export {
     CommandsConfig,
     buildCommandsConfig,

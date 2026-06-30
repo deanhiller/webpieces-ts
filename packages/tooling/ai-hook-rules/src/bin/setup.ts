@@ -44,7 +44,9 @@ class InstallTarget {
 }
 
 export const RULES_HOOK = new HookSpec('rules', 'Rules hook (code-style validation)', 'Write|Edit|MultiEdit', 'wp-ai-rules-hook');
-export const GUARDS_HOOK = new HookSpec('guards', 'Guards hook (git/PR/branch protection)', 'Bash', 'wp-ai-guards-hook');
+// Guards match BOTH Bash (git/PR guards) and Write|Edit|MultiEdit (file-scoped guards like
+// feature-branch-guard), so ALL guards run in the guards hook regardless of scope.
+export const GUARDS_HOOK = new HookSpec('guards', 'Guards hook (git/PR/branch protection)', 'Write|Edit|MultiEdit|Bash', 'wp-ai-guards-hook');
 
 // `homeDir` is injectable so tests can point the global target at a temp dir instead of the real
 // ~/.claude/settings.json (a unit test must never write the user's actual global settings).

@@ -5,6 +5,9 @@ export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError } from '
 
 export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
 export type RuleScope = 'edit' | 'file' | 'bash';
+// Which category of built-in rules a hook invocation runs: code-style 'rules', git/PR/branch
+// 'guards' (the hookGuards section), or 'all' (the combined back-compat bin).
+export type HookMode = 'rules' | 'guards' | 'all';
 export type IsLineDisabled = (lineNum: number, ruleName: string) => boolean;
 
 export class Violation {

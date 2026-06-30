@@ -30,7 +30,7 @@ export { MergeInProgressGuardRule } from './core/rules/merge-in-progress-guard';
 export { PrMergeCleanupRule } from './core/rules/pr-merge-cleanup';
 export { NoDirectMainUpdateRule } from './core/rules/no-direct-main-update';
 export { NoJsFilesRule } from './core/rules/no-js-files';
-export { NoEditOnMainRule } from './core/rules/no-edit-on-main';
+export { FeatureBranchGuardRule } from './core/rules/feature-branch-guard';
 
 export { run } from './core/runner';
 export { stripTsNoise } from './core/strip-ts-noise';

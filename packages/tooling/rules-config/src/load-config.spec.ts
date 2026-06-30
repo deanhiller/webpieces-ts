@@ -18,7 +18,7 @@ function mktmp(contents: Record<string, string>): string {
 // Code rules go under `rules`; the 7 bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-cleanup',
-    'no-direct-main-update', 'no-edit-on-main', 'no-shell-substitution',
+    'no-direct-main-update', 'feature-branch-guard', 'no-shell-substitution',
 ];
 const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',

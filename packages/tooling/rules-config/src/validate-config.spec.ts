@@ -32,9 +32,9 @@ describe('validateWebpiecesConfig', () => {
         const errors = validateWebpiecesConfig({
             'no-shell-substitution': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
             'pr-merge-cleanup': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
-            'no-edit-on-main': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
+            'feature-branch-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
         });
-        for (const rule of ['no-shell-substitution', 'pr-merge-cleanup', 'no-edit-on-main']) {
+        for (const rule of ['no-shell-substitution', 'pr-merge-cleanup', 'feature-branch-guard']) {
             const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
             expect(fieldErrors).toEqual([]);
         }
