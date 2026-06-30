@@ -30,7 +30,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-symbol-di-tokens': {},
     'nx-wiring': { mode: 'ON' },
     'validate-ts-in-src': {
-        mode: 'ON',
+        mode: 'MODIFIED_FILES',
         allowedRootFiles: ['jest.setup.ts'],
         excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },

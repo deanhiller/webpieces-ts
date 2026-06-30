@@ -30,12 +30,12 @@ function matchesAny(patterns: string[], file: string): boolean {
 
 export class GateResult {
     name: string;
-    color: string; // 'yellow' | 'red' — the color shown WHEN files matched (green is implicit)
+    warningColor: string; // 'yellow' | 'red' — the color shown WHEN files matched (green is implicit)
     matchedFiles: string[];
 
-    constructor(name: string, color: string, matchedFiles: string[]) {
+    constructor(name: string, warningColor: string, matchedFiles: string[]) {
         this.name = name;
-        this.color = color;
+        this.warningColor = warningColor;
         this.matchedFiles = matchedFiles;
     }
 }
@@ -46,7 +46,7 @@ export function computeGateResults(gates: GateDefinition[], changedFiles: string
         .filter((gate: GateDefinition): boolean => !gate.disabled)
         .map((gate: GateDefinition): GateResult => {
             const matched = changedFiles.filter((file: string): boolean => matchesAny(gate.patterns, file));
-            return new GateResult(gate.name, gate.color, matched);
+            return new GateResult(gate.name, gate.warningColor, matched);
         });
 }
 
@@ -110,7 +110,7 @@ export class DashboardInput {
 
 function gateLine(result: GateResult): string {
     if (result.matchedFiles.length === 0) return `**${result.name}:** 🟢 No`;
-    const emoji = result.color === 'red' ? '🔴' : '🟡';
+    const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
     return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
 }
 

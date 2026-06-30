@@ -157,7 +157,7 @@ function prGateExample(): string {
         `    "mode": "ON",\n` +
         `    "buildCommand": "<command CI runs to validate a PR, e.g. pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)>",\n` +
         `    "gates": [\n` +
-        `      { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "color": "yellow" }\n` +
+        `      { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "warningColor": "yellow" }\n` +
         `    ]\n` +
         `  }`
     );
@@ -166,7 +166,7 @@ function prGateExample(): string {
 // webpieces-disable no-any-unknown -- one gate entry from opaque consumer JSON, validated field-by-field
 function validateGate(gate: unknown, index: number): string[] {
     if (typeof gate !== 'object' || gate === null) {
-        return [`[pr-gate] gates[${index}] must be an object { name, patterns, color, disabled? }.`];
+        return [`[pr-gate] gates[${index}] must be an object { name, patterns, warningColor, disabled? }.`];
     }
     // webpieces-disable no-any-unknown -- narrowing one opaque gate object from consumer JSON
     const g = gate as Record<string, unknown>;
@@ -174,8 +174,10 @@ function validateGate(gate: unknown, index: number): string[] {
     if (typeof g['name'] !== 'string') errors.push(`[pr-gate] gates[${index}].name must be a string.`);
     if (!Array.isArray(g['patterns']) || !g['patterns'].every(p => typeof p === 'string'))
         errors.push(`[pr-gate] gates[${index}].patterns must be string[].`);
-    if (g['color'] !== undefined && g['color'] !== 'yellow' && g['color'] !== 'red')
-        errors.push(`[pr-gate] gates[${index}].color must be "yellow" or "red" (green is implicit when nothing matches).`);
+    if (g['warningColor'] === undefined)
+        errors.push(`[pr-gate] gates[${index}].warningColor is required — set it to "yellow" or "red" (green is implicit when nothing matches).`);
+    else if (g['warningColor'] !== 'yellow' && g['warningColor'] !== 'red')
+        errors.push(`[pr-gate] gates[${index}].warningColor must be "yellow" or "red" (green is implicit when nothing matches).`);
     if (g['disabled'] !== undefined && typeof g['disabled'] !== 'boolean')
         errors.push(`[pr-gate] gates[${index}].disabled must be a boolean (example/inactive gate kept in the file).`);
     return errors;
@@ -222,7 +224,7 @@ export function validatePrGateSection(section: unknown): string[] {
     if ('gates' in s) {
         const gates = s['gates'];
         if (!Array.isArray(gates)) {
-            errors.push(`[pr-gate] "gates" must be an array of { name, patterns, color, disabled? }.`);
+            errors.push(`[pr-gate] "gates" must be an array of { name, patterns, warningColor, disabled? }.`);
         } else {
             for (let i = 0; i < gates.length; i += 1) {
                 errors.push(...validateGate(gates[i], i));

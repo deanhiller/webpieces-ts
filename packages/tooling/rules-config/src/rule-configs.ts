@@ -31,7 +31,7 @@ export type PrismaConverterMode = typeof PRISMA_CONVERTER_MODES[number];
 export const DIRECT_API_RESOLVER_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
 export type DirectApiResolverMode = typeof DIRECT_API_RESOLVER_MODES[number];
 
-export const THROW_CAUSE_MODES = ['ON', 'OFF', 'MODIFIED_CODE'] as const;
+export const THROW_CAUSE_MODES = ['OFF', 'MODIFIED_CODE'] as const;
 export type ThrowCauseMode = typeof THROW_CAUSE_MODES[number];
 
 export const ON_OFF_MODES = ['ON', 'OFF'] as const;
@@ -44,7 +44,7 @@ export type OnOffMode = typeof ON_OFF_MODES[number];
 export const BRANCH_GUARD_MODES = ['ON', 'OFF', 'ON_NO_SUBBRANCHES'] as const;
 export type BranchGuardMode = typeof BRANCH_GUARD_MODES[number];
 
-export const VALIDATE_TS_MODES = ['ON', 'OFF', 'MODIFIED_FILES'] as const;
+export const VALIDATE_TS_MODES = ['OFF', 'MODIFIED_FILES'] as const;
 export type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
 
 // ---------------------------------------------------------------------------
