@@ -1,8 +1,9 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
+import { prDirFor } from '@webpieces/rules-config';
 import { getFeatureName } from './git-readAiBranchName';
+import { mergeDirFor } from './merge-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -80,7 +81,14 @@ export async function findForkPoint(workflow: string): Promise<void> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
-    const outputDir = path.join(repoRoot, WEBPIECES_TMP_DIR, `${workflow}-${featureName}`);
+    // Single source of truth for the per-feature dir — the SAME nested home the readers use
+    // (git-gatherInfo / merge-start read updatemain-hashes.json from mergeDirFor). Previously this
+    // wrote to the legacy flat `.webpieces/<workflow>-<feature>/` while readers looked under
+    // `.webpieces/merge-info/<feature>/`, so the hash file was written to one path and read from
+    // another. Route both through mergeDirFor/prDirFor so they can never diverge again.
+    const outputDir = workflow === 'review'
+        ? prDirFor(repoRoot, featureName)
+        : mergeDirFor(repoRoot, featureName);
     const prefix = workflow === 'review' ? 'review-' : 'updatemain-';
     fs.mkdirSync(outputDir, { recursive: true });
 

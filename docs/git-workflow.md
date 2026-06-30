@@ -43,7 +43,7 @@ The AI hooks will block any branch creation that violates these rules.
 - `git rebase main`
 - `git pull origin main` (while on a feature branch)
 
-These are all blocked by the `no-direct-main-update` AI hook.
+These are all blocked by the `redirect-how-to-merge-main` AI hook.
 
 **ALWAYS use the squash-update script:**
 ```bash

@@ -2,8 +2,8 @@
 import { execSync, spawnSync } from 'child_process';
 import { reviewJsonPath, reviewJsonSchemaHint } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
-import { runConfiguredBuildGate, resolveBuildCommand } from './workflow/build-affected';
-import { runGitChecked } from './workflow/git-exec';
+import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
+import { ensurePushed } from './workflow/git-exec';
 
 // START of the AI-first PR flow (webpieces is AI-driven, so we invert trytami's human-first flow):
 // this command does the deterministic setup — update from main, push, run the build gate — then
@@ -27,37 +27,17 @@ function runUpdateFromMain(): void {
     }
 }
 
-function ensurePushed(currentBranch: string): void {
-    const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', currentBranch]).status === 0;
-    if (remoteExists) {
-        runGitChecked(['push', '--force-with-lease', 'origin', `HEAD:${currentBranch}`], 'Failed to push branch');
-    } else {
-        runGitChecked(['push', '-u', 'origin', `HEAD:${currentBranch}`], 'Failed to push new branch');
-    }
-}
-
 export function main(): void {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
     runUpdateFromMain();
     ensurePushed(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
 
-    const buildCommand = resolveBuildCommand(repoRoot);
-    process.stdout.write('\n' + SEP + '② Build gate (nx affected)\n' + SEP + '\n');
-    process.stdout.write(
-        `This gate runs the build command below. To get it passing BEFORE this command runs it,\n` +
-        `run the SAME command yourself first and fix everything it reports:\n\n` +
-        `    ${buildCommand}\n\n`,
-    );
-    const buildCode = runConfiguredBuildGate(repoRoot);
-    if (buildCode !== 0) {
-        process.stderr.write(
-            `\n❌ Build failed — fix it before reviewing.\n\n` +
-            `Run THIS exact command to reproduce and fix all errors, then re-run pnpm wp-start-upsert-pr:\n\n` +
-            `    ${buildCommand}\n\n`,
-        );
-        process.exit(buildCode);
-    }
+    // Advisory build gate — early feedback before the AI writes review.json. wp-finish-upsert-pr runs
+    // the authoritative one. Both go through the same shared runBuildGate (only the framing differs).
+    runBuildGate(repoRoot, new BuildGateOptions(
+        '② Build gate (nx affected)', 'pnpm wp-start-upsert-pr', 'Build failed — fix it before reviewing.',
+    ));
 
     // Hand the AI its next step: write review.json, then run finish (which posts the PR).
     const reviewPath = reviewJsonPath(repoRoot, getFeatureName());

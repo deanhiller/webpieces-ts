@@ -13,12 +13,11 @@ import {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
-    NoShellSubstitutionConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
     PrMergeCleanupConfig,
-    NoDirectMainUpdateConfig,
+    RedirectHowToMergeMainConfig,
     FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
@@ -41,12 +40,11 @@ export class WebpiecesRulesConfig {
     'throw-cause-required'?: ThrowCauseRequiredConfig;
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
-    'no-shell-substitution'?: NoShellSubstitutionConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
     'pr-creation-guard'?: PrCreationGuardConfig;
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;
     'pr-merge-cleanup'?: PrMergeCleanupConfig;
-    'no-direct-main-update'?: NoDirectMainUpdateConfig;
+    'redirect-how-to-merge-main'?: RedirectHowToMergeMainConfig;
     'feature-branch-guard'?: FeatureBranchGuardConfig;
     'no-file-import-cycles'?: NoFileImportCyclesConfig;
     'runtime-architecture'?: RuntimeArchitectureConfig;

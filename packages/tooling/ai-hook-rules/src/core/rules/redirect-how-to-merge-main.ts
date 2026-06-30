@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { NoDirectMainUpdateConfig } from '@webpieces/rules-config';
+import { RedirectHowToMergeMainConfig } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -21,8 +21,8 @@ function truncate(s: string): string {
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
-export class NoDirectMainUpdateRule extends BashRuleBase<NoDirectMainUpdateConfig> {
-    constructor(config: NoDirectMainUpdateConfig) { super(config, 'no-direct-main-update'); }
+export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeMainConfig> {
+    constructor(config: RedirectHowToMergeMainConfig) { super(config, 'redirect-how-to-merge-main'); }
 
     readonly description = 'Block direct git merge/rebase/pull from main on feature branches. Use the squash-update process instead.';
     readonly fixHint = FIX_HINT;

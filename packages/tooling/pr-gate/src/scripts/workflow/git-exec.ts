@@ -12,3 +12,17 @@ export function runGitChecked(args: string[], errMsg: string): void {
         process.exit(1);
     }
 }
+
+/**
+ * Push HEAD to origin/<currentBranch>. Single source of truth shared by wp-start-upsert-pr and
+ * wp-finish-upsert-pr (they pushed with identical copy-pasted logic). Uses --force-with-lease for an
+ * existing remote branch (the 3-point squash rewrites history) and -u for a brand-new branch.
+ */
+export function ensurePushed(currentBranch: string): void {
+    const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', currentBranch]).status === 0;
+    if (remoteExists) {
+        runGitChecked(['push', '--force-with-lease', 'origin', `HEAD:${currentBranch}`], 'Failed to push branch');
+    } else {
+        runGitChecked(['push', '-u', 'origin', `HEAD:${currentBranch}`], 'Failed to push new branch');
+    }
+}

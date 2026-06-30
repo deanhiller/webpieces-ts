@@ -4,24 +4,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate,
-    MERGE_EXPLANATION_FILE,
     loadReviewJson,
     prDirFor,
     reviewJsonPath,
     ReviewJson,
-    stampCleanMainSyncStatus,
 } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
-import { runGitChecked } from './workflow/git-exec';
-import { runConfiguredBuildGate, resolveBuildCommand } from './workflow/build-affected';
-import {
-    mergeDirFor,
-    perFileContextDir,
-    readMergeMarker,
-    writeMergeMarker,
-    scanConflictMarkers,
-    scanMergeExplanations,
-} from './workflow/merge-state';
+import { ensurePushed } from './workflow/git-exec';
+import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
+import { mergeDirFor, readMergeMarker } from './workflow/merge-state';
+import { mergeEnd } from './workflow/merge-end';
+import { MergeContext } from './workflow/merge-start';
 import {
     computeGateResults,
     countAddedDisables,
@@ -30,110 +23,17 @@ import {
 } from '../dashboard/dashboard';
 
 // FINISH of the AI-first PR flow. Runs after the AI has written review.json (see wp-start-upsert-pr).
-// Responsibilities, in order: (1) if a 3-point merge was in progress, validate the AI's conflict
-// resolution and commit it; (2) REQUIRE review.json (hard-fail with the schema if absent/invalid);
-// (3) run the authoritative build gate; (4) render the dashboard (shell facts + AI risk/violations);
-// (5) create/update the PR via `gh`. This is the ONLY command that posts PRs.
+// Responsibilities, in order: (1) if a 3-point merge was in progress, validate + commit + FINALIZE the
+// AI's resolution via merge-END (so the PR is posted from the finalized feature branch, not the squash
+// branch); (2) REQUIRE review.json (hard-fail with the schema if absent/invalid); (3) run the
+// authoritative build gate; (4) render the dashboard; (5) create/update the PR via `gh`. This is the
+// ONLY command that posts PRs.
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 function gitOut(args: string[]): string {
     const result = spawnSync('git', args, { encoding: 'utf8' });
     return result.status === 0 ? (result.stdout ?? '').trim() : '';
-}
-
-// Validate the AI's resolution of the conflicted files — the part of the process the AI owns
-// (branch creation/finalization is the script's job, so it is not re-checked here). Exits the
-// process with a fix instruction on any failure; returns only when all three checks pass.
-function validateResolution(repoRoot: string, mergeDir: string, conflictedFiles: string[]): void {
-    // 1. Scoped conflict-marker scan (only the conflicted files — O(conflicts), not O(repo)).
-    const scan = scanConflictMarkers(repoRoot, conflictedFiles);
-    if (!scan.clean) {
-        process.stderr.write('❌ Unresolved conflict markers (<<<<<<< / ======= / >>>>>>>) remain in:\n');
-        for (const file of scan.filesWithMarkers) process.stderr.write(`  - ${file}\n`);
-        process.stderr.write('\nResolve them, then re-run: pnpm wp-finish-upsert-pr\n');
-        process.exit(1);
-    }
-
-    // 2. Ensure git itself has no remaining unmerged entries.
-    const unmerged = execSync('git diff --name-only --diff-filter=U', { encoding: 'utf8' }).trim();
-    if (unmerged !== '') {
-        process.stderr.write('❌ Git still reports unmerged files:\n' + unmerged + '\n');
-        process.stderr.write('\nResolve and `git add` them, then re-run: pnpm wp-finish-upsert-pr\n');
-        process.exit(1);
-    }
-    process.stdout.write('✅ No conflict markers in resolved files.\n');
-
-    // 3. Explanation check — every conflicted file must have a non-empty merge-explanation.md in
-    // its per-file context dir, proving the AI deliberately 3-point merged it (and recording how)
-    // rather than blindly taking one side. A sidecar file works for any type, incl. JSON/deletes.
-    const explanations = scanMergeExplanations(mergeDir, conflictedFiles);
-    if (!explanations.clean) {
-        process.stderr.write(`❌ Missing/empty merge explanation (${MERGE_EXPLANATION_FILE}) for:\n`);
-        for (const file of explanations.filesWithMarkers) {
-            process.stderr.write(`  - ${file}\n      → ${path.join(perFileContextDir(mergeDir, file), MERGE_EXPLANATION_FILE)}\n`);
-        }
-        process.stderr.write(
-            '\nWrite a few sentences on how you resolved each (which side, what you combined, why),\n' +
-            'then re-run: pnpm wp-finish-upsert-pr\n',
-        );
-        process.exit(1);
-    }
-    process.stdout.write('✅ Merge explanations present for all resolved files.\n');
-}
-
-// If a 3-point merge was in progress, validate + commit the AI's resolution. No marker => no merge
-// happened (the common case) => nothing to do here. Already-validated => previously committed.
-function completeMergeIfInProgress(repoRoot: string, mergeDir: string): void {
-    const marker = readMergeMarker(mergeDir);
-    if (!marker || marker.validated) return;
-
-    process.stdout.write('\n' + SEP + '🔎 Validating Merge Resolution\n' + SEP + '\n');
-    validateResolution(repoRoot, mergeDir, marker.conflictedFiles);
-    runGitChecked(['add', '-A'], 'Failed to stage resolved files');
-
-    const nothingStaged = spawnSync('git', ['diff-index', '--quiet', '--cached', 'HEAD', '--']).status === 0;
-    if (!nothingStaged) {
-        runGitChecked(
-            ['commit', '-m', `Squash merge of ${marker.currentBranch} (conflicts resolved)`],
-            'Failed to commit resolved merge',
-        );
-    }
-
-    marker.validated = true;
-    writeMergeMarker(mergeDir, marker);
-    fs.writeFileSync(path.join(mergeDir, 'conflicts-resolved'), '');
-    // Conflicts resolved + committed onto fresh main — stamp clean so the guard stops blocking edits.
-    stampCleanMainSyncStatus(repoRoot);
-    process.stdout.write('\n✅ Merge validated and committed.\n');
-}
-
-function runBuildGate(repoRoot: string): void {
-    const buildCommand = resolveBuildCommand(repoRoot);
-    process.stdout.write('\n' + SEP + '🛠️  Build gate (authoritative)\n' + SEP + '\n');
-    process.stdout.write(
-        `Running the build gate. To get it passing, run the SAME command yourself and fix everything it reports:\n\n` +
-        `    ${buildCommand}\n\n`,
-    );
-    const buildCode = runConfiguredBuildGate(repoRoot);
-    if (buildCode !== 0) {
-        process.stderr.write(
-            `\n❌ Build failed — no PR created/updated.\n\n` +
-            `Run THIS exact command to reproduce and fix all errors, then re-run pnpm wp-finish-upsert-pr:\n\n` +
-            `    ${buildCommand}\n\n`,
-        );
-        process.exit(buildCode);
-    }
-    process.stdout.write('\n✅ Build passed.\n');
-}
-
-function ensurePushed(currentBranch: string): void {
-    const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', currentBranch]).status === 0;
-    if (remoteExists) {
-        runGitChecked(['push', '--force-with-lease', 'origin', `HEAD:${currentBranch}`], 'Failed to push branch');
-    } else {
-        runGitChecked(['push', '-u', 'origin', `HEAD:${currentBranch}`], 'Failed to push new branch');
-    }
 }
 
 function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJson): string {
@@ -183,14 +83,24 @@ export async function main(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     const mergeDir = mergeDirFor(repoRoot, getFeatureName());
 
-    // 1. Finish any in-progress conflict resolution (no-op when there was no merge).
-    completeMergeIfInProgress(repoRoot, mergeDir);
+    // 1. Finish any in-progress conflict resolution: validate + commit + finalize the branch swap.
+    //    No marker (or already validated) => no merge in progress => nothing to do (the common case).
+    const marker = readMergeMarker(mergeDir);
+    if (marker && !marker.validated) {
+        await mergeEnd(
+            repoRoot, mergeDir,
+            new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
+            marker.conflictedFiles,
+        );
+    }
 
     // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
     const review = loadReviewJson(reviewJsonPath(repoRoot, getFeatureName()));
 
     // 3. Authoritative build gate, then push, then post.
-    runBuildGate(repoRoot);
+    runBuildGate(repoRoot, new BuildGateOptions(
+        '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
+    ));
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     ensurePushed(currentBranch);
 

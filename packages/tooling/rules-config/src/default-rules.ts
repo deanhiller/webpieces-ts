@@ -21,7 +21,6 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-destructure': { allowTopLevel: true },
     'catch-error-pattern': {},
     'no-unmanaged-exceptions': {},
-    'no-shell-substitution': { mode: 'ON' },
     'no-file-import-cycles': { mode: 'RUN_EVERY_TIME' },
     'runtime-architecture': { mode: 'RUN_EVERY_TIME', servicePaths: [], apiProjectPaths: [], allowedCycles: [] },
     'prisma-validate-dtos': {},
@@ -39,7 +38,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'pr-creation-guard': { mode: 'ON' },
     'merge-in-progress-guard': { mode: 'ON' },
     'pr-merge-cleanup': { mode: 'ON' },
-    'no-direct-main-update': { mode: 'ON' },
+    'redirect-how-to-merge-main': { mode: 'ON' },
 };
 
 export const defaultRulesDir: readonly string[] = [];

@@ -9,12 +9,11 @@ export const builtInRuleNames: readonly string[] = [
     'no-unmanaged-exceptions',
     'catch-error-pattern',
     'throw-cause-required',
-    'no-shell-substitution',
     'no-symbol-di-tokens',
     'branch-creation-guard',
     'pr-creation-guard',
     'merge-in-progress-guard',
     'pr-merge-cleanup',
-    'no-direct-main-update',
+    'redirect-how-to-merge-main',
     'feature-branch-guard',
 ];

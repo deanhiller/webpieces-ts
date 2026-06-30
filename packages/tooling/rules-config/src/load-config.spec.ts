@@ -15,10 +15,10 @@ function mktmp(contents: Record<string, string>): string {
 
 // Minimal valid config — every built-in present in its correct section, all OFF with the
 // now-required ignoreModifiedUntilEpoch (0 = active), plus a valid commands.pr-gate block.
-// Code rules go under `rules`; the 7 bash guards go under `hookGuards`.
+// Code rules go under `rules`; the 6 bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-cleanup',
-    'no-direct-main-update', 'feature-branch-guard', 'no-shell-substitution',
+    'redirect-how-to-merge-main', 'feature-branch-guard',
 ];
 const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',

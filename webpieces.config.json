@@ -124,7 +124,7 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "branch-creation-guard": {
-            "mode": "ON",
+            "mode": "ON_NO_SUBBRANCHES",
             "subBranchNaming": "feature/<ticket>/<short-description>",
             "ignoreModifiedUntilEpoch": 0
         },
