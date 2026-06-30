@@ -49,9 +49,24 @@ describe('main-sync lock state machine', () => {
         expect(isRefreshInProgress(root, 5, now)).toBe(false); // hung → reclaimable
     });
 
+    it('isRefreshInProgress: a fresh inprocess lock whose refresher pid is dead is reclaimable', () => {
+        const now = 10 * 60 * 1000;
+        // Fresh (not stale) but owned by a pid that cannot exist → a killed refresher → reclaimable
+        // immediately, NOT wedged until hangTimeout.
+        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, 2147483646));
+        expect(isRefreshInProgress(root, 5, now)).toBe(false);
+        // Fresh inprocess owned by THIS live process → genuinely in progress.
+        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, process.pid));
+        expect(isRefreshInProgress(root, 5, now)).toBe(true);
+        // pid 0 (an old lock without a pid) → fall back to staleness only → still in progress.
+        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, 0));
+        expect(isRefreshInProgress(root, 5, now)).toBe(true);
+    });
+
     it('inProcessLock/finishedLock build the expected states', () => {
         expect(inProcessLock(123).state).toBe('inprocess');
         expect(inProcessLock(123).started).toBe(123);
+        expect(inProcessLock(123).pid).toBe(process.pid);
         expect(finishedLock(123).state).toBe('finished');
     });
 });
