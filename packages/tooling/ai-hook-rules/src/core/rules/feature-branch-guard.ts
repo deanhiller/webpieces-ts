@@ -62,6 +62,11 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         // for the next call. Fail-open: never block on missing data.
         if (status === null) return [];
 
+        // Stale cross-branch cache: the cached status is for a DIFFERENT branch (e.g. you just
+        // switched branches and the refresh for this one hasn't landed yet). Never block on another
+        // branch's signals — fail open; the refresh we just spawned rewrites it for this branch.
+        if (status.branch !== branch) return [];
+
         // State 2: this feature branch was already merged into main.
         if (status.branchAlreadyMerged) {
             return [new V(1, ctx.relativePath, this.alreadyMergedMessage(branch, status.mergedPr))];

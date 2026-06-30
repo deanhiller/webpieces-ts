@@ -13,15 +13,11 @@ export interface SkipRuleResult {
     reason?: string;
 }
 
+// The actual checked-out branch. Always uses git directly — env vars (BRANCH_NAME, GIT_BRANCH,
+// GITHUB_*, CI_COMMIT_BRANCH, …) were intentionally REMOVED: a stray GIT_BRANCH=main locally made
+// this return "main" on a feature branch, which (a) mislabeled the main-sync cache and (b) silently
+// disabled merged-PR detection (detectMergedPr skips "main"). git rev-parse is the source of truth.
 export function getCurrentBranch(): string {
-    const envBranch =
-        process.env['BRANCH_NAME'] ||
-        process.env['GIT_BRANCH'] ||
-        process.env['GITHUB_HEAD_REF'] ||
-        process.env['GITHUB_REF_NAME'] ||
-        process.env['CI_COMMIT_BRANCH'] ||
-        process.env['CIRCLE_BRANCH'];
-    if (envBranch) return envBranch;
     // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
     try {

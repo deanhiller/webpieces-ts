@@ -92,6 +92,14 @@ describe('feature-branch-guard', () => {
         expect(violations[0].message).toContain('wp-start-upsert-pr');
     });
 
+    it('fails open when the cache is for a DIFFERENT branch (stale cross-branch)', () => {
+        // Cache was written for another branch (e.g. just switched branches); even though it says
+        // merged+conflict, the guard must NOT block this branch on another branch's signals.
+        state.branch = 'dean/current';
+        state.status = status({ branch: 'dean/other', branchAlreadyMerged: true, mergedPr: '1', conflict: true, conflictFiles: ['x'] });
+        expect(rule().check(ctx()).length).toBe(0);
+    });
+
     it('already-merged takes priority over conflict', () => {
         state.status = status({ branchAlreadyMerged: true, mergedPr: '9', conflict: true, conflictFiles: ['x'] });
         const violations = rule().check(ctx());
