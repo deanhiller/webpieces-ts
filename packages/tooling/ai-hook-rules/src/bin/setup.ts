@@ -1,151 +1,313 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
+import { createInterface } from 'readline';
 
-import { builtInRuleNames } from '../core/rules/index';
+import { allRuleNames, sectionForRule, isHookGuard } from '@webpieces/rules-config';
 
-const HOOK_COMMAND = './node_modules/.bin/wp-ai-hook';
+import { toError } from '../core/to-error';
+
 const CONFIG_FILENAME = 'webpieces.config.json';
+const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin/main';
+const DEFAULT_UPSERT_PR = 'pnpm wp-start-upsert-pr';
+const DEFAULT_MERGE_COMPLETE = 'pnpm wp-finish-upsert-pr';
 
-interface HookEntry {
-    matcher: string;
-    hooks: Array<{ type: string; command: string }>;
+// ---------------------------------------------------------------------------
+// The two independently-installable hooks. Each can land in a different settings
+// file (see InstallTarget) so a team can ship the guards while a developer keeps
+// the code-style rules local while iterating.
+// ---------------------------------------------------------------------------
+class HookSpec {
+    constructor(
+        readonly key: string,
+        readonly label: string,
+        readonly matcher: string,
+        readonly bin: string,
+    ) {}
+
+    // Absolute targets (global) need the exact path to this repo's bin — no ~/.webpieces bridge.
+    commandFor(target: InstallTarget, projectRoot: string): string {
+        if (target.absolute) {
+            return `node ${path.join(projectRoot, 'node_modules', '.bin', this.bin)}`;
+        }
+        return `./node_modules/.bin/${this.bin}`;
+    }
 }
 
-interface ClaudeSettings {
-    hooks?: {
-        PreToolUse?: HookEntry[];
-    };
-    // webpieces-disable no-any-unknown -- opaque settings bag allows arbitrary key access
-    [key: string]: unknown;
+class InstallTarget {
+    constructor(
+        readonly choice: string,
+        readonly label: string,
+        readonly settingsPath: string,
+        readonly absolute: boolean,
+    ) {}
 }
 
-interface RulesConfig {
-    rules: Record<string, object>;
-    rulesDir?: string[];
-    'pr-gate'?: object;
+export const RULES_HOOK = new HookSpec('rules', 'Rules hook (code-style validation)', 'Write|Edit|MultiEdit', 'wp-ai-rules-hook');
+export const GUARDS_HOOK = new HookSpec('guards', 'Guards hook (git/PR/branch protection)', 'Bash', 'wp-ai-guards-hook');
+
+// `homeDir` is injectable so tests can point the global target at a temp dir instead of the real
+// ~/.claude/settings.json (a unit test must never write the user's actual global settings).
+export function installTargets(projectRoot: string, homeDir: string = homedir()): InstallTarget[] {
+    return [
+        new InstallTarget('1', 'project (.claude/settings.json — committed, for the team)',
+            path.join(projectRoot, '.claude', 'settings.json'), false),
+        new InstallTarget('2', 'project for you (.claude/settings.local.json — personal)',
+            path.join(projectRoot, '.claude', 'settings.local.json'), false),
+        new InstallTarget('3', 'global (~/.claude/settings.json — exact path, this repo only)',
+            path.join(homeDir, '.claude', 'settings.json'), true),
+    ];
 }
 
-// ignoreModifiedUntilEpoch is required on every rule (0 = active). A freshly seeded rule is OFF.
-function seedRule(): object {
+// ---------------------------------------------------------------------------
+// webpieces.config.json seeding + migration to the rules / hookGuards / commands layout.
+// ---------------------------------------------------------------------------
+// webpieces-disable no-any-unknown -- webpieces.config.json / settings.json are opaque consumer JSON
+type Json = Record<string, unknown>;
+type RuleEntry = Json;
+type Section = Record<string, RuleEntry>;
+
+interface ConfigFile {
+    extends?: string;
+    rules: Section;
+    hookGuards: Section;
+    commands: Json;
+    rulesDir: string[];
+}
+
+interface MigrateResult {
+    config: ConfigFile;
+    changes: string[];
+}
+
+function seedRule(): RuleEntry {
     return { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
 }
 
-// pr-gate is a required top-level block; seed it OFF (opt-out) with a ready-to-use buildCommand so
-// flipping it ON is a one-line edit.
-function seedPrGate(): object {
-    return { mode: 'OFF', buildCommand: 'pnpm nx affected --target=ci --base=origin/main', gates: [] };
+function seedCommands(): Json {
+    return {
+        'pr-gate': { mode: 'OFF', buildCommand: DEFAULT_BUILD_COMMAND, gates: [] },
+        upsertPr: DEFAULT_UPSERT_PR,
+        mergeComplete: DEFAULT_MERGE_COMPLETE,
+    };
 }
 
-function settingsAlreadyHasHook(settingsPath: string): boolean {
-    if (!fs.existsSync(settingsPath)) return false;
-    const content = fs.readFileSync(settingsPath, 'utf8');
-    return content.includes('wp-ai-hook');
+function buildSeedConfig(): ConfigFile {
+    const rules: Section = {};
+    const hookGuards: Section = {};
+    for (const name of allRuleNames()) {
+        if (sectionForRule(name) === 'hookGuards') hookGuards[name] = seedRule();
+        else rules[name] = seedRule();
+    }
+    return { rules, hookGuards, commands: seedCommands(), rulesDir: [] };
 }
 
-function wireSettings(projectRoot: string): void {
-    const claudeDir = path.join(projectRoot, '.claude');
-    if (!fs.existsSync(claudeDir)) {
-        console.log('  [ai-hook-rules] No .claude/ directory found — add the hook manually:');
-        console.log('  In .claude/settings.json under hooks.PreToolUse, add:');
-        console.log(`  { "matcher": "Write|Edit|MultiEdit|Bash", "hooks": [{ "type": "command", "command": "${HOOK_COMMAND}" }] }`);
-        return;
-    }
-
-    const settingsPath = path.join(claudeDir, 'settings.json');
-
-    if (settingsAlreadyHasHook(settingsPath)) {
-        console.log('  [ai-hook-rules] .claude/settings.json already has the hook — skipping.');
-        return;
-    }
-
-    let settings: ClaudeSettings = {};
-    if (fs.existsSync(settingsPath)) {
-        settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as ClaudeSettings;
-    }
-
-    if (!settings.hooks) settings.hooks = {};
-    if (!Array.isArray(settings.hooks.PreToolUse)) settings.hooks.PreToolUse = [];
-
-    settings.hooks.PreToolUse.push({
-        matcher: 'Write|Edit|MultiEdit|Bash',
-        hooks: [{ type: 'command', command: HOOK_COMMAND }],
-    });
-
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
-    console.log(`  [ai-hook-rules] Wired ${HOOK_COMMAND} into .claude/settings.json`);
-}
-
-function seedConfig(projectRoot: string): void {
-    const configPath = path.join(projectRoot, CONFIG_FILENAME);
-    if (fs.existsSync(configPath)) {
-        console.log(`  [ai-hook-rules] ${CONFIG_FILENAME} already exists — run with --sync to add missing rules.`);
-        return;
-    }
-
-    const rules: Record<string, object> = {};
-    for (const name of builtInRuleNames) {
-        rules[name] = seedRule();
-    }
-
-    const config: RulesConfig = { rules, rulesDir: [], 'pr-gate': seedPrGate() };
+function writeConfig(configPath: string, config: ConfigFile): void {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4) + '\n');
-    console.log(`  [ai-hook-rules] Created ${CONFIG_FILENAME} with all rules set to OFF.`);
-    console.log('  Review and enable the rules you want by changing "mode" to "ON" or "MODIFIED_CODE" etc.');
 }
 
-function syncConfig(projectRoot: string): void {
-    const configPath = path.join(projectRoot, CONFIG_FILENAME);
-
-    let config: RulesConfig = { rules: {}, rulesDir: [] };
-    if (fs.existsSync(configPath)) {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as RulesConfig;
+function readConfig(configPath: string): Json {
+    const raw = fs.readFileSync(configPath, 'utf8');
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        return JSON.parse(raw) as Json;
+    } catch (err: unknown) {
+        const error = toError(err);
+        throw new Error(`${CONFIG_FILENAME} has invalid JSON — fix it, then retry: ${error.message}`, { cause: error });
     }
-    if (!config.rules) config.rules = {};
+}
 
-    const added: string[] = [];
-    for (const name of builtInRuleNames) {
-        if (!Object.prototype.hasOwnProperty.call(config.rules, name)) {
-            config.rules[name] = seedRule();
-            added.push(name);
+function asSection(value: Json[string]): Section {
+    return (typeof value === 'object' && value !== null && !Array.isArray(value)) ? (value as Section) : {};
+}
+
+// Migrate an existing config to the rules / hookGuards / commands layout and add any missing rules.
+// Returns a human-readable list of what changed (empty = already up to date).
+export function migrate(existing: Json): MigrateResult {
+    const changes: string[] = [];
+    const rules: Section = asSection(existing['rules']);
+    const hookGuards: Section = asSection(existing['hookGuards']);
+    const commands: Json = (typeof existing['commands'] === 'object' && existing['commands'] !== null)
+        ? (existing['commands'] as Json) : {};
+
+    // Move a deprecated top-level pr-gate block under commands.
+    if (existing['pr-gate'] !== undefined && commands['pr-gate'] === undefined) {
+        commands['pr-gate'] = existing['pr-gate'];
+        changes.push('moved top-level "pr-gate" → commands["pr-gate"]');
+    }
+    // Move guards mistakenly left in rules into hookGuards.
+    for (const name of Object.keys(rules)) {
+        if (isHookGuard(name)) {
+            hookGuards[name] = rules[name];
+            delete rules[name];
+            changes.push(`moved "${name}" from rules → hookGuards`);
         }
     }
-
-    let addedPrGate = false;
-    if (!Object.prototype.hasOwnProperty.call(config, 'pr-gate')) {
-        config['pr-gate'] = seedPrGate();
-        addedPrGate = true;
+    // Move code rules mistakenly placed in hookGuards back into rules.
+    for (const name of Object.keys(hookGuards)) {
+        if (!isHookGuard(name) && allRuleNames().includes(name)) {
+            rules[name] = hookGuards[name];
+            delete hookGuards[name];
+            changes.push(`moved "${name}" from hookGuards → rules`);
+        }
     }
-
-    if (added.length === 0 && !addedPrGate) {
-        console.log(`  [ai-hook-rules] ${CONFIG_FILENAME} is already up to date — no new rules to add.`);
-        return;
+    // Add any missing built-in into its correct section (OFF).
+    for (const name of allRuleNames()) {
+        const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+        if (!(name in target)) {
+            target[name] = seedRule();
+            changes.push(`added "${name}" (OFF) to ${sectionForRule(name)}`);
+        }
     }
-
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 4) + '\n');
-    if (addedPrGate) console.log(`  [ai-hook-rules] Added the required "pr-gate" block (mode OFF) to ${CONFIG_FILENAME}.`);
-    console.log(`  [ai-hook-rules] Added ${added.length} new rule(s) to ${CONFIG_FILENAME} (set to OFF):`);
-    for (const name of added) {
-        console.log(`    - ${name}`);
+    // Fill command defaults.
+    if (commands['pr-gate'] === undefined) {
+        commands['pr-gate'] = { mode: 'OFF', buildCommand: DEFAULT_BUILD_COMMAND, gates: [] };
+        changes.push('added commands["pr-gate"] (OFF)');
     }
-    console.log('  Review each new rule and set "mode" to ON/MODIFIED_CODE/etc. as desired.');
+    if (commands['upsertPr'] === undefined) { commands['upsertPr'] = DEFAULT_UPSERT_PR; changes.push('added commands.upsertPr'); }
+    if (commands['mergeComplete'] === undefined) { commands['mergeComplete'] = DEFAULT_MERGE_COMPLETE; changes.push('added commands.mergeComplete'); }
+
+    const rulesDir: string[] = Array.isArray(existing['rulesDir']) ? (existing['rulesDir'] as string[]) : [];
+    const config: ConfigFile = { rules, hookGuards, commands, rulesDir };
+    if (typeof existing['extends'] === 'string') config.extends = existing['extends'];
+    return { config, changes };
 }
 
-export function main(): void {
-    const args = process.argv.slice(2);
-    const isSync = args.includes('--sync');
+function seedOrSyncConfig(projectRoot: string, syncOnly: boolean): void {
+    const configPath = path.join(projectRoot, CONFIG_FILENAME);
+    if (!fs.existsSync(configPath)) {
+        if (syncOnly) {
+            console.log(`  [ai-hooks] No ${CONFIG_FILENAME} found — nothing to sync.`);
+            return;
+        }
+        writeConfig(configPath, buildSeedConfig());
+        console.log(`  [ai-hooks] Created ${CONFIG_FILENAME} (rules / hookGuards / commands), all rules OFF.`);
+        console.log('  Enable the ones you want by changing "mode".');
+        return;
+    }
+    const result = migrate(readConfig(configPath));
+    if (result.changes.length === 0) {
+        console.log(`  [ai-hooks] ${CONFIG_FILENAME} already uses the rules / hookGuards / commands layout — no changes.`);
+        return;
+    }
+    writeConfig(configPath, result.config);
+    console.log(`  [ai-hooks] Migrated ${CONFIG_FILENAME}:`);
+    for (const change of result.changes) console.log(`    - ${change}`);
+}
 
+// ---------------------------------------------------------------------------
+// Claude Code settings.json hook wiring.
+// ---------------------------------------------------------------------------
+interface HookCommand { type: string; command: string; }
+interface HookEntry { matcher: string; hooks: HookCommand[]; }
+interface ClaudeSettings {
+    hooks?: { PreToolUse?: HookEntry[] };
+    // webpieces-disable no-any-unknown -- opaque settings bag; arbitrary keys allowed
+    [key: string]: unknown;
+}
+
+export function readSettings(settingsPath: string): ClaudeSettings {
+    if (!fs.existsSync(settingsPath)) return {};
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    if (raw.trim() === '') return {};
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        return JSON.parse(raw) as ClaudeSettings;
+    } catch (err: unknown) {
+        const error = toError(err);
+        throw new Error(`${settingsPath} has invalid JSON — fix it, then retry: ${error.message}`, { cause: error });
+    }
+}
+
+function writeSettings(settingsPath: string, settings: ClaudeSettings): void {
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
+}
+
+export function hasHook(settings: ClaudeSettings, bin: string): boolean {
+    const entries = settings.hooks?.PreToolUse ?? [];
+    return entries.some((e: HookEntry) => e.hooks.some((h: HookCommand) => h.command.includes(bin)));
+}
+
+// Drop every PreToolUse command referencing `bin`; returns true if anything was removed.
+function removeHook(settings: ClaudeSettings, bin: string): boolean {
+    const entries = settings.hooks?.PreToolUse;
+    if (!entries) return false;
+    let changed = false;
+    const kept: HookEntry[] = [];
+    for (const entry of entries) {
+        const hooks = entry.hooks.filter((h: HookCommand) => !h.command.includes(bin));
+        if (hooks.length !== entry.hooks.length) changed = true;
+        if (hooks.length > 0) kept.push({ matcher: entry.matcher, hooks });
+    }
+    if (changed) settings.hooks!.PreToolUse = kept;
+    return changed;
+}
+
+function addHook(settings: ClaudeSettings, matcher: string, command: string): void {
+    if (!settings.hooks) settings.hooks = {};
+    if (!Array.isArray(settings.hooks.PreToolUse)) settings.hooks.PreToolUse = [];
+    settings.hooks.PreToolUse.push({ matcher, hooks: [{ type: 'command', command }] });
+}
+
+// Apply the chosen install for one hook: remove it from every target file, then add it back to the
+// chosen one (or nowhere, for uninstall). Writes only the files that changed.
+export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets: InstallTarget[], projectRoot: string): void {
+    for (const target of targets) {
+        const settings = readSettings(target.settingsPath);
+        const removed = removeHook(settings, hook.bin);
+        const isChosen = chosen !== null && chosen.settingsPath === target.settingsPath;
+        if (isChosen) {
+            addHook(settings, hook.matcher, hook.commandFor(target, projectRoot));
+            writeSettings(target.settingsPath, settings);
+            console.log(`  ✅ ${hook.label} → ${target.label}`);
+        } else if (removed) {
+            writeSettings(target.settingsPath, settings);
+        }
+    }
+    if (chosen === null) console.log(`  ⛔ ${hook.label} not installed (removed from all locations).`);
+}
+
+function currentLocation(hook: HookSpec, targets: InstallTarget[]): string {
+    const here = targets.filter((t: InstallTarget) => hasHook(readSettings(t.settingsPath), hook.bin));
+    return here.length === 0 ? 'none' : here.map((t: InstallTarget) => t.label.split(' (')[0]).join(', ');
+}
+
+function prompt(question: string): Promise<string> {
+    return new Promise((resolve: (answer: string) => void) => {
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(question, (answer: string) => { rl.close(); resolve(answer.trim()); });
+    });
+}
+
+async function wireHook(hook: HookSpec, targets: InstallTarget[], projectRoot: string): Promise<void> {
+    console.log('');
+    console.log(`${hook.label}  [matcher: ${hook.matcher}]`);
+    console.log(`  currently installed in: ${currentLocation(hook, targets)}`);
+    for (const target of targets) console.log(`    ${target.choice}) ${target.label}`);
+    console.log('    4) none / uninstall');
+    const answer = await prompt('  Where should it live? [1/2/3/4, default 4]: ');
+    const chosen = targets.find((t: InstallTarget) => t.choice === answer) ?? null;
+    applyHook(hook, chosen, targets, projectRoot);
+}
+
+export async function main(): Promise<void> {
+    const args = process.argv.slice(2);
+    const syncOnly = args.includes('--sync');
     const projectRoot = process.cwd();
 
-    if (isSync) {
-        syncConfig(projectRoot);
-    } else {
-        seedConfig(projectRoot);
-        console.log('');
-        console.log('  To install the global Claude Code hook (one-time, per machine):');
-        console.log('    ./node_modules/.bin/wp-setup-global-ai-hooks');
-    }
+    seedOrSyncConfig(projectRoot, syncOnly);
+    if (syncOnly) return;
+
+    const targets = installTargets(projectRoot);
+    console.log('');
+    console.log('Two webpieces hooks can be installed independently — choose a location for each:');
+    await wireHook(RULES_HOOK, targets, projectRoot);
+    await wireHook(GUARDS_HOOK, targets, projectRoot);
+    console.log('');
+    console.log('Done. Re-run wp-setup-ai-hooks anytime to move or uninstall a hook.');
 }
 
 if (require.main === module) {
-    main();
+    void main();
 }

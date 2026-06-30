@@ -1,10 +1,29 @@
+import { buildCommandsConfig, CommandsConfig } from './commands-config';
 import { findConfigFile, readRawConfig } from './config-file';
 import { defaultRules } from './default-rules';
 import { InformAiError } from './inform-ai-error';
-import { buildPrGateConfig, PrGateConfig } from './pr-gate-config';
+import { PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
-import { validatePrGateSection, validateWebpiecesConfig } from './validate-config';
+import { validateCommandsSection, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
+
+// Inject the canonical command strings (from the `commands` section) as the DEFAULT for the guards
+// that surface them in their fix hints, so a project renames a command in one place. Only fills a
+// gap — an explicit per-guard override wins. Mutates the merged guard entries in place.
+function applyCommandDefaults(
+    // webpieces-disable no-any-unknown -- opaque merged rule/guard map
+    rules: Record<string, Record<string, unknown>>,
+    commands: CommandsConfig,
+): void {
+    const prCreation = rules['pr-creation-guard'];
+    if (prCreation && prCreation['upsertPrCommand'] === undefined) {
+        prCreation['upsertPrCommand'] = commands.upsertPr;
+    }
+    const mergeInProgress = rules['merge-in-progress-guard'];
+    if (mergeInProgress && mergeInProgress['mergeCompleteCommand'] === undefined) {
+        mergeInProgress['mergeCompleteCommand'] = commands.mergeComplete;
+    }
+}
 
 // webpieces-disable no-any-unknown -- merging opaque option bags from config JSON
 function mergeRule(
@@ -42,14 +61,16 @@ function buildWebpiecesRulesConfig(
  * Everything a consumer might need from webpieces.config.json, produced from ONE parse + ONE
  * validation pass. Data-only (per CLAUDE.md, classes for data):
  *  - `resolved`    — Map-based view merged with defaultRules (nx executors).
- *  - `rulesConfig` — typed WebpiecesRulesConfig (ai-hook-rules, code-rules).
- *  - `prGate`      — the pr-gate section (pr-gate scripts).
+ *  - `rulesConfig` — typed WebpiecesRulesConfig (ai-hook-rules, code-rules); rules + hookGuards merged.
+ *  - `commands`    — the `commands` section (gated commands + pr-gate).
+ *  - `prGate`      — convenience alias of `commands.prGate` (pr-gate scripts).
  *  - `configPath`  — absolute path, or null when no config file was found.
  */
 export class LoadedConfig {
     constructor(
         readonly resolved: ResolvedConfig,
         readonly rulesConfig: WebpiecesRulesConfig,
+        readonly commands: CommandsConfig,
         readonly prGate: PrGateConfig,
         readonly configPath: string | null,
     ) {}
@@ -64,20 +85,29 @@ export class LoadedConfig {
 export function loadAndValidate(cwd: string): LoadedConfig {
     const configPath = findConfigFile(cwd);
     if (!configPath) {
+        const emptyCommands = buildCommandsConfig(undefined);
         return new LoadedConfig(
             new ResolvedConfig(new Map(), new Set(), [], null),
             new WebpiecesRulesConfig(),
-            buildPrGateConfig(undefined),
+            emptyCommands,
+            emptyCommands.prGate,
             null,
         );
     }
 
     const consumerConfig = readRawConfig(configPath);
-    const overrideRules = consumerConfig.rules || {};
+    const rulesSection = consumerConfig.rules || {};
+    const hookGuardsSection = consumerConfig.hookGuards || {};
+    const legacyPrGate = consumerConfig['pr-gate'];
+
+    // rules + hookGuards are validated/loaded as one flat name→config map (the runtime dispatches by
+    // each rule's own `scope`, so it needs no section knowledge). Placement is enforced separately.
+    const overrideRules = { ...rulesSection, ...hookGuardsSection };
 
     const errors = [
         ...validateWebpiecesConfig(overrideRules),
-        ...validatePrGateSection(consumerConfig['pr-gate']),
+        ...validateSectionPlacement(rulesSection, hookGuardsSection),
+        ...validateCommandsSection(consumerConfig.commands, legacyPrGate),
     ];
     if (errors.length > 0) {
         throw new InformAiError(
@@ -87,6 +117,8 @@ export function loadAndValidate(cwd: string): LoadedConfig {
     }
 
     const rulesDir = consumerConfig.rulesDir ?? [];
+    const commands = buildCommandsConfig(consumerConfig.commands, legacyPrGate);
+    applyCommandDefaults(overrideRules, commands);
 
     const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
     const mergedRules = new Map<string, ResolvedRuleConfig>();
@@ -100,7 +132,6 @@ export function loadAndValidate(cwd: string): LoadedConfig {
     const resolved = new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
 
     const rulesConfig = buildWebpiecesRulesConfig(overrideRules, rulesDir);
-    const prGate = buildPrGateConfig(consumerConfig['pr-gate']);
 
-    return new LoadedConfig(resolved, rulesConfig, prGate, configPath);
+    return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, configPath);
 }

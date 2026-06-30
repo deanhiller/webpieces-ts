@@ -1,4 +1,4 @@
-import { validateWebpiecesConfig, validatePrGateSection } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection } from './validate-config';
 
 // Helper: errors mentioning a given rule name.
 function errorsFor(rule: string, errors: string[]): string[] {
@@ -154,5 +154,55 @@ describe('validatePrGateSection', () => {
         });
         expect(bad.some(e => e.includes('gates[0].color must be "yellow" or "red"'))).toBe(true);
         expect(bad.some(e => e.includes('gates[0].disabled must be a boolean'))).toBe(true);
+    });
+});
+
+describe('validateSectionPlacement', () => {
+    it('flags a guard left in the rules section', () => {
+        const errors = validateSectionPlacement({ 'pr-creation-guard': { mode: 'ON' } }, {});
+        expect(errors.some(e => e.includes('[pr-creation-guard]') && e.includes('"hookGuards"'))).toBe(true);
+    });
+
+    it('flags a code rule placed in the hookGuards section', () => {
+        const errors = validateSectionPlacement({}, { 'no-any-unknown': { mode: 'MODIFIED_CODE' } });
+        expect(errors.some(e => e.includes('[no-any-unknown]') && e.includes('"rules"'))).toBe(true);
+    });
+
+    it('accepts correctly-placed entries', () => {
+        const errors = validateSectionPlacement(
+            { 'no-any-unknown': { mode: 'MODIFIED_CODE' } },
+            { 'pr-creation-guard': { mode: 'ON' } },
+        );
+        expect(errors).toEqual([]);
+    });
+
+    it('ignores unknown/custom names in hookGuards', () => {
+        const errors = validateSectionPlacement({}, { 'my-custom-guard': { mode: 'ON' } });
+        expect(errors).toEqual([]);
+    });
+});
+
+describe('validateCommandsSection', () => {
+    it('errors on a deprecated top-level pr-gate block', () => {
+        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' } }, { mode: 'OFF' });
+        expect(errors.some(e => e.includes('top-level "pr-gate" block is deprecated'))).toBe(true);
+    });
+
+    it('validates commands.pr-gate (missing → error)', () => {
+        const errors = validateCommandsSection({}, undefined);
+        expect(errors.some(e => e.includes('[pr-gate] Not configured'))).toBe(true);
+    });
+
+    it('accepts a valid commands section with string command overrides', () => {
+        const errors = validateCommandsSection(
+            { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm wp-upsert-pr', mergeComplete: 'pnpm wp-git-merge-complete' },
+            undefined,
+        );
+        expect(errors).toEqual([]);
+    });
+
+    it('rejects a non-string command field', () => {
+        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, upsertPr: 123 }, undefined);
+        expect(errors.some(e => e.includes('[commands] "upsertPr" must be a string'))).toBe(true);
     });
 });

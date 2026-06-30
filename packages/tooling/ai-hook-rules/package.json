@@ -6,8 +6,9 @@
     "main": "./src/index.js",
     "bin": {
         "wp-ai-hook": "./bin/wp-ai-hook.js",
+        "wp-ai-rules-hook": "./bin/wp-ai-rules-hook.js",
+        "wp-ai-guards-hook": "./bin/wp-ai-guards-hook.js",
         "wp-setup-ai-hooks": "./bin/wp-setup-ai-hooks.js",
-        "wp-setup-global-ai-hooks": "./bin/wp-setup-global-ai-hooks.js",
         "wp-dev-hook-install": "./bin/wp-dev-hook-install.js",
         "wp-dev-hook-uninstall": "./bin/wp-dev-hook-uninstall.js"
     },
@@ -15,6 +16,8 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./claude-code": "./src/adapters/claude-code-hook.js",
+        "./claude-code-rules": "./src/adapters/rules-hook.js",
+        "./claude-code-guards": "./src/adapters/guards-hook.js",
         "./openclaw-plugin": "./src/adapters/openclaw-plugin.js"
     },
     "files": [

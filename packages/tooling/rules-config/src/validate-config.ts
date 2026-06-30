@@ -1,4 +1,5 @@
 import { FieldDef } from './field-def';
+import { sectionForRule, isHookGuard } from './sections';
 import {
     MaxMethodLinesConfig,
     MaxFileLinesConfig,
@@ -57,6 +58,12 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };
 
+// Every built-in rule name that has a typed schema (code rules + bash guards). The installer uses
+// this (with sectionForRule) to seed a fresh webpieces.config.json with every rule in its section.
+export function allRuleNames(): readonly string[] {
+    return Object.keys(RULE_SCHEMAS);
+}
+
 function valueHint(def: FieldDef, key?: string): string {
     // ignoreModifiedUntilEpoch is required on every rule; 0 keeps the rule active (epoch in the
     // past), a future unix epoch (seconds) temporarily disables it. Spell that out for the AI.
@@ -78,8 +85,9 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
     const optional = fields.filter(f => schema[f].optional);
 
     const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
+    const section = sectionForRule(ruleName);
     let out =
-        `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "rules" section\n` +
+        `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "${section}" section\n` +
         `(choose values appropriate for your project):\n\n` +
         `  "${ruleName}": {\n${requiredLines.join(',\n')}\n  }`;
 
@@ -183,8 +191,8 @@ function validateGate(gate: unknown, index: number): string[] {
 export function validatePrGateSection(section: unknown): string[] {
     if (section === undefined || section === null) {
         return [
-            `[pr-gate] Not configured in webpieces.config.json. Add this top-level block ` +
-            `(sibling of "rules"; set "mode": "OFF" to opt out):\n\n${prGateExample()}`,
+            `[pr-gate] Not configured in webpieces.config.json. Add this block under the "commands" ` +
+            `section (set "mode": "OFF" to opt out):\n\n${prGateExample()}`,
         ];
     }
     if (typeof section !== 'object' || Array.isArray(section)) {
@@ -219,6 +227,76 @@ export function validatePrGateSection(section: unknown): string[] {
             for (let i = 0; i < gates.length; i += 1) {
                 errors.push(...validateGate(gates[i], i));
             }
+        }
+    }
+
+    return errors;
+}
+
+/**
+ * Enforce that each built-in lives in its correct section: code rules under `rules`, bash guards
+ * under `hookGuards`. A guard left in `rules` (or a rule placed in `hookGuards`) is reported with a
+ * "move it" message so the split stays clean. Unknown/custom names are ignored (they may be custom
+ * rules from rulesDir). Presence ("every built-in must be configured") is checked separately by
+ * validateWebpiecesConfig against the merged map.
+ */
+// webpieces-disable no-any-unknown -- section maps are opaque consumer JSON
+export function validateSectionPlacement(
+    rulesSection: Record<string, Record<string, unknown>>,
+    hookGuardsSection: Record<string, Record<string, unknown>>,
+): string[] {
+    const errors: string[] = [];
+    for (const name of Object.keys(rulesSection)) {
+        if (isHookGuard(name)) {
+            errors.push(
+                `[${name}] is a hook guard and belongs in the "hookGuards" section, not "rules". ` +
+                `Move it (or run \`wp-setup-ai-hooks --sync\` to migrate automatically).`,
+            );
+        }
+    }
+    for (const name of Object.keys(hookGuardsSection)) {
+        // Only flag KNOWN code rules misplaced into hookGuards; unknown names may be custom rules.
+        if (!isHookGuard(name) && RULE_SCHEMAS[name]) {
+            errors.push(
+                `[${name}] is a code rule and belongs in the "rules" section, not "hookGuards". ` +
+                `Move it (or run \`wp-setup-ai-hooks --sync\` to migrate automatically).`,
+            );
+        }
+    }
+    return errors;
+}
+
+/**
+ * Validate the `commands` section: its `pr-gate` block (delegated to validatePrGateSection) plus the
+ * optional command-string fields. Also surfaces a migration error if a DEPRECATED top-level `pr-gate`
+ * block is still present, telling the consumer to move it under `commands`.
+ */
+// webpieces-disable no-any-unknown -- `commands`/`legacyPrGate` are opaque consumer JSON
+export function validateCommandsSection(commands: unknown, legacyPrGate: unknown): string[] {
+    const errors: string[] = [];
+
+    if (legacyPrGate !== undefined) {
+        errors.push(
+            `[pr-gate] The top-level "pr-gate" block is deprecated. Move it under the "commands" ` +
+            `section as commands["pr-gate"] (run \`wp-setup-ai-hooks --sync\` to migrate automatically).`,
+        );
+    }
+
+    if (commands !== undefined && (typeof commands !== 'object' || commands === null || Array.isArray(commands))) {
+        errors.push(`[commands] Must be an object { "pr-gate": {...}, "upsertPr": "...", "mergeComplete": "..." }.`);
+        return errors;
+    }
+
+    // webpieces-disable no-any-unknown -- narrowing the opaque commands section from consumer JSON
+    const c = (commands ?? {}) as Record<string, unknown>;
+
+    // pr-gate is required (set mode OFF to opt out). Prefer commands["pr-gate"]; fall back to the
+    // legacy top-level block so an un-migrated file still validates its gate config.
+    errors.push(...validatePrGateSection(c['pr-gate'] ?? legacyPrGate));
+
+    for (const field of ['upsertPr', 'mergeComplete']) {
+        if (field in c && typeof c[field] !== 'string') {
+            errors.push(`[commands] "${field}" must be a string (the gated command to run).`);
         }
     }
 

@@ -1,12 +1,22 @@
 {
+    "_comment": "Two independently-installable webpieces PreToolUse hooks. The Rules hook validates code-style on Write/Edit/MultiEdit; the Guards hook protects git/PR/branch on Bash. Install them with `wp-setup-ai-hooks` (which lets you pick a location per hook); this file just shows the wiring. Use `./node_modules/.bin/<bin>` for project installs, or `node <repoRoot>/node_modules/.bin/<bin>` for a global ~/.claude/settings.json install.",
     "hooks": {
         "PreToolUse": [
             {
-                "matcher": "Write|Edit|MultiEdit|Bash",
+                "matcher": "Write|Edit|MultiEdit",
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "./node_modules/.bin/wp-ai-hook"
+                        "command": "./node_modules/.bin/wp-ai-rules-hook"
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "./node_modules/.bin/wp-ai-guards-hook"
                     }
                 ]
             }

@@ -6,15 +6,23 @@ import { toError } from './to-error';
 
 export const CONFIG_FILENAME = 'webpieces.config.json';
 
-// Raw shape of webpieces.config.json as parsed from JSON, before validation/typing. `pr-gate` is a
-// top-level sibling of `rules` (its nested `gates` array can't be expressed in the FieldDef schema),
-// so it is carried here as opaque JSON and validated structurally by validatePrGateSection.
+// Raw shape of webpieces.config.json as parsed from JSON, before validation/typing.
+//  - `rules`      — code-style validators (scope edit/file).
+//  - `hookGuards` — git/PR/branch protection guards (scope bash).
+//  - `commands`   — gated command config the guards point at; `pr-gate` lives inside it. Carried as
+//                   opaque JSON because its nested `gates` array can't be expressed in the FieldDef
+//                   schema; validated structurally by validateCommandsSection.
+//  - `pr-gate`    — DEPRECATED top-level block (pre-migration layout). Read only as a back-compat
+//                   fallback / to emit a "move it under commands" migration error.
 // webpieces-disable no-any-unknown -- consumer JSON config has opaque rule option values
 export interface RawConfigFile {
     extends?: string;
     rules?: Record<string, Record<string, unknown>>;
+    hookGuards?: Record<string, Record<string, unknown>>;
+    // webpieces-disable no-any-unknown -- opaque commands JSON, validated by validateCommandsSection
+    commands?: unknown;
     rulesDir?: string[];
-    // webpieces-disable no-any-unknown -- opaque pr-gate JSON, validated by validatePrGateSection
+    // webpieces-disable no-any-unknown -- DEPRECATED top-level pr-gate, migrated under `commands`
     'pr-gate'?: unknown;
 }
 

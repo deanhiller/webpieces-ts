@@ -6,7 +6,9 @@ export { findConfigFile, CONFIG_FILENAME } from './config-file';
 export { isPathExcluded } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate } from './load-template';
-export { validateWebpiecesConfig, validatePrGateSection } from './validate-config';
+export { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, allRuleNames } from './validate-config';
+export type { ConfigSection } from './sections';
+export { HOOK_GUARD_NAMES, isHookGuard, sectionForRule } from './sections';
 export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
@@ -90,3 +92,9 @@ export {
     reviewJsonPath,
     reviewJsonSchemaHint,
 } from './review-json';
+export {
+    CommandsConfig,
+    buildCommandsConfig,
+    DEFAULT_UPSERT_PR_COMMAND,
+    DEFAULT_MERGE_COMPLETE_COMMAND,
+} from './commands-config';
