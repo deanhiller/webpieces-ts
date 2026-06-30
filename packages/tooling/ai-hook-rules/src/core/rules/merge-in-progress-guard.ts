@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { WEBPIECES_TMP_DIR, MERGE_DIR_PREFIX, MERGE_IN_PROGRESS_FILE, MergeInProgressGuardConfig } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MergeInProgressGuardConfig } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -22,11 +22,11 @@ function fixHintFor(mergeCompleteCommand: string): readonly string[] {
 // Returns the path of the first UNVALIDATED merge marker found, or null. We detect validation
 // by a raw substring (no JSON.parse) so a malformed marker can never crash the guard.
 function findUnvalidatedMerge(workspaceRoot: string): string | null {
-    const tmpDir = path.join(workspaceRoot, WEBPIECES_TMP_DIR);
-    if (!fs.existsSync(tmpDir)) return null;
-    for (const entry of fs.readdirSync(tmpDir)) {
-        if (!entry.startsWith(MERGE_DIR_PREFIX)) continue;
-        const marker = path.join(tmpDir, entry, MERGE_IN_PROGRESS_FILE);
+    // Per-feature merge dirs live under `.webpieces/merge-info/<feature>/`; scan that home's subdirs.
+    const mergeInfoDir = path.join(workspaceRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR);
+    if (!fs.existsSync(mergeInfoDir)) return null;
+    for (const entry of fs.readdirSync(mergeInfoDir)) {
+        const marker = path.join(mergeInfoDir, entry, MERGE_IN_PROGRESS_FILE);
         if (!fs.existsSync(marker)) continue;
         const raw = fs.readFileSync(marker, 'utf8');
         if (!/"validated"\s*:\s*true/.test(raw)) return marker;

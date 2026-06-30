@@ -5,6 +5,7 @@ import { loadAndValidate, WebpiecesRulesConfig, isHookGuard, DEFAULT_HANG_TIMEOU
 import { buildContexts, buildBashContext } from './build-context';
 import { loadRules, globMatches } from './load-rules';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
+import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
 import { formatReport } from './report';
 import {
@@ -104,8 +105,19 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const ctx = buildBashContext(command, workspaceRoot);
     const groups = runBashRules(rules, ctx);
-    if (groups.length === 0) return null;
+    if (groups.length === 0) {
+        // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
+        // about (branch create, commit, push, merge, PR). Skipping ls/cat/grep keeps the audit log
+        // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
+        // logged below.
+        if (/\b(?:git|gh)\b/.test(command)) {
+            logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'no bash-guard block'));
+        }
+        return null;
+    }
 
+    const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
+    logGuardDecision(workspaceRoot, new GuardDecision(ruleNames, 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'bash-guard block'));
     const report = formatReport('<bash>', groups);
     return new BlockedResult(report);
 }

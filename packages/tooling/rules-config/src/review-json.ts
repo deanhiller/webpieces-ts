@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR } from './constants';
+import { WEBPIECES_TMP_DIR, PR_INFO_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 
@@ -39,10 +39,17 @@ export class ReviewJson {
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
+// The per-feature PR working dir: `.webpieces/pr-info/<feature>`. Holds pr-body.md (rendered
+// dashboard) and review.json (AI-authored review). Nested under pr-info/ to keep `.webpieces/`
+// top level quiet. Shared so the start/finish commands and the AI agree on one location.
+export function prDirFor(repoRoot: string, featureName: string): string {
+    return path.join(repoRoot, WEBPIECES_TMP_DIR, PR_INFO_DIR, featureName);
+}
+
 // Absolute path of the review.json for a feature — beside pr-body.md, keyed by branch name so the
 // AI and the finish command agree on the location without passing it around.
 export function reviewJsonPath(repoRoot: string, featureName: string): string {
-    return path.join(repoRoot, WEBPIECES_TMP_DIR, `pr-${featureName}`, 'review.json');
+    return path.join(prDirFor(repoRoot, featureName), 'review.json');
 }
 
 // Copy-paste schema both commands print: wp-start-upsert-pr to instruct the AI to WRITE it,

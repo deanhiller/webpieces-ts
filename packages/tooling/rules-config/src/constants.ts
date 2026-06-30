@@ -34,10 +34,14 @@ export const RULE_NAMES = {
 // depends on the other — they only share this vocabulary.
 //
 // `.webpieces/` is the single working dir for all webpieces tooling: ai-hook-rules
-// bootstrap/cache, the instruct-ai docs, and the per-feature merge-/review-/pr- workflow
-// dirs. It is gitignored. Only the prefixed workflow dirs are subject to 30-day cleanup.
+// bootstrap/cache, the instruct-ai docs, and the workflow state. To keep the top level
+// quiet, per-feature workflow dirs are nested one level down under `merge-info/<feature>`
+// and `pr-info/<feature>` rather than scattered as top-level `merge-<feature>`/`pr-<feature>`.
+// `.webpieces/` is gitignored; only the per-feature subdirs under those two homes are subject
+// to 30-day cleanup (the homes themselves, like hooks/ and instruct-ai/, are permanent).
 export const WEBPIECES_TMP_DIR = '.webpieces';
-export const MERGE_DIR_PREFIX = 'merge-';
+export const MERGE_INFO_DIR = 'merge-info';
+export const PR_INFO_DIR = 'pr-info';
 export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 
 // Proof-of-work the AI must produce for every conflicted file it resolves during a 3-point

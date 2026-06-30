@@ -12,6 +12,7 @@ import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
+import { logGuardDecision, GuardDecision } from '../decision-log';
 
 /**
  * Comprehensive "are you on a proper feature branch?" guard — the single rule that blocks edits when
@@ -43,15 +44,16 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     ];
 
     check(ctx: FileContext): readonly Violation[] {
-        // Only files inside the workspace root.
+        // Only files inside the workspace root — guard has no jurisdiction, nothing worth logging.
         if (ctx.relativePath.startsWith('..')) return [];
 
         const branch = this.currentBranch(ctx.workspaceRoot);
-        if (branch === null) return []; // can't determine branch (e.g. not a git repo) → don't block
+        // Can't determine branch (e.g. not a git repo) → don't block. Fail-open.
+        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
 
         // State 1: on main — synchronous, no cache needed.
         if (branch === 'main') {
-            return [new V(1, ctx.relativePath, this.onMainMessage())];
+            return this.block(ctx, branch, 'on-main', this.onMainMessage());
         }
 
         // Keep the cache warm for the next call. Detached; never blocks this edit.
@@ -60,26 +62,46 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         const status = readMainSyncStatus(ctx.workspaceRoot);
         // No cache yet (first edit of the session) → allow; the refresh we just spawned populates it
         // for the next call. Fail-open: never block on missing data.
-        if (status === null) return [];
+        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)');
 
         // Stale cross-branch cache: the cached status is for a DIFFERENT branch (e.g. you just
         // switched branches and the refresh for this one hasn't landed yet). Never block on another
         // branch's signals — fail open; the refresh we just spawned rewrites it for this branch.
-        if (status.branch !== branch) return [];
+        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)');
 
         // State 2: this feature branch was already merged into main.
         if (status.branchAlreadyMerged) {
-            return [new V(1, ctx.relativePath, this.alreadyMergedMessage(branch, status.mergedPr))];
+            const pr = status.mergedPr !== '' ? status.mergedPr : '?';
+            return this.block(ctx, branch, `already-merged PR#${pr}`, this.alreadyMergedMessage(branch, status.mergedPr));
         }
         // State 3: no fork point — main was merged into the branch.
         if (!status.hasForkPoint) {
-            return [new V(1, ctx.relativePath, this.noForkPointMessage(branch))];
+            return this.block(ctx, branch, 'no-fork-point', this.noForkPointMessage(branch));
         }
         // State 4: origin/main moved and touches files you changed.
         if (status.conflict) {
-            return [new V(1, ctx.relativePath, this.conflictMessage(status.conflictFiles))];
+            return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(status.conflictFiles));
         }
+        return this.allow(ctx, branch, 'clean-feature-branch');
+    }
+
+    // Log + return for the allow path. Centralizes the decision-log call so every exit of check()
+    // is recorded with its reason (this is the audit trail for "why didn't the guard fire?").
+    private allow(ctx: FileContext, branch: string | null, reason: string): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW', reason);
         return [];
+    }
+
+    private block(ctx: FileContext, branch: string, reason: string, message: string): readonly Violation[] {
+        this.logDecision(ctx, branch, 'BLOCK', reason);
+        return [new V(1, ctx.relativePath, message)];
+    }
+
+    private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string): void {
+        logGuardDecision(
+            ctx.workspaceRoot,
+            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason),
+        );
     }
 
     private currentBranch(workspaceRoot: string): string | null {

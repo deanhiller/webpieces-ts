@@ -31,57 +31,27 @@ openclaw plugins enable @webpieces/ai-hook-rules
 # Drop webpieces.config.json into any project you want checked
 ```
 
-## Install (global hook, per user)
+## The two hooks (Claude Code)
 
-Wires a single shim into `~/.claude/settings.json` once. The shim
-(`~/.webpieces/global-hook.js`) runs on every `Write|Edit|MultiEdit|Bash` and
-**delegates to each repo's own `./node_modules/.bin/wp-ai-hook`** — so you install the
-global hook one time and every webpieces project you have installed gets enforced
-automatically, no per-project Claude Code wiring.
+`wp-setup-ai-hooks` wires two independent `PreToolUse` hooks into the chosen
+`settings.json`, each invoked via the project's `./node_modules/.bin/`:
 
-```bash
-# from any repo that has @webpieces/ai-hook-rules installed (e.g. this one):
-pnpm exec wp-setup-global-ai-hooks
-#   or, equivalently:
-./node_modules/.bin/wp-setup-global-ai-hooks
-# Restart your Claude Code session
-```
+- `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit`. Runs the code-style rules.
+- `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash`. Runs the git/PR/branch guards
+  (`hookGuards` section): bash git/PR guards on `Bash`, and file guards like
+  `feature-branch-guard` on `Write|Edit|MultiEdit`.
 
-The command is interactive:
+For each hook the setup command prompts for a target: project `.claude/settings.json`,
+personal `.claude/settings.local.json`, the global `~/.claude/settings.json` (this-repo-only),
+or **none** (= uninstall). Installing and uninstalling are the same operation — pick a
+location, or pick "none" to remove the hook from every target.
 
-- **Not yet wired** → prompts `Install global webpieces hook…? [Y/n]`. On `Y` it copies the
-  bundled `global-hook.js` → `~/.webpieces/global-hook.js` and appends the `PreToolUse`
-  entry to `~/.claude/settings.json`.
-- **Already wired** → prompts `Global hook is already installed. Uninstall? [y/N]`. To
-  **refresh to the latest** version, run it twice: once answering `y` (uninstall), then
-  again answering `Y` (re-install the current copy).
+### Disabling enforcement
 
-### How delegation works
-
-The shim keys off `process.cwd()` — the directory you launched Claude Code from:
-
-1. If `<cwd>/.webpieces/skiphooks` is present and unexpired → allow everything (escape hatch).
-2. Writing `<cwd>/.webpieces/skiphooks` is always allowed.
-3. If `<cwd>/node_modules/.bin/wp-ai-hook` exists → delegate the decision to it.
-4. Otherwise → block and tell the AI to install the hook (or write a skiphooks).
-
-Because resolution is cwd-based (not the edited file's path), launch Claude Code from the
-directory whose `node_modules` contains the install. In a monorepo where only a subdir is a
-webpieces project, launch from that subdir to get enforcement there.
-
-### Temporarily skipping hooks
-
-Drop a `skiphooks` file at the launch dir to bypass enforcement (e.g. for an umbrella repo
-where only some subdirs are webpieces projects):
-
-```bash
-# <cwd>/.webpieces/skiphooks
-{"expires": null, "reason": "why hooks are skipped here"}
-```
-
-`expires` is a unix-epoch-seconds number, or `null` to skip indefinitely. The check is
-**exact to the launch dir** — it does not walk up — so a skiphooks at a parent dir does not
-affect Claude Code launched from a child dir.
+There is no runtime escape-hatch file. To stop enforcement, **uninstall the hook**
+(re-run `wp-setup-ai-hooks` and choose "none" for it). Per-rule opt-outs stay in
+`webpieces.config.json` (`mode: "OFF"`, `ignoreModifiedUntilEpoch`, `ignoreRuleWhileOnBranch`)
+and per-line opt-outs use `// webpieces-disable <rule> -- reason`.
 
 ## Starter rules
 

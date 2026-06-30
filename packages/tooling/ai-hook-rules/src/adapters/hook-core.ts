@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { run, runBash } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
+import { logGuardDecision, GuardDecision, branchForLog } from '../core/decision-log';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, HookMode } from '../core/types';
 import { toError } from '../core/to-error';
@@ -101,8 +102,19 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     const input = normalizeToolInput(toolKind, payload.tool_input);
     if (!input) { process.exit(0); return; }
 
-    // Always allow edits to webpieces.config.json — it's the fix target when the config is broken
-    if (path.basename(input.filePath) === CONFIG_FILENAME) { process.exit(0); return; }
+    // Always allow edits to webpieces.config.json — it's the fix target when the config is broken.
+    // This exits BEFORE run(), so feature-branch-guard never sees a config edit; record that so the
+    // audit trail explains why a config edit on a bad branch was not blocked (see decision-log.ts).
+    if (path.basename(input.filePath) === CONFIG_FILENAME) {
+        if (mode !== 'rules') {
+            logGuardDecision(
+                cwd,
+                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(cwd), 'ALLOW', 'config-bypass (feature-branch-guard skipped)'),
+            );
+        }
+        process.exit(0);
+        return;
+    }
 
     const result = run(toolKind, input, cwd, mode);
     if (!result) { process.exit(0); return; }

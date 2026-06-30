@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
     WEBPIECES_TMP_DIR,
-    MERGE_DIR_PREFIX,
+    MERGE_INFO_DIR,
     MERGE_IN_PROGRESS_FILE,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
@@ -33,7 +33,7 @@ describe('pr-creation-guard', () => {
 describe('merge-in-progress-guard', () => {
     function withMarker(validated: boolean): string {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-'));
-        const dir = path.join(root, WEBPIECES_TMP_DIR, `${MERGE_DIR_PREFIX}feat`);
+        const dir = path.join(root, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, 'feat');
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, MERGE_IN_PROGRESS_FILE), JSON.stringify({ validated }));
         return root;
