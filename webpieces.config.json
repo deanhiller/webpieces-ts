@@ -145,11 +145,6 @@
             "branchNamingConvention": "{whoami}/{featurename}",
             "hangTimeoutMinutes": 5,
             "ignoreModifiedUntilEpoch": 0
-        },
-        "no-edit-on-main": {
-            "mode": "ON",
-            "branchNamingConvention": "{whoami}/{featurename}",
-            "ignoreModifiedUntilEpoch": 0
         }
     },
     "commands": {
