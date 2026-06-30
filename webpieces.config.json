@@ -140,7 +140,7 @@
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
-        "no-direct-main-update": {
+        "redirect-how-to-merge-main": {
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
