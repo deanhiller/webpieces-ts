@@ -7,13 +7,17 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 
-const FIX_HINT: readonly string[] = [
-    'A 3-point merge is in progress and not yet validated.',
-    'Resolve the remaining conflicts in the working tree, then run:',
-    '  pnpm wp-finish-upsert-pr',
-    'That scans for leftover conflict markers and runs the build; only when green does it commit,',
-    'unblock commit/push/PR, render the dashboard, and create/update the PR.',
-];
+const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
+
+function fixHintFor(mergeCompleteCommand: string): readonly string[] {
+    return [
+        'A 3-point merge is in progress and not yet validated.',
+        'Resolve the remaining conflicts in the working tree, then run:',
+        `  ${mergeCompleteCommand}`,
+        'That scans for leftover conflict markers and runs the build; only when green does it commit,',
+        'unblock commit/push/PR, render the dashboard, and create/update the PR.',
+    ];
+}
 
 // Returns the path of the first UNVALIDATED merge marker found, or null. We detect validation
 // by a raw substring (no JSON.parse) so a malformed marker can never crash the guard.
@@ -45,10 +49,15 @@ function truncate(s: string): string {
 }
 
 export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardConfig> {
-    constructor(config: MergeInProgressGuardConfig) { super(config, 'merge-in-progress-guard'); }
+    private readonly mergeCompleteCommand: string;
 
-    readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing pnpm wp-finish-upsert-pr.';
-    readonly fixHint = FIX_HINT;
+    constructor(config: MergeInProgressGuardConfig) {
+        super(config, 'merge-in-progress-guard');
+        this.mergeCompleteCommand = config.mergeCompleteCommand ?? DEFAULT_MERGE_COMPLETE_COMMAND;
+    }
+
+    readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing the merge-complete command.';
+    get fixHint(): readonly string[] { return fixHintFor(this.mergeCompleteCommand); }
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isBlockedDuringMerge(ctx.command)) return [];
@@ -60,7 +69,7 @@ export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardC
             [
                 'A merge is in progress and not yet validated — this command is blocked.',
                 `Marker: ${marker}`,
-                'Finish resolving conflicts, then run:  pnpm wp-finish-upsert-pr',
+                `Finish resolving conflicts, then run:  ${this.mergeCompleteCommand}`,
             ].join('\n'),
         )];
     }

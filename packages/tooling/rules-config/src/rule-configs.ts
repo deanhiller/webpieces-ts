@@ -291,9 +291,13 @@ export class PrCreationGuardConfig extends BaseRuleConfig {
 
 export class MergeInProgressGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
+    // The gated command the guard points agents to in order to finish a 3-point merge. Per-project
+    // override; defaults to `commands.mergeComplete` (pnpm wp-git-merge-complete) at load time.
+    mergeCompleteCommand?: string;
 
     static readonly SCHEMA: SchemaShape<MergeInProgressGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
+        mergeCompleteCommand: FieldDef.optional('string'),
         ...BASE_RULE_SCHEMA,
     };
 }

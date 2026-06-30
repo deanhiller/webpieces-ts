@@ -13,32 +13,47 @@ function mktmp(contents: Record<string, string>): string {
     return dir;
 }
 
-// Minimal valid config — every built-in rule present, all OFF with the now-required
-// ignoreModifiedUntilEpoch (0 = active), plus a valid pr-gate block (also now required).
-const ALL_RULE_NAMES = [
+// Minimal valid config — every built-in present in its correct section, all OFF with the
+// now-required ignoreModifiedUntilEpoch (0 = active), plus a valid commands.pr-gate block.
+// Code rules go under `rules`; the 7 bash guards go under `hookGuards`.
+const HOOK_GUARD_NAMES = [
+    'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-cleanup',
+    'no-direct-main-update', 'no-edit-on-main', 'no-shell-substitution',
+];
+const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
     'no-any-unknown', 'no-implicit-any', 'prisma-validate-dtos', 'prisma-converter',
     'no-destructure', 'no-unmanaged-exceptions', 'catch-error-pattern', 'throw-cause-required',
-    'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'no-shell-substitution',
-    'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-cleanup',
-    'no-direct-main-update', 'no-edit-on-main', 'no-file-import-cycles', 'runtime-architecture',
-    'no-js-files', 'validate-ts-in-src',
+    'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'no-file-import-cycles',
+    'runtime-architecture', 'no-js-files', 'validate-ts-in-src',
 ];
 
-function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {
     const base: Record<string, unknown> = {};
-    for (const name of ALL_RULE_NAMES) {
-        base[name] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
-    }
+    for (const name of names) base[name] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
     return { ...base, ...overrides };
+}
+
+function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    // Route each override to whichever section owns that name.
+    const ruleOverrides: Record<string, unknown> = {};
+    const guardOverrides: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(overrides)) {
+        if (HOOK_GUARD_NAMES.includes(k)) guardOverrides[k] = v; else ruleOverrides[k] = v;
+    }
+    return {
+        rules: offEntries(CODE_RULE_NAMES, ruleOverrides),
+        hookGuards: offEntries(HOOK_GUARD_NAMES, guardOverrides),
+    };
 }
 
 function validPrGate(): Record<string, unknown> {
     return { mode: 'ON', buildCommand: 'echo ci' };
 }
 
-function writeConfig(rules: Record<string, unknown>, prGate: unknown = validPrGate()): string {
-    return mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules, 'pr-gate': prGate }) });
+// `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate is added here.
+function writeConfig(sections: Record<string, unknown>, prGate: unknown = validPrGate()): string {
+    return mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': prGate } }) });
 }
 
 describe('loadAndValidate', () => {
@@ -85,12 +100,39 @@ describe('loadAndValidate', () => {
     });
 
     it('throws listing missing rules when config has none', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: {}, 'pr-gate': validPrGate() }) });
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: {}, commands: { 'pr-gate': validPrGate() } }) });
         expect(() => loadAndValidate(dir)).toThrow('Not configured in webpieces.config.json');
     });
 
-    it('throws when the pr-gate block is missing entirely', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ rules: allRulesOff() }) });
+    it('throws when the commands.pr-gate block is missing entirely', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify(allRulesOff()) });
         expect(() => loadAndValidate(dir)).toThrow('[pr-gate] Not configured');
+    });
+});
+
+describe('loadAndValidate — sections & commands', () => {
+    it('errors when a guard is left in the rules section (placement)', () => {
+        const sections = allRulesOff();
+        // Misplace a guard into rules.
+        (sections['rules'] as Record<string, unknown>)['pr-creation-guard'] = { mode: 'ON', ignoreModifiedUntilEpoch: 0 };
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': validPrGate() } }) });
+        expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
+    });
+
+    it('errors on a deprecated top-level pr-gate block', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...allRulesOff(), 'pr-gate': validPrGate() }) });
+        expect(() => loadAndValidate(dir)).toThrow('top-level "pr-gate" block is deprecated');
+    });
+
+    it('injects commands.upsertPr as the pr-creation-guard default', () => {
+        const sections = allRulesOff();
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...sections,
+            commands: { 'pr-gate': validPrGate(), upsertPr: 'pnpm my-upsert' },
+        }) });
+        const loaded = loadAndValidate(dir);
+        expect(loaded.commands.upsertPr).toBe('pnpm my-upsert');
+        const guard = loaded.rulesConfig['pr-creation-guard'] as Record<string, unknown>;
+        expect(guard['upsertPrCommand']).toBe('pnpm my-upsert');
     });
 });
