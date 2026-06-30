@@ -3,6 +3,7 @@ import * as path from 'path';
 import { run, runBash } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog } from '../core/decision-log';
+import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, HookMode } from '../core/types';
 import { toError } from '../core/to-error';
@@ -111,6 +112,10 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
                 cwd,
                 new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(cwd), 'ALLOW', 'config-bypass (feature-branch-guard skipped)'),
             );
+            // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
+            // the cache directly, otherwise a session that only edits webpieces.config.json never
+            // refreshes the sync status. Fire-and-forget; never blocks the edit.
+            triggerMainSyncRefresh(cwd);
         }
         process.exit(0);
         return;

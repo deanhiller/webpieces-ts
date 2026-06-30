@@ -62,14 +62,19 @@ export class MainSyncStatus {
     }
 }
 
-// Concurrency state machine for the detached refresher. `started` is epoch milliseconds.
+// Concurrency state machine for the detached refresher. `started` is epoch milliseconds. `pid` is
+// the refresher process's pid (0 = unknown, e.g. a lock written by an older version) — used so a
+// refresher that was KILLED before writing its finished lock (SIGKILL skips the finally) doesn't
+// wedge `inprocess` for the whole hangTimeout: if its pid is gone, the lock is reclaimable now.
 export class MainSyncLock {
     state: string;
     started: number;
+    pid: number;
 
-    constructor(state: string, started: number) {
+    constructor(state: string, started: number, pid: number = 0) {
         this.state = state;
         this.started = started;
+        this.pid = pid;
     }
 }
 
@@ -91,6 +96,7 @@ interface RawStatus {
 interface RawLock {
     state?: string;
     started?: number;
+    pid?: number;
 }
 
 // Result of a captured git/gh invocation: ok=false on spawn failure or non-zero exit.
@@ -150,7 +156,7 @@ export function readMainSyncLock(repoRoot: string): MainSyncLock | null {
         const lockPath = mainSyncLockPath(repoRoot);
         if (!fs.existsSync(lockPath)) return null;
         const raw = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as RawLock;
-        return new MainSyncLock(raw.state ?? LOCK_STATE_FINISHED, raw.started ?? 0);
+        return new MainSyncLock(raw.state ?? LOCK_STATE_FINISHED, raw.started ?? 0, raw.pid ?? 0);
     } catch (err: unknown) {
         const error = toError(err);
         void error;
@@ -170,21 +176,40 @@ export function isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now:
     return now - lock.started > hangTimeoutMinutes * 60 * 1000;
 }
 
+// Liveness probe: is `pid` still a running process? `process.kill(pid, 0)` sends no signal, it only
+// tests existence — ESRCH means the process is gone, EPERM means it exists but isn't ours (alive).
+// pid <= 0 means "unknown" (an old lock with no pid) → assume alive and fall back to staleness only.
+function isProcessAlive(pid: number): boolean {
+    if (pid <= 0) return true;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (err: unknown) {
+        const error = toError(err);
+        // ESRCH = no such process (dead); anything else (e.g. EPERM = exists, not ours) = alive.
+        return !error.message.includes('ESRCH');
+    }
+}
+
 // True when another refresher is actively running and we should NOT start a second one. A finished
-// lock, a missing lock, or a stale (hung) inprocess lock all return false.
+// lock, a missing lock, a stale (hung) inprocess lock, OR an inprocess lock whose refresher pid is
+// already dead (it was killed before writing its finished lock) all return false — so a killed
+// refresher never wedges refreshes for the full hangTimeout.
 export function isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
     const lock = readMainSyncLock(repoRoot);
     if (!lock) return false;
     if (lock.state !== LOCK_STATE_INPROCESS) return false;
-    return !isLockStale(lock, hangTimeoutMinutes, now);
+    if (isLockStale(lock, hangTimeoutMinutes, now)) return false;
+    return isProcessAlive(lock.pid);
 }
 
-export function inProcessLock(now: number = Date.now()): MainSyncLock {
-    return new MainSyncLock(LOCK_STATE_INPROCESS, now);
+export function inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock {
+    return new MainSyncLock(LOCK_STATE_INPROCESS, now, pid);
 }
 
 export function finishedLock(started: number): MainSyncLock {
-    return new MainSyncLock(LOCK_STATE_FINISHED, started);
+    return new MainSyncLock(LOCK_STATE_FINISHED, started, 0);
 }
 
 // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
