@@ -25,7 +25,7 @@ const CODE_RULE_NAMES = [
     'no-any-unknown', 'no-implicit-any', 'prisma-validate-dtos', 'prisma-converter',
     'no-destructure', 'no-unmanaged-exceptions', 'catch-error-pattern', 'throw-cause-required',
     'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'no-file-import-cycles',
-    'runtime-architecture', 'no-js-files', 'validate-ts-in-src',
+    'runtime-architecture', 'nx-wiring', 'no-js-files', 'validate-ts-in-src',
 ];
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {
@@ -69,7 +69,7 @@ describe('loadAndValidate', () => {
 
     it('merges defaults with overrides and honors mode:OFF; exposes all three views', () => {
         const dir = writeConfig(allRulesOff({
-            'max-file-lines': { limit: 500, mode: 'MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
+            'max-file-lines': { limit: 500, mode: 'NEW_AND_MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
             'no-any-unknown': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
         }));
         const loaded = loadAndValidate(dir);

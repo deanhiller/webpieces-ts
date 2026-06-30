@@ -19,11 +19,21 @@
  * The disable expires after 1 month from the date specified.
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate, RULE_NAMES, WEBPIECES_DISABLE, MaxMethodLinesConfig, MethodLimitMode } from '@webpieces/rules-config';
+import {
+    writeTemplate,
+    RULE_NAMES,
+    WEBPIECES_DISABLE,
+    MaxMethodLinesConfig,
+    MethodLimitMode,
+    detectBase,
+    getChangedFiles,
+    getFileDiff,
+    getChangedLineNumbers,
+    findNewMethodSignaturesInDiff,
+} from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 import { runNewMethods } from './validate-new-methods';
@@ -45,171 +55,6 @@ const TMP_MD_FILE = 'webpieces.methodsize.md';
  */
 function writeTmpInstructions(workspaceRoot: string): string {
     return writeTemplate(workspaceRoot, TMP_MD_FILE);
-}
-
-/**
- * Get changed TypeScript files between base and head (or working tree if head not specified).
- * Uses `git diff base [head]` to match what `nx affected` does.
- * When head is NOT specified, also includes untracked files (matching nx affected behavior).
- */
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        // If head is specified, diff base to head; otherwise diff base to working tree
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-
-        // When comparing to working tree (no head specified), also include untracked files
-        // This matches what nx affected does: "All modified files not yet committed or tracked will also be added"
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-                // Merge and dedupe
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            } catch (err: unknown) {
-                //const error = toError(err);
-                // If ls-files fails, just return the changed files
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
-}
-
-/**
- * Get the diff content for a specific file between base and head (or working tree if head not specified).
- * Uses `git diff base [head]` to match what `nx affected` does.
- * For untracked files, returns the entire file content as additions.
- */
-function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        // If head is specified, diff base to head; otherwise diff base to working tree
-        const diffTarget = head ? `${base} ${head}` : base;
-        const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-
-        // If diff is empty and we're comparing to working tree, check if it's an untracked file
-        if (!diff && !head) {
-            const fullPath = path.join(workspaceRoot, file);
-            if (fs.existsSync(fullPath)) {
-                // Check if file is untracked
-                const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                }).trim();
-
-                if (isUntracked) {
-                    // For untracked files, treat entire content as additions
-                    const content = fs.readFileSync(fullPath, 'utf-8');
-                    const lines = content.split('\n');
-                    // Create a pseudo-diff where all lines are additions
-                    return lines.map((line) => `+${line}`).join('\n');
-                }
-            }
-        }
-
-        return diff;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return '';
-    }
-}
-
-/**
- * Parse diff to find NEW method signatures.
- * Must handle: export function, async function, const/let arrow functions, class methods
- */
-// webpieces-disable max-lines-new-methods -- Regex patterns require inline documentation
-function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
-    const newMethods = new Set<string>();
-    const lines = diffContent.split('\n');
-
-    // Patterns to match method definitions (same as validate-new-methods)
-    const patterns = [
-        // [export] [async] function methodName( - most explicit, check first
-        /^\+\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/,
-        // [export] const/let methodName = [async] (
-        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
-        // [export] const/let methodName = [async] function
-        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
-        // class method: [public/private/protected] [static] [async] methodName( - but NOT constructor, if, for, while, etc.
-        /^\+\s*(?:(?:public|private|protected)\s+)?(?:static\s+)?(?:async\s+)?(\w+)\s*\(/,
-    ];
-
-    for (const line of lines) {
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            for (const pattern of patterns) {
-                const match = line.match(pattern);
-                if (match) {
-                    // Extract method name - now always in capture group 1
-                    const methodName = match[1];
-                    if (methodName && !['if', 'for', 'while', 'switch', 'catch', 'constructor'].includes(methodName)) {
-                        newMethods.add(methodName);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    return newMethods;
-}
-
-/**
- * Parse diff to find line numbers that have changes in the new file
- */
-function getChangedLineNumbers(diffContent: string): Set<number> {
-    const changedLines = new Set<number>();
-    const lines = diffContent.split('\n');
-
-    let currentNewLine = 0;
-
-    for (const line of lines) {
-        // Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@
-        const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (hunkMatch) {
-            currentNewLine = parseInt(hunkMatch[1], 10);
-            continue;
-        }
-
-        if (currentNewLine === 0) continue;
-
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            // Added line
-            changedLines.add(currentNewLine);
-            currentNewLine++;
-        } else if (line.startsWith('-') && !line.startsWith('---')) {
-            // Removed line - doesn't increment new line counter
-        } else if (!line.startsWith('\\')) {
-            // Context line (unchanged)
-            currentNewLine++;
-        }
-    }
-
-    return changedLines;
 }
 
 /**
@@ -513,42 +358,6 @@ function findViolations(
 }
 
 /**
- * Auto-detect the base branch by finding the merge-base with origin/main.
- */
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
-}
-
-/**
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
@@ -649,7 +458,7 @@ export async function runModifiedMethods(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+        const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('\u2705 No TypeScript files changed');
@@ -684,7 +493,7 @@ export async function runModifiedMethods(
  * sub-check.
  *   - NEW_METHODS                -> new-methods only
  *   - NEW_AND_MODIFIED_METHODS   -> new-methods + modified-methods
- *   - MODIFIED_FILES             -> modified-methods only
+ *   - NEW_AND_MODIFIED_FILES             -> modified-methods only
  */
 export class MaxMethodLinesValidator extends CodeValidator<MaxMethodLinesConfig> {
     constructor(config: MaxMethodLinesConfig) {
@@ -694,7 +503,7 @@ export class MaxMethodLinesValidator extends CodeValidator<MaxMethodLinesConfig>
     async run(workspaceRoot: string): Promise<ExecutorResult> {
         const mode: MethodLimitMode = this.config.mode ?? 'NEW_AND_MODIFIED_METHODS';
         const runNew = mode === 'NEW_METHODS' || mode === 'NEW_AND_MODIFIED_METHODS';
-        const runModified = mode === 'NEW_AND_MODIFIED_METHODS' || mode === 'MODIFIED_FILES';
+        const runModified = mode === 'NEW_AND_MODIFIED_METHODS' || mode === 'NEW_AND_MODIFIED_FILES';
 
         const results: ExecutorResult[] = [];
         if (runNew) {
