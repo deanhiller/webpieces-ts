@@ -69,6 +69,16 @@ function checkMergeCommits(mergeCommits: string[], outputDir: string, prefix: st
     process.stderr.write('✅ No improper merges from main detected\n');
 }
 
+// Single source of truth for the per-feature dir fork-point output is written to — the SAME nested
+// home the readers use (git-gatherInfo / merge-start read updatemain-hashes.json from mergeDirFor;
+// the review flow reads from prDirFor). Previously findForkPoint wrote to the legacy flat
+// `.webpieces/<workflow>-<feature>/` while readers looked under `.webpieces/merge-info/<feature>/`,
+// so the hash file was written to one path and read from another. Routing the writer through these
+// same helpers is what keeps them from diverging again — guarded by git-findForkPoint.spec.ts.
+export function forkPointOutputDir(repoRoot: string, featureName: string, workflow: string): string {
+    return workflow === 'review' ? prDirFor(repoRoot, featureName) : mergeDirFor(repoRoot, featureName);
+}
+
 export async function findForkPoint(workflow: string): Promise<void> {
     if (workflow !== 'review' && workflow !== 'merge') {
         process.stderr.write('ERROR: Workflow argument required\n');
@@ -81,14 +91,7 @@ export async function findForkPoint(workflow: string): Promise<void> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
-    // Single source of truth for the per-feature dir — the SAME nested home the readers use
-    // (git-gatherInfo / merge-start read updatemain-hashes.json from mergeDirFor). Previously this
-    // wrote to the legacy flat `.webpieces/<workflow>-<feature>/` while readers looked under
-    // `.webpieces/merge-info/<feature>/`, so the hash file was written to one path and read from
-    // another. Route both through mergeDirFor/prDirFor so they can never diverge again.
-    const outputDir = workflow === 'review'
-        ? prDirFor(repoRoot, featureName)
-        : mergeDirFor(repoRoot, featureName);
+    const outputDir = forkPointOutputDir(repoRoot, featureName, workflow);
     const prefix = workflow === 'review' ? 'review-' : 'updatemain-';
     fs.mkdirSync(outputDir, { recursive: true });
 
