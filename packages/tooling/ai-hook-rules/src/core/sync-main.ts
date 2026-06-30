@@ -29,7 +29,7 @@ export function main(): void {
     const hangTimeoutMinutes = Number(process.argv[3]) || DEFAULT_HANG_TIMEOUT_MINUTES;
     const startedMs = Date.now();
 
-    // First action: prove the detached child actually started. If async-refresh.log has no START line
+    // First action: prove the detached child actually started. If guard-async-work.log has no START line
     // for a spawn, the child never launched (or died before this point).
     logSyncEvent(repoRoot, new SyncLogEvent('START', process.pid, '-', `argv=${process.argv.slice(2).join(' ')}`));
 

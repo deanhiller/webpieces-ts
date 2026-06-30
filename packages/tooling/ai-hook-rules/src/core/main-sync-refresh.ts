@@ -14,8 +14,8 @@ import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
  * the NEXT call. This is the first detached spawn in the codebase — every existing hook is synchronous.
  *
  * Observability: we log SPAWN_ATTEMPT here and the child logs START/FINISH/ERROR, all to
- * `.webpieces/hooks/async-refresh.log`. The child's stdout/stderr are redirected to a sibling file (not
- * /dev/null) so a crash before the child's own logging is still captured. If async-refresh.log shows
+ * `.webpieces/hooks/guard-async-work.log`. The child's stdout/stderr are redirected to a sibling file (not
+ * /dev/null) so a crash before the child's own logging is still captured. If guard-async-work.log shows
  * SPAWN_ATTEMPT but never START, the detached child was killed before it ran.
  */
 export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes: number = DEFAULT_HANG_TIMEOUT_MINUTES): void {

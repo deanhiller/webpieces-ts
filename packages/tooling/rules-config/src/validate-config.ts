@@ -100,16 +100,33 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
     return out;
 }
 
+// A config key under rules/hookGuards that is not a known built-in rule (and no rulesDir is set to
+// supply custom rules). Almost always a removed/renamed rule left behind, or a typo. Actionable.
+function unknownRuleError(ruleName: string): string {
+    return (
+        `[${ruleName}] Unknown rule — not a built-in rule and no "rulesDir" is configured to supply ` +
+        `custom rules. Remove the "${ruleName}" key from webpieces.config.json (it is likely a removed ` +
+        `or renamed rule, or a typo).`
+    );
+}
+
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually
 export function validateWebpiecesConfig(
     rawRules: Record<string, Record<string, unknown>>,
+    hasCustomRulesDir: boolean = false,
 ): string[] {
     const errors: string[] = [];
 
     // Check field-level correctness for rules that are present
     for (const [ruleName, entry] of Object.entries(rawRules)) {
         const schema = RULE_SCHEMAS[ruleName];
-        if (!schema) continue; // custom/unknown rule — no schema to validate against
+        if (!schema) {
+            // No built-in schema. With no rulesDir there are no custom rules, so this key is a
+            // dead/typo'd entry — tell the AI to remove it (a removed rule like no-shell-substitution
+            // lingers here otherwise). With a rulesDir it may be a legitimate custom rule → skip.
+            if (!hasCustomRulesDir) errors.push(unknownRuleError(ruleName));
+            continue;
+        }
         for (const [key, value] of Object.entries(entry)) {
             const fieldDef = schema[key];
             if (!fieldDef) {

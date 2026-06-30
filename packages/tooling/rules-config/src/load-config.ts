@@ -104,8 +104,13 @@ export function loadAndValidate(cwd: string): LoadedConfig {
     // each rule's own `scope`, so it needs no section knowledge). Placement is enforced separately.
     const overrideRules = { ...rulesSection, ...hookGuardsSection };
 
+    // A non-empty rulesDir means custom rules exist (loaded at runtime by ai-hook-rules), so a config
+    // key with no built-in schema may be a legitimate custom rule. With no rulesDir, an unknown key is
+    // a dead/typo'd entry and is rejected (validateWebpiecesConfig).
+    const rulesDir = consumerConfig.rulesDir ?? [];
+
     const errors = [
-        ...validateWebpiecesConfig(overrideRules),
+        ...validateWebpiecesConfig(overrideRules, rulesDir.length > 0),
         ...validateSectionPlacement(rulesSection, hookGuardsSection),
         ...validateCommandsSection(consumerConfig.commands, legacyPrGate),
     ];
@@ -115,8 +120,6 @@ export function loadAndValidate(cwd: string): LoadedConfig {
             errors.map(e => `  • ${e}`).join('\n'),
         );
     }
-
-    const rulesDir = consumerConfig.rulesDir ?? [];
     const commands = buildCommandsConfig(consumerConfig.commands, legacyPrGate);
     applyCommandDefaults(overrideRules, commands);
 

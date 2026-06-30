@@ -28,6 +28,16 @@ describe('validateWebpiecesConfig', () => {
         expect(errorsFor('no-file-import-cycles', errors).some(e => e.includes('Unknown field "bogusField"'))).toBe(true);
     });
 
+    it('rejects an unknown rule key (e.g. a removed rule) when no rulesDir is configured', () => {
+        const errors = validateWebpiecesConfig({ 'no-shell-substitution': { mode: 'OFF' } });
+        expect(errors.some(e => e.includes('[no-shell-substitution]') && e.includes('Unknown rule'))).toBe(true);
+    });
+
+    it('allows an unknown rule key when a rulesDir is configured (may be a custom rule)', () => {
+        const errors = validateWebpiecesConfig({ 'my-custom-rule': { mode: 'ON' } }, true);
+        expect(errors.some(e => e.includes('[my-custom-rule]'))).toBe(false);
+    });
+
     it('every rule accepts the universal escape hatches', () => {
         const errors = validateWebpiecesConfig({
             'pr-creation-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },

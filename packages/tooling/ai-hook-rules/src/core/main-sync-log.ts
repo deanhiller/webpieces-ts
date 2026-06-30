@@ -9,11 +9,11 @@ import { toError } from './to-error';
 // exited, with stdio discarded, so when it fails to update the cache there is normally no trace.
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
-// mid-run (START with no FINISH), or threw. Writes to `.webpieces/hooks/async-refresh.log`.
+// mid-run (START with no FINISH), or threw. Writes to `.webpieces/hooks/guard-async-work.log`.
 const HOOKS_DIR = '.webpieces/hooks';
-const LOG_FILE = 'async-refresh.log';
-const LOG_FILE_PREV = 'async-refresh.1.log';
-const STDERR_FILE = 'async-refresh.stderr.log';
+const LOG_FILE = 'guard-async-work.log';
+const LOG_FILE_PREV = 'guard-async-work.1.log';
+const STDERR_FILE = 'guard-async-work.stderr.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors decision-log)
 const MAX_DETAIL_LEN = 300;
 
@@ -35,7 +35,7 @@ export class SyncLogEvent {
 }
 
 /**
- * Append one tab-separated line per refresher event to `.webpieces/hooks/async-refresh.log`. `root` is
+ * Append one tab-separated line per refresher event to `.webpieces/hooks/guard-async-work.log`. `root` is
  * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */
