@@ -1,9 +1,10 @@
 import * as path from 'path';
 
-import { loadAndValidate, WebpiecesRulesConfig, isHookGuard } from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { loadRules, globMatches } from './load-rules';
+import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { toError } from './to-error';
 import { formatReport } from './report';
 import {
@@ -19,6 +20,16 @@ function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     if (mode === 'all') return rules;
     if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.name));
     return rules.filter((r: Rule): boolean => !isHookGuard(r.name));
+}
+
+// Fire-and-forget the detached refresher when feature-branch-guard is loaded and active, so the
+// cache (.webpieces/main-sync-status.json) stays fresh as the AI works. The guard rule itself also
+// triggers this on Write/Edit; this covers the Bash path so the cache is warm on every command.
+function maybeRefreshMainSync(rules: readonly Rule[], workspaceRoot: string): void {
+    const guard = rules.find((r: Rule): boolean => r.name === 'feature-branch-guard');
+    if (guard && guard.shouldRun()) {
+        triggerMainSyncRefresh(workspaceRoot, DEFAULT_HANG_TIMEOUT_MINUTES);
+    }
 }
 
 const CONFIG_MISSING_REPORT =
@@ -84,6 +95,12 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
+
+    // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs
+    // far more bash than edits, so refreshing here means the guard's next file-edit check reads a
+    // fresh status. Detached + fire-and-forget — never blocks the command. Only when the guard is
+    // loaded (guards/all mode) and enabled, so a project that opted out never triggers git fetches.
+    maybeRefreshMainSync(rules, workspaceRoot);
 
     const ctx = buildBashContext(command, workspaceRoot);
     const groups = runBashRules(rules, ctx);
