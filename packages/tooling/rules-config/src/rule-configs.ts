@@ -257,15 +257,6 @@ export class NoSymbolDiTokensConfig extends BaseRuleConfig {
     };
 }
 
-export class NoShellSubstitutionConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
-
-    static readonly SCHEMA: SchemaShape<NoShellSubstitutionConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
-        ...BASE_RULE_SCHEMA,
-    };
-}
-
 export class BranchCreationGuardConfig extends BaseRuleConfig {
     declare mode?: BranchGuardMode;
     // Naming pattern for stacked SUB-branches only (branches created off another feature branch,
@@ -318,10 +309,10 @@ export class PrMergeCleanupConfig extends BaseRuleConfig {
     };
 }
 
-export class NoDirectMainUpdateConfig extends BaseRuleConfig {
+export class RedirectHowToMergeMainConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
 
-    static readonly SCHEMA: SchemaShape<NoDirectMainUpdateConfig> = {
+    static readonly SCHEMA: SchemaShape<RedirectHowToMergeMainConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         ...BASE_RULE_SCHEMA,
     };

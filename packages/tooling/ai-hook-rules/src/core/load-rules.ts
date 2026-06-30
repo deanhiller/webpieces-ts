@@ -5,9 +5,9 @@ import {
     BaseRuleConfig, RuleOptions, WebpiecesRulesConfig,
     NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig,
     NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
-    CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoShellSubstitutionConfig,
+    CatchErrorPatternConfig, ThrowCauseRequiredConfig,
     NoSymbolDiTokensConfig, BranchCreationGuardConfig, PrCreationGuardConfig,
-    MergeInProgressGuardConfig, PrMergeCleanupConfig, NoDirectMainUpdateConfig,
+    MergeInProgressGuardConfig, PrMergeCleanupConfig, RedirectHowToMergeMainConfig,
     NoJsFilesConfig, FeatureBranchGuardConfig,
 } from '@webpieces/rules-config';
 
@@ -26,13 +26,12 @@ import { RequireReturnTypeRule } from './rules/require-return-type';
 import { NoUnmanagedExceptionsRule } from './rules/no-unmanaged-exceptions';
 import { CatchErrorPatternRule } from './rules/catch-error-pattern';
 import { ThrowCauseRequiredRule } from './rules/throw-cause-required';
-import { NoShellSubstitutionRule } from './rules/no-shell-substitution';
 import { NoSymbolDiTokensRule } from './rules/no-symbol-di-tokens';
 import { BranchCreationGuardRule } from './rules/branch-creation-guard';
 import { PrCreationGuardRule } from './rules/pr-creation-guard';
 import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
 import { PrMergeCleanupRule } from './rules/pr-merge-cleanup';
-import { NoDirectMainUpdateRule } from './rules/no-direct-main-update';
+import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
 import { FeatureBranchGuardRule } from './rules/feature-branch-guard';
 
@@ -54,13 +53,12 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'no-unmanaged-exceptions': (c: BaseRuleConfig) => new NoUnmanagedExceptionsRule(c as NoUnmanagedExceptionsConfig),
     'catch-error-pattern': (c: BaseRuleConfig) => new CatchErrorPatternRule(c as CatchErrorPatternConfig),
     'throw-cause-required': (c: BaseRuleConfig) => new ThrowCauseRequiredRule(c as ThrowCauseRequiredConfig),
-    'no-shell-substitution': (c: BaseRuleConfig) => new NoShellSubstitutionRule(c as NoShellSubstitutionConfig),
     'no-symbol-di-tokens': (c: BaseRuleConfig) => new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig),
     'branch-creation-guard': (c: BaseRuleConfig) => new BranchCreationGuardRule(c as BranchCreationGuardConfig),
     'pr-creation-guard': (c: BaseRuleConfig) => new PrCreationGuardRule(c as PrCreationGuardConfig),
     'merge-in-progress-guard': (c: BaseRuleConfig) => new MergeInProgressGuardRule(c as MergeInProgressGuardConfig),
     'pr-merge-cleanup': (c: BaseRuleConfig) => new PrMergeCleanupRule(c as PrMergeCleanupConfig),
-    'no-direct-main-update': (c: BaseRuleConfig) => new NoDirectMainUpdateRule(c as NoDirectMainUpdateConfig),
+    'redirect-how-to-merge-main': (c: BaseRuleConfig) => new RedirectHowToMergeMainRule(c as RedirectHowToMergeMainConfig),
     'no-js-files': (c: BaseRuleConfig) => new NoJsFilesRule(c as NoJsFilesConfig),
     'feature-branch-guard': (c: BaseRuleConfig) => new FeatureBranchGuardRule(c as FeatureBranchGuardConfig),
 };

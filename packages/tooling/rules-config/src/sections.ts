@@ -15,9 +15,8 @@ export const HOOK_GUARD_NAMES: readonly string[] = [
     'pr-creation-guard',
     'merge-in-progress-guard',
     'pr-merge-cleanup',
-    'no-direct-main-update',
+    'redirect-how-to-merge-main',
     'feature-branch-guard',
-    'no-shell-substitution',
 ];
 
 const HOOK_GUARD_SET: ReadonlySet<string> = new Set(HOOK_GUARD_NAMES);

@@ -22,13 +22,12 @@ export { RequireReturnTypeRule } from './core/rules/require-return-type';
 export { NoUnmanagedExceptionsRule } from './core/rules/no-unmanaged-exceptions';
 export { CatchErrorPatternRule } from './core/rules/catch-error-pattern';
 export { ThrowCauseRequiredRule } from './core/rules/throw-cause-required';
-export { NoShellSubstitutionRule } from './core/rules/no-shell-substitution';
 export { NoSymbolDiTokensRule } from './core/rules/no-symbol-di-tokens';
 export { BranchCreationGuardRule } from './core/rules/branch-creation-guard';
 export { PrCreationGuardRule } from './core/rules/pr-creation-guard';
 export { MergeInProgressGuardRule } from './core/rules/merge-in-progress-guard';
 export { PrMergeCleanupRule } from './core/rules/pr-merge-cleanup';
-export { NoDirectMainUpdateRule } from './core/rules/no-direct-main-update';
+export { RedirectHowToMergeMainRule } from './core/rules/redirect-how-to-merge-main';
 export { NoJsFilesRule } from './core/rules/no-js-files';
 export { FeatureBranchGuardRule } from './core/rules/feature-branch-guard';
 

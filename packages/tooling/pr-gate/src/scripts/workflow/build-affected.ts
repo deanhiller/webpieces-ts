@@ -42,3 +42,47 @@ export function runBuildAffected(repoRoot: string, buildCommand?: string): numbe
 export function runConfiguredBuildGate(repoRoot: string): number {
     return runBuildAffected(repoRoot, loadAndValidate(repoRoot).prGate.buildCommand);
 }
+
+const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+
+/**
+ * The two facts that differ between the wp-start (advisory) and wp-finish (authoritative) build
+ * gates. Everything else — resolve command, run it, print the re-run hint, exit non-zero on failure
+ * — is identical, so it lives once in runBuildGate and the difference is passed in here. A class (not
+ * an object literal) per the codebase's data-structure convention.
+ */
+export class BuildGateOptions {
+    label: string;            // section header shown above the gate
+    rerunCommand: string;     // command the AI re-runs after fixing the build
+    failureHeadline: string;  // first line printed on failure
+
+    constructor(label: string, rerunCommand: string, failureHeadline: string) {
+        this.label = label;
+        this.rerunCommand = rerunCommand;
+        this.failureHeadline = failureHeadline;
+    }
+}
+
+/**
+ * Run the configured build gate with consistent framing, exiting the process on failure. Single
+ * source of truth: wp-start-upsert-pr and wp-finish-upsert-pr both call THIS (only the BuildGateOptions
+ * differ) so a fix to the gate flow is made once, not in two near-identical copies.
+ */
+export function runBuildGate(repoRoot: string, opts: BuildGateOptions): void {
+    const buildCommand = resolveBuildCommand(repoRoot);
+    process.stdout.write('\n' + SEP + opts.label + '\n' + SEP + '\n');
+    process.stdout.write(
+        `Running the build gate. To get it passing, run the SAME command yourself and fix everything it reports:\n\n` +
+        `    ${buildCommand}\n\n`,
+    );
+    const buildCode = runConfiguredBuildGate(repoRoot);
+    if (buildCode !== 0) {
+        process.stderr.write(
+            `\n❌ ${opts.failureHeadline}\n\n` +
+            `Run THIS exact command to reproduce and fix all errors, then re-run ${opts.rerunCommand}:\n\n` +
+            `    ${buildCommand}\n\n`,
+        );
+        process.exit(buildCode);
+    }
+    process.stdout.write('\n✅ Build passed.\n');
+}

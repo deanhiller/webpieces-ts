@@ -30,11 +30,11 @@ describe('validateWebpiecesConfig', () => {
 
     it('every rule accepts the universal escape hatches', () => {
         const errors = validateWebpiecesConfig({
-            'no-shell-substitution': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
+            'pr-creation-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
             'pr-merge-cleanup': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
             'feature-branch-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
         });
-        for (const rule of ['no-shell-substitution', 'pr-merge-cleanup', 'feature-branch-guard']) {
+        for (const rule of ['pr-creation-guard', 'pr-merge-cleanup', 'feature-branch-guard']) {
             const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
             expect(fieldErrors).toEqual([]);
         }
@@ -93,10 +93,10 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
     it('rejects a present rule that is missing the required ignoreModifiedUntilEpoch', () => {
         const errors = validateWebpiecesConfig({
-            'no-shell-substitution': { mode: 'ON' },
+            'pr-creation-guard': { mode: 'ON' },
         });
         expect(
-            errorsFor('no-shell-substitution', errors).some(
+            errorsFor('pr-creation-guard', errors).some(
                 e => e.includes('Missing required field "ignoreModifiedUntilEpoch"'),
             ),
         ).toBe(true);
@@ -104,10 +104,10 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('rejects a present rule that is missing the required mode', () => {
         const errors = validateWebpiecesConfig({
-            'no-shell-substitution': { ignoreModifiedUntilEpoch: 0 },
+            'pr-creation-guard': { ignoreModifiedUntilEpoch: 0 },
         });
         expect(
-            errorsFor('no-shell-substitution', errors).some(
+            errorsFor('pr-creation-guard', errors).some(
                 e => e.includes('Missing required field "mode"'),
             ),
         ).toBe(true);
@@ -115,9 +115,9 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('accepts a fully-specified rule (mode + ignoreModifiedUntilEpoch)', () => {
         const errors = validateWebpiecesConfig({
-            'no-shell-substitution': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
+            'pr-creation-guard': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
         });
-        expect(errorsFor('no-shell-substitution', errors)).toEqual([]);
+        expect(errorsFor('pr-creation-guard', errors)).toEqual([]);
     });
 
     it('branch-creation-guard accepts ON_NO_SUBBRANCHES mode and branchFormat', () => {
