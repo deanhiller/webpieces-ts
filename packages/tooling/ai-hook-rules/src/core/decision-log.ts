@@ -5,13 +5,13 @@ import * as path from 'path';
 import { toError } from './to-error';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
-// the ASYNC log (async-refresh.log, written by the detached refresher in main-sync-log.ts). This one
-// records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES the
-// async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
-// traceable to a stale or missing async write. Writes to `.webpieces/hooks/sync-decisions.log`.
+// the ASYNC log (guard-async-work.log, written by the detached refresher in main-sync-log.ts). This
+// one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
+// the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
+// traceable to a stale or missing async write. Writes to `.webpieces/hooks/guard-sync-decisions.log`.
 const HOOKS_DIR = '.webpieces/hooks';
-const LOG_FILE = 'sync-decisions.log';
-const LOG_FILE_PREV = 'sync-decisions.1.log';
+const LOG_FILE = 'guard-sync-decisions.log';
+const LOG_FILE_PREV = 'guard-sync-decisions.1.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
 const MAX_TARGET_LEN = 160;
 
@@ -42,7 +42,7 @@ export class GuardDecision {
 }
 
 /**
- * Append one tab-separated line per decision to `.webpieces/hooks/sync-decisions.log`. `root` is
+ * Append one tab-separated line per decision to `.webpieces/hooks/guard-sync-decisions.log`. `root` is
  * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or process.cwd() at
  * the pre-load config-bypass site). Swallows all errors — logging must never block or fail a hook.
  */
