@@ -1,16 +1,25 @@
 import * as path from 'path';
 
-import { loadAndValidate, WebpiecesRulesConfig } from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig, isHookGuard } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { loadRules, globMatches } from './load-rules';
 import { toError } from './to-error';
 import { formatReport } from './report';
 import {
-    ToolKind, NormalizedToolInput, BlockedResult,
+    ToolKind, NormalizedToolInput, BlockedResult, HookMode,
     Rule, Violation, RuleGroup,
     EditContext, FileContext, BashContext,
 } from './types';
+
+// Restrict loaded rules to the category this hook invocation runs. The two split hooks each pass a
+// disjoint category ('rules' = code-style, 'guards' = the hookGuards section); 'all' runs both (the
+// combined back-compat bin). isHookGuard is the shared classifier in @webpieces/rules-config.
+function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
+    if (mode === 'all') return rules;
+    if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.name));
+    return rules.filter((r: Rule): boolean => !isHookGuard(r.name));
+}
 
 const CONFIG_MISSING_REPORT =
     'webpieces.config.json not found.\n' +
@@ -21,14 +30,16 @@ export function run(
     toolKind: ToolKind,
     input: NormalizedToolInput,
     cwd: string,
+    mode: HookMode = 'all',
 ): BlockedResult | null {
-    return runInternal(toolKind, input, cwd);
+    return runInternal(toolKind, input, cwd, mode);
 }
 
 function runInternal(
     toolKind: ToolKind,
     input: NormalizedToolInput,
     cwd: string,
+    mode: HookMode,
 ): BlockedResult | null {
     const loaded = loadAndValidate(cwd);
     if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
@@ -40,7 +51,7 @@ function runInternal(
         return null;
     }
 
-    const rules = loadRules(loaded.rulesConfig, workspaceRoot);
+    const rules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
     if (rules.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
@@ -59,16 +70,16 @@ function runInternal(
     return new BlockedResult(report);
 }
 
-export function runBash(command: string, cwd: string): BlockedResult | null {
-    return runBashInternal(command, cwd);
+export function runBash(command: string, cwd: string, mode: HookMode = 'all'): BlockedResult | null {
+    return runBashInternal(command, cwd, mode);
 }
 
-function runBashInternal(command: string, cwd: string): BlockedResult | null {
+function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
     const loaded = loadAndValidate(cwd);
     if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 
     const workspaceRoot = path.dirname(loaded.configPath);
-    const rules = loadRules(loaded.rulesConfig, workspaceRoot);
+    const rules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
     if (rules.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);

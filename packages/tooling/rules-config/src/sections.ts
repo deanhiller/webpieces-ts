@@ -16,7 +16,7 @@ export const HOOK_GUARD_NAMES: readonly string[] = [
     'merge-in-progress-guard',
     'pr-merge-cleanup',
     'no-direct-main-update',
-    'no-edit-on-main',
+    'feature-branch-guard',
     'no-shell-substitution',
 ];
 

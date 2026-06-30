@@ -1,5 +1,5 @@
 {
-    "_comment": "Two independently-installable webpieces PreToolUse hooks. The Rules hook validates code-style on Write/Edit/MultiEdit; the Guards hook protects git/PR/branch on Bash. Install them with `wp-setup-ai-hooks` (which lets you pick a location per hook); this file just shows the wiring. Use `./node_modules/.bin/<bin>` for project installs, or `node <repoRoot>/node_modules/.bin/<bin>` for a global ~/.claude/settings.json install.",
+    "_comment": "Two independently-installable webpieces PreToolUse hooks. The Rules hook validates code-style on Write/Edit/MultiEdit; the Guards hook protects git/PR/branch — it matches Write|Edit|MultiEdit|Bash so ALL guards run here (bash git/PR guards on Bash, file guards like feature-branch-guard on Write/Edit). Install them with `wp-setup-ai-hooks` (which lets you pick a location per hook); this file just shows the wiring. Use `./node_modules/.bin/<bin>` for project installs, or `node <repoRoot>/node_modules/.bin/<bin>` for a global ~/.claude/settings.json install.",
     "hooks": {
         "PreToolUse": [
             {
@@ -12,7 +12,7 @@
                 ]
             },
             {
-                "matcher": "Bash",
+                "matcher": "Write|Edit|MultiEdit|Bash",
                 "hooks": [
                     {
                         "type": "command",

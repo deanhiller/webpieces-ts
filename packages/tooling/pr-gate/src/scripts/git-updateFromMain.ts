@@ -2,7 +2,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { main as gatherInfo } from './git-gatherInfo';
 import { main as cleanTmp } from './workflow/cleanTmp';
@@ -214,6 +214,10 @@ function finalizeBranch(
     }
     runGitChecked(['checkout', squashBranch], 'Failed to checkout squash branch');
     runGitChecked(['branch', '-m', currentBranch], 'Failed to rename squash branch');
+
+    // Branch now contains origin/main — stamp a clean main-sync status so the feature-branch-guard
+    // unblocks edits immediately (no wait for the async refresher).
+    stampCleanMainSyncStatus(execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim());
 
     process.stdout.write(`\n✅ Branch ${currentBranch} updated from main. Backup: ${backupBranch}\n`);
     process.stdout.write(`   Delete backup when safe: git branch -D ${backupBranch}\n\n`);

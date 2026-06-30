@@ -8,7 +8,7 @@ import {
     CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoShellSubstitutionConfig,
     NoSymbolDiTokensConfig, BranchCreationGuardConfig, PrCreationGuardConfig,
     MergeInProgressGuardConfig, PrMergeCleanupConfig, NoDirectMainUpdateConfig,
-    NoJsFilesConfig, NoEditOnMainConfig,
+    NoJsFilesConfig, FeatureBranchGuardConfig,
 } from '@webpieces/rules-config';
 
 import type { Rule, PlainRule } from './types';
@@ -34,7 +34,7 @@ import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
 import { PrMergeCleanupRule } from './rules/pr-merge-cleanup';
 import { NoDirectMainUpdateRule } from './rules/no-direct-main-update';
 import { NoJsFilesRule } from './rules/no-js-files';
-import { NoEditOnMainRule } from './rules/no-edit-on-main';
+import { FeatureBranchGuardRule } from './rules/feature-branch-guard';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
@@ -62,7 +62,7 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'pr-merge-cleanup': (c: BaseRuleConfig) => new PrMergeCleanupRule(c as PrMergeCleanupConfig),
     'no-direct-main-update': (c: BaseRuleConfig) => new NoDirectMainUpdateRule(c as NoDirectMainUpdateConfig),
     'no-js-files': (c: BaseRuleConfig) => new NoJsFilesRule(c as NoJsFilesConfig),
-    'no-edit-on-main': (c: BaseRuleConfig) => new NoEditOnMainRule(c as NoEditOnMainConfig),
+    'feature-branch-guard': (c: BaseRuleConfig) => new FeatureBranchGuardRule(c as FeatureBranchGuardConfig),
 };
 
 // Index the typed config by rule name. Each value is the rule's *Config (a plain object from

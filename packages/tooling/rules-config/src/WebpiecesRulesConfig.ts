@@ -19,7 +19,7 @@ import {
     MergeInProgressGuardConfig,
     PrMergeCleanupConfig,
     NoDirectMainUpdateConfig,
-    NoEditOnMainConfig,
+    FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NoJsFilesConfig,
@@ -47,7 +47,7 @@ export class WebpiecesRulesConfig {
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;
     'pr-merge-cleanup'?: PrMergeCleanupConfig;
     'no-direct-main-update'?: NoDirectMainUpdateConfig;
-    'no-edit-on-main'?: NoEditOnMainConfig;
+    'feature-branch-guard'?: FeatureBranchGuardConfig;
     'no-file-import-cycles'?: NoFileImportCyclesConfig;
     'runtime-architecture'?: RuntimeArchitectureConfig;
     'no-js-files'?: NoJsFilesConfig;

@@ -70,7 +70,7 @@ describe('applyHook', () => {
         applyHook(GUARDS_HOOK, global, targets, root);
 
         const settings = readSettings(global.settingsPath);
-        const cmd = settings.hooks!.PreToolUse!.find(e => e.matcher === 'Bash')!.hooks[0].command;
+        const cmd = settings.hooks!.PreToolUse!.find(e => e.matcher === 'Write|Edit|MultiEdit|Bash')!.hooks[0].command;
         expect(cmd).toBe(`node ${path.join(root, 'node_modules', '.bin', 'wp-ai-guards-hook')}`);
         expect(cmd).not.toContain('global-hook.js');
     });

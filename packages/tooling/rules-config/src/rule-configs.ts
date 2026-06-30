@@ -320,13 +320,22 @@ export class NoDirectMainUpdateConfig extends BaseRuleConfig {
     };
 }
 
-export class NoEditOnMainConfig extends BaseRuleConfig {
+// Comprehensive "are you on a proper feature branch?" guard. Replaces the old no-edit-on-main:
+//  - on main (synchronous check)                  → block, create a feature branch
+//  - branch already merged into main (merged PR)  → block, branch off fresh main
+//  - no fork point with origin/main               → block, squash onto a new branch
+//  - origin/main moved & touches your files       → block, merge main first
+// branchNamingConvention is surfaced in the on-main message; hangTimeoutMinutes tunes the detached
+// refresher's stale-lock reclaim window.
+export class FeatureBranchGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
     branchNamingConvention?: string;
+    hangTimeoutMinutes?: number;
 
-    static readonly SCHEMA: SchemaShape<NoEditOnMainConfig> = {
+    static readonly SCHEMA: SchemaShape<FeatureBranchGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         branchNamingConvention: FieldDef.optional('string'),
+        hangTimeoutMinutes: FieldDef.optional('number'),
         ...BASE_RULE_SCHEMA,
     };
 }
