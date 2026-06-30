@@ -4,9 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate,
-    WEBPIECES_TMP_DIR,
     MERGE_EXPLANATION_FILE,
     loadReviewJson,
+    prDirFor,
     reviewJsonPath,
     ReviewJson,
     stampCleanMainSyncStatus,
@@ -153,7 +153,7 @@ function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJs
 }
 
 function upsertPr(repoRoot: string, currentBranch: string, body: string): void {
-    const prDir = path.join(repoRoot, WEBPIECES_TMP_DIR, `pr-${getFeatureName()}`);
+    const prDir = prDirFor(repoRoot, getFeatureName());
     fs.mkdirSync(prDir, { recursive: true });
     const bodyFile = path.join(prDir, 'pr-body.md');
     fs.writeFileSync(bodyFile, body + '\n');

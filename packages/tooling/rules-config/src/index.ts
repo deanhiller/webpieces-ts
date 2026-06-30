@@ -29,7 +29,8 @@ export {
     RULE_NAMES,
     hasDisable,
     WEBPIECES_TMP_DIR,
-    MERGE_DIR_PREFIX,
+    MERGE_INFO_DIR,
+    PR_INFO_DIR,
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
 } from './constants';
@@ -102,6 +103,7 @@ export {
 export {
     ReviewJson,
     loadReviewJson,
+    prDirFor,
     reviewJsonPath,
     reviewJsonSchemaHint,
 } from './review-json';

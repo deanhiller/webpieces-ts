@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     WEBPIECES_TMP_DIR,
-    MERGE_DIR_PREFIX,
+    MERGE_INFO_DIR,
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
 } from '@webpieces/rules-config';
@@ -57,7 +57,7 @@ export class MarkerScanResult {
 const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
 
 export function mergeDirFor(repoRoot: string, featureName: string): string {
-    return path.join(repoRoot, WEBPIECES_TMP_DIR, `${MERGE_DIR_PREFIX}${featureName}`);
+    return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, featureName);
 }
 
 // Per-conflicted-file context dir holding A-forkpoint.txt / B-feature.txt / C-main.txt /

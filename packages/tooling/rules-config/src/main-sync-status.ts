@@ -73,7 +73,7 @@ export class MainSyncLock {
     }
 }
 
-// Raw JSON shapes for the cast at the parse boundary (mirrors global SkipHooksFile-style casts) —
+// Raw JSON shapes for the cast at the parse boundary —
 // keeps `any`/`unknown` out of the cast so no-any-unknown stays clean.
 interface RawStatus {
     branch?: string;
