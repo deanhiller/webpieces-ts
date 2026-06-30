@@ -9,6 +9,7 @@ import {
 } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
+import { logSyncEvent, SyncLogEvent } from './main-sync-log';
 
 /**
  * The detached, fire-and-forget refresher spawned (by file path, not a bin) from
@@ -26,10 +27,18 @@ import { toError } from './to-error';
 export function main(): void {
     const repoRoot = process.argv[2] ?? process.cwd();
     const hangTimeoutMinutes = Number(process.argv[3]) || DEFAULT_HANG_TIMEOUT_MINUTES;
+    const startedMs = Date.now();
+
+    // First action: prove the detached child actually started. If main-sync.log has no START line
+    // for a spawn, the child never launched (or died before this point).
+    logSyncEvent(repoRoot, new SyncLogEvent('START', process.pid, '-', `argv=${process.argv.slice(2).join(' ')}`));
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        if (isRefreshInProgress(repoRoot, hangTimeoutMinutes)) return;
+        if (isRefreshInProgress(repoRoot, hangTimeoutMinutes)) {
+            logSyncEvent(repoRoot, new SyncLogEvent('SKIP_INPROGRESS', process.pid, '-', 'another refresh is in progress'));
+            return;
+        }
 
         const lock = inProcessLock();
         writeMainSyncLock(repoRoot, lock);
@@ -37,6 +46,11 @@ export function main(): void {
         try {
             const status = computeMainSyncStatus(repoRoot);
             writeMainSyncStatus(repoRoot, status);
+            // FINISH after a successful write — START-without-FINISH means we were killed mid-run.
+            logSyncEvent(repoRoot, new SyncLogEvent(
+                'FINISH', process.pid, status.branch,
+                `merged=${String(status.branchAlreadyMerged)} mergedPr=${status.mergedPr} forkPoint=${String(status.hasForkPoint)} conflict=${String(status.conflict)} ms=${String(Date.now() - startedMs)}`,
+            ));
         } finally {
             // Always flip the lock off so a compute failure can't wedge the guard until the
             // staleness reclaim kicks in.
@@ -44,9 +58,9 @@ export function main(): void {
         }
     } catch (err: unknown) {
         const error = toError(err);
-        void error;
-        // Detached: swallow so a transient git/fs error never leaves poison state. The next hook
-        // call spawns a fresh refresher.
+        // Detached: swallow so a transient git/fs error never leaves poison state (the next hook call
+        // spawns a fresh refresher) — but record WHY it died so the failure isn't invisible.
+        logSyncEvent(repoRoot, new SyncLogEvent('ERROR', process.pid, '-', `${error.message} | ${error.stack ?? ''}`));
     }
 }
 
