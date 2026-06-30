@@ -6,12 +6,20 @@
 export class GateDefinition {
     name: string;
     patterns: string[];
-    severity: string; // 'warn' (yellow) | 'block' (red, fails the gate)
+    // The color shown on the dashboard WHEN this gate's patterns match a changed file. Green is
+    // implicit (shown when nothing matched), so it is never configured. Color is purely visual —
+    // even 'red' never fails/blocks the PR (only the build gate can). 'yellow' = caution,
+    // 'red' = louder "look here" flag (e.g. DB schema / migration changes).
+    color: string; // 'yellow' | 'red'
+    // Example/inactive gate: parsed and kept in the file (JSON has no comments) but skipped at
+    // compute/render time. Other projects flip this to false and tune patterns/color.
+    disabled: boolean;
 
-    constructor(name: string, patterns: string[], severity: string) {
+    constructor(name: string, patterns: string[], color: string, disabled = false) {
         this.name = name;
         this.patterns = patterns;
-        this.severity = severity;
+        this.color = color;
+        this.disabled = disabled;
     }
 }
 
@@ -31,10 +39,10 @@ export class PrGateConfig {
 // whole list via the `pr-gate.gates` array in webpieces.config.json.
 export function defaultGates(): GateDefinition[] {
     return [
-        new GateDefinition('API Changed', ['libraries/apis/**', '**/*Api.ts'], 'warn'),
-        new GateDefinition('Config Files Changed', ['**/package.json', '**/tsconfig*.json', 'nx.json', '**/*.config.*'], 'warn'),
-        new GateDefinition('Dependency Graph Changed', ['architecture/dependencies.json'], 'warn'),
-        new GateDefinition('Claude / Rules Changed', ['**/CLAUDE.md', '**/claude.*.md', '.claude/**', 'webpieces.config.json'], 'warn'),
+        new GateDefinition('API Changed', ['libraries/apis/**', '**/*Api.ts'], 'yellow'),
+        new GateDefinition('Config Files Changed', ['**/package.json', '**/tsconfig*.json', 'nx.json', '**/*.config.*'], 'yellow'),
+        new GateDefinition('Dependency Graph Changed', ['architecture/dependencies.json'], 'yellow'),
+        new GateDefinition('Claude / Rules Changed', ['**/CLAUDE.md', '**/claude.*.md', '.claude/**', 'webpieces.config.json'], 'yellow'),
     ];
 }
 
@@ -45,7 +53,8 @@ export function defaultPrGateConfig(): PrGateConfig {
 interface RawGate {
     name?: string;
     patterns?: string[];
-    severity?: string;
+    color?: string;
+    disabled?: boolean;
 }
 
 interface RawPrGateSection {
@@ -55,7 +64,7 @@ interface RawPrGateSection {
 }
 
 function toGate(raw: RawGate): GateDefinition {
-    return new GateDefinition(raw.name ?? '', raw.patterns ?? [], raw.severity ?? 'warn');
+    return new GateDefinition(raw.name ?? '', raw.patterns ?? [], raw.color ?? 'yellow', raw.disabled ?? false);
 }
 
 /**

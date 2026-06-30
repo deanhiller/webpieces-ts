@@ -43,7 +43,7 @@ export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 // Proof-of-work the AI must produce for every conflicted file it resolves during a 3-point
 // merge: a short explanation written NEXT TO that file's 3-point context (the same
 // `updatemain-<safe_path>/` dir that holds A-forkpoint.txt / B-A.diff / C-A.diff). The
-// merge-complete gate requires a non-empty file of this name per conflicted file before passing —
+// wp-finish-upsert-pr gate requires a non-empty file of this name per conflicted file before passing —
 // it is the only check on the part of the process the AI actually owns (resolving files). Using a
 // sidecar file (rather than an in-source comment) works for any file type, including comment-less
 // ones like JSON and files resolved by deletion.

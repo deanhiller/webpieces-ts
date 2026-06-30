@@ -84,3 +84,9 @@ export {
     defaultPrGateConfig,
     buildPrGateConfig,
 } from './pr-gate-config';
+export {
+    ReviewJson,
+    loadReviewJson,
+    reviewJsonPath,
+    reviewJsonSchemaHint,
+} from './review-json';

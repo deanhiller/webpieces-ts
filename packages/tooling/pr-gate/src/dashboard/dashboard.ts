@@ -1,4 +1,4 @@
-import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES } from '@webpieces/rules-config';
+import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson } from '@webpieces/rules-config';
 
 // Self-contained glob matcher (** , * , ?) so pr-gate needs no extra runtime dependency.
 function globToRegex(pattern: string): RegExp {
@@ -30,21 +30,24 @@ function matchesAny(patterns: string[], file: string): boolean {
 
 export class GateResult {
     name: string;
-    severity: string;
+    color: string; // 'yellow' | 'red' — the color shown WHEN files matched (green is implicit)
     matchedFiles: string[];
 
-    constructor(name: string, severity: string, matchedFiles: string[]) {
+    constructor(name: string, color: string, matchedFiles: string[]) {
         this.name = name;
-        this.severity = severity;
+        this.color = color;
         this.matchedFiles = matchedFiles;
     }
 }
 
+// Disabled gates are in-file examples (JSON has no comments) — skip them entirely.
 export function computeGateResults(gates: GateDefinition[], changedFiles: string[]): GateResult[] {
-    return gates.map((gate: GateDefinition): GateResult => {
-        const matched = changedFiles.filter((file: string): boolean => matchesAny(gate.patterns, file));
-        return new GateResult(gate.name, gate.severity, matched);
-    });
+    return gates
+        .filter((gate: GateDefinition): boolean => !gate.disabled)
+        .map((gate: GateDefinition): GateResult => {
+            const matched = changedFiles.filter((file: string): boolean => matchesAny(gate.patterns, file));
+            return new GateResult(gate.name, gate.color, matched);
+        });
 }
 
 export class DisableCounts {
@@ -88,11 +91,11 @@ export class DashboardInput {
     forkPoint: string;
     featureHead: string;
     mainHead: string;
-    summary: string;
+    review: ReviewJson; // AI-authored risk/violations/summary (from review.json)
 
     constructor(
         title: string, gateResults: GateResult[], disables: DisableCounts,
-        buildPassed: boolean, forkPoint: string, featureHead: string, mainHead: string, summary: string,
+        buildPassed: boolean, forkPoint: string, featureHead: string, mainHead: string, review: ReviewJson,
     ) {
         this.title = title;
         this.gateResults = gateResults;
@@ -101,14 +104,34 @@ export class DashboardInput {
         this.forkPoint = forkPoint;
         this.featureHead = featureHead;
         this.mainHead = mainHead;
-        this.summary = summary;
+        this.review = review;
     }
 }
 
 function gateLine(result: GateResult): string {
     if (result.matchedFiles.length === 0) return `**${result.name}:** 🟢 No`;
-    const emoji = result.severity === 'block' ? '🔴' : '🟡';
+    const emoji = result.color === 'red' ? '🔴' : '🟡';
     return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
+}
+
+// 10-cell risk bar colored by band (🟩 ≤25, 🟨 ≤50, 🟧 ≤75, 🟥 >75), at least one filled cell —
+// ported from trytami's github_risk_bar (git-display-utils.sh).
+function riskBar(score: number): string {
+    const clamped = Math.max(0, Math.min(100, score));
+    const cell = clamped <= 25 ? '🟩' : clamped <= 50 ? '🟨' : clamped <= 75 ? '🟧' : '🟥';
+    const filled = Math.max(1, Math.min(10, Math.round(clamped / 10)));
+    return cell.repeat(filled) + '⬜'.repeat(10 - filled);
+}
+
+// RISK section (trytami's AI half): Risk Score bar, Risk Level, Pattern Violations.
+function riskLines(review: ReviewJson): string[] {
+    const violations = review.violations.length;
+    const violationLine = violations === 0 ? '🟢 No' : `🟡 Yes (${violations} violation(s))`;
+    return [
+        `**Risk Score:** ${riskBar(review.riskScore)} **${review.riskScore}/100** ${review.riskEmoji}`,
+        `**Risk Level:** ${review.riskEmoji} **${review.riskLevel}**`,
+        `**Pattern Violations:** ${violationLine}`,
+    ];
 }
 
 function disableLine(disables: DisableCounts): string {
@@ -121,15 +144,16 @@ export function renderDashboard(input: DashboardInput): string {
     const lines: string[] = [];
     lines.push('## 🚦 PR Gate Dashboard');
     lines.push('');
+    for (const line of riskLines(input.review)) lines.push(line);
     lines.push(`**Build (nx affected):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
     for (const result of input.gateResults) lines.push(gateLine(result));
     lines.push(disableLine(input.disables));
     const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
     lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
     lines.push('');
-    if (input.summary.trim() !== '') {
+    if (input.review.summary.trim() !== '') {
         lines.push('### Summary');
-        lines.push(input.summary.trim());
+        lines.push(input.review.summary.trim());
         lines.push('');
     }
     lines.push('### 🔍 3-Point Hash Points');
@@ -137,6 +161,6 @@ export function renderDashboard(input: DashboardInput): string {
     lines.push(`- Feature HEAD (B): \`${input.featureHead.slice(0, 12)}\``);
     lines.push(`- Main HEAD (C): \`${input.mainHead.slice(0, 12)}\``);
     lines.push('');
-    lines.push('<sub>🤖 Generated by `pnpm wp-upsert-pr` (build ran via nx affected — not self-attested).</sub>');
+    lines.push('<sub>🤖 Generated by `pnpm wp-finish-upsert-pr` (build ran via nx affected — not self-attested).</sub>');
     return lines.join('\n');
 }
