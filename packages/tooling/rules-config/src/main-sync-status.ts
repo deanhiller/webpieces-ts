@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { WEBPIECES_TMP_DIR } from './constants';
-import { getCurrentBranch } from './skip-rule';
 import { toError } from './to-error';
 
 // Shared "is my feature branch healthy relative to origin/main?" state. The SLOW signals (git fetch
@@ -195,6 +194,13 @@ function capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
     return { ok: true, out: result.stdout.trim() };
 }
 
+// The actual checked-out branch in repoRoot — cwd-correct so the cache's `branch` label always
+// matches what the feature-branch-guard compares against (its own `git rev-parse` in the workspace).
+function gitBranch(repoRoot: string): string {
+    const result = capture(repoRoot, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+    return result.ok ? result.out : '';
+}
+
 function changedFiles(repoRoot: string, base: string, head: string): string[] {
     const result = capture(repoRoot, 'git', ['diff', '--name-only', base, head]);
     if (!result.ok || result.out === '') return [];
@@ -223,7 +229,7 @@ function benignStatus(branch: string, featureHead: string): MainSyncStatus {
  * conflict). Never run on the hook's blocking path.
  */
 export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
-    const branch = getCurrentBranch();
+    const branch = gitBranch(repoRoot);
     const mergedPr = detectMergedPr(repoRoot, branch);
 
     // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
@@ -284,7 +290,7 @@ export function squashRecoverySteps(currentBranch: string): string[] {
 export function stampCleanMainSyncStatus(repoRoot: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const branch = getCurrentBranch();
+        const branch = gitBranch(repoRoot);
         const originMain = capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
         const featureHead = capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
         if (!originMain.ok || !featureHead.ok) return;

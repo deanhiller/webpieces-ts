@@ -136,16 +136,23 @@ function buildRepo(work: string, mainEdits: string[], featureEdits: string[]): v
 
 describe('computeMainSyncStatus (integration)', () => {
     let work: string;
-    const prevBranch = process.env['BRANCH_NAME'];
 
     beforeEach(() => {
-        process.env['BRANCH_NAME'] = 'feature';
         work = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-work-'));
     });
 
     afterEach(() => {
-        if (prevBranch === undefined) delete process.env['BRANCH_NAME']; else process.env['BRANCH_NAME'] = prevBranch;
         fs.rmSync(work, { recursive: true, force: true });
+    });
+
+    it('records the REAL checked-out branch (not an env var)', () => {
+        // Set a misleading env var: the old getCurrentBranch would have returned it; gitBranch must not.
+        const prev = process.env['GIT_BRANCH'];
+        process.env['GIT_BRANCH'] = 'main';
+        buildRepo(work, ['other.txt'], ['shared.txt']);
+        const status = computeMainSyncStatus(work);
+        if (prev === undefined) delete process.env['GIT_BRANCH']; else process.env['GIT_BRANCH'] = prev;
+        expect(status.branch).toBe('feature');
     });
 
     it('flags conflict=true when main and the branch touched the same file', () => {
