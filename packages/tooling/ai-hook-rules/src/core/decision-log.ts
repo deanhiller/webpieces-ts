@@ -4,20 +4,23 @@ import * as path from 'path';
 
 import { toError } from './to-error';
 
-// Sibling of rejection-log.ts. The rejection log records only BLOCKS (file edits). This records
-// EVERY guard decision — allow, block, config-bypass, and the various fail-open cases — so when a
-// guard silently lets an edit through (e.g. feature-branch-guard failing open on a missing/stale
-// sync cache, or a webpieces.config.json edit skipping the guard entirely) there is an audit trail
-// answering "why didn't it fire?". Writes to the same `.webpieces/hooks` dir as the rejection log.
+// The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
+// the ASYNC log (async-refresh.log, written by the detached refresher in main-sync-log.ts). This one
+// records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES the
+// async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
+// traceable to a stale or missing async write. Writes to `.webpieces/hooks/sync-decisions.log`.
 const HOOKS_DIR = '.webpieces/hooks';
-const LOG_FILE = 'guard-decisions.log';
-const LOG_FILE_PREV = 'guard-decisions.1.log';
+const LOG_FILE = 'sync-decisions.log';
+const LOG_FILE_PREV = 'sync-decisions.1.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
 const MAX_TARGET_LEN = 160;
 
 export type Verdict = 'ALLOW' | 'BLOCK';
 
 // Data-only record of one guard decision (per CLAUDE.md: classes for data, not object literals).
+// `cache` summarizes the async-written main-sync-status.json that drove a feature-branch-guard
+// decision (branch/merged/conflict/fork + the cache timestamp), or '-' when no cache was consulted
+// (bash guards, on-main, config-bypass).
 export class GuardDecision {
     rule: string;
     tool: string;
@@ -25,19 +28,21 @@ export class GuardDecision {
     branch: string;
     verdict: Verdict;
     reason: string;
+    cache: string;
 
-    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string) {
+    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-') {
         this.rule = rule;
         this.tool = tool;
         this.target = target;
         this.branch = branch;
         this.verdict = verdict;
         this.reason = reason;
+        this.cache = cache;
     }
 }
 
 /**
- * Append one tab-separated line per decision to `.webpieces/hooks/guard-decisions.log`. `root` is
+ * Append one tab-separated line per decision to `.webpieces/hooks/sync-decisions.log`. `root` is
  * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or process.cwd() at
  * the pre-load config-bypass site). Swallows all errors — logging must never block or fail a hook.
  */
@@ -59,6 +64,7 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
             decision.branch,
             decision.rule,
             oneLine(decision.reason),
+            oneLine(decision.cache),
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {

@@ -8,7 +8,7 @@ function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-synclog-'));
 }
 
-const LOG_REL = '.webpieces/hooks/main-sync.log';
+const LOG_REL = '.webpieces/hooks/async-refresh.log';
 
 describe('main-sync-log', () => {
     it('appends one tab-separated line with phase, pid, branch and detail', () => {
@@ -21,14 +21,14 @@ describe('main-sync-log', () => {
         expect(content.trim().split('\n').length).toBe(1);
     });
 
-    it('rotates to main-sync.1.log once the log exceeds the size cap', () => {
+    it('rotates to async-refresh.1.log once the log exceeds the size cap', () => {
         const root = tmpRoot();
         const hooksDir = path.join(root, '.webpieces/hooks');
         fs.mkdirSync(hooksDir, { recursive: true });
-        fs.writeFileSync(path.join(hooksDir, 'main-sync.log'), 'x'.repeat(512 * 1024 + 10));
+        fs.writeFileSync(path.join(hooksDir, 'async-refresh.log'), 'x'.repeat(512 * 1024 + 10));
         logSyncEvent(root, new SyncLogEvent('FINISH', 1, 'main', 'ok'));
-        expect(fs.existsSync(path.join(hooksDir, 'main-sync.1.log'))).toBe(true);
-        expect(fs.readFileSync(path.join(hooksDir, 'main-sync.log'), 'utf8')).toContain('\tFINISH\t');
+        expect(fs.existsSync(path.join(hooksDir, 'async-refresh.1.log'))).toBe(true);
+        expect(fs.readFileSync(path.join(hooksDir, 'async-refresh.log'), 'utf8')).toContain('\tFINISH\t');
     });
 
     it('collapses newlines/tabs in detail so one event is always one line', () => {
@@ -40,6 +40,6 @@ describe('main-sync-log', () => {
     });
 
     it('syncStderrLogPath points inside .webpieces/hooks', () => {
-        expect(syncStderrLogPath('/repo')).toBe(path.join('/repo', '.webpieces/hooks', 'main-sync.stderr.log'));
+        expect(syncStderrLogPath('/repo')).toBe(path.join('/repo', '.webpieces/hooks', 'async-refresh.stderr.log'));
     });
 });

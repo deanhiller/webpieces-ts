@@ -5,6 +5,7 @@ import {
     DEFAULT_HANG_TIMEOUT_MINUTES,
     readMainSyncStatus,
     squashRecoverySteps,
+    MainSyncStatus,
 } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
@@ -62,45 +63,54 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         const status = readMainSyncStatus(ctx.workspaceRoot);
         // No cache yet (first edit of the session) → allow; the refresh we just spawned populates it
         // for the next call. Fail-open: never block on missing data.
-        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)');
+        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
+        const cache = this.cacheSummary(status);
         // Stale cross-branch cache: the cached status is for a DIFFERENT branch (e.g. you just
         // switched branches and the refresh for this one hasn't landed yet). Never block on another
         // branch's signals — fail open; the refresh we just spawned rewrites it for this branch.
-        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)');
+        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
 
         // State 2: this feature branch was already merged into main.
         if (status.branchAlreadyMerged) {
             const pr = status.mergedPr !== '' ? status.mergedPr : '?';
-            return this.block(ctx, branch, `already-merged PR#${pr}`, this.alreadyMergedMessage(branch, status.mergedPr));
+            return this.block(ctx, branch, `already-merged PR#${pr}`, this.alreadyMergedMessage(branch, status.mergedPr), cache);
         }
         // State 3: no fork point — main was merged into the branch.
         if (!status.hasForkPoint) {
-            return this.block(ctx, branch, 'no-fork-point', this.noForkPointMessage(branch));
+            return this.block(ctx, branch, 'no-fork-point', this.noForkPointMessage(branch), cache);
         }
         // State 4: origin/main moved and touches files you changed.
         if (status.conflict) {
-            return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(status.conflictFiles));
+            return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(status.conflictFiles), cache);
         }
-        return this.allow(ctx, branch, 'clean-feature-branch');
+        return this.allow(ctx, branch, 'clean-feature-branch', cache);
+    }
+
+    // One-line summary of the async-written cache that drove this decision, for the SYNC log — so a
+    // wrong allow/block is traceable to the exact (possibly stale) main-sync-status.json read.
+    private cacheSummary(status: MainSyncStatus): string {
+        const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
+        return `cache=${status.branch} merged=${merged} fork=${String(status.hasForkPoint)} conflict=${String(status.conflict)} ts=${status.timestamp}`;
     }
 
     // Log + return for the allow path. Centralizes the decision-log call so every exit of check()
-    // is recorded with its reason (this is the audit trail for "why didn't the guard fire?").
-    private allow(ctx: FileContext, branch: string | null, reason: string): readonly Violation[] {
-        this.logDecision(ctx, branch, 'ALLOW', reason);
+    // is recorded with its reason + the async cache it read (this is the audit trail for "why didn't
+    // the guard fire?"). `cache` is the summary of the main-sync-status.json that drove the decision.
+    private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW', reason, cache);
         return [];
     }
 
-    private block(ctx: FileContext, branch: string, reason: string, message: string): readonly Violation[] {
-        this.logDecision(ctx, branch, 'BLOCK', reason);
+    private block(ctx: FileContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
         return [new V(1, ctx.relativePath, message)];
     }
 
-    private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string): void {
+    private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason),
+            new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache),
         );
     }
 
