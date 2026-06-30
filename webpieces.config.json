@@ -71,8 +71,50 @@
             "mode": "MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925,
-            "allowedPaths": ["libraries/apis/**", "packages/http/http-api/**"]
+            "allowedPaths": [
+                "libraries/apis/**",
+                "packages/http/http-api/**"
+            ]
         },
+        "no-file-import-cycles": {
+            "mode": "ON",
+            "ignoreTypeOnly": false,
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "runtime-architecture": {
+            "mode": "ON",
+            "servicePaths": [
+                "apps/*"
+            ],
+            "apiProjectPaths": [
+                "apps/example-apis"
+            ],
+            "allowedCycles": [],
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "no-js-files": {
+            "mode": "ON",
+            "allowedPaths": [],
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "validate-ts-in-src": {
+            "mode": "MODIFIED_FILES",
+            "ignoreModifiedUntilEpoch": 1771931925,
+            "allowedRootFiles": [
+                "jest.setup.ts"
+            ],
+            "excludePaths": [
+                "node_modules",
+                "dist",
+                ".nx",
+                ".git",
+                "**/*.d.ts",
+                "**/jest.config.ts",
+                "**/codegen.ts"
+            ]
+        }
+    },
+    "hookGuards": {
         "no-shell-substitution": {
             "mode": "OFF",
             "ignoreModifiedUntilEpoch": 0
@@ -102,51 +144,102 @@
             "mode": "ON",
             "branchNamingConvention": "{whoami}/{featurename}",
             "ignoreModifiedUntilEpoch": 0
-        },
-        "no-file-import-cycles": {
-            "mode": "ON",
-            "ignoreTypeOnly": false,
-            "ignoreModifiedUntilEpoch": 0
-        },
-        "runtime-architecture": {
-            "mode": "ON",
-            "servicePaths": ["apps/*"],
-            "apiProjectPaths": ["apps/example-apis"],
-            "allowedCycles": [],
-            "ignoreModifiedUntilEpoch": 0
-        },
-        "no-js-files": {
-            "mode": "ON",
-            "allowedPaths": [],
-            "ignoreModifiedUntilEpoch": 0
-        },
-        "validate-ts-in-src": {
-            "mode": "MODIFIED_FILES",
-            "ignoreModifiedUntilEpoch": 1771931925,
-            "allowedRootFiles": ["jest.setup.ts"],
-            "excludePaths": [
-                "node_modules", "dist", ".nx", ".git",
-                "**/*.d.ts", "**/jest.config.ts", "**/codegen.ts"
-            ]
         }
     },
-    "rulesDir": [],
-    "pr-gate": {
-        "mode": "ON",
-        "buildCommandWhy": "--base is the FORK POINT via $(git merge-base origin/main HEAD), NOT origin/main: basing on origin/main marks projects from other people's already-merged PRs as 'affected' (your branch still has their pre-merge versions), wasting rebuilds. The fork point scopes affected to only your branch's work. The $(...) resolves because the gate runs with shell:true.",
-        "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
-        "gatesWhy": "color = the dashboard color shown WHEN a gate's patterns match a changed file (green is implicit when nothing matches; color is purely visual and never blocks the PR — only the build gate can). disabled:true gates are kept-in-file examples (JSON has no comments) other projects flip to false and tune; they are skipped on this repo.",
-        "gates": [
-            { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "color": "yellow" },
-            { "name": "Config Files Changed", "patterns": ["**/package.json", "**/tsconfig*.json", "nx.json", "**/*.config.*"], "color": "yellow" },
-            { "name": "Dependency Graph Changed", "patterns": ["architecture/dependencies.json"], "color": "yellow" },
-            { "name": "Claude / Rules Changed", "patterns": ["**/CLAUDE.md", "**/claude.*.md", ".claude/**", "webpieces.config.json"], "color": "yellow" },
-            { "name": "Package.json Changed", "patterns": ["**/package.json"], "color": "yellow", "disabled": true },
-            { "name": "Other API Files Changed", "patterns": ["**/*Dto.ts"], "color": "yellow", "disabled": true },
-            { "name": "Authentication Changed", "patterns": ["**/authentication.ts"], "color": "yellow", "disabled": true },
-            { "name": "DB Schema Changed", "patterns": ["**/schema.prisma"], "color": "red", "disabled": true },
-            { "name": "Migration Files", "patterns": ["**/migrations/**"], "color": "red", "disabled": true },
-            { "name": "Firestore Schema Changed", "patterns": ["**/firestore*.ts"], "color": "yellow", "disabled": true }
-        ]
-    }
+    "commands": {
+        "pr-gate": {
+            "mode": "ON",
+            "buildCommandWhy": "--base is the FORK POINT via $(git merge-base origin/main HEAD), NOT origin/main: basing on origin/main marks projects from other people's already-merged PRs as 'affected' (your branch still has their pre-merge versions), wasting rebuilds. The fork point scopes affected to only your branch's work. The $(...) resolves because the gate runs with shell:true.",
+            "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
+            "gatesWhy": "color = the dashboard color shown WHEN a gate's patterns match a changed file (green is implicit when nothing matches; color is purely visual and never blocks the PR — only the build gate can). disabled:true gates are kept-in-file examples (JSON has no comments) other projects flip to false and tune; they are skipped on this repo.",
+            "gates": [
+                {
+                    "name": "API Changed",
+                    "patterns": [
+                        "libraries/apis/**",
+                        "**/*Api.ts"
+                    ],
+                    "color": "yellow"
+                },
+                {
+                    "name": "Config Files Changed",
+                    "patterns": [
+                        "**/package.json",
+                        "**/tsconfig*.json",
+                        "nx.json",
+                        "**/*.config.*"
+                    ],
+                    "color": "yellow"
+                },
+                {
+                    "name": "Dependency Graph Changed",
+                    "patterns": [
+                        "architecture/dependencies.json"
+                    ],
+                    "color": "yellow"
+                },
+                {
+                    "name": "Claude / Rules Changed",
+                    "patterns": [
+                        "**/CLAUDE.md",
+                        "**/claude.*.md",
+                        ".claude/**",
+                        "webpieces.config.json"
+                    ],
+                    "color": "yellow"
+                },
+                {
+                    "name": "Package.json Changed",
+                    "patterns": [
+                        "**/package.json"
+                    ],
+                    "color": "yellow",
+                    "disabled": true
+                },
+                {
+                    "name": "Other API Files Changed",
+                    "patterns": [
+                        "**/*Dto.ts"
+                    ],
+                    "color": "yellow",
+                    "disabled": true
+                },
+                {
+                    "name": "Authentication Changed",
+                    "patterns": [
+                        "**/authentication.ts"
+                    ],
+                    "color": "yellow",
+                    "disabled": true
+                },
+                {
+                    "name": "DB Schema Changed",
+                    "patterns": [
+                        "**/schema.prisma"
+                    ],
+                    "color": "red",
+                    "disabled": true
+                },
+                {
+                    "name": "Migration Files",
+                    "patterns": [
+                        "**/migrations/**"
+                    ],
+                    "color": "red",
+                    "disabled": true
+                },
+                {
+                    "name": "Firestore Schema Changed",
+                    "patterns": [
+                        "**/firestore*.ts"
+                    ],
+                    "color": "yellow",
+                    "disabled": true
+                }
+            ]
+        },
+        "upsertPr": "pnpm wp-start-upsert-pr",
+        "mergeComplete": "pnpm wp-finish-upsert-pr"
+    },
+    "rulesDir": []
 }
