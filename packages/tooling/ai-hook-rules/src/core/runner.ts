@@ -136,7 +136,7 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
         'webpieces.config.json is out of sync — new built-in rules are present that have no entry in webpieces.config.json.',
         '',
         'Tell the human: the following rules need to be configured. Ask for each one:',
-        '  - Should this rule be ON, OFF, MODIFIED_CODE, or NEW_AND_MODIFIED_FILES?',
+        '  - Should this rule be ON, OFF, NEW_AND_MODIFIED_CODE, or NEW_AND_MODIFIED_FILES?',
         '  - What values do you want for the options listed below?',
         'Then update webpieces.config.json and retry.',
         '',

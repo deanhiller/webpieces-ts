@@ -29,7 +29,7 @@
  * MODES (LINE-BASED)
  * ============================================================================
  * - OFF:            Skip validation entirely
- * - MODIFIED_CODE:  Flag destructuring on changed lines (lines in diff hunks)
+ * - NEW_AND_MODIFIED_CODE:  Flag destructuring on changed lines (lines in diff hunks)
  * - NEW_AND_MODIFIED_FILES: Flag ALL destructuring in files that were modified
  *
  * ============================================================================
@@ -254,7 +254,7 @@ function getDestructureContext(node: ts.Node): string {
 }
 
 /**
- * MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
+ * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
 // webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
 function findViolationsForModifiedCode(
@@ -418,7 +418,7 @@ async function runValidatorImpl(
 
     let violations: DestructureViolation[] = [];
 
-    if (mode === 'MODIFIED_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

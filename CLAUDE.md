@@ -144,7 +144,7 @@ export class MyService {
 }
 ```
 
-**`Symbol()` DI tokens are blocked by `no-symbol-di-tokens`** (enforced via `@webpieces/ai-hook-rules` PreToolUse hook and `@webpieces/code-rules` MODIFIED_CODE gate). Allowed paths are configured in `webpieces.config.json` under `no-symbol-di-tokens.allowedPaths`. Defaults:
+**`Symbol()` DI tokens are blocked by `no-symbol-di-tokens`** (enforced via `@webpieces/ai-hook-rules` PreToolUse hook and `@webpieces/code-rules` NEW_AND_MODIFIED_CODE gate). Allowed paths are configured in `webpieces.config.json` under `no-symbol-di-tokens.allowedPaths`. Defaults:
 - `libraries/apis/**` — define Symbol token alongside the API interface
 - `packages/http/http-api/**` — framework primitives (e.g. `Symbol.for` multiInject)
 

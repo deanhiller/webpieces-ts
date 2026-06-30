@@ -11,7 +11,7 @@ export type RuleOptions = Record<string, unknown>;
  * On/off is driven entirely by `mode`: a rule is OFF only when explicitly
  * set to `mode: "OFF"`. Any other value (or an absent mode) leaves the rule
  * ON. For code-rules, `mode` doubles as the scope selector
- * (e.g. "MODIFIED_CODE", "NEW_AND_MODIFIED_METHODS"); for simple on/off
+ * (e.g. "NEW_AND_MODIFIED_CODE", "NEW_AND_MODIFIED_METHODS"); for simple on/off
  * rules it is just "ON"/"OFF". (The legacy `enabled` boolean has been
  * removed in favor of this single, more flexible switch.)
  */

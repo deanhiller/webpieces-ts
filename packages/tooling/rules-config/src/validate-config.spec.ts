@@ -98,6 +98,22 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
             expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_FILES'))).toBe(true);
         }
     });
+
+    // Line-tier rules use NEW_AND_MODIFIED_CODE, not the old MODIFIED_CODE. The rename is a
+    // deliberate breaking change: a downstream config still saying MODIFIED_CODE must hard-fail.
+    it('accepts NEW_AND_MODIFIED_CODE and rejects the old MODIFIED_CODE for line-tier rules', () => {
+        for (const rule of ['no-any-unknown', 'no-destructure', 'catch-error-pattern', 'no-symbol-di-tokens', 'throw-cause-required']) {
+            const ok = errorsFor(rule, validateWebpiecesConfig({
+                [rule]: { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+            })).filter(e => e.includes('Must be one of'));
+            expect(ok).toEqual([]);
+
+            const bad = errorsFor(rule, validateWebpiecesConfig({
+                [rule]: { mode: 'MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+            }));
+            expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_CODE'))).toBe(true);
+        }
+    });
 });
 
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
@@ -214,13 +230,13 @@ describe('validateSectionPlacement', () => {
     });
 
     it('flags a code rule placed in the hookGuards section', () => {
-        const errors = validateSectionPlacement({}, { 'no-any-unknown': { mode: 'MODIFIED_CODE' } });
+        const errors = validateSectionPlacement({}, { 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE' } });
         expect(errors.some(e => e.includes('[no-any-unknown]') && e.includes('"rules"'))).toBe(true);
     });
 
     it('accepts correctly-placed entries', () => {
         const errors = validateSectionPlacement(
-            { 'no-any-unknown': { mode: 'MODIFIED_CODE' } },
+            { 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE' } },
             { 'pr-creation-guard': { mode: 'ON' } },
         );
         expect(errors).toEqual([]);

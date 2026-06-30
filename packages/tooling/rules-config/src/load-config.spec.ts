@@ -87,7 +87,7 @@ describe('loadAndValidate', () => {
 
     it('preserves unknown option keys for consumers that understand them', () => {
         const dir = writeConfig(allRulesOff({
-            'no-destructure': { mode: 'MODIFIED_CODE', disableAllowed: false, ignoreModifiedUntilEpoch: 12345 },
+            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', disableAllowed: false, ignoreModifiedUntilEpoch: 12345 },
         }));
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         expect(rule.options['disableAllowed']).toBe(false);

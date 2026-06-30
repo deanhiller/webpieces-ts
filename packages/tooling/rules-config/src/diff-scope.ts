@@ -158,7 +158,7 @@ export function getFileDiff(workspaceRoot: string, file: string, base: string, h
 
 /**
  * Parse a unified diff and return the set of added/changed line numbers (the `+` lines per hunk).
- * This is the basis of MODIFIED_CODE (line-level) scoping.
+ * This is the basis of NEW_AND_MODIFIED_CODE (line-level) scoping.
  */
 export function getChangedLineNumbers(diffContent: string): Set<number> {
     const changedLines = new Set<number>();

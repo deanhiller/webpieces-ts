@@ -24,7 +24,7 @@
  * MODES (LINE-BASED)
  * ============================================================================
  * - OFF:            Skip validation entirely
- * - MODIFIED_CODE:  Flag Symbol DI tokens on changed lines (lines in diff hunks)
+ * - NEW_AND_MODIFIED_CODE:  Flag Symbol DI tokens on changed lines (lines in diff hunks)
  * - NEW_AND_MODIFIED_FILES: Flag ALL Symbol DI tokens in files that were modified
  *
  * ============================================================================
@@ -299,7 +299,7 @@ async function runValidatorImpl(
 
     let violations: SymbolViolation[] = [];
 
-    if (mode === 'MODIFIED_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);

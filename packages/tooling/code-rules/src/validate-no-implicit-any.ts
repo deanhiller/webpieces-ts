@@ -15,7 +15,7 @@
  * MODES (LINE-BASED)
  * ============================================================================
  * - OFF:            Skip validation entirely.
- * - MODIFIED_CODE:  Flag implicit-any on changed lines (lines in diff hunks).
+ * - NEW_AND_MODIFIED_CODE:  Flag implicit-any on changed lines (lines in diff hunks).
  * - NEW_AND_MODIFIED_FILES: Flag ALL implicit-any in files that were modified.
  *
  * ============================================================================
@@ -251,7 +251,7 @@ async function runInternal(
     console.log(`\ud83d\udcc2 Checking ${changedFiles.length} changed file(s)...`);
 
     let violations: ImplicitAnyViolation[] = [];
-    if (mode === 'MODIFIED_CODE') {
+    if (mode === 'NEW_AND_MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
