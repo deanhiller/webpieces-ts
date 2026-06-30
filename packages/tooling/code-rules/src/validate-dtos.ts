@@ -10,7 +10,7 @@
  * ============================================================================
  * - OFF:            Skip validation entirely
  * - MODIFIED_CLASS: Only validate Dto classes that have changed lines in the diff
- * - MODIFIED_FILES: Validate ALL Dto classes in files that were modified
+ * - NEW_AND_MODIFIED_FILES: Validate ALL Dto classes in files that were modified
  *
  * ============================================================================
  * SKIP CONDITIONS
@@ -28,11 +28,10 @@
  * - Extra Dbo fields are allowed (e.g., password)
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { PrismaValidateDtosConfig, PrismaValidateDtosMode } from '@webpieces/rules-config';
+import { PrismaValidateDtosConfig, PrismaValidateDtosMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -62,148 +61,6 @@ interface DtoViolation {
 interface DboEntry {
     name: string;
     fields: Set<string>;
-}
-
-/**
- * Auto-detect the base branch by finding the merge-base with origin/main.
- */
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
-}
-
-/**
- * Get changed files between base and head (or working tree if head not specified).
- */
-// webpieces-disable max-lines-new-methods -- Git command handling with untracked files requires multiple code paths
-function getChangedFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget}`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f.length > 0);
-
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync('git ls-files --others --exclude-standard', {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f.length > 0);
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            } catch (err: unknown) {
-                //const error = toError(err);
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
-}
-
-/**
- * Get the diff content for a specific file.
- */
-function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-
-        if (!diff && !head) {
-            const fullPath = path.join(workspaceRoot, file);
-            if (fs.existsSync(fullPath)) {
-                const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                }).trim();
-
-                if (isUntracked) {
-                    const content = fs.readFileSync(fullPath, 'utf-8');
-                    const lines = content.split('\n');
-                    return lines.map((line) => `+${line}`).join('\n');
-                }
-            }
-        }
-
-        return diff;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return '';
-    }
-}
-
-/**
- * Parse diff to extract changed line numbers (additions only - lines starting with +).
- */
-function getChangedLineNumbers(diffContent: string): Set<number> {
-    const changedLines = new Set<number>();
-    const lines = diffContent.split('\n');
-    let currentLine = 0;
-
-    for (const line of lines) {
-        const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (hunkMatch) {
-            currentLine = parseInt(hunkMatch[1], 10);
-            continue;
-        }
-
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            changedLines.add(currentLine);
-            currentLine++;
-        } else if (line.startsWith('-') && !line.startsWith('---')) {
-            // Deletions don't increment line number
-        } else {
-            currentLine++;
-        }
-    }
-
-    return changedLines;
 }
 
 /**
@@ -679,7 +536,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
 
     return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
 }

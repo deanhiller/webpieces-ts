@@ -13,10 +13,9 @@
  * The disable expires after 1 month from the date specified.
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { writeTemplate, hasDisable, RULE_NAMES, MaxFileLinesConfig, FileLimitMode } from '@webpieces/rules-config';
+import { writeTemplate, hasDisable, RULE_NAMES, MaxFileLinesConfig, FileLimitMode, detectBase, getChangedFiles } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -36,55 +35,6 @@ const TMP_MD_FILE = 'webpieces.filesize.md';
  */
 function writeTmpInstructions(workspaceRoot: string): string {
     return writeTemplate(workspaceRoot, TMP_MD_FILE);
-}
-
-/**
- * Get changed TypeScript files between base and head (or working tree if head not specified).
- * Uses `git diff base [head]` to match what `nx affected` does.
- * When head is NOT specified, also includes untracked files (matching nx affected behavior).
- */
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        // If head is specified, diff base to head; otherwise diff base to working tree
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-
-        // When comparing to working tree (no head specified), also include untracked files
-        // This matches what nx affected does: "All modified files not yet committed or tracked will also be added"
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-                // Merge and dedupe
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            } catch (err: unknown) {
-                //const error = toError(err);
-                // If ls-files fails, just return the changed files
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
 }
 
 /**
@@ -228,42 +178,6 @@ function findViolations(workspaceRoot: string, changedFiles: string[], limit: nu
 }
 
 /**
- * Auto-detect the base branch by finding the merge-base with origin/main.
- */
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
-}
-
-/**
  * Get today's date in yyyy/mm/dd format for error messages
  */
 function getTodayDateString(): string {
@@ -332,7 +246,7 @@ async function runValidatorImpl(
     const limit = options.limit ?? 900;
     const disableAllowed = options.disableAllowed ?? true;
 
-    const rawMode: FileLimitMode = options.mode ?? 'MODIFIED_FILES';
+    const rawMode: FileLimitMode = options.mode ?? 'NEW_AND_MODIFIED_FILES';
     const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
     const mode: FileLimitMode = skip.skip ? 'OFF' : rawMode;
 
@@ -372,7 +286,7 @@ async function runValidatorImpl(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+        const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('\u2705 No TypeScript files changed');

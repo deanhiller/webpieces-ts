@@ -24,6 +24,7 @@ import {
     FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
+    NxWiringConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
@@ -54,6 +55,7 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'feature-branch-guard': FeatureBranchGuardConfig.SCHEMA,
     'no-file-import-cycles': NoFileImportCyclesConfig.SCHEMA,
     'runtime-architecture': RuntimeArchitectureConfig.SCHEMA,
+    'nx-wiring': NxWiringConfig.SCHEMA,
     'no-js-files': NoJsFilesConfig.SCHEMA,
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };

@@ -24,7 +24,7 @@
  * - OFF:                      Skip validation entirely
  * - MODIFIED_CODE:            Flag violations on changed lines (lines in diff hunks)
  * - NEW_AND_MODIFIED_METHODS: Flag violations in new/modified method/route scopes
- * - MODIFIED_FILES:           Flag ALL violations in files that were modified
+ * - NEW_AND_MODIFIED_FILES:           Flag ALL violations in files that were modified
  *
  * ============================================================================
  * ESCAPE HATCH
@@ -34,12 +34,10 @@
  *   const myApi = inject(MyApi);
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from './diff-utils';
-import { hasDisable, RULE_NAMES, AngularNoDirectApiInResolverConfig, DirectApiResolverMode } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, AngularNoDirectApiInResolverConfig, DirectApiResolverMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -58,49 +56,6 @@ interface ViolationInfo {
 }
 
 /**
- * Get changed TypeScript files between base and head (or working tree if head not specified).
- */
-// webpieces-disable max-lines-new-methods -- Git command handling with untracked files requires multiple code paths
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            } catch (err: unknown) {
-                //const error = toError(err);
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
-}
-
-/**
  * Check if a line contains a webpieces-disable comment for no-direct-api-resolver.
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
@@ -115,42 +70,6 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         }
     }
     return false;
-}
-
-/**
- * Auto-detect the base branch by finding the merge-base with origin/main.
- */
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
 }
 
 /**
@@ -311,7 +230,7 @@ function findViolationsForModifiedCode(
 }
 
 /**
- * MODIFIED_FILES mode: Flag ALL violations in files that were modified.
+ * NEW_AND_MODIFIED_FILES mode: Flag ALL violations in files that were modified.
  */
 function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): Violation[] {
     const violations: Violation[] = [];
@@ -633,7 +552,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const allChangedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+    const allChangedFiles = getChangedFiles(workspaceRoot, base, head);
     const scopedFiles = filterByEnforcePaths(allChangedFiles, options.enforcePaths);
     const changedFiles = filterRelevantFiles(scopedFiles);
 
@@ -650,7 +569,7 @@ async function runValidatorImpl(
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
         violations = findViolationsForModifiedMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'MODIFIED_FILES') {
+    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 

@@ -12,7 +12,7 @@
  *
  * Config (webpieces.config.json, rule key `no-file-import-cycles`):
  *   "no-file-import-cycles": {
- *       "mode": "ON",                       // "OFF" disables the gate everywhere
+ *       "mode": "RUN_EVERY_TIME",           // "OFF" disables the gate everywhere
  *       "ignoreModifiedUntilEpoch": 1771931925,  // epoch SECONDS; while now < epoch,
  *                                            //   cycles are reported but the gate PASSES
  *                                            //   (warn, don't fail). After it, fails again.
@@ -36,7 +36,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { toError } from '../../toError';
 
-export type ValidateNoFileImportCyclesMode = 'ON' | 'OFF';
+export type ValidateNoFileImportCyclesMode = 'RUN_EVERY_TIME' | 'OFF';
 
 export interface ValidateNoFileImportCyclesOptions {
     // No options here — config comes from webpieces.config.json at runtime.

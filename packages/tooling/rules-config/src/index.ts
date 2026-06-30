@@ -13,6 +13,16 @@ export { FieldDef } from './field-def';
 export type { SchemaShape } from './field-def';
 export { shouldSkipRule, getCurrentBranch } from './skip-rule';
 export type { SkipRuleResult } from './skip-rule';
+export {
+    detectBase,
+    resolveBase,
+    getChangedFiles,
+    getFileDiff,
+    getChangedLineNumbers,
+    findNewMethodSignaturesInDiff,
+    hasChangesInRange,
+    isNewOrModified,
+} from './diff-scope';
 export { AbstractRule } from './abstract-rule';
 export {
     WEBPIECES_DISABLE,
@@ -48,6 +58,7 @@ export {
     FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
+    NxWiringConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
     BaseRuleConfig,
@@ -64,6 +75,7 @@ export {
     DIRECT_API_RESOLVER_MODES,
     THROW_CAUSE_MODES,
     ON_OFF_MODES,
+    STRUCTURAL_MODES,
     VALIDATE_TS_MODES,
 } from './rule-configs';
 export type {
@@ -77,6 +89,7 @@ export type {
     DirectApiResolverMode,
     ThrowCauseMode,
     OnOffMode,
+    StructuralMode,
     ValidateTsMode,
 } from './rule-configs';
 export {

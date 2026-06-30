@@ -10,7 +10,7 @@
         "no-destructure": {},
         "require-return-type": {},
         "no-unmanaged-exceptions": {},
-        "nx-wiring": { "mode": "ON" }
+        "nx-wiring": { "mode": "RUN_EVERY_TIME" }
     },
     "rulesDir": [],
     "pr-gate": {

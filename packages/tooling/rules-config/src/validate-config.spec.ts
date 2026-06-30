@@ -9,7 +9,7 @@ describe('validateWebpiecesConfig', () => {
     it('accepts excludePackages + escape hatches on no-file-import-cycles (regression)', () => {
         const errors = validateWebpiecesConfig({
             'no-file-import-cycles': {
-                mode: 'ON',
+                mode: 'RUN_EVERY_TIME',
                 ignoreTypeOnly: false,
                 excludePackages: ['@kami/entities'],
                 ignoreModifiedUntilEpoch: 1771931925,
@@ -23,7 +23,7 @@ describe('validateWebpiecesConfig', () => {
 
     it('still rejects a genuinely unknown field', () => {
         const errors = validateWebpiecesConfig({
-            'no-file-import-cycles': { mode: 'ON', bogusField: true },
+            'no-file-import-cycles': { mode: 'RUN_EVERY_TIME', bogusField: true },
         });
         expect(errorsFor('no-file-import-cycles', errors).some(e => e.includes('Unknown field "bogusField"'))).toBe(true);
     });
@@ -55,6 +55,38 @@ describe('validateWebpiecesConfig', () => {
         // ignoreRuleWhileOnBranch stays optional.
         expect(requiredBlock).not.toContain('ignoreRuleWhileOnBranch');
         expect(optionalBlock).toContain('ignoreRuleWhileOnBranch');
+    });
+});
+
+describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
+    // Structural rules (import-cycle / runtime-architecture / nx-wiring) use RUN_EVERY_TIME, not ON.
+    it('accepts RUN_EVERY_TIME and rejects ON for structural rules', () => {
+        for (const rule of ['no-file-import-cycles', 'runtime-architecture', 'nx-wiring']) {
+            const ok = errorsFor(rule, validateWebpiecesConfig({
+                [rule]: { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: 0 },
+            })).filter(e => e.includes('Must be one of'));
+            expect(ok).toEqual([]);
+
+            const bad = errorsFor(rule, validateWebpiecesConfig({
+                [rule]: { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
+            }));
+            expect(bad.some(e => e.includes('Must be one of') && e.includes('RUN_EVERY_TIME'))).toBe(true);
+        }
+    });
+
+    // File-tier rules use NEW_AND_MODIFIED_FILES, not the old MODIFIED_FILES.
+    it('accepts NEW_AND_MODIFIED_FILES and rejects MODIFIED_FILES for file-tier rules', () => {
+        for (const rule of ['max-file-lines', 'validate-ts-in-src', 'no-js-files']) {
+            const ok = errorsFor(rule, validateWebpiecesConfig({
+                [rule]: { mode: 'NEW_AND_MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
+            })).filter(e => e.includes('Must be one of'));
+            expect(ok).toEqual([]);
+
+            const bad = errorsFor(rule, validateWebpiecesConfig({
+                [rule]: { mode: 'MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
+            }));
+            expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_FILES'))).toBe(true);
+        }
     });
 });
 
