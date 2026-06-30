@@ -11,9 +11,9 @@
         },
         "mode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_FILES"],
-            "description": "OFF: skip validation. MODIFIED_FILES: validate all code in modified files.",
-            "default": "MODIFIED_FILES"
+            "enum": ["OFF", "NEW_AND_MODIFIED_FILES"],
+            "description": "OFF: skip validation. NEW_AND_MODIFIED_FILES: validate all code in modified files.",
+            "default": "NEW_AND_MODIFIED_FILES"
         },
         "disableAllowed": {
             "type": "boolean",

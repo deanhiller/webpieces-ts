@@ -12,16 +12,25 @@
  * - OFF: Skip validation entirely
  * - NEW_METHODS: Only validate new methods (detected via git diff)
  * - NEW_AND_MODIFIED_METHODS: Validate new methods + methods with changes in their line range
- * - MODIFIED_FILES: Validate all methods in modified files
+ * - NEW_AND_MODIFIED_FILES: Validate all methods in modified files
  *
  * Escape hatch: Add webpieces-disable require-return-type comment with justification
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, RequireReturnTypeConfig, ReturnTypeMode } from '@webpieces/rules-config';
+import {
+    hasDisable,
+    RULE_NAMES,
+    RequireReturnTypeConfig,
+    ReturnTypeMode,
+    detectBase,
+    getChangedFiles,
+    getFileDiff,
+    getChangedLineNumbers,
+    findNewMethodSignaturesInDiff,
+} from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -29,116 +38,6 @@ interface MethodViolation {
     file: string;
     methodName: string;
     line: number;
-}
-
-/**
- * Get changed TypeScript files between base and head (or working tree if head not specified).
- */
-// webpieces-disable max-lines-new-methods -- Git command handling with untracked files requires multiple code paths
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            } catch (err: unknown) {
-                //const error = toError(err);
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
-}
-
-/**
- * Get the diff content for a specific file.
- */
-function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-
-        if (!diff && !head) {
-            const fullPath = path.join(workspaceRoot, file);
-            if (fs.existsSync(fullPath)) {
-                const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                }).trim();
-
-                if (isUntracked) {
-                    const content = fs.readFileSync(fullPath, 'utf-8');
-                    const lines = content.split('\n');
-                    return lines.map((line) => `+${line}`).join('\n');
-                }
-            }
-        }
-
-        return diff;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return '';
-    }
-}
-
-/**
- * Parse diff to find newly added method signatures.
- */
-function findNewMethodSignaturesInDiff(diffContent: string): Set<string> {
-    const newMethods = new Set<string>();
-    const lines = diffContent.split('\n');
-
-    const patterns = [
-        /^\+\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/,
-        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
-        /^\+\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/,
-        /^\+\s*(?:(?:public|private|protected)\s+)?(?:static\s+)?(?:async\s+)?(\w+)\s*\(/,
-    ];
-
-    for (const line of lines) {
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            for (const pattern of patterns) {
-                const match = line.match(pattern);
-                if (match) {
-                    const methodName = match[1];
-                    if (methodName && !['if', 'for', 'while', 'switch', 'catch', 'constructor'].includes(methodName)) {
-                        newMethods.add(methodName);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    return newMethods;
 }
 
 /**
@@ -237,34 +136,6 @@ function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[
 }
 
 /**
- * Parse diff to extract changed line numbers (both additions and modifications).
- */
-function getChangedLineNumbers(diffContent: string): Set<number> {
-    const changedLines = new Set<number>();
-    const lines = diffContent.split('\n');
-    let currentLine = 0;
-
-    for (const line of lines) {
-        const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (hunkMatch) {
-            currentLine = parseInt(hunkMatch[1], 10);
-            continue;
-        }
-
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            changedLines.add(currentLine);
-            currentLine++;
-        } else if (line.startsWith('-') && !line.startsWith('---')) {
-            // Deletions don't increment line number
-        } else {
-            currentLine++;
-        }
-    }
-
-    return changedLines;
-}
-
-/**
  * Check if a method has any changed lines within its range.
  */
 function methodHasChanges(method: MethodInfo, changedLines: Set<number>): boolean {
@@ -354,7 +225,7 @@ function findViolationsForModifiedAndNewMethods(
 }
 
 /**
- * Find all methods without explicit return types in modified files (MODIFIED_FILES mode).
+ * Find all methods without explicit return types in modified files (NEW_AND_MODIFIED_FILES mode).
  */
 function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): MethodViolation[] {
     const violations: MethodViolation[] = [];
@@ -375,42 +246,6 @@ function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: str
     }
 
     return violations;
-}
-
-/**
- * Auto-detect the base branch by finding the merge-base with origin/main.
- */
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
 }
 
 /**
@@ -492,7 +327,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+    const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
@@ -507,7 +342,7 @@ async function runValidatorImpl(
         violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
         violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'MODIFIED_FILES') {
+    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 

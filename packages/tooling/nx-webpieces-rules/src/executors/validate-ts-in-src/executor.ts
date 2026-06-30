@@ -10,13 +10,13 @@
  * `excludePaths` is holistic — its bare dir names and globs exempt files
  * from BOTH layers. Defaults exempt **\/*.d.ts and **\/jest.config.ts.
  *
- * Only the files changed vs the base branch are validated (MODIFIED_FILES),
+ * Only the files changed vs the base branch are validated (NEW_AND_MODIFIED_FILES),
  * so the rule applies cleanly to legacy projects — pre-existing orphan files
  * are grandfathered and only newly-touched files are checked.
  *
  * Configurable via webpieces.config.json:
  *   "validate-ts-in-src": {
- *       "mode": "MODIFIED_FILES", // "OFF" disables the rule
+ *       "mode": "NEW_AND_MODIFIED_FILES", // "OFF" disables the rule
  *       "excludePaths": [...],   // dir names + globs, e.g. "**\/codegen.ts"
  *       "allowedRootFiles": [...]
  *   }
@@ -26,11 +26,10 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadAndValidate, isPathExcluded, shouldSkipRule } from '@webpieces/rules-config';
-import { execSync } from 'child_process';
+import { loadAndValidate, isPathExcluded, shouldSkipRule, detectBase, getChangedFiles } from '@webpieces/rules-config';
 import * as path from 'path';
 
-export type ValidateTsInSrcMode = 'OFF' | 'MODIFIED_FILES';
+export type ValidateTsInSrcMode = 'OFF' | 'NEW_AND_MODIFIED_FILES';
 
 export interface ValidateTsInSrcOptions {
     mode?: ValidateTsInSrcMode;
@@ -79,89 +78,6 @@ async function getProjectRoots(workspaceRoot: string): Promise<string[]> {
         roots.push(path.join(workspaceRoot, cfg.root));
     }
     return roots;
-}
-
-function isTestFile(filePath: string): boolean {
-    return filePath.includes('.spec.ts') ||
-        filePath.includes('.test.ts') ||
-        filePath.includes('__tests__/');
-}
-
-// webpieces-disable max-lines-new-methods -- Git command handling with untracked files requires multiple code paths
-function getChangedTsFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f: string) => f && !isTestFile(f));
-
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f: string) => f && !isTestFile(f));
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            // webpieces-disable catch-error-pattern -- intentional swallow; git ls-files failure falls back to staged-only list
-            } catch (err: unknown) {
-                //const error = toError(err);
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    // webpieces-disable catch-error-pattern -- intentional swallow; git diff failure returns empty list
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
-}
-
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    // webpieces-disable catch-error-pattern -- intentional swallow; try local main as fallback
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        // webpieces-disable catch-error-pattern -- intentional swallow; no base found is handled by caller
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
 }
 
 function checkSingleFileLayerOne(
@@ -262,7 +178,7 @@ async function runModifiedFilesMode(
     excludePaths: string[],
     allowedRootFiles: string[],
 ): Promise<ExecutorResult> {
-    console.log('\n📁 Validating TypeScript files are in src/ and owned by a project (MODIFIED_FILES mode)\n');
+    console.log('\n📁 Validating TypeScript files are in src/ and owned by a project (NEW_AND_MODIFIED_FILES mode)\n');
 
     let base = process.env['NX_BASE'];
     const head = process.env['NX_HEAD'];
@@ -280,7 +196,7 @@ async function runModifiedFilesMode(
     console.log('');
 
     const projectRoots = await getProjectRoots(workspaceRoot);
-    const changedFiles = getChangedTsFiles(workspaceRoot, base, head);
+    const changedFiles = getChangedFiles(workspaceRoot, base, head);
 
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed\n');
@@ -324,7 +240,7 @@ export default async function runExecutor(
     const shared = loadAndValidate(context.root).resolved;
     const rule = shared.rules.get('validate-ts-in-src');
 
-    const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'MODIFIED_FILES';
+    const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'NEW_AND_MODIFIED_FILES';
     const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
     const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
     const effectiveMode = resolveMode(rawMode, epoch, branch);
@@ -340,7 +256,7 @@ export default async function runExecutor(
     const allowedRootFiles =
         (rule?.options['allowedRootFiles'] as string[] | undefined) ?? DEFAULT_ALLOWED_ROOT_FILES;
 
-    // Only MODIFIED_FILES remains once OFF is handled above — validate just the
+    // Only NEW_AND_MODIFIED_FILES remains once OFF is handled above — validate just the
     // files changed vs the base branch (legacy-friendly; no whole-workspace scan).
     return runModifiedFilesMode(workspaceRoot, excludePaths, allowedRootFiles);
 }

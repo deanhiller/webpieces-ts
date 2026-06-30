@@ -6,8 +6,8 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_CODE", "MODIFIED_FILES"],
-            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. MODIFIED_FILES: all in modified files. Disallows try/catch blocks.",
+            "enum": ["OFF", "MODIFIED_CODE", "NEW_AND_MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_CODE: only changed lines in diff. NEW_AND_MODIFIED_FILES: all in modified files. Disallows try/catch blocks.",
             "default": "OFF"
         },
         "disableAllowed": {

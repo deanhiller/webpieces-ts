@@ -7,28 +7,28 @@ import { FieldDef, SchemaShape } from './field-def';
 // consumer) imports these instead of re-declaring the same unions — a rename here ripples
 // everywhere at compile time. The FieldDef SCHEMA below references the same arrays, so the
 // type and the runtime validation can never diverge.
-export const METHOD_LIMIT_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export const METHOD_LIMIT_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type MethodLimitMode = typeof METHOD_LIMIT_MODES[number];
 
-export const FILE_LIMIT_MODES = ['OFF', 'MODIFIED_FILES'] as const;
+export const FILE_LIMIT_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES'] as const;
 export type FileLimitMode = typeof FILE_LIMIT_MODES[number];
 
-export const RETURN_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export const RETURN_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ReturnTypeMode = typeof RETURN_TYPE_MODES[number];
 
-export const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export const INLINE_TYPE_MODES = ['OFF', 'NEW_METHODS', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type InlineTypeMode = typeof INLINE_TYPE_MODES[number];
 
-export const MODIFIED_CODE_MODES = ['OFF', 'MODIFIED_CODE', 'MODIFIED_FILES'] as const;
+export const MODIFIED_CODE_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
 
-export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'MODIFIED_FILES'] as const;
+export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type PrismaValidateDtosMode = typeof PRISMA_DTOS_MODES[number];
 
-export const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export const PRISMA_CONVERTER_MODES = ['OFF', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type PrismaConverterMode = typeof PRISMA_CONVERTER_MODES[number];
 
-export const DIRECT_API_RESOLVER_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'MODIFIED_FILES'] as const;
+export const DIRECT_API_RESOLVER_MODES = ['OFF', 'MODIFIED_CODE', 'NEW_AND_MODIFIED_METHODS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type DirectApiResolverMode = typeof DIRECT_API_RESOLVER_MODES[number];
 
 export const THROW_CAUSE_MODES = ['OFF', 'MODIFIED_CODE'] as const;
@@ -44,8 +44,15 @@ export type OnOffMode = typeof ON_OFF_MODES[number];
 export const BRANCH_GUARD_MODES = ['ON', 'OFF', 'ON_NO_SUBBRANCHES'] as const;
 export type BranchGuardMode = typeof BRANCH_GUARD_MODES[number];
 
-export const VALIDATE_TS_MODES = ['OFF', 'MODIFIED_FILES'] as const;
+export const VALIDATE_TS_MODES = ['OFF', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ValidateTsMode = typeof VALIDATE_TS_MODES[number];
+
+// Structural / whole-graph rules (import-cycle, runtime-architecture, nx-wiring). They can't be
+// scoped to changed lines/files — a cycle or wiring break can route through a project that wasn't
+// itself edited — so when active they run the FULL check every time (nx-affected already limits
+// them to affected projects externally). RUN_EVERY_TIME replaces the old, vaguer "ON".
+export const STRUCTURAL_MODES = ['OFF', 'RUN_EVERY_TIME'] as const;
+export type StructuralMode = typeof STRUCTURAL_MODES[number];
 
 // ---------------------------------------------------------------------------
 // Universal escape hatches — EVERY rule supports temporarily disabling itself
@@ -341,12 +348,12 @@ export class FeatureBranchGuardConfig extends BaseRuleConfig {
 }
 
 export class NoFileImportCyclesConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
+    declare mode?: StructuralMode;
     ignoreTypeOnly?: boolean;
     excludePackages?: string[];
 
     static readonly SCHEMA: SchemaShape<NoFileImportCyclesConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
+        mode: new FieldDef('string', STRUCTURAL_MODES),
         ignoreTypeOnly: FieldDef.optional('boolean'),
         excludePackages: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
@@ -354,13 +361,13 @@ export class NoFileImportCyclesConfig extends BaseRuleConfig {
 }
 
 export class RuntimeArchitectureConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
+    declare mode?: StructuralMode;
     servicePaths?: string[];
     apiProjectPaths?: string[];
     allowedCycles?: string[];
 
     static readonly SCHEMA: SchemaShape<RuntimeArchitectureConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
+        mode: new FieldDef('string', STRUCTURAL_MODES),
         servicePaths: FieldDef.optional('string[]'),
         apiProjectPaths: FieldDef.optional('string[]'),
         allowedCycles: FieldDef.optional('string[]'),
@@ -368,12 +375,23 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
     };
 }
 
+export class NxWiringConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<NxWiringConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoJsFilesConfig extends BaseRuleConfig {
-    declare mode?: OnOffMode;
+    // File-tier: NEW_AND_MODIFIED_FILES (active) intercepts a .js/.jsx Write — the file being
+    // written is inherently a new/modified file, so it's already diff-scoped in practice.
+    declare mode?: FileLimitMode;
     allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoJsFilesConfig> = {
-        mode: new FieldDef('string', ON_OFF_MODES),
+        mode: new FieldDef('string', FILE_LIMIT_MODES),
         allowedPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };

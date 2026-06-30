@@ -16,7 +16,7 @@
  * ============================================================================
  * - OFF:            Skip validation entirely.
  * - MODIFIED_CODE:  Flag implicit-any on changed lines (lines in diff hunks).
- * - MODIFIED_FILES: Flag ALL implicit-any in files that were modified.
+ * - NEW_AND_MODIFIED_FILES: Flag ALL implicit-any in files that were modified.
  *
  * ============================================================================
  * ESCAPE HATCH
@@ -25,11 +25,10 @@
  *   function handler(x) { ... }
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -48,76 +47,6 @@ interface ImplicitAnyViolation {
 const IMPLICIT_ANY_CODES: ReadonlySet<number> = new Set<number>([
     7005, 7006, 7008, 7015, 7018, 7019, 7031, 7034, 7053,
 ]);
-
-function listUntrackedOrEmpty(workspaceRoot: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const output = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        return output.trim().split('\n').filter((f: string) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
-}
-
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    const diffTarget = head ? `${base} ${head}` : base;
-    const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-        cwd: workspaceRoot,
-        encoding: 'utf-8',
-    });
-    const changed = output.trim().split('\n').filter((f: string) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-    if (head) return changed;
-    return Array.from(new Set([...changed, ...listUntrackedOrEmpty(workspaceRoot)]));
-}
-
-function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-    const diffTarget = head ? `${base} ${head}` : base;
-    const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
-        cwd: workspaceRoot,
-        encoding: 'utf-8',
-    });
-    if (diff || head) return diff;
-    const fullPath = path.join(workspaceRoot, file);
-    if (!fs.existsSync(fullPath)) return '';
-    const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
-        cwd: workspaceRoot,
-        encoding: 'utf-8',
-    }).trim();
-    if (!isUntracked) return '';
-    const content = fs.readFileSync(fullPath, 'utf-8');
-    const lines = content.split('\n');
-    const hunk = `@@ -0,0 +1,${String(lines.length)} @@`;
-    return hunk + '\n' + lines.map((line: string) => `+${line}`).join('\n');
-}
-
-function getChangedLineNumbers(diffContent: string): Set<number> {
-    const changedLines = new Set<number>();
-    const lines = diffContent.split('\n');
-    let currentLine = 0;
-
-    for (const line of lines) {
-        const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-        if (hunkMatch) {
-            currentLine = parseInt(hunkMatch[1], 10);
-            continue;
-        }
-
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            changedLines.add(currentLine);
-            currentLine++;
-        } else if (line.startsWith('-') && !line.startsWith('---')) {
-            // Deletions don't increment line number
-        } else {
-            currentLine++;
-        }
-    }
-
-    return changedLines;
-}
 
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
     const startCheck = Math.max(0, lineNumber - 5);
@@ -246,22 +175,6 @@ function findViolationsForModifiedFiles(
     return results;
 }
 
-function detectBase(workspaceRoot: string): string | null {
-    for (const ref of ['origin/main', 'main']) {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const merged = execSync(`git merge-base HEAD ${ref}`, {
-                cwd: workspaceRoot, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-            if (merged) return merged;
-        } catch (err: unknown) {
-            //const error = toError(err);
-            // try next ref
-        }
-    }
-    return null;
-}
-
 function reportViolations(violations: ImplicitAnyViolation[], mode: ModifiedCodeMode): void {
     console.error('');
     console.error('\u274c Implicit-any inferences found! Add explicit type annotations.');
@@ -329,7 +242,7 @@ async function runInternal(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+    const changedFiles = getChangedFiles(workspaceRoot, base, head);
     if (changedFiles.length === 0) {
         console.log('\u2705 No TypeScript files changed');
         return { success: true };
@@ -340,7 +253,7 @@ async function runInternal(
     let violations: ImplicitAnyViolation[] = [];
     if (mode === 'MODIFIED_CODE') {
         violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
-    } else if (mode === 'MODIFIED_FILES') {
+    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 

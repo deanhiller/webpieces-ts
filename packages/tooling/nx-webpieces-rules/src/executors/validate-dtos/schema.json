@@ -6,8 +6,8 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["OFF", "MODIFIED_CLASS", "MODIFIED_FILES"],
-            "description": "OFF: skip validation. MODIFIED_CLASS: only validate Dto classes with changed lines. MODIFIED_FILES: validate all Dtos in modified files.",
+            "enum": ["OFF", "MODIFIED_CLASS", "NEW_AND_MODIFIED_FILES"],
+            "description": "OFF: skip validation. MODIFIED_CLASS: only validate Dto classes with changed lines. NEW_AND_MODIFIED_FILES: validate all Dtos in modified files.",
             "default": "OFF"
         },
         "prismaSchemaPath": {

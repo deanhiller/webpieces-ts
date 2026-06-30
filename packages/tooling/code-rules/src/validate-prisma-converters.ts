@@ -42,15 +42,13 @@
  * ============================================================================
  * - OFF:                      Skip validation entirely
  * - NEW_AND_MODIFIED_METHODS: Validate new/modified methods in converters + changed lines in non-converters
- * - MODIFIED_FILES:           Validate all methods in modified files
+ * - NEW_AND_MODIFIED_FILES:           Validate all methods in modified files
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from './diff-utils';
-import { hasDisable, RULE_NAMES, PrismaConverterConfig, PrismaConverterMode } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, PrismaConverterConfig, PrismaConverterMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -71,85 +69,6 @@ interface FileContext {
     sourceFile: ts.SourceFile;
     prismaModels: Set<string>;
     disableAllowed: boolean;
-}
-
-/**
- * Auto-detect the base branch by finding the merge-base with origin/main.
- */
-function detectBase(workspaceRoot: string): string | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const mergeBase = execSync('git merge-base HEAD origin/main', {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-
-        if (mergeBase) {
-            return mergeBase;
-        }
-    } catch (err: unknown) {
-        //const error = toError(err);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const mergeBase = execSync('git merge-base HEAD main', {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-
-            if (mergeBase) {
-                return mergeBase;
-            }
-        } catch (err2: unknown) {
-            //const error2 = toError(err2);
-            // Ignore
-        }
-    }
-    return null;
-}
-
-/**
- * Get changed TypeScript files between base and head (or working tree if head not specified).
- */
-// webpieces-disable max-lines-new-methods -- Git command handling with untracked files requires multiple code paths
-function getChangedTypeScriptFiles(workspaceRoot: string, base: string, head?: string): string[] {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget} -- '*.ts' '*.tsx'`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-        });
-        const changedFiles = output
-            .trim()
-            .split('\n')
-            .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-
-        if (!head) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const untrackedOutput = execSync(`git ls-files --others --exclude-standard '*.ts' '*.tsx'`, {
-                    cwd: workspaceRoot,
-                    encoding: 'utf-8',
-                });
-                const untrackedFiles = untrackedOutput
-                    .trim()
-                    .split('\n')
-                    .filter((f) => f && !f.includes('.spec.ts') && !f.includes('.test.ts'));
-                const allFiles = new Set([...changedFiles, ...untrackedFiles]);
-                return Array.from(allFiles);
-            } catch (err: unknown) {
-                //const error = toError(err);
-                return changedFiles;
-            }
-        }
-
-        return changedFiles;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        return [];
-    }
 }
 
 /**
@@ -722,7 +641,7 @@ function validateChangedFiles(
 
     console.log(`   Found ${prismaModels.size} model(s) in schema.prisma`);
 
-    let changedFiles = getChangedTypeScriptFiles(workspaceRoot, base, head);
+    let changedFiles = getChangedFiles(workspaceRoot, base, head);
     if (enforcePaths.length > 0) {
         changedFiles = changedFiles.filter((f) =>
             enforcePaths.some((ep) => f.startsWith(ep))

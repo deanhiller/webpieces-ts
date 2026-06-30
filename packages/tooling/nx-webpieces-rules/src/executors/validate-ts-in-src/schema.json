@@ -6,9 +6,9 @@
     "properties": {
         "mode": {
             "type": "string",
-            "enum": ["ON", "OFF", "MODIFIED_FILES"],
-            "default": "ON",
-            "description": "ON = enforce both layers, OFF = skip validation, MODIFIED_FILES = only check new/changed .ts files from git diff. This is the single on/off switch (the legacy 'enabled' boolean has been removed)."
+            "enum": ["OFF", "NEW_AND_MODIFIED_FILES"],
+            "default": "NEW_AND_MODIFIED_FILES",
+            "description": "OFF = skip validation, NEW_AND_MODIFIED_FILES = only check new/changed .ts files from git diff (legacy-friendly; pre-existing files are grandfathered). The whole-workspace 'ON' scan was removed."
         },
         "excludePaths": {
             "type": "array",
