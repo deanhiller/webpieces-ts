@@ -119,10 +119,6 @@
         }
     },
     "hookGuards": {
-        "no-shell-substitution": {
-            "mode": "OFF",
-            "ignoreModifiedUntilEpoch": 0
-        },
         "branch-creation-guard": {
             "mode": "ON_NO_SUBBRANCHES",
             "subBranchNaming": "feature/<ticket>/<short-description>",
@@ -140,7 +136,7 @@
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
-        "no-direct-main-update": {
+        "redirect-how-to-merge-main": {
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
