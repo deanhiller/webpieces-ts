@@ -6,19 +6,19 @@
 export class GateDefinition {
     name: string;
     patterns: string[];
-    // The color shown on the dashboard WHEN this gate's patterns match a changed file. Green is
-    // implicit (shown when nothing matched), so it is never configured. Color is purely visual —
-    // even 'red' never fails/blocks the PR (only the build gate can). 'yellow' = caution,
-    // 'red' = louder "look here" flag (e.g. DB schema / migration changes).
-    color: string; // 'yellow' | 'red'
+    // The warning color shown on the dashboard WHEN this gate's patterns match a changed file. Green
+    // is implicit (shown when nothing matched), so it is never configured. warningColor is purely
+    // visual — even 'red' never fails/blocks the PR (only the build gate can). 'yellow' = caution,
+    // 'red' = louder "look here" flag (e.g. DB schema / migration changes). REQUIRED on every gate.
+    warningColor: string; // 'yellow' | 'red'
     // Example/inactive gate: parsed and kept in the file (JSON has no comments) but skipped at
-    // compute/render time. Other projects flip this to false and tune patterns/color.
+    // compute/render time. Other projects flip this to false and tune patterns/warningColor.
     disabled: boolean;
 
-    constructor(name: string, patterns: string[], color: string, disabled = false) {
+    constructor(name: string, patterns: string[], warningColor: string, disabled = false) {
         this.name = name;
         this.patterns = patterns;
-        this.color = color;
+        this.warningColor = warningColor;
         this.disabled = disabled;
     }
 }
@@ -53,7 +53,7 @@ export function defaultPrGateConfig(): PrGateConfig {
 interface RawGate {
     name?: string;
     patterns?: string[];
-    color?: string;
+    warningColor?: string;
     disabled?: boolean;
 }
 
@@ -64,7 +64,7 @@ interface RawPrGateSection {
 }
 
 function toGate(raw: RawGate): GateDefinition {
-    return new GateDefinition(raw.name ?? '', raw.patterns ?? [], raw.color ?? 'yellow', raw.disabled ?? false);
+    return new GateDefinition(raw.name ?? '', raw.patterns ?? [], raw.warningColor ?? 'yellow', raw.disabled ?? false);
 }
 
 /**

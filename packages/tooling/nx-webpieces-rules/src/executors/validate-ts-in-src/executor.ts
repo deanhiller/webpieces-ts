@@ -10,9 +10,13 @@
  * `excludePaths` is holistic — its bare dir names and globs exempt files
  * from BOTH layers. Defaults exempt **\/*.d.ts and **\/jest.config.ts.
  *
+ * Only the files changed vs the base branch are validated (MODIFIED_FILES),
+ * so the rule applies cleanly to legacy projects — pre-existing orphan files
+ * are grandfathered and only newly-touched files are checked.
+ *
  * Configurable via webpieces.config.json:
  *   "validate-ts-in-src": {
- *       "mode": "ON",            // "OFF" disables the rule
+ *       "mode": "MODIFIED_FILES", // "OFF" disables the rule
  *       "excludePaths": [...],   // dir names + globs, e.g. "**\/codegen.ts"
  *       "allowedRootFiles": [...]
  *   }
@@ -24,10 +28,9 @@ import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate, isPathExcluded, shouldSkipRule } from '@webpieces/rules-config';
 import { execSync } from 'child_process';
-import * as fs from 'fs';
 import * as path from 'path';
 
-export type ValidateTsInSrcMode = 'ON' | 'OFF' | 'MODIFIED_FILES';
+export type ValidateTsInSrcMode = 'OFF' | 'MODIFIED_FILES';
 
 export interface ValidateTsInSrcOptions {
     mode?: ValidateTsInSrcMode;
@@ -66,15 +69,6 @@ class LayerTwoViolation {
     }
 }
 
-function isNodeModulesDir(name: string): boolean {
-    return name === 'node_modules' || name.startsWith('node_modules_');
-}
-
-function shouldSkipTopLevelDir(name: string, excludePaths: string[]): boolean {
-    if (isNodeModulesDir(name)) return true;
-    return excludePaths.includes(name);
-}
-
 async function getProjectRoots(workspaceRoot: string): Promise<string[]> {
     const projectGraph = await createProjectGraphAsync();
     const projectsConfig = readProjectsConfigurationFromProjectGraph(projectGraph);
@@ -85,130 +79,6 @@ async function getProjectRoots(workspaceRoot: string): Promise<string[]> {
         roots.push(path.join(workspaceRoot, cfg.root));
     }
     return roots;
-}
-
-function findTsFilesOutsideSrc(projectDir: string): string[] {
-    const violations: string[] = [];
-    if (!fs.existsSync(projectDir)) return violations;
-    const entries = fs.readdirSync(projectDir, { withFileTypes: true });
-
-    for (const entry of entries) {
-        if (entry.name === 'src') continue;
-        if (isNodeModulesDir(entry.name)) continue;
-        if (entry.name === 'dist') continue;
-
-        if (entry.isFile() && entry.name.endsWith('.ts')) {
-            violations.push(path.join(projectDir, entry.name));
-        }
-
-        if (entry.isDirectory()) {
-            const tsFiles = findTsFilesRecursively(path.join(projectDir, entry.name));
-            violations.push(...tsFiles);
-        }
-    }
-
-    return violations;
-}
-
-function findTsFilesRecursively(dir: string): string[] {
-    const results: string[] = [];
-    if (!fs.existsSync(dir)) return results;
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-        if (isNodeModulesDir(entry.name)) continue;
-        if (entry.name === 'dist') continue;
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isFile() && entry.name.endsWith('.ts')) {
-            results.push(fullPath);
-        } else if (entry.isDirectory()) {
-            results.push(...findTsFilesRecursively(fullPath));
-        }
-    }
-    return results;
-}
-
-function findOrphanTsFiles(
-    dir: string,
-    projectRootSet: Set<string>,
-    workspaceRoot: string,
-    results: string[],
-): void {
-    if (!fs.existsSync(dir)) return;
-
-    const relDir = path.relative(workspaceRoot, dir);
-    if (projectRootSet.has(relDir)) return;
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-        if (isNodeModulesDir(entry.name)) continue;
-        if (entry.name === 'dist') continue;
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isFile() && entry.name.endsWith('.ts')) {
-            results.push(fullPath);
-        } else if (entry.isDirectory()) {
-            findOrphanTsFiles(fullPath, projectRootSet, workspaceRoot, results);
-        }
-    }
-}
-
-function checkLayerOne(
-    projectRoots: string[],
-    workspaceRoot: string,
-    excludePaths: string[],
-): LayerOneViolation[] {
-    const violations: LayerOneViolation[] = [];
-    for (const projectDir of projectRoots) {
-        const projectName = path.relative(workspaceRoot, projectDir);
-        const tsFiles = findTsFilesOutsideSrc(projectDir);
-        for (const tsFile of tsFiles) {
-            const relativePath = path.relative(workspaceRoot, tsFile);
-            if (isPathExcluded(relativePath, excludePaths)) continue;
-            violations.push(new LayerOneViolation(relativePath, projectName));
-        }
-    }
-    return violations;
-}
-
-function checkLayerTwo(
-    workspaceRoot: string,
-    projectRoots: string[],
-    excludePaths: string[],
-    allowedRootFiles: string[],
-): LayerTwoViolation[] {
-    const violations: LayerTwoViolation[] = [];
-    const projectRootSet = new Set(
-        projectRoots.map((p) => path.relative(workspaceRoot, p)),
-    );
-
-    const entries = fs.readdirSync(workspaceRoot, { withFileTypes: true });
-
-    for (const entry of entries) {
-        if (entry.isFile()) {
-            if (!entry.name.endsWith('.ts')) continue;
-            if (allowedRootFiles.includes(entry.name)) continue;
-            if (isPathExcluded(entry.name, excludePaths)) continue;
-            violations.push(new LayerTwoViolation(entry.name));
-            continue;
-        }
-        if (!entry.isDirectory()) continue;
-        if (shouldSkipTopLevelDir(entry.name, excludePaths)) continue;
-
-        const orphans: string[] = [];
-        findOrphanTsFiles(
-            path.join(workspaceRoot, entry.name),
-            projectRootSet,
-            workspaceRoot,
-            orphans,
-        );
-        for (const orphan of orphans) {
-            const relativePath = path.relative(workspaceRoot, orphan);
-            if (isPathExcluded(relativePath, excludePaths)) continue;
-            violations.push(new LayerTwoViolation(relativePath));
-        }
-    }
-
-    return violations;
 }
 
 function isTestFile(filePath: string): boolean {
@@ -445,36 +315,6 @@ async function runModifiedFilesMode(
     return { success: false };
 }
 
-async function runOnMode(
-    workspaceRoot: string,
-    excludePaths: string[],
-    allowedRootFiles: string[],
-): Promise<ExecutorResult> {
-    console.log('\n📁 Validating TypeScript files are in src/ and owned by a project\n');
-
-    const projectRoots = await getProjectRoots(workspaceRoot);
-
-    const layerOneViolations = checkLayerOne(projectRoots, workspaceRoot, excludePaths);
-    const layerTwoViolations = checkLayerTwo(
-        workspaceRoot, projectRoots, excludePaths, allowedRootFiles,
-    );
-
-    if (layerOneViolations.length === 0 && layerTwoViolations.length === 0) {
-        console.log('✅ All .ts files are inside a project\'s src/ directory\n');
-        return { success: true };
-    }
-
-    if (layerOneViolations.length > 0) {
-        reportLayerOneFailure(layerOneViolations);
-    }
-    if (layerTwoViolations.length > 0) {
-        reportLayerTwoFailure(layerTwoViolations);
-    }
-
-    console.error('To disable: set rules["validate-ts-in-src"].mode to "OFF" in webpieces.config.json\n');
-    return { success: false };
-}
-
 export default async function runExecutor(
     _nxOptions: ValidateTsInSrcOptions,
     context: ExecutorContext,
@@ -484,7 +324,7 @@ export default async function runExecutor(
     const shared = loadAndValidate(context.root).resolved;
     const rule = shared.rules.get('validate-ts-in-src');
 
-    const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'ON';
+    const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'MODIFIED_FILES';
     const epoch = rule?.options['ignoreModifiedUntilEpoch'] as number | undefined;
     const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
     const effectiveMode = resolveMode(rawMode, epoch, branch);
@@ -500,9 +340,7 @@ export default async function runExecutor(
     const allowedRootFiles =
         (rule?.options['allowedRootFiles'] as string[] | undefined) ?? DEFAULT_ALLOWED_ROOT_FILES;
 
-    if (effectiveMode === 'MODIFIED_FILES') {
-        return runModifiedFilesMode(workspaceRoot, excludePaths, allowedRootFiles);
-    }
-
-    return runOnMode(workspaceRoot, excludePaths, allowedRootFiles);
+    // Only MODIFIED_FILES remains once OFF is handled above — validate just the
+    // files changed vs the base branch (legacy-friendly; no whole-workspace scan).
+    return runModifiedFilesMode(workspaceRoot, excludePaths, allowedRootFiles);
 }
