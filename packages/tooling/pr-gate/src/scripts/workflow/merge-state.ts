@@ -9,7 +9,7 @@ import {
 
 // Proof-obligation marker written when a 3-point squash-merge hits conflicts. Its mere
 // presence (with validated=false) is what the merge-in-progress-guard hook uses to block
-// commit/push/PR until `wp-git-merge-complete` validates the resolution and flips it true.
+// commit/push/PR until `wp-finish-upsert-pr` validates the resolution and flips it true.
 export class MergeMarker {
     currentBranch: string;
     squashBranch: string;

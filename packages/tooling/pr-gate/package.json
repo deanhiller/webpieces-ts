@@ -7,9 +7,9 @@
     "bin": {
         "wp-git-update": "./src/scripts/git-updateFromMain.js",
         "wp-git-gather": "./src/scripts/git-gatherInfo.js",
-        "wp-git-merge-complete": "./src/scripts/git-mergeComplete.js",
+        "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
         "wp-build-affected": "./src/scripts/wp-build-affected.js",
-        "wp-upsert-pr": "./src/scripts/wp-upsert-pr.js"
+        "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js"
     },
     "files": [
         "src/**/*"

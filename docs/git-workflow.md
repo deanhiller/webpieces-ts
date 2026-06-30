@@ -99,7 +99,7 @@ The `sub/` prefix tells the `branch-creation-guard` AI hook that you intentional
 |--------|---------|
 | `./scripts/git-updateFromMain.sh` | Main entry point — squash-merge from main with optional AI conflict resolution |
 | `./scripts/git-gatherInfo.sh` | Validates tree state and gathers A/B/C hash points (called by updateFromMain) |
-| `./scripts/git-mergeComplete.sh` | Stages all resolved files after AI conflict resolution |
+| `wp-finish-upsert-pr` (`git-finishUpsertPr.ts`) | Validates AI conflict resolution, requires review.json, runs the build, then renders the dashboard and creates/updates the PR |
 | `./scripts/.workflow/git-findForkPoint.sh` | Calculates fork point and detects illegal merge commits |
 | `./scripts/.workflow/git-readAiBranchName.sh` | Converts branch name to safe directory name |
 | `./scripts/.workflow/git-validateUpToDate.sh` | Verifies branch is up-to-date with origin/main |

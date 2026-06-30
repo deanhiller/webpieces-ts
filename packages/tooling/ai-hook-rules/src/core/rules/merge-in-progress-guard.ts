@@ -10,9 +10,9 @@ import { BashRuleBase } from '../rule-base';
 const FIX_HINT: readonly string[] = [
     'A 3-point merge is in progress and not yet validated.',
     'Resolve the remaining conflicts in the working tree, then run:',
-    '  pnpm wp-git-merge-complete',
-    'That scans for leftover conflict markers and runs the build; only when green does it',
-    'commit and unblock commit/push/PR. Then run: pnpm wp-upsert-pr',
+    '  pnpm wp-finish-upsert-pr',
+    'That scans for leftover conflict markers and runs the build; only when green does it commit,',
+    'unblock commit/push/PR, render the dashboard, and create/update the PR.',
 ];
 
 // Returns the path of the first UNVALIDATED merge marker found, or null. We detect validation
@@ -47,7 +47,7 @@ function truncate(s: string): string {
 export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardConfig> {
     constructor(config: MergeInProgressGuardConfig) { super(config, 'merge-in-progress-guard'); }
 
-    readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing pnpm wp-git-merge-complete.';
+    readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing pnpm wp-finish-upsert-pr.';
     readonly fixHint = FIX_HINT;
 
     check(ctx: BashContext): readonly Violation[] {
@@ -60,7 +60,7 @@ export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardC
             [
                 'A merge is in progress and not yet validated — this command is blocked.',
                 `Marker: ${marker}`,
-                'Finish resolving conflicts, then run:  pnpm wp-git-merge-complete',
+                'Finish resolving conflicts, then run:  pnpm wp-finish-upsert-pr',
             ].join('\n'),
         )];
     }

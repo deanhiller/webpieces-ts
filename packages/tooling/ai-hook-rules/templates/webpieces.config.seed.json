@@ -12,5 +12,21 @@
         "no-unmanaged-exceptions": {},
         "nx-wiring": { "mode": "ON" }
     },
-    "rulesDir": []
+    "rulesDir": [],
+    "pr-gate": {
+        "mode": "ON",
+        "buildCommandWhy": "--base is the FORK POINT via $(git merge-base origin/main HEAD), NOT origin/main: basing on origin/main marks projects from other people's already-merged PRs as 'affected' (your branch still has their pre-merge versions), wasting rebuilds. The fork point scopes affected to only your branch's work. The $(...) resolves because the gate runs with shell:true.",
+        "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
+        "gatesWhy": "color = the dashboard color shown WHEN a gate's patterns match a changed file (green is implicit when nothing matches; color is purely visual and never blocks the PR — only the build gate can). disabled:true gates are kept-in-file examples (JSON has no comments) you flip to false and tune for your project.",
+        "gates": [
+            { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "color": "yellow" },
+            { "name": "Config Files Changed", "patterns": ["**/package.json", "**/tsconfig*.json", "nx.json", "**/*.config.*"], "color": "yellow" },
+            { "name": "Dependency Graph Changed", "patterns": ["architecture/dependencies.json"], "color": "yellow" },
+            { "name": "Claude / Rules Changed", "patterns": ["**/CLAUDE.md", "**/claude.*.md", ".claude/**", "webpieces.config.json"], "color": "yellow" },
+            { "name": "Package.json Changed", "patterns": ["**/package.json"], "color": "yellow", "disabled": true },
+            { "name": "Authentication Changed", "patterns": ["**/authentication.ts"], "color": "yellow", "disabled": true },
+            { "name": "DB Schema Changed", "patterns": ["**/schema.prisma"], "color": "red", "disabled": true },
+            { "name": "Migration Files", "patterns": ["**/migrations/**"], "color": "red", "disabled": true }
+        ]
+    }
 }

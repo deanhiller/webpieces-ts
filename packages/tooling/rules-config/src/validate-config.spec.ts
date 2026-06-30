@@ -128,11 +128,14 @@ describe('validatePrGateSection', () => {
         expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
     });
 
-    it('accepts a full valid block', () => {
+    it('accepts a full valid block (color + disabled example gate)', () => {
         const errors = validatePrGateSection({
             mode: 'ON',
-            buildCommand: 'pnpm nx affected --target=ci',
-            gates: [{ name: 'API', patterns: ['**/*Api.ts'], severity: 'warn' }],
+            buildCommand: 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)',
+            gates: [
+                { name: 'API', patterns: ['**/*Api.ts'], color: 'yellow' },
+                { name: 'DB Schema', patterns: ['**/schema.prisma'], color: 'red', disabled: true },
+            ],
         });
         expect(errors).toEqual([]);
     });
@@ -142,5 +145,14 @@ describe('validatePrGateSection', () => {
         expect(bad.some(e => e.includes('"mode" = "MAYBE" is not valid'))).toBe(true);
         expect(bad.some(e => e.includes('gates[0].name must be a string'))).toBe(true);
         expect(bad.some(e => e.includes('gates[0].patterns must be string[]'))).toBe(true);
+    });
+
+    it('rejects an invalid gate color and a non-boolean disabled', () => {
+        const bad = validatePrGateSection({
+            mode: 'ON', buildCommand: 'x',
+            gates: [{ name: 'X', patterns: ['**/*.ts'], color: 'warn', disabled: 'nope' }],
+        });
+        expect(bad.some(e => e.includes('gates[0].color must be "yellow" or "red"'))).toBe(true);
+        expect(bad.some(e => e.includes('gates[0].disabled must be a boolean'))).toBe(true);
     });
 });

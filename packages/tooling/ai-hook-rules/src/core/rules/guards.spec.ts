@@ -26,7 +26,7 @@ describe('pr-creation-guard', () => {
         expect(prCreationGuard.check(ctx('gh pr create --title x', root)).length).toBe(1);
         expect(prCreationGuard.check(ctx('gh api repos/o/r/pulls -f title=x', root)).length).toBe(1);
         expect(prCreationGuard.check(ctx('gh pr list', root)).length).toBe(0);
-        expect(prCreationGuard.check(ctx('pnpm wp-upsert-pr', root)).length).toBe(0);
+        expect(prCreationGuard.check(ctx('pnpm wp-finish-upsert-pr', root)).length).toBe(0);
     });
 });
 
@@ -43,7 +43,7 @@ describe('merge-in-progress-guard', () => {
         const root = withMarker(false);
         expect(mergeInProgressGuard.check(ctx('git commit -m x', root)).length).toBe(1);
         expect(mergeInProgressGuard.check(ctx('git push origin HEAD', root)).length).toBe(1);
-        expect(mergeInProgressGuard.check(ctx('pnpm wp-git-merge-complete', root)).length).toBe(0);
+        expect(mergeInProgressGuard.check(ctx('pnpm wp-finish-upsert-pr', root)).length).toBe(0);
     });
 
     it('allows everything once the marker is validated', () => {

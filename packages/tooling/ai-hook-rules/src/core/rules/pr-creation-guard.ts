@@ -4,21 +4,22 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 
-const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-upsert-pr';
+const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-start-upsert-pr';
 
 function fixHintFor(upsertPrCommand: string): readonly string[] {
     return [
-        'Direct PR creation is blocked. Create or update a PR ONLY via the gated command:',
+        'Direct PR creation is blocked. Create or update a PR ONLY via the gated flow:',
         `  ${upsertPrCommand}`,
-        'It updates the branch from main (3-point merge), runs the real build (nx affected), and',
-        'assembles the PR dashboard — then creates/updates the PR itself. A failing build = no PR.',
-        'There is nothing to paste or attest to; the command does the work.',
+        'It updates the branch from main (3-point merge) and runs the real build (nx affected), then',
+        'instructs you to write review.json and run `pnpm wp-finish-upsert-pr`, which assembles the',
+        'dashboard and creates/updates the PR itself. A failing build = no PR.',
+        'There is nothing to paste or attest to; the commands do the work.',
     ];
 }
 
-// Detect every way an agent could open/update a PR directly, so the ONLY path left is
-// `pnpm wp-upsert-pr` (whose internal `gh pr create` runs as a child process the hook
-// never sees). Read-only `gh pr list` / `gh api .../pulls` GET are intentionally allowed.
+// Detect every way an agent could open/update a PR directly, so the ONLY path left is the gated
+// flow (wp-start-upsert-pr → wp-finish-upsert-pr, whose internal `gh pr create` runs as a child
+// process the hook never sees). Read-only `gh pr list` / `gh api .../pulls` GET are intentionally allowed.
 function isDirectPrCreation(cmd: string): boolean {
     if (/\bgh\s+pr\s+(create|edit)\b/.test(cmd)) return true;
 

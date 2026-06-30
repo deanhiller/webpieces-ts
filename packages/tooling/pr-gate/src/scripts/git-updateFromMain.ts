@@ -81,9 +81,9 @@ You are on branch \`{{SQUASH_BRANCH}}\` with conflict markers in the working tre
 ## How the gate works
 
 - Resolve every conflicted file in the working tree.
-- Run **\`pnpm wp-git-merge-complete\`** — the validation gate. It scans for leftover conflict
+- Run **\`pnpm wp-finish-upsert-pr\`** — the validation + finish gate. It scans for leftover conflict
   markers, checks each conflicted file has a written merge explanation, runs the \`nx affected\`
-  build, and — only if all pass — stages, commits, and unblocks the workflow.
+  build, and — only if all pass — stages, commits, then renders the dashboard and creates/updates the PR.
 - **Do NOT run \`git add\` / \`git commit\` / \`git push\` / \`gh pr\` yourself.** They are blocked by
   the \`merge-in-progress-guard\` hook until the gate validates. The gate does the commit.
 
@@ -125,24 +125,17 @@ this file: which side you took where, what you combined from B-A.diff vs C-A.dif
 gate fails if any conflicted file's explanation is missing or empty. Do not paste A/B/C context
 blocks into the source code.
 
-## STEP 3 — Run the gate
+## STEP 3 — Run the gate (validates the merge AND finishes the PR)
 
 \`\`\`
-pnpm wp-git-merge-complete
+pnpm wp-finish-upsert-pr
 \`\`\`
 
 - Leftover conflict markers → fix those files and re-run.
 - Missing merge explanation → write it (see STEP 2) and re-run.
 - Build failure → fix the TypeScript/lint errors and re-run (the gate re-stages for you).
-- On success it commits and prints the finalize instruction.
-
-## STEP 4 — Finalize
-
-\`\`\`
-pnpm wp-upsert-pr      # (or pnpm wp-git-update)
-\`\`\`
-
-Force-pushes the resolved squash branch over your feature branch and updates/creates the PR.
+- Missing review.json → write it in the printed format (your PR review), then re-run.
+- On success it commits, renders the dashboard, and creates/updates the PR.
 
 ## Conflicted files
 
@@ -230,7 +223,7 @@ async function handleResume(mergeDir: string, marker: MergeMarker): Promise<void
     if (!marker.validated) {
         process.stdout.write('\n' + SEP + '⏸️  Merge in progress — not yet validated\n' + SEP + '\n');
         process.stdout.write('Resolve the remaining conflicts in the working tree, then run:\n');
-        process.stdout.write('  pnpm wp-git-merge-complete\n\n');
+        process.stdout.write('  pnpm wp-finish-upsert-pr\n\n');
         process.exit(1);
     }
     process.stdout.write('Resuming: merge validated — finalizing.\n');
