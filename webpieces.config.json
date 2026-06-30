@@ -8,7 +8,7 @@
         },
         "max-file-lines": {
             "limit": 902,
-            "mode": "MODIFIED_FILES",
+            "mode": "NEW_AND_MODIFIED_FILES",
             "disableAllowed": false,
             "ignoreModifiedUntilEpoch": 1771931925
         },
@@ -77,12 +77,12 @@
             ]
         },
         "no-file-import-cycles": {
-            "mode": "ON",
+            "mode": "RUN_EVERY_TIME",
             "ignoreTypeOnly": false,
             "ignoreModifiedUntilEpoch": 0
         },
         "runtime-architecture": {
-            "mode": "ON",
+            "mode": "RUN_EVERY_TIME",
             "servicePaths": [
                 "apps/*"
             ],
@@ -93,12 +93,12 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "no-js-files": {
-            "mode": "ON",
+            "mode": "NEW_AND_MODIFIED_FILES",
             "allowedPaths": [],
             "ignoreModifiedUntilEpoch": 0
         },
         "validate-ts-in-src": {
-            "mode": "MODIFIED_FILES",
+            "mode": "NEW_AND_MODIFIED_FILES",
             "ignoreModifiedUntilEpoch": 1771931925,
             "allowedRootFiles": [
                 "jest.setup.ts"
@@ -112,6 +112,10 @@
                 "**/jest.config.ts",
                 "**/codegen.ts"
             ]
+        },
+        "nx-wiring": {
+            "mode": "RUN_EVERY_TIME",
+            "ignoreModifiedUntilEpoch": 0
         }
     },
     "hookGuards": {
