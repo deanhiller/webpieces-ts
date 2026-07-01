@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadAndValidate, WebpiecesRulesConfig, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { loadRules, globMatches } from './load-rules';
@@ -21,6 +21,17 @@ function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     if (mode === 'all') return rules;
     if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.name));
     return rules.filter((r: Rule): boolean => !isHookGuard(r.name));
+}
+
+// Drop rules whose category is excluded for this file path (webpieces.config.json → excludePaths).
+// Two independent glob lists: `guards` suppresses file-scoped guards (e.g. feature-branch-guard),
+// `rules` suppresses code-style rules — so a vendored tree can be exempt from one but not the other.
+// Only file tools reach here; bash git/PR guards (no file path) are never affected.
+export function filterByExcludedPaths(rules: readonly Rule[], relativePath: string, ex: ExcludePaths): readonly Rule[] {
+    return rules.filter((r: Rule): boolean => {
+        const patterns = isHookGuard(r.name) ? ex.guards : ex.rules;
+        return !patterns.some((p: string): boolean => globMatches(p, relativePath));
+    });
 }
 
 // Fire-and-forget the detached refresher when feature-branch-guard is loaded and active, so the
@@ -63,14 +74,20 @@ function runInternal(
         return null;
     }
 
-    const rules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
+    const modeRules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
+    if (modeRules.length === 0) return null;
+
+    // Suppress enforcement for files under this category's excludePaths (e.g. vendored repos under
+    // repositories/**). Exclusion is all-or-nothing per category, so an excluded file drops the whole
+    // rule set and is fully hands-off — no violations AND no config-sync nag on those files.
+    const relativePath = path.relative(workspaceRoot, input.filePath);
+    const rules = filterByExcludedPaths(modeRules, relativePath, loaded.excludePaths);
     if (rules.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot);
-    const relativePath = path.relative(workspaceRoot, input.filePath);
 
     const editGroups = runEditRules(rules, contexts.editContexts);
     const fileGroups = runFileRules(rules, contexts.fileContext);

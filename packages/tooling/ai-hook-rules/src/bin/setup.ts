@@ -74,6 +74,7 @@ interface ConfigFile {
     rules: Section;
     hookGuards: Section;
     commands: Json;
+    excludePaths: Json;
     rulesDir: string[];
 }
 
@@ -94,6 +95,12 @@ function seedCommands(): Json {
     };
 }
 
+// Required excludePaths block: two glob lists that suppress hook enforcement per file path. Seeded
+// empty (enforce everywhere) — a client adds paths (e.g. "repositories/**") to exempt vendored trees.
+function seedExcludePaths(): Json {
+    return { rules: [], guards: [] };
+}
+
 function buildSeedConfig(): ConfigFile {
     const rules: Section = {};
     const hookGuards: Section = {};
@@ -101,7 +108,7 @@ function buildSeedConfig(): ConfigFile {
         if (sectionForRule(name) === 'hookGuards') hookGuards[name] = seedRule();
         else rules[name] = seedRule();
     }
-    return { rules, hookGuards, commands: seedCommands(), rulesDir: [] };
+    return { rules, hookGuards, commands: seedCommands(), excludePaths: seedExcludePaths(), rulesDir: [] };
 }
 
 function writeConfig(configPath: string, config: ConfigFile): void {
@@ -169,8 +176,14 @@ export function migrate(existing: Json): MigrateResult {
     if (commands['upsertPr'] === undefined) { commands['upsertPr'] = DEFAULT_UPSERT_PR; changes.push('added commands.upsertPr'); }
     if (commands['mergeComplete'] === undefined) { commands['mergeComplete'] = DEFAULT_MERGE_COMPLETE; changes.push('added commands.mergeComplete'); }
 
+    // Seed the now-required excludePaths block (empty = enforce everywhere) if the config predates it.
+    const excludePaths: Json = (typeof existing['excludePaths'] === 'object' && existing['excludePaths'] !== null && !Array.isArray(existing['excludePaths']))
+        ? (existing['excludePaths'] as Json) : {};
+    if (excludePaths['rules'] === undefined) { excludePaths['rules'] = []; changes.push('added excludePaths.rules ([])'); }
+    if (excludePaths['guards'] === undefined) { excludePaths['guards'] = []; changes.push('added excludePaths.guards ([])'); }
+
     const rulesDir: string[] = Array.isArray(existing['rulesDir']) ? (existing['rulesDir'] as string[]) : [];
-    const config: ConfigFile = { rules, hookGuards, commands, rulesDir };
+    const config: ConfigFile = { rules, hookGuards, commands, excludePaths, rulesDir };
     if (typeof existing['extends'] === 'string') config.extends = existing['extends'];
     return { config, changes };
 }

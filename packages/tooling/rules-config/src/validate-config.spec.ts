@@ -1,4 +1,4 @@
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths } from './validate-config';
 
 // Helper: errors mentioning a given rule name.
 function errorsFor(rule: string, errors: string[]): string[] {
@@ -270,5 +270,28 @@ describe('validateCommandsSection', () => {
     it('rejects a non-string command field', () => {
         const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, upsertPr: 123 }, undefined);
         expect(errors.some(e => e.includes('[commands] "upsertPr" must be a string'))).toBe(true);
+    });
+});
+
+describe('validateExcludePaths', () => {
+    it('errors with a copy-paste example when the block is missing (required)', () => {
+        const errors = validateExcludePaths(undefined);
+        expect(errors.some(e => e.includes('[excludePaths] Not configured'))).toBe(true);
+        expect(errors.some(e => e.includes('"rules"') && e.includes('"guards"'))).toBe(true);
+    });
+
+    it('accepts a valid block with empty and populated lists', () => {
+        expect(validateExcludePaths({ rules: [], guards: [] })).toEqual([]);
+        expect(validateExcludePaths({ rules: ['repositories/**'], guards: ['vendor/**'] })).toEqual([]);
+    });
+
+    it('rejects a non-object (e.g. an array)', () => {
+        expect(validateExcludePaths(['repositories/**']).some(e => e.includes('Must be an object'))).toBe(true);
+    });
+
+    it('rejects a missing or non-string-array rules/guards list', () => {
+        expect(validateExcludePaths({ guards: [] }).some(e => e.includes('"rules" must be a string[]'))).toBe(true);
+        expect(validateExcludePaths({ rules: [], guards: 'nope' }).some(e => e.includes('"guards" must be a string[]'))).toBe(true);
+        expect(validateExcludePaths({ rules: [1, 2], guards: [] }).some(e => e.includes('"rules" must be a string[]'))).toBe(true);
     });
 });

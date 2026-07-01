@@ -51,9 +51,17 @@ function validPrGate(): Record<string, unknown> {
     return { mode: 'ON', buildCommand: 'echo ci' };
 }
 
-// `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate is added here.
+// `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate + the required
+// excludePaths block are added here so the fixture always validates.
+function validExcludePaths(): Record<string, unknown> {
+    return { rules: [], guards: [] };
+}
 function writeConfig(sections: Record<string, unknown>, prGate: unknown = validPrGate()): string {
-    return mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': prGate } }) });
+    return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+        ...sections,
+        commands: { 'pr-gate': prGate },
+        excludePaths: validExcludePaths(),
+    }) });
 }
 
 describe('loadAndValidate', () => {
@@ -108,6 +116,22 @@ describe('loadAndValidate', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify(allRulesOff()) });
         expect(() => loadAndValidate(dir)).toThrow('[pr-gate] Not configured');
     });
+
+    it('throws when the required excludePaths block is missing', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...allRulesOff(), commands: { 'pr-gate': validPrGate() } }) });
+        expect(() => loadAndValidate(dir)).toThrow('[excludePaths] Not configured');
+    });
+
+    it('parses excludePaths into the typed ExcludePaths view', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...allRulesOff(),
+            commands: { 'pr-gate': validPrGate() },
+            excludePaths: { rules: ['repositories/**'], guards: ['vendor/**'] },
+        }) });
+        const loaded = loadAndValidate(dir);
+        expect(loaded.excludePaths.rules).toEqual(['repositories/**']);
+        expect(loaded.excludePaths.guards).toEqual(['vendor/**']);
+    });
 });
 
 describe('loadAndValidate — sections & commands', () => {
@@ -129,6 +153,7 @@ describe('loadAndValidate — sections & commands', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
             ...sections,
             commands: { 'pr-gate': validPrGate(), upsertPr: 'pnpm my-upsert' },
+            excludePaths: validExcludePaths(),
         }) });
         const loaded = loadAndValidate(dir);
         expect(loaded.commands.upsertPr).toBe('pnpm my-upsert');
