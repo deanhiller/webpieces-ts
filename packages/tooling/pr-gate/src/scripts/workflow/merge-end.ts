@@ -2,6 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus } from '@webpieces/rules-config';
+import { baseBranchName, nextBranchName } from './branch-naming';
 import { main as cleanTmp } from './cleanTmp';
 import { runGitChecked } from './git-exec';
 import { MergeContext } from './merge-start';
@@ -9,8 +10,9 @@ import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExpl
 
 // merge-END: the second half of the 3-point squash-merge lifecycle, symmetric with merge-START. Given
 // the branch context, it (optionally) validates + commits the AI's conflict resolution, then ALWAYS
-// finalizes the merge — swaps `<branch>Squash` back over the feature branch, force-pushes, stamps a
-// clean main-sync status, clears the marker and sweeps stale tmp. Both wp-git-update (clean path /
+// finalizes the merge — promotes `<branch>Squash` to the next numbered generation (base → base2),
+// force-pushes to the stable base branch, stamps a clean main-sync status, clears the marker and
+// sweeps stale tmp. Both wp-git-update (clean path /
 // validated resume) and wp-finish-upsert-pr (conflict resolution) call THIS, so finalization happens
 // in exactly one place and the conflict path can no longer post a PR from the un-swapped squash branch.
 
@@ -56,26 +58,30 @@ function validateResolution(repoRoot: string, mergeDir: string, conflictedFiles:
     process.stdout.write('✅ Merge explanations present for all resolved files.\n');
 }
 
-// Swap the squash branch back over the feature branch, force-push, and stamp clean main-sync.
+// Promote the squash branch to the NEXT numbered generation, force-push to the stable base
+// branch (where the single PR lives), and stamp clean main-sync. The local branch numbers up
+// (base → base2 → base3) so the generation is visible; the remote/PR name stays `base`.
 function finalizeBranch(ctx: MergeContext): void {
     process.stdout.write('\n' + SEP + '🗑️  Finalizing\n' + SEP + '\n');
+    const base = baseBranchName(ctx.currentBranch);
+    const next = nextBranchName(ctx.currentBranch);
     runGitChecked(['branch', '-D', ctx.currentBranch], 'Failed to delete old feature branch');
 
-    const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', ctx.currentBranch]).status === 0;
+    const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', base]).status === 0;
     if (remoteExists) {
         process.stdout.write(ctx.prNumber ? `Updating PR #${ctx.prNumber} (force-with-lease)...\n` : 'Updating remote branch (force-with-lease)...\n');
-        runGitChecked(['push', '-u', '--force-with-lease', 'origin', `${ctx.squashBranch}:${ctx.currentBranch}`], 'Failed to push to origin');
+        runGitChecked(['push', '-u', '--force-with-lease', 'origin', `${ctx.squashBranch}:${base}`], 'Failed to push to origin');
     } else {
         process.stdout.write('No remote branch — local only.\n');
     }
     runGitChecked(['checkout', ctx.squashBranch], 'Failed to checkout squash branch');
-    runGitChecked(['branch', '-m', ctx.currentBranch], 'Failed to rename squash branch');
+    runGitChecked(['branch', '-m', next], 'Failed to rename squash branch');
 
     // Branch now contains origin/main — stamp a clean main-sync status so the feature-branch-guard
     // unblocks edits immediately (no wait for the async refresher).
     stampCleanMainSyncStatus(execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim());
 
-    process.stdout.write(`\n✅ Branch ${ctx.currentBranch} updated from main. Backup: ${ctx.backupBranch}\n`);
+    process.stdout.write(`\n✅ Now on ${next} (remote/PR: ${base}), updated from main. Backup: ${ctx.backupBranch}\n`);
     process.stdout.write(`   Delete backup when safe: git branch -D ${ctx.backupBranch}\n\n`);
 }
 
