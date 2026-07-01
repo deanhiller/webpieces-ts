@@ -23,12 +23,12 @@
             "ignoreModifiedUntilEpoch": 1771931925
         },
         "no-any-unknown": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
         "no-implicit-any": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
@@ -43,22 +43,22 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "no-destructure": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": false,
             "ignoreModifiedUntilEpoch": 1771931925
         },
         "no-unmanaged-exceptions": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
         "catch-error-pattern": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925
         },
         "throw-cause-required": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": false,
             "ignoreModifiedUntilEpoch": 1771931925
         },
@@ -68,7 +68,7 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "no-symbol-di-tokens": {
-            "mode": "MODIFIED_CODE",
+            "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 1771931925,
             "allowedPaths": [
