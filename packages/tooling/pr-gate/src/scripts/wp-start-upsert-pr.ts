@@ -2,6 +2,7 @@
 import { execSync, spawnSync } from 'child_process';
 import { reviewJsonPath, reviewJsonSchemaHint } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
+import { baseBranchName } from './workflow/branch-naming';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
 import { ensurePushed } from './workflow/git-exec';
 
@@ -31,7 +32,8 @@ export function main(): void {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
     runUpdateFromMain();
-    ensurePushed(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
+    // Local branch may be a numbered generation (base2/…); the remote/PR branch is the stable base.
+    ensurePushed(baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim()));
 
     // Advisory build gate — early feedback before the AI writes review.json. wp-finish-upsert-pr runs
     // the authoritative one. Both go through the same shared runBuildGate (only the framing differs).

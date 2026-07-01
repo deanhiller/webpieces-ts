@@ -10,6 +10,7 @@ import {
     ReviewJson,
 } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
+import { baseBranchName } from './workflow/branch-naming';
 import { ensurePushed } from './workflow/git-exec';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
 import { mergeDirFor, readMergeMarker } from './workflow/merge-state';
@@ -52,7 +53,10 @@ function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJs
     return renderDashboard(input);
 }
 
-function upsertPr(repoRoot: string, currentBranch: string, body: string): void {
+// The PR always lives on the stable base branch (the local branch may be a numbered generation
+// base2/base3/…). Look up / create / merge against `baseBranch`, never the numbered branch, or
+// generation 2+ would fail to find its PR and open a duplicate.
+function upsertPr(repoRoot: string, baseBranch: string, body: string): void {
     const prDir = prDirFor(repoRoot, getFeatureName());
     fs.mkdirSync(prDir, { recursive: true });
     const bodyFile = path.join(prDir, 'pr-body.md');
@@ -60,14 +64,14 @@ function upsertPr(repoRoot: string, currentBranch: string, body: string): void {
 
     const existing = gitOut(['log', '-1', '--format=%s']); // title fallback
     const prNumber = spawnSync(
-        'gh', ['pr', 'list', '--head', currentBranch, '--json', 'number', '--jq', '.[0].number'],
+        'gh', ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
         { encoding: 'utf8' },
     );
     const num = prNumber.status === 0 ? (prNumber.stdout ?? '').trim() : '';
 
     if (num === '') {
         process.stdout.write('Creating PR...\n');
-        const create = spawnSync('gh', ['pr', 'create', '--head', currentBranch, '--base', 'main', '--title', existing, '--body-file', bodyFile], { stdio: 'inherit' });
+        const create = spawnSync('gh', ['pr', 'create', '--head', baseBranch, '--base', 'main', '--title', existing, '--body-file', bodyFile], { stdio: 'inherit' });
         if (create.status !== 0) {
             process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
             return;
@@ -76,7 +80,7 @@ function upsertPr(repoRoot: string, currentBranch: string, body: string): void {
         process.stdout.write(`Updating PR #${num}...\n`);
         spawnSync('gh', ['pr', 'edit', num, '--body-file', bodyFile], { stdio: 'inherit' });
     }
-    spawnSync('gh', ['pr', 'merge', currentBranch, '--auto', '--squash'], { stdio: 'inherit' });
+    spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash'], { stdio: 'inherit' });
 }
 
 export async function main(): Promise<void> {
@@ -101,12 +105,14 @@ export async function main(): Promise<void> {
     runBuildGate(repoRoot, new BuildGateOptions(
         '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
     ));
-    const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-    ensurePushed(currentBranch);
+    // After finalize the local branch is the numbered generation (base2/…); the remote branch and
+    // PR live on the stable base name — push and upsert against that.
+    const base = baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
+    ensurePushed(base);
 
     process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
     const body = buildDashboard(repoRoot, true, review);
-    upsertPr(repoRoot, currentBranch, body);
+    upsertPr(repoRoot, base, body);
     process.stdout.write('\n✅ Done.\n');
 }
 

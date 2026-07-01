@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 import { main as gatherInfo } from '../git-gatherInfo';
+import { baseBranchName, preMergeBackupName } from './branch-naming';
 import { runGitChecked } from './git-exec';
 import { MergeMarker, perFileContextDir, writeMergeMarker } from './merge-state';
 
@@ -48,21 +49,25 @@ export class MergeStartResult {
     }
 }
 
-function detectPr(currentBranch: string): string {
+// Detect the PR by its STABLE base branch — the PR always lives on `base`, never on the numbered
+// generation (base2/base3/…) you may currently be on, so pass baseBranchName(currentBranch).
+function detectPr(baseBranch: string): string {
     const result = spawnSync(
-        'gh', ['pr', 'list', '--head', currentBranch, '--json', 'number', '--jq', '.[0].number'],
+        'gh', ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
         { encoding: 'utf8' },
     );
     return result.status === 0 ? (result.stdout ?? '').trim() : '';
 }
 
+// Snapshot the pre-merge state as `<currentBranch>PreMerge`. One overwritable slot per generation:
+// if a stale PreMerge from a crashed rerun of THIS branch exists, delete it first so we never
+// accumulate backups (the old scheme minted a fresh Backup1/Backup2/… on every run).
 function createBackup(currentBranch: string): string {
-    process.stdout.write('\n' + SEP + '💾 Creating Incremental Backup\n' + SEP + '\n');
-    let n = 1;
-    while (spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${currentBranch}Backup${n}`]).status === 0) {
-        n += 1;
+    process.stdout.write('\n' + SEP + '💾 Creating Pre-Merge Backup\n' + SEP + '\n');
+    const backupBranch = preMergeBackupName(currentBranch);
+    if (spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${backupBranch}`]).status === 0) {
+        runGitChecked(['branch', '-D', backupBranch], 'Failed to delete stale pre-merge backup');
     }
-    const backupBranch = `${currentBranch}Backup${n}`;
     runGitChecked(['checkout', '-b', backupBranch], 'Failed to create backup branch');
     runGitChecked(['checkout', currentBranch], 'Failed to return to feature branch');
     process.stdout.write(`✅ Backup created: ${backupBranch}\n\n`);
@@ -167,7 +172,7 @@ pnpm wp-finish-upsert-pr
 
 ## If you need to bail out
 
-A backup branch was created (e.g. \`<feature>Backup1\`). To abandon:
+A backup branch was created (e.g. \`<feature>PreMerge\`). To abandon:
 
 \`\`\`
 git merge --abort 2>/dev/null; git checkout <feature> ; git branch -D {{SQUASH_BRANCH}}
@@ -235,7 +240,7 @@ export async function mergeStart(repoRoot: string, mergeDir: string): Promise<Me
     await gatherInfo();
     const hashes = JSON.parse(fs.readFileSync(path.join(mergeDir, 'updatemain-hashes.json'), 'utf8')) as HashPoints;
 
-    const prNumber = detectPr(currentBranch);
+    const prNumber = detectPr(baseBranchName(currentBranch));
     process.stdout.write(prNumber ? `Existing PR #${prNumber} will be updated.\n` : 'No existing PR (one can be created later).\n');
 
     const backupBranch = createBackup(currentBranch);

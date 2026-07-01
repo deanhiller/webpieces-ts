@@ -66,7 +66,7 @@ describe('merge marker round-trip', () => {
     it('writes, reads, and clears the marker', () => {
         const root = tmp();
         const dir = mergeDirFor(root, 'feat');
-        const marker = new MergeMarker('feat', 'featSquash', 'featBackup1', '42', ['a.ts'], 'A', 'B', 'C', false);
+        const marker = new MergeMarker('feat', 'featSquash', 'featPreMerge', '42', ['a.ts'], 'A', 'B', 'C', false);
         writeMergeMarker(dir, marker);
 
         const read = readMergeMarker(dir);
