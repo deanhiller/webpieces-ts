@@ -26,12 +26,76 @@ class HookSpec {
     ) {}
 
     // Absolute targets (global) need the exact path to this repo's bin — no ~/.webpieces bridge.
+    // Project (relative) targets point at the checked-in shim (passing this hook's bin name as an
+    // arg) instead of the bare bin, so the hook degrades gracefully when node_modules is absent
+    // (fresh clone before `pnpm install`, or the package removed on purpose). See writeShim().
     commandFor(target: InstallTarget, projectRoot: string): string {
         if (target.absolute) {
             return `node ${path.join(projectRoot, 'node_modules', '.bin', this.bin)}`;
         }
-        return `./node_modules/.bin/${this.bin}`;
+        return shimCommand(this.bin);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Single checked-in shim (.claude/webpieces/ai-hook.sh). Both project hooks point at it, passing
+// their bin name as the first arg. settings.json points here (not at the bare bin) so a missing bin
+// (fresh clone, package removed) yields a friendly "run pnpm install" line instead of the raw
+// `sh: No such file or directory` on every Write/Edit/Bash tool call. The bin name rides along in
+// the command string, so `command.includes(bin)` still detects/uninstalls each hook (hasHook /
+// removeHook). `.claude` is committed, so the shim survives even when node_modules does not.
+// ---------------------------------------------------------------------------
+const SHIM_MARKER = '.claude/webpieces/ai-hook.sh';
+
+function shimPath(projectRoot: string): string {
+    return path.join(projectRoot, '.claude', 'webpieces', 'ai-hook.sh');
+}
+
+function shimCommand(bin: string): string {
+    return `./${SHIM_MARKER} ${bin}`;
+}
+
+export function renderShim(): string {
+    return `#!/bin/sh
+# Managed by @webpieces/ai-hook-rules (wp-setup-ai-hooks) — do not edit; re-running the installer
+# overwrites this file. Checked in on purpose so the hook degrades gracefully when node_modules is
+# absent. Safe to delete along with the matching .claude/settings.json entries if you remove
+# @webpieces/ai-hook-rules.
+#
+# Usage (wired into .claude/settings.json): ./.claude/webpieces/ai-hook.sh <bin-name>
+BIN_NAME="$1"
+shift
+BIN="./node_modules/.bin/$BIN_NAME"
+if [ -x "$BIN" ]; then
+  exec "$BIN" "$@"          # exec preserves stdin — hooks receive the tool payload as JSON on stdin
+fi
+echo "  [ai-hook-rules] $BIN_NAME not installed — run 'pnpm install' to enable webpieces AI guards." >&2
+echo "  (If you removed @webpieces/ai-hook-rules on purpose, delete this hook from .claude/settings.json.)" >&2
+exit 0                       # non-blocking: inform, never block the dev's tool call
+`;
+}
+
+// Idempotent: re-running the installer overwrites the managed shim in place.
+function writeShim(projectRoot: string): void {
+    const target = shimPath(projectRoot);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, renderShim(), { mode: 0o755 });
+    // writeFileSync's mode is only applied when creating the file; force it on overwrite too.
+    fs.chmodSync(target, 0o755);
+}
+
+function removeShim(projectRoot: string): void {
+    const target = shimPath(projectRoot);
+    if (fs.existsSync(target)) fs.rmSync(target);
+}
+
+// The shim is shared by both hooks — only safe to delete once no project settings file references
+// it anymore (i.e. the other hook was moved to global or uninstalled too).
+function shimReferenced(targets: InstallTarget[]): boolean {
+    return targets.some((t: InstallTarget) => {
+        const entries = readSettings(t.settingsPath).hooks?.PreToolUse ?? [];
+        return entries.some((e: HookEntry) => e.hooks.some((h: HookCommand) => h.command.includes(SHIM_MARKER)));
+    });
 }
 
 class InstallTarget {
@@ -279,6 +343,13 @@ export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets:
         } else if (removed) {
             writeSettings(target.settingsPath, settings);
         }
+    }
+    // Manage the shared checked-in shim: (re)write it whenever a project (relative) install exists,
+    // otherwise clean it up once neither hook references it anymore.
+    if (chosen !== null && !chosen.absolute) {
+        writeShim(projectRoot);
+    } else if (!shimReferenced(targets)) {
+        removeShim(projectRoot);
     }
     if (chosen === null) console.log(`  ⛔ ${hook.label} not installed (removed from all locations).`);
 }
