@@ -108,8 +108,8 @@ describe('applyHook — checked-in shim management', () => {
         // Generic shim: no hard-coded bin, reads it from $1 and degrades gracefully.
         const body = fs.readFileSync(shim, 'utf8');
         expect(body).toContain('BIN_NAME="$1"');
-        expect(body).toContain("run 'pnpm install'");
-        expect(body).toContain('exit 0');
+        expect(body).toContain("Run 'pnpm install'");
+        expect(body).toContain('exit 2'); // fail closed when the bin is missing
     });
 
     it('keeps the shared shim while the other hook still uses it, removes it once neither does', () => {
@@ -158,11 +158,13 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
         expect(out.stdout).toBe('{"tool":"Bash"}');
     });
 
-    it('exits 0 with a friendly stderr message when the bin is absent', () => {
+    it('fails closed (exit 2) with a clear stderr message when the bin is absent', () => {
         const root = mktmp(); // no node_modules/.bin here
         const out = runShim(root, 'wp-ai-guards-hook', '{"tool":"Bash"}');
-        expect(out.status).toBe(0); // never blocks the dev's tool call
-        expect(out.stderr).toContain("run 'pnpm install'");
+        // exit 2 = Claude Code blocks the tool call; exiting 0 would silently disable every guard.
+        expect(out.status).toBe(2);
+        expect(out.stderr).toContain("Run 'pnpm install'");
+        expect(out.stderr).toContain('not installed');
         expect(out.stderr).toContain('wp-ai-guards-hook');
     });
 });
