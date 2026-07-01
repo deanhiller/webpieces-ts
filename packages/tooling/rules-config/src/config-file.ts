@@ -21,6 +21,10 @@ export interface RawConfigFile {
     hookGuards?: Record<string, Record<string, unknown>>;
     // webpieces-disable no-any-unknown -- opaque commands JSON, validated by validateCommandsSection
     commands?: unknown;
+    // REQUIRED top-level block: two glob lists that suppress hook enforcement per file path.
+    // Opaque here (validated structurally by validateExcludePaths, then parsed into ExcludePaths).
+    // webpieces-disable no-any-unknown -- opaque excludePaths JSON, validated by validateExcludePaths
+    excludePaths?: unknown;
     rulesDir?: string[];
     // webpieces-disable no-any-unknown -- DEPRECATED top-level pr-gate, migrated under `commands`
     'pr-gate'?: unknown;

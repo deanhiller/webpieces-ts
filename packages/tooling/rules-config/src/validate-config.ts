@@ -252,6 +252,47 @@ export function validatePrGateSection(section: unknown): string[] {
     return errors;
 }
 
+function excludePathsExample(): string {
+    return '"excludePaths": {\n' +
+        '    "rules":  ["repositories/**"],\n' +
+        '    "guards": []\n' +
+        '  }';
+}
+
+// One of the two excludePaths lists: required, must be a string[] (may be empty).
+// webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed here
+function validateExcludeList(value: unknown, key: string): string[] {
+    if (!(Array.isArray(value) && value.every(p => typeof p === 'string'))) {
+        return [`[excludePaths] "${key}" must be a string[] of glob paths (use [] for none).`];
+    }
+    return [];
+}
+
+/**
+ * Validate the REQUIRED top-level `excludePaths` block: two independent glob lists (`rules`,
+ * `guards`) that suppress hook enforcement per file path. Required so every client upgrading is
+ * forced to declare it (as [] to keep today's behavior, or with real paths). Returns copy-paste
+ * friendly errors and never throws — same contract as validatePrGateSection.
+ */
+// webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed below
+export function validateExcludePaths(section: unknown): string[] {
+    if (section === undefined || section === null) {
+        return [
+            `[excludePaths] Not configured in webpieces.config.json. Add this REQUIRED block ` +
+            `(use empty arrays to keep enforcing everywhere):\n\n  ${excludePathsExample()}`,
+        ];
+    }
+    if (typeof section !== 'object' || Array.isArray(section)) {
+        return [`[excludePaths] Must be an object with "rules" and "guards" string arrays. Example:\n\n  ${excludePathsExample()}`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing the opaque excludePaths section from consumer JSON
+    const s = section as Record<string, unknown>;
+    return [
+        ...validateExcludeList(s['rules'], 'rules'),
+        ...validateExcludeList(s['guards'], 'guards'),
+    ];
+}
+
 /**
  * Enforce that each built-in lives in its correct section: code rules under `rules`, bash guards
  * under `hookGuards`. A guard left in `rules` (or a rule placed in `hookGuards`) is reported with a

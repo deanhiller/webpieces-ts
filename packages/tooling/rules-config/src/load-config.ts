@@ -1,10 +1,11 @@
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
 import { findConfigFile, readRawConfig } from './config-file';
 import { defaultRules } from './default-rules';
+import { ExcludePaths } from './exclude-hook-paths';
 import { InformAiError } from './inform-ai-error';
 import { PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
-import { validateCommandsSection, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
+import { validateCommandsSection, validateExcludePaths, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 
 // Inject the canonical command strings (from the `commands` section) as the DEFAULT for the guards
@@ -43,6 +44,18 @@ function mergeRule(
     return new ResolvedRuleConfig(merged as RuleOptions);
 }
 
+// Parse the (already-validated) raw excludePaths block into the typed ExcludePaths. Defensive
+// defaults keep this total even though validateExcludePaths guarantees both string[] lists are set.
+// webpieces-disable no-any-unknown -- `raw` is opaque consumer JSON until narrowed here
+function parseExcludePaths(raw: unknown): ExcludePaths {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return new ExcludePaths([], []);
+    // webpieces-disable no-any-unknown -- validateExcludePaths already proved both are string[]
+    const s = raw as Record<string, string[]>;
+    const rules = Array.isArray(s['rules']) ? s['rules'].filter(p => typeof p === 'string') : [];
+    const guards = Array.isArray(s['guards']) ? s['guards'].filter(p => typeof p === 'string') : [];
+    return new ExcludePaths(rules, guards);
+}
+
 function buildWebpiecesRulesConfig(
     // webpieces-disable no-any-unknown -- JSON values are opaque until assigned to typed fields
     rawRules: Record<string, Record<string, unknown>>,
@@ -64,6 +77,7 @@ function buildWebpiecesRulesConfig(
  *  - `rulesConfig` — typed WebpiecesRulesConfig (ai-hook-rules, code-rules); rules + hookGuards merged.
  *  - `commands`    — the `commands` section (gated commands + pr-gate).
  *  - `prGate`      — convenience alias of `commands.prGate` (pr-gate scripts).
+ *  - `excludePaths`— the required `excludePaths` block (per-category glob suppression lists).
  *  - `configPath`  — absolute path, or null when no config file was found.
  */
 export class LoadedConfig {
@@ -72,6 +86,7 @@ export class LoadedConfig {
         readonly rulesConfig: WebpiecesRulesConfig,
         readonly commands: CommandsConfig,
         readonly prGate: PrGateConfig,
+        readonly excludePaths: ExcludePaths,
         readonly configPath: string | null,
     ) {}
 }
@@ -91,6 +106,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
             new WebpiecesRulesConfig(),
             emptyCommands,
             emptyCommands.prGate,
+            new ExcludePaths([], []),
             null,
         );
     }
@@ -113,6 +129,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
         ...validateWebpiecesConfig(overrideRules, rulesDir.length > 0),
         ...validateSectionPlacement(rulesSection, hookGuardsSection),
         ...validateCommandsSection(consumerConfig.commands, legacyPrGate),
+        ...validateExcludePaths(consumerConfig.excludePaths),
     ];
     if (errors.length > 0) {
         throw new InformAiError(
@@ -135,6 +152,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
     const resolved = new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
 
     const rulesConfig = buildWebpiecesRulesConfig(overrideRules, rulesDir);
+    const excludePaths = parseExcludePaths(consumerConfig.excludePaths);
 
-    return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, configPath);
+    return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, excludePaths, configPath);
 }

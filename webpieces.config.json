@@ -242,5 +242,13 @@
         "upsertPr": "pnpm wp-start-upsert-pr",
         "mergeComplete": "pnpm wp-finish-upsert-pr"
     },
+    "excludePaths": {
+        "rules": [
+            "repositories/**"
+        ],
+        "guards": [
+            "repositories/**"
+        ]
+    },
     "rulesDir": []
 }
