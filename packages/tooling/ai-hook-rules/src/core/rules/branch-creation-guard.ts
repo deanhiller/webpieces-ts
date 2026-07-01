@@ -19,6 +19,11 @@ const BRANCH_PATTERNS: RegExp[] = [
     /git\s+branch\s+(?!-[dDmMrRla])([^\s-][^\s]*)/,
 ];
 
+// The squash-merge tooling reserves a trailing `wp<number>` as its generation marker
+// (base → basewp2 → basewp3). A human branch ending that way would collide with it, so
+// block it at creation time and steer the name back to the plain feature form.
+const RESERVED_GENERATION_SUFFIX = /wp\d+$/;
+
 function extractBranchName(command: string): string | null {
     for (const pattern of BRANCH_PATTERNS) {
         const m = pattern.exec(command);
@@ -93,6 +98,16 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     check(ctx: BashContext): readonly Violation[] {
         const requestedName = extractBranchName(ctx.command);
         if (!requestedName) return [];
+
+        if (RESERVED_GENERATION_SUFFIX.test(requestedName)) {
+            return [new V(
+                1,
+                truncate(ctx.command),
+                `Branch name '${requestedName}' ends in 'wp<number>', which is reserved for the ` +
+                `squash-merge tool's generation marker (base → basewp2 → basewp3). ` +
+                `Rename it to a plain feature branch. ${this.branchFormat}.`,
+            )];
+        }
 
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,
