@@ -1,11 +1,16 @@
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import {
-    migrate, applyHook, installTargets, readSettings, hasHook,
+    migrate, applyHook, installTargets, readSettings, hasHook, renderShim,
     RULES_HOOK, GUARDS_HOOK,
 } from './setup';
+
+function shimFile(root: string): string {
+    return path.join(root, '.claude', 'webpieces', 'ai-hook.sh');
+}
 
 function mktmp(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-setup-'));
@@ -60,7 +65,8 @@ describe('applyHook', () => {
         expect(hasHook(settings, 'wp-ai-rules-hook')).toBe(true);
         const entry = settings.hooks!.PreToolUse![0];
         expect(entry.matcher).toBe('Write|Edit|MultiEdit');
-        expect(entry.hooks[0].command).toBe('./node_modules/.bin/wp-ai-rules-hook');
+        // Project install points at the checked-in shim, passing the bin name as an arg.
+        expect(entry.hooks[0].command).toBe('./.claude/webpieces/ai-hook.sh wp-ai-rules-hook');
     });
 
     it('installs the guards hook globally with an absolute exact path (no bridge)', () => {
@@ -87,5 +93,76 @@ describe('applyHook', () => {
         // Uninstall (choose none).
         applyHook(RULES_HOOK, null, targets, root);
         expect(hasHook(readSettings(targets[1].settingsPath), 'wp-ai-rules-hook')).toBe(false);
+    });
+});
+
+describe('applyHook — checked-in shim management', () => {
+    it('writes an executable checked-in shim for a project install', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(RULES_HOOK, targets[0], targets, root);
+
+        const shim = shimFile(root);
+        expect(fs.existsSync(shim)).toBe(true);
+        expect(fs.statSync(shim).mode & 0o111).not.toBe(0); // executable bit set
+        // Generic shim: no hard-coded bin, reads it from $1 and degrades gracefully.
+        const body = fs.readFileSync(shim, 'utf8');
+        expect(body).toContain('BIN_NAME="$1"');
+        expect(body).toContain("run 'pnpm install'");
+        expect(body).toContain('exit 0');
+    });
+
+    it('keeps the shared shim while the other hook still uses it, removes it once neither does', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(RULES_HOOK, targets[0], targets, root);
+        applyHook(GUARDS_HOOK, targets[0], targets, root);
+        expect(fs.existsSync(shimFile(root))).toBe(true);
+
+        // Uninstall rules — guards still references the shim, so it must stay.
+        applyHook(RULES_HOOK, null, targets, root);
+        expect(fs.existsSync(shimFile(root))).toBe(true);
+
+        // Uninstall guards too — now nothing references it, so it's removed.
+        applyHook(GUARDS_HOOK, null, targets, root);
+        expect(fs.existsSync(shimFile(root))).toBe(false);
+    });
+
+    it('does not write a shim for a global (absolute) install', () => {
+        const root = mktmp();
+        const targets = targetsIn(root);
+        applyHook(GUARDS_HOOK, targets[2], targets, root);
+        expect(fs.existsSync(shimFile(root))).toBe(false);
+    });
+});
+
+describe('renderShim (runtime behavior via /bin/sh)', () => {
+    // Run the rendered shim exactly as Claude Code would: `sh <shim> <bin> ...`, from a repo cwd,
+    // piping tool-payload JSON on stdin. spawnSync never throws on non-zero exit.
+    function runShim(root: string, bin: string, stdin: string): { status: number | null; stdout: string; stderr: string } {
+        const shimAbs = path.join(root, 'ai-hook.sh');
+        fs.writeFileSync(shimAbs, renderShim(), { mode: 0o755 });
+        const r = spawnSync('/bin/sh', [shimAbs, bin], { cwd: root, input: stdin, encoding: 'utf8' });
+        return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+    }
+
+    it('execs the bin and forwards stdin when it is installed', () => {
+        const root = mktmp();
+        // Fake bin that echoes its stdin so we can prove stdin was forwarded through exec.
+        const binDir = path.join(root, 'node_modules', '.bin');
+        fs.mkdirSync(binDir, { recursive: true });
+        fs.writeFileSync(path.join(binDir, 'wp-ai-guards-hook'), '#!/bin/sh\ncat\n', { mode: 0o755 });
+
+        const out = runShim(root, 'wp-ai-guards-hook', '{"tool":"Bash"}');
+        expect(out.status).toBe(0);
+        expect(out.stdout).toBe('{"tool":"Bash"}');
+    });
+
+    it('exits 0 with a friendly stderr message when the bin is absent', () => {
+        const root = mktmp(); // no node_modules/.bin here
+        const out = runShim(root, 'wp-ai-guards-hook', '{"tool":"Bash"}');
+        expect(out.status).toBe(0); // never blocks the dev's tool call
+        expect(out.stderr).toContain("run 'pnpm install'");
+        expect(out.stderr).toContain('wp-ai-guards-hook');
     });
 });
