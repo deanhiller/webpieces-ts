@@ -90,3 +90,20 @@ describe('branch-creation-guard', () => {
         expect(normal).toContain('subBranchNaming');
     });
 });
+
+describe('branch-creation-guard reserved wp<number> suffix', () => {
+    it('blocks a branch name ending in the reserved wp<number> generation marker', () => {
+        git.branch = 'main';
+        git.behind = 0;
+        const violations = rule('ON').check(ctx('git checkout -b dean/upgrade-webpieceswp2'));
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('reserved');
+        expect(violations[0].message).toContain('wp<number>');
+    });
+
+    it('does NOT block a name that merely contains digits or a version', () => {
+        git.branch = 'main';
+        git.behind = 0;
+        expect(rule('ON').check(ctx('git checkout -b dean/upgrade-webpieces-0.3.213')).length).toBe(0);
+    });
+});
