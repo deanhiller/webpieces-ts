@@ -264,6 +264,39 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
     });
 });
 
+// A Bash deny only shows the human a top-level systemMessage (permissionDecisionReason is invisible
+// there) and it honors ANSI, so the fallback wraps it red — Bash ONLY. Write/Edit render the reason
+// red natively, so they get no systemMessage. See claude-code-response.ts for the full matrix.
+describe('renderShim fallback — tool-conditional deny visibility', () => {
+    const ESC = String.fromCharCode(0x1b);
+
+    it('Bash deny carries an ANSI-red systemMessage (valid JSON after ${BIN_NAME} sub)', () => {
+        const out = runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('git status'));
+        expect(out.status).toBe(0);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        const decision = JSON.parse(out.stdout) as {
+            systemMessage?: string;
+            hookSpecificOutput: { permissionDecisionReason: string };
+        };
+        expect(decision.systemMessage).toBeDefined();
+        expect(decision.systemMessage!.startsWith(`${ESC}[31`)).toBe(true);
+        expect(decision.systemMessage!.endsWith(`${ESC}[0m`)).toBe(true);
+        expect(decision.systemMessage).toContain("Run 'pnpm install'");
+        // The reason the model reads stays plain (no ANSI), and BIN_NAME substituted cleanly.
+        expect(decision.hookSpecificOutput.permissionDecisionReason).toContain('wp-ai-guards-hook');
+        expect(decision.hookSpecificOutput.permissionDecisionReason.includes(ESC)).toBe(false);
+    });
+
+    it('Write/Edit deny has NO systemMessage (reason renders red natively)', () => {
+        const edit = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'a.ts', old_string: 'x', new_string: 'y' } });
+        const out = runShim(mktmp(), 'wp-ai-guards-hook', edit);
+        expect(denied(out)).toBe(true);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        const decision = JSON.parse(out.stdout) as { systemMessage?: string };
+        expect(decision.systemMessage).toBeUndefined();
+    });
+});
+
 describe('installer allowlist (POSIX ERE ↔ JS regex twins)', () => {
     // The shim matches with grep -E on INSTALLER_ALLOW_ERE; the JS twin must agree so a future
     // runner-side check stays behaviorally identical. Assert both on the same sample set.

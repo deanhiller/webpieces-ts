@@ -97,7 +97,9 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     if (!command || command.trim() === '') { emitAllow(); }
     const result = runBash(command, cwd, mode);
     if (!result) { emitAllow(); }
-    emitDeny(result.report);
+    // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
+    // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
+    emitDeny(result.report, 'Bash');
 }
 
 function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
@@ -128,7 +130,9 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     if (!result) { emitAllow(); }
 
     logRejection(toolKind, input, result, cwd);
-    emitDeny(result.report);
+    // File-tool deny → pass the Write/Edit/MultiEdit kind so denyJson omits systemMessage (the reason
+    // already renders red natively for these tools). See claude-code-response.ts.
+    emitDeny(result.report, toolKind);
 }
 
 /**
@@ -139,11 +143,16 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
  * and the reason now surfaces in the Claude Code UI instead of being hidden on a stderr+exit-2 block.
  */
 export async function runMain(mode: HookMode): Promise<void> {
+    // Captured from the payload as soon as it parses so the fail-closed catch below can tell denyJson
+    // which tool it is denying — a crash on a Bash call still gets the visible red systemMessage, a
+    // crash on a file tool does not. Empty (before parse / malformed input) → treated as non-Bash.
+    let toolName = '';
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const raw = await readStdin();
         const payload = safeParse(raw);
         if (!payload) { emitAllow(); }
+        toolName = payload.tool_name;
 
         // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
         // process.cwd(); they match today, but the payload is the authoritative signal and stays
@@ -172,11 +181,11 @@ export async function runMain(mode: HookMode): Promise<void> {
         // InformAiError (bad config/stdin) both carry an AI-readable message; anything else is an
         // unexpected bug. All three deny (fail closed) and surface their reason to the AI.
         if (error instanceof RuleFailError) {
-            emitDeny(error.aiMessage);
+            emitDeny(error.aiMessage, toolName);
         } else if (error instanceof InformAiError) {
-            emitDeny(error.message);
+            emitDeny(error.message, toolName);
         } else {
-            emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`);
+            emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, toolName);
         }
     }
 }
