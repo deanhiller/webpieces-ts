@@ -77,14 +77,19 @@ BIN="$ROOT/node_modules/.bin/$BIN_NAME"
 if [ -x "$BIN" ]; then
   exec "$BIN" "$@"          # exec preserves stdin — hooks receive the tool payload as JSON on stdin
 fi
-# Bin missing (fresh clone before install, or a broken install). The webpieces guards CANNOT run,
-# so FAIL CLOSED — Claude Code treats exit 2 as "block this tool call". Exiting 0 here would let
-# every Write/Edit/Bash through with all guards silently disabled, which is exactly what we must not
-# do. Tell the human to install; their own terminal 'pnpm install' does not go through this hook.
-echo "❌ @webpieces/ai-hook-rules is declared in package.json but is not installed ($BIN_NAME not found)." >&2
-echo "   Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry." >&2
-echo "   (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)" >&2
-exit 2                       # fail closed: block until the guards can actually run
+# Bin missing (fresh clone before install, or a broken install). The webpieces guards CANNOT run, so
+# FAIL CLOSED — deny the tool call. We deny via Claude Code's PreToolUse JSON protocol
+# (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
+# but only the JSON's permissionDecisionReason is surfaced to the human in the terminal UI (and to the
+# model) — an exit-2 stderr message is NOT reliably shown on a blocked call, so the user would never
+# see the "run pnpm install" fix (they'd just see the tool's optimistic action summary). This still
+# fails closed: permissionDecision "deny" blocks the tool; it is not silently allowed like a plain
+# exit 0 would be. Tell the human to install; their own terminal 'pnpm install' does not go through
+# this hook. The reason is a single JSON string with no double-quotes/backslashes, so it stays valid
+# JSON after \${BIN_NAME} (always wp-ai-rules-hook / wp-ai-guards-hook) is substituted in.
+REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
+printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
+exit 0                       # decision is carried by permissionDecision "deny", not the exit code
 `;
 }
 
