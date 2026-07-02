@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import {
     migrate, applyHook, installTargets, readSettings, hasHook, renderShim,
-    RULES_HOOK, GUARDS_HOOK,
+    RULES_HOOK, GUARDS_HOOK, resolveTargetChoice, parseTargetArg, InstallTarget,
 } from './setup';
 
 function shimFile(root: string): string {
@@ -134,6 +134,38 @@ describe('applyHook — checked-in shim management', () => {
         const targets = targetsIn(root);
         applyHook(GUARDS_HOOK, targets[2], targets, root);
         expect(fs.existsSync(shimFile(root))).toBe(false);
+    });
+});
+
+describe('--target flag parsing (non-interactive install)', () => {
+    it('maps friendly target names to InstallTarget choice ids', () => {
+        expect(resolveTargetChoice('project')).toBe('1');
+        expect(resolveTargetChoice('project-personal')).toBe('2');
+        expect(resolveTargetChoice('projectpersonal')).toBe('2');
+        expect(resolveTargetChoice('local')).toBe('2');
+        expect(resolveTargetChoice('global')).toBe('3');
+        expect(resolveTargetChoice('none')).toBe('4');
+        expect(resolveTargetChoice('uninstall')).toBe('4');
+    });
+
+    it('returns null for an unknown target name', () => {
+        expect(resolveTargetChoice('nope')).toBeNull();
+        expect(resolveTargetChoice('')).toBeNull();
+    });
+
+    it('resolved choices line up with the real installTargets ids (1=project,2=personal,3=global)', () => {
+        const targets = installTargets('/tmp/x', '/tmp/home');
+        const byName = (name: string): boolean =>
+            targets.find((t: InstallTarget): boolean => t.choice === resolveTargetChoice(name))!.absolute;
+        expect(byName('project')).toBe(false);
+        expect(byName('global')).toBe(true);
+    });
+
+    it('extracts --target=<name> from argv (null when absent)', () => {
+        expect(parseTargetArg(['--sync', '--target=project'])).toBe('project');
+        expect(parseTargetArg(['--target=global'])).toBe('global');
+        expect(parseTargetArg(['--sync'])).toBeNull();
+        expect(parseTargetArg([])).toBeNull();
     });
 });
 

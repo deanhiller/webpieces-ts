@@ -111,7 +111,7 @@ function shimReferenced(targets: InstallTarget[]): boolean {
     });
 }
 
-class InstallTarget {
+export class InstallTarget {
     constructor(
         readonly choice: string,
         readonly label: string,
@@ -379,6 +379,27 @@ function prompt(question: string): Promise<string> {
     });
 }
 
+// Map a friendly `--target` name to an InstallTarget choice id (see installTargets). Returns null
+// for an unknown name so the caller can error out. Kept separate + exported for unit testing.
+export function resolveTargetChoice(name: string): string | null {
+    switch (name) {
+        case 'project': return '1';
+        case 'project-personal':
+        case 'projectpersonal':
+        case 'local': return '2';
+        case 'global': return '3';
+        case 'none':
+        case 'uninstall': return '4';
+        default: return null;
+    }
+}
+
+// Extract the value of `--target=<name>` from argv (null if the flag is absent).
+export function parseTargetArg(args: string[]): string | null {
+    const flag = args.find((a: string): boolean => a.startsWith('--target='));
+    return flag ? flag.slice('--target='.length) : null;
+}
+
 async function wireHook(hook: HookSpec, targets: InstallTarget[], projectRoot: string): Promise<void> {
     console.log('');
     console.log(`${hook.label}  [matcher: ${hook.matcher}]`);
@@ -399,12 +420,32 @@ export async function main(): Promise<void> {
     if (syncOnly) return;
 
     const targets = installTargets(projectRoot);
+
+    // Non-interactive: `--target=project|project-personal|global|none` installs BOTH hooks at that
+    // location without prompting, so an agent or CI can run the installer unattended (e.g. after a
+    // @webpieces upgrade that changed the hook entry). Omit the flag for the interactive per-hook chooser.
+    const targetName = parseTargetArg(args);
+    if (targetName !== null) {
+        const choice = resolveTargetChoice(targetName);
+        if (choice === null) {
+            console.error(`❌ Unknown --target '${targetName}'. Use one of: project | project-personal | global | none`);
+            process.exitCode = 1;
+            return;
+        }
+        const chosen = targets.find((t: InstallTarget): boolean => t.choice === choice) ?? null;
+        applyHook(RULES_HOOK, chosen, targets, projectRoot);
+        applyHook(GUARDS_HOOK, chosen, targets, projectRoot);
+        console.log(`\nDone. Both hooks set to: ${targetName}.`);
+        return;
+    }
+
     console.log('');
     console.log('Two webpieces hooks can be installed independently — choose a location for each:');
     await wireHook(RULES_HOOK, targets, projectRoot);
     await wireHook(GUARDS_HOOK, targets, projectRoot);
     console.log('');
     console.log('Done. Re-run wp-setup-ai-hooks anytime to move or uninstall a hook.');
+    console.log('(Non-interactive: wp-setup-ai-hooks --target=project|project-personal|global|none)');
 }
 
 if (require.main === module) {
