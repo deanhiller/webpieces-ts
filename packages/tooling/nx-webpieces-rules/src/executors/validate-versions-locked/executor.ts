@@ -29,7 +29,7 @@ export interface ExecutorResult {
 
 // webpieces-disable max-lines-new-methods -- Existing method from renamed validate-versions file
 // Find all package.json files except node_modules, dist, .nx, .angular
-function findPackageJsonFiles(dir: string, basePath = ''): string[] {
+export function findPackageJsonFiles(dir: string, basePath = ''): string[] {
     const files: string[] = [];
     const items = fs.readdirSync(dir);
 
@@ -58,6 +58,13 @@ function findPackageJsonFiles(dir: string, basePath = ''): string[] {
 
         const stat = fs.statSync(fullPath);
         if (stat.isDirectory()) {
+            // Don't descend into a nested git repository (e.g. a clone under repositories/): it is a
+            // separate project with its own version policy, NOT part of this monorepo's version lock.
+            // The presence of a `.git` entry (dir for a real clone, file for a worktree/submodule)
+            // marks a repo boundary — the same signal the AI guards use to scope to the current repo.
+            if (fs.existsSync(path.join(fullPath, '.git'))) {
+                continue;
+            }
             files.push(...findPackageJsonFiles(fullPath, relativePath));
         } else if (item === 'package.json') {
             files.push(fullPath);

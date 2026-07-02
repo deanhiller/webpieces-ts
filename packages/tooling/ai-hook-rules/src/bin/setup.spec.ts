@@ -65,8 +65,9 @@ describe('applyHook', () => {
         expect(hasHook(settings, 'wp-ai-rules-hook')).toBe(true);
         const entry = settings.hooks!.PreToolUse![0];
         expect(entry.matcher).toBe('Write|Edit|MultiEdit');
-        // Project install points at the checked-in shim, passing the bin name as an arg.
-        expect(entry.hooks[0].command).toBe('./.claude/webpieces/ai-hook.sh wp-ai-rules-hook');
+        // Project install points at the checked-in shim via $CLAUDE_PROJECT_DIR (so the hook
+        // resolves from any cwd — a subdir or a nested clone — instead of 127ing), passing the bin.
+        expect(entry.hooks[0].command).toBe('"$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook');
     });
 
     it('installs the guards hook globally with an absolute exact path (no bridge)', () => {
@@ -140,9 +141,15 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
     // Run the rendered shim exactly as Claude Code would: `sh <shim> <bin> ...`, from a repo cwd,
     // piping tool-payload JSON on stdin. spawnSync never throws on non-zero exit.
     function runShim(root: string, bin: string, stdin: string): { status: number | null; stdout: string; stderr: string } {
-        const shimAbs = path.join(root, 'ai-hook.sh');
+        // Place the shim at its REAL relative location (<root>/.claude/webpieces/ai-hook.sh) so its
+        // self-location (`dirname $0/../..` → <root>) resolves the bin correctly. Run it from a
+        // SUBDIR to prove it no longer depends on the caller's cwd (the whole point of the change).
+        const shimAbs = path.join(root, '.claude', 'webpieces', 'ai-hook.sh');
+        fs.mkdirSync(path.dirname(shimAbs), { recursive: true });
         fs.writeFileSync(shimAbs, renderShim(), { mode: 0o755 });
-        const r = spawnSync('/bin/sh', [shimAbs, bin], { cwd: root, input: stdin, encoding: 'utf8' });
+        const subdir = path.join(root, 'packages', 'deep', 'sub');
+        fs.mkdirSync(subdir, { recursive: true });
+        const r = spawnSync('/bin/sh', [shimAbs, bin], { cwd: subdir, input: stdin, encoding: 'utf8' });
         return { status: r.status, stdout: r.stdout, stderr: r.stderr };
     }
 

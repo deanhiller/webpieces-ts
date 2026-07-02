@@ -208,6 +208,21 @@ function addArchitectureProject(
 }
 
 
+// A project sits inside a NESTED git repo (e.g. a clone under repositories/) when any of its
+// ancestor dirs — up to but NOT including the workspace root — contains a `.git`. Such projects are
+// separate repos, not part of THIS workspace's graph, so they must not get inferred targets (that is
+// what drags foreign clones into `nx affected`). Same repo-boundary signal the AI guards use.
+export function isInsideNestedGitRepo(workspaceRoot: string, projectRoot: string): boolean {
+    let dir = projectRoot;
+    while (dir && dir !== '.' && dir !== '/') {
+        if (existsSync(join(workspaceRoot, dir, '.git'))) return true;
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    return false;
+}
+
 function addPerProjectTargets(
     results: CreateNodesResultV2,
     projectFiles: readonly string[],
@@ -227,6 +242,10 @@ function addPerProjectTargets(
 
         // Skip root (workspace manifest, not a project)
         if (projectRoot === '.') continue;
+
+        // Skip projects inside a nested git repo (vendored clones under repositories/): they are
+        // separate repos and must not be swept into this workspace's `nx affected` graph.
+        if (isInsideNestedGitRepo(context.workspaceRoot, projectRoot)) continue;
 
         // Skip if we've already processed this project root
         if (processedRoots.has(projectRoot)) continue;
