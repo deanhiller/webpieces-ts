@@ -110,7 +110,9 @@ describe('applyHook — checked-in shim management', () => {
         const body = fs.readFileSync(shim, 'utf8');
         expect(body).toContain('BIN_NAME="$1"');
         expect(body).toContain("Run 'pnpm install'");
-        expect(body).toContain('exit 2'); // fail closed when the bin is missing
+        // Fail closed when the bin is missing: deny via the PreToolUse JSON protocol (blocks the call
+        // AND surfaces the reason), not a bare exit 2 (blocks but hides the reason in the UI).
+        expect(body).toContain('"permissionDecision":"deny"');
     });
 
     it('keeps the shared shim while the other hook still uses it, removes it once neither does', () => {
@@ -197,13 +199,22 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
         expect(out.stdout).toBe('{"tool":"Bash"}');
     });
 
-    it('fails closed (exit 2) with a clear stderr message when the bin is absent', () => {
+    it('fails closed by DENYING via the PreToolUse JSON protocol (exit 0, reason on stdout) when the bin is absent', () => {
         const root = mktmp(); // no node_modules/.bin here
         const out = runShim(root, 'wp-ai-guards-hook', '{"tool":"Bash"}');
-        // exit 2 = Claude Code blocks the tool call; exiting 0 would silently disable every guard.
-        expect(out.status).toBe(2);
-        expect(out.stderr).toContain("Run 'pnpm install'");
-        expect(out.stderr).toContain('not installed');
-        expect(out.stderr).toContain('wp-ai-guards-hook');
+        // Deny via JSON + exit 0 (NOT exit 2): permissionDecision "deny" still blocks the tool, and
+        // its reason is surfaced to the user in the terminal UI + to the model — an exit-2 stderr line
+        // is not reliably shown on a blocked call. Exit 0 with NO decision would silently allow.
+        expect(out.status).toBe(0);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        const decision = JSON.parse(out.stdout) as {
+            hookSpecificOutput: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string };
+        };
+        expect(decision.hookSpecificOutput.hookEventName).toBe('PreToolUse');
+        expect(decision.hookSpecificOutput.permissionDecision).toBe('deny');
+        const reason = decision.hookSpecificOutput.permissionDecisionReason;
+        expect(reason).toContain("Run 'pnpm install'");
+        expect(reason).toContain('not installed');
+        expect(reason).toContain('wp-ai-guards-hook');
     });
 });
