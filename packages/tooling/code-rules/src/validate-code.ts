@@ -17,6 +17,7 @@ import {
     NoSymbolDiTokensConfig,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { runValidators } from './rule-reporter';
 import { MaxMethodLinesValidator } from './validate-modified-methods';
 import { MaxFileLinesValidator } from './validate-modified-files';
 import { RequireReturnTypeValidator } from './validate-return-types';
@@ -87,11 +88,10 @@ export default async function runValidator(workspaceRoot: string): Promise<Execu
     console.log(`   Active rules: ${active.map((v: CodeValidator<BaseRuleConfig>) => v.name).join(', ')}`);
     console.log('');
 
-    const results: ExecutorResult[] = [];
-    for (const validator of active) {
-        results.push(await validator.run(workspaceRoot));
-    }
-    const allSuccess = results.every((r: ExecutorResult) => r.success);
+    // Per-validator isolation lives in runValidators: a bug in one validator no longer aborts the
+    // rest, and a thrown RuleFailError is reported like any other failure.
+    const result = await runValidators(active, workspaceRoot);
+    const allSuccess = result.success;
 
     console.log(allSuccess ? '\n✅ All code validations passed\n' : '\n❌ Some code validations failed\n');
     return { success: allSuccess };

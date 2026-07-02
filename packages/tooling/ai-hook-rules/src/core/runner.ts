@@ -11,7 +11,7 @@ import { toError } from './to-error';
 import { formatReport } from './report';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
-    Rule, Violation, RuleGroup,
+    Rule, Violation, RuleGroup, RuleFailError,
     EditContext, FileContext, BashContext,
 } from './types';
 
@@ -220,15 +220,29 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
     return new BlockedResult(lines.join('\n'));
 }
 
-// N-legs pattern: each rule runs independently; crash → visible violation so AI sees it, not silent []
-function runRuleCheck(rule: Rule, ctx: EditContext | FileContext | BashContext): readonly Violation[] {
+// N-legs pattern: each rule runs independently so one rule can never abort the others. A rule may
+// EITHER return Violation[] OR throw — both accumulate here into visible violations the AI sees:
+//  - a thrown RuleFailError  → an expected, well-formed violation (its line/snippet/fixHints kept);
+//  - a thrown plain Error    → a "crashed" violation (a bug, surfaced not swallowed).
+export function runRuleCheck(rule: Rule, ctx: EditContext | FileContext | BashContext): readonly Violation[] {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         return rule.check(ctx);
     } catch (err: unknown) {
         const error = toError(err);
+        if (error instanceof RuleFailError) {
+            return [violationFromRuleFail(error)];
+        }
         return [new Violation(0, '', `Rule '${rule.name}' crashed: ${error.message}`)];
     }
+}
+
+// A thrown RuleFailError carries its own AI-facing message + optional location and fix hints. Fold the
+// fix hints into the message because Violation has no fixHint field (RuleGroup's fixHint comes from the
+// rule definition, not a per-throw value).
+function violationFromRuleFail(error: RuleFailError): Violation {
+    const hints = error.fixHints.length > 0 ? `\n  Fix: ${error.fixHints.join('\n  Fix: ')}` : '';
+    return new Violation(error.line ?? 0, error.snippet ?? '', error.aiMessage + hints);
 }
 
 function ruleMatchesFile(rule: Rule, relativePath: string): boolean {

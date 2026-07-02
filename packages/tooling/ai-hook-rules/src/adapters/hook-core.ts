@@ -5,8 +5,9 @@ import { logRejection } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
-import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, HookMode } from '../core/types';
+import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode } from '../core/types';
 import { toError } from '../core/to-error';
+import { emitDeny, emitAllow } from './claude-code-response';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -92,19 +93,18 @@ function normalizeToolInput(toolKind: ToolKind, toolInput: ClaudeCodeToolInput):
 
 function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const command = payload.tool_input.command;
-    if (!command || command.trim() === '') { process.exit(0); return; }
+    if (!command || command.trim() === '') { emitAllow(); }
     const result = runBash(command, cwd, mode);
-    if (!result) { process.exit(0); return; }
-    process.stderr.write(result.report);
-    process.exit(2);
+    if (!result) { emitAllow(); }
+    emitDeny(result.report);
 }
 
 function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const toolKind = normalizeToolKind(payload.tool_name);
-    if (!toolKind) { process.exit(0); return; }
+    if (!toolKind) { emitAllow(); }
 
     const input = normalizeToolInput(toolKind, payload.tool_input);
-    if (!input) { process.exit(0); return; }
+    if (!input) { emitAllow(); }
 
     // Always allow edits to webpieces.config.json — it's the fix target when the config is broken.
     // This exits BEFORE run(), so feature-branch-guard never sees a config edit; record that so the
@@ -120,29 +120,29 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
             // refreshes the sync status. Fire-and-forget; never blocks the edit.
             triggerMainSyncRefresh(cwd);
         }
-        process.exit(0);
-        return;
+        emitAllow();
     }
 
     const result = run(toolKind, input, cwd, mode);
-    if (!result) { process.exit(0); return; }
+    if (!result) { emitAllow(); }
 
     logRejection(toolKind, input, result, cwd);
-    process.stderr.write(result.report);
-    process.exit(2);
+    emitDeny(result.report);
 }
 
 /**
  * Shared entry point for all three Claude Code PreToolUse adapters. `mode` selects which tool kinds
- * to validate; payloads outside the mode's scope pass through (exit 0). Fails CLOSED (exit 2) on any
- * unexpected crash so a broken hook never silently lets an edit through.
+ * to validate; payloads outside the mode's scope pass through (emitAllow). Blocks by emitting a
+ * PreToolUse `permissionDecision:"deny"` JSON on stdout (exit 0) — see claude-code-response.ts. Fails
+ * CLOSED on any unexpected crash (emits a deny) so a broken hook never silently lets an edit through,
+ * and the reason now surfaces in the Claude Code UI instead of being hidden on a stderr+exit-2 block.
  */
 export async function runMain(mode: HookMode): Promise<void> {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const raw = await readStdin();
         const payload = safeParse(raw);
-        if (!payload) { process.exit(0); return; }
+        if (!payload) { emitAllow(); }
 
         // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
         // process.cwd(); they match today, but the payload is the authoritative signal and stays
@@ -151,7 +151,7 @@ export async function runMain(mode: HookMode): Promise<void> {
 
         if (payload.tool_name === 'Bash') {
             // No code-style rule is bash-scoped, so the rules hook ignores Bash.
-            if (mode === 'rules') { process.exit(0); return; }
+            if (mode === 'rules') { emitAllow(); }
             handleBash(payload, cwd, mode);
             return;
         }
@@ -161,11 +161,15 @@ export async function runMain(mode: HookMode): Promise<void> {
         handleFileTool(payload, cwd, mode);
     } catch (err: unknown) {
         const error = toError(err);
-        if (err instanceof InformAiError) {
-            process.stderr.write(error.message + '\n');
+        // An escaped RuleFailError (a rule that threw past the runner's per-rule catch) or an
+        // InformAiError (bad config/stdin) both carry an AI-readable message; anything else is an
+        // unexpected bug. All three deny (fail closed) and surface their reason to the AI.
+        if (error instanceof RuleFailError) {
+            emitDeny(error.aiMessage);
+        } else if (error instanceof InformAiError) {
+            emitDeny(error.message);
         } else {
-            process.stderr.write(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}\n`);
+            emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`);
         }
-        process.exit(2);
     }
 }

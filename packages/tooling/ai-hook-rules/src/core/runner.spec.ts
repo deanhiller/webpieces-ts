@@ -1,7 +1,7 @@
-import { ExcludePaths } from '@webpieces/rules-config';
+import { ExcludePaths, RuleFailError } from '@webpieces/rules-config';
 
-import { filterByExcludedPaths, isGitOrGhCommand } from './runner';
-import { Rule } from './types';
+import { filterByExcludedPaths, isGitOrGhCommand, runRuleCheck } from './runner';
+import { Rule, Violation, BashContext } from './types';
 
 // The helper only reads `rule.name` to classify a rule as guard vs code rule (via isHookGuard), so
 // a minimal stand-in is enough. 'feature-branch-guard' is a hook guard; 'max-file-lines' is a code rule.
@@ -45,6 +45,39 @@ describe('filterByExcludedPaths', () => {
         const ex = new ExcludePaths([], []);
         const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', ex);
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
+    });
+});
+
+describe('runRuleCheck (N-legs: a rule may return violations OR throw; never propagates)', () => {
+    const ctx = {} as unknown as BashContext; // a throwing/returning check ignores the context
+
+    function ruleThatThrows(name: string, err: Error): Rule {
+        return { name, check: (): readonly Violation[] => { throw err; } } as unknown as Rule;
+    }
+
+    it('passes through returned violations unchanged', () => {
+        const rule = { name: 'r', check: (): readonly Violation[] => [new Violation(3, 'x', 'msg')] } as unknown as Rule;
+        const vs = runRuleCheck(rule, ctx);
+        expect(vs).toHaveLength(1);
+        expect(vs[0]?.message).toBe('msg');
+    });
+
+    it('converts a thrown RuleFailError into a Violation with its line/snippet and folds in fix hints', () => {
+        const err = new RuleFailError('no-any-unknown', 'Avoid any here', 42, 'const x: any', ['use unknown', 'add a type']);
+        const vs = runRuleCheck(ruleThatThrows('no-any-unknown', err), ctx);
+        expect(vs).toHaveLength(1);
+        expect(vs[0]?.line).toBe(42);
+        expect(vs[0]?.snippet).toBe('const x: any');
+        expect(vs[0]?.message).toContain('Avoid any here');
+        expect(vs[0]?.message).toContain('Fix: use unknown');
+        expect(vs[0]?.message).toContain('Fix: add a type');
+    });
+
+    it('converts a thrown plain Error (a bug) into a visible "crashed" Violation, not a propagated throw', () => {
+        const vs = runRuleCheck(ruleThatThrows('buggy-rule', new Error('boom')), ctx);
+        expect(vs).toHaveLength(1);
+        expect(vs[0]?.line).toBe(0);
+        expect(vs[0]?.message).toContain("Rule 'buggy-rule' crashed: boom");
     });
 });
 
