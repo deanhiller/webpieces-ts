@@ -26,9 +26,12 @@ class HookSpec {
     ) {}
 
     // Absolute targets (global) need the exact path to this repo's bin — no ~/.webpieces bridge.
-    // Project (relative) targets point at the checked-in shim (passing this hook's bin name as an
-    // arg) instead of the bare bin, so the hook degrades gracefully when node_modules is absent
-    // (fresh clone before `pnpm install`, or the package removed on purpose). See writeShim().
+    // Project (relative) targets point at the checked-in shim via $CLAUDE_PROJECT_DIR (the project
+    // root Claude Code exports to hooks). Using $CLAUDE_PROJECT_DIR — NOT a bare `./…` — means the
+    // hook resolves from ANY cwd (a monorepo subdir, or a nested clone under repositories/) instead
+    // of `command not found` (exit 127) silently skipping the guard. It stays portable (no hardcoded
+    // absolute path), and the shim still degrades gracefully when node_modules is absent. See
+    // writeShim(); the git-repo-boundary decision (foreign clone → allow) then happens in the binary.
     commandFor(target: InstallTarget, projectRoot: string): string {
         if (target.absolute) {
             return `node ${path.join(projectRoot, 'node_modules', '.bin', this.bin)}`;
@@ -52,7 +55,9 @@ function shimPath(projectRoot: string): string {
 }
 
 function shimCommand(bin: string): string {
-    return `./${SHIM_MARKER} ${bin}`;
+    // $CLAUDE_PROJECT_DIR (exported to hooks by Claude Code) = the project root, so the shim resolves
+    // from any cwd. Quoted to survive spaces in the path.
+    return `"$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${bin}`;
 }
 
 export function renderShim(): string {
@@ -62,10 +67,13 @@ export function renderShim(): string {
 # when node_modules is absent. Safe to delete along with the matching .claude/settings.json entries
 # if you remove @webpieces/ai-hook-rules.
 #
-# Usage (wired into .claude/settings.json): ./.claude/webpieces/ai-hook.sh <bin-name>
+# Usage (wired into .claude/settings.json): "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
 BIN_NAME="$1"
 shift
-BIN="./node_modules/.bin/$BIN_NAME"
+# Resolve the bin relative to THIS script (…/<root>/.claude/webpieces/ai-hook.sh → <root>), not the
+# caller's cwd — the hook can be invoked from any directory (a subdir, or a nested clone).
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+BIN="$ROOT/node_modules/.bin/$BIN_NAME"
 if [ -x "$BIN" ]; then
   exec "$BIN" "$@"          # exec preserves stdin — hooks receive the tool payload as JSON on stdin
 fi

@@ -1,6 +1,6 @@
 import { ExcludePaths } from '@webpieces/rules-config';
 
-import { filterByExcludedPaths } from './runner';
+import { filterByExcludedPaths, isGitOrGhCommand } from './runner';
 import { Rule } from './types';
 
 // The helper only reads `rule.name` to classify a rule as guard vs code rule (via isHookGuard), so
@@ -45,5 +45,24 @@ describe('filterByExcludedPaths', () => {
         const ex = new ExcludePaths([], []);
         const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', ex);
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
+    });
+});
+
+describe('isGitOrGhCommand (drives force-to-root)', () => {
+    it('matches a plain git/gh command', () => {
+        expect(isGitOrGhCommand('git commit -m x')).toBe(true);
+        expect(isGitOrGhCommand('gh pr create')).toBe(true);
+    });
+
+    it('matches git/gh after a shell separator', () => {
+        expect(isGitOrGhCommand('cd sub && git status')).toBe(true);
+        expect(isGitOrGhCommand('echo hi; git push')).toBe(true);
+        expect(isGitOrGhCommand('foo | gh pr list')).toBe(true);
+    });
+
+    it('does NOT match words that merely contain git/gh', () => {
+        expect(isGitOrGhCommand('echo github.com')).toBe(false);
+        expect(isGitOrGhCommand('ls digital/')).toBe(false);
+        expect(isGitOrGhCommand('cat gitignore-notes.md')).toBe(false);
     });
 });

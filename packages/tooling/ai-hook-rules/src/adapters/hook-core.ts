@@ -22,6 +22,9 @@ const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 interface ClaudeCodePayload {
     tool_name: string;
     tool_input: ClaudeCodeToolInput;
+    // Claude Code sends the session's current working directory (follows a persisted `cd`). Used to
+    // scope guards to the git repo the AI is actually in — see runner git-repo-boundary governance.
+    cwd?: string;
 }
 
 interface ClaudeCodeToolInput {
@@ -141,7 +144,10 @@ export async function runMain(mode: HookMode): Promise<void> {
         const payload = safeParse(raw);
         if (!payload) { process.exit(0); return; }
 
-        const cwd = process.cwd();
+        // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
+        // process.cwd(); they match today, but the payload is the authoritative signal and stays
+        // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
+        const cwd = payload.cwd ?? process.cwd();
 
         if (payload.tool_name === 'Bash') {
             // No code-style rule is bash-scoped, so the rules hook ignores Bash.

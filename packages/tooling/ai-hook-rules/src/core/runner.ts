@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { spawnSync } from 'child_process';
 
 import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
@@ -32,6 +33,20 @@ export function filterByExcludedPaths(rules: readonly Rule[], relativePath: stri
         const patterns = isHookGuard(r.name) ? ex.guards : ex.rules;
         return !patterns.some((p: string): boolean => globMatches(p, relativePath));
     });
+}
+
+// The git repo root of `cwd`, or null if cwd is not in a git repo / git is unavailable. This is the
+// repo-boundary signal: the guards only govern commands whose repo IS the one this webpieces.config
+// governs; a command run inside a nested clone (different git root) is out of scope.
+function gitToplevel(cwd: string): string | null {
+    const r = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+    return r.status === 0 ? (r.stdout ?? '').trim() : null;
+}
+
+// A git or gh invocation anywhere in the command (start, or after a ;/&&/|| separator or pipe).
+const GIT_OR_GH_RE = /(?:^|[;&|]\s*)(?:git|gh)\b/;
+export function isGitOrGhCommand(command: string): boolean {
+    return GIT_OR_GH_RE.test(command);
 }
 
 // Fire-and-forget the detached refresher when feature-branch-guard is loaded and active, so the
@@ -108,11 +123,34 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 
     const workspaceRoot = path.dirname(loaded.configPath);
+
+    // Git-repo-boundary governance. The hook now always runs (via $CLAUDE_PROJECT_DIR), so this is
+    // where out-of-scope work is let through deliberately instead of the old accidental 127.
+    const gitRoot = gitToplevel(cwd);
+    if (gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot)) {
+        // cwd is inside a DIFFERENT git repo than this webpieces.config governs (e.g. a clone under
+        // repositories/). Out of scope → allow, hands-off. Intentional, not a silent hole.
+        logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'foreign git repo (out of scope)'));
+        return null;
+    }
+
     const rules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
     if (rules.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
+
+    // Force-to-root: git/gh commands must run from the repo root, where the guards can reason about
+    // git state coherently. From a subdir, BLOCK with an actionable cd message — never silently skip.
+    if (isGitOrGhCommand(command) && path.resolve(cwd) !== path.resolve(workspaceRoot)) {
+        const report =
+            `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
+            `   You are in: ${cwd}\n` +
+            `   cd to the repo root first:  cd ${workspaceRoot}\n` +
+            `   Then re-run your command. (The webpieces guards evaluate the repo's git state at its root.)`;
+        logGuardDecision(workspaceRoot, new GuardDecision('force-to-root', 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'git/gh from subdir'));
+        return new BlockedResult(report);
+    }
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs
     // far more bash than edits, so refreshing here means the guard's next file-edit check reads a
