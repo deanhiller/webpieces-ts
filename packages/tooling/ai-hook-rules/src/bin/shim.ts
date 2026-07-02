@@ -60,18 +60,31 @@ fi
 # in the PreToolUse protocol; the guards resume automatically once node_modules is present.
 PAYLOAD="$(cat)"
 CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 if printf '%s' "$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}'; then
   exit 0                     # allow the installer so the assistant can self-heal the deadlock
 fi
 # Not an installer command → FAIL CLOSED. Deny via Claude Code's PreToolUse JSON protocol
 # (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
-# but only the JSON's permissionDecisionReason is surfaced to the human in the terminal UI (and to the
-# model) — an exit-2 stderr message is NOT reliably shown on a blocked call, so the user would never
-# see the "run pnpm install" fix. This still fails closed: "deny" blocks the tool; it is not the silent
-# allow a plain exit 0 with no JSON would be. The reason is a single JSON string with no
-# double-quotes/backslashes, so it stays valid JSON after \${BIN_NAME} is substituted in.
+# but the reason must be made visible, and HOW depends on the tool (verified by live tests; the docs
+# are wrong here):
+#   - Bash deny:  permissionDecisionReason is NOT shown to the human — ONLY a top-level systemMessage
+#                 is, and it honors ANSI. So for Bash we emit systemMessage wrapped in ANSI red so the
+#                 "run pnpm install" fix is visible (today, on Bash, it is invisible).
+#   - Write/Edit/MultiEdit deny: permissionDecisionReason renders as a RED "Error:" block natively —
+#                 no systemMessage needed (a second line would be redundant).
+#   - NEVER exit 2 (stdout JSON ignored; stderr not reliably shown on a blocked Bash call).
+# The ESC is emitted as the literal 6-char JSON escape \\u001b (built via \${BS} so no raw ESC byte and
+# no \\uXXXX sits in this source); Claude Code's JSON parser turns \\u001b into ESC. The reason is a
+# single JSON string with no double-quotes/backslashes, so it stays valid JSON after \${BIN_NAME} subs.
 REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
-printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
+if [ "\$TOOL" = "Bash" ]; then
+  BS='\\'                     # one literal backslash, so the \\u001b escape never sits in this source
+  ESC="\${BS}u001b"          # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
+  printf '{"systemMessage":"%s🛑 %s%s","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\${ESC}[31;1m" "\$REASON" "\${ESC}[0m" "\$REASON"
+else
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
+fi
 exit 0                       # decision is carried by permissionDecision "deny", not the exit code
 `;
 }
