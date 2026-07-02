@@ -4,7 +4,7 @@ import * as path from 'path';
 import { MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus } from '@webpieces/rules-config';
 import { baseBranchName, nextBranchName } from './branch-naming';
 import { main as cleanTmp } from './cleanTmp';
-import { runGitChecked } from './git-exec';
+import { assertNoUntracked, runGitChecked } from './git-exec';
 import { MergeContext } from './merge-start';
 import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExplanations } from './merge-state';
 
@@ -96,7 +96,11 @@ export async function mergeEnd(
     if (conflictedFiles !== null) {
         process.stdout.write('\n' + SEP + '🔎 Validating Merge Resolution\n' + SEP + '\n');
         validateResolution(repoRoot, mergeDir, conflictedFiles);
-        runGitChecked(['add', '-A'], 'Failed to stage resolved files');
+        // Stage the AI's resolved conflicts, but NEVER sweep untracked files into the squash commit
+        // (a blanket `git add -A` once swept a stale untracked dir in). Fail on untracked so the AI
+        // commits or deletes them explicitly; then `git add -u` stages tracked resolutions only.
+        assertNoUntracked(repoRoot);
+        runGitChecked(['add', '-u'], 'Failed to stage resolved files');
 
         const nothingStaged = spawnSync('git', ['diff-index', '--quiet', '--cached', 'HEAD', '--']).status === 0;
         if (!nothingStaged) {

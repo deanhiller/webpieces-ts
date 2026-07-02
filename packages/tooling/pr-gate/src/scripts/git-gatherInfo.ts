@@ -5,6 +5,7 @@ import * as path from 'path';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { findForkPoint } from './workflow/git-findForkPoint';
 import { mergeDirFor } from './workflow/merge-state';
+import { assertCleanTree } from './workflow/git-exec';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -14,38 +15,17 @@ interface HashPoints {
     hashMainHead: string;
 }
 
-function validateCleanTree(currentBranch: string): void {
+function validateCleanTree(currentBranch: string, repoRoot: string): void {
     if (currentBranch === 'main') {
         process.stderr.write('❌ Error: Already on main branch. No need to update from main.\n');
         process.exit(1);
     }
-
     process.stderr.write(`Current branch: ${currentBranch}\n`);
-
-    const hasDirtyFiles = spawnSync('git', ['diff-index', '--quiet', 'HEAD', '--']).status !== 0;
-    if (!hasDirtyFiles) return;
-
-    const changedFiles = execSync('git diff --name-only HEAD', { encoding: 'utf8' }).trim();
-    process.stderr.write('\n');
-    process.stderr.write(SEP);
-    process.stderr.write('❌ ERROR: You have uncommitted changes\n');
-    process.stderr.write(SEP);
-    process.stderr.write('\n');
-    process.stderr.write('Please commit or stash your changes before updating from main.\n');
-    process.stderr.write('\n');
-    process.stderr.write('Files with changes:\n');
-    process.stderr.write(changedFiles + '\n');
-    process.stderr.write('\n');
-    process.stderr.write('\x1b[1;31mTo commit your changes, run:\n');
-    process.stderr.write('  git add -A && git commit -m "your message"\x1b[0m\n');
-    process.stderr.write('\n');
-    process.stderr.write('Or to stash them temporarily:\n');
-    process.stderr.write('  git stash\n');
-    process.stderr.write('  pnpm wp-git-update\n');
-    process.stderr.write('  git stash pop\n');
-    process.stderr.write('\n');
-    process.stderr.write(SEP);
-    process.exit(1);
+    // Require a fully-committed tree (tracked AND untracked). The old check used `git diff-index`,
+    // which is tracked-only, so a stale untracked dir slipped through and was later swept into the
+    // squash commit by `git add -A`. assertCleanTree uses `git status --porcelain` (untracked-aware,
+    // gitignore-respecting) and aborts with instructions — the tooling never commits your work for you.
+    assertCleanTree(repoRoot);
 }
 
 function printHashPoints(hashes: HashPoints, currentBranch: string, mergeDir: string): void {
@@ -70,7 +50,7 @@ export async function main(): Promise<void> {
     const mergeDir = mergeDirFor(repoRoot, featureName);
     fs.mkdirSync(mergeDir, { recursive: true });
 
-    validateCleanTree(currentBranch);
+    validateCleanTree(currentBranch, repoRoot);
 
     process.stderr.write('\n');
     process.stderr.write(SEP);
