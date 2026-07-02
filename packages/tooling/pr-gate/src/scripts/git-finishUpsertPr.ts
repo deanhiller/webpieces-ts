@@ -8,10 +8,11 @@ import {
     prDirFor,
     reviewJsonPath,
     ReviewJson,
+    writeTemplate,
 } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { baseBranchName } from './workflow/branch-naming';
-import { ensurePushed } from './workflow/git-exec';
+import { assertCleanTree, ensurePushed } from './workflow/git-exec';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
 import { mergeDirFor, readMergeMarker } from './workflow/merge-state';
 import { mergeEnd } from './workflow/merge-end';
@@ -85,6 +86,8 @@ function upsertPr(repoRoot: string, baseBranch: string, body: string): void {
 
 export async function main(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+    // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
+    writeTemplate(repoRoot, 'webpieces.git-workflow.md');
     const mergeDir = mergeDirFor(repoRoot, getFeatureName());
 
     // 1. Finish any in-progress conflict resolution: validate + commit + finalize the branch swap.
@@ -100,6 +103,11 @@ export async function main(): Promise<void> {
 
     // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
     const review = loadReviewJson(reviewJsonPath(repoRoot, getFeatureName()));
+
+    // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical, or a
+    // fix edited after the merge commit builds green yet a stale commit gets pushed (CI then fails on
+    // the committed tree). Require a clean tree here; the tooling won't commit your work for you.
+    assertCleanTree(repoRoot);
 
     // 3. Authoritative build gate, then push, then post.
     runBuildGate(repoRoot, new BuildGateOptions(

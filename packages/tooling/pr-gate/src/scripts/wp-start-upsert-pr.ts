@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process';
-import { reviewJsonPath, reviewJsonSchemaHint } from '@webpieces/rules-config';
+import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { baseBranchName } from './workflow/branch-naming';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
-import { ensurePushed } from './workflow/git-exec';
+import { assertCleanTree, ensurePushed } from './workflow/git-exec';
 
 // START of the AI-first PR flow (webpieces is AI-driven, so we invert trytami's human-first flow):
 // this command does the deterministic setup — update from main, push, run the build gate — then
@@ -30,6 +30,13 @@ function runUpdateFromMain(): void {
 
 export function main(): void {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+    // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
+    writeTemplate(repoRoot, 'webpieces.git-workflow.md');
+
+    // Precondition: a fully-committed tree. This flow updates, pushes HEAD, and builds — the tooling
+    // must not commit your work for you, and pushing HEAD while building the working tree would let an
+    // uncommitted change build green yet push a stale commit. Fail early with instructions if dirty.
+    assertCleanTree(repoRoot);
 
     runUpdateFromMain();
     // Local branch may be a numbered generation (base2/…); the remote/PR branch is the stable base.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import { writeTemplate } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { mergeDirFor, readMergeMarker, MergeMarker } from './workflow/merge-state';
 import { mergeStart, MergeContext } from './workflow/merge-start';
@@ -35,6 +36,8 @@ export async function main(): Promise<void> {
     const featureName = getFeatureName();
     const mergeDir = mergeDirFor(repoRoot, featureName);
     fs.mkdirSync(mergeDir, { recursive: true });
+    // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
+    writeTemplate(repoRoot, 'webpieces.git-workflow.md');
 
     const existing = readMergeMarker(mergeDir);
     if (existing) {
