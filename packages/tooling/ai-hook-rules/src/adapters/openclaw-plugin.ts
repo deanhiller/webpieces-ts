@@ -3,7 +3,7 @@ import * as fs from 'fs';
 
 import { CONFIG_FILENAME } from '@webpieces/rules-config';
 import { run } from '../core/runner';
-import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError } from '../core/types';
+import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError } from '../core/types';
 import { toError } from '../core/to-error';
 
 interface ToolCallEvent {
@@ -83,9 +83,16 @@ export default async function handler(
         return new OpenclawHandlerResult('rejected', result.report);
     } catch (err: unknown) {
         const error = toError(err);
-        const msg = err instanceof InformAiError
-            ? error.message
-            : `[ai-hooks] openclaw adapter crashed — failing closed: ${error.message}`;
+        // An escaped RuleFailError or InformAiError carries an AI-readable message; anything else is
+        // an unexpected bug. All reject (fail closed).
+        let msg: string;
+        if (error instanceof RuleFailError) {
+            msg = error.aiMessage;
+        } else if (error instanceof InformAiError) {
+            msg = error.message;
+        } else {
+            msg = `[ai-hooks] openclaw adapter crashed — failing closed: ${error.message}`;
+        }
         return new OpenclawHandlerResult('rejected', msg);
     }
 }
