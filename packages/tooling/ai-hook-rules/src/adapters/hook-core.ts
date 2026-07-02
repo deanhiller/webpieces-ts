@@ -8,6 +8,7 @@ import { CONFIG_FILENAME } from '../core/load-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
+import { healShim } from '../bin/shim';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -148,6 +149,12 @@ export async function runMain(mode: HookMode): Promise<void> {
         // process.cwd(); they match today, but the payload is the authoritative signal and stays
         // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
         const cwd = payload.cwd ?? process.cwd();
+
+        // Keep the committed shim (.claude/webpieces/ai-hook.sh) identical to renderShim() so its
+        // fail-closed escape hatch + installer allowlist never go stale — no human hand-edits it.
+        // Runs only when the guards binary is actually installed (i.e. now), is best-effort, and
+        // never throws into the decision below. 'rules' hook skips it (guards owns the shim).
+        if (mode !== 'rules') healShim(cwd);
 
         if (payload.tool_name === 'Bash') {
             // No code-style rule is bash-scoped, so the rules hook ignores Bash.
