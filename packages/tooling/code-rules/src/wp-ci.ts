@@ -19,7 +19,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { loadAndValidate, InformAiError, toError } from '@webpieces/rules-config';
+import { loadAndValidate, InformAiError, RuleFailError, toError } from '@webpieces/rules-config';
 import runValidateCode from './validate-code';
 
 const NX_PLUGIN_NAME = '@webpieces/nx-webpieces-rules';
@@ -122,7 +122,9 @@ async function main(): Promise<void> {
         process.exit(ciCode);
     } catch (err: unknown) {
         const error = toError(err);
-        if (err instanceof InformAiError) {
+        if (error instanceof RuleFailError) {
+            console.error(error.humanMessage);
+        } else if (err instanceof InformAiError) {
             console.error(error.message);
         } else {
             console.error(`[wp-ci] unexpected error: ${error.message}`);
