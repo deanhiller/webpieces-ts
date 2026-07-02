@@ -6,6 +6,11 @@ import { createInterface } from 'readline';
 import { allRuleNames, sectionForRule, isHookGuard } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
+import { SHIM_MARKER, shimPath, renderShim } from './shim';
+
+// Re-exported for back-compat (setup.spec.ts + external callers). The shim body + path now live in
+// ./shim (shared with the runtime self-heal in hook-core). See shim.ts for the single source of truth.
+export { renderShim };
 
 const CONFIG_FILENAME = 'webpieces.config.json';
 const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=origin/main';
@@ -47,50 +52,16 @@ class HookSpec {
 // `sh: No such file or directory` on every Write/Edit/Bash tool call. The bin name rides along in
 // the command string, so `command.includes(bin)` still detects/uninstalls each hook (hasHook /
 // removeHook). `.claude` is committed, so the shim survives even when node_modules does not.
+// The shim body + path live in ./shim (shared with the runtime self-heal in hook-core); only the
+// settings.json command string is built here.
 // ---------------------------------------------------------------------------
-const SHIM_MARKER = '.claude/webpieces/ai-hook.sh';
-
-function shimPath(projectRoot: string): string {
-    return path.join(projectRoot, '.claude', 'webpieces', 'ai-hook.sh');
-}
-
 function shimCommand(bin: string): string {
-    // $CLAUDE_PROJECT_DIR (exported to hooks by Claude Code) = the project root, so the shim resolves
-    // from any cwd. Quoted to survive spaces in the path.
-    return `"$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${bin}`;
-}
-
-export function renderShim(): string {
-    return `#!/bin/sh
-# Managed by @webpieces/ai-hook-rules (wp-setup-ai-hooks) — do not edit; re-running the installer
-# overwrites this file. Checked in on purpose so the hook has a stable, committed entry point even
-# when node_modules is absent. Safe to delete along with the matching .claude/settings.json entries
-# if you remove @webpieces/ai-hook-rules.
-#
-# Usage (wired into .claude/settings.json): "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
-BIN_NAME="$1"
-shift
-# Resolve the bin relative to THIS script (…/<root>/.claude/webpieces/ai-hook.sh → <root>), not the
-# caller's cwd — the hook can be invoked from any directory (a subdir, or a nested clone).
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-BIN="$ROOT/node_modules/.bin/$BIN_NAME"
-if [ -x "$BIN" ]; then
-  exec "$BIN" "$@"          # exec preserves stdin — hooks receive the tool payload as JSON on stdin
-fi
-# Bin missing (fresh clone before install, or a broken install). The webpieces guards CANNOT run, so
-# FAIL CLOSED — deny the tool call. We deny via Claude Code's PreToolUse JSON protocol
-# (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
-# but only the JSON's permissionDecisionReason is surfaced to the human in the terminal UI (and to the
-# model) — an exit-2 stderr message is NOT reliably shown on a blocked call, so the user would never
-# see the "run pnpm install" fix (they'd just see the tool's optimistic action summary). This still
-# fails closed: permissionDecision "deny" blocks the tool; it is not silently allowed like a plain
-# exit 0 would be. Tell the human to install; their own terminal 'pnpm install' does not go through
-# this hook. The reason is a single JSON string with no double-quotes/backslashes, so it stays valid
-# JSON after \${BIN_NAME} (always wp-ai-rules-hook / wp-ai-guards-hook) is substituted in.
-REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
-printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
-exit 0                       # decision is carried by permissionDecision "deny", not the exit code
-`;
+    // Invoke via `sh <file>` rather than executing the shim directly: `sh` reads a 0644 file fine, so
+    // a missing executable bit on the checked-in shim (fresh clone, a filesystem that drops the bit,
+    // git core.fileMode quirks) can NEVER break the hook with a raw `Permission denied` on every tool
+    // call. $CLAUDE_PROJECT_DIR (exported to hooks by Claude Code) = the project root, so the shim
+    // resolves from any cwd. Quoted to survive spaces in the path.
+    return `sh "$CLAUDE_PROJECT_DIR/${SHIM_MARKER}" ${bin}`;
 }
 
 // Idempotent: re-running the installer overwrites the managed shim in place.
