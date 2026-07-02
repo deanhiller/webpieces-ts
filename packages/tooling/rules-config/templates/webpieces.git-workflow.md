@@ -35,12 +35,55 @@ by the `redirect-how-to-merge-main` guard.
 3. **`pnpm wp-finish-upsert-pr`** — validates any in-progress merge, requires your `review.json`, runs
    the **authoritative** build gate, pushes, and creates/updates the PR.
 
-## Resolving merge conflicts
+## Two possible outcomes of a squash-update
 
-Follow `.webpieces/instruct-ai/webpieces.mergeprocess.md`. For each conflicted file: resolve it (remove
-all markers), `git add` it, and write its `merge-explanation.md`. Then run `pnpm wp-finish-upsert-pr`.
-The gate stages only tracked resolutions (`git add -u`) and refuses to proceed if untracked files are
-present — commit or delete them first.
+A `wp-git-update` (the squash step inside `wp-start-upsert-pr` too) ends one of two ways. The tool
+`git merge --squash`es your feature onto a fresh copy of main; whether that merges cleanly decides
+who does the work.
+
+### Outcome A — CLEAN merge (the tool does everything; you do nothing)
+
+```
+you: pnpm wp-git-update
+  tool: assertCleanTree            # you must have committed your own work first
+  tool: backup branch; checkout main; pull; create <feature>Squash off main
+  tool: git merge --squash <feature>          # SUCCEEDS — stages the combined result
+  tool: git commit -m "Squash merge of <feature>"     # <-- the TOOL commits (mechanical)
+  tool: delete old branch; force-push to the stable base; rename to next generation
+  done — no AI/human merge work.
+```
+
+There is **no `git add` here** — `git merge --squash` staged only the merge result, and the tool
+commits exactly that. The commit is a pure function of your already-committed work + main.
+
+### Outcome B — CONFLICT merge (the AI resolves; the tool still commits)
+
+```
+you: pnpm wp-git-update
+  tool: assertCleanTree; backup; checkout main; pull; create <feature>Squash
+  tool: git merge --squash <feature>          # CONFLICTS — conflicted files left with markers
+  tool: writes .webpieces/merge-info/<feature>/ (A=fork / B=feature / C=main context + diffs)
+  tool: writes .webpieces/instruct-ai/webpieces.mergeprocess.md, then exits (code 2)
+  ---- hand-off to the AI ----
+  AI:  read webpieces.mergeprocess.md
+  AI:  per conflicted file -> resolve markers -> git add <file> -> write merge-explanation.md
+  AI:  pnpm wp-finish-upsert-pr
+  tool: validateResolution (no markers left, every file has an explanation)
+  tool: assertNoUntracked -> git add -u -> git commit "... (conflicts resolved)"   # <-- TOOL commits
+  tool: build gate -> push -> create/update PR
+```
+
+Who does what on the conflict path:
+- **You/the AI** supply the *judgment*: how to combine the conflicting changes. You edit the files,
+  `git add` them, and write each `merge-explanation.md`.
+- **The tool** still makes the *commit*. You are BLOCKED from `git commit` / `git push` / `gh pr`
+  while the merge is in progress (the `merge-in-progress-guard`); `wp-finish-upsert-pr` is what
+  validates and commits. `git add -u` stages only your tracked resolutions and **refuses** if any
+  untracked file is present — commit or delete those first, the tool will not sweep them in.
+
+The two docs cooperate: **this file** is the always-present overview of both paths;
+**`webpieces.mergeprocess.md`** is written *only when there is a conflict* and lists the exact files
+to resolve for that specific merge.
 
 ## Before you trust a push
 
