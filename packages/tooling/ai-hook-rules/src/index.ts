@@ -8,6 +8,9 @@ export {
     ResolvedConfig, ResolvedRuleConfig,
 } from './core/types';
 
+// Structured fix guidance shown in blocked reports (violation + mainMessage + options + escape)
+export { FixHint, Option, DisableEscape } from './core/fix-hint';
+
 // Scope-specific rule bases (each extends the shared AbstractRule from @webpieces/rules-config)
 export { EditRuleBase, FileRuleBase, BashRuleBase, EmptyRuleConfig } from './core/rule-base';
 export { CustomRuleAdapter } from './core/custom-rule-adapter';

@@ -5,10 +5,12 @@ import { RedirectHowToMergeMainConfig } from '@webpieces/rules-config';
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
+import { FixHint } from '../fix-hint';
 
-const FIX_HINT: readonly string[] = [
+const FIX_HINT = new FixHint(
+    'Direct merge/rebase/pull from main on a feature branch is blocked.',
     "Run 'pnpm wp-git-update' to squash-update from main. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.",
-];
+);
 
 const WRONG_UPDATE_PATTERNS: RegExp[] = [
     /git\s+merge\s+(origin\/main|main)\b/,
@@ -48,13 +50,7 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
         return [new V(
             1,
             truncate(ctx.command),
-            [
-                `Direct merge/rebase from main on branch '${currentBranch}' is blocked.`,
-                'This breaks the 3-point fork-point system.',
-                'Use the squash-update process instead:',
-                '  pnpm wp-git-update',
-                'See docs/git-workflow.md for details.',
-            ].join('\n'),
+            `Direct merge/rebase from main on branch '${currentBranch}' is blocked.`,
         )];
     }
 }

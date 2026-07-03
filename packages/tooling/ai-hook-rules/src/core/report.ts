@@ -1,4 +1,5 @@
 import type { RuleGroup, Violation } from './types';
+import type { Option } from './fix-hint';
 
 export function formatReport(relativePath: string, ruleGroups: readonly RuleGroup[]): string {
     const lines: string[] = [];
@@ -9,15 +10,28 @@ export function formatReport(relativePath: string, ruleGroups: readonly RuleGrou
         const count = group.violations.length;
         const label = count === 1 ? '1 violation' : `${count} violations`;
         lines.push(`[${group.ruleName}] (${label})`);
+        const fh = group.fixHint;
         for (const v of group.violations) {
             const editPrefix = formatEditPrefix(v);
             lines.push(`  ${editPrefix}L${String(v.line)}:  ${v.snippet}`);
-            lines.push(`    \u2192 ${v.message}`);
+            // Per-occurrence override (dynamic rules), else the rule-level FixHint.violation.
+            lines.push(`    \u2192 ${v.message ?? fh.violation}`);
         }
-        if (group.fixHint.length > 0) {
-            for (let i = 0; i < group.fixHint.length; i += 1) {
-                lines.push(`  Fix Option ${String(i + 1)}: ${group.fixHint[i]}`);
-            }
+        // mainMessage may be '' (guidance already on the violation line) \u2014 skip when empty.
+        if (fh.mainMessage) for (const l of fh.mainMessage.split('\n')) lines.push(`  ${l}`);
+        // "Fix Option N:" numbering + "(preferred)" are framework-owned so a multi-line message
+        // can never become fake options and authors never hand-write those labels.
+        fh.fixOptions.forEach((opt: Option, i: number) => {
+            const optLines = opt.text.split('\n');
+            const tag = opt.preferred ? '(preferred) ' : '';
+            lines.push(`  Fix Option ${String(i + 1)}: ${tag}${optLines[0]}`);
+            for (const l of optLines.slice(1)) lines.push(`    ${l}`);
+        });
+        // Framework-owned disable escape (only the 9 disable-able code-style rules set this).
+        if (fh.escape) {
+            lines.push(fh.escape.allowed
+                ? `  Escape (if truly needed): ${fh.escape.comment}`
+                : '  \u{1F512} The team disabled escaping via webpieces-disable for this rule (disableAllowed:false) — it must be followed.');
         }
         lines.push('');
     }

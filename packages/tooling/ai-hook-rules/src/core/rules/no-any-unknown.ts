@@ -3,6 +3,7 @@ import { NoAnyUnknownConfig, RULE_NAMES } from '@webpieces/rules-config';
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 // This regex literal matches the token as text, not a TS type.
 const ANY_PATTERN =
@@ -13,23 +14,24 @@ export class NoAnyUnknownRule extends EditRuleBase<NoAnyUnknownConfig> {
 
     readonly description = 'Disallow the `any` keyword. Use concrete types or interfaces.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    readonly fixHint = [
-        'Prefer: interface MyData { ... }   or   class MyData { ... }',
-        '// webpieces-disable no-any-unknown -- <one-line reason>',
-    ];
+    get fixHint(): FixHint {
+        return new FixHint(
+            '`any` erases type information.',
+            'Use a concrete type: interface MyData { ... } or class MyData { ... } (or `unknown` with type guards).',
+            [],
+            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-any-unknown -- <one-line reason>'),
+        );
+    }
 
     check(ctx: EditContext): readonly Violation[] {
+        const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
             const stripped = ctx.strippedLines[i];
             if (!ANY_PATTERN.test(stripped)) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_ANY_UNKNOWN)) continue;
-            violations.push(new V(
-                lineNum,
-                ctx.lines[i].trim(),
-                '`any` erases type information. Use a concrete type, an interface, or `unknown` with type guards.',
-            ));
+            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_ANY_UNKNOWN)) continue;
+            violations.push(new V(lineNum, ctx.lines[i].trim()));
         }
         return violations;
     }

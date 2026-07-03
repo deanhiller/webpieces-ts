@@ -6,17 +6,19 @@ import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MergeInProgr
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
+import { FixHint } from '../fix-hint';
 
 const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
-function fixHintFor(mergeCompleteCommand: string): readonly string[] {
-    return [
-        'A 3-point merge is in progress and not yet validated.',
-        'Resolve the remaining conflicts in the working tree, then run:',
-        `  ${mergeCompleteCommand}`,
-        'That scans for leftover conflict markers and runs the build; only when green does it commit,',
-        'unblock commit/push/PR, render the dashboard, and create/update the PR.',
-    ];
+function fixHintFor(mergeCompleteCommand: string): FixHint {
+    return new FixHint(
+        'A merge is in progress and not yet validated — this command is blocked.',
+        'A 3-point merge is in progress and not yet validated.\n'
+        + 'Resolve the remaining conflicts in the working tree, then run:\n'
+        + `  ${mergeCompleteCommand}\n`
+        + 'That scans for leftover conflict markers and runs the build; only when green does it commit,\n'
+        + 'unblock commit/push/PR, render the dashboard, and create/update the PR.',
+    );
 }
 
 // Returns the path of the first UNVALIDATED merge marker found, or null. We detect validation
@@ -57,7 +59,7 @@ export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardC
     }
 
     readonly description = 'Block commit/push/merge/PR while a 3-point merge marker is unvalidated, forcing the merge-complete command.';
-    get fixHint(): readonly string[] { return fixHintFor(this.mergeCompleteCommand); }
+    get fixHint(): FixHint { return fixHintFor(this.mergeCompleteCommand); }
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isBlockedDuringMerge(ctx.command)) return [];
@@ -66,11 +68,8 @@ export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardC
         return [new V(
             1,
             truncate(ctx.command),
-            [
-                'A merge is in progress and not yet validated — this command is blocked.',
-                `Marker: ${marker}`,
-                `Finish resolving conflicts, then run:  ${this.mergeCompleteCommand}`,
-            ].join('\n'),
+            'A merge is in progress and not yet validated — this command is blocked.\n'
+            + `Marker: ${marker}`,
         )];
     }
 }

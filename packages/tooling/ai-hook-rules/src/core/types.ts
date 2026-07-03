@@ -2,6 +2,7 @@
 // so ai-hooks and the Nx validate-code executor share one loader and one config file.
 import { RuleOptions } from '@webpieces/rules-config';
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError, RuleFailError } from '@webpieces/rules-config';
+import { FixHint } from './fix-hint';
 
 export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
 export type RuleScope = 'edit' | 'file' | 'bash';
@@ -13,11 +14,14 @@ export type IsLineDisabled = (lineNum: number, ruleName: string) => boolean;
 export class Violation {
     readonly line: number;
     readonly snippet: string;
-    readonly message: string;
+    // Optional per-occurrence override for the `→` line. When omitted, the report falls back
+    // to the rule's `FixHint.violation`. Dynamic rules (param name, line count, marker path,
+    // branch/PR) pass a specific message here; static rules omit it.
+    readonly message: string | undefined;
     editIndex: number | undefined;
     editCount: number | undefined;
 
-    constructor(line: number, snippet: string, message: string) {
+    constructor(line: number, snippet: string, message?: string) {
         this.line = line;
         this.snippet = snippet;
         this.message = message;
@@ -156,7 +160,7 @@ export interface PlainRule {
     readonly scope: RuleScope;
     readonly files: readonly string[];
     readonly defaultOptions: RuleOptions;
-    readonly fixHint: readonly string[];
+    readonly fixHint: FixHint;
     check(ctx: EditContext | FileContext | BashContext): readonly Violation[];
 }
 
@@ -172,13 +176,13 @@ export interface Rule extends PlainRule {
 export class RuleGroup {
     readonly ruleName: string;
     readonly ruleDescription: string;
-    readonly fixHint: readonly string[];
+    readonly fixHint: FixHint;
     readonly violations: readonly Violation[];
 
     constructor(
         ruleName: string,
         ruleDescription: string,
-        fixHint: readonly string[],
+        fixHint: FixHint,
         violations: readonly Violation[],
     ) {
         this.ruleName = ruleName;

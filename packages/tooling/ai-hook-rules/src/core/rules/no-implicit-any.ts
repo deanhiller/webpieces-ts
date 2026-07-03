@@ -3,6 +3,7 @@ import { NoImplicitAnyConfig, RULE_NAMES } from '@webpieces/rules-config';
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 const ARROW_PARAMS_RE = /\(([^()]*)\)\s*=>/g;
 const FN_DECL_PARAMS_RE = /\bfunction\s*[\w$]*\s*\(([^()]*)\)/g;
@@ -43,17 +44,22 @@ export class NoImplicitAnyRule extends EditRuleBase<NoImplicitAnyConfig> {
 
     readonly description = 'Disallow function parameters without explicit type annotations (implicit-any).';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    readonly fixHint = [
-        'Add explicit types: (x: string) => ...   or   function foo(x: number)',
-        '// webpieces-disable no-implicit-any -- <one-line reason>',
-    ];
+    get fixHint(): FixHint {
+        return new FixHint(
+            'A parameter has no type annotation (implicit any).',
+            'Add explicit types: (x: string) => ... or function foo(x: number).',
+            [],
+            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-implicit-any -- <one-line reason>'),
+        );
+    }
 
     check(ctx: EditContext): readonly Violation[] {
+        const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
             const stripped = ctx.strippedLines[i];
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_IMPLICIT_ANY)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_IMPLICIT_ANY)) continue;
             const offender = findOffender(stripped);
             if (!offender) continue;
             violations.push(new V(

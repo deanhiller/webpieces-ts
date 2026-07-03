@@ -1,6 +1,7 @@
 import { AbstractRule, BaseRuleConfig, RuleOptions } from '@webpieces/rules-config';
 
 import type { EditContext, BashContext, FileContext, Violation, Rule } from './types';
+import type { FixHint } from './fix-hint';
 
 /**
  * A concrete, instantiable BaseRuleConfig used as a fallback when a built-in rule has no
@@ -19,7 +20,7 @@ export abstract class EditRuleBase<C extends BaseRuleConfig> extends AbstractRul
     readonly files: readonly string[] = [];
     readonly defaultOptions: RuleOptions = {};
     abstract readonly description: string;
-    abstract readonly fixHint: readonly string[];
+    abstract readonly fixHint: FixHint;
 
     abstract check(ctx: EditContext): readonly Violation[];
 }
@@ -29,7 +30,7 @@ export abstract class FileRuleBase<C extends BaseRuleConfig> extends AbstractRul
     readonly files: readonly string[] = [];
     readonly defaultOptions: RuleOptions = {};
     abstract readonly description: string;
-    abstract readonly fixHint: readonly string[];
+    abstract readonly fixHint: FixHint;
 
     abstract check(ctx: FileContext): readonly Violation[];
 }
@@ -39,7 +40,7 @@ export abstract class BashRuleBase<C extends BaseRuleConfig> extends AbstractRul
     readonly files: readonly string[] = [];
     readonly defaultOptions: RuleOptions = {};
     abstract readonly description: string;
-    abstract readonly fixHint: readonly string[];
+    abstract readonly fixHint: FixHint;
 
     abstract check(ctx: BashContext): readonly Violation[];
 }

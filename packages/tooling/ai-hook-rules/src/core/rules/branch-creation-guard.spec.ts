@@ -82,11 +82,14 @@ describe('branch-creation-guard', () => {
     });
 
     it('fixHint is mode-aware: ON_NO_SUBBRANCHES points to the epoch escape; ON points to subBranchNaming', () => {
-        const strict = rule('ON_NO_SUBBRANCHES').fixHint.join('\n');
+        const flatten = (fh: { mainMessage: string; fixOptions: readonly { text: string }[] }): string =>
+            [fh.mainMessage, ...fh.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+
+        const strict = flatten(rule('ON_NO_SUBBRANCHES').fixHint);
         expect(strict).toContain('ignoreModifiedUntilEpoch');
         expect(strict).not.toContain('subBranchNaming');
 
-        const normal = rule('ON').fixHint.join('\n');
+        const normal = flatten(rule('ON').fixHint);
         expect(normal).toContain('subBranchNaming');
     });
 });
