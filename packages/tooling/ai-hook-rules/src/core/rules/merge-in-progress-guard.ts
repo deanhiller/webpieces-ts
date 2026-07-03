@@ -18,6 +18,9 @@ function fixHintFor(mergeCompleteCommand: string): FixHint {
         + `  ${mergeCompleteCommand}\n`
         + 'That scans for leftover conflict markers and runs the build; only when green does it commit,\n'
         + 'unblock commit/push/PR, render the dashboard, and create/update the PR.',
+        [],
+        undefined,
+        true,
     );
 }
 

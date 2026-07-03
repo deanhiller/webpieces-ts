@@ -62,7 +62,6 @@ export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
                 new Option('External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.'),
             ],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-symbol-di-tokens -- <reason>'),
-            true,
         );
     }
 

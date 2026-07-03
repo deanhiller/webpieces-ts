@@ -36,7 +36,6 @@ export class ThrowCauseRequiredRule extends EditRuleBase<ThrowCauseRequiredConfi
                 new Option('throw new SpecificError("add info here", { cause: error }); e.g. new InformAiError("what happened for AI", { cause: error }).'),
             ],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable throw-cause-required -- <reason>'),
-            true,
         );
     }
 

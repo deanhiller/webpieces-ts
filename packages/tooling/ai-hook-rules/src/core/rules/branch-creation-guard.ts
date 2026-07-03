@@ -97,6 +97,8 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             'Cannot create this branch (main is stale, or branching off a non-main branch).',
             'Create your branch from an up-to-date main. Pick one:',
             options,
+            undefined,
+            true,
         );
     }
 

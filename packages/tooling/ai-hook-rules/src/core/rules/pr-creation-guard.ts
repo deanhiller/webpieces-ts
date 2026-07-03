@@ -16,6 +16,9 @@ function fixHintFor(upsertPrCommand: string): FixHint {
         + 'instructs you to write review.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n'
         + 'dashboard and creates/updates the PR itself. A failing build = no PR.\n'
         + 'There is nothing to paste or attest to; the commands do the work.',
+        [],
+        undefined,
+        true,
     );
 }
 

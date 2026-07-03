@@ -19,7 +19,6 @@ export class NoDestructureRule extends EditRuleBase<NoDestructureConfig> {
             'Assign the whole result instead: const obj = methodCall(); then pass obj around or use obj.x.',
             [],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-destructure -- <reason>'),
-            true,
         );
     }
 
