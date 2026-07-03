@@ -54,6 +54,7 @@ export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig>
                 new Option('To explicitly ignore the error: //const error = toError(err);'),
             ],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable catch-error-pattern -- <reason>'), // webpieces-disable catch-error-pattern -- example text in a hint string
+            true,
         );
     }
 

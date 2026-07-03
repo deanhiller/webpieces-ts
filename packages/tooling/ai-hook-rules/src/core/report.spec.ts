@@ -85,3 +85,19 @@ describe('formatReport — disable escape', () => {
         expect(out).not.toContain('must be followed');
     });
 });
+
+describe('formatReport — frequentlyHit memory nudge', () => {
+    it('appends a save-to-memory nudge naming the rule when frequentlyHit is true', () => {
+        const out = report(
+            new FixHint('what', 'fix it', [], new DisableEscape(true, '// webpieces-disable demo-rule -- <reason>'), true),
+            new Violation(1, 'x'),
+        );
+        expect(out).toContain('You hit [demo-rule] often');
+        expect(out).toContain('Add this convention to your memory');
+    });
+
+    it('omits the nudge by default (frequentlyHit unset)', () => {
+        const out = report(new FixHint('what', 'fix it'), new Violation(1, 'x'));
+        expect(out).not.toContain('Add this convention to your memory');
+    });
+});

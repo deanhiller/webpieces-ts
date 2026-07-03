@@ -48,16 +48,27 @@ export class FixHint {
     readonly fixOptions: readonly Option[];
     /** Present only for disable-able rules; absent for guards. */
     readonly escape?: DisableEscape;
+    /**
+     * True for the handful of code-style rules the AI re-triggers from habit many times a day
+     * (destructuring, missing return types, any/unknown, un-chained throws, …). When set, the
+     * framework (report.ts) appends a one-line nudge telling the AI to persist this convention to
+     * its Claude memory — so it writes the code right the first time instead of burning tokens
+     * re-fixing the same rejection over and over. Off for situational rules (file size, workflow
+     * guards) where a memory would not stop the next hit.
+     */
+    readonly frequentlyHit: boolean;
 
     constructor(
         violation: string,
         mainMessage: string,
         fixOptions: readonly Option[] = [],
         escape?: DisableEscape,
+        frequentlyHit = false,
     ) {
         this.violation = violation;
         this.mainMessage = mainMessage;
         this.fixOptions = fixOptions;
         this.escape = escape;
+        this.frequentlyHit = frequentlyHit;
     }
 }

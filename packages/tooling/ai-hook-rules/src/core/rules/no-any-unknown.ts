@@ -20,6 +20,7 @@ export class NoAnyUnknownRule extends EditRuleBase<NoAnyUnknownConfig> {
             'Use a concrete type: interface MyData { ... } or class MyData { ... } (or `unknown` with type guards).',
             [],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-any-unknown -- <one-line reason>'),
+            true,
         );
     }
 

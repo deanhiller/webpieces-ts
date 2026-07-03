@@ -46,6 +46,8 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
             new Option('main moved/conflicts → `pnpm wp-start-upsert-pr` (merge), `/wp-merge` (resolve), `pnpm wp-finish-upsert-pr`.'),
             new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
         ],
+        undefined,
+        true,
     );
 
     check(ctx: FileContext): readonly Violation[] {

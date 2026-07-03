@@ -43,6 +43,7 @@ export class RequireReturnTypeRule extends EditRuleBase<RequireReturnTypeConfig>
             'Add a return type: function foo(x: T): ReturnType { ... }.',
             [],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable require-return-type -- <reason>'),
+            true,
         );
     }
 
