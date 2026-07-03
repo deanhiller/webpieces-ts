@@ -17,7 +17,7 @@ function mktmp(contents: Record<string, string>): string {
 // now-required ignoreModifiedUntilEpoch (0 = active), plus a valid commands.pr-gate block.
 // Code rules go under `rules`; the 6 bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
-    'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-cleanup',
+    'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-guard',
     'redirect-how-to-merge-main', 'feature-branch-guard',
 ];
 const CODE_RULE_NAMES = [
@@ -159,5 +159,20 @@ describe('loadAndValidate — sections & commands', () => {
         expect(loaded.commands.upsertPr).toBe('pnpm my-upsert');
         const guard = loaded.rulesConfig['pr-creation-guard'] as Record<string, unknown>;
         expect(guard['upsertPrCommand']).toBe('pnpm my-upsert');
+    });
+});
+
+describe('loadAndValidate — deprecated key aliasing', () => {
+    it('accepts the deprecated pr-merge-cleanup key and normalizes it to pr-merge-guard', () => {
+        const sections = allRulesOff();
+        // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
+        const guards = sections.hookGuards as Record<string, unknown>;
+        guards['pr-merge-cleanup'] = guards['pr-merge-guard'];
+        delete guards['pr-merge-guard'];
+        const dir = writeConfig(sections);
+        const loaded = loadAndValidate(dir); // must NOT throw on the deprecated key
+        expect(loaded.rulesConfig['pr-merge-guard']).toBeDefined();
+        expect(loaded.resolved.userConfiguredRuleNames.has('pr-merge-guard')).toBe(true);
+        expect(loaded.resolved.userConfiguredRuleNames.has('pr-merge-cleanup')).toBe(false);
     });
 });

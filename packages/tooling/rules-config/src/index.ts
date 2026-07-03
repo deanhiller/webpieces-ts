@@ -55,7 +55,7 @@ export {
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
-    PrMergeCleanupConfig,
+    PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
     FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,

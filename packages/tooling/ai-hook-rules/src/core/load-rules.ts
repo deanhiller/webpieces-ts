@@ -7,7 +7,7 @@ import {
     NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
     NoSymbolDiTokensConfig, BranchCreationGuardConfig, PrCreationGuardConfig,
-    MergeInProgressGuardConfig, PrMergeCleanupConfig, RedirectHowToMergeMainConfig,
+    MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
     NoJsFilesConfig, FeatureBranchGuardConfig,
 } from '@webpieces/rules-config';
 
@@ -30,7 +30,7 @@ import { NoSymbolDiTokensRule } from './rules/no-symbol-di-tokens';
 import { BranchCreationGuardRule } from './rules/branch-creation-guard';
 import { PrCreationGuardRule } from './rules/pr-creation-guard';
 import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
-import { PrMergeCleanupRule } from './rules/pr-merge-cleanup';
+import { PrMergeGuardRule } from './rules/pr-merge-guard';
 import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
 import { FeatureBranchGuardRule } from './rules/feature-branch-guard';
@@ -57,7 +57,7 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'branch-creation-guard': (c: BaseRuleConfig) => new BranchCreationGuardRule(c as BranchCreationGuardConfig),
     'pr-creation-guard': (c: BaseRuleConfig) => new PrCreationGuardRule(c as PrCreationGuardConfig),
     'merge-in-progress-guard': (c: BaseRuleConfig) => new MergeInProgressGuardRule(c as MergeInProgressGuardConfig),
-    'pr-merge-cleanup': (c: BaseRuleConfig) => new PrMergeCleanupRule(c as PrMergeCleanupConfig),
+    'pr-merge-guard': (c: BaseRuleConfig) => new PrMergeGuardRule(c as PrMergeGuardConfig),
     'redirect-how-to-merge-main': (c: BaseRuleConfig) => new RedirectHowToMergeMainRule(c as RedirectHowToMergeMainConfig),
     'no-js-files': (c: BaseRuleConfig) => new NoJsFilesRule(c as NoJsFilesConfig),
     'feature-branch-guard': (c: BaseRuleConfig) => new FeatureBranchGuardRule(c as FeatureBranchGuardConfig),

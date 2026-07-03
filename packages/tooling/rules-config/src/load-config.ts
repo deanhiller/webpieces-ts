@@ -91,6 +91,25 @@ export class LoadedConfig {
     ) {}
 }
 
+// Config keys that were renamed. A project's webpieces.config.json may still use the OLD key (it can
+// legitimately lag the published rules-config by a release), so normalize any deprecated key to its
+// canonical name BEFORE validation/placement/loading — every downstream consumer then sees one name.
+// The old key stays accepted indefinitely; teams can flip to the new name whenever convenient.
+const DEPRECATED_RULE_ALIASES: Readonly<Record<string, string>> = {
+    'pr-merge-cleanup': 'pr-merge-guard',
+};
+
+// webpieces-disable no-any-unknown -- opaque per-rule option bags from consumer JSON, validated later
+type RuleSectionMap = Record<string, Record<string, unknown>>;
+
+function normalizeDeprecatedKeys(section: RuleSectionMap): RuleSectionMap {
+    const out: RuleSectionMap = {};
+    for (const key of Object.keys(section)) {
+        out[DEPRECATED_RULE_ALIASES[key] ?? key] = section[key];
+    }
+    return out;
+}
+
 /**
  * The single load+validate entry point for ALL consumers (ai-hook-rules, code-rules,
  * nx-webpieces-rules, pr-gate scripts). Reads webpieces.config.json once, validates BOTH the `rules`
@@ -112,8 +131,8 @@ export function loadAndValidate(cwd: string): LoadedConfig {
     }
 
     const consumerConfig = readRawConfig(configPath);
-    const rulesSection = consumerConfig.rules || {};
-    const hookGuardsSection = consumerConfig.hookGuards || {};
+    const rulesSection = normalizeDeprecatedKeys(consumerConfig.rules || {});
+    const hookGuardsSection = normalizeDeprecatedKeys(consumerConfig.hookGuards || {});
     const legacyPrGate = consumerConfig['pr-gate'];
 
     // rules + hookGuards are validated/loaded as one flat name→config map (the runtime dispatches by

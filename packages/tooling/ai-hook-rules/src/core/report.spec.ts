@@ -85,19 +85,3 @@ describe('formatReport — disable escape', () => {
         expect(out).not.toContain('must be followed');
     });
 });
-
-describe('formatReport — frequentlyHit memory nudge', () => {
-    it('appends a save-to-memory nudge naming the rule when frequentlyHit is true', () => {
-        const out = report(
-            new FixHint('what', 'fix it', [], undefined, true),
-            new Violation(1, 'x'),
-        );
-        expect(out).toContain('You keep hitting [demo-rule]');
-        expect(out).toContain('Save the workflow above to your memory');
-    });
-
-    it('omits the nudge by default (frequentlyHit unset)', () => {
-        const out = report(new FixHint('what', 'fix it'), new Violation(1, 'x'));
-        expect(out).not.toContain('Save the workflow above to your memory');
-    });
-});

@@ -13,7 +13,7 @@ export const builtInRuleNames: readonly string[] = [
     'branch-creation-guard',
     'pr-creation-guard',
     'merge-in-progress-guard',
-    'pr-merge-cleanup',
+    'pr-merge-guard',
     'redirect-how-to-merge-main',
     'feature-branch-guard',
 ];

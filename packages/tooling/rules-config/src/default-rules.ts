@@ -37,7 +37,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'branch-creation-guard': { mode: 'ON', subBranchNaming: 'feature/<ticket>/<short-description>' },
     'pr-creation-guard': { mode: 'ON' },
     'merge-in-progress-guard': { mode: 'ON' },
-    'pr-merge-cleanup': { mode: 'ON' },
+    'pr-merge-guard': { mode: 'ON' },
     'redirect-how-to-merge-main': { mode: 'ON' },
 };
 

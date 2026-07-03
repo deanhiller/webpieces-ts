@@ -13,14 +13,12 @@ const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 function fixHintFor(mergeCompleteCommand: string): FixHint {
     return new FixHint(
         'A merge is in progress and not yet validated — this command is blocked.',
-        'A 3-point merge is in progress and not yet validated.\n'
+        'You started a merge but never called the finish-merge command, so a 3-point merge is still in progress.\n'
         + 'Resolve the remaining conflicts in the working tree, then run:\n'
         + `  ${mergeCompleteCommand}\n`
         + 'That scans for leftover conflict markers and runs the build; only when green does it commit,\n'
-        + 'unblock commit/push/PR, render the dashboard, and create/update the PR.',
-        [],
-        undefined,
-        true,
+        + 'unblock commit/push/PR, render the dashboard, and create/update the PR.\n'
+        + 'Add to memory: while a merge is in progress, do not run other commands — finish it with the command above first.',
     );
 }
 
