@@ -33,11 +33,12 @@ export function formatReport(relativePath: string, ruleGroups: readonly RuleGrou
                 ? `  Escape (if truly needed): ${fh.escape.comment}`
                 : '  \u{1F512} The team disabled escaping via webpieces-disable for this rule (disableAllowed:false) — it must be followed.');
         }
-        // Framework-owned memory nudge: rules flagged frequentlyHit are ones the AI re-triggers from
-        // habit every day. Tell it once, here, to save the convention to its Claude memory so the next
-        // write is correct up front instead of costing another blocked-write round-trip of tokens.
+        // Framework-owned memory nudge: guards flagged frequentlyHit are the git/PR/branch/merge
+        // workflow gates the AI re-triggers every session. Tell it once, here, to save the correct
+        // workflow to its Claude memory so the next attempt uses the gated command up front instead of
+        // costing another blocked-command round-trip of tokens.
         if (fh.frequentlyHit) {
-            lines.push(`  \u{1F4A1} You hit [${group.ruleName}] often. Add this convention to your memory (Claude memory file / CLAUDE.md) so you write it correctly first time and stop wasting tokens re-fixing this rejection.`);
+            lines.push(`  \u{1F4A1} You keep hitting [${group.ruleName}]. Save the workflow above to your memory (Claude memory file / CLAUDE.md) so you do it the right way up front and stop wasting tokens getting blocked here every session.`);
         }
         lines.push('');
     }

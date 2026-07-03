@@ -27,6 +27,9 @@ export class PrMergeCleanupRule extends BashRuleBase<PrMergeCleanupConfig> {
             'After merging a PR you must clean up the local branch.',
             'Run this combined command instead:\n'
             + `  gh pr merge --squash && git checkout main && git pull && git branch -d ${this.currentBranch}`,
+            [],
+            undefined,
+            true,
         );
     }
 

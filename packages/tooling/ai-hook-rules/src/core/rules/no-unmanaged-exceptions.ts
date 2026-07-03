@@ -37,7 +37,6 @@ export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedException
                 ),
             ],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-unmanaged-exceptions -- <reason>'),
-            true,
         );
     }
 
