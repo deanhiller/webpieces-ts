@@ -29,7 +29,7 @@ export { NoSymbolDiTokensRule } from './core/rules/no-symbol-di-tokens';
 export { BranchCreationGuardRule } from './core/rules/branch-creation-guard';
 export { PrCreationGuardRule } from './core/rules/pr-creation-guard';
 export { MergeInProgressGuardRule } from './core/rules/merge-in-progress-guard';
-export { PrMergeCleanupRule } from './core/rules/pr-merge-cleanup';
+export { PrMergeGuardRule } from './core/rules/pr-merge-guard';
 export { RedirectHowToMergeMainRule } from './core/rules/redirect-how-to-merge-main';
 export { NoJsFilesRule } from './core/rules/no-js-files';
 export { FeatureBranchGuardRule } from './core/rules/feature-branch-guard';

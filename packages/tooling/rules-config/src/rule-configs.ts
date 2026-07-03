@@ -300,10 +300,10 @@ export class MergeInProgressGuardConfig extends BaseRuleConfig {
     };
 }
 
-export class PrMergeCleanupConfig extends BaseRuleConfig {
+export class PrMergeGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
 
-    static readonly SCHEMA: SchemaShape<PrMergeCleanupConfig> = {
+    static readonly SCHEMA: SchemaShape<PrMergeGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         ...BASE_RULE_SCHEMA,
     };

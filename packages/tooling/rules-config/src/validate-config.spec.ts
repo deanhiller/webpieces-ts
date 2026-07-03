@@ -41,10 +41,10 @@ describe('validateWebpiecesConfig', () => {
     it('every rule accepts the universal escape hatches', () => {
         const errors = validateWebpiecesConfig({
             'pr-creation-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
-            'pr-merge-cleanup': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
+            'pr-merge-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
             'feature-branch-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
         });
-        for (const rule of ['pr-creation-guard', 'pr-merge-cleanup', 'feature-branch-guard']) {
+        for (const rule of ['pr-creation-guard', 'pr-merge-guard', 'feature-branch-guard']) {
             const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
             expect(fieldErrors).toEqual([]);
         }

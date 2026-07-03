@@ -15,10 +15,8 @@ function fixHintFor(upsertPrCommand: string): FixHint {
         + 'It updates the branch from main (3-point merge) and runs the real build (nx affected), then\n'
         + 'instructs you to write review.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n'
         + 'dashboard and creates/updates the PR itself. A failing build = no PR.\n'
-        + 'There is nothing to paste or attest to; the commands do the work.',
-        [],
-        undefined,
-        true,
+        + 'There is nothing to paste or attest to; the commands do the work.\n'
+        + 'Add this to your memory so you don\'t forget next time and waste tokens.',
     );
 }
 

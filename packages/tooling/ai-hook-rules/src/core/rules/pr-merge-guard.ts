@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { PrMergeCleanupConfig } from '@webpieces/rules-config';
+import { PrMergeGuardConfig } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -12,8 +12,8 @@ function truncate(s: string): string {
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
-export class PrMergeCleanupRule extends BashRuleBase<PrMergeCleanupConfig> {
-    constructor(config: PrMergeCleanupConfig) { super(config, 'pr-merge-cleanup'); }
+export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
+    constructor(config: PrMergeGuardConfig) { super(config, 'pr-merge-guard'); }
 
     readonly description = 'After merging a PR, require switching to main, pulling, and deleting the local branch.';
 
@@ -25,11 +25,8 @@ export class PrMergeCleanupRule extends BashRuleBase<PrMergeCleanupConfig> {
     get fixHint(): FixHint {
         return new FixHint(
             'After merging a PR you must clean up the local branch.',
-            'Run this combined command instead:\n'
-            + `  gh pr merge --squash && git checkout main && git pull && git branch -d ${this.currentBranch}`,
-            [],
-            undefined,
-            true,
+            `Run gh pr merge --squash && git checkout main && git pull && git branch -d ${this.currentBranch}.\n`
+            + "Add this to your memory so you don't forget next time and waste tokens.",
         );
     }
 

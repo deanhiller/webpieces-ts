@@ -16,7 +16,7 @@ import {
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
-    PrMergeCleanupConfig,
+    PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
     FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
@@ -43,7 +43,7 @@ export class WebpiecesRulesConfig {
     'branch-creation-guard'?: BranchCreationGuardConfig;
     'pr-creation-guard'?: PrCreationGuardConfig;
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;
-    'pr-merge-cleanup'?: PrMergeCleanupConfig;
+    'pr-merge-guard'?: PrMergeGuardConfig;
     'redirect-how-to-merge-main'?: RedirectHowToMergeMainConfig;
     'feature-branch-guard'?: FeatureBranchGuardConfig;
     'no-file-import-cycles'?: NoFileImportCyclesConfig;

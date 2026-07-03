@@ -48,28 +48,16 @@ export class FixHint {
     readonly fixOptions: readonly Option[];
     /** Present only for disable-able rules; absent for guards. */
     readonly escape?: DisableEscape;
-    /**
-     * True for the git/PR/branch/merge WORKFLOW GUARDS the AI re-triggers every session — it keeps
-     * reaching for `gh pr create`, editing on main, branching off a feature branch, merging directly,
-     * etc., and each hit is a wasted blocked-command round-trip. When set, the framework (report.ts)
-     * appends a one-line nudge telling the AI to persist the correct workflow (e.g. "PRs go only
-     * through wp-start-upsert-pr") to its Claude memory so it uses the gated flow up front instead of
-     * getting blocked. Off for the code-style rules and situational rules (file size), where the
-     * per-occurrence fix is context-specific and a saved memory would not stop the next hit.
-     */
-    readonly frequentlyHit: boolean;
 
     constructor(
         violation: string,
         mainMessage: string,
         fixOptions: readonly Option[] = [],
         escape?: DisableEscape,
-        frequentlyHit = false,
     ) {
         this.violation = violation;
         this.mainMessage = mainMessage;
         this.fixOptions = fixOptions;
         this.escape = escape;
-        this.frequentlyHit = frequentlyHit;
     }
 }

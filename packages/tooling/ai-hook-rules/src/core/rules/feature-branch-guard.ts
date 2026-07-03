@@ -46,8 +46,6 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
             new Option('main moved/conflicts → `pnpm wp-start-upsert-pr` (merge), `/wp-merge` (resolve), `pnpm wp-finish-upsert-pr`.'),
             new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
         ],
-        undefined,
-        true,
     );
 
     check(ctx: FileContext): readonly Violation[] {
@@ -148,12 +146,13 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     private alreadyMergedMessage(branch: string, mergedPr: string): string {
         const pr = mergedPr !== '' ? ` (merged PR #${mergedPr})` : '';
         return [
-            `This feature branch "${branch}" was already merged into main${pr}.`,
+            `It looks like you forgot to switch to main and delete this branch "${branch}" — its PR is already merged into main${pr}.`,
             'Your work is in main — do NOT keep editing this stale branch (you will reconflict with main).',
             'Start fresh:',
             '  1. git checkout main',
             '  2. git pull',
             '  3. git checkout -b <new-feature-branch>',
+            'Please add to memory: switch to main (and delete the branch) after a PR is merged.',
         ].join('\n');
     }
 
