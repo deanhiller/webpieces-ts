@@ -50,6 +50,7 @@ export class NoImplicitAnyRule extends EditRuleBase<NoImplicitAnyConfig> {
             'Add explicit types: (x: string) => ... or function foo(x: number).',
             [],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-implicit-any -- <one-line reason>'),
+            true,
         );
     }
 
