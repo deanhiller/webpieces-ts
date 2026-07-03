@@ -260,7 +260,7 @@ function runBashRules(rules: readonly Rule[], bashContext: BashContext): readonl
         const vs = runRuleCheck(rule, bashContext);
         if (vs.length > 0) {
             groups.push(new RuleGroup(
-                rule.name, rule.description, [...rule.fixHint], [...vs],
+                rule.name, rule.description, rule.fixHint, [...vs],
             ));
         }
     }
@@ -285,7 +285,7 @@ function runEditRules(rules: readonly Rule[], editContexts: readonly EditContext
         }
         if (allViolations.length > 0) {
             groups.push(new RuleGroup(
-                rule.name, rule.description, [...rule.fixHint], allViolations,
+                rule.name, rule.description, rule.fixHint, allViolations,
             ));
         }
     }
@@ -301,7 +301,7 @@ function runFileRules(rules: readonly Rule[], fileContext: FileContext): readonl
         const vs = runRuleCheck(rule, fileContext);
         if (vs.length > 0) {
             groups.push(new RuleGroup(
-                rule.name, rule.description, [...rule.fixHint], [...vs],
+                rule.name, rule.description, rule.fixHint, [...vs],
             ));
         }
     }

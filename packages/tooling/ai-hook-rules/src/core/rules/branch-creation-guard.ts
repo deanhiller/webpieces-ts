@@ -5,6 +5,7 @@ import { BranchCreationGuardConfig } from '@webpieces/rules-config';
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
+import { FixHint, Option } from '../fix-hint';
 
 // Defaults used when the rule has no explicit value in webpieces.config.json.
 // branchFormat is a human sentence telling the AI how to name a branch created off main; it is
@@ -77,22 +78,26 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     // Mode-aware fix hints. Branches off main follow branchFormat — never the sub-branch
     // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
     // hard-blocks it and points instead at the ignoreModifiedUntilEpoch escape hatch.
-    get fixHint(): readonly string[] {
-        const hints = [
-            "Run 'git checkout main && git pull origin main', then create your branch FROM main",
-            `Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`,
+    get fixHint(): FixHint {
+        const options = [
+            new Option("Run 'git checkout main && git pull origin main', then create your branch FROM main", true),
+            new Option(`Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`),
         ];
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
-            hints.push(
+            options.push(new Option(
                 'Sub-branches (branching off another feature branch) are disabled. To temporarily allow one, set ' +
                 "branch-creation-guard.ignoreModifiedUntilEpoch to a future epoch in webpieces.config.json",
-            );
+            ));
         } else {
-            hints.push(
+            options.push(new Option(
                 `If you truly need a stacked sub-branch (requires human approval), name it per branch-creation-guard.subBranchNaming: ${this.subBranchNaming}`,
-            );
+            ));
         }
-        return hints;
+        return new FixHint(
+            'Cannot create this branch (main is stale, or branching off a non-main branch).',
+            'Create your branch from an up-to-date main. Pick one:',
+            options,
+        );
     }
 
     check(ctx: BashContext): readonly Violation[] {

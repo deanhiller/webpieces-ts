@@ -4,6 +4,7 @@ import type {
     PlainRule, Rule, RuleScope,
     EditContext, FileContext, BashContext, Violation,
 } from './types';
+import type { FixHint } from './fix-hint';
 
 /**
  * Wraps a custom rule loaded from a `rulesDir` (a plain object) so it satisfies the same
@@ -16,7 +17,7 @@ export class CustomRuleAdapter extends AbstractRule<BaseRuleConfig> implements R
     readonly scope: RuleScope;
     readonly files: readonly string[];
     readonly description: string;
-    readonly fixHint: readonly string[];
+    readonly fixHint: FixHint;
     readonly defaultOptions: RuleOptions;
     private readonly impl: PlainRule;
     private readonly rawConfig: RuleOptions;

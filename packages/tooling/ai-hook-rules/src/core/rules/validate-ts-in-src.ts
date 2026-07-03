@@ -6,6 +6,7 @@ import { ValidateTsInSrcConfig, isPathExcluded } from '@webpieces/rules-config';
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
+import { FixHint, Option } from '../fix-hint';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',
@@ -31,10 +32,14 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
         excludePaths: DEFAULT_EXCLUDE_PATHS,
         allowedRootFiles: DEFAULT_ALLOWED_ROOT_FILES,
     };
-    readonly fixHint = [
-        'Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.',
-        'Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in webpieces.config.json',
-    ];
+    readonly fixHint = new FixHint(
+        'TypeScript file is outside a project src/ directory.',
+        'Fix by one of:',
+        [
+            new Option('Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.', true),
+            new Option('Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in webpieces.config.json'),
+        ],
+    );
 
     check(ctx: FileContext): readonly Violation[] {
         if (ctx.tool !== 'Write') return [];

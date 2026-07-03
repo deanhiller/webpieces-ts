@@ -3,6 +3,7 @@ import { RequireReturnTypeConfig, RULE_NAMES } from '@webpieces/rules-config';
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 // Matches function/method signatures that don't have `: ReturnType` before the `{` body opener.
 // Pattern: function name(<params>) { — missing `: Type` between `)` and `{`
@@ -36,23 +37,24 @@ export class RequireReturnTypeRule extends EditRuleBase<RequireReturnTypeConfig>
 
     readonly description = 'Every function and method must declare its return type.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    readonly fixHint = [
-        'Add return type: function foo(x: T): ReturnType { ... }',
-        '// webpieces-disable require-return-type -- <reason>',
-    ];
+    get fixHint(): FixHint {
+        return new FixHint(
+            'Missing return type annotation.',
+            'Add a return type: function foo(x: T): ReturnType { ... }.',
+            [],
+            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable require-return-type -- <reason>'),
+        );
+    }
 
     check(ctx: EditContext): readonly Violation[] {
+        const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
             const stripped = ctx.strippedLines[i];
             if (!isMissingReturnType(stripped)) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, RULE_NAMES.REQUIRE_RETURN_TYPE)) continue;
-            violations.push(new V(
-                lineNum,
-                ctx.lines[i].trim(),
-                'Missing return type annotation.',
-            ));
+            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.REQUIRE_RETURN_TYPE)) continue;
+            violations.push(new V(lineNum, ctx.lines[i].trim()));
         }
         return violations;
     }

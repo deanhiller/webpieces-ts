@@ -3,6 +3,7 @@ import { CatchErrorPatternConfig, RULE_NAMES } from '@webpieces/rules-config';
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
+import { FixHint, Option, DisableEscape } from '../fix-hint';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
 /**
@@ -44,14 +45,20 @@ export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig>
 
     readonly description = 'Catch blocks must use: catch (err: unknown) { const error = toError(err); }'; // webpieces-disable catch-error-pattern -- example text in a description string
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    readonly fixHint = [
-        'Add as first statement inside the catch block: const error = toError(err);',
-        'To explicitly ignore the error: //const error = toError(err);',
-        'For nested catches use numbered names: catch (err2: unknown) { const error2 = toError(err2); }', // webpieces-disable catch-error-pattern -- example text in a hint string
-        'To suppress this rule: // webpieces-disable catch-error-pattern -- <reason>',
-    ];
+    get fixHint(): FixHint {
+        return new FixHint(
+            'Catch block does not follow the toError(err) pattern.',
+            'Name the catch parameter err (err2/err3 when nested), then pick one:',
+            [
+                new Option('Add as the first statement in the catch block: const error = toError(err);', true),
+                new Option('To explicitly ignore the error: //const error = toError(err);'),
+            ],
+            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable catch-error-pattern -- <reason>'), // webpieces-disable catch-error-pattern -- example text in a hint string
+        );
+    }
 
     check(ctx: EditContext): readonly Violation[] {
+        const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];
         const lines = ctx.strippedLines;
 
@@ -61,7 +68,7 @@ export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig>
             if (!catchMatch) continue;
 
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, RULE_NAMES.CATCH_ERROR_PATTERN)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.CATCH_ERROR_PATTERN)) continue;
 
             const actualParam = catchMatch[1];
             const typeAnnotation = catchMatch[2];

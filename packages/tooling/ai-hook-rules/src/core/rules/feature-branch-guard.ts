@@ -11,6 +11,7 @@ import {
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
+import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
@@ -37,12 +38,15 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         branchNamingConvention: '{whoami}/{featurename}',
         hangTimeoutMinutes: DEFAULT_HANG_TIMEOUT_MINUTES,
     };
-    readonly fixHint = [
-        'You must be on a clean, up-to-date feature branch to edit code.',
-        'On main → create a feature branch. Already merged → branch off fresh main.',
-        'main moved/conflicts → `pnpm wp-start-upsert-pr` (merge), `/wp-merge` (resolve), `pnpm wp-finish-upsert-pr`.',
-        'Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.',
-    ];
+    readonly fixHint = new FixHint(
+        'You are not on a clean, up-to-date feature branch.',
+        'You must be on a clean, up-to-date feature branch to edit code. Pick one:',
+        [
+            new Option('On main → create a feature branch. Already merged → branch off fresh main.', true),
+            new Option('main moved/conflicts → `pnpm wp-start-upsert-pr` (merge), `/wp-merge` (resolve), `pnpm wp-finish-upsert-pr`.'),
+            new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
+        ],
+    );
 
     check(ctx: FileContext): readonly Violation[] {
         // Only files inside the workspace root — guard has no jurisdiction, nothing worth logging.

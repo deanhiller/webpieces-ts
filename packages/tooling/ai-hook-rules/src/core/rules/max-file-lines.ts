@@ -3,6 +3,7 @@ import { MaxFileLinesConfig, writeTemplateIfMissing } from '@webpieces/rules-con
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { FileRuleBase } from '../rule-base';
+import { FixHint, DisableEscape } from '../fix-hint';
 
 const DEFAULT_LIMIT = 900;
 const INSTRUCT_FILE = 'webpieces.filesize.md';
@@ -13,10 +14,14 @@ export class MaxFileLinesRule extends FileRuleBase<MaxFileLinesConfig> {
     readonly description = 'Cap file length at a configured line limit.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
     override readonly defaultOptions = { limit: DEFAULT_LIMIT };
-    readonly fixHint = [
-        'READ .webpieces/instruct-ai/webpieces.filesize.md for step-by-step refactoring guidance.',
-        '// eslint-disable-next-line @webpieces/max-file-lines  (also suppresses the eslint rule)',
-    ];
+    get fixHint(): FixHint {
+        return new FixHint(
+            'File exceeds the max-file-lines limit.',
+            'READ .webpieces/instruct-ai/webpieces.filesize.md and refactor to reduce the file size.',
+            [],
+            new DisableEscape(this.config.disableAllowed ?? true, '// eslint-disable-next-line @webpieces/max-file-lines  (also suppresses the eslint rule)'),
+        );
+    }
 
     check(ctx: FileContext): readonly Violation[] {
         const limit = this.config.limit ?? DEFAULT_LIMIT;

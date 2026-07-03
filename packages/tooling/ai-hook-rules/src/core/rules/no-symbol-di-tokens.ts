@@ -3,6 +3,7 @@ import { NoSymbolDiTokensConfig, RULE_NAMES } from '@webpieces/rules-config';
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { EditRuleBase } from '../rule-base';
+import { FixHint, Option, DisableEscape } from '../fix-hint';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
@@ -51,28 +52,31 @@ export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
     readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @provideSingleton() + inject-by-type instead.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
     override readonly defaultOptions = { allowedPaths: [] };
-    readonly fixHint = [
-        'Option 1: Use @provideSingleton() on the class and inject by type — no Symbol needed.',
-        'Option 2: Implement an API interface — import the Symbol from the API definition and use @provideSingletonAs(TOKEN).',
-        'Option 3: External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.',
-        'Option 4 (last resort): // webpieces-disable no-symbol-di-tokens -- <reason>',
-    ];
+    get fixHint(): FixHint {
+        return new FixHint(
+            'Symbol() used as a DI token — we avoid Symbol DI tokens where we can.',
+            'Pick one:',
+            [
+                new Option('Use @provideSingleton() on the class and inject by type — no Symbol needed.', true),
+                new Option('Implement an API interface — import the Symbol from the API definition and use @provideSingletonAs(TOKEN).'),
+                new Option('External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.'),
+            ],
+            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-symbol-di-tokens -- <reason>'),
+        );
+    }
 
     check(ctx: EditContext): readonly Violation[] {
         const allowedPaths = this.config.allowedPaths ?? [];
         if (isAllowedPath(ctx.relativePath, allowedPaths)) return [];
 
+        const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
             const stripped = ctx.strippedLines[i];
             if (!SYMBOL_DI_REGEX.test(stripped ?? '')) continue;
             const lineNum = i + 1;
-            if (ctx.isLineDisabled(lineNum, RULE_NAMES.NO_SYMBOL_DI_TOKENS)) continue;
-            violations.push(new V(
-                lineNum,
-                ctx.lines[i]?.trim() ?? '',
-                'Symbol() used as a DI token. Mostly we avoid Symbol if we can — see fix options below.',
-            ));
+            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_SYMBOL_DI_TOKENS)) continue;
+            violations.push(new V(lineNum, ctx.lines[i]?.trim() ?? ''));
         }
         return violations;
     }
