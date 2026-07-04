@@ -34,13 +34,14 @@ export default async function runExecutor(
     try {
         // Load the saved graph
         console.log('📂 Loading saved graph...');
-        const graph = loadBlessedGraph(workspaceRoot, graphPath);
+        const graphFile = loadBlessedGraph(workspaceRoot, graphPath);
 
-        if (!graph) {
+        if (!graphFile) {
             console.error('❌ No saved graph found at architecture/dependencies.json');
             console.error('   Run: nx run architecture:generate first');
             return { success: false };
         }
+        const graph = graphFile.projects;
 
         // Generate visualization
         console.log('🎨 Generating visualization...');

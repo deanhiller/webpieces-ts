@@ -5,7 +5,16 @@
  * Used in validate mode to ensure developers have updated the graph file.
  */
 
-import type { EnhancedGraph } from './graph-sorter';
+import type { EnhancedGraph, GraphEntry } from './graph-sorter';
+
+/**
+ * A changed metadata field on a project (framework, shortDescription, ...)
+ */
+export interface FieldChange {
+    field: string;
+    from: string | undefined;
+    to: string | undefined;
+}
 
 /**
  * Difference between two graphs
@@ -18,8 +27,19 @@ export interface GraphDiff {
         addedDeps: string[];
         removedDeps: string[];
         levelChanged: { from: number; to: number } | null;
+        changedFields: FieldChange[];
     }[];
 }
+
+/**
+ * Metadata fields compared per project (beyond level + dependsOn)
+ */
+const METADATA_FIELDS: ReadonlyArray<keyof GraphEntry & string> = [
+    'framework',
+    'shortDescription',
+    'responsibilitiesFile',
+    'designFile',
+];
 
 /**
  * Comparison result
@@ -112,15 +132,38 @@ function findModifiedProjects(
                 ? { from: savedEntry.level, to: currentEntry.level }
                 : null;
 
-        if (addedDeps.length > 0 || removedDeps.length > 0 || levelChanged) {
+        const changedFields = findChangedFields(currentEntry, savedEntry);
+
+        if (addedDeps.length > 0 || removedDeps.length > 0 || levelChanged || changedFields.length > 0) {
             diff.modified.push({
                 project,
                 addedDeps,
                 removedDeps,
                 levelChanged,
+                changedFields,
             });
         }
     }
+}
+
+function findChangedFields(currentEntry: GraphEntry, savedEntry: GraphEntry): FieldChange[] {
+    const changes: FieldChange[] = [];
+    for (const field of METADATA_FIELDS) {
+        const from = savedEntry[field] as string | undefined;
+        const to = currentEntry[field] as string | undefined;
+        if (from !== to) {
+            changes.push({ field, from, to });
+        }
+    }
+    return changes;
+}
+
+function formatFieldValue(value: string | undefined): string {
+    if (value === undefined) return '(none)';
+    const MAX_SUMMARY_VALUE_CHARS = 60;
+    return value.length > MAX_SUMMARY_VALUE_CHARS
+        ? `"${value.slice(0, MAX_SUMMARY_VALUE_CHARS)}..."`
+        : `"${value}"`;
 }
 
 function buildSummary(diff: GraphDiff): string {
@@ -144,6 +187,11 @@ function buildSummary(diff: GraphDiff): string {
         }
         if (mod.levelChanged) {
             parts.push(`level: ${mod.levelChanged.from} -> ${mod.levelChanged.to}`);
+        }
+        for (const change of mod.changedFields) {
+            parts.push(
+                `${change.field}: ${formatFieldValue(change.from)} -> ${formatFieldValue(change.to)}`
+            );
         }
         if (parts.length > 0) {
             summaryParts.push(`${mod.project}: ${parts.join('; ')}`);
