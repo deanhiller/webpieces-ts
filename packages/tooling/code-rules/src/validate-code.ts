@@ -31,6 +31,8 @@ import { CatchErrorPatternValidator } from './validate-catch-error-pattern';
 import { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptions';
 import { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 import { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
+import { MatchRulesValidator } from './validate-match-rules';
+import { MatchRuleConfig } from '@webpieces/rules-config';
 
 export { ExecutorResult } from './code-validator';
 
@@ -41,7 +43,10 @@ export { ExecutorResult } from './code-validator';
  * config instance — `loadAndValidate` already validates that configured rules
  * carry an explicit `mode`, so in practice every key is present.
  */
-function buildValidators(config: WebpiecesRulesConfig): CodeValidator<BaseRuleConfig>[] {
+function buildValidators(
+    config: WebpiecesRulesConfig,
+    matchRules: readonly MatchRuleConfig[],
+): CodeValidator<BaseRuleConfig>[] {
     return [
         new MaxMethodLinesValidator(config['max-method-lines'] ?? new MaxMethodLinesConfig()),
         new MaxFileLinesValidator(config['max-file-lines'] ?? new MaxFileLinesConfig()),
@@ -56,6 +61,8 @@ function buildValidators(config: WebpiecesRulesConfig): CodeValidator<BaseRuleCo
         new NoUnmanagedExceptionsValidator(config['no-unmanaged-exceptions'] ?? new NoUnmanagedExceptionsConfig()),
         new NoDirectApiResolverValidator(config['angular-no-direct-api-in-resolver'] ?? new AngularNoDirectApiInResolverConfig()),
         new NoSymbolDiTokensValidator(config['no-symbol-di-tokens'] ?? new NoSymbolDiTokensConfig()),
+        // One validator per client-authored match-rules entry (each with its own name/mode/epoch).
+        ...matchRules.map((mr: MatchRuleConfig) => new MatchRulesValidator(mr)),
     ];
 }
 
@@ -76,7 +83,7 @@ export default async function runValidator(workspaceRoot: string): Promise<Execu
 
     console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
-    const validators = buildValidators(loaded.rulesConfig);
+    const validators = buildValidators(loaded.rulesConfig, loaded.matchRules);
     const active = validators.filter((v: CodeValidator<BaseRuleConfig>) => v.shouldRun());
 
     if (active.length === 0) {

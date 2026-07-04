@@ -1,5 +1,8 @@
 import { FieldDef } from './field-def';
 import { sectionForRule, isHookGuard } from './sections';
+import { MODIFIED_CODE_MODES } from './rule-configs';
+import { DEFAULT_MATCH_RULES } from './match-rules-config';
+import { toError } from './to-error';
 import {
     MaxMethodLinesConfig,
     MaxFileLinesConfig,
@@ -291,6 +294,111 @@ export function validateExcludePaths(section: unknown): string[] {
         ...validateExcludeList(s['rules'], 'rules'),
         ...validateExcludeList(s['guards'], 'guards'),
     ];
+}
+
+// ---------------------------------------------------------------------------
+// match-rules — a new top-level ARRAY section (parallel to pr-gate/excludePaths). Each entry is a
+// client-authored content guard (raw-regex patterns + message + scoping). Validated structurally here
+// the same way pr-gate's `gates` are, because an array of objects can't be expressed in FieldDef schema.
+// ---------------------------------------------------------------------------
+
+function matchRulesExample(): string {
+    return `"match-rules": ${JSON.stringify(DEFAULT_MATCH_RULES, null, 4)}`;
+}
+
+// webpieces-disable no-any-unknown -- generic type guard over an opaque JSON value
+function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every(v => typeof v === 'string');
+}
+
+// Compile a pattern to validate it; returns the error message, or undefined when it compiles.
+function regexError(pattern: string): string | undefined {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        // Constructed only to validate the syntax; the object is intentionally discarded.
+        void new RegExp(pattern);
+        return undefined;
+    } catch (err: unknown) {
+        const error = toError(err);
+        return error.message;
+    }
+}
+
+// One entry of the match-rules array, validated field-by-field (see validateGate for the pattern).
+// webpieces-disable no-any-unknown -- one match-rule entry from opaque consumer JSON, validated field-by-field
+function validateMatchRule(entry: unknown, index: number): string[] {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+        return [`[match-rules] entry[${index}] must be an object { name, patterns, mainMessage, mode, ignoreModifiedUntilEpoch, ... }.`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing one opaque match-rule entry from consumer JSON
+    const e = entry as Record<string, unknown>;
+    const label = typeof e['name'] === 'string' ? `"${e['name']}"` : `entry[${index}]`;
+    const errors: string[] = [];
+
+    if (typeof e['name'] !== 'string' || e['name'].trim() === '')
+        errors.push(`[match-rules] entry[${index}].name must be a non-empty string (it is the disable token and report label).`);
+
+    if (!isStringArray(e['patterns']) || e['patterns'].length === 0) {
+        errors.push(`[match-rules] ${label}.patterns must be a non-empty string[] of regexes.`);
+    } else {
+        e['patterns'].forEach((p: string, pi: number) => {
+            const rxErr = regexError(p);
+            if (rxErr) errors.push(`[match-rules] ${label}.patterns[${pi}] is not a valid regex: ${rxErr}`);
+        });
+    }
+
+    if (typeof e['mainMessage'] !== 'string' || e['mainMessage'].trim() === '')
+        errors.push(`[match-rules] ${label}.mainMessage must be a non-empty string.`);
+
+    if (typeof e['mode'] !== 'string' || !MODIFIED_CODE_MODES.includes(e['mode'] as typeof MODIFIED_CODE_MODES[number]))
+        errors.push(`[match-rules] ${label}.mode must be one of: ${MODIFIED_CODE_MODES.join(', ')}.`);
+
+    if (typeof e['ignoreModifiedUntilEpoch'] !== 'number')
+        errors.push(`[match-rules] ${label}.ignoreModifiedUntilEpoch must be a number (0 = active; future unix-epoch seconds = temporarily off).`);
+
+    if (e['options'] !== undefined && !isStringArray(e['options']))
+        errors.push(`[match-rules] ${label}.options must be a string[] (omit if not needed).`);
+    if (e['allowedPaths'] !== undefined && !isStringArray(e['allowedPaths']))
+        errors.push(`[match-rules] ${label}.allowedPaths must be a string[] of globs (omit if not needed).`);
+    if (e['disableAllowed'] !== undefined && typeof e['disableAllowed'] !== 'boolean')
+        errors.push(`[match-rules] ${label}.disableAllowed must be a boolean.`);
+    if (e['ignoreRuleWhileOnBranch'] !== undefined && typeof e['ignoreRuleWhileOnBranch'] !== 'string')
+        errors.push(`[match-rules] ${label}.ignoreRuleWhileOnBranch must be a string.`);
+
+    return errors;
+}
+
+/**
+ * Validate the REQUIRED top-level `match-rules` array (client-authored content guards). MISSING →
+ * one error printing the ready-to-paste `no-fetch` example (add at least this; more can follow).
+ * Present-but-`[]` → allowed (a conscious opt-out, matching pr-gate mode:OFF / excludePaths []).
+ * Otherwise every entry is validated field-by-field (each regex compile-checked) plus name
+ * uniqueness. Copy-paste-friendly errors; never throws — same contract as validatePrGateSection.
+ */
+// webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed below
+export function validateMatchRulesSection(section: unknown): string[] {
+    if (section === undefined || section === null) {
+        return [
+            `[match-rules] Not configured in webpieces.config.json. Add this REQUIRED top-level array — ` +
+            `seed it with the no-fetch guard below (you can add more entries: no-moment, no-lodash-chain, …):\n\n${matchRulesExample()}`,
+        ];
+    }
+    if (!Array.isArray(section)) {
+        return [`[match-rules] Must be an array of content-guard objects. Example:\n\n${matchRulesExample()}`];
+    }
+
+    const errors: string[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < section.length; i += 1) {
+        errors.push(...validateMatchRule(section[i], i));
+        // webpieces-disable no-any-unknown -- reading the name off an opaque entry only to dedupe
+        const name = (section[i] as Record<string, unknown> | null)?.['name'];
+        if (typeof name === 'string') {
+            if (seen.has(name)) errors.push(`[match-rules] duplicate entry name "${name}" — each match-rule name must be unique.`);
+            seen.add(name);
+        }
+    }
+    return errors;
 }
 
 /**

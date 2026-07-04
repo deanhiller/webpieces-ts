@@ -4,7 +4,8 @@ import { spawnSync } from 'child_process';
 import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
-import { loadRules, globMatches } from './load-rules';
+import { loadRules, loadMatchRules, globMatches } from './load-rules';
+import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
@@ -89,7 +90,10 @@ function runInternal(
         return null;
     }
 
-    const modeRules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
+    // Built-in/custom rules PLUS the client-authored match-rules (content guards). Match-rules run only
+    // in the file-edit path (they are code-style, so filterByMode keeps them out of the bash/guards path).
+    const allRules = [...loadRules(loaded.rulesConfig, workspaceRoot), ...loadMatchRules(loaded.matchRules)];
+    const modeRules = filterByMode(allRules, mode);
     if (modeRules.length === 0) return null;
 
     // Suppress enforcement for files under this category's excludePaths (e.g. vendored repos under
@@ -99,7 +103,9 @@ function runInternal(
     const rules = filterByExcludedPaths(modeRules, relativePath, loaded.excludePaths);
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
+    // Config-sync applies only to built-in/custom rules; match-rules have their own validated section
+    // (loadAndValidate already rejected an invalid `match-rules`), so they must not trip the sync nag.
+    const outOfSync = checkConfigSync(rules.filter((r: Rule) => !(r instanceof MatchRule)), loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot);

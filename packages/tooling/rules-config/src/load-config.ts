@@ -5,7 +5,8 @@ import { ExcludePaths } from './exclude-hook-paths';
 import { InformAiError } from './inform-ai-error';
 import { PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
-import { validateCommandsSection, validateExcludePaths, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
+import { validateCommandsSection, validateExcludePaths, validateMatchRulesSection, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
+import { MatchRuleConfig } from './match-rules-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 
 // Inject the canonical command strings (from the `commands` section) as the DEFAULT for the guards
@@ -56,6 +57,15 @@ function parseExcludePaths(raw: unknown): ExcludePaths {
     return new ExcludePaths(rules, guards);
 }
 
+// Parse the (already-validated) raw match-rules array into typed MatchRuleConfig[]. Each entry is a
+// plain object from JSON; the engines consume its fields only (no methods), so a structural cast is
+// sufficient. Defensive [] keeps this total even though validateMatchRulesSection ran first.
+// webpieces-disable no-any-unknown -- validated array; each entry cast to the typed MatchRuleConfig
+function parseMatchRules(raw: unknown): MatchRuleConfig[] {
+    if (!Array.isArray(raw)) return [];
+    return raw as MatchRuleConfig[];
+}
+
 function buildWebpiecesRulesConfig(
     // webpieces-disable no-any-unknown -- JSON values are opaque until assigned to typed fields
     rawRules: Record<string, Record<string, unknown>>,
@@ -78,15 +88,18 @@ function buildWebpiecesRulesConfig(
  *  - `commands`    — the `commands` section (gated commands + pr-gate).
  *  - `prGate`      — convenience alias of `commands.prGate` (pr-gate scripts).
  *  - `excludePaths`— the required `excludePaths` block (per-category glob suppression lists).
+ *  - `matchRules`  — the required `match-rules` array (client-authored content guards).
  *  - `configPath`  — absolute path, or null when no config file was found.
  */
 export class LoadedConfig {
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         readonly resolved: ResolvedConfig,
         readonly rulesConfig: WebpiecesRulesConfig,
         readonly commands: CommandsConfig,
         readonly prGate: PrGateConfig,
         readonly excludePaths: ExcludePaths,
+        readonly matchRules: readonly MatchRuleConfig[],
         readonly configPath: string | null,
     ) {}
 }
@@ -126,6 +139,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
             emptyCommands,
             emptyCommands.prGate,
             new ExcludePaths([], []),
+            [],
             null,
         );
     }
@@ -149,6 +163,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
         ...validateSectionPlacement(rulesSection, hookGuardsSection),
         ...validateCommandsSection(consumerConfig.commands, legacyPrGate),
         ...validateExcludePaths(consumerConfig.excludePaths),
+        ...validateMatchRulesSection(consumerConfig['match-rules']),
     ];
     if (errors.length > 0) {
         throw new InformAiError(
@@ -172,6 +187,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
 
     const rulesConfig = buildWebpiecesRulesConfig(overrideRules, rulesDir);
     const excludePaths = parseExcludePaths(consumerConfig.excludePaths);
+    const matchRules = parseMatchRules(consumerConfig['match-rules']);
 
-    return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, excludePaths, configPath);
+    return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, excludePaths, matchRules, configPath);
 }
