@@ -18,6 +18,8 @@ export {
 export {
     Controller,
     isController,
+    NotController,
+    isNotController,
     provideSingleton,
     provideSingletonAs,
     provideTransient,

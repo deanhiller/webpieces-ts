@@ -6,8 +6,8 @@ import { InversifyModule } from './modules/InversifyModule';
 import { FilterRoutes } from './routes/FilterRoutes';
 import { ApiRoutingFactory } from '@webpieces/http-routing';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-import { SaveController } from './controllers/SaveController';
-import { PublicController } from './controllers/PublicController';
+import { SaveController } from './controllers/save-controller';
+import { PublicController } from './controllers/public-controller';
 
 /**
  * ProdServerMeta - Application metadata and configuration.

@@ -18,6 +18,12 @@ export {
     renderMatchRuleMessage,
     DEFAULT_MATCH_RULES,
 } from './match-rules-config';
+export {
+    ControllerNamingViolation,
+    findControllerNamingViolations,
+    isControllerNamingAllowedPath,
+    toKebabCase,
+} from './controller-naming-config';
 export type { ConfigSection } from './sections';
 export { HOOK_GUARD_NAMES, isHookGuard, sectionForRule } from './sections';
 export { FieldDef } from './field-def';
@@ -61,6 +67,7 @@ export {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    EnforceControllerNamingConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,

@@ -12,6 +12,7 @@ export { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptio
 export { NoDestructureValidator } from './validate-no-destructure';
 export { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 export { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
+export { EnforceControllerNamingValidator } from './validate-enforce-controller-naming';
 export { PrismaValidateDtosValidator } from './validate-dtos';
 export { PrismaConverterValidator } from './validate-prisma-converters';
 export { default as validateCode } from './validate-code';

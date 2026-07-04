@@ -4,7 +4,7 @@ import { WebpiecesModule } from '@webpieces/http-server';
 import { Server2Api } from '@webpieces/server2-api';
 import { Server2Module } from './modules/Server2Module';
 import { Server2FilterRoutes } from './routes/Server2FilterRoutes';
-import { Server2Controller } from './controllers/Server2Controller';
+import { Server2Controller } from './controllers/server2-controller';
 
 /**
  * Server2Meta - server2's application metadata.
