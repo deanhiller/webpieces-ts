@@ -36,7 +36,7 @@ function getShortName(name: string): string {
 /**
  * Generate Graphviz DOT format from the graph
  */
-export function generateDot(graph: EnhancedGraph, title: string = 'WebPieces Architecture'): string {
+export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): string {
     let dot = 'digraph Architecture {\n';
     dot += '  rankdir=TB;\n';
     dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
@@ -90,7 +90,7 @@ export function generateDot(graph: EnhancedGraph, title: string = 'WebPieces Arc
 /**
  * Generate interactive HTML with embedded SVG using viz.js
  */
-export function generateHTML(dot: string, title: string = 'WebPieces Architecture'): string {
+export function generateHTML(dot: string, title: string = 'Monorepo Dependency Architecture'): string {
     const styles = generateHTMLStyles();
     const legend = generateHTMLLegend();
     const script = generateHTMLScript(dot);
@@ -204,7 +204,7 @@ interface VisualizationPaths {
 export function writeVisualization(
     graph: EnhancedGraph,
     workspaceRoot: string,
-    title: string = 'WebPieces Architecture'
+    title: string = 'Monorepo Dependency Architecture'
 ): VisualizationPaths {
     const outputDir = path.join(workspaceRoot, 'tmp', 'webpieces');
 
