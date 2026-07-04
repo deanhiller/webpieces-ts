@@ -36,9 +36,17 @@ export { ClientErrorTranslator } from './ClientErrorTranslator';
 // Context management for header propagation
 export { StaticContextReader, CompositeContextReader } from './ContextReader';
 export { ContextMgr } from './ContextMgr';
+export { MutableContextStore } from './MutableContextStore';
+export { RequestIdChainProcessor } from './RequestIdChainProcessor';
 
-// Re-export ContextReader interface from http-api for convenience
-export { ContextReader } from '@webpieces/http-api';
+// Re-export header contract from http-api for convenience (browser one-import)
+export {
+    ContextReader,
+    HeaderRegistry,
+    PlatformHeader,
+    PlatformHeadersExtension,
+    WebpiecesCoreHeaders,
+} from '@webpieces/http-api';
 
 // Re-export API decorators for convenience (same as http-routing does)
 export {

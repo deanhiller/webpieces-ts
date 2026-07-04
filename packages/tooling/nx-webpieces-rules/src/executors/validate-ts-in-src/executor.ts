@@ -28,6 +28,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
 import { loadAndValidate, isPathExcluded, shouldSkipRule, detectBase, getChangedFiles } from '@webpieces/rules-config';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export type ValidateTsInSrcMode = 'OFF' | 'NEW_AND_MODIFIED_FILES';
 
@@ -196,7 +197,10 @@ async function runModifiedFilesMode(
     console.log('');
 
     const projectRoots = await getProjectRoots(workspaceRoot);
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    // git diff --name-only lists DELETED paths too (renames = delete+add);
+    // a file that no longer exists cannot be an orphan - skip it
+    const changedFiles = getChangedFiles(workspaceRoot, base, head)
+        .filter((relPath: string) => fs.existsSync(path.join(workspaceRoot, relPath)));
 
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed\n');

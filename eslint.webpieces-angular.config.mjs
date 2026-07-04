@@ -16,7 +16,7 @@ import angularTemplateParser from '@angular-eslint/template-parser';
 export default [
     // ─── Angular HTML template rules ────────────────────────────────────────
     {
-        files: ['apps/example-client/**/*.html'],
+        files: ['apps/app-example/angular-site/**/*.html'],
         languageOptions: {
             parser: angularTemplateParser,
         },
@@ -37,13 +37,13 @@ export default [
 
     // ─── Angular client TypeScript rules ────────────────────────────────────
     {
-        files: ['apps/example-client/**/*.ts'],
+        files: ['apps/app-example/angular-site/**/*.ts'],
         rules: {
             'no-console': 'error',
         },
     },
     {
-        files: ['apps/example-client/**/*.ts'],
+        files: ['apps/app-example/angular-site/**/*.ts'],
         rules: {
             'no-restricted-syntax': [
                 'error',
@@ -106,7 +106,7 @@ export default [
         },
     },
     {
-        files: ['apps/example-client/**/*.ts'],
+        files: ['apps/app-example/angular-site/**/*.ts'],
         rules: {
             'no-restricted-imports': [
                 'error',
@@ -125,7 +125,7 @@ export default [
 
     // ─── TypeScript preferences ──────────────────────────────────────────────
     {
-        files: ['apps/example-client/**/*.ts'],
+        files: ['apps/app-example/angular-site/**/*.ts'],
         rules: {
             '@typescript-eslint/no-inferrable-types': 'off',
         },

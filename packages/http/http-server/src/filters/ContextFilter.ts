@@ -1,8 +1,8 @@
-import {inject, injectable, multiInject, optional} from 'inversify';
+import {inject, injectable} from 'inversify';
 import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { PlatformHeader, PlatformHeadersExtension, HeaderMethods, HEADER_TYPES } from '@webpieces/http-api';
+import { PlatformHeader, HeaderRegistry } from '@webpieces/http-api';
 import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
 import {ContextKeys} from "../headers/ContextKeys";
 
@@ -28,25 +28,18 @@ import {ContextKeys} from "../headers/ContextKeys";
 @provideSingleton()
 @injectable()
 export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-    private headerMethods: PlatformHeader[];
+    private transferredHeaders: PlatformHeader[];
 
     constructor(
-        @multiInject(HEADER_TYPES.PlatformHeadersExtension) @optional()
-        extensions: PlatformHeadersExtension[] = [],
-        @inject(HeaderMethods) headerMethods: HeaderMethods
+        @inject(HeaderRegistry) registry: HeaderRegistry
     ) {
         super();
 
-        // Flatten all headers from all extensions
-        const allHeaders: PlatformHeader[] = [];
-        for (const extension of extensions) {
-            allHeaders.push(...extension.getHeaders());
-        }
+        // The registry is the single source of truth (all modules' extensions,
+        // duplicate-validated at startup)
+        this.transferredHeaders = registry.getTransferredHeaders();
 
-        // Create HeaderMethods helper with flattened headers
-        this.headerMethods = headerMethods.findTransferHeaders(allHeaders);
-
-        console.log(`[ContextFilter] Collected ${allHeaders.length} platform headers from ${extensions.length} extensions`);
+        console.log(`[ContextFilter] Using ${registry.getHeaders().length} platform headers from HeaderRegistry (${this.transferredHeaders.length} transferred)`);
     }
 
     async filter(
@@ -78,7 +71,7 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
 
         // Transfer each header to RequestContext using RequestContext.putHeader()
-        for (const header of this.headerMethods) {
+        for (const header of this.transferredHeaders) {
             // Get values from requestHeaders (case-insensitive lookup)
             const values = meta.requestHeaders.get(header.headerName.toLowerCase());
             if (values && values.length > 0) {

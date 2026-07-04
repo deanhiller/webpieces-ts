@@ -151,17 +151,31 @@ importers:
         specifier: 0.15.0
         version: 0.15.0
 
-  apps/example-apis:
+  apps/app-example/client-server-api:
     dependencies:
       '@webpieces/http-api':
         specifier: workspace:*
-        version: link:../../packages/http/http-api
+        version: link:../../../packages/http/http-api
+
+  apps/app-example/company-core:
+    dependencies:
+      '@webpieces/http-api':
+        specifier: workspace:*
+        version: link:../../../packages/http/http-api
+
+  apps/app-example/server2-api:
+    dependencies:
+      '@webpieces/http-api':
+        specifier: workspace:*
+        version: link:../../../packages/http/http-api
 
   packages/core/core-context:
     dependencies:
       '@webpieces/core-util':
         specifier: '*'
         version: 0.2.104
+
+  packages/core/core-mock: {}
 
   packages/core/core-util: {}
 

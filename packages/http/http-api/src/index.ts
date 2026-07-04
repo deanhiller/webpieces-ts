@@ -77,8 +77,21 @@ export {
 // Platform Headers
 export { PlatformHeader } from './PlatformHeader';
 export { PlatformHeadersExtension } from './PlatformHeadersExtension';
-export { HeaderMethods, ContextReader } from './HeaderMethods';
+export { HeaderRegistry } from './HeaderRegistry';
+export { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
+export { HeaderMethods } from './HeaderMethods';
+export { ContextReader } from './ContextReader';
 export { HEADER_TYPES } from './HeaderTypes';
 
 // Logging
 export { LogApiCall } from './LogApiCall';
+
+// Re-export core-util error helper so http-client (which depends only on
+// http-api) can follow the catch-error pattern without a new dependency
+export { toError } from '@webpieces/core-util';
+
+// Test-case recording contract (impl lives in http-server; hooks in http-client)
+export { TestCaseRecorder, RecorderKeys } from './recorder/TestCaseRecorder';
+export { RecordedEndpoint, RecordedError, RecordedTestCase } from './recorder/RecordedEndpoint';
+export { DoNotRecord, getDoNotRecordFields } from './recorder/DoNotRecord';
+export { RecordSerializer, SerializedMap, SerializedError } from './recorder/RecordSerializer';
