@@ -8,7 +8,16 @@ export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate } from './load-template';
-export { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, allRuleNames } from './validate-config';
+export { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+export {
+    MatchRuleConfig,
+    MatchRuleViolation,
+    findMatchRuleViolations,
+    isMatchRuleAllowedPath,
+    compileMatchRulePatterns,
+    renderMatchRuleMessage,
+    DEFAULT_MATCH_RULES,
+} from './match-rules-config';
 export type { ConfigSection } from './sections';
 export { HOOK_GUARD_NAMES, isHookGuard, sectionForRule } from './sections';
 export { FieldDef } from './field-def';

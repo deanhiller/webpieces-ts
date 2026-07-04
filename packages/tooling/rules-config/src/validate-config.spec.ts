@@ -1,4 +1,16 @@
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection } from './validate-config';
+
+// A minimal valid match-rule entry, cloned + tweaked per test.
+function validMatchRule(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        name: 'no-fetch',
+        patterns: ['(?<![.\\w])fetch\\s*\\('],
+        mainMessage: 'Use the generated client instead.',
+        mode: 'NEW_AND_MODIFIED_CODE',
+        ignoreModifiedUntilEpoch: 0,
+        ...overrides,
+    };
+}
 
 // Helper: errors mentioning a given rule name.
 function errorsFor(rule: string, errors: string[]): string[] {
@@ -293,5 +305,49 @@ describe('validateExcludePaths', () => {
         expect(validateExcludePaths({ guards: [] }).some(e => e.includes('"rules" must be a string[]'))).toBe(true);
         expect(validateExcludePaths({ rules: [], guards: 'nope' }).some(e => e.includes('"guards" must be a string[]'))).toBe(true);
         expect(validateExcludePaths({ rules: [1, 2], guards: [] }).some(e => e.includes('"rules" must be a string[]'))).toBe(true);
+    });
+});
+
+describe('validateMatchRulesSection', () => {
+    it('errors when missing, printing the ready-to-paste no-fetch example', () => {
+        const errors = validateMatchRulesSection(undefined);
+        expect(errors.some(e => e.includes('[match-rules] Not configured'))).toBe(true);
+        // The printed example seeds the no-fetch guard so a client can copy it in.
+        expect(errors.some(e => e.includes('"match-rules"') && e.includes('"no-fetch"'))).toBe(true);
+    });
+
+    it('accepts an empty array (a conscious opt-out)', () => {
+        expect(validateMatchRulesSection([])).toEqual([]);
+    });
+
+    it('accepts a fully-specified valid entry', () => {
+        expect(validateMatchRulesSection([validMatchRule({ options: ['a', 'b'], allowedPaths: ['packages/**'], disableAllowed: true })])).toEqual([]);
+    });
+
+    it('rejects a non-array section', () => {
+        expect(validateMatchRulesSection({ name: 'no-fetch' }).some(e => e.includes('Must be an array'))).toBe(true);
+    });
+
+    it('reports an invalid regex with the entry name and index', () => {
+        const errors = validateMatchRulesSection([validMatchRule({ patterns: ['('] })]);
+        expect(errors.some(e => e.includes('"no-fetch".patterns[0] is not a valid regex'))).toBe(true);
+    });
+
+    it('requires name, patterns, mainMessage, mode, and epoch', () => {
+        const errors = validateMatchRulesSection([{ name: '' }]);
+        expect(errors.some(e => e.includes('.name must be a non-empty string'))).toBe(true);
+        expect(errors.some(e => e.includes('.patterns must be a non-empty string[]'))).toBe(true);
+        expect(errors.some(e => e.includes('.mainMessage must be a non-empty string'))).toBe(true);
+        expect(errors.some(e => e.includes('.mode must be one of'))).toBe(true);
+        expect(errors.some(e => e.includes('.ignoreModifiedUntilEpoch must be a number'))).toBe(true);
+    });
+
+    it('rejects an invalid mode value', () => {
+        expect(validateMatchRulesSection([validMatchRule({ mode: 'ON' })]).some(e => e.includes('.mode must be one of'))).toBe(true);
+    });
+
+    it('flags duplicate entry names', () => {
+        const errors = validateMatchRulesSection([validMatchRule(), validMatchRule()]);
+        expect(errors.some(e => e.includes('duplicate entry name "no-fetch"'))).toBe(true);
     });
 });

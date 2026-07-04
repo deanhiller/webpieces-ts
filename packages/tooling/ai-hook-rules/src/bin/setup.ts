@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, sectionForRule, isHookGuard } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -128,6 +128,7 @@ interface ConfigFile {
     hookGuards: Section;
     commands: Json;
     excludePaths: Json;
+    'match-rules': Json[];
     rulesDir: string[];
 }
 
@@ -154,6 +155,12 @@ function seedExcludePaths(): Json {
     return { rules: [], guards: [] };
 }
 
+// Deep-copy the framework's default match-rules (the no-fetch guard) into plain JSON for the config
+// file. Round-tripping through JSON turns the MatchRuleConfig instances into plain objects.
+function seedMatchRules(): Json[] {
+    return JSON.parse(JSON.stringify(DEFAULT_MATCH_RULES)) as Json[];
+}
+
 function buildSeedConfig(): ConfigFile {
     const rules: Section = {};
     const hookGuards: Section = {};
@@ -161,7 +168,13 @@ function buildSeedConfig(): ConfigFile {
         if (sectionForRule(name) === 'hookGuards') hookGuards[name] = seedRule();
         else rules[name] = seedRule();
     }
-    return { rules, hookGuards, commands: seedCommands(), excludePaths: seedExcludePaths(), rulesDir: [] };
+    return {
+        rules, hookGuards, commands: seedCommands(), excludePaths: seedExcludePaths(),
+        // Seed the required match-rules array with the framework's default no-fetch guard. A fresh
+        // project gets contract-first enforcement out of the box; clients edit it and add more entries.
+        'match-rules': seedMatchRules(),
+        rulesDir: [],
+    };
 }
 
 function writeConfig(configPath: string, config: ConfigFile): void {
@@ -235,8 +248,18 @@ export function migrate(existing: Json): MigrateResult {
     if (excludePaths['rules'] === undefined) { excludePaths['rules'] = []; changes.push('added excludePaths.rules ([])'); }
     if (excludePaths['guards'] === undefined) { excludePaths['guards'] = []; changes.push('added excludePaths.guards ([])'); }
 
+    // Seed the now-required match-rules array (with the default no-fetch guard) if the config predates
+    // it. A client that has already customized it keeps their array untouched.
+    let matchRules: Json[];
+    if (Array.isArray(existing['match-rules'])) {
+        matchRules = existing['match-rules'] as Json[];
+    } else {
+        matchRules = seedMatchRules();
+        changes.push('added "match-rules" (seeded with the no-fetch guard)');
+    }
+
     const rulesDir: string[] = Array.isArray(existing['rulesDir']) ? (existing['rulesDir'] as string[]) : [];
-    const config: ConfigFile = { rules, hookGuards, commands, excludePaths, rulesDir };
+    const config: ConfigFile = { rules, hookGuards, commands, excludePaths, 'match-rules': matchRules, rulesDir };
     if (typeof existing['extends'] === 'string') config.extends = existing['extends'];
     return { config, changes };
 }

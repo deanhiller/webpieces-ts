@@ -25,6 +25,10 @@ export interface RawConfigFile {
     // Opaque here (validated structurally by validateExcludePaths, then parsed into ExcludePaths).
     // webpieces-disable no-any-unknown -- opaque excludePaths JSON, validated by validateExcludePaths
     excludePaths?: unknown;
+    // REQUIRED top-level array of client-authored content guards (regex patterns + message + scoping).
+    // Opaque here; validated structurally by validateMatchRulesSection, then parsed into MatchRuleConfig[].
+    // webpieces-disable no-any-unknown -- opaque match-rules JSON, validated by validateMatchRulesSection
+    'match-rules'?: unknown;
     rulesDir?: string[];
     // webpieces-disable no-any-unknown -- DEPRECATED top-level pr-gate, migrated under `commands`
     'pr-gate'?: unknown;

@@ -44,6 +44,8 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
     return {
         rules: offEntries(CODE_RULE_NAMES, ruleOverrides),
         hookGuards: offEntries(HOOK_GUARD_NAMES, guardOverrides),
+        // match-rules is a required top-level section; [] is the allowed opt-out for these fixtures.
+        'match-rules': [],
     };
 }
 

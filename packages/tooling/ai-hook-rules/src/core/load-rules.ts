@@ -8,7 +8,7 @@ import {
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
     NoSymbolDiTokensConfig, BranchCreationGuardConfig, PrCreationGuardConfig,
     MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
-    NoJsFilesConfig, FeatureBranchGuardConfig,
+    NoJsFilesConfig, FeatureBranchGuardConfig, MatchRuleConfig,
 } from '@webpieces/rules-config';
 
 import type { Rule, PlainRule } from './types';
@@ -34,6 +34,7 @@ import { PrMergeGuardRule } from './rules/pr-merge-guard';
 import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
 import { FeatureBranchGuardRule } from './rules/feature-branch-guard';
+import { MatchRule } from './rules/match-rule';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
 const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
@@ -74,6 +75,13 @@ export function loadRules(config: WebpiecesRulesConfig, workspaceRoot: string): 
     const builtIns = loadBuiltInRules(config);
     const custom = loadCustomRules(config, workspaceRoot);
     return [...builtIns, ...custom];
+}
+
+// One MatchRule per entry of the `match-rules` array. Kept separate from loadRules (built-ins/custom)
+// because match-rules live in their own validated section — they must NOT flow through the
+// config-sync check, which compares rule names against the `rules`/`hookGuards` map.
+export function loadMatchRules(matchRules: readonly MatchRuleConfig[]): Rule[] {
+    return matchRules.map((c: MatchRuleConfig) => new MatchRule(c));
 }
 
 function loadBuiltInRules(config: WebpiecesRulesConfig): Rule[] {
