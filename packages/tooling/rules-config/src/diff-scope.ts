@@ -75,6 +75,11 @@ export function resolveBase(workspaceRoot: string): DiffRange {
  * Changed files between base and head (or base→working-tree when head is omitted). When head is
  * omitted, untracked files are unioned in too (matching `nx affected`). `tsOnly` (default true)
  * restricts to *.ts/*.tsx and drops test files; pass false for an all-files diff.
+ *
+ * Deletions are excluded (`--diff-filter=d`): every consumer reasons about a file's current
+ * content or location, and a path that no longer exists can't violate anything. This also fixes
+ * renames — without rename detection git reports a rename as delete+add, so filtering the delete
+ * side leaves only the file's NEW path in the list.
  */
 // webpieces-disable max-lines-new-methods -- git command handling with untracked files needs several code paths
 export function getChangedFiles(
@@ -89,7 +94,7 @@ export function getChangedFiles(
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const diffTarget = head ? `${base} ${head}` : base;
-        const output = execSync(`git diff --name-only ${diffTarget}${glob}`, {
+        const output = execSync(`git diff --name-only --diff-filter=d ${diffTarget}${glob}`, {
             cwd: workspaceRoot,
             encoding: 'utf-8',
         });
