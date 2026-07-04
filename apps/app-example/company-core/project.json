@@ -1,0 +1,22 @@
+{
+  "name": "company-core",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/app-example/company-core/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/apps/app-example/company-core",
+        "main": "apps/app-example/company-core/src/index.ts",
+        "tsConfig": "apps/app-example/company-core/tsconfig.lib.json",
+        "assets": [
+          "apps/app-example/company-core/package.json"
+        ]
+      }
+    }
+  }
+}

@@ -1,33 +1,35 @@
-import { PlatformHeader, ContextReader } from '@webpieces/http-api';
+import { ContextReader, HeaderMethods, HeaderRegistry } from '@webpieces/http-api';
+import { RequestIdChainProcessor } from './RequestIdChainProcessor';
 
 /**
- * ContextMgr - Manages context reader and header set for HTTP clients.
+ * ContextMgr - Manages context reader + header registry for HTTP clients.
  *
- * Passed to createClient() via ClientConfig to enable automatic header propagation.
- * Combines a ContextReader (how to read header values) with a header set
- * (which headers to propagate).
+ * Passed to createApiClient() via ClientConfig.contextMgr to enable automatic
+ * header propagation: every header in the registry with isWantTransferred=true
+ * is read from the ContextReader and added to outbound requests.
+ *
+ * BREAKING (migration from the PlatformHeader[] constructor):
+ *   new ContextMgr(reader, headerArray)
+ * becomes
+ *   new ContextMgr(reader, new HeaderRegistry([new PlatformHeadersExtension(headerArray)]))
  *
  * Example usage:
  * ```typescript
- * // Node.js server-side (reads from RequestContext)
- * const contextMgr = new ContextMgr(
- *     new RequestContextReader(),
- *     [...WebpiecesCoreHeaders.getAllHeaders(), ...CompanyHeaders.getAllHeaders()]
- * );
+ * // Node.js server-side (reads the magic context from RequestContext):
+ * const contextMgr = new ContextMgr(new RequestContextReader(), registry);
  *
- * // Browser client-side (reads from static map)
- * const headers = new Map([['Authorization', getToken()]]);
- * const contextMgr = new ContextMgr(
- *     new StaticContextReader(headers),
- *     [WebpiecesCoreHeaders.REQUEST_ID]
- * );
+ * // Browser client-side (app-managed store, no AsyncLocalStorage):
+ * const store = new MutableContextStore();
+ * const contextMgr = new ContextMgr(store, registry);
  *
- * // Both cases
+ * // Both cases:
  * const config = new ClientConfig('http://api.example.com', contextMgr);
- * const client = createClient(SaveApi, config);
+ * const client = createApiClient(SaveApi, config);
  * ```
  */
 export class ContextMgr {
+    private chainProcessor: RequestIdChainProcessor;
+
     constructor(
         /**
          * The context reader that provides header values.
@@ -36,48 +38,50 @@ export class ContextMgr {
         public readonly contextReader: ContextReader,
 
         /**
-         * The set of platform headers to read and propagate.
-         * Only headers in this set will be added to requests.
+         * The single source of truth for which headers exist and how they behave
+         * (transferred/secured/MDC). Shared with the server-side filters.
          */
-        public readonly headerSet: PlatformHeader[]
-    ) {}
+        public readonly registry: HeaderRegistry,
+
+        /**
+         * When true (default), outbound calls send the current x-request-id as
+         * x-previous-request-id (and drop x-request-id) so each hop in a
+         * distributed trace gets its own id chained to its caller's.
+         */
+        public readonly chainRequestIds: boolean = true,
+    ) {
+        this.chainProcessor = new RequestIdChainProcessor();
+    }
 
     /**
-     * Read a single header value by header name.
+     * Build the headers to send on an outbound request: every transferred
+     * header (isWantTransferred=true) with a non-empty value in the context,
+     * then request-id chaining applied (unless opted out).
      *
-     * Returns undefined if:
-     * - Header name not found in headerSet
-     * - Header has isWantTransferred=false
-     * - contextReader returns undefined/null/empty string
-     *
-     * This method is called by ClientFactory for each header in the headerSet,
-     * allowing a single loop instead of the previous double-loop pattern.
-     *
-     * @param headerName - The HTTP header name (e.g., 'x-request-id')
-     * @returns The header value, or undefined if not available/transferable
+     * Values are RAW (unmasked) - this map goes on the wire, not in logs.
      */
-    read(headerName: string): string | undefined {
-        // Find the header definition in our set
-        const header = this.headerSet.find(h => h.headerName === headerName);
+    buildOutboundHeaders(): Map<string, string> {
+        const outbound = new Map<string, string>();
 
-        // Not in our header set - don't transfer
-        if (!header) {
-            return undefined;
+        for (const header of this.registry.getTransferredHeaders()) {
+            const value = this.contextReader.read(header);
+            if (value !== undefined && value !== null && value !== '') {
+                outbound.set(header.headerName, value);
+            }
         }
 
-        // Header not marked for transfer - don't transfer
-        if (!header.isWantTransferred) {
-            return undefined;
+        if (this.chainRequestIds) {
+            this.chainProcessor.process(outbound);
         }
 
-        // Read value from context reader
-        const value = this.contextReader.read(header);
+        return outbound;
+    }
 
-        // Only return non-empty values
-        if (value !== undefined && value !== null && value !== '') {
-            return value;
-        }
-
-        return undefined;
+    /**
+     * Build the header map for LOGGING: secured header values are masked,
+     * and headers are keyed by loggerMdcKey when defined.
+     */
+    buildHeadersForLogging(headerMethods: HeaderMethods): Map<string, string> {
+        return headerMethods.buildSecureMapForLogs(this.registry.getHeaders(), this.contextReader);
     }
 }

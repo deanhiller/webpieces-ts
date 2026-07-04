@@ -13,7 +13,7 @@ if [ ! -f "$PID_FILE" ]; then
     echo "Checking for any running server processes..."
 
     # Try to find and kill any running server processes
-    pkill -f "node -r reflect-metadata dist/apps/example-app/src/server.js"
+    pkill -f "node -r reflect-metadata dist/apps/app-example/client-server/src/server.js"
 
     if [ $? -eq 0 ]; then
         echo "✅ Killed running server process(es)"

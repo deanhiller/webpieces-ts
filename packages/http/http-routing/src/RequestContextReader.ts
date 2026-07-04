@@ -1,4 +1,5 @@
 import { PlatformHeader, ContextReader } from '@webpieces/http-api';
+import { ContextKey } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
 /**
@@ -23,5 +24,15 @@ export class RequestContextReader implements ContextReader {
     read(header: PlatformHeader): string | undefined {
         // Use RequestContext.getHeader() which calls header.getHeaderName()
         return RequestContext.getHeader(header);
+    }
+
+    /**
+     * Read a non-header context value (e.g. the active TestCaseRecorder under
+     * RecorderKeys.RECORDER). Lets the isomorphic http-client find server-side
+     * context without importing core-context itself.
+     */
+    // webpieces-disable no-any-unknown -- context values are heterogeneous (recorder, meta objects)
+    readValue(key: ContextKey): unknown {
+        return RequestContext.getHeader(key);
     }
 }

@@ -59,7 +59,7 @@ mkdir -p tmp
 
 # Run the production build (with reflect-metadata loaded first)
 echo "Starting server..."
-NODE_ENV=development node -r reflect-metadata dist/apps/example-app/src/server.js > $LOG_FILE 2>&1 &
+NODE_ENV=development node -r reflect-metadata dist/apps/app-example/client-server/src/server.js > $LOG_FILE 2>&1 &
 SERVER_PID=$!
 
 # Save PID

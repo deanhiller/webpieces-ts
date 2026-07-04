@@ -1,40 +1,79 @@
 {
     "services": {
-        "example-client": {
-            "level": 1,
+        "angular-site": {
+            "level": 2,
             "implements": [],
             "uses": [
-                "example-apis"
+                "client-server-api"
             ],
             "dependsOn": [
-                "example-server"
+                "client-server"
             ]
         },
-        "example-server": {
+        "app-example-e2e": {
+            "level": 0,
+            "implements": [],
+            "uses": [],
+            "dependsOn": []
+        },
+        "client-server": {
+            "level": 1,
+            "implements": [
+                "client-server-api"
+            ],
+            "uses": [
+                "server2-api"
+            ],
+            "dependsOn": [
+                "server2"
+            ]
+        },
+        "company-core": {
+            "level": 0,
+            "implements": [],
+            "uses": [],
+            "dependsOn": []
+        },
+        "server2": {
             "level": 0,
             "implements": [
-                "example-apis"
+                "server2-api"
             ],
             "uses": [],
             "dependsOn": []
         }
     },
     "apis": {
-        "example-apis": {
+        "client-server-api": {
             "implementedBy": [
-                "example-server"
+                "client-server"
             ],
             "usedBy": [
-                "example-client"
+                "angular-site"
+            ]
+        },
+        "server2-api": {
+            "implementedBy": [
+                "server2"
+            ],
+            "usedBy": [
+                "client-server"
             ]
         }
     },
     "runtimeEdges": [
         {
-            "from": "example-client",
-            "to": "example-server",
+            "from": "angular-site",
+            "to": "client-server",
             "via": [
-                "example-apis"
+                "client-server-api"
+            ]
+        },
+        {
+            "from": "client-server",
+            "to": "server2",
+            "via": [
+                "server2-api"
             ]
         }
     ],

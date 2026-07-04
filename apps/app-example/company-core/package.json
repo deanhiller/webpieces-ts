@@ -1,0 +1,11 @@
+{
+    "name": "@webpieces/company-core",
+    "version": "0.0.0-dev",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "dependencies": {
+        "@webpieces/http-api": "workspace:*"
+    },
+    "description": "Company-wide shared core (platform headers) - brought in by ALL projects; apis do NOT know about it"
+}

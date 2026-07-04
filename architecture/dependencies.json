@@ -5,10 +5,48 @@
             "rules-config"
         ]
     },
+    "angular-site": {
+        "level": 3,
+        "dependsOn": [
+            "client-server-api",
+            "company-core",
+            "http-client"
+        ]
+    },
+    "app-example-e2e": {
+        "level": 6,
+        "dependsOn": [
+            "client-server",
+            "server2"
+        ]
+    },
+    "client-server": {
+        "level": 5,
+        "dependsOn": [
+            "client-server-api",
+            "company-core",
+            "core-mock",
+            "http-client",
+            "http-server",
+            "server2-api"
+        ]
+    },
+    "client-server-api": {
+        "level": 2,
+        "dependsOn": [
+            "http-api"
+        ]
+    },
     "code-rules": {
         "level": 1,
         "dependsOn": [
             "rules-config"
+        ]
+    },
+    "company-core": {
+        "level": 2,
+        "dependsOn": [
+            "http-api"
         ]
     },
     "core-context": {
@@ -16,6 +54,10 @@
         "dependsOn": [
             "core-util"
         ]
+    },
+    "core-mock": {
+        "level": 0,
+        "dependsOn": []
     },
     "core-util": {
         "level": 0,
@@ -25,26 +67,6 @@
         "level": 1,
         "dependsOn": [
             "rules-config"
-        ]
-    },
-    "example-apis": {
-        "level": 2,
-        "dependsOn": [
-            "http-api"
-        ]
-    },
-    "example-client": {
-        "level": 3,
-        "dependsOn": [
-            "example-apis",
-            "http-client"
-        ]
-    },
-    "example-server": {
-        "level": 5,
-        "dependsOn": [
-            "example-apis",
-            "http-server"
         ]
     },
     "http-api": {
@@ -96,5 +118,19 @@
     "rules-config": {
         "level": 0,
         "dependsOn": []
+    },
+    "server2": {
+        "level": 5,
+        "dependsOn": [
+            "company-core",
+            "http-server",
+            "server2-api"
+        ]
+    },
+    "server2-api": {
+        "level": 2,
+        "dependsOn": [
+            "http-api"
+        ]
     }
 }

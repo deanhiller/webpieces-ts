@@ -1,29 +1,6 @@
 import { PlatformHeader } from './PlatformHeader';
-
-/**
- * ContextReader - Interface for reading header values from context.
- *
- * Different implementations for different environments:
- * - RequestContextReader: Node.js with AsyncLocalStorage (in @webpieces/http-routing, server-side only)
- * - StaticContextReader: Browser or testing with manual header management (in @webpieces/http-client)
- * - CompositeContextReader: Combines multiple readers with priority (in @webpieces/http-client)
- *
- * This interface is defined in @webpieces/http-api so both http-routing and http-client
- * can use it without creating circular dependencies.
- *
- * This interface is DI-independent so it works in both server (Inversify)
- * and client (Angular, browser) environments.
- */
-export interface ContextReader {
-    /**
-     * Read the value of a platform header.
-     * Returns undefined if header not available.
-     *
-     * @param header - The platform header to read
-     * @returns The header value, or undefined if not present
-     */
-    read(header: PlatformHeader): string | undefined;
-}
+// Single source of truth for the ContextReader interface (was duplicated here)
+import { ContextReader } from './ContextReader';
 
 /**
  * HeaderMethods - Utility class for working with platform headers.
@@ -86,10 +63,12 @@ export class HeaderMethods {
         for (const header of platformHeaders) {
             const value = contextReader.read(header);
             if(value) {
+                // MDC-style key when defined (Java getLoggerMDCKey), else the raw header name
+                const logKey = header.loggerMdcKey ?? header.headerName;
                 if(!header.isSecured)
-                    headers.set(header.headerName, value);
+                    headers.set(logKey, value);
                 else
-                    headers.set(header.headerName, this.maskSecureValue(value));
+                    headers.set(logKey, this.maskSecureValue(value));
             }
         }
 

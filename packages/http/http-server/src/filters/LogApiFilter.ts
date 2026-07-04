@@ -1,11 +1,10 @@
-import {inject, injectable, multiInject, optional} from 'inversify';
+import {inject, injectable} from 'inversify';
 import {provideSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import {
     PlatformHeader,
-    PlatformHeadersExtension,
     HeaderMethods,
-    HEADER_TYPES,
+    HeaderRegistry,
     LogApiCall,
 } from '@webpieces/http-api';
 
@@ -32,19 +31,16 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private allHeaders: PlatformHeader[];
 
     constructor(
-        @multiInject(HEADER_TYPES.PlatformHeadersExtension) @optional()
-        extensions: PlatformHeadersExtension[] = [],
+        @inject(HeaderRegistry) registry: HeaderRegistry,
         @inject(HeaderMethods) private headerMethods: HeaderMethods
     ) {
         super();
 
-        // Flatten all headers from all extensions
-        this.allHeaders = [];
-        for (const extension of extensions) {
-            this.allHeaders.push(...extension.getHeaders());
-        }
+        // The registry is the single source of truth (all modules' extensions,
+        // duplicate-validated at startup). Log map keys use loggerMdcKey when set.
+        this.allHeaders = registry.getHeaders();
 
-        console.log(`[LogApiFilter] Collected ${this.allHeaders.length} platform headers from ${extensions.length} extensions`);
+        console.log(`[LogApiFilter] Using ${this.allHeaders.length} platform headers from HeaderRegistry`);
 
         this.logApiCall = new LogApiCall();
     }

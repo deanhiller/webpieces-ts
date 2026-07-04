@@ -1,5 +1,5 @@
-import { ContainerModule } from 'inversify';
-import { HEADER_TYPES, PlatformHeadersExtension, HeaderMethods } from '@webpieces/http-api';
+import { ContainerModule, ResolutionContext } from 'inversify';
+import { HEADER_TYPES, PlatformHeadersExtension, HeaderMethods, HeaderRegistry } from '@webpieces/http-api';
 import { WebpiecesCoreHeaders } from '../headers/WebpiecesCoreHeaders';
 
 /**
@@ -32,6 +32,16 @@ export const WebpiecesModule = new ContainerModule((options) => {
     // Bind extension for multiInject collection
     // WebpiecesMiddleware will collect all PlatformHeadersExtension bindings via @multiInject
     bind<PlatformHeadersExtension>(HEADER_TYPES.PlatformHeadersExtension).toConstantValue(coreExtension);
+
+    // HeaderRegistry: the single source of truth for all platform headers.
+    // Collects EVERY module's PlatformHeadersExtension at first resolution and
+    // fail-fast validates duplicates/conflicts (port of Java HeaderTranslation).
+    bind<HeaderRegistry>(HeaderRegistry)
+        .toDynamicValue((ctx: ResolutionContext) => {
+            const extensions = ctx.getAll<PlatformHeadersExtension>(HEADER_TYPES.PlatformHeadersExtension);
+            return new HeaderRegistry(extensions);
+        })
+        .inSingletonScope();
 
     console.log(`[WebpiecesModule] Registered core platform headers extension with ${coreExtension.headers.length} headers`);
 });

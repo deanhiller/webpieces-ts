@@ -3,9 +3,10 @@ import { Header } from '@webpieces/core-util';
 /**
  * PlatformHeader - Defines an HTTP header that can be transferred between services.
  *
- * Simplified from Java PlatformHeaders:
- * - Single headerName field (used for both HTTP header and MDC logging key)
- * - No separate getLoggerMDCKey() - just use headerName
+ * Port of Java PlatformHeaders, simplified:
+ * - No isWantLogged flag (deprecated in Java) - "wants MDC logging" is expressed
+ *   by setting loggerMdcKey. Headers without one still appear in API logs
+ *   (masked when isSecured); they just aren't exposed as an MDC dimension key.
  *
  * Implements Header interface from core-util to avoid circular dependencies.
  *
@@ -39,16 +40,26 @@ export class PlatformHeader implements Header {
      */
     readonly isDimensionForMetrics: boolean;
 
+    /**
+     * Key used when exposing this header to the logger's MDC / structured log
+     * dimensions. Port of Java getLoggerMDCKey(). When set, log maps key this
+     * header by it instead of headerName (e.g. 'requestId' vs 'x-request-id').
+     * Undefined = not an MDC dimension (Java: getLoggerMDCKey() == null).
+     */
+    readonly loggerMdcKey?: string;
+
     constructor(
         headerName: string,
         isWantTransferred: boolean = true,
         isSecured: boolean = false,
-        isDimensionForMetrics: boolean = false
+        isDimensionForMetrics: boolean = false,
+        loggerMdcKey?: string
     ) {
         this.headerName = headerName;
         this.isWantTransferred = isWantTransferred;
         this.isSecured = isSecured;
         this.isDimensionForMetrics = isDimensionForMetrics;
+        this.loggerMdcKey = loggerMdcKey;
     }
 
     /**

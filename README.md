@@ -253,7 +253,7 @@ This:
 
 ## Example Application
 
-The `apps/example-app` demonstrates a complete microservice:
+The `apps/app-example/client-server` demonstrates a complete microservice:
 
 - **SaveApi** - Search API interface
 - **SaveController** - Controller implementation

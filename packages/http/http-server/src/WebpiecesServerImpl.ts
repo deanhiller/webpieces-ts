@@ -2,21 +2,15 @@ import express, {Express} from 'express';
 import {Container, ContainerModule, inject, injectable} from 'inversify';
 import {buildProviderModule} from '@inversifyjs/binding-decorators';
 import {
-    ExpressRouteHandler,
-    getApiPath,
-    getAuthMeta,
-    getEndpoints,
-    MethodMeta,
     provideSingleton,
-    RouteBuilderImpl, RouteMetadata,
+    RouteBuilderImpl,
     WebAppMeta,
     WEBAPP_META_TOKEN,
-    WebpiecesConfig,
 } from '@webpieces/http-routing';
 import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
-import {RequestContext} from '@webpieces/core-context';
-import {Service, WpResponse} from "@webpieces/http-filters";
+import {WebpiecesRouteCreator} from './WebpiecesRouteCreator';
+import {InProcessApiClientFactory} from './InProcessApiClientFactory';
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -181,8 +175,15 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         // Layer 3: Request/Response Logging
         this.app.use(this.middleware.logNextLayer.bind(this.middleware));
 
-        // Register routes
-        const routeCount = this.registerExpressRoutes();
+        // Register routes via the shared adapter (same code path as the
+        // embeddable WebpiecesRouteCreator used by legacy Express apps)
+        const routeCreator = new WebpiecesRouteCreator(
+            this.app,
+            this.appContainer,
+            this.routeBuilder,
+            this.middleware,
+        );
+        const routeCount = routeCreator.mountRegisteredRoutes();
 
         // Start listening - wrap in Promise
         const promise = new Promise<void>((resolve, reject) => {
@@ -199,64 +200,6 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         });
 
         await promise;
-    }
-
-    /**
-     * Register Express routes - the SINGLE loop over routes.
-     * For each route: createHandler (sets up filter chain) → wrapExpress → registerHandler.
-     *
-     * @returns Number of routes registered
-     */
-    private registerExpressRoutes(): number {
-        if (!this.app) {
-            throw new Error('Express app not initialized');
-        }
-
-        const routes = this.routeBuilder.getRoutes();
-        let count = 0;
-
-        for (const routeWithMeta of routes) {
-            const service = this.routeBuilder.createRouteHandler(routeWithMeta);
-            const routeMeta = routeWithMeta.definition.routeMeta;
-
-            // Create ExpressWrapper directly (handles full request/response cycle)
-            const wrapper = this.middleware.createExpressWrapper(service, routeMeta);
-
-            this.registerHandler(
-                routeMeta.httpMethod,
-                routeMeta.path,
-                wrapper.execute.bind(wrapper),
-            );
-            count++;
-        }
-
-        return count;
-    }
-
-    registerHandler(httpMethod: string, path: string, expressHandler: ExpressRouteHandler) {
-        if (!this.app) {
-            throw new Error('Express app not initialized');
-        }
-
-        switch (httpMethod.toLowerCase()) {
-            case 'get':
-                this.app.get(path, expressHandler);
-                break;
-            case 'post':
-                this.app.post(path, expressHandler);
-                break;
-            case 'put':
-                this.app.put(path, expressHandler);
-                break;
-            case 'delete':
-                this.app.delete(path, expressHandler);
-                break;
-            case 'patch':
-                this.app.patch(path, expressHandler);
-                break;
-            default:
-                console.warn(`[WebpiecesServer] Unknown HTTP method: ${httpMethod}`);
-        }
     }
 
     /**
@@ -317,53 +260,18 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      * const response = await saveApi.save(request);
      * ```
      */
+    // webpieces-disable no-any-unknown -- abstract constructor signature requires any[] args
     createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T {
         if (!this.initialized) {
             throw new Error('Server not initialized. Call initialize() before createApiClient().');
         }
 
-        // Get endpoints from the API prototype using @ApiPath/@Endpoint decorators
-        const basePath = getApiPath(apiPrototype) || '';
-        const endpoints = getEndpoints(apiPrototype) || {};
-
-        // Create proxy object
-        const proxy: Record<string, unknown> = {};
-
-        // Loop over API endpoints and create proxy functions
-        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
-            const httpMethod = 'POST';
-            const path = basePath + endpointPath;
-
-            const authMeta = getAuthMeta(apiPrototype, methodName);
-            const routeMeta = new RouteMetadata(httpMethod, path, methodName, apiPrototype.name, authMeta);
-
-            // Create invoker service ONCE (sets up filter chain once, not on every call!)
-            const service = this.routeBuilder.createRouteInvoker(httpMethod, path);
-
-            // Proxy method creates MethodMeta and calls the pre-configured service
-            // IMPORTANT: Tests MUST wrap calls in RequestContext.run() themselves
-            // This forces explicit context setup in tests, matching production behavior
-            proxy[methodName] = async (requestDto: unknown): Promise<unknown> => {
-                // Verify we're inside an active RequestContext
-                // This helps test authors know they need to wrap their test in RequestContext.run()
-                if (!RequestContext.isActive()) {
-                    //Many devs may not activate headers
-                    return RequestContext.run(async () => {
-                        return await this.runMethod(routeMeta, requestDto, service);
-                    });
-                }
-                return await this.runMethod(routeMeta, requestDto, service);
-            };
+        // Delegates to the shared factory (same code path as WebpiecesRouteCreator.createApiClient)
+        if (!this.clientFactory) {
+            this.clientFactory = new InProcessApiClientFactory(this.routeBuilder);
         }
-
-        return proxy as T;
+        return this.clientFactory.createApiClient(apiPrototype);
     }
 
-    private async runMethod(routeMeta: RouteMetadata, requestDto: unknown, service: Service<MethodMeta, WpResponse<unknown>>) {
-        // Create MethodMeta without headers (test mode - no HTTP involved)
-        // requestHeaders is optional, so we can omit it
-        const meta = new MethodMeta(routeMeta, undefined, requestDto);
-        const responseWrapper = await service.invoke(meta);
-        return responseWrapper.response;
-    }
+    private clientFactory?: InProcessApiClientFactory;
 }

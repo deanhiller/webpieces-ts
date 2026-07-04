@@ -55,7 +55,7 @@ case "$SERVICE" in
 
         # Build the server
         echo "Building server..."
-        pnpm nx build example-server
+        pnpm nx build client-server
 
         if [ $? -ne 0 ]; then
             echo "❌ Build failed"
@@ -75,7 +75,7 @@ case "$SERVICE" in
         ln -sf "$(pwd)/dist/packages/http/http-routing" node_modules/@webpieces/http-routing
         ln -sf "$(pwd)/dist/packages/http/http-filters" node_modules/@webpieces/http-filters
         ln -sf "$(pwd)/dist/packages/http/http-server" node_modules/@webpieces/http-server
-        ln -sf "$(pwd)/dist/libraries/apis/example-apis" node_modules/@webpieces/example-apis
+        ln -sf "$(pwd)/dist/apps/app-example/client-server-api" node_modules/@webpieces/client-server-api
 
         echo "✅ Symlinks created successfully"
 
@@ -84,7 +84,7 @@ case "$SERVICE" in
 
         # Run the server with PORT env var
         echo "Starting server..."
-        PORT=${SERVER_PORT} NODE_ENV=development node -r reflect-metadata dist/apps/example-server/src/server.js > $LOG_FILE 2>&1 &
+        PORT=${SERVER_PORT} NODE_ENV=development node -r reflect-metadata dist/apps/app-example/client-server/src/server.js > $LOG_FILE 2>&1 &
         SERVER_PID=$!
 
         # Save PID
@@ -145,7 +145,7 @@ case "$SERVICE" in
 
         # Start Angular dev server
         echo "Starting Angular dev server..."
-        pnpm nx serve example-client --port=${CLIENT_PORT} > $LOG_FILE 2>&1 &
+        pnpm nx serve angular-site --port=${CLIENT_PORT} > $LOG_FILE 2>&1 &
         CLIENT_PID=$!
 
         # Save PID
@@ -185,7 +185,7 @@ case "$SERVICE" in
 
         if [ ! -f "$PID_FILE" ]; then
             echo "⚠️  No PID file found. Server may not be running."
-            pkill -f "node -r reflect-metadata dist/apps/example-server/src/server.js"
+            pkill -f "node -r reflect-metadata dist/apps/app-example/client-server/src/server.js"
             exit 0
         fi
 
@@ -221,7 +221,7 @@ case "$SERVICE" in
 
         if [ ! -f "$PID_FILE" ]; then
             echo "⚠️  No PID file found. Client may not be running."
-            pkill -f "nx serve example-client"
+            pkill -f "nx serve angular-site"
             exit 0
         fi
 
