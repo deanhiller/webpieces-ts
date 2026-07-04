@@ -4,6 +4,12 @@
  * Data classes for the per-project Inversify dependency DAG that is generated
  * into <projectRoot>/design.json and <projectRoot>/design.md on every build.
  *
+ * A project's design.json is a container (`DiGraph`) holding an ARRAY of
+ * per-root designs (`DiDesign`) — one self-contained downward tree per
+ * @Controller class (or, for controller-less library projects, per top-of-DAG
+ * class). Each node in a design carries its `level` = BFS depth from that
+ * design's root (root = level 0, its direct injections = level 1, and so on).
+ *
  * All structures are classes (not interfaces) per the repo convention for
  * data-only structures.
  */
@@ -28,13 +34,16 @@ export class DiNode {
     kind: DiNodeKind;
     scope: DiScope;
     file: string;
+    /** BFS depth from the design's root (root = 0). Filled in after the walk. */
+    level: number;
 
-    constructor(id: string, className: string, kind: DiNodeKind, scope: DiScope, file: string) {
+    constructor(id: string, className: string, kind: DiNodeKind, scope: DiScope, file: string, level = 0) {
         this.id = id;
         this.className = className;
         this.kind = kind;
         this.scope = scope;
         this.file = file;
+        this.level = level;
     }
 }
 
@@ -70,23 +79,47 @@ export class DiEdge {
 }
 
 /**
- * The full per-project DI graph, serialized to design.json.
+ * One self-contained DI design tree: a single root (a @Controller, or a
+ * library top-of-DAG class) and everything it injects "on down". Shared
+ * dependencies are duplicated across designs — each design is its own tree so
+ * it can be reviewed in isolation.
  */
-export class DiGraph {
-    schemaVersion: number;
-    project: string;
-    roots: string[];
+export class DiDesign {
+    /** Node id of this design's root (level 0). */
+    root: string;
+    rootKind: DiNodeKind;
+    /** Workspace-relative posix path of the root class's file. */
+    file: string;
+    /** Deepest level reached from the root (0 when the root has no injections). */
+    maxLevel: number;
     nodes: DiNode[];
     edges: DiEdge[];
     unresolved: string[];
 
-    constructor(project: string) {
-        this.schemaVersion = 1;
-        this.project = project;
-        this.roots = [];
+    constructor(root: string, rootKind: DiNodeKind, file: string) {
+        this.root = root;
+        this.rootKind = rootKind;
+        this.file = file;
+        this.maxLevel = 0;
         this.nodes = [];
         this.edges = [];
         this.unresolved = [];
+    }
+}
+
+/**
+ * The full per-project DI graph, serialized to design.json — a container over
+ * one `DiDesign` per root (controller or library top-of-DAG class).
+ */
+export class DiGraph {
+    schemaVersion: number;
+    project: string;
+    designs: DiDesign[];
+
+    constructor(project: string) {
+        this.schemaVersion = 2;
+        this.project = project;
+        this.designs = [];
     }
 }
 

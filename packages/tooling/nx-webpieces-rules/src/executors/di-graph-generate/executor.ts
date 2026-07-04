@@ -25,7 +25,7 @@ import { buildDiGraph } from '../../lib/di-graph/analyzer';
 import { createProjectProgram } from '../../lib/di-graph/program';
 import { toDesignJson } from '../../lib/di-graph/serializer';
 import { toDesignMarkdown } from '../../lib/di-graph/mermaid';
-import { DiGraph } from '../../lib/di-graph/model';
+import { DiDesign, DiGraph } from '../../lib/di-graph/model';
 import { toError } from '../../toError';
 
 export interface DiGraphGenerateOptions {
@@ -105,12 +105,15 @@ export default async function runExecutor(
         const graph = buildDiGraph(program, context.root, projectRoot, projectName);
         writeDesignFiles(projectRootAbs, graph);
 
+        const nodeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.nodes.length, 0);
+        const edgeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.edges.length, 0);
         console.log(
             `✅ Wrote ${projectRoot}/design.json + design.md ` +
-                `(${graph.roots.length} root(s), ${graph.nodes.length} node(s), ${graph.edges.length} edge(s))`,
+                `(${graph.designs.length} design(s), ${nodeCount} node(s), ${edgeCount} edge(s))`,
         );
-        if (graph.unresolved.length > 0) {
-            console.warn(`⚠️  ${graph.unresolved.length} unresolved token(s)/type(s): ${graph.unresolved.join(', ')}`);
+        const unresolved = [...new Set(graph.designs.flatMap((d: DiDesign) => d.unresolved))];
+        if (unresolved.length > 0) {
+            console.warn(`⚠️  ${unresolved.length} unresolved token(s)/type(s): ${unresolved.join(', ')}`);
         }
         return { success: true };
     } catch (err: unknown) {
