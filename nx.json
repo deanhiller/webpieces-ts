@@ -19,6 +19,7 @@
                 "architecture:validate-complete",
                 "validate-no-file-import-cycles",
                 "validate-runtime-markers",
+                "validate-di-graph-unchanged",
                 "^build"
             ],
             "inputs": ["default", "^default"]
@@ -48,6 +49,7 @@
                 "architecture:validate-complete",
                 "validate-no-file-import-cycles",
                 "validate-runtime-markers",
+                "validate-di-graph-unchanged",
                 "^build"
             ]
         }

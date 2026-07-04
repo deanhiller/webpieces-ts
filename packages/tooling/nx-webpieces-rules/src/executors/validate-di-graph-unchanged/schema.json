@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate DI Graph Unchanged Executor",
+    "description": "Fails when the regenerated design.json/design.md differ from the committed copies (runs after di-graph-generate). On/off and grace window come from webpieces.config.json (rule: di-graph).",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

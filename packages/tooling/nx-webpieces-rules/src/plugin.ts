@@ -30,6 +30,10 @@ import {
     createValidateRuntimeArchitectureTarget,
     createValidateRuntimeMarkersTarget,
 } from './runtime-targets';
+import {
+    createDiGraphGenerateTarget,
+    createValidateDiGraphUnchangedTarget,
+} from './di-graph-targets';
 
 /**
  * Circular dependency checking options
@@ -55,6 +59,7 @@ export interface ValidationOptions {
     validateTsInSrc?: boolean;
     validateNxWiring?: boolean;
     runtimeArchitecture?: boolean;
+    diGraph?: boolean;
     newMethodsMaxLines?: number;
     modifiedAndNewMethodsMaxLines?: number;
     modifiedFilesMaxLines?: number;
@@ -120,6 +125,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validateTsInSrc: true,
             validateNxWiring: true,
             runtimeArchitecture: true,
+            diGraph: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
             modifiedFilesMaxLines: 900,
@@ -259,25 +265,7 @@ function addPerProjectTargets(
 
         processedRoots.add(projectRoot);
 
-        const targets: Record<string, TargetConfiguration> = {};
-
-        // Add circular-deps target ONLY for project.json projects
-        // (package.json-only projects may not have TypeScript source)
-        if (isProjectJson && opts.circularDeps.enabled) {
-            if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
-                const targetName = opts.circularDeps.targetName!;
-                targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
-            }
-        }
-
-        // Add per-project runtime-marker validation (validates this project's
-        // service-contract.json against its own api-project deps, independently).
-        if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
-            targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
-        }
-
-        // Add ci target to ALL projects (both project.json and package.json)
-        targets['ci'] = createCiTarget();
+        const targets = buildPerProjectTargets(isProjectJson, projectRoot, opts);
 
         if (Object.keys(targets).length === 0) continue;
 
@@ -291,6 +279,44 @@ function addPerProjectTargets(
 
         results.push([projectFile, result] as const);
     }
+}
+
+/**
+ * Build the target map for one project. Most targets are project.json-only
+ * (package.json-only projects may not have TypeScript source); `ci` goes on all.
+ */
+function buildPerProjectTargets(
+    isProjectJson: boolean,
+    projectRoot: string,
+    opts: Required<ArchitecturePluginOptions>,
+): Record<string, TargetConfiguration> {
+    const targets: Record<string, TargetConfiguration> = {};
+
+    // Add circular-deps target ONLY for project.json projects
+    if (isProjectJson && opts.circularDeps.enabled) {
+        if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
+            const targetName = opts.circularDeps.targetName!;
+            targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
+        }
+    }
+
+    // Add per-project runtime-marker validation (validates this project's
+    // service-contract.json against its own api-project deps, independently).
+    if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
+        targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
+    }
+
+    // Per-project DI design DAG: regenerate design.json/design.md on every build,
+    // then gate the build on the committed copies being current.
+    if (isProjectJson && opts.workspace.validations!.diGraph) {
+        targets['di-graph-generate'] = createDiGraphGenerateTarget();
+        targets['validate-di-graph-unchanged'] = createValidateDiGraphUnchangedTarget();
+    }
+
+    // Add ci target to ALL projects (both project.json and package.json)
+    targets['ci'] = createCiTarget();
+
+    return targets;
 }
 
 /**

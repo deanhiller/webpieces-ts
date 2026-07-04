@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "DI Graph Generate Executor",
+    "description": "Generates the project's Inversify DI dependency DAG into design.json + design.md at the project root. On/off comes from webpieces.config.json (rule: di-graph).",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

@@ -70,6 +70,7 @@ export {
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
+    DiGraphConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
     BaseRuleConfig,

@@ -1,0 +1,59 @@
+{
+    "schemaVersion": 1,
+    "project": "client-server",
+    "roots": [
+        "PublicController",
+        "SaveController"
+    ],
+    "nodes": [
+        {
+            "id": "PublicController",
+            "className": "PublicController",
+            "kind": "controller",
+            "scope": "singleton",
+            "file": "apps/app-example/client-server/src/controllers/PublicController.ts"
+        },
+        {
+            "id": "SaveController",
+            "className": "SaveController",
+            "kind": "controller",
+            "scope": "singleton",
+            "file": "apps/app-example/client-server/src/controllers/SaveController.ts"
+        },
+        {
+            "id": "SimpleCounter",
+            "className": "SimpleCounter",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "apps/app-example/client-server/src/controllers/SaveController.ts"
+        },
+        {
+            "id": "TYPES.Server2Api (dynamic)",
+            "className": "TYPES.Server2Api (dynamic)",
+            "kind": "dynamic",
+            "scope": "singleton",
+            "file": "apps/app-example/client-server/src/modules/InversifyModule.ts"
+        }
+    ],
+    "edges": [
+        {
+            "from": "SaveController",
+            "to": "SimpleCounter",
+            "injection": "token",
+            "token": "TYPES.Counter",
+            "tokenKey": "symbol.for:Counter",
+            "paramName": "counter",
+            "paramType": "Counter"
+        },
+        {
+            "from": "SaveController",
+            "to": "TYPES.Server2Api (dynamic)",
+            "injection": "token",
+            "token": "TYPES.Server2Api",
+            "tokenKey": "symbol.for:Server2Api",
+            "paramName": "remoteService",
+            "paramType": "Server2Api"
+        }
+    ],
+    "unresolved": []
+}

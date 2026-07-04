@@ -46,6 +46,7 @@ export interface ExecutorResult {
 const DEFAULT_REQUIRED_DEPS: string[] = [
     'architecture:validate-complete',
     'validate-no-file-import-cycles',
+    'validate-di-graph-unchanged',
 ];
 
 // Per-project build targets must ALSO keep `^build` so build order follows nx's full graph.
