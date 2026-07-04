@@ -15,6 +15,7 @@ import {
     NoUnmanagedExceptionsConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    EnforceControllerNamingConfig,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { runValidators } from './rule-reporter';
@@ -31,6 +32,7 @@ import { CatchErrorPatternValidator } from './validate-catch-error-pattern';
 import { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptions';
 import { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 import { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
+import { EnforceControllerNamingValidator } from './validate-enforce-controller-naming';
 import { MatchRulesValidator } from './validate-match-rules';
 import { MatchRuleConfig } from '@webpieces/rules-config';
 
@@ -61,6 +63,7 @@ function buildValidators(
         new NoUnmanagedExceptionsValidator(config['no-unmanaged-exceptions'] ?? new NoUnmanagedExceptionsConfig()),
         new NoDirectApiResolverValidator(config['angular-no-direct-api-in-resolver'] ?? new AngularNoDirectApiInResolverConfig()),
         new NoSymbolDiTokensValidator(config['no-symbol-di-tokens'] ?? new NoSymbolDiTokensConfig()),
+        new EnforceControllerNamingValidator(config['enforce-controller-naming'] ?? new EnforceControllerNamingConfig()),
         // One validator per client-authored match-rules entry (each with its own name/mode/epoch).
         ...matchRules.map((mr: MatchRuleConfig) => new MatchRulesValidator(mr)),
     ];

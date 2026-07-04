@@ -13,6 +13,7 @@ import {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    EnforceControllerNamingConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
@@ -41,6 +42,7 @@ export class WebpiecesRulesConfig {
     'throw-cause-required'?: ThrowCauseRequiredConfig;
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
+    'enforce-controller-naming'?: EnforceControllerNamingConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
     'pr-creation-guard'?: PrCreationGuardConfig;
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;

@@ -1,5 +1,5 @@
 import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
-import { Counter, SimpleCounter } from '../controllers/SaveController';
+import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
 import { PlatformHeader, PlatformHeadersExtension, HEADER_TYPES, HeaderRegistry } from '@webpieces/http-api';
 import { RequestContextReader } from '@webpieces/http-routing';

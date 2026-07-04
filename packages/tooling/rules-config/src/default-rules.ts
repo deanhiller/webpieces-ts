@@ -27,6 +27,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'prisma-converter': {},
     'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
+    'enforce-controller-naming': { mode: 'NEW_AND_MODIFIED_FILES', allowedPaths: [] },
     'nx-wiring': { mode: 'RUN_EVERY_TIME' },
     'di-graph': { mode: 'RUN_EVERY_TIME' },
     'validate-ts-in-src': {

@@ -12,8 +12,8 @@ import {
 } from '@webpieces/http-server';
 import { Filter, Service, WpResponse } from '@webpieces/http-filters';
 import { SaveApi, SaveResponse, PublicApi, PublicInfoResponse } from '@webpieces/client-server-api';
-import { SaveController } from '../controllers/SaveController';
-import { PublicController } from '../controllers/PublicController';
+import { SaveController } from '../controllers/save-controller';
+import { PublicController } from '../controllers/public-controller';
 import { AuthFilter } from '../filters/AuthFilter';
 import { CompanyModule } from '../modules/CompanyModule';
 import { Server2Api } from '@webpieces/server2-api';

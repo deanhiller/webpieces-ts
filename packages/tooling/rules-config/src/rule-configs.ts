@@ -257,6 +257,24 @@ export class NoSymbolDiTokensConfig extends BaseRuleConfig {
     };
 }
 
+// enforce-controller-naming — a controller class (one decorated @Controller() OR whose heritage
+// ends in `*Api`) must be named `{Something}Controller` AND live in a lower-case kebab file
+// `{something}-controller.ts`. The kebab file name is the contract a separate controller-discovery
+// tool relies on (it globs `**/*-controller.ts`). `allowedPaths` exempts legit non-controller
+// `*Api` implementers (e.g. a `*Simulator` under `**/remote/**`).
+export class EnforceControllerNamingConfig extends BaseRuleConfig {
+    declare mode?: ModifiedCodeMode;
+    disableAllowed?: boolean;
+    allowedPaths?: string[];
+
+    static readonly SCHEMA: SchemaShape<EnforceControllerNamingConfig> = {
+        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        disableAllowed: FieldDef.optional('boolean'),
+        allowedPaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class BranchCreationGuardConfig extends BaseRuleConfig {
     declare mode?: BranchGuardMode;
     // Naming pattern for stacked SUB-branches only (branches created off another feature branch,

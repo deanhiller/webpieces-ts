@@ -8,6 +8,7 @@ import type { BindInWhenOnFluentSyntax, ServiceIdentifier } from 'inversify';
  */
 export const ROUTING_METADATA_KEYS = {
     CONTROLLER: 'webpieces:controller',
+    NOT_CONTROLLER: 'webpieces:not-controller',
     SOURCE_FILEPATH: 'webpieces:source-filepath',
 };
 
@@ -35,6 +36,35 @@ export function Controller(): ClassDecorator {
  */
 export function isController(controllerClass: any): boolean {
     return Reflect.getMetadata(ROUTING_METADATA_KEYS.CONTROLLER, controllerClass) === true;
+}
+
+/**
+ * @NotController decorator — explicitly marks a class that implements/extends an `*Api` contract
+ * as deliberately NOT a controller (e.g. a simulator, an in-process client, a test double).
+ *
+ * The `enforce-controller-naming` rule requires every class whose heritage ends in `*Api` to declare
+ * its intent: either `@Controller` (then it must be named `{Something}Controller` and live in a
+ * `{something}-controller.ts` file) OR `@NotController` (then it is exempt from those naming rules).
+ * This is a pure marker — it registers no route and only records intent for the lint rule.
+ *
+ * Usage:
+ * ```typescript
+ * @NotController()
+ * export class Server2Simulator extends Server2Api { ... }
+ * ```
+ */
+export function NotController(): ClassDecorator {
+    return (target: object) => {
+        Reflect.defineMetadata(ROUTING_METADATA_KEYS.NOT_CONTROLLER, true, target);
+    };
+}
+
+/**
+ * Helper function to check if a class is explicitly marked as NOT a controller.
+ * Server-side only.
+ */
+export function isNotController(controllerClass: object): boolean {
+    return Reflect.getMetadata(ROUTING_METADATA_KEYS.NOT_CONTROLLER, controllerClass) === true;
 }
 
 /**
