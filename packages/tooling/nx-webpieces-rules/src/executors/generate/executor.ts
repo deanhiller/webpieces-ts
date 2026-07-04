@@ -8,9 +8,11 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
+import { writeTemplate } from '@webpieces/rules-config';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
+import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { buildWorkspaceModel } from '../../lib/runtime-markers';
 import { assembleRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
@@ -64,12 +66,19 @@ export default async function runExecutor(
         console.log('🔄 Computing topological layers...');
         const enhancedGraph = sortGraphTopologically(reducedGraph);
 
-        // Step 3: Save the graph
+        // Step 3: Enrich with AI metadata (framework, shortDescription, file
+        // pointers). This VALIDATES (responsibilities.md required per project)
+        // and throws before any write, so a failure never clobbers the file.
+        console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
+        const projectInfos = await collectProjectInfo();
+        enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
+
+        // Step 4: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');
         saveGraph(enhancedGraph, workspaceRoot, graphPath);
         console.log('✅ Graph saved successfully');
 
-        // Step 4: Generate the runtime microservice graph at the same time
+        // Step 5: Generate the runtime microservice graph at the same time
         await generateRuntimeGraph(workspaceRoot);
 
         // Print summary
@@ -83,6 +92,11 @@ export default async function runExecutor(
     } catch (err: unknown) {
         const error = toError(err);
         console.error('❌ Graph generation failed:', error.message);
+        if (error instanceof MetadataValidationError) {
+            const mdPath = writeTemplate(workspaceRoot, 'webpieces.responsibilities.md');
+            console.error('');
+            console.error('⚠️  *** Refer to ' + mdPath + ' for how to author responsibilities.md files *** ⚠️');
+        }
         return { success: false };
     }
 }

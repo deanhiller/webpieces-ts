@@ -8,11 +8,21 @@
  */
 
 /**
- * Graph entry with level metadata
+ * Graph entry with level metadata plus AI-oriented metadata filled in by
+ * enrichGraph() (lib/graph-metadata.ts) before the graph is saved:
+ *  - framework: angular | react | express | all-ts | ... (nx tag or inferred)
+ *  - shortDescription: summary extracted from the project's responsibilities.md
+ *  - responsibilitiesFile: repo-relative path to the FULL responsibilities doc
+ *  - designFile: repo-relative path to the generated DI design.json (only for
+ *    project.json projects)
  */
 export interface GraphEntry {
     level: number;
     dependsOn: string[];
+    framework?: string;
+    shortDescription?: string;
+    responsibilitiesFile?: string;
+    designFile?: string;
 }
 
 /**

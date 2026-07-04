@@ -108,7 +108,15 @@ function loadBlessedGraph(workspaceRoot: string): EnhancedGraph | null {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const content = fs.readFileSync(graphPath, 'utf-8');
-        cachedGraph = JSON.parse(content) as EnhancedGraph;
+        const parsed = JSON.parse(content);
+        // Current format wraps the project map: { aiInstructions, projects: {...} }.
+        // Legacy format IS the flat project map. Accept both so lint keeps
+        // working mid-upgrade.
+        if (parsed !== null && typeof parsed === 'object' && 'projects' in parsed) {
+            cachedGraph = parsed.projects as EnhancedGraph;
+        } else {
+            cachedGraph = parsed as EnhancedGraph;
+        }
         cachedGraphPath = graphPath;
         return cachedGraph;
     } catch (err: unknown) {
