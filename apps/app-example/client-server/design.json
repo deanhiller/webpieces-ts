@@ -11,21 +11,21 @@
             "className": "PublicController",
             "kind": "controller",
             "scope": "singleton",
-            "file": "apps/app-example/client-server/src/controllers/PublicController.ts"
+            "file": "apps/app-example/client-server/src/controllers/public-controller.ts"
         },
         {
             "id": "SaveController",
             "className": "SaveController",
             "kind": "controller",
             "scope": "singleton",
-            "file": "apps/app-example/client-server/src/controllers/SaveController.ts"
+            "file": "apps/app-example/client-server/src/controllers/save-controller.ts"
         },
         {
             "id": "SimpleCounter",
             "className": "SimpleCounter",
             "kind": "class",
             "scope": "singleton",
-            "file": "apps/app-example/client-server/src/controllers/SaveController.ts"
+            "file": "apps/app-example/client-server/src/controllers/save-controller.ts"
         },
         {
             "id": "TYPES.Server2Api (dynamic)",
