@@ -30,6 +30,10 @@ import {
     createValidateRuntimeArchitectureTarget,
     createValidateRuntimeMarkersTarget,
 } from './runtime-targets';
+import {
+    createDiGraphGenerateTarget,
+    createValidateDiGraphUnchangedTarget,
+} from './di-graph-targets';
 
 /**
  * Circular dependency checking options
@@ -261,33 +265,7 @@ function addPerProjectTargets(
 
         processedRoots.add(projectRoot);
 
-        const targets: Record<string, TargetConfiguration> = {};
-
-        // Add circular-deps target ONLY for project.json projects
-        // (package.json-only projects may not have TypeScript source)
-        if (isProjectJson && opts.circularDeps.enabled) {
-            if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
-                const targetName = opts.circularDeps.targetName!;
-                targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
-            }
-        }
-
-        // Add per-project runtime-marker validation (validates this project's
-        // service-contract.json against its own api-project deps, independently).
-        if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
-            targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
-        }
-
-        // Per-project DI design DAG: regenerate design.json/design.md on every build,
-        // then gate the build on the committed copies being current. project.json
-        // projects only (package.json-only projects may have no TypeScript source).
-        if (isProjectJson && opts.workspace.validations!.diGraph) {
-            targets['di-graph-generate'] = createDiGraphGenerateTarget();
-            targets['validate-di-graph-unchanged'] = createValidateDiGraphUnchangedTarget();
-        }
-
-        // Add ci target to ALL projects (both project.json and package.json)
-        targets['ci'] = createCiTarget();
+        const targets = buildPerProjectTargets(isProjectJson, projectRoot, opts);
 
         if (Object.keys(targets).length === 0) continue;
 
@@ -301,6 +279,44 @@ function addPerProjectTargets(
 
         results.push([projectFile, result] as const);
     }
+}
+
+/**
+ * Build the target map for one project. Most targets are project.json-only
+ * (package.json-only projects may not have TypeScript source); `ci` goes on all.
+ */
+function buildPerProjectTargets(
+    isProjectJson: boolean,
+    projectRoot: string,
+    opts: Required<ArchitecturePluginOptions>,
+): Record<string, TargetConfiguration> {
+    const targets: Record<string, TargetConfiguration> = {};
+
+    // Add circular-deps target ONLY for project.json projects
+    if (isProjectJson && opts.circularDeps.enabled) {
+        if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
+            const targetName = opts.circularDeps.targetName!;
+            targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
+        }
+    }
+
+    // Add per-project runtime-marker validation (validates this project's
+    // service-contract.json against its own api-project deps, independently).
+    if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
+        targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
+    }
+
+    // Per-project DI design DAG: regenerate design.json/design.md on every build,
+    // then gate the build on the committed copies being current.
+    if (isProjectJson && opts.workspace.validations!.diGraph) {
+        targets['di-graph-generate'] = createDiGraphGenerateTarget();
+        targets['validate-di-graph-unchanged'] = createValidateDiGraphUnchangedTarget();
+    }
+
+    // Add ci target to ALL projects (both project.json and package.json)
+    targets['ci'] = createCiTarget();
+
+    return targets;
 }
 
 /**
@@ -652,39 +668,6 @@ function createCircularDepsTarget(_projectRoot: string, _targetName: string): Ta
         metadata: {
             technologies: ['madge'],
             description: 'Check for circular file-import dependencies using madge',
-        },
-    };
-}
-
-/**
- * Create per-project DI graph generation target. cache:false because the point
- * is to regenerate design.json/design.md on EVERY build so the committed DI
- * design DAG can never silently drift from the code.
- */
-function createDiGraphGenerateTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:di-graph-generate',
-        cache: false,
-        outputs: ['{projectRoot}/design.json', '{projectRoot}/design.md'],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Generate the Inversify DI dependency DAG into design.json + design.md',
-        },
-    };
-}
-
-/**
- * Create per-project DI graph staleness gate — regenerates first (dependsOn),
- * then fails if the regenerated files differ from the committed copies.
- */
-function createValidateDiGraphUnchangedTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-di-graph-unchanged',
-        cache: false, // Depends on git state
-        dependsOn: ['di-graph-generate'],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Validate the committed design.json/design.md match the regenerated DI graph',
         },
     };
 }
