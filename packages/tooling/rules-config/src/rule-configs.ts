@@ -375,6 +375,17 @@ export class NxWiringConfig extends BaseRuleConfig {
     };
 }
 
+export class DiGraphConfig extends BaseRuleConfig {
+    // Structural: the DI graph is regenerated whole-project on every build (generate +
+    // unchanged gate), so it cannot be scoped to changed lines.
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<DiGraphConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoJsFilesConfig extends BaseRuleConfig {
     // File-tier: NEW_AND_MODIFIED_FILES (active) intercepts a .js/.jsx Write — the file being
     // written is inherently a new/modified file, so it's already diff-scoped in practice.

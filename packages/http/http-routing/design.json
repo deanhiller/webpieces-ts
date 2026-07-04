@@ -1,0 +1,18 @@
+{
+    "schemaVersion": 1,
+    "project": "http-routing",
+    "roots": [
+        "RouteBuilderImpl"
+    ],
+    "nodes": [
+        {
+            "id": "RouteBuilderImpl",
+            "className": "RouteBuilderImpl",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-routing/src/RouteBuilderImpl.ts"
+        }
+    ],
+    "edges": [],
+    "unresolved": []
+}

@@ -27,6 +27,7 @@ import {
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
+    DiGraphConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
@@ -57,6 +58,7 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'no-file-import-cycles': NoFileImportCyclesConfig.SCHEMA,
     'runtime-architecture': RuntimeArchitectureConfig.SCHEMA,
     'nx-wiring': NxWiringConfig.SCHEMA,
+    'di-graph': DiGraphConfig.SCHEMA,
     'no-js-files': NoJsFilesConfig.SCHEMA,
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };

@@ -28,6 +28,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
     'nx-wiring': { mode: 'RUN_EVERY_TIME' },
+    'di-graph': { mode: 'RUN_EVERY_TIME' },
     'validate-ts-in-src': {
         mode: 'NEW_AND_MODIFIED_FILES',
         allowedRootFiles: ['jest.setup.ts'],

@@ -21,6 +21,7 @@ import {
     FeatureBranchGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
+    DiGraphConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
@@ -48,6 +49,7 @@ export class WebpiecesRulesConfig {
     'feature-branch-guard'?: FeatureBranchGuardConfig;
     'no-file-import-cycles'?: NoFileImportCyclesConfig;
     'runtime-architecture'?: RuntimeArchitectureConfig;
+    'di-graph'?: DiGraphConfig;
     'no-js-files'?: NoJsFilesConfig;
     'validate-ts-in-src'?: ValidateTsInSrcConfig;
     rulesDir?: string[];

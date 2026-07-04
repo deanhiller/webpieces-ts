@@ -1,0 +1,157 @@
+{
+    "schemaVersion": 1,
+    "project": "http-server",
+    "roots": [
+        "ContextFilter",
+        "LogApiFilter",
+        "RecordingFilter",
+        "WebpiecesServerImpl"
+    ],
+    "nodes": [
+        {
+            "id": "ContextFilter",
+            "className": "ContextFilter",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-server/src/filters/ContextFilter.ts"
+        },
+        {
+            "id": "HeaderMethods",
+            "className": "HeaderMethods",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-api/src/HeaderMethods.ts"
+        },
+        {
+            "id": "HeaderRegistry (dynamic)",
+            "className": "HeaderRegistry (dynamic)",
+            "kind": "dynamic",
+            "scope": "singleton",
+            "file": "packages/http/http-server/src/modules/WebpiecesModule.ts"
+        },
+        {
+            "id": "LogApiFilter",
+            "className": "LogApiFilter",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-server/src/filters/LogApiFilter.ts"
+        },
+        {
+            "id": "RecordingFilter",
+            "className": "RecordingFilter",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-server/src/filters/RecordingFilter.ts"
+        },
+        {
+            "id": "RouteBuilderImpl",
+            "className": "RouteBuilderImpl",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-routing/src/RouteBuilderImpl.ts"
+        },
+        {
+            "id": "WebpiecesMiddleware",
+            "className": "WebpiecesMiddleware",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-server/src/WebpiecesMiddleware.ts"
+        },
+        {
+            "id": "WebpiecesServerImpl",
+            "className": "WebpiecesServerImpl",
+            "kind": "class",
+            "scope": "singleton",
+            "file": "packages/http/http-server/src/WebpiecesServerImpl.ts"
+        },
+        {
+            "id": "config",
+            "className": "config",
+            "kind": "constant",
+            "scope": "unknown",
+            "file": "packages/http/http-server/src/WebpiecesFactory.ts"
+        },
+        {
+            "id": "meta",
+            "className": "meta",
+            "kind": "constant",
+            "scope": "unknown",
+            "file": "packages/http/http-server/src/WebpiecesFactory.ts"
+        }
+    ],
+    "edges": [
+        {
+            "from": "ContextFilter",
+            "to": "HeaderRegistry (dynamic)",
+            "injection": "token",
+            "token": "HeaderRegistry",
+            "tokenKey": "class:packages/http/http-api/src/HeaderRegistry.ts#HeaderRegistry",
+            "paramName": "registry",
+            "paramType": "HeaderRegistry"
+        },
+        {
+            "from": "LogApiFilter",
+            "to": "HeaderMethods",
+            "injection": "token",
+            "token": "HeaderMethods",
+            "tokenKey": "class:packages/http/http-api/src/HeaderMethods.ts#HeaderMethods",
+            "paramName": "headerMethods",
+            "paramType": "HeaderMethods"
+        },
+        {
+            "from": "LogApiFilter",
+            "to": "HeaderRegistry (dynamic)",
+            "injection": "token",
+            "token": "HeaderRegistry",
+            "tokenKey": "class:packages/http/http-api/src/HeaderRegistry.ts#HeaderRegistry",
+            "paramName": "registry",
+            "paramType": "HeaderRegistry"
+        },
+        {
+            "from": "RecordingFilter",
+            "to": "HeaderRegistry (dynamic)",
+            "injection": "token",
+            "token": "HeaderRegistry",
+            "tokenKey": "class:packages/http/http-api/src/HeaderRegistry.ts#HeaderRegistry",
+            "paramName": "registry",
+            "paramType": "HeaderRegistry"
+        },
+        {
+            "from": "RecordingFilter",
+            "to": "config",
+            "injection": "token",
+            "token": "WEBPIECES_CONFIG_TOKEN",
+            "tokenKey": "symbol.for:WebpiecesConfig",
+            "paramName": "config",
+            "paramType": "WebpiecesConfig"
+        },
+        {
+            "from": "WebpiecesServerImpl",
+            "to": "RouteBuilderImpl",
+            "injection": "token",
+            "token": "RouteBuilderImpl",
+            "tokenKey": "class:packages/http/http-routing/src/RouteBuilderImpl.ts#RouteBuilderImpl",
+            "paramName": "routeBuilder",
+            "paramType": "RouteBuilderImpl"
+        },
+        {
+            "from": "WebpiecesServerImpl",
+            "to": "WebpiecesMiddleware",
+            "injection": "token",
+            "token": "WebpiecesMiddleware",
+            "tokenKey": "class:packages/http/http-server/src/WebpiecesMiddleware.ts#WebpiecesMiddleware",
+            "paramName": "middleware",
+            "paramType": "WebpiecesMiddleware"
+        },
+        {
+            "from": "WebpiecesServerImpl",
+            "to": "meta",
+            "injection": "token",
+            "token": "WEBAPP_META_TOKEN",
+            "tokenKey": "symbol.for:WebAppMeta",
+            "paramName": "meta",
+            "paramType": "WebAppMeta"
+        }
+    ],
+    "unresolved": []
+}
