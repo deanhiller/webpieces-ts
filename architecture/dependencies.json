@@ -129,7 +129,8 @@
             "responsibilitiesFile": "packages/http/http-api/responsibilities.md",
             "designFile": "packages/http/http-api/design.json",
             "dependsOn": [
-                "core-util"
+                "core-util",
+                "wp-logging"
             ]
         },
         "http-client": {
@@ -225,6 +226,14 @@
             "dependsOn": [
                 "http-api"
             ]
+        },
+        "wp-logging": {
+            "level": 0,
+            "framework": "all",
+            "shortDescription": "Pluggable logging interface for WebPieces, usable in browser (Angular/React) and Node.js. Ships the `Logger`/`LoggerFactory` interfaces, a browser-safe console default, and the slf4j-style `LogManager` holder, so code logs through one seam while each app plugs in its own backend at startup.",
+            "responsibilitiesFile": "packages/core/wp-logging/responsibilities.md",
+            "designFile": "packages/core/wp-logging/design.json",
+            "dependsOn": []
         }
     }
 }

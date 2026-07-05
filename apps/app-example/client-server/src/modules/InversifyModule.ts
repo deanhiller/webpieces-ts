@@ -4,6 +4,9 @@ import { Server2Api, TYPES } from '../remote/Server2Client';
 import { PlatformHeader, PlatformHeadersExtension, HEADER_TYPES, HeaderRegistry } from '@webpieces/http-api';
 import { RequestContextReader } from '@webpieces/http-routing';
 import { createApiClient, ClientConfig, ContextMgr } from '@webpieces/http-client';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('InversifyModule');
 
 /**
  * App-specific headers unique to this application.
@@ -75,5 +78,5 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // Bind extension for multiInject collection
     bind<PlatformHeadersExtension>(HEADER_TYPES.PlatformHeadersExtension).toConstantValue(appExtension);
 
-    console.log(`[InversifyModule] Registered app platform headers extension with ${appExtension.headers.length} headers`);
+    log.info(`[InversifyModule] Registered app platform headers extension with ${appExtension.headers.length} headers`);
 });

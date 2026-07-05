@@ -162,6 +162,9 @@ importers:
       '@webpieces/http-api':
         specifier: workspace:*
         version: link:../../../packages/http/http-api
+      '@webpieces/wp-logging':
+        specifier: workspace:*
+        version: link:../../../packages/core/wp-logging
 
   apps/app-example/server2-api:
     dependencies:
@@ -179,11 +182,16 @@ importers:
 
   packages/core/core-util: {}
 
+  packages/core/wp-logging: {}
+
   packages/http/http-api:
     dependencies:
       '@webpieces/core-util':
         specifier: '*'
         version: 0.2.104
+      '@webpieces/wp-logging':
+        specifier: workspace:*
+        version: link:../../core/wp-logging
 
   packages/http/http-client:
     dependencies:
@@ -205,6 +213,9 @@ importers:
       '@webpieces/http-filters':
         specifier: workspace:*
         version: link:../http-filters
+      '@webpieces/wp-logging':
+        specifier: workspace:*
+        version: link:../../core/wp-logging
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -217,6 +228,9 @@ importers:
       '@webpieces/http-routing':
         specifier: workspace:*
         version: link:../http-routing
+      '@webpieces/wp-logging':
+        specifier: workspace:*
+        version: link:../../core/wp-logging
       cors:
         specifier: 2.8.5
         version: 2.8.5

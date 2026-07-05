@@ -20,6 +20,9 @@ import {
 import { Service, WpResponse } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('WebpiecesMiddleware');
 
 export class ExpressWrapper {
     constructor(
@@ -150,31 +153,31 @@ export class ExpressWrapper {
 
             // Set type-specific fields (MUST match ClientErrorTranslator)
             if (error instanceof HttpUserError) {
-                console.log('[ExpressWrapper] User Error:', error.message);
+                log.info('[ExpressWrapper] User Error:', error.message);
                 protocolError.errorCode = error.errorCode;
             } else if (error instanceof HttpBadRequestError) {
-                console.log('[ExpressWrapper] Bad Request:', error.message);
+                log.info('[ExpressWrapper] Bad Request:', error.message);
                 protocolError.field = error.field;
                 protocolError.guiAlertMessage = error.guiMessage;
             } else if (error instanceof HttpNotFoundError) {
-                console.log('[ExpressWrapper] Not Found:', error.message);
+                log.info('[ExpressWrapper] Not Found:', error.message);
             } else if (error instanceof HttpTimeoutError) {
-                console.error('[ExpressWrapper] Timeout Error:', error.message);
+                log.error('[ExpressWrapper] Timeout Error:', error.message);
             } else if (error instanceof HttpVendorError) {
-                console.error('[ExpressWrapper] Vendor Error:', error.message);
+                log.error('[ExpressWrapper] Vendor Error:', error.message);
                 protocolError.waitSeconds = error.waitSeconds;
             } else if (error instanceof HttpUnauthorizedError) {
-                console.log('[ExpressWrapper] Unauthorized:', error.message);
+                log.info('[ExpressWrapper] Unauthorized:', error.message);
             } else if (error instanceof HttpForbiddenError) {
-                console.log('[ExpressWrapper] Forbidden:', error.message);
+                log.info('[ExpressWrapper] Forbidden:', error.message);
             } else if (error instanceof HttpInternalServerError) {
-                console.error('[ExpressWrapper] Internal Server Error:', error.message);
+                log.error('[ExpressWrapper] Internal Server Error:', error.message);
             } else if (error instanceof HttpBadGatewayError) {
-                console.error('[ExpressWrapper] Bad Gateway:', error.message);
+                log.error('[ExpressWrapper] Bad Gateway:', error.message);
             } else if (error instanceof HttpGatewayTimeoutError) {
-                console.error('[ExpressWrapper] Gateway Timeout:', error.message);
+                log.error('[ExpressWrapper] Gateway Timeout:', error.message);
             } else {
-                console.log('[ExpressWrapper] Generic HttpError:', error.message);
+                log.info('[ExpressWrapper] Generic HttpError:', error.message);
             }
 
             // Serialize ProtocolError to JSON (SYMMETRIC with client)
@@ -184,7 +187,7 @@ export class ExpressWrapper {
             // Unknown error - 500
             const err = toError(error);
             protocolError.message = 'Internal Server Error';
-            console.error('[ExpressWrapper] Unexpected error:', err);
+            log.error('[ExpressWrapper] Unexpected error:', err);
             const responseJson = JSON.stringify(protocolError);
             res.status(500).setHeader('Content-Type', 'application/json').send(responseJson);
         }
@@ -231,7 +234,7 @@ export class WebpiecesMiddleware {
         res: Response,
         next: NextFunction,
     ): Promise<void> {
-        console.log('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
+        log.info('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Global error handler IS the top-level catch-all
         try {
@@ -239,14 +242,14 @@ export class WebpiecesMiddleware {
             // 1. Synchronous throws from next() itself
             // 2. Rejected promises from downstream async middleware
             await next();
-            console.log(
+            log.info(
                 '🔴 [Layer 1: GlobalErrorHandler] Request END (success):',
                 req.method,
                 req.path,
             );
         } catch (err: unknown) {
             const error = toError(err);
-            console.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
+            log.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
             if (!res.headersSent) {
                 // Return HTML error page (not JSON - JsonTranslator handles JSON errors)
                 res.status(500).send(`
@@ -261,7 +264,7 @@ export class WebpiecesMiddleware {
           </html>
         `);
             }
-            console.log(
+            log.info(
                 '🔴 [Layer 1: GlobalErrorHandler] Request END (error):',
                 req.method,
                 req.path,
@@ -275,9 +278,9 @@ export class WebpiecesMiddleware {
      * IMPORTANT: Must be async and await next() to properly chain with async middleware.
      */
     async logNextLayer(req: Request, res: Response, next: NextFunction): Promise<void> {
-        console.log('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
+        log.info('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
         await next();
-        console.log('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
+        log.info('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
     }
 
     /**
@@ -290,7 +293,7 @@ export class WebpiecesMiddleware {
      * @returns Express middleware handler for CORS
      */
     corsForLocalhost(): RequestHandler {
-        console.log('[WebpiecesMiddleware] CORS enabled for localhost:* origins');
+        log.info('[WebpiecesMiddleware] CORS enabled for localhost:* origins');
 
         return cors({
             origin: function (origin, callback) {
@@ -304,7 +307,7 @@ export class WebpiecesMiddleware {
                 if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
                     callback(null, true);
                 } else {
-                    console.log(`[CORS] Blocked origin: ${origin} (only localhost:* allowed)`);
+                    log.info(`[CORS] Blocked origin: ${origin} (only localhost:* allowed)`);
                     callback(new Error(`CORS not allowed for origin: ${origin}`));
                 }
             },

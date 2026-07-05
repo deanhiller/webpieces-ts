@@ -6,6 +6,9 @@ import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from './MethodMeta';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('RouteBuilder');
 
 /**
  * Express route handler function type.
@@ -250,7 +253,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         const route = routeWithMeta.definition;
         const routeMeta = route.routeMeta;
 
-        console.log(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
+        log.info(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
 
         // Get cached filter definitions
         const filterDefinitions = this.getFilterDefinitions();

@@ -1,6 +1,9 @@
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { PlatformHeadersExtension, HEADER_TYPES } from '@webpieces/http-api';
 import { CompanyHeaders } from '@webpieces/company-core';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('CompanyModule');
 
 /**
  * CompanyHeaders lives in @webpieces/company-core - the company-wide lib ALL
@@ -27,5 +30,5 @@ export const CompanyModule = new ContainerModule((options: ContainerModuleLoadOp
     // Bind extension for multiInject collection
     options.bind<PlatformHeadersExtension>(HEADER_TYPES.PlatformHeadersExtension).toConstantValue(companyExtension);
 
-    console.log(`[CompanyModule] Registered company platform headers extension with ${companyExtension.headers.length} headers`);
+    log.info(`[CompanyModule] Registered company platform headers extension with ${companyExtension.headers.length} headers`);
 });

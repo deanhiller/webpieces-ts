@@ -1,6 +1,7 @@
 import {inject, injectable} from 'inversify';
 import {provideSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { LogManager } from '@webpieces/wp-logging';
 import {
     PlatformHeader,
     HeaderMethods,
@@ -24,6 +25,8 @@ import {
  * User errors (HttpBadRequestError, etc.) are logged as OTHER, not FAIL,
  * because they are expected behavior from the server's perspective.
  */
+const log = LogManager.getLogger('LogApiFilter');
+
 @provideSingleton()
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
@@ -40,7 +43,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // duplicate-validated at startup). Log map keys use loggerMdcKey when set.
         this.allHeaders = registry.getHeaders();
 
-        console.log(`[LogApiFilter] Using ${this.allHeaders.length} platform headers from HeaderRegistry`);
+        log.info(`[LogApiFilter] Using ${this.allHeaders.length} platform headers from HeaderRegistry`);
 
         this.logApiCall = new LogApiCall();
     }

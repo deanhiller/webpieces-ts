@@ -1,6 +1,9 @@
 import { ContainerModule, ResolutionContext } from 'inversify';
 import { HEADER_TYPES, PlatformHeadersExtension, HeaderMethods, HeaderRegistry } from '@webpieces/http-api';
 import { WebpiecesCoreHeaders } from '../headers/WebpiecesCoreHeaders';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('WebpiecesModule');
 
 /**
  * WebpiecesModule - Framework-level DI bindings.
@@ -43,5 +46,5 @@ export const WebpiecesModule = new ContainerModule((options) => {
         })
         .inSingletonScope();
 
-    console.log(`[WebpiecesModule] Registered core platform headers extension with ${coreExtension.headers.length} headers`);
+    log.info(`[WebpiecesModule] Registered core platform headers extension with ${coreExtension.headers.length} headers`);
 });
