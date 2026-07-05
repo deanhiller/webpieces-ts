@@ -4,7 +4,7 @@
   "sourceRoot": "apps/app-example/angular-site/src",
   "projectType": "application",
   "prefix": "app",
-  "tags": ["framework:angular"],
+  "tags": ["framework:angular", "role:client"],
   "targets": {
     "build": {
       "executor": "@angular/build:application",

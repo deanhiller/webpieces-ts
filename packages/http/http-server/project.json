@@ -18,5 +18,5 @@
             }
         }
     },
-    "tags": ["framework:express"]
+    "tags": ["framework:express", "role:lib"]
 }

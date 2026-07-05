@@ -83,7 +83,11 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "framework-tag": {
-            "mode": "NEW_AND_MODIFIED_CODE",
+            "mode": "MODIFIED_PROJECTS",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "role-tag": {
+            "mode": "MODIFIED_PROJECTS",
             "ignoreModifiedUntilEpoch": 0
         },
         "di-graph": {

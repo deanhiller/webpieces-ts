@@ -11,6 +11,7 @@
         "ai-hook-rules": {
             "level": 1,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.",
             "responsibilitiesFile": "packages/tooling/ai-hook-rules/responsibilities.md",
             "designFile": "packages/tooling/ai-hook-rules/design.json",
@@ -21,6 +22,7 @@
         "angular-site": {
             "level": 3,
             "framework": "angular",
+            "role": "client",
             "shortDescription": "Angular single-page frontend demonstrating the webpieces browser client. It injects `SaveApi`/`PublicApi` as generated HTTP clients from `client-server-api` and calls the client-server service, wiring a HeaderRegistry from `company-core` for context header transfer.",
             "responsibilitiesFile": "apps/app-example/angular-site/responsibilities.md",
             "designFile": "apps/app-example/angular-site/design.json",
@@ -33,6 +35,7 @@
         "app-example-e2e": {
             "level": 7,
             "framework": "express",
+            "role": "server",
             "shortDescription": "End-to-end test project for the two-service example. Boots both `client-server` and `server2` on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.",
             "responsibilitiesFile": "apps/app-example/e2e/responsibilities.md",
             "designFile": "apps/app-example/e2e/design.json",
@@ -44,6 +47,7 @@
         "client-server": {
             "level": 6,
             "framework": "express",
+            "role": "server",
             "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
             "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
             "designFile": "apps/app-example/client-server/design.json",
@@ -58,6 +62,7 @@
         "client-server-api": {
             "level": 2,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Shared API contract for the client-server service: `SaveApi`/`PublicApi` abstract classes plus request/response DTOs, annotated with webpieces routing/auth decorators. Single source of truth implemented server-side and consumed by browser clients.",
             "responsibilitiesFile": "apps/app-example/client-server-api/responsibilities.md",
             "designFile": "apps/app-example/client-server-api/design.json",
@@ -68,6 +73,7 @@
         "code-rules": {
             "level": 1,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
             "designFile": "packages/tooling/code-rules/design.json",
@@ -78,6 +84,7 @@
         "company-core": {
             "level": 2,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Company-wide shared core library, browser-safe, brought in by ALL example projects. Defines the second-tier `CompanyHeaders` (tenant id, api version) as `PlatformHeader` constants that servers bind and browsers register — the company layer between framework core headers and app headers.",
             "responsibilitiesFile": "apps/app-example/company-core/responsibilities.md",
             "designFile": "apps/app-example/company-core/design.json",
@@ -88,6 +95,7 @@
         "company-svc-core": {
             "level": 5,
             "framework": "express",
+            "role": "lib",
             "shortDescription": "Company-wide shared SERVER core (node-only, `framework:express`). Holds the single shared server bootstrap and shared server DI so every express service starts the same way. It is the node-only counterpart to the browser-safe `company-core` and is NOT imported by Angular.",
             "responsibilitiesFile": "apps/app-example/company-svc-core/responsibilities.md",
             "designFile": "apps/app-example/company-svc-core/design.json",
@@ -99,6 +107,7 @@
         "core-context": {
             "level": 1,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and copy/restore key-value data automatically across async boundaries.",
             "responsibilitiesFile": "packages/core/core-context/responsibilities.md",
             "designFile": "packages/core/core-context/design.json",
@@ -109,6 +118,7 @@
         "core-mock": {
             "level": 0,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Typed mock framework for feature tests (port of Java webpieces MockSuperclass). `createMock<T>()` returns a Proxy implementing any api plus a `.mock` control facade for the prime/assert vocabulary; `MockHandler` is the underlying queue/default/drain engine.",
             "responsibilitiesFile": "packages/core/core-mock/responsibilities.md",
             "designFile": "packages/core/core-mock/design.json",
@@ -117,6 +127,7 @@
         "core-util": {
             "level": 0,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Lowest-level, zero-dependency utilities shared across webpieces (browser and Node). Provides `toError()` for standardized catch handling, plus the `Header` interface and `ContextKey` class that higher packages build request-context and HTTP-header abstractions on.",
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
             "designFile": "packages/core/core-util/design.json",
@@ -125,6 +136,7 @@
         "eslint-rules": {
             "level": 1,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Custom ESLint plugin exporting WebPieces lint rules — architecture dependency boundaries, exception/catch-error patterns, method/file size limits, no-JsonProperty-primitive, and Angular template rules — consumed by the shared eslint config and the nx-webpieces build validators.",
             "responsibilitiesFile": "packages/tooling/eslint-rules/responsibilities.md",
             "designFile": "packages/tooling/eslint-rules/design.json",
@@ -135,6 +147,7 @@
         "http-api": {
             "level": 1,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Shared HTTP API contract consumed by both client and server: REST decorators (ApiPath, Endpoint, Authentication), the HttpError hierarchy, datetime DTOs, platform-header registry/readers, ValidateImplementation, and the test-case recorder contract. Pure definitions, no runtime.",
             "responsibilitiesFile": "packages/http/http-api/responsibilities.md",
             "designFile": "packages/http/http-api/design.json",
@@ -146,6 +159,7 @@
         "http-client": {
             "level": 2,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
             "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
             "designFile": "packages/http/http-client/design.json",
@@ -156,6 +170,7 @@
         "http-filters": {
             "level": 2,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Minimal filter-chain primitives for cross-cutting concerns: the `Filter`/`Service` interfaces, the `WpResponse` type, and `FilterChain`, which invokes filters in order and wraps the terminal controller call. Pure infrastructure with no concrete filters.",
             "responsibilitiesFile": "packages/http/http-filters/responsibilities.md",
             "designFile": "packages/http/http-filters/design.json",
@@ -166,6 +181,7 @@
         "http-routing": {
             "level": 3,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`RouteBuilder` wiring, `RouteDefinition`/`FilterDefinition`, `MethodMeta`, `FilterMatcher` (glob-based filter-to-route matching), and `ApiRoutingFactory` that maps http-api decorators to controller handlers.",
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",
             "designFile": "packages/http/http-routing/design.json",
@@ -177,6 +193,7 @@
         "http-server": {
             "level": 4,
             "framework": "express",
+            "role": "lib",
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express middleware, ships built-in filters (Context, LogApi, Recording), the in-process test client, and the test-case recorder implementation.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "designFile": "packages/http/http-server/design.json",
@@ -187,6 +204,7 @@
         "nx-webpieces-rules": {
             "level": 2,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "designFile": "packages/tooling/nx-webpieces-rules/design.json",
@@ -200,6 +218,7 @@
         "pr-gate": {
             "level": 1,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, update-from-main, gather-info, merge start/end, build-affected — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "designFile": "packages/tooling/pr-gate/design.json",
@@ -210,6 +229,7 @@
         "rules-config": {
             "level": 0,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate and main-sync state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "designFile": "packages/tooling/rules-config/design.json",
@@ -218,6 +238,7 @@
         "server2": {
             "level": 6,
             "framework": "express",
+            "role": "server",
             "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
             "responsibilitiesFile": "apps/app-example/server2/responsibilities.md",
             "designFile": "apps/app-example/server2/design.json",
@@ -229,6 +250,7 @@
         "server2-api": {
             "level": 2,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Shared API contract for server2: the `Server2Api` abstract class (fetchValue) plus its request/response DTOs, annotated with webpieces routing/auth decorators. Implemented by `server2` and consumed by `client-server` as an HTTP client.",
             "responsibilitiesFile": "apps/app-example/server2-api/responsibilities.md",
             "designFile": "apps/app-example/server2-api/design.json",
@@ -239,6 +261,7 @@
         "wp-logging": {
             "level": 0,
             "framework": "all",
+            "role": "lib",
             "shortDescription": "Pluggable logging interface for WebPieces, usable in browser (Angular/React) and Node.js. Ships the `Logger`/`LoggerFactory` interfaces, a browser-safe console default, and the slf4j-style `LogManager` holder, so code logs through one seam while each app plugs in its own backend at startup.",
             "responsibilitiesFile": "packages/core/wp-logging/responsibilities.md",
             "designFile": "packages/core/wp-logging/design.json",

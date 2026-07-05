@@ -21,5 +21,5 @@
             }
         }
     },
-    "tags": ["type:tooling", "framework:all"]
+    "tags": ["type:tooling", "framework:all", "role:lib"]
 }
