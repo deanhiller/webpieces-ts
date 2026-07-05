@@ -16,6 +16,7 @@ import { buildAngularDiGraph } from '../di-graph/angular-analyzer';
 import { explicitFrameworkTag, selectAnalyzer, FrameworkMarkers } from '../di-graph/analyzer-strategy';
 import { AngularAnalyzer, EmptyAnalyzer, InversifyAnalyzer } from '../di-graph/analyzer-strategy';
 import { toDesignJson } from '../di-graph/serializer';
+import { generateDesignDot } from '../di-graph/dot';
 import { toDesignMarkdown } from '../di-graph/mermaid';
 import { DiDesign, DiGraph, DiEdge, DiNode } from '../di-graph/model';
 
@@ -361,6 +362,35 @@ describe('di-graph analyzer - shared dependency duplicated per controller', () =
             expect(nodeIn(design, 'LeafDep')?.level).toBe(2);
             expect(design?.edges.find((e: DiEdge) => e.from === root && e.to === 'SharedService')).toBeDefined();
         }
+    });
+});
+
+describe('di-graph analyzer - API-backed impl labeling (api + impl)', () => {
+    let fixture: Fixture;
+    let graph: DiGraph;
+
+    beforeAll(() => {
+        fixture = new Fixture(CONTROLLER_FIXTURE);
+        graph = fixture.build();
+    });
+
+    afterAll(() => fixture.cleanup());
+
+    it('records the injected contract as `api`, keeping the impl class as identity', () => {
+        // @inject(TYPES.Counter) counter: Counter, bound .to(SimpleCounter).
+        const impl = node(graph, 'SimpleCounter');
+        expect(impl?.className).toBe('SimpleCounter');
+        expect(impl?.api).toBe('Counter');
+        // inject-by-type: declared type IS the class → no api.
+        expect(node(graph, 'HelperService')?.api).toBeUndefined();
+        // Generated-client exception: dynamic leaves never carry api.
+        expect(allNodes(graph).find((n: DiNode) => n.kind === 'dynamic')?.api).toBeUndefined();
+    });
+
+    it('renders API-backed boxes as "api / (impl)" in DOT and mermaid', () => {
+        expect(toDesignMarkdown(graph)).toContain('Counter<br/>(SimpleCounter)');
+        const design = designFor(graph, 'SaveController');
+        expect(generateDesignDot(design!)).toContain('Counter\\n(SimpleCounter)');
     });
 });
 

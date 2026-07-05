@@ -199,8 +199,11 @@ export abstract class DiDesignBuilder {
      * Register (or fetch) the node for a class, returning its stable id.
      * `scopeHint` carries the scope of the module binding the class was reached
      * through (e.g. bind(TOKEN).to(X).inSingletonScope() where X is not self-bound).
+     * `apiType` is the declared param/field type the class was injected as; when it
+     * differs from the impl class name it becomes the node's `api` (rendered as the
+     * primary box label, with the impl class in parens). Set on first reach.
      */
-    protected classNode(cls: ts.ClassDeclaration, scopeHint: DiScope = 'unknown'): string {
+    protected classNode(cls: ts.ClassDeclaration, scopeHint: DiScope = 'unknown', apiType = ''): string {
         const existing = this.classIds.get(cls);
         if (existing) return existing;
 
@@ -211,7 +214,12 @@ export abstract class DiDesignBuilder {
 
         const declaredScope = this.classScope(cls);
         const scope = declaredScope !== 'unknown' ? declaredScope : scopeHint;
-        this.design.nodes.push(new DiNode(id, className, this.rootKindOf(cls), scope, file));
+        const node = new DiNode(id, className, this.rootKindOf(cls), scope, file);
+        // Injected AS an API/interface that resolves to a differently-named impl —
+        // record the contract (strip a trailing `[]` from multiInject array params).
+        const api = apiType.replace(/\[\]$/, '');
+        if (api !== '' && api !== className) node.api = api;
+        this.design.nodes.push(node);
         return id;
     }
 
@@ -340,7 +348,7 @@ export abstract class DiDesignBuilder {
             const target = resolveClassDeclaration(expr, this.checker);
             if (target) {
                 const classToken = classTokenKey(target, this.workspaceRoot);
-                const toId = this.classNode(target);
+                const toId = this.classNode(target, 'unknown', injection.paramType);
                 this.walkClass(target);
                 this.design.edges.push(
                     new DiEdge(fromId, toId, 'type', classToken.display, classToken.key, injection.paramName, injection.paramType),
@@ -359,7 +367,7 @@ export abstract class DiDesignBuilder {
 
     private bindingTarget(binding: Binding, paramType: string): string {
         if (binding.implClass) {
-            const toId = this.classNode(binding.implClass, binding.scope);
+            const toId = this.classNode(binding.implClass, binding.scope, paramType);
             this.walkClass(binding.implClass);
             return toId;
         }
