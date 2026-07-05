@@ -312,7 +312,7 @@ describe('di-graph analyzer - controller project', () => {
         expect(edge(graph, 'HelperService', 'LeafService')).toBeDefined();
     });
 
-    it('assigns BFS levels down from the controller (root = 0)', () => {
+    it('assigns longest-path levels down from the controller (root = 0)', () => {
         const save = designFor(graph, 'SaveController');
         expect(nodeIn(save, 'SaveController')?.level).toBe(0);
         expect(nodeIn(save, 'HelperService')?.level).toBe(1);
@@ -336,8 +336,8 @@ describe('di-graph analyzer - controller project', () => {
         expect(md.match(/```mermaid/g)).toHaveLength(2);
         expect(md).toContain('## SaveController');
         expect(md).toContain('## EmptyController');
-        // B0: edges are labeled by the constructor param NAME, not the token.
-        expect(md).toContain('|counter|');
+        // Edges are unlabeled arrows — the param name/token live in design.json.
+        expect(md).not.toContain('|counter|');
         expect(md).not.toContain('|TYPES.Counter|');
     });
 });
@@ -540,10 +540,13 @@ describe('di-graph analyzer - angular project', () => {
 
     it('walks field inject() sites down from the root component', () => {
         const app = designFor(graph, 'AppComponent');
-        // Field inject(SaveApi)/inject(EnvironmentConfig) → L1, labeled by field name.
+        // Field inject(SaveApi)/inject(EnvironmentConfig) edges exist off the root.
         expect(app?.edges.find((e: DiEdge) => e.from === 'AppComponent' && e.paramName === 'saveApi')).toBeDefined();
         expect(app?.edges.find((e: DiEdge) => e.from === 'AppComponent' && e.paramName === 'envConfig')).toBeDefined();
-        expect(nodeIn(app, 'EnvironmentConfig')?.level).toBe(1);
+        // Longest-path level: EnvironmentConfig is injected directly by the root
+        // AND (more deeply) by SaveApi/ClientConfig, so it sits below its deepest
+        // dependent rather than at L1.
+        expect(nodeIn(app, 'EnvironmentConfig')?.level).toBe(3);
     });
 
     it('maps useFactory providers to dynamic leaves and fans out to deps', () => {
@@ -557,13 +560,16 @@ describe('di-graph analyzer - angular project', () => {
         expect(nodeIn(app, 'MutableContextStore')?.kind).toBe('constant');
     });
 
-    it('B0: boxes are labeled by the declared type, edges by the injection name', () => {
+    it('B0: boxes are labeled by the declared type; the injection name stays in design.json', () => {
         const app = designFor(graph, 'AppComponent');
         // useFactory box labeled by the token type (SaveApi), not the factory text.
         expect(nodeIn(app, 'SaveApi')?.className).toBe('SaveApi');
         expect(nodeIn(app, 'SaveApi')?.detail).toBe('SaveApi (dynamic)');
+        // The param name is preserved on the edge (design.json) even though the
+        // rendered graphs no longer label edges.
+        expect(app?.edges.find((e: DiEdge) => e.to === 'SaveApi')?.paramName).toBe('saveApi');
         const md = toDesignMarkdown(graph);
-        expect(md).toContain('|saveApi|');
+        expect(md).not.toContain('|saveApi|');
         expect(md).toContain(':::component');
     });
 

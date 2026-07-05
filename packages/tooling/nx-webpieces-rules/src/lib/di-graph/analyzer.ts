@@ -470,10 +470,14 @@ function findLibraryRoots(
 }
 
 /**
- * Assign each node its BFS shortest-path depth from the design's root (root =
- * level 0, its direct injections = level 1, ...) and record the deepest level.
- * A node reached from multiple parents keeps its SHALLOWEST depth. Cycles are
- * safe: a node is levelled once, the first (shallowest) time BFS reaches it.
+ * Assign each node its LONGEST-path depth from the design's root (root = level
+ * 0, its direct injections = level 1, ...) and record the deepest level. A node
+ * reached from multiple parents takes its DEEPEST depth, so it always sits below
+ * everything that depends on it (a dependency is never on the same or a shallower
+ * level than its dependent — e.g. a config injected by both a level-2 service and
+ * a level-3 client lands at level 4, one below that client). Levels are computed
+ * by edge relaxation bounded by the reachable node count, which terminates even
+ * if the DI graph contains a cycle; the root is pinned at 0.
  */
 export function assignLevels(design: DiDesign): void {
     const outgoing = new Map<string, string[]>();
@@ -482,22 +486,35 @@ export function assignLevels(design: DiDesign): void {
         list.push(e.to);
         outgoing.set(e.from, list);
     }
-    const nodeById = new Map<string, DiNode>(design.nodes.map((n: DiNode) => [n.id, n]));
-    const levelById = new Map<string, number>();
 
-    let frontier = [design.root];
-    let level = 0;
-    while (frontier.length > 0) {
-        const next: string[] = [];
-        for (const id of frontier) {
-            if (levelById.has(id)) continue;
-            levelById.set(id, level);
-            for (const to of outgoing.get(id) ?? []) {
-                if (!levelById.has(to)) next.push(to);
+    // Nodes reachable from the root — only these get a level; the rest fall back
+    // to 0 below, matching the previous behaviour for disconnected nodes.
+    const reachable = new Set<string>();
+    const queue = [design.root];
+    for (let i = 0; i < queue.length; i++) {
+        const id = queue[i];
+        if (reachable.has(id)) continue;
+        reachable.add(id);
+        for (const to of outgoing.get(id) ?? []) {
+            if (!reachable.has(to)) queue.push(to);
+        }
+    }
+
+    const levelById = new Map<string, number>();
+    for (const id of reachable) levelById.set(id, 0);
+    // Bellman-Ford-style longest-path relaxation. |reachable| passes suffice for
+    // any acyclic graph; the pass count also bounds work if a cycle exists.
+    for (let pass = 0; pass < reachable.size; pass++) {
+        let changed = false;
+        for (const e of design.edges) {
+            if (!reachable.has(e.from) || e.to === design.root) continue;
+            const candidate = (levelById.get(e.from) ?? 0) + 1;
+            if (candidate > (levelById.get(e.to) ?? 0)) {
+                levelById.set(e.to, candidate);
+                changed = true;
             }
         }
-        frontier = next;
-        level++;
+        if (!changed) break;
     }
 
     let maxLevel = 0;

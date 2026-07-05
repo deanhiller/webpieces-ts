@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { DiDesign, DiEdge, DiGraph, DiNode } from '../di-graph/model';
 import { generateDesignDot } from '../di-graph/dot';
 import { generateDesignHTML } from '../di-graph/design-visualizer';
+import { assignLevels } from '../di-graph/analyzer';
 
 function makeDesign(): DiDesign {
     const design = new DiDesign('AgentController', 'controller', 'src/controllers/AgentController.ts');
@@ -42,16 +43,71 @@ describe('generateDesignDot', () => {
         expect(dot).toContain('"MysteryToken" [fillcolor="#FCE4EC", style="filled,dashed"');
     });
 
-    it('labels every edge by the injection param NAME (B0)', () => {
+    it('emits unlabeled edges (the arrow alone shows the dependency)', () => {
         const dot = generateDesignDot(makeDesign());
-        // B0: edges show the declared param/field name, not the raw token expr.
-        expect(dot).toContain('"AgentController" -> "AgentHandler" [label="handler"];');
-        expect(dot).toContain('"AgentHandler" -> "FirestoreConfig" [label="config"];');
-        expect(dot).toContain('"AgentHandler" -> "MysteryToken" [label="multiInject mysteries"];');
+        expect(dot).toContain('"AgentController" -> "AgentHandler";');
+        expect(dot).toContain('"AgentHandler" -> "FirestoreConfig";');
+        expect(dot).toContain('"AgentHandler" -> "MysteryToken";');
+        expect(dot).not.toContain('[label=');
     });
 
     it('is deterministic', () => {
         expect(generateDesignDot(makeDesign())).toBe(generateDesignDot(makeDesign()));
+    });
+});
+
+describe('assignLevels — longest-path layering', () => {
+    // Diamond: a shared config is injected by BOTH a level-2 service and the
+    // level-3 client that the service depends on. The config must land at L4
+    // (one below its DEEPEST dependent), never at L3 alongside/above it.
+    function diamond(): DiDesign {
+        const design = new DiDesign('Controller', 'controller', 'src/Controller.ts');
+        design.nodes = [
+            new DiNode('Controller', 'Controller', 'controller', 'singleton', 'src/Controller.ts', 0),
+            new DiNode('Handler', 'Handler', 'class', 'singleton', 'src/Handler.ts', 0),
+            new DiNode('Service', 'Service', 'class', 'singleton', 'src/Service.ts', 0),
+            new DiNode('Client', 'Client', 'class', 'singleton', 'src/Client.ts', 0),
+            new DiNode('Config', 'Config', 'constant', 'singleton', 'src/Config.ts', 0),
+        ];
+        design.edges = [
+            new DiEdge('Controller', 'Handler', 'type', '', '', 'handler', 'Handler'),
+            new DiEdge('Handler', 'Service', 'type', '', '', 'service', 'Service'),
+            new DiEdge('Service', 'Client', 'type', '', '', 'client', 'Client'),
+            new DiEdge('Service', 'Config', 'type', '', '', 'config', 'Config'),
+            new DiEdge('Client', 'Config', 'type', '', '', 'config', 'Config'),
+        ];
+        return design;
+    }
+
+    function levelOf(design: DiDesign, id: string): number | undefined {
+        return design.nodes.find((n: DiNode) => n.id === id)?.level;
+    }
+
+    it('puts a shared dependency one level below its deepest dependent', () => {
+        const design = diamond();
+        assignLevels(design);
+        expect(levelOf(design, 'Controller')).toBe(0);
+        expect(levelOf(design, 'Handler')).toBe(1);
+        expect(levelOf(design, 'Service')).toBe(2);
+        expect(levelOf(design, 'Client')).toBe(3);
+        // Reached at depth 3 via Service AND depth 4 via Client → deepest wins.
+        expect(levelOf(design, 'Config')).toBe(4);
+        expect(design.maxLevel).toBe(4);
+    });
+
+    it('keeps the root at level 0 even if a cycle points back to it', () => {
+        const design = new DiDesign('A', 'controller', 'src/A.ts');
+        design.nodes = [
+            new DiNode('A', 'A', 'controller', 'singleton', 'src/A.ts', 0),
+            new DiNode('B', 'B', 'class', 'singleton', 'src/B.ts', 0),
+        ];
+        design.edges = [
+            new DiEdge('A', 'B', 'type', '', '', 'b', 'B'),
+            new DiEdge('B', 'A', 'type', '', '', 'a', 'A'),
+        ];
+        assignLevels(design);
+        expect(levelOf(design, 'A')).toBe(0);
+        expect(levelOf(design, 'B')).toBe(1);
     });
 });
 
