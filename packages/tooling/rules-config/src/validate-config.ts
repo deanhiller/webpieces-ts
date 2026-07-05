@@ -85,6 +85,31 @@ function valueHint(def: FieldDef, key?: string): string {
         : '"<string>"';
 }
 
+// Scoped modes (narrowest → broadest) that enforce ONLY on what changed, so a rule can be
+// adopted gradually instead of all-at-once. When a rule offers one, recommend the first it
+// supports so a fresh config opts into a low-friction rollout rather than reflexively OFF.
+const GRADUAL_MODE_PREFERENCE = [
+    'MODIFIED_PROJECTS',
+    'NEW_AND_MODIFIED_CODE',
+    'NEW_AND_MODIFIED_METHODS',
+    'MODIFIED_CLASS',
+    'NEW_METHODS',
+    'NEW_AND_MODIFIED_FILES',
+];
+
+/** A rollout hint for the copy-paste snippet: recommend the narrowest gradual mode the rule supports. */
+function rolloutTip(schema: Record<string, FieldDef>): string {
+    const modes = schema['mode']?.enumValues ?? [];
+    const recommended = GRADUAL_MODE_PREFERENCE.find((m: string) => modes.includes(m));
+    if (!recommended) return '';
+    const optOut = modes.includes('OFF') ? ' Set "mode": "OFF" to opt out entirely.' : '';
+    return (
+        `\n\n💡 Recommended: start with "mode": "${recommended}" — it enforces only on what you ` +
+        `actually change, so the rule rolls out gradually (existing code stays grandfathered until ` +
+        `you next touch that project/file/method).${optOut}`
+    );
+}
+
 function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>): string {
     // Only required fields go in the copy-paste entry. Optional fields (e.g. the
     // universal escape hatches ignoreRuleWhileOnBranch / ignoreModifiedUntilEpoch)
@@ -106,6 +131,7 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
             `\n\nOptional fields you may add to this rule (omit if not needed):\n` +
             `${optionalLines.join(',\n')}`;
     }
+    out += rolloutTip(schema);
     return out;
 }
 

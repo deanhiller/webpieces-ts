@@ -22,6 +22,12 @@ export type InlineTypeMode = typeof INLINE_TYPE_MODES[number];
 export const MODIFIED_CODE_MODES = ['OFF', 'NEW_AND_MODIFIED_CODE', 'NEW_AND_MODIFIED_FILES'] as const;
 export type ModifiedCodeMode = typeof MODIFIED_CODE_MODES[number];
 
+// PROJECT-level rules (e.g. framework-tag): the check is neither line- nor file-scoped — it runs
+// for a whole project when ANY file the project owns is touched. `MODIFIED_PROJECTS` names that
+// honestly (nx `affected` already narrows execution to the changed projects).
+export const PROJECT_MODES = ['OFF', 'MODIFIED_PROJECTS'] as const;
+export type ProjectMode = typeof PROJECT_MODES[number];
+
 export const PRISMA_DTOS_MODES = ['OFF', 'MODIFIED_CLASS', 'NEW_AND_MODIFIED_FILES'] as const;
 export type PrismaValidateDtosMode = typeof PRISMA_DTOS_MODES[number];
 
@@ -281,11 +287,11 @@ export class EnforceControllerNamingConfig extends BaseRuleConfig {
 // `framework` field and the `library-types-match-client` rule. `knownTypes` customizes the list
 // suggested to the author when a tag is missing (defaults to angular, react, express, all).
 export class FrameworkTagConfig extends BaseRuleConfig {
-    declare mode?: ModifiedCodeMode;
+    declare mode?: ProjectMode;
     knownTypes?: string[];
 
     static readonly SCHEMA: SchemaShape<FrameworkTagConfig> = {
-        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        mode: new FieldDef('string', PROJECT_MODES),
         knownTypes: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };
