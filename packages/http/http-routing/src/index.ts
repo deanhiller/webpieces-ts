@@ -20,6 +20,8 @@ export {
     isController,
     NotController,
     isNotController,
+    ApiImplementation,
+    isApiImplementation,
     provideSingleton,
     provideSingletonAs,
     provideTransient,

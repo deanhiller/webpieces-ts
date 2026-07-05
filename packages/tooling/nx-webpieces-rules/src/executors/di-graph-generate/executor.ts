@@ -22,7 +22,9 @@ import { loadAndValidate } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
+    DiAnalyzer,
     explicitFrameworkTag,
+    explicitRoleTag,
     FrameworkMarkers,
     selectAnalyzer,
 } from '../../lib/di-graph/analyzer-strategy';
@@ -48,6 +50,7 @@ const RULE_NAME = 'di-graph';
 // Inversify decorator isn't short-circuited to empty.
 const DI_MARKERS = [
     '@Controller(',
+    '@ApiImplementation(',
     '@provideSingleton',
     '@provideTransient',
     '@injectable',
@@ -98,6 +101,39 @@ function writeDesignFiles(projectRootAbs: string, graph: DiGraph): void {
     fs.writeFileSync(path.join(projectRootAbs, 'design.md'), toDesignMarkdown(graph));
 }
 
+/** The analyzer chosen for a project plus the role tag that drove the choice. */
+class AnalyzerChoice {
+    constructor(
+        public readonly analyzer: DiAnalyzer,
+        public readonly role: string | null,
+    ) {}
+}
+
+/**
+ * Select the analyzer by role (server→@Controller, designed-lib→@ApiImplementation,
+ * client→angular design, lib→skip). The explicit `role:` nx tag is the source of
+ * truth; when absent we fall back to the legacy `framework:` selection + marker
+ * pre-scan so designs stay identical until a project is retagged.
+ */
+function chooseAnalyzer(tags: string[], srcDir: string): AnalyzerChoice {
+    const role = explicitRoleTag(tags);
+    const framework = explicitFrameworkTag(tags);
+    const analyzer = selectAnalyzer(role, framework, detectFrameworkMarkers(srcDir));
+    console.log(
+        `   Analyzer: ${analyzer.constructor.name} ` +
+            `(role tag: ${role ?? 'none'}, framework tag: ${framework ?? 'none'})`,
+    );
+    return new AnalyzerChoice(analyzer, role);
+}
+
+function reportDesignedLibMissingRoot(projectName: string): void {
+    console.error(
+        `❌ ${projectName} is tagged role:designed-lib but has no @ApiImplementation class.\n` +
+            `   Annotate the library's top implementation class with @ApiImplementation ` +
+            `(from @webpieces/http-routing), or retag the project role:lib if it has no design.`,
+    );
+}
+
 export default async function runExecutor(
     _options: DiGraphGenerateOptions,
     context: ExecutorContext,
@@ -132,14 +168,16 @@ export default async function runExecutor(
             return { success: true };
         }
 
-        // Select the analyzer by framework: express → Inversify, angular →
-        // Angular, else skip. The explicit `framework:` nx tag wins; a marker
-        // pre-scan corroborates only when the tag is absent.
-        const framework = explicitFrameworkTag(projectConfig?.tags ?? []);
-        const analyzer = selectAnalyzer(framework, detectFrameworkMarkers(srcDir));
-        console.log(`   Analyzer: ${analyzer.constructor.name} (framework tag: ${framework ?? 'none'})`);
+        const choice = chooseAnalyzer(projectConfig?.tags ?? [], srcDir);
+        const graph = choice.analyzer.analyzeProject(program, context.root, projectRoot, projectName);
 
-        const graph = analyzer.analyzeProject(program, context.root, projectRoot, projectName);
+        // A designed-lib MUST expose at least one @ApiImplementation root, else its
+        // design would be empty and the tag is meaningless — fail loudly.
+        if (choice.role === 'designed-lib' && graph.designs.length === 0) {
+            reportDesignedLibMissingRoot(projectName);
+            return { success: false };
+        }
+
         writeDesignFiles(projectRootAbs, graph);
 
         const nodeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.nodes.length, 0);

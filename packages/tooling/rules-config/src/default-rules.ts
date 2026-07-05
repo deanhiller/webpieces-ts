@@ -29,6 +29,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-symbol-di-tokens': {},
     'enforce-controller-naming': { mode: 'NEW_AND_MODIFIED_FILES', allowedPaths: [] },
     'framework-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['angular', 'react', 'express', 'all'] },
+    'role-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['server', 'designed-lib', 'lib', 'client'] },
     'nx-wiring': { mode: 'RUN_EVERY_TIME' },
     'di-graph': { mode: 'RUN_EVERY_TIME' },
     'validate-ts-in-src': {

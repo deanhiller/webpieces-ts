@@ -297,6 +297,23 @@ export class FrameworkTagConfig extends BaseRuleConfig {
     };
 }
 
+// role-tag — every project that a changed source file belongs to must carry a
+// `role:<server|designed-lib|lib|client>` nx tag in its project.json. That tag is the project's
+// ROLE (orthogonal to `framework` libType) — the source of truth for the dependencies.json `role`
+// field, the `role-dependency` edge rule (apps are never depended upon), and DI-design generation
+// (server→@Controller, designed-lib→@ApiImplementation, lib→none, client→angular design).
+// `knownTypes` customizes the list suggested to the author when a tag is missing.
+export class RoleTagConfig extends BaseRuleConfig {
+    declare mode?: ProjectMode;
+    knownTypes?: string[];
+
+    static readonly SCHEMA: SchemaShape<RoleTagConfig> = {
+        mode: new FieldDef('string', PROJECT_MODES),
+        knownTypes: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class BranchCreationGuardConfig extends BaseRuleConfig {
     declare mode?: BranchGuardMode;
     // Naming pattern for stacked SUB-branches only (branches created off another feature branch,

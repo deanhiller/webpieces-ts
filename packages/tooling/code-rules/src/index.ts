@@ -14,6 +14,7 @@ export { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver'
 export { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
 export { EnforceControllerNamingValidator } from './validate-enforce-controller-naming';
 export { FrameworkTagValidator } from './validate-framework-tag';
+export { RoleTagValidator } from './validate-role-tag';
 export { PrismaValidateDtosValidator } from './validate-dtos';
 export { PrismaConverterValidator } from './validate-prisma-converters';
 export { default as validateCode } from './validate-code';

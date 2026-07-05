@@ -77,6 +77,20 @@ export function isControllerClass(cls: ts.ClassDeclaration): boolean {
     return hasDecoratorNamed(cls, new Set(['Controller']));
 }
 
+/** A `@ApiImplementation` class — the explicit DI-design root for a `role:designed-lib` project. */
+export function isApiImplementationClass(cls: ts.ClassDeclaration): boolean {
+    return hasDecoratorNamed(cls, new Set(['ApiImplementation']));
+}
+
+/** Node kind for a class: `@Controller` → controller, `@ApiImplementation` → apiImplementation, else class. */
+export function rootKindOfClass(cls: ts.ClassDeclaration): DiNodeKind {
+    if (isControllerClass(cls)) return 'controller';
+    if (isApiImplementationClass(cls)) return 'apiImplementation';
+    return 'class';
+}
+
+export type DiRootMode = 'controller' | 'apiImplementation';
+
 function isDiRegisteredClass(cls: ts.ClassDeclaration): boolean {
     return hasDecoratorNamed(cls, DI_DECORATORS);
 }
@@ -184,9 +198,9 @@ export abstract class DiDesignBuilder {
     /** Collect the injection sites for one class (constructor params, field inject(), ...). */
     protected abstract collectInjections(cls: ts.ClassDeclaration): Injection[];
 
-    /** Node kind for a root/reached class — `controller` (Inversify) or `component` (Angular). */
+    /** Node kind for a root/reached class — `controller`/`apiImplementation` (Inversify) or `component` (Angular). */
     protected rootKindOf(cls: ts.ClassDeclaration): DiNodeKind {
-        return isControllerClass(cls) ? 'controller' : 'class';
+        return rootKindOfClass(cls);
     }
 
     addRoot(cls: ts.ClassDeclaration): void {
@@ -556,9 +570,9 @@ export function buildDesign(
  * Build the full Inversify DI graph for one project: one self-contained
  * `DiDesign` per @Controller root. `projectRoot` is workspace-relative.
  *
- * `includeLibraryRoots` (default false, the v1 executor path) roots ONLY on
- * @Controller classes; when true, a controller-less project falls back to its
- * top-of-DAG DI classes (the deferred library behavior, still unit-tested).
+ * `includeLibraryRoots` (default false) roots ONLY on @Controller classes; when
+ * true, a controller-less project falls back to top-of-DAG DI classes. `rootMode`
+ * `'apiImplementation'` (role:designed-lib) instead roots on `@ApiImplementation`.
  */
 export function buildDiGraph(
     program: ts.Program,
@@ -566,22 +580,24 @@ export function buildDiGraph(
     projectRoot: string,
     projectName: string,
     includeLibraryRoots = false,
+    rootMode: DiRootMode = 'controller',
 ): DiGraph {
     const checker = program.getTypeChecker();
     const table = collectBindings(program, checker, workspaceRoot);
     const graph = new DiGraph(projectName);
 
     const classes = projectClasses(program, workspaceRoot, projectRoot);
-    const controllers = classes.filter((cls: ts.ClassDeclaration) => isControllerClass(cls));
     const roots =
-        controllers.length > 0
-            ? controllers
-            : includeLibraryRoots
-              ? findLibraryRoots(classes, checker, table, workspaceRoot)
-              : [];
+        rootMode === 'apiImplementation'
+            ? classes.filter((cls: ts.ClassDeclaration) => isApiImplementationClass(cls))
+            : ((): ts.ClassDeclaration[] => {
+                  const controllers = classes.filter((cls: ts.ClassDeclaration) => isControllerClass(cls));
+                  if (controllers.length > 0) return controllers;
+                  return includeLibraryRoots ? findLibraryRoots(classes, checker, table, workspaceRoot) : [];
+              })();
 
     for (const root of [...roots].sort(byClassName)) {
-        const rootKind: DiNodeKind = isControllerClass(root) ? 'controller' : 'class';
+        const rootKind: DiNodeKind = rootKindOfClass(root);
         graph.designs.push(
             buildDesign(
                 root,

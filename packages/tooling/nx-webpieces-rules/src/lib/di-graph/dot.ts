@@ -13,7 +13,8 @@ import { DiDesign, DiNode } from './model';
  * Node fill colors by DI node kind.
  */
 const KIND_COLORS: Record<string, string> = {
-    controller: '#E3F2FD', // light blue — the root/entry class (Inversify)
+    controller: '#E3F2FD', // light blue — the root/entry class (server @Controller)
+    apiImplementation: '#E0F2F1', // light teal — the root/entry class (designed-lib @ApiImplementation)
     component: '#E8F5E9', // light green — the root/entry Angular component
     class: '#F5F5F5', // neutral — plain injectable class
     constant: '#FFF3E0', // light orange — toConstantValue leaf
@@ -36,7 +37,9 @@ function nodeStatement(node: DiNode): string {
     const styles: string[] = ['filled'];
     if (node.kind === 'constant' || node.kind === 'dynamic') styles.push('rounded');
     if (node.kind === 'unresolved') styles.push('dashed');
-    const penwidth = node.kind === 'controller' || node.kind === 'component' ? ', penwidth=2' : '';
+    const isRootKind =
+        node.kind === 'controller' || node.kind === 'apiImplementation' || node.kind === 'component';
+    const penwidth = isRootKind ? ', penwidth=2' : '';
     return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}];\n`;
 }
 

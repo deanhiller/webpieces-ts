@@ -69,6 +69,7 @@ export {
     NoSymbolDiTokensConfig,
     EnforceControllerNamingConfig,
     FrameworkTagConfig,
+    RoleTagConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,

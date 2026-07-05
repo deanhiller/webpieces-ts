@@ -16,7 +16,8 @@ import {
     validateShortDescription,
     MAX_SHORT_DESCRIPTION_LENGTH,
 } from '../responsibilities';
-import { enrichGraph, MetadataValidationError, validateLibraryTypesMatch } from '../graph-metadata';
+import { enrichGraph, MetadataValidationError, validateLibraryTypesMatch, validateRoleDependencies } from '../graph-metadata';
+import { resolveRole } from '../role-resolver';
 import { toError } from '../../toError';
 
 describe('extractShortDescription', () => {
@@ -180,6 +181,84 @@ describe('validateLibraryTypesMatch', () => {
             problems
         );
         expect(problems).toEqual([]);
+    });
+});
+
+describe('validateRoleDependencies', () => {
+    function graphOf(entries: Record<string, { role?: string; dependsOn: string[] }>): EnhancedGraph {
+        const graph: EnhancedGraph = {};
+        for (const [name, entry] of Object.entries(entries)) {
+            graph[name] = { level: 0, dependsOn: entry.dependsOn, role: entry.role };
+        }
+        return graph;
+    }
+
+    it('allows depending on lib and designed-lib', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(
+            graphOf({
+                svr: { role: 'server', dependsOn: ['plain', 'designed'] },
+                plain: { role: 'lib', dependsOn: [] },
+                designed: { role: 'designed-lib', dependsOn: [] },
+            }),
+            problems
+        );
+        expect(problems).toEqual([]);
+    });
+
+    it('flags depending on a server (a terminal app)', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(
+            graphOf({ a: { role: 'lib', dependsOn: ['svr'] }, svr: { role: 'server', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'a' must not depend on 'svr' (role:server)");
+    });
+
+    it('flags depending on a client', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(
+            graphOf({ a: { role: 'server', dependsOn: ['ng'] }, ng: { role: 'client', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'a' must not depend on 'ng' (role:client)");
+    });
+
+    it('skips edges whose target has no resolved role', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(graphOf({ a: { role: 'lib', dependsOn: ['b'] }, b: { dependsOn: [] } }), problems);
+        expect(problems).toEqual([]);
+    });
+});
+
+describe('resolveRole', () => {
+    function infoOf(tags: string[]): ProjectInfo {
+        return new ProjectInfo('proj', 'packages/proj', tags);
+    }
+
+    it('reads the explicit role: tag', () => {
+        expect(resolveRole(infoOf(['framework:express', 'role:server'])).role).toBe('server');
+        expect(resolveRole(infoOf(['role:designed-lib'])).role).toBe('designed-lib');
+    });
+
+    it('defaults to lib when no role tag is present', () => {
+        const res = resolveRole(infoOf(['framework:all']));
+        expect(res.role).toBe('lib');
+        expect(res.problem).toBeNull();
+    });
+
+    it('flags more than one role tag', () => {
+        const res = resolveRole(infoOf(['role:server', 'role:lib']));
+        expect(res.role).toBeNull();
+        expect(res.problem).toContain('at most one');
+    });
+
+    it('flags an empty role value', () => {
+        const res = resolveRole(infoOf(['role:']));
+        expect(res.role).toBeNull();
+        expect(res.problem).toContain('empty value');
     });
 });
 

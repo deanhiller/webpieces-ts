@@ -9,17 +9,17 @@ import type { BindInWhenOnFluentSyntax, ServiceIdentifier } from 'inversify';
 export const ROUTING_METADATA_KEYS = {
     CONTROLLER: 'webpieces:controller',
     NOT_CONTROLLER: 'webpieces:not-controller',
+    API_IMPLEMENTATION: 'webpieces:api-implementation',
     SOURCE_FILEPATH: 'webpieces:source-filepath',
 };
 
 /**
- * @Controller decorator to mark a class as a controller.
- * This is a server-side only decorator.
+ * @Controller decorator — marks a controller (server-side only).
  *
  * Usage:
  * ```typescript
  * @Controller()
- * export class SaveController implements SaveApi {
+ * export class SaveController {
  *   // ...
  * }
  * ```
@@ -50,7 +50,7 @@ export function isController(controllerClass: any): boolean {
  * Usage:
  * ```typescript
  * @NotController()
- * export class Server2Simulator extends Server2Api { ... }
+ * export class Server2Simulator { ... }
  * ```
  */
 export function NotController(): ClassDecorator {
@@ -68,15 +68,50 @@ export function isNotController(controllerClass: object): boolean {
 }
 
 /**
+ * @ApiImplementation decorator — marks the top-of-DAG implementation class in a LIBRARY
+ * (a `role:designed-lib` project) whose DI design should be generated.
+ *
+ * It is the library-side analog of `@Controller`: where a server's design roots on its
+ * `@Controller` classes, a designed-lib's design roots on its `@ApiImplementation` classes.
+ * A `role:designed-lib` project is REQUIRED to have at least one such class — otherwise the
+ * DI-graph generator has no root and fails.
+ *
+ * Put it on the top implementation class a library exports and binds in its `ContainerModule`
+ * (e.g. the class an app injects to drive the library). Like `@Controller`, this is a pure
+ * marker read by the static DI-graph analyzer (by decorator name); it registers nothing at
+ * runtime on its own.
+ *
+ * Usage:
+ * ```typescript
+ * @ApiImplementation()
+ * @injectable()
+ * export class AgentHandler { ... }
+ * ```
+ */
+export function ApiImplementation(): ClassDecorator {
+    return (target: object) => {
+        Reflect.defineMetadata(ROUTING_METADATA_KEYS.API_IMPLEMENTATION, true, target);
+    };
+}
+
+/**
+ * Helper function to check if a class is marked as an API implementation (designed-lib root).
+ * Server/library side only.
+ */
+export function isApiImplementation(implClass: object): boolean {
+    return Reflect.getMetadata(ROUTING_METADATA_KEYS.API_IMPLEMENTATION, implClass) === true;
+}
+
+/**
  * SourceFile decorator to explicitly set the source filepath for a controller.
  * This is used by filter matching to determine which filters apply to the controller.
  *
- * If not specified, the system will use a heuristic based on class name.
+ * If not specified, the system will use a heuristic based on the controller's name.
  *
  * Usage:
  * @SourceFile('src/controllers/admin/UserController.ts')
  * @Controller()
- * export class UserController implements UserApi
+ * export class UserController { ... }
  *
  * @param filepath - The source filepath of the controller
  */
@@ -116,7 +151,7 @@ export function provideSingleton() {
  * import { SOME_API_TOKEN } from '@myorg/some-api';
  *
  * @provideSingletonAs(SOME_API_TOKEN)
- * export class SomeApiImpl implements SomeApi { ... }
+ * export class SomeApiImpl { ... }
  * ```
  */
 export function provideSingletonAs<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {

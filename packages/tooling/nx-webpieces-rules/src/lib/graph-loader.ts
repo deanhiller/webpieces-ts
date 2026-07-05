@@ -160,6 +160,7 @@ function formatEntryLines(entry: GraphEntry): string[] {
     lines.push(`            "level": ${entry.level},`);
 
     pushOptionalField(lines, 'framework', entry.framework);
+    pushOptionalField(lines, 'role', entry.role);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
     pushOptionalField(lines, 'designFile', entry.designFile);

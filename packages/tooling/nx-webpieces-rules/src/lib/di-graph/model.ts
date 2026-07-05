@@ -16,7 +16,14 @@
 
 import type * as ts from 'typescript';
 
-export type DiNodeKind = 'controller' | 'component' | 'class' | 'constant' | 'dynamic' | 'unresolved';
+export type DiNodeKind =
+    | 'controller'
+    | 'apiImplementation'
+    | 'component'
+    | 'class'
+    | 'constant'
+    | 'dynamic'
+    | 'unresolved';
 
 export type DiInjectionKind = 'token' | 'type' | 'multiInject';
 

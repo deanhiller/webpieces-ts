@@ -22,6 +22,7 @@ export interface GraphEntry {
     level: number;
     dependsOn: string[];
     framework?: string;
+    role?: string;
     shortDescription?: string;
     responsibilitiesFile?: string;
     designFile?: string;
