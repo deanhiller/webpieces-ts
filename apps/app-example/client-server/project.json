@@ -30,5 +30,5 @@
             }
         }
     },
-    "tags": ["framework:express"]
+    "tags": ["framework:express", "role:server"]
 }

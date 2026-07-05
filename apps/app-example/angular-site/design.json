@@ -31,7 +31,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "apps/app-example/angular-site/src/services/EnvironmentConfig.ts",
-                    "level": 1
+                    "level": 3
                 },
                 {
                     "id": "MutableContextStore",

@@ -49,7 +49,8 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "apps/app-example/client-server/src/controllers/save-controller.ts",
-                    "level": 1
+                    "level": 1,
+                    "api": "Counter"
                 }
             ],
             "edges": [

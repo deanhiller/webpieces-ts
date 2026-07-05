@@ -14,12 +14,13 @@ appears in each root's tree.
 graph TD
     Server2Controller["Server2Controller"]:::controller
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
     classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
 ```
 
 
-Edges are injections labeled by the target `constructor param`/`inject()` field
-name (`multiInject <name>` for `@multiInject`). Rounded nodes are
+Edges are constructor/`inject()` dependencies (the injected param/field
+name and token are in `design.json`). Rounded nodes are
 `toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed
 nodes are tokens the analyzer could not resolve.
