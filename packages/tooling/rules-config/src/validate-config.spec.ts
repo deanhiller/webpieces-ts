@@ -126,6 +126,29 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
             expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_CODE'))).toBe(true);
         }
     });
+
+    // framework-tag is PROJECT-level: it uses MODIFIED_PROJECTS, not the line/file-scoped modes.
+    it('accepts MODIFIED_PROJECTS and rejects NEW_AND_MODIFIED_CODE for framework-tag', () => {
+        const ok = errorsFor('framework-tag', validateWebpiecesConfig({
+            'framework-tag': { mode: 'MODIFIED_PROJECTS', ignoreModifiedUntilEpoch: 0 },
+        })).filter(e => e.includes('Must be one of'));
+        expect(ok).toEqual([]);
+
+        const bad = errorsFor('framework-tag', validateWebpiecesConfig({
+            'framework-tag': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+        }));
+        expect(bad.some(e => e.includes('Must be one of') && e.includes('MODIFIED_PROJECTS'))).toBe(true);
+    });
+
+    it('recommends the gradual scoped mode in the missing-rule snippet (framework-tag → MODIFIED_PROJECTS)', () => {
+        const snippet = validateWebpiecesConfig({}).find(e => e.includes('[framework-tag] Not configured'));
+        expect(snippet).toBeDefined();
+        expect(snippet!).toContain('💡 Recommended: start with "mode": "MODIFIED_PROJECTS"');
+        expect(snippet!).toContain('rolls out gradually');
+        // Structural rules (RUN_EVERY_TIME only) get no gradual recommendation.
+        const structural = validateWebpiecesConfig({}).find(e => e.includes('[no-file-import-cycles] Not configured'));
+        expect(structural!).not.toContain('💡 Recommended');
+    });
 });
 
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {

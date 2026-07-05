@@ -24,18 +24,18 @@
  *   { "name": "my-lib", "tags": ["framework:all"] }
  *
  * ============================================================================
- * MODES (PROJECT-BASED)
+ * MODES (PROJECT-LEVEL)
  * ============================================================================
- * - OFF:                     Skip validation entirely
- * - NEW_AND_MODIFIED_CODE
- *   / NEW_AND_MODIFIED_FILES: Require a framework tag on every project that owns
- *                            a changed .ts file (both modes behave the same here
- *                            — the check is project-level, not line-level).
+ * - OFF:               Skip validation entirely.
+ * - MODIFIED_PROJECTS: Require a framework tag on every project that owns ANY
+ *                      changed file (not just .ts, and not line-scoped) — the
+ *                      check is inherently project-level. nx `affected` already
+ *                      narrows execution to the changed projects.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ModifiedCodeMode, FrameworkTagConfig, detectBase, getChangedFiles, toError } from '@webpieces/rules-config';
+import { ProjectMode, FrameworkTagConfig, detectBase, getChangedFiles, toError } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -134,7 +134,7 @@ export function findUntaggedProjects(workspaceRoot: string, changedFiles: string
     return untagged;
 }
 
-function reportViolations(untagged: UntaggedProject[], knownTypes: string[], mode: ModifiedCodeMode): void {
+function reportViolations(untagged: UntaggedProject[], knownTypes: string[], mode: ProjectMode): void {
     const suggestion = knownTypes.map((t: string) => `${FRAMEWORK_TAG_PREFIX}${t}`).join(' | ');
     console.error('');
     console.error('❌ Every modified project must declare which client side it targets (a framework tag)!');
@@ -153,7 +153,7 @@ function reportViolations(untagged: UntaggedProject[], knownTypes: string[], mod
     console.error('');
 }
 
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
+function resolveMode(normalMode: ProjectMode, epoch: number | undefined, branchPattern: string | undefined): ProjectMode {
     if (normalMode === 'OFF') {
         return normalMode;
     }
@@ -167,7 +167,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 }
 
 async function runValidatorImpl(options: FrameworkTagConfig, workspaceRoot: string): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ProjectMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const knownTypes = options.knownTypes && options.knownTypes.length > 0 ? options.knownTypes : DEFAULT_KNOWN_TYPES;
 
     if (mode === 'OFF') {
@@ -195,9 +195,11 @@ async function runValidatorImpl(options: FrameworkTagConfig, workspaceRoot: stri
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    // Project-level rule: ANY changed file (not just .ts) makes its owning
+    // project require a tag, so include non-code files too.
+    const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
     if (changedFiles.length === 0) {
-        console.log('✅ No TypeScript files changed');
+        console.log('✅ No changed files in any project');
         return { success: true };
     }
 
