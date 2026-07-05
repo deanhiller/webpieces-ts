@@ -10,7 +10,9 @@
 /**
  * Graph entry with level metadata plus AI-oriented metadata filled in by
  * enrichGraph() (lib/graph-metadata.ts) before the graph is saved:
- *  - framework: angular | react | express | all-ts | ... (nx tag or inferred)
+ *  - framework: the project's libType — angular | react | express | all
+ *    ("all" = library usable by any side); from its `framework:` nx tag
+ *    (source of truth) or inferred from package.json deps
  *  - shortDescription: summary extracted from the project's responsibilities.md
  *  - responsibilitiesFile: repo-relative path to the FULL responsibilities doc
  *  - designFile: repo-relative path to the generated DI design.json (only for

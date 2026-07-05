@@ -35,5 +35,5 @@
             }
         }
     },
-    "tags": ["type:tooling"]
+    "tags": ["type:tooling", "framework:all"]
 }

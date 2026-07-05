@@ -13,6 +13,11 @@
  *     }
  * }
  *
+ * `framework` is the project's libType — which client side it targets:
+ * angular | react | express | all ("all" = usable by any side). It comes from
+ * the project's `framework:` nx tag and is enforced across edges by the
+ * `library-types-match-client` rule.
+ *
  * The legacy format (flat { "<project>": { level, dependsOn } } map) is still
  * readable so validation against a pre-upgrade file produces a clean
  * "re-run architecture:generate" diff instead of a parse failure.

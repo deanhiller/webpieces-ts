@@ -15,14 +15,18 @@ import type { EnhancedGraph } from './graph-sorter';
 import { toError } from '../toError';
 
 /**
- * Level colors for visualization
+ * Framework (libType) colors for visualization — nodes are colored by which
+ * client side they target so it is obvious at a glance which projects are
+ * Angular, which are Express, and which libraries are shared ("all").
  */
-const LEVEL_COLORS: Record<number, string> = {
-    0: '#E8F5E9', // Light green - foundation
-    1: '#E3F2FD', // Light blue - middleware
-    2: '#FFF3E0', // Light orange - applications
-    3: '#FCE4EC', // Light pink - higher level
+const FRAMEWORK_COLORS: Record<string, string> = {
+    angular: '#FCE4EC', // pink   - Angular front-end
+    react: '#E3F2FD', // blue   - React front-end
+    express: '#E8F5E9', // green  - Express / server side
+    all: '#F5F5F5', // grey   - library usable by any side
 };
+
+const DEFAULT_FRAMEWORK_COLOR = '#FFF3E0'; // orange - unknown/other libType
 
 /**
  * Remove scope from name for display
@@ -49,11 +53,12 @@ export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Depe
         levels[info.level].push(project);
     }
 
-    // Create nodes with level-based colors
+    // Create nodes colored by framework (libType); level is kept in the label
     for (const [project, info] of Object.entries(graph)) {
         const shortName = getShortName(project);
-        const color = LEVEL_COLORS[info.level] || '#F5F5F5';
-        dot += `  "${shortName}" [fillcolor="${color}", label="${shortName}\\n(L${info.level})"];\n`;
+        const framework = info.framework ?? 'all';
+        const color = FRAMEWORK_COLORS[framework] ?? DEFAULT_FRAMEWORK_COLOR;
+        dot += `  "${shortName}" [fillcolor="${color}", label="${shortName}\\n(L${info.level} · ${framework})"];\n`;
     }
 
     dot += '\n';
@@ -158,21 +163,25 @@ function generateHTMLStyles(): string {
 
 function generateHTMLLegend(): string {
     return `<div class="legend">
-        <h2>Legend</h2>
+        <h2>Legend — colored by framework (libType)</h2>
         <div class="legend-item">
-            <span class="legend-box" style="background: #E8F5E9;"></span>
-            <strong>Level 0:</strong> Foundation libraries (no dependencies)
+            <span class="legend-box" style="background: #FCE4EC;"></span>
+            <strong>angular:</strong> Angular front-end
         </div>
         <div class="legend-item">
             <span class="legend-box" style="background: #E3F2FD;"></span>
-            <strong>Level 1:</strong> Middleware libraries (depend on Level 0)
+            <strong>react:</strong> React front-end
         </div>
         <div class="legend-item">
-            <span class="legend-box" style="background: #FFF3E0;"></span>
-            <strong>Level 2:</strong> Applications (depend on Level 1)
+            <span class="legend-box" style="background: #E8F5E9;"></span>
+            <strong>express:</strong> Express / server side
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="background: #F5F5F5;"></span>
+            <strong>all:</strong> Library usable by any side
         </div>
         <div class="legend-item" style="margin-top: 15px;">
-            <em>Note: Transitive dependencies are allowed but not shown in the graph.</em>
+            <em>Each node label shows its dependency level (L#) and framework. Rows are still laid out by level (top = no dependencies). Transitive dependencies are allowed but not shown.</em>
         </div>
     </div>`;
 }

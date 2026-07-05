@@ -68,6 +68,7 @@ export {
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
     EnforceControllerNamingConfig,
+    FrameworkTagConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,

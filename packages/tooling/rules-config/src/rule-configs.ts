@@ -275,6 +275,22 @@ export class EnforceControllerNamingConfig extends BaseRuleConfig {
     };
 }
 
+// framework-tag — every project that a changed source file belongs to must carry a
+// `framework:<angular|react|express|all>` nx tag in its project.json. That tag is the project's
+// "libType" (which client side it targets) — the source of truth for the dependencies.json
+// `framework` field and the `library-types-match-client` rule. `knownTypes` customizes the list
+// suggested to the author when a tag is missing (defaults to angular, react, express, all).
+export class FrameworkTagConfig extends BaseRuleConfig {
+    declare mode?: ModifiedCodeMode;
+    knownTypes?: string[];
+
+    static readonly SCHEMA: SchemaShape<FrameworkTagConfig> = {
+        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        knownTypes: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class BranchCreationGuardConfig extends BaseRuleConfig {
     declare mode?: BranchGuardMode;
     // Naming pattern for stacked SUB-branches only (branches created off another feature branch,

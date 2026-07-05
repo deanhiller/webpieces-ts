@@ -1,14 +1,18 @@
 /**
  * Framework Resolver
  *
- * Determines the `framework` field written per project into
- * architecture/dependencies.json (angular, react, express, all-ts, ...).
+ * Determines the `framework` field (a project's "libType" — which client side
+ * it targets) written per project into architecture/dependencies.json. Known
+ * values: angular | react | express | all ("all" = a library usable by any
+ * side). This is the field the `library-types-match-client` rule reads to keep
+ * an express project from depending on an angular-only lib (and vice-versa).
  *
  * Resolution order:
  * 1. Explicit nx tag `framework:<value>` on the project (project.json tags) —
- *    any value is allowed so new frameworks need no code change here.
+ *    any value is allowed so new frameworks need no code change here. This is
+ *    the source of truth; every project should carry one.
  * 2. Inference from the project's package.json dependencies.
- * 3. Fallback: 'all-ts' (plain TypeScript library).
+ * 3. Fallback: 'all' (plain TypeScript library usable by any side).
  */
 
 import * as fs from 'fs';
@@ -70,7 +74,7 @@ export function resolveFramework(info: ProjectInfo, workspaceRoot: string): Fram
 function inferFromPackageJson(info: ProjectInfo, workspaceRoot: string): string {
     const pkgJsonPath = path.join(workspaceRoot, info.root, 'package.json');
     if (!fs.existsSync(pkgJsonPath)) {
-        return 'all-ts';
+        return 'all';
     }
 
     let allDeps: Record<string, string>;
@@ -94,5 +98,5 @@ function inferFromPackageJson(info: ProjectInfo, workspaceRoot: string): string 
             return marker.framework;
         }
     }
-    return 'all-ts';
+    return 'all';
 }
