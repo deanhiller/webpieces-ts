@@ -8,4 +8,30 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-No DI-registered classes found in this project.
+## AppComponent — component, Level 0…3
+
+```mermaid
+graph TD
+    AppComponent["AppComponent"]:::component
+    ClientConfig(["ClientConfig"])
+    EnvironmentConfig["EnvironmentConfig"]
+    MutableContextStore(["MutableContextStore"])
+    PublicApi(["PublicApi"])
+    SaveApi(["SaveApi"])
+    AppComponent -->|envConfig| EnvironmentConfig
+    AppComponent -->|publicApi| PublicApi
+    AppComponent -->|saveApi| SaveApi
+    ClientConfig -->|EnvironmentConfig| EnvironmentConfig
+    ClientConfig -->|MutableContextStore| MutableContextStore
+    PublicApi -->|ClientConfig| ClientConfig
+    SaveApi -->|ClientConfig| ClientConfig
+    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
+    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
+```
+
+
+Edges are injections labeled by the target `constructor param`/`inject()` field
+name (`multiInject <name>` for `@multiInject`). Rounded nodes are
+`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed
+nodes are tokens the analyzer could not resolve.

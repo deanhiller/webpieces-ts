@@ -8,16 +8,4 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## RouteBuilderImpl — root, Level 0…0
-
-```mermaid
-graph TD
-    RouteBuilderImpl["RouteBuilderImpl"]
-    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
-    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
-```
-
-
-Edges are constructor injections: `-->|TOKEN|` for `@inject`/`@multiInject`,
-unlabeled arrows for inject-by-type. Rounded nodes are `toConstantValue`/
-`toDynamicValue` leaves; dashed nodes are tokens the analyzer could not resolve.
+No DI-registered classes found in this project.

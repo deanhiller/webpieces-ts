@@ -82,6 +82,10 @@
             "allowedPaths": [],
             "ignoreModifiedUntilEpoch": 0
         },
+        "framework-tag": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "ignoreModifiedUntilEpoch": 0
+        },
         "di-graph": {
             "mode": "RUN_EVERY_TIME",
             "ignoreModifiedUntilEpoch": 0
