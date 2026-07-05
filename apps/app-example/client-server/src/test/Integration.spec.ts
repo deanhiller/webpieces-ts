@@ -6,7 +6,7 @@ import { ProdServerMeta } from '../ProdServerMeta';
 import { SaveApi, SaveRequest, SaveResponse, PublicApi, PublicInfoRequest } from '@webpieces/client-server-api';
 import { RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/http-api';
-import { CompanyHeaders } from '../modules/CompanyModule';
+import { CompanyHeaders } from '@webpieces/company-core';
 import {
     Server2Api,
     FetchValueRequest,

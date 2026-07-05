@@ -31,7 +31,7 @@
             ]
         },
         "app-example-e2e": {
-            "level": 6,
+            "level": 7,
             "framework": "express",
             "shortDescription": "End-to-end test project for the two-service example. Boots both `client-server` and `server2` on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.",
             "responsibilitiesFile": "apps/app-example/e2e/responsibilities.md",
@@ -42,17 +42,16 @@
             ]
         },
         "client-server": {
-            "level": 5,
+            "level": 6,
             "framework": "express",
             "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
             "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
             "designFile": "apps/app-example/client-server/design.json",
             "dependsOn": [
                 "client-server-api",
-                "company-core",
+                "company-svc-core",
                 "core-mock",
                 "http-client",
-                "http-server",
                 "server2-api"
             ]
         },
@@ -84,6 +83,17 @@
             "designFile": "apps/app-example/company-core/design.json",
             "dependsOn": [
                 "http-api"
+            ]
+        },
+        "company-svc-core": {
+            "level": 5,
+            "framework": "express",
+            "shortDescription": "Company-wide shared SERVER core (node-only, `framework:express`). Holds the single shared server bootstrap and shared server DI so every express service starts the same way. It is the node-only counterpart to the browser-safe `company-core` and is NOT imported by Angular.",
+            "responsibilitiesFile": "apps/app-example/company-svc-core/responsibilities.md",
+            "designFile": "apps/app-example/company-svc-core/design.json",
+            "dependsOn": [
+                "company-core",
+                "http-server"
             ]
         },
         "core-context": {
@@ -206,14 +216,13 @@
             "dependsOn": []
         },
         "server2": {
-            "level": 5,
+            "level": 6,
             "framework": "express",
             "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
             "responsibilitiesFile": "apps/app-example/server2/responsibilities.md",
             "designFile": "apps/app-example/server2/design.json",
             "dependsOn": [
-                "company-core",
-                "http-server",
+                "company-svc-core",
                 "server2-api"
             ]
         },

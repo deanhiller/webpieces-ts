@@ -1,7 +1,7 @@
 import { WebAppMeta, Routes } from '@webpieces/http-routing';
 import { ContainerModule } from 'inversify';
 import { WebpiecesModule } from '@webpieces/http-server';
-import { CompanyModule } from './modules/CompanyModule';
+import { CompanyHeadersModule } from '@webpieces/company-svc-core';
 import { InversifyModule } from './modules/InversifyModule';
 import { FilterRoutes } from './routes/FilterRoutes';
 import { ApiRoutingFactory } from '@webpieces/http-routing';
@@ -31,14 +31,14 @@ export class ProdServerMeta implements WebAppMeta {
      *
      * Three-tier module structure:
      * 1. WebpiecesModule (framework headers: x-request-id, x-correlation-id)
-     * 2. CompanyModule (company headers: x-tenant-id, x-api-version)
+     * 2. CompanyHeadersModule (company headers: x-tenant-id, x-api-version)
      * 3. InversifyModule (app headers: x-client-type)
      *
      * All modules contribute PlatformHeader instances that are collected
      * via Inversify @multiInject pattern in WebpiecesMiddleware.
      */
     getDIModules(): ContainerModule[] {
-        return [WebpiecesModule, CompanyModule, InversifyModule];
+        return [WebpiecesModule, CompanyHeadersModule, InversifyModule];
     }
 
     /**
