@@ -1,8 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "company-core",
-    "roots": [],
-    "nodes": [],
-    "edges": [],
-    "unresolved": []
+    "designs": []
 }

@@ -1,8 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "eslint-rules",
-    "roots": [],
-    "nodes": [],
-    "edges": [],
-    "unresolved": []
+    "designs": []
 }

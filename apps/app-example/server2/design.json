@@ -1,18 +1,24 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "server2",
-    "roots": [
-        "Server2Controller"
-    ],
-    "nodes": [
+    "designs": [
         {
-            "id": "Server2Controller",
-            "className": "Server2Controller",
-            "kind": "controller",
-            "scope": "singleton",
-            "file": "apps/app-example/server2/src/controllers/server2-controller.ts"
+            "root": "Server2Controller",
+            "rootKind": "controller",
+            "file": "apps/app-example/server2/src/controllers/server2-controller.ts",
+            "maxLevel": 0,
+            "nodes": [
+                {
+                    "id": "Server2Controller",
+                    "className": "Server2Controller",
+                    "kind": "controller",
+                    "scope": "singleton",
+                    "file": "apps/app-example/server2/src/controllers/server2-controller.ts",
+                    "level": 0
+                }
+            ],
+            "edges": [],
+            "unresolved": []
         }
-    ],
-    "edges": [],
-    "unresolved": []
+    ]
 }
