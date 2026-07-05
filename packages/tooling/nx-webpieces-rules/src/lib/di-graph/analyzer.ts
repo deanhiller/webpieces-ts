@@ -29,7 +29,7 @@ import { classTokenKey, relativeFile, resolveTokenKey } from './token-resolver';
 
 const DI_DECORATORS = new Set(['provideSingleton', 'provideTransient', 'provideSingletonAs', 'injectable']);
 
-class ParamInjection {
+export class ParamInjection {
     expr: ts.Expression | null;
     multi: boolean;
     optional: boolean;
@@ -43,7 +43,7 @@ class ParamInjection {
     }
 }
 
-function readParamDecorators(param: ts.ParameterDeclaration): ParamInjection {
+export function readParamDecorators(param: ts.ParameterDeclaration): ParamInjection {
     let expr: ts.Expression | null = null;
     let multi = false;
     let optional = false;
@@ -81,7 +81,7 @@ function isDiRegisteredClass(cls: ts.ClassDeclaration): boolean {
     return hasDecoratorNamed(cls, DI_DECORATORS);
 }
 
-function findConstructor(cls: ts.ClassDeclaration): ts.ConstructorDeclaration | null {
+export function findConstructor(cls: ts.ClassDeclaration): ts.ConstructorDeclaration | null {
     for (const member of cls.members) {
         if (ts.isConstructorDeclaration(member) && member.body) return member;
         if (ts.isConstructorDeclaration(member)) return member;
@@ -90,7 +90,7 @@ function findConstructor(cls: ts.ClassDeclaration): ts.ConstructorDeclaration | 
 }
 
 /** All class declarations in files under the project root. */
-function projectClasses(
+export function projectClasses(
     program: ts.Program,
     workspaceRoot: string,
     projectRoot: string,
@@ -111,17 +111,63 @@ function projectClasses(
 }
 
 /**
+ * One normalized injection site, framework-agnostic — produced by a builder's
+ * `collectInjections(cls)` hook and processed by the shared base. Inversify
+ * emits `token`/`type` from constructor params; Angular emits `angularToken`
+ * from constructor params AND `inject()` field initializers.
+ *
+ * Modes:
+ *   - `token`        Inversify `@inject`/`@multiInject`: table lookup; an unbound
+ *                    token becomes an `unresolved` node (no class fallback).
+ *   - `type`         Inversify bare typed param: resolve the declared TYPE to a
+ *                    class (inject-by-type); no table lookup.
+ *   - `angularToken` Angular `inject(T)` / `@Inject(T)` / bare typed ctor param:
+ *                    table lookup FIRST (provider table), then fall back to
+ *                    resolving the token expression as a class, else unresolved.
+ */
+export class Injection {
+    mode: 'token' | 'type' | 'angularToken';
+    /** Token/type expression (modes `token`/`angularToken`, or the type identifier for `type`). */
+    expr: ts.Expression | ts.Identifier | null;
+    multi: boolean;
+    optional: boolean;
+    paramName: string;
+    paramType: string;
+
+    constructor(
+        mode: 'token' | 'type' | 'angularToken',
+        expr: ts.Expression | ts.Identifier | null,
+        paramName: string,
+        paramType: string,
+        multi = false,
+        optional = false,
+    ) {
+        this.mode = mode;
+        this.expr = expr;
+        this.paramName = paramName;
+        this.paramType = paramType;
+        this.multi = multi;
+        this.optional = optional;
+    }
+}
+
+/**
  * Builds ONE self-contained `DiDesign` for a single root. A fresh instance is
  * created per root so its maps (visited/classIds/usedIds/...) are scoped to
- * that root's tree — a dependency shared by two controllers is therefore walked
- * (and duplicated) into each controller's design, not hidden under whichever
- * controller reached it first.
+ * that root's tree — a dependency shared by two roots is therefore walked
+ * (and duplicated) into each root's design, not hidden under whichever root
+ * reached it first.
+ *
+ * Framework-agnostic base: subclasses implement {@link collectInjections} (and
+ * override {@link rootKindOf} for Angular components); everything else — node
+ * ids, leaf/unresolved labeling, token→binding resolution, factory-dep edges,
+ * level assignment — is shared so Inversify and Angular render identically.
  */
-class DiDesignBuilder {
-    private readonly checker: ts.TypeChecker;
-    private readonly table: BindingTable;
-    private readonly workspaceRoot: string;
-    private readonly design: DiDesign;
+export abstract class DiDesignBuilder {
+    protected readonly checker: ts.TypeChecker;
+    protected readonly table: BindingTable;
+    protected readonly workspaceRoot: string;
+    protected readonly design: DiDesign;
     private readonly classIds = new Map<ts.ClassDeclaration, string>();
     private readonly leafIds = new Map<Binding, string>();
     private readonly unresolvedIds = new Map<string, string>();
@@ -135,6 +181,14 @@ class DiDesignBuilder {
         this.design = design;
     }
 
+    /** Collect the injection sites for one class (constructor params, field inject(), ...). */
+    protected abstract collectInjections(cls: ts.ClassDeclaration): Injection[];
+
+    /** Node kind for a root/reached class — `controller` (Inversify) or `component` (Angular). */
+    protected rootKindOf(cls: ts.ClassDeclaration): DiNodeKind {
+        return isControllerClass(cls) ? 'controller' : 'class';
+    }
+
     addRoot(cls: ts.ClassDeclaration): void {
         const id = this.classNode(cls);
         this.design.root = id;
@@ -146,7 +200,7 @@ class DiDesignBuilder {
      * `scopeHint` carries the scope of the module binding the class was reached
      * through (e.g. bind(TOKEN).to(X).inSingletonScope() where X is not self-bound).
      */
-    private classNode(cls: ts.ClassDeclaration, scopeHint: DiScope = 'unknown'): string {
+    protected classNode(cls: ts.ClassDeclaration, scopeHint: DiScope = 'unknown'): string {
         const existing = this.classIds.get(cls);
         if (existing) return existing;
 
@@ -157,8 +211,7 @@ class DiDesignBuilder {
 
         const declaredScope = this.classScope(cls);
         const scope = declaredScope !== 'unknown' ? declaredScope : scopeHint;
-        const kind: DiNodeKind = isControllerClass(cls) ? 'controller' : 'class';
-        this.design.nodes.push(new DiNode(id, className, kind, scope, file));
+        this.design.nodes.push(new DiNode(id, className, this.rootKindOf(cls), scope, file));
         return id;
     }
 
@@ -187,128 +240,196 @@ class DiDesignBuilder {
         return 'unknown';
     }
 
-    private leafNode(binding: Binding, kind: DiNodeKind): string {
+    /**
+     * Leaf box for a constant/dynamic binding. B0: the box is labeled by the
+     * DECLARED param TYPE (e.g. `FirestoreConfig`, `ClientConfig`) — the DI
+     * contract — while the bound expression (`buildConfigFromEnv(...)` /
+     * `TOKEN (dynamic)`) is kept as `detail`. A dynamic leaf also fans out to
+     * each of its `useFactory` `deps` (Angular; empty for Inversify).
+     */
+    private leafNode(binding: Binding, kind: DiNodeKind, paramType: string): string {
         const existing = this.leafIds.get(binding);
         if (existing) return existing;
 
-        // Dynamic values are factory functions — their source text is noise, so label
-        // them by the token they satisfy. Constants keep their (short) expression text.
-        const className = kind === 'dynamic'
-            ? `${binding.tokenDisplay} (dynamic)`
-            : binding.valueText !== '' ? binding.valueText : binding.tokenDisplay;
+        const detail = kind === 'dynamic' ? `${binding.tokenDisplay} (dynamic)` : binding.valueText;
+        const className = paramType !== '' ? paramType : detail !== '' ? detail : binding.tokenDisplay;
         const id = this.claimId(className, binding.file);
         this.leafIds.set(binding, id);
-        this.design.nodes.push(new DiNode(id, className, kind, binding.scope, binding.file));
+        this.design.nodes.push(new DiNode(id, className, kind, binding.scope, binding.file, 0, detail));
+        if (kind === 'dynamic') this.expandFactoryDeps(id, binding);
         return id;
     }
 
-    private unresolvedNode(display: string, file: string): string {
-        const key = `${display} ${file}`;
+    /** Edges from a `useFactory` leaf to each declared `deps: [...]` token (Angular). */
+    private expandFactoryDeps(leafId: string, binding: Binding): void {
+        for (const dep of binding.factoryDeps) {
+            const bindings = this.table.lookup(dep.key);
+            if (bindings.length > 0) {
+                for (const depBinding of bindings) {
+                    // The dep token IS the declared type — label the box with it.
+                    const toId = this.bindingTarget(depBinding, dep.display);
+                    this.design.edges.push(new DiEdge(leafId, toId, 'type', dep.display, dep.key, dep.display, dep.display));
+                }
+            } else {
+                const toId = this.unresolvedNode(dep.display, binding.file, '');
+                this.design.edges.push(new DiEdge(leafId, toId, 'type', dep.display, dep.key, dep.display, dep.display));
+            }
+        }
+    }
+
+    /**
+     * `unresolved` placeholder box. B0: labeled by the declared param TYPE
+     * (`className`) with the resolving token expression kept as `detail` (and
+     * surfaced in `design.unresolved` for diagnostics).
+     */
+    private unresolvedNode(className: string, file: string, detail: string): string {
+        const key = `${className}|${detail}|${file}`;
         const existing = this.unresolvedIds.get(key);
         if (existing) return existing;
 
-        const id = this.claimId(display, file);
+        const id = this.claimId(className, file);
         this.unresolvedIds.set(key, id);
-        this.design.nodes.push(new DiNode(id, display, 'unresolved', 'unknown', file));
-        this.design.unresolved.push(display);
+        this.design.nodes.push(new DiNode(id, className, 'unresolved', 'unknown', file, 0, detail !== className ? detail : ''));
+        this.design.unresolved.push(detail !== '' ? detail : className);
         return id;
     }
 
-    walkClass(cls: ts.ClassDeclaration): void {
+    protected walkClass(cls: ts.ClassDeclaration): void {
         if (this.visited.has(cls)) return;
         this.visited.add(cls);
 
-        const ctor = findConstructor(cls);
-        if (!ctor) return;
         const fromId = this.classNode(cls);
-
-        for (const param of ctor.parameters) {
-            this.walkParam(fromId, cls, param);
+        for (const injection of this.collectInjections(cls)) {
+            this.processInjection(fromId, cls, injection);
         }
     }
 
-    private walkParam(fromId: string, cls: ts.ClassDeclaration, param: ts.ParameterDeclaration): void {
-        const injection = readParamDecorators(param);
-        if (injection.unmanaged) return;
-
-        const paramName = ts.isIdentifier(param.name) ? param.name.text : param.name.getText();
-        const paramType = param.type ? param.type.getText() : '';
-
-        if (injection.expr) {
-            this.walkTokenParam(fromId, cls, injection, paramName, paramType);
+    /** Resolve one injection to a node and record the edge(s). Never throws. */
+    private processInjection(fromId: string, cls: ts.ClassDeclaration, injection: Injection): void {
+        if (injection.mode === 'type') {
+            this.processTypeInjection(fromId, cls, injection);
         } else {
-            this.walkTypeParam(fromId, cls, param, paramName, paramType);
+            this.processTokenInjection(fromId, cls, injection);
         }
     }
 
-    private walkTokenParam(
-        fromId: string,
-        cls: ts.ClassDeclaration,
-        injection: ParamInjection,
-        paramName: string,
-        paramType: string,
-    ): void {
+    /** Inversify `@inject`/`@multiInject` and Angular `inject()`/`@Inject`/bare token. */
+    private processTokenInjection(fromId: string, cls: ts.ClassDeclaration, injection: Injection): void {
         const expr = injection.expr;
         if (!expr) return;
         const token = resolveTokenKey(expr, this.checker, this.workspaceRoot);
         const kind = injection.multi ? 'multiInject' : 'token';
         const bindings = this.table.lookup(token.key);
 
-        if (bindings.length === 0) {
-            // @multiInject @optional with zero bindings is legal — no edge, no error.
-            if (injection.multi && injection.optional) return;
-            const file = relativeFile(this.workspaceRoot, cls.getSourceFile());
-            const toId = this.unresolvedNode(token.display, file);
-            this.design.edges.push(new DiEdge(fromId, toId, kind, token.display, token.key, paramName, paramType));
+        if (bindings.length > 0) {
+            for (const binding of bindings) {
+                const toId = this.bindingTarget(binding, injection.paramType);
+                this.design.edges.push(
+                    new DiEdge(fromId, toId, kind, token.display, token.key, injection.paramName, injection.paramType),
+                );
+            }
             return;
         }
 
-        for (const binding of bindings) {
-            const toId = this.bindingTarget(binding);
-            this.design.edges.push(new DiEdge(fromId, toId, kind, token.display, token.key, paramName, paramType));
+        // @multiInject @optional with zero bindings is legal — no edge, no error.
+        if (injection.multi && injection.optional) return;
+
+        // Angular: a token with no explicit provider may still be a bare @Injectable
+        // class — resolve the token expression as a class and inject it by type.
+        if (injection.mode === 'angularToken') {
+            const target = resolveClassDeclaration(expr, this.checker);
+            if (target) {
+                const classToken = classTokenKey(target, this.workspaceRoot);
+                const toId = this.classNode(target);
+                this.walkClass(target);
+                this.design.edges.push(
+                    new DiEdge(fromId, toId, 'type', classToken.display, classToken.key, injection.paramName, injection.paramType),
+                );
+                return;
+            }
         }
+
+        const file = relativeFile(this.workspaceRoot, cls.getSourceFile());
+        const label = injection.paramType !== '' ? injection.paramType : token.display;
+        const toId = this.unresolvedNode(label, file, token.display);
+        this.design.edges.push(
+            new DiEdge(fromId, toId, kind, token.display, token.key, injection.paramName, injection.paramType),
+        );
     }
 
-    private bindingTarget(binding: Binding): string {
+    private bindingTarget(binding: Binding, paramType: string): string {
         if (binding.implClass) {
             const toId = this.classNode(binding.implClass, binding.scope);
             this.walkClass(binding.implClass);
             return toId;
         }
-        if (binding.kind === 'toConstantValue') return this.leafNode(binding, 'constant');
-        if (binding.kind === 'toDynamicValue') return this.leafNode(binding, 'dynamic');
+        if (binding.kind === 'toConstantValue') return this.leafNode(binding, 'constant', paramType);
+        if (binding.kind === 'toDynamicValue') return this.leafNode(binding, 'dynamic', paramType);
         // .to(X) where X did not resolve to a class declaration.
-        return this.unresolvedNode(binding.valueText !== '' ? binding.valueText : binding.tokenDisplay, binding.file);
+        const detail = binding.valueText !== '' ? binding.valueText : binding.tokenDisplay;
+        const label = paramType !== '' ? paramType : detail;
+        return this.unresolvedNode(label, binding.file, detail);
     }
 
-    private walkTypeParam(
-        fromId: string,
-        cls: ts.ClassDeclaration,
-        param: ts.ParameterDeclaration,
-        paramName: string,
-        paramType: string,
-    ): void {
-        const typeName = param.type && ts.isTypeReferenceNode(param.type) ? param.type.typeName : null;
-        const target = typeName && ts.isIdentifier(typeName)
-            ? resolveClassDeclaration(typeName, this.checker)
-            : null;
+    /** Inversify bare typed param — resolve the declared type directly to a class. */
+    private processTypeInjection(fromId: string, cls: ts.ClassDeclaration, injection: Injection): void {
+        const typeRef = injection.expr && ts.isIdentifier(injection.expr) ? injection.expr : null;
+        const target = typeRef ? resolveClassDeclaration(typeRef, this.checker) : null;
 
         if (target) {
             const token = classTokenKey(target, this.workspaceRoot);
             const toId = this.classNode(target);
             this.walkClass(target);
-            this.design.edges.push(new DiEdge(fromId, toId, 'type', token.display, token.key, paramName, paramType));
+            this.design.edges.push(
+                new DiEdge(fromId, toId, 'type', token.display, token.key, injection.paramName, injection.paramType),
+            );
             return;
         }
 
         // Bare param whose type is not a resolvable class (interface, primitive, etc.).
         const file = relativeFile(this.workspaceRoot, cls.getSourceFile());
-        const toId = this.unresolvedNode(paramType !== '' ? paramType : paramName, file);
-        this.design.edges.push(new DiEdge(fromId, toId, 'type', paramType, `type:${paramType}`, paramName, paramType));
+        const label = injection.paramType !== '' ? injection.paramType : injection.paramName;
+        const toId = this.unresolvedNode(label, file, '');
+        this.design.edges.push(
+            new DiEdge(fromId, toId, 'type', injection.paramType, `type:${injection.paramType}`, injection.paramName, injection.paramType),
+        );
     }
 }
 
-function byClassName(a: ts.ClassDeclaration, b: ts.ClassDeclaration): number {
+/**
+ * Inversify builder: injection sites are constructor params — `@inject`/
+ * `@multiInject` tokens or bare typed (inject-by-type) params.
+ */
+export class InversifyDesignBuilder extends DiDesignBuilder {
+    protected collectInjections(cls: ts.ClassDeclaration): Injection[] {
+        const ctor = findConstructor(cls);
+        if (!ctor) return [];
+
+        const injections: Injection[] = [];
+        for (const param of ctor.parameters) {
+            const decorated = readParamDecorators(param);
+            if (decorated.unmanaged) continue;
+
+            const paramName = ts.isIdentifier(param.name) ? param.name.text : param.name.getText();
+            const paramType = param.type ? param.type.getText() : '';
+
+            if (decorated.expr) {
+                injections.push(
+                    new Injection('token', decorated.expr, paramName, paramType, decorated.multi, decorated.optional),
+                );
+            } else {
+                const typeRef =
+                    param.type && ts.isTypeReferenceNode(param.type) && ts.isIdentifier(param.type.typeName)
+                        ? param.type.typeName
+                        : null;
+                injections.push(new Injection('type', typeRef, paramName, paramType));
+            }
+        }
+        return injections;
+    }
+}
+
+export function byClassName(a: ts.ClassDeclaration, b: ts.ClassDeclaration): number {
     const nameA = a.name ? a.name.text : '';
     const nameB = b.name ? b.name.text : '';
     if (nameA !== nameB) return nameA < nameB ? -1 : 1;
@@ -354,7 +475,7 @@ function findLibraryRoots(
  * A node reached from multiple parents keeps its SHALLOWEST depth. Cycles are
  * safe: a node is levelled once, the first (shallowest) time BFS reaches it.
  */
-function assignLevels(design: DiDesign): void {
+export function assignLevels(design: DiDesign): void {
     const outgoing = new Map<string, string[]>();
     for (const e of design.edges) {
         const list = outgoing.get(e.from) ?? [];
@@ -387,33 +508,39 @@ function assignLevels(design: DiDesign): void {
     design.maxLevel = maxLevel;
 }
 
-/** Build one self-contained downward design tree for a single root class. */
-function buildDesign(
+/**
+ * Build one self-contained downward design tree for a single root class, using
+ * the builder produced by `makeBuilder` (Inversify or Angular). `rootKind` is
+ * the node kind for the root box (`controller`/`component`/`class`).
+ */
+export function buildDesign(
     root: ts.ClassDeclaration,
-    checker: ts.TypeChecker,
-    table: BindingTable,
+    rootKind: DiNodeKind,
     workspaceRoot: string,
+    makeBuilder: (design: DiDesign) => DiDesignBuilder,
 ): DiDesign {
     const className = root.name ? root.name.text : '<anonymous>';
-    const rootKind: DiNodeKind = isControllerClass(root) ? 'controller' : 'class';
     const file = relativeFile(workspaceRoot, root.getSourceFile());
     const design = new DiDesign(className, rootKind, file);
-    const builder = new DiDesignBuilder(checker, table, workspaceRoot, design);
-    builder.addRoot(root);
+    makeBuilder(design).addRoot(root);
     assignLevels(design);
     return design;
 }
 
 /**
- * Build the full DI graph for one project: one self-contained `DiDesign` per
- * root — every @Controller class, or (when the project has no controllers)
- * every top-of-DAG DI class. `projectRoot` is workspace-relative.
+ * Build the full Inversify DI graph for one project: one self-contained
+ * `DiDesign` per @Controller root. `projectRoot` is workspace-relative.
+ *
+ * `includeLibraryRoots` (default false, the v1 executor path) roots ONLY on
+ * @Controller classes; when true, a controller-less project falls back to its
+ * top-of-DAG DI classes (the deferred library behavior, still unit-tested).
  */
 export function buildDiGraph(
     program: ts.Program,
     workspaceRoot: string,
     projectRoot: string,
     projectName: string,
+    includeLibraryRoots = false,
 ): DiGraph {
     const checker = program.getTypeChecker();
     const table = collectBindings(program, checker, workspaceRoot);
@@ -421,12 +548,23 @@ export function buildDiGraph(
 
     const classes = projectClasses(program, workspaceRoot, projectRoot);
     const controllers = classes.filter((cls: ts.ClassDeclaration) => isControllerClass(cls));
-    const roots = controllers.length > 0
-        ? controllers
-        : findLibraryRoots(classes, checker, table, workspaceRoot);
+    const roots =
+        controllers.length > 0
+            ? controllers
+            : includeLibraryRoots
+              ? findLibraryRoots(classes, checker, table, workspaceRoot)
+              : [];
 
     for (const root of [...roots].sort(byClassName)) {
-        graph.designs.push(buildDesign(root, checker, table, workspaceRoot));
+        const rootKind: DiNodeKind = isControllerClass(root) ? 'controller' : 'class';
+        graph.designs.push(
+            buildDesign(
+                root,
+                rootKind,
+                workspaceRoot,
+                (design: DiDesign) => new InversifyDesignBuilder(checker, table, workspaceRoot, design),
+            ),
+        );
     }
 
     return graph;

@@ -12,6 +12,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { createProjectProgram } from '../di-graph/program';
 import { buildDiGraph } from '../di-graph/analyzer';
+import { buildAngularDiGraph } from '../di-graph/angular-analyzer';
+import { explicitFrameworkTag, selectAnalyzer, FrameworkMarkers } from '../di-graph/analyzer-strategy';
+import { AngularAnalyzer, EmptyAnalyzer, InversifyAnalyzer } from '../di-graph/analyzer-strategy';
 import { toDesignJson } from '../di-graph/serializer';
 import { toDesignMarkdown } from '../di-graph/mermaid';
 import { DiDesign, DiGraph, DiEdge, DiNode } from '../di-graph/model';
@@ -214,11 +217,18 @@ class Fixture {
         }
     }
 
-    build(): DiGraph {
+    build(includeLibraryRoots = false): DiGraph {
         const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
         expect(program).not.toBeNull();
         if (!program) throw new Error('program not created');
-        return buildDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj');
+        return buildDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj', includeLibraryRoots);
+    }
+
+    buildAngular(): DiGraph {
+        const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
+        expect(program).not.toBeNull();
+        if (!program) throw new Error('program not created');
+        return buildAngularDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj');
     }
 
     cleanup(): void {
@@ -286,9 +296,12 @@ describe('di-graph analyzer - controller project', () => {
         expect(node(graph, 'SimpleCounter')?.scope).toBe('singleton');
     });
 
-    it('records toDynamicValue bindings as dynamic leaves labeled by token', () => {
+    it('records toDynamicValue bindings as dynamic leaves labeled by the declared type (B0)', () => {
         const dynamicNode = allNodes(graph).find((n: DiNode) => n.kind === 'dynamic');
-        expect(dynamicNode?.className).toBe('TYPES.Remote (dynamic)');
+        // B0: the box is the DECLARED param type (`Remote`), not the token; the
+        // bound-expression hint moves to `detail`.
+        expect(dynamicNode?.className).toBe('Remote');
+        expect(dynamicNode?.detail).toBe('TYPES.Remote (dynamic)');
         const dynamicEdge = allEdges(graph).find((e: DiEdge) => e.to === dynamicNode?.id);
         expect(dynamicEdge?.from).toBe('SaveController');
     });
@@ -323,7 +336,9 @@ describe('di-graph analyzer - controller project', () => {
         expect(md.match(/```mermaid/g)).toHaveLength(2);
         expect(md).toContain('## SaveController');
         expect(md).toContain('## EmptyController');
-        expect(md).toContain('|TYPES.Counter|');
+        // B0: edges are labeled by the constructor param NAME, not the token.
+        expect(md).toContain('|counter|');
+        expect(md).not.toContain('|TYPES.Counter|');
     });
 });
 
@@ -385,7 +400,9 @@ describe('di-graph analyzer - library project (no controllers) and cycles', () =
 
     beforeAll(() => {
         fixture = new Fixture(LIBRARY_FIXTURE);
-        graph = fixture.build();
+        // Library top-of-DAG rooting is deferred for the v1 executor path but the
+        // code path is still exercised via includeLibraryRoots=true.
+        graph = fixture.build(true);
     });
 
     afterAll(() => fixture.cleanup());
@@ -421,5 +438,168 @@ describe('di-graph analyzer - empty project', () => {
         expect(allNodes(graph)).toEqual([]);
         expect(toDesignMarkdown(graph)).toContain('No DI-registered classes');
         fixture.cleanup();
+    });
+});
+
+/**
+ * Angular fixture mirroring apps/app-example/angular-site: a bootstrap root
+ * component that injects via field `inject()`, an `ApplicationConfig.providers`
+ * table exercising useValue / useFactory+deps / useClass / bare-class, an
+ * `@Injectable({providedIn:'root'})` self-registered service, and a routed page.
+ */
+const ANGULAR_FIXTURE: Record<string, string> = {
+    'main.ts': `
+import { bootstrapApplication } from '@angular/platform-browser';
+import { AppComponent } from './app.component';
+import { appConfig } from './app.config';
+bootstrapApplication(AppComponent, appConfig);
+`,
+    'api.ts': `
+export abstract class SaveApi { abstract save(): void; }
+export class ClientConfig {}
+export class MutableContextStore {}
+`,
+    'env.ts': `
+import { Injectable } from '@angular/core';
+@Injectable({ providedIn: 'root' })
+export class EnvironmentConfig { apiBaseUrl(): string { return ''; } }
+`,
+    'logger.ts': `
+import { Injectable } from '@angular/core';
+@Injectable()
+export class BareLogger {}
+`,
+    'app.component.ts': `
+import { Component, inject } from '@angular/core';
+import { SaveApi } from './api';
+import { EnvironmentConfig } from './env';
+import { BareLogger } from './logger';
+@Component({ selector: 'app-root', template: '' })
+export class AppComponent {
+  private saveApi = inject(SaveApi);
+  public envConfig = inject(EnvironmentConfig);
+  private logger = inject(BareLogger);
+}
+`,
+    'page.component.ts': `
+import { Component, inject } from '@angular/core';
+import { EnvironmentConfig } from './env';
+@Component({ selector: 'app-page', template: '' })
+export class PageComponent {
+  private envConfig = inject(EnvironmentConfig);
+}
+`,
+    'app.routes.ts': `
+import { Routes } from '@angular/router';
+import { PageComponent } from './page.component';
+export const routes: Routes = [
+  { path: 'page', component: PageComponent },
+];
+`,
+    'app.config.ts': `
+import { ApplicationConfig } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { routes } from './app.routes';
+import { SaveApi, ClientConfig, MutableContextStore } from './api';
+import { EnvironmentConfig } from './env';
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideRouter(routes),
+    { provide: MutableContextStore, useValue: new MutableContextStore() },
+    {
+      provide: ClientConfig,
+      useFactory: (env: EnvironmentConfig, store: MutableContextStore) => new ClientConfig(),
+      deps: [EnvironmentConfig, MutableContextStore],
+    },
+    {
+      provide: SaveApi,
+      useFactory: (config: ClientConfig) => ({ save() {} }),
+      deps: [ClientConfig],
+    },
+  ],
+};
+`,
+};
+
+describe('di-graph analyzer - angular project', () => {
+    let fixture: Fixture;
+    let graph: DiGraph;
+
+    beforeAll(() => {
+        fixture = new Fixture(ANGULAR_FIXTURE);
+        graph = fixture.buildAngular();
+    });
+
+    afterAll(() => fixture.cleanup());
+
+    it('roots one design per entry component (bootstrap + routed)', () => {
+        expect(rootNames(graph)).toEqual(['AppComponent', 'PageComponent']);
+        expect(designFor(graph, 'AppComponent')?.rootKind).toBe('component');
+        expect(node(graph, 'AppComponent')?.kind).toBe('component');
+    });
+
+    it('walks field inject() sites down from the root component', () => {
+        const app = designFor(graph, 'AppComponent');
+        // Field inject(SaveApi)/inject(EnvironmentConfig) → L1, labeled by field name.
+        expect(app?.edges.find((e: DiEdge) => e.from === 'AppComponent' && e.paramName === 'saveApi')).toBeDefined();
+        expect(app?.edges.find((e: DiEdge) => e.from === 'AppComponent' && e.paramName === 'envConfig')).toBeDefined();
+        expect(nodeIn(app, 'EnvironmentConfig')?.level).toBe(1);
+    });
+
+    it('maps useFactory providers to dynamic leaves and fans out to deps', () => {
+        const app = designFor(graph, 'AppComponent');
+        expect(nodeIn(app, 'SaveApi')?.kind).toBe('dynamic');
+        // SaveApi's factory deps: [ClientConfig]; ClientConfig's factory deps:
+        // [EnvironmentConfig, MutableContextStore].
+        expect(app?.edges.find((e: DiEdge) => e.from === 'SaveApi' && e.to === 'ClientConfig')).toBeDefined();
+        expect(app?.edges.find((e: DiEdge) => e.from === 'ClientConfig' && e.to === 'EnvironmentConfig')).toBeDefined();
+        expect(app?.edges.find((e: DiEdge) => e.from === 'ClientConfig' && e.to === 'MutableContextStore')).toBeDefined();
+        expect(nodeIn(app, 'MutableContextStore')?.kind).toBe('constant');
+    });
+
+    it('B0: boxes are labeled by the declared type, edges by the injection name', () => {
+        const app = designFor(graph, 'AppComponent');
+        // useFactory box labeled by the token type (SaveApi), not the factory text.
+        expect(nodeIn(app, 'SaveApi')?.className).toBe('SaveApi');
+        expect(nodeIn(app, 'SaveApi')?.detail).toBe('SaveApi (dynamic)');
+        const md = toDesignMarkdown(graph);
+        expect(md).toContain('|saveApi|');
+        expect(md).toContain(':::component');
+    });
+
+    it('resolves a bare @Injectable (no provider) by inject-by-type fallback', () => {
+        const app = designFor(graph, 'AppComponent');
+        // inject(BareLogger) has no explicit provider — resolved as a class.
+        const loggerEdge = app?.edges.find((e: DiEdge) => e.from === 'AppComponent' && e.paramName === 'logger');
+        expect(loggerEdge?.to).toBe('BareLogger');
+        expect(nodeIn(app, 'BareLogger')?.kind).toBe('class');
+    });
+
+    it('self-registers @Injectable({providedIn:"root"}) as a singleton', () => {
+        expect(node(graph, 'EnvironmentConfig')?.scope).toBe('singleton');
+    });
+});
+
+describe('di-graph analyzer-strategy - selection', () => {
+    it('reads the explicit framework: nx tag', () => {
+        expect(explicitFrameworkTag(['scope:app', 'framework:angular'])).toBe('angular');
+        expect(explicitFrameworkTag(['framework:  express  '])).toBe('express');
+        expect(explicitFrameworkTag(['scope:app'])).toBeNull();
+    });
+
+    it('selects by tag first (express→Inversify, angular→Angular, else→Empty)', () => {
+        const noMarkers = new FrameworkMarkers(false, false);
+        expect(selectAnalyzer('express', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer('angular', noMarkers)).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer('all', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer('react', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+    });
+
+    it('falls back to markers only when the tag is absent', () => {
+        expect(selectAnalyzer(null, new FrameworkMarkers(true, false))).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, new FrameworkMarkers(false, true))).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer(null, new FrameworkMarkers(false, false))).toBeInstanceOf(EmptyAnalyzer);
+        // Angular marker wins over a stray controller marker.
+        expect(selectAnalyzer(null, new FrameworkMarkers(true, true))).toBeInstanceOf(AngularAnalyzer);
     });
 });

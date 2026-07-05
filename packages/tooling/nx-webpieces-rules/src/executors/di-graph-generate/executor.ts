@@ -21,7 +21,11 @@ import type { ExecutorContext } from '@nx/devkit';
 import { loadAndValidate } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildDiGraph } from '../../lib/di-graph/analyzer';
+import {
+    explicitFrameworkTag,
+    FrameworkMarkers,
+    selectAnalyzer,
+} from '../../lib/di-graph/analyzer-strategy';
 import { createProjectProgram } from '../../lib/di-graph/program';
 import { toDesignJson } from '../../lib/di-graph/serializer';
 import { toDesignMarkdown } from '../../lib/di-graph/mermaid';
@@ -39,7 +43,9 @@ export interface ExecutorResult {
 const RULE_NAME = 'di-graph';
 
 // Cheap substring pre-scan: a project whose source never mentions any DI marker
-// gets an empty graph without paying for a ts.Program.
+// gets an empty graph without paying for a ts.Program. Angular markers
+// (@Component/bootstrapApplication) are included so an Angular app that uses no
+// Inversify decorator isn't short-circuited to empty.
 const DI_MARKERS = [
     '@Controller(',
     '@provideSingleton',
@@ -47,21 +53,44 @@ const DI_MARKERS = [
     '@injectable',
     'new ContainerModule',
     '@inject(',
+    '@Component(',
+    'bootstrapApplication',
 ];
 
-function sourceHasDiMarkers(dir: string): boolean {
-    if (!fs.existsSync(dir)) return false;
+const ANGULAR_MARKERS = ['@Component(', 'bootstrapApplication'];
+const CONTROLLER_MARKER = '@Controller(';
+
+/** Recursively read every project .ts file, folding each into `visit`. */
+function forEachSourceFile(dir: string, visit: (content: string) => void): void {
+    if (!fs.existsSync(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
             if (entry.name === 'node_modules' || entry.name === 'dist') continue;
-            if (sourceHasDiMarkers(full)) return true;
+            forEachSourceFile(full, visit);
         } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-            const content = fs.readFileSync(full, 'utf-8');
-            if (DI_MARKERS.some((marker: string) => content.includes(marker))) return true;
+            visit(fs.readFileSync(full, 'utf-8'));
         }
     }
-    return false;
+}
+
+function sourceHasDiMarkers(dir: string): boolean {
+    let found = false;
+    forEachSourceFile(dir, (content: string) => {
+        if (!found && DI_MARKERS.some((marker: string) => content.includes(marker))) found = true;
+    });
+    return found;
+}
+
+/** Pre-scan a project's source for the framework markers used when no tag is set. */
+function detectFrameworkMarkers(dir: string): FrameworkMarkers {
+    let angular = false;
+    let controller = false;
+    forEachSourceFile(dir, (content: string) => {
+        if (!angular && ANGULAR_MARKERS.some((marker: string) => content.includes(marker))) angular = true;
+        if (!controller && content.includes(CONTROLLER_MARKER)) controller = true;
+    });
+    return new FrameworkMarkers(angular, controller);
 }
 
 function writeDesignFiles(projectRootAbs: string, graph: DiGraph): void {
@@ -84,12 +113,13 @@ export default async function runExecutor(
     const projectConfig = context.projectsConfigurations?.projects[projectName];
     const projectRoot = projectConfig?.root ?? '.';
     const projectRootAbs = path.join(context.root, projectRoot);
+    const srcDir = path.join(projectRootAbs, 'src');
 
     console.log(`\n🧬 Generating DI design graph for ${projectName}\n`);
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- chokepoint: a generator crash must produce an actionable failure, not a stack trace mid-build
     try {
-        if (!sourceHasDiMarkers(path.join(projectRootAbs, 'src'))) {
+        if (!sourceHasDiMarkers(srcDir)) {
             console.log('   No DI markers found — writing empty design graph');
             writeDesignFiles(projectRootAbs, new DiGraph(projectName));
             return { success: true };
@@ -102,7 +132,14 @@ export default async function runExecutor(
             return { success: true };
         }
 
-        const graph = buildDiGraph(program, context.root, projectRoot, projectName);
+        // Select the analyzer by framework: express → Inversify, angular →
+        // Angular, else skip. The explicit `framework:` nx tag wins; a marker
+        // pre-scan corroborates only when the tag is absent.
+        const framework = explicitFrameworkTag(projectConfig?.tags ?? []);
+        const analyzer = selectAnalyzer(framework, detectFrameworkMarkers(srcDir));
+        console.log(`   Analyzer: ${analyzer.constructor.name} (framework tag: ${framework ?? 'none'})`);
+
+        const graph = analyzer.analyzeProject(program, context.root, projectRoot, projectName);
         writeDesignFiles(projectRootAbs, graph);
 
         const nodeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.nodes.length, 0);

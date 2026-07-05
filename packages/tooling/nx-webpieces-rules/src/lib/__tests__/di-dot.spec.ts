@@ -42,11 +42,12 @@ describe('generateDesignDot', () => {
         expect(dot).toContain('"MysteryToken" [fillcolor="#FCE4EC", style="filled,dashed"');
     });
 
-    it('labels token and multiInject edges, leaves type injection unlabeled', () => {
+    it('labels every edge by the injection param NAME (B0)', () => {
         const dot = generateDesignDot(makeDesign());
-        expect(dot).toContain('"AgentController" -> "AgentHandler";');
-        expect(dot).toContain('"AgentHandler" -> "FirestoreConfig" [label="TYPES.FirestoreConfig"];');
-        expect(dot).toContain('"AgentHandler" -> "MysteryToken" [label="multiInject TYPES.Mystery"];');
+        // B0: edges show the declared param/field name, not the raw token expr.
+        expect(dot).toContain('"AgentController" -> "AgentHandler" [label="handler"];');
+        expect(dot).toContain('"AgentHandler" -> "FirestoreConfig" [label="config"];');
+        expect(dot).toContain('"AgentHandler" -> "MysteryToken" [label="multiInject mysteries"];');
     });
 
     it('is deterministic', () => {
