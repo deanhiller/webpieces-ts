@@ -36,7 +36,36 @@ export const AI_INSTRUCTIONS =
     "Each project's shortDescription is only a summary. BEFORE adding code to a project, " +
     'read its responsibilitiesFile for the full responsibilities (what belongs in that ' +
     'project and what does not), and read its designFile to understand the DI design ' +
-    'before reading the code.';
+    'before reading the code. Use the entries in `commands` to regenerate these files ' +
+    'or display any of the graphs in a browser.';
+
+/**
+ * Named command → "command — what it does" map embedded in dependencies.json.
+ */
+export type CommandMap = Record<string, string>;
+
+/**
+ * Commands embedded in dependencies.json so AI (and humans) know how to
+ * regenerate and DISPLAY the architecture + design graphs. These work in any
+ * repo consuming @webpieces/nx-webpieces-rules.
+ */
+export const GRAPH_COMMANDS: CommandMap = {
+    regenerateArchitecture:
+        'pnpm nx run architecture:generate — rewrites architecture/dependencies.json and ' +
+        'architecture/runtime-dependencies.json; run after adding/removing project dependencies',
+    visualizeArchitecture:
+        'pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) ' +
+        'as HTML in a browser',
+    visualizeRuntimeArchitecture:
+        'pnpm nx run architecture:visualize-runtime — opens the runtime microservice call graph ' +
+        'as HTML in a browser',
+    regenerateDesigns:
+        "pnpm nx run-many --target=di-graph-generate — rewrites every project's " +
+        'design.json/design.md (also runs automatically on every build)',
+    visualizeDesign:
+        "pnpm wp-design-visualize <project> — opens a project's DI designs (its designFile) as " +
+        'HTML, one graph per controller with the controller at the top; no args = interactive picker',
+};
 
 /**
  * The full contents of architecture/dependencies.json.
@@ -44,6 +73,7 @@ export const AI_INSTRUCTIONS =
 export class DependenciesFile {
     constructor(
         public readonly aiInstructions: string,
+        public readonly commands: CommandMap,
         public readonly projects: EnhancedGraph
     ) {}
 }
@@ -73,11 +103,12 @@ export function loadBlessedGraph(
         if (parsed !== null && typeof parsed === 'object' && 'projects' in parsed) {
             return new DependenciesFile(
                 typeof parsed.aiInstructions === 'string' ? parsed.aiInstructions : '',
+                parsed.commands !== null && typeof parsed.commands === 'object' ? (parsed.commands as CommandMap) : {},
                 parsed.projects as EnhancedGraph
             );
         }
         // Legacy flat format: the whole object is the project map
-        return new DependenciesFile('', parsed as EnhancedGraph);
+        return new DependenciesFile('', {}, parsed as EnhancedGraph);
     } catch (err: unknown) {
         const error = toError(err);
         throw new Error(`Failed to load graph from ${fullPath}`, { cause: error });
@@ -90,6 +121,13 @@ export function loadBlessedGraph(
 function formatGraphJson(file: DependenciesFile): string {
     const lines: string[] = ['{'];
     lines.push(`    "aiInstructions": ${JSON.stringify(file.aiInstructions)},`);
+    lines.push(`    "commands": {`);
+    const commandNames = Object.keys(file.commands);
+    commandNames.forEach((name: string, index: number) => {
+        const comma = index === commandNames.length - 1 ? '' : ',';
+        lines.push(`        ${JSON.stringify(name)}: ${JSON.stringify(file.commands[name])}${comma}`);
+    });
+    lines.push(`    },`);
     lines.push(`    "projects": {`);
 
     const keys = Object.keys(file.projects).sort();
@@ -170,7 +208,7 @@ export function saveGraph(
         sortedGraph[key] = graph[key];
     }
 
-    const content = formatGraphJson(new DependenciesFile(AI_INSTRUCTIONS, sortedGraph));
+    const content = formatGraphJson(new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph));
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
 

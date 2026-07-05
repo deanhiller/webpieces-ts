@@ -5,6 +5,9 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "executors": "./executors.json",
+    "bin": {
+        "wp-design-visualize": "./src/scripts/wp-design-visualize.js"
+    },
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
