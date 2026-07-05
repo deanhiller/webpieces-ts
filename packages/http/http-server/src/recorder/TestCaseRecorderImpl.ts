@@ -8,6 +8,7 @@ import {
 } from '@webpieces/http-api';
 import { toError } from '@webpieces/core-util';
 import { SpecGenerator } from './SpecGenerator';
+import { LogManager } from '@webpieces/wp-logging';
 
 /**
  * TestCaseRecorderImpl - Server-side recorder (port of Java
@@ -25,6 +26,8 @@ import { SpecGenerator } from './SpecGenerator';
  * Both are always logged; written to recordingDir when configured.
  * NEVER breaks production - the whole body is caught and logged.
  */
+const log = LogManager.getLogger('TestCaseRecorder');
+
 export class TestCaseRecorderImpl implements TestCaseRecorder {
     private downstreamCalls: RecordedEndpoint[] = [];
     private serializer = new RecordSerializer();
@@ -54,7 +57,7 @@ export class TestCaseRecorderImpl implements TestCaseRecorder {
             const baseName = this.buildBaseName(serverEndpoint, testCase.recordedAt);
             const specSource = this.specGenerator.generate(testCase, `${baseName}.fixture.json`);
 
-            console.log(`[TestCaseRecorder] Recorded ${serverEndpoint.apiName}.${serverEndpoint.methodName} ` +
+            log.info(`[TestCaseRecorder] Recorded ${serverEndpoint.apiName}.${serverEndpoint.methodName} ` +
                 `(${this.downstreamCalls.length} downstream calls)\n` +
                 `--- fixture (${baseName}.fixture.json) ---\n${fixtureJson}\n` +
                 `--- generated spec (${baseName}.spec.ts) ---\n${specSource}`);
@@ -63,13 +66,13 @@ export class TestCaseRecorderImpl implements TestCaseRecorder {
                 fs.mkdirSync(recordingDir, { recursive: true });
                 fs.writeFileSync(path.join(recordingDir, `${baseName}.fixture.json`), fixtureJson);
                 fs.writeFileSync(path.join(recordingDir, `${baseName}.spec.ts`), specSource);
-                console.log(`[TestCaseRecorder] Wrote fixture + spec to ${recordingDir}/${baseName}.*`);
+                log.info(`[TestCaseRecorder] Wrote fixture + spec to ${recordingDir}/${baseName}.*`);
             }
 
             return testCase;
         } catch (err: unknown) {
             const error = toError(err);
-            console.error('[TestCaseRecorder] Failed to emit test case (request unaffected):', error.message);
+            log.error('[TestCaseRecorder] Failed to emit test case (request unaffected):', error.message);
             return undefined;
         }
     }

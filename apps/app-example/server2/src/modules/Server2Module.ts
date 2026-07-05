@@ -1,6 +1,9 @@
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { PlatformHeadersExtension, HEADER_TYPES } from '@webpieces/http-api';
 import { CompanyHeaders } from '@webpieces/company-core';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('Server2Module');
 
 /**
  * Server2Module - server2's DI bindings.
@@ -14,5 +17,5 @@ export const Server2Module = new ContainerModule((options: ContainerModuleLoadOp
     const companyExtension = new PlatformHeadersExtension(CompanyHeaders.getAllHeaders());
     options.bind<PlatformHeadersExtension>(HEADER_TYPES.PlatformHeadersExtension).toConstantValue(companyExtension);
 
-    console.log(`[Server2Module] Registered company platform headers extension with ${companyExtension.headers.length} headers`);
+    log.info(`[Server2Module] Registered company platform headers extension with ${companyExtension.headers.length} headers`);
 });

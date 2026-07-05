@@ -10,6 +10,7 @@ import {
 } from '@webpieces/http-routing';
 import { WebpiecesMiddleware } from './WebpiecesMiddleware';
 import { InProcessApiClientFactory } from './InProcessApiClientFactory';
+import { LogManager } from '@webpieces/wp-logging';
 
 /**
  * WebpiecesRouteCreator - Embeddable adapter that mounts the webpieces
@@ -49,6 +50,8 @@ import { InProcessApiClientFactory } from './InProcessApiClientFactory';
  * This same class is used internally by WebpiecesServerImpl.start(), so the
  * full server and the embeddable adapter share one code path.
  */
+const log = LogManager.getLogger('WebpiecesRouteCreator');
+
 export class WebpiecesRouteCreator {
     private routeBuilder: RouteBuilderImpl;
     private middleware: WebpiecesMiddleware;
@@ -182,7 +185,7 @@ export class WebpiecesRouteCreator {
                 this.app.patch(path, expressHandler);
                 break;
             default:
-                console.warn(`[WebpiecesRouteCreator] Unknown HTTP method: ${httpMethod}`);
+                log.warn(`[WebpiecesRouteCreator] Unknown HTTP method: ${httpMethod}`);
         }
     }
 }

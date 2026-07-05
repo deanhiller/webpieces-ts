@@ -7,6 +7,7 @@ export default defineConfig({
             '@webpieces/core-context': path.resolve(__dirname, 'packages/core/core-context/src/index.ts'),
             '@webpieces/core-mock': path.resolve(__dirname, 'packages/core/core-mock/src/index.ts'),
             '@webpieces/core-util': path.resolve(__dirname, 'packages/core/core-util/src/index.ts'),
+            '@webpieces/wp-logging': path.resolve(__dirname, 'packages/core/wp-logging/src/index.ts'),
             '@webpieces/http-api': path.resolve(__dirname, 'packages/http/http-api/src/index.ts'),
             '@webpieces/http-routing': path.resolve(__dirname, 'packages/http/http-routing/src/index.ts'),
             '@webpieces/http-filters': path.resolve(__dirname, 'packages/http/http-filters/src/index.ts'),

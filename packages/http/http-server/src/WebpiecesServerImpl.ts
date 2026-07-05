@@ -11,6 +11,7 @@ import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
 import {WebpiecesRouteCreator} from './WebpiecesRouteCreator';
 import {InProcessApiClientFactory} from './InProcessApiClientFactory';
+import {LogManager} from '@webpieces/wp-logging';
 
 /**
  * WebpiecesServerImpl - Internal server implementation.
@@ -36,6 +37,8 @@ import {InProcessApiClientFactory} from './InProcessApiClientFactory';
  * DI Pattern: This class is registered in webpiecesContainer via @provideSingleton()
  * and resolved by WebpiecesFactory. It receives RouteBuilder via constructor injection.
  */
+const log = LogManager.getLogger('WebpiecesServer');
+
 @provideSingleton()
 @injectable()
 export class WebpiecesServerImpl implements WebpiecesServer {
@@ -189,12 +192,12 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         const promise = new Promise<void>((resolve, reject) => {
             this.server = this.app!.listen(this.port, (error?: Error) => {
                 if (error) {
-                    console.error(`[WebpiecesServer] Failed to start server:`, error);
+                    log.error(`[WebpiecesServer] Failed to start server:`, error);
                     reject(error);
                     return;
                 }
-                console.log(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
-                console.log(`[WebpiecesServer] Registered ${routeCount} routes`);
+                log.info(`[WebpiecesServer] Server listening on http://localhost:${this.port}`);
+                log.info(`[WebpiecesServer] Registered ${routeCount} routes`);
                 resolve();
             });
         });
@@ -217,11 +220,11 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         return new Promise<void>((resolve, reject) => {
             this.server!.close((err?: Error) => {
                 if (err) {
-                    console.error('[WebpiecesServer] Error stopping server:', err);
+                    log.error('[WebpiecesServer] Error stopping server:', err);
                     reject(err);
                     return;
                 }
-                console.log('[WebpiecesServer] Server stopped');
+                log.info('[WebpiecesServer] Server stopped');
                 resolve();
             });
         });
@@ -251,7 +254,7 @@ export class WebpiecesServerImpl implements WebpiecesServer {
      * For each API method, it sets up the filter chain ONCE during proxy creation,
      * so subsequent calls reuse the same filter chain (efficient!).
      *
-     * @param apiPrototype - The API prototype class with routing decorators (can be abstract)
+     * @param apiPrototype - The abstract API prototype whose routing decorators declare the routes
      * @returns A proxy that implements the API interface
      *
      * Example:

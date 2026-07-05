@@ -11,6 +11,9 @@ import {
 } from '@webpieces/client-server-api';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
 import { toError } from '@webpieces/core-util';
+import { LogManager } from '@webpieces/wp-logging';
+
+const log = LogManager.getLogger('AppComponent');
 
 /**
  * Root application component.
@@ -66,7 +69,7 @@ export class AppComponent implements OnInit {
     } catch (err: unknown) {
       const error = toError(err);
       this.error = error.message || 'Failed to call SaveApi';
-      console.error('SaveApi error:', error);
+      log.error('SaveApi error:', error);
     } finally {
       this.loading = false;
     }
@@ -86,7 +89,7 @@ export class AppComponent implements OnInit {
     } catch (err: unknown) {
       const error = toError(err);
       this.error = error.message || 'Failed to call PublicApi';
-      console.error('PublicApi error:', error);
+      log.error('PublicApi error:', error);
     } finally {
       this.loading = false;
     }

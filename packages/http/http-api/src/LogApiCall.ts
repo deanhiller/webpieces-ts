@@ -7,6 +7,9 @@ import {
     HttpUserError,
 } from './errors';
 import {toError} from "@webpieces/core-util";
+import {LogManager} from "@webpieces/wp-logging";
+
+const log = LogManager.getLogger('LogApiCall');
 
 
 /**
@@ -42,7 +45,7 @@ export class LogApiCall {
     ): Promise<any> {
         // Log request - convert Map to Object for JSON serialization
         const headersObj = Object.fromEntries(headers);
-        console.log(
+        log.info(
             `[API-${type}-req] ${meta.controllerClassName}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)} headers=${JSON.stringify(headersObj)}`
         );
 
@@ -57,7 +60,7 @@ export class LogApiCall {
                 throw new Error(`Response cannot be null and was from ${meta.controllerClassName}.${meta.methodName}`);
 
             // Log success response
-            console.log(
+            log.info(
                 `[API-${type}-resp-SUCCESS] ${meta.controllerClassName}.${meta.methodName} response=${JSON.stringify(response)}`
             );
 
@@ -69,11 +72,11 @@ export class LogApiCall {
 
             // Log error based on type and re-throw
             if (LogApiCall.isUserError(error)) {
-                console.log(
+                log.warn(
                     `[API-${type}-resp-OTHER] ${meta.controllerClassName}.${meta.methodName} errorType=${errorType}`
                 );
             } else {
-                console.error(
+                log.error(
                     `[API-${type}-resp-FAIL] ${meta.controllerClassName}.${meta.methodName} errorType=${errorType} error=${errorMessage}`
                 );
             }

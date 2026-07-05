@@ -5,7 +5,8 @@
     "main": "./src/index.js",
     "types": "./src/index.d.ts",
     "dependencies": {
-        "@webpieces/http-api": "workspace:*"
+        "@webpieces/http-api": "workspace:*",
+        "@webpieces/wp-logging": "workspace:*"
     },
     "description": "Company-wide shared core (platform headers) - brought in by ALL projects; apis do NOT know about it"
 }

@@ -22,6 +22,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/core-util": "*"
+        "@webpieces/core-util": "*",
+        "@webpieces/wp-logging": "workspace:*"
     }
 }

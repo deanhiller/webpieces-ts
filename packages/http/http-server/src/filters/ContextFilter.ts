@@ -5,6 +5,7 @@ import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { PlatformHeader, HeaderRegistry } from '@webpieces/http-api';
 import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
 import {ContextKeys} from "../headers/ContextKeys";
+import { LogManager } from '@webpieces/wp-logging';
 
 /**
  * ContextFilter - Transfers platform headers and stores request metadata in RequestContext.
@@ -25,6 +26,8 @@ import {ContextKeys} from "../headers/ContextKeys";
  * 6. Downstream filters and controller can access headers + metadata
  * 7. Context auto-clears when RequestContext.run() completes
  */
+const log = LogManager.getLogger('ContextFilter');
+
 @provideSingleton()
 @injectable()
 export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
@@ -39,7 +42,7 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // duplicate-validated at startup)
         this.transferredHeaders = registry.getTransferredHeaders();
 
-        console.log(`[ContextFilter] Using ${registry.getHeaders().length} platform headers from HeaderRegistry (${this.transferredHeaders.length} transferred)`);
+        log.info(`[ContextFilter] Using ${registry.getHeaders().length} platform headers from HeaderRegistry (${this.transferredHeaders.length} transferred)`);
     }
 
     async filter(
