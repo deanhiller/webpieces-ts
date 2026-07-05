@@ -14,6 +14,7 @@ appears in each root's tree.
 graph TD
     PublicController["PublicController"]:::controller
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
     classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
 ```
 
@@ -22,15 +23,17 @@ graph TD
 ```mermaid
 graph TD
     SaveController["SaveController"]:::controller
+    Server2Api(["Server2Api"])
     SimpleCounter["SimpleCounter"]
-    TYPES_Server2Api__dynamic_(["TYPES.Server2Api (dynamic)"])
-    SaveController -->|TYPES.Counter| SimpleCounter
-    SaveController -->|TYPES.Server2Api| TYPES_Server2Api__dynamic_
+    SaveController -->|remoteService| Server2Api
+    SaveController -->|counter| SimpleCounter
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
     classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
 ```
 
 
-Edges are constructor injections: `-->|TOKEN|` for `@inject`/`@multiInject`,
-unlabeled arrows for inject-by-type. Rounded nodes are `toConstantValue`/
-`toDynamicValue` leaves; dashed nodes are tokens the analyzer could not resolve.
+Edges are injections labeled by the target `constructor param`/`inject()` field
+name (`multiInject <name>` for `@multiInject`). Rounded nodes are
+`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed
+nodes are tokens the analyzer could not resolve.

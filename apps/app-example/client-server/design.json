@@ -35,23 +35,33 @@
                     "level": 0
                 },
                 {
+                    "id": "Server2Api",
+                    "className": "Server2Api",
+                    "kind": "dynamic",
+                    "scope": "singleton",
+                    "file": "apps/app-example/client-server/src/modules/InversifyModule.ts",
+                    "level": 1,
+                    "detail": "TYPES.Server2Api (dynamic)"
+                },
+                {
                     "id": "SimpleCounter",
                     "className": "SimpleCounter",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "apps/app-example/client-server/src/controllers/save-controller.ts",
                     "level": 1
-                },
-                {
-                    "id": "TYPES.Server2Api (dynamic)",
-                    "className": "TYPES.Server2Api (dynamic)",
-                    "kind": "dynamic",
-                    "scope": "singleton",
-                    "file": "apps/app-example/client-server/src/modules/InversifyModule.ts",
-                    "level": 1
                 }
             ],
             "edges": [
+                {
+                    "from": "SaveController",
+                    "to": "Server2Api",
+                    "injection": "token",
+                    "token": "TYPES.Server2Api",
+                    "tokenKey": "symbol.for:Server2Api",
+                    "paramName": "remoteService",
+                    "paramType": "Server2Api"
+                },
                 {
                     "from": "SaveController",
                     "to": "SimpleCounter",
@@ -60,15 +70,6 @@
                     "tokenKey": "symbol.for:Counter",
                     "paramName": "counter",
                     "paramType": "Counter"
-                },
-                {
-                    "from": "SaveController",
-                    "to": "TYPES.Server2Api (dynamic)",
-                    "injection": "token",
-                    "token": "TYPES.Server2Api",
-                    "tokenKey": "symbol.for:Server2Api",
-                    "paramName": "remoteService",
-                    "paramType": "Server2Api"
                 }
             ],
             "unresolved": []
