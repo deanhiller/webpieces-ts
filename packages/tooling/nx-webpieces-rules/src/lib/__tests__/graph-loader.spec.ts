@@ -8,7 +8,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { EnhancedGraph } from '../graph-sorter';
-import { saveGraph, loadBlessedGraph, AI_INSTRUCTIONS, DEFAULT_GRAPH_PATH } from '../graph-loader';
+import {
+    saveGraph,
+    loadBlessedGraph,
+    AI_INSTRUCTIONS,
+    GRAPH_COMMANDS,
+    DEFAULT_GRAPH_PATH,
+} from '../graph-loader';
 
 let tmpRoot: string;
 
@@ -48,6 +54,8 @@ describe('graph-loader wrapper format', () => {
 
         const raw = JSON.parse(fs.readFileSync(path.join(tmpRoot, DEFAULT_GRAPH_PATH), 'utf-8'));
         expect(raw.aiInstructions).toBe(AI_INSTRUCTIONS);
+        expect(raw.commands).toEqual(GRAPH_COMMANDS);
+        expect(raw.commands.visualizeDesign).toContain('wp-design-visualize');
         expect(Object.keys(raw.projects)).toEqual(['core-util', 'http-routing']);
         expect(raw.projects['http-routing'].shortDescription).toBe(
             'Matches filters to routes with "quotes" and \\ backslashes.'
@@ -58,6 +66,7 @@ describe('graph-loader wrapper format', () => {
         const loaded = loadBlessedGraph(tmpRoot);
         expect(loaded).not.toBeNull();
         expect(loaded!.aiInstructions).toBe(AI_INSTRUCTIONS);
+        expect(loaded!.commands).toEqual(GRAPH_COMMANDS);
         expect(loaded!.projects).toEqual(raw.projects);
     });
 
@@ -90,7 +99,23 @@ describe('graph-loader legacy format', () => {
         const loaded = loadBlessedGraph(tmpRoot, 'legacy/dependencies.json');
         expect(loaded).not.toBeNull();
         expect(loaded!.aiInstructions).toBe('');
+        expect(loaded!.commands).toEqual({});
         expect(loaded!.projects['http-routing'].dependsOn).toEqual(['http-api']);
+    });
+
+    it('reads a wrapper file WITHOUT commands (pre-commands format)', () => {
+        const wrapper = {
+            aiInstructions: 'old text',
+            projects: { 'http-api': { level: 0, dependsOn: [] } },
+        };
+        const wrapperPath = path.join(tmpRoot, 'nocmd/dependencies.json');
+        fs.mkdirSync(path.dirname(wrapperPath), { recursive: true });
+        fs.writeFileSync(wrapperPath, JSON.stringify(wrapper), 'utf-8');
+
+        const loaded = loadBlessedGraph(tmpRoot, 'nocmd/dependencies.json');
+        expect(loaded).not.toBeNull();
+        expect(loaded!.commands).toEqual({});
+        expect(loaded!.projects['http-api'].level).toBe(0);
     });
 
     it('returns null when the file does not exist', () => {
