@@ -16,7 +16,7 @@
 
 import type * as ts from 'typescript';
 
-export type DiNodeKind = 'controller' | 'class' | 'constant' | 'dynamic' | 'unresolved';
+export type DiNodeKind = 'controller' | 'component' | 'class' | 'constant' | 'dynamic' | 'unresolved';
 
 export type DiInjectionKind = 'token' | 'type' | 'multiInject';
 
@@ -36,14 +36,30 @@ export class DiNode {
     file: string;
     /** BFS depth from the design's root (root = 0). Filled in after the walk. */
     level: number;
+    /**
+     * Secondary detail for constant/dynamic/unresolved leaves whose box is now
+     * labeled by the declared param type (see B0): the bound expression text
+     * (`toConstantValue`/`toDynamicValue`/`.to(X)` source) or resolving token.
+     * Omitted (undefined → not serialized) for class/controller/component nodes.
+     */
+    detail?: string;
 
-    constructor(id: string, className: string, kind: DiNodeKind, scope: DiScope, file: string, level = 0) {
+    constructor(
+        id: string,
+        className: string,
+        kind: DiNodeKind,
+        scope: DiScope,
+        file: string,
+        level = 0,
+        detail?: string,
+    ) {
         this.id = id;
         this.className = className;
         this.kind = kind;
         this.scope = scope;
         this.file = file;
         this.level = level;
+        if (detail !== undefined && detail !== '') this.detail = detail;
     }
 }
 
@@ -153,6 +169,13 @@ export class Binding {
     valueText: string;
     /** Workspace-relative posix path of the file the binding appears in. */
     file: string;
+    /**
+     * Angular `useFactory` deps: the declared `deps: [A, B]` tokens. The walker
+     * emits an edge from the dynamic leaf to each dep so a factory's true DI
+     * boundary is visible (e.g. ClientConfig's factory → EnvironmentConfig +
+     * MutableContextStore). Empty for every Inversify binding.
+     */
+    factoryDeps: TokenRef[];
 
     constructor(
         tokenKey: string,
@@ -162,6 +185,7 @@ export class Binding {
         implClass: ts.ClassDeclaration | null,
         valueText: string,
         file: string,
+        factoryDeps: TokenRef[] = [],
     ) {
         this.tokenKey = tokenKey;
         this.tokenDisplay = tokenDisplay;
@@ -170,5 +194,6 @@ export class Binding {
         this.implClass = implClass;
         this.valueText = valueText;
         this.file = file;
+        this.factoryDeps = factoryDeps;
     }
 }

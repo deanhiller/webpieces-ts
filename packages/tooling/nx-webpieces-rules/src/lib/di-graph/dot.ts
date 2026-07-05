@@ -13,7 +13,8 @@ import { DiDesign, DiNode } from './model';
  * Node fill colors by DI node kind.
  */
 const KIND_COLORS: Record<string, string> = {
-    controller: '#E3F2FD', // light blue — the root/entry class
+    controller: '#E3F2FD', // light blue — the root/entry class (Inversify)
+    component: '#E8F5E9', // light green — the root/entry Angular component
     class: '#F5F5F5', // neutral — plain injectable class
     constant: '#FFF3E0', // light orange — toConstantValue leaf
     dynamic: '#FFF3E0', // light orange — toDynamicValue leaf
@@ -31,7 +32,7 @@ function nodeStatement(node: DiNode): string {
     const styles: string[] = ['filled'];
     if (node.kind === 'constant' || node.kind === 'dynamic') styles.push('rounded');
     if (node.kind === 'unresolved') styles.push('dashed');
-    const penwidth = node.kind === 'controller' ? ', penwidth=2' : '';
+    const penwidth = node.kind === 'controller' || node.kind === 'component' ? ', penwidth=2' : '';
     return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}];\n`;
 }
 
@@ -67,10 +68,12 @@ export function generateDesignDot(design: DiDesign): string {
 
     dot += '\n';
 
-    // Constructor-injection edges; labels mirror design.md (mermaid.ts)
+    // Constructor-injection edges; labels are the declared param/field NAME
+    // (B0) — the human-meaningful "why", not the raw token expression. The
+    // token/tokenKey stay in design.json for tooling. Mirrors design.md.
     for (const edge of design.edges) {
-        const token = edge.injection === 'multiInject' ? `multiInject ${edge.token}` : edge.token;
-        const label = token !== '' ? ` [label="${dotEscape(token)}"]` : '';
+        const name = edge.injection === 'multiInject' ? `multiInject ${edge.paramName}` : edge.paramName;
+        const label = name !== '' ? ` [label="${dotEscape(name)}"]` : '';
         dot += `  "${dotEscape(edge.from)}" -> "${dotEscape(edge.to)}"${label};\n`;
     }
 

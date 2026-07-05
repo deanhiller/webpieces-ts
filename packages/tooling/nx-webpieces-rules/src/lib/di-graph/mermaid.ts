@@ -28,6 +28,7 @@ function nodeStatement(node: DiNode): string {
     const id = mermaidId(node.id);
     const text = label(node.className);
     if (node.kind === 'controller') return `    ${id}["${text}"]:::controller`;
+    if (node.kind === 'component') return `    ${id}["${text}"]:::component`;
     if (node.kind === 'constant' || node.kind === 'dynamic') return `    ${id}(["${text}"])`;
     if (node.kind === 'unresolved') return `    ${id}{{"${text} ?"}}:::unresolved`;
     return `    ${id}["${text}"]`;
@@ -41,21 +42,24 @@ function graphBody(design: DiDesign): string[] {
     for (const edge of design.edges) {
         const from = mermaidId(edge.from);
         const to = mermaidId(edge.to);
-        const token = edge.injection === 'multiInject' ? `multiInject ${edge.token}` : edge.token;
-        if (token !== '') {
-            lines.push(`    ${from} -->|${edgeLabel(token)}| ${to}`);
+        // B0: label edges by the declared param/field NAME, not the raw token.
+        const name = edge.injection === 'multiInject' ? `multiInject ${edge.paramName}` : edge.paramName;
+        if (name !== '') {
+            lines.push(`    ${from} -->|${edgeLabel(name)}| ${to}`);
         } else {
             lines.push(`    ${from} --> ${to}`);
         }
     }
     lines.push('    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d');
+    lines.push('    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37');
     lines.push('    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5');
     return lines;
 }
 
 /** One `## Root` section with the design's Mermaid diagram. */
 function designSection(design: DiDesign): string[] {
-    const kind = design.rootKind === 'controller' ? 'controller' : 'root';
+    const kind =
+        design.rootKind === 'controller' ? 'controller' : design.rootKind === 'component' ? 'component' : 'root';
     const heading = `## ${design.root} — ${kind}, Level 0…${design.maxLevel}`;
     return [heading, '', '```mermaid', ...graphBody(design), '```', ''];
 }
@@ -92,9 +96,10 @@ export function toDesignMarkdown(graph: DiGraph): string {
 
     const legend = [
         '',
-        'Edges are constructor injections: `-->|TOKEN|` for `@inject`/`@multiInject`,',
-        'unlabeled arrows for inject-by-type. Rounded nodes are `toConstantValue`/',
-        '`toDynamicValue` leaves; dashed nodes are tokens the analyzer could not resolve.',
+        'Edges are injections labeled by the target `constructor param`/`inject()` field',
+        'name (`multiInject <name>` for `@multiInject`). Rounded nodes are',
+        '`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed',
+        'nodes are tokens the analyzer could not resolve.',
         '',
     ];
 
