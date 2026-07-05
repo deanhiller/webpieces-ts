@@ -29,6 +29,21 @@ const FRAMEWORK_COLORS: Record<string, string> = {
 const DEFAULT_FRAMEWORK_COLOR = '#FFF3E0'; // orange - unknown/other libType
 
 /**
+ * Role border styling — fill stays keyed on framework; the border shape shows a
+ * project's ROLE at a glance:
+ *   server       → double border (a runnable server app)
+ *   client       → dashed border (a client app, e.g. angular)
+ *   designed-lib → bold border   (a library with a generated @ApiImplementation design)
+ *   lib / other  → plain thin border
+ */
+function roleBorderAttrs(role: string): string {
+    if (role === 'server') return ', peripheries=2';
+    if (role === 'client') return ', style="filled,dashed"';
+    if (role === 'designed-lib') return ', penwidth=2';
+    return '';
+}
+
+/**
  * Remove scope from name for display
  * '@scope/name' → 'name'
  * 'name' → 'name'
@@ -53,12 +68,15 @@ export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Depe
         levels[info.level].push(project);
     }
 
-    // Create nodes colored by framework (libType); level is kept in the label
+    // Nodes: fill colored by framework (libType), border shaped by role; the
+    // label shows the framework-role combo (e.g. express-server, all-lib).
     for (const [project, info] of Object.entries(graph)) {
         const shortName = getShortName(project);
         const framework = info.framework ?? 'all';
+        const role = info.role ?? 'lib';
         const color = FRAMEWORK_COLORS[framework] ?? DEFAULT_FRAMEWORK_COLOR;
-        dot += `  "${shortName}" [fillcolor="${color}", label="${shortName}\\n(L${info.level} · ${framework})"];\n`;
+        const border = roleBorderAttrs(role);
+        dot += `  "${shortName}" [fillcolor="${color}"${border}, label="${shortName}\\n(L${info.level} · ${framework}-${role})"];\n`;
     }
 
     dot += '\n';
@@ -163,7 +181,7 @@ function generateHTMLStyles(): string {
 
 function generateHTMLLegend(): string {
     return `<div class="legend">
-        <h2>Legend — colored by framework (libType)</h2>
+        <h2>Legend — fill = framework (libType), border = role</h2>
         <div class="legend-item">
             <span class="legend-box" style="background: #FCE4EC;"></span>
             <strong>angular:</strong> Angular front-end
@@ -180,8 +198,24 @@ function generateHTMLLegend(): string {
             <span class="legend-box" style="background: #F5F5F5;"></span>
             <strong>all:</strong> Library usable by any side
         </div>
+        <div class="legend-item" style="margin-top: 12px;">
+            <span class="legend-box" style="border: 3px double #333;"></span>
+            <strong>server:</strong> runnable server app (double border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 1px dashed #333;"></span>
+            <strong>client:</strong> client app, e.g. angular (dashed border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 2px solid #333;"></span>
+            <strong>designed-lib:</strong> library with a generated @ApiImplementation design (bold border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 1px solid #ccc;"></span>
+            <strong>lib:</strong> plain library, no generated design (thin border)
+        </div>
         <div class="legend-item" style="margin-top: 15px;">
-            <em>Each node label shows its dependency level (L#) and framework. Rows are still laid out by level (top = no dependencies). Transitive dependencies are allowed but not shown.</em>
+            <em>Each node label shows its dependency level (L#) and framework-role (e.g. express-server, all-lib). Rows are laid out by level (top = no dependencies). Transitive dependencies are allowed but not shown.</em>
         </div>
     </div>`;
 }

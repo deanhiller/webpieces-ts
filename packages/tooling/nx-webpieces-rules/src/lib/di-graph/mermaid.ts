@@ -24,6 +24,7 @@ function nodeStatement(node: DiNode): string {
     // Injected as an API → contract on top, impl class in parens (leaves never set `api`).
     const text = node.api ? `${label(node.api)}<br/>(${label(node.className)})` : label(node.className);
     if (node.kind === 'controller') return `    ${id}["${text}"]:::controller`;
+    if (node.kind === 'apiImplementation') return `    ${id}["${text}"]:::apiImpl`;
     if (node.kind === 'component') return `    ${id}["${text}"]:::component`;
     if (node.kind === 'constant' || node.kind === 'dynamic') return `    ${id}(["${text}"])`;
     if (node.kind === 'unresolved') return `    ${id}{{"${text} ?"}}:::unresolved`;
@@ -43,6 +44,7 @@ function graphBody(design: DiDesign): string[] {
         lines.push(`    ${from} --> ${to}`);
     }
     lines.push('    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d');
+    lines.push('    classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e');
     lines.push('    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37');
     lines.push('    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5');
     return lines;
@@ -51,7 +53,13 @@ function graphBody(design: DiDesign): string[] {
 /** One `## Root` section with the design's Mermaid diagram. */
 function designSection(design: DiDesign): string[] {
     const kind =
-        design.rootKind === 'controller' ? 'controller' : design.rootKind === 'component' ? 'component' : 'root';
+        design.rootKind === 'controller'
+            ? 'controller'
+            : design.rootKind === 'apiImplementation'
+              ? 'api-impl'
+              : design.rootKind === 'component'
+                ? 'component'
+                : 'root';
     const heading = `## ${design.root} — ${kind}, Level 0…${design.maxLevel}`;
     return [heading, '', '```mermaid', ...graphBody(design), '```', ''];
 }

@@ -12,129 +12,34 @@
  * `library-types-match-client` rule, which uses it to keep an express project
  * from depending on an angular-only library (and vice-versa).
  *
- * ============================================================================
- * VIOLATION (BAD)
- * ============================================================================
- * A project.json with no `framework:` tag whose source was modified:
- *   { "name": "my-lib", "tags": [] }
- *
- * ============================================================================
- * ALLOWED
- * ============================================================================
- *   { "name": "my-lib", "tags": ["framework:all"] }
+ * The project-walking + diff-scoping + mode logic is shared with the `role-tag`
+ * rule in `tag-rule.ts`; this file supplies only the framework-specific prefix,
+ * known values, and violation message.
  *
  * ============================================================================
  * MODES (PROJECT-LEVEL)
  * ============================================================================
  * - OFF:               Skip validation entirely.
  * - MODIFIED_PROJECTS: Require a framework tag on every project that owns ANY
- *                      changed file (not just .ts, and not line-scoped) — the
- *                      check is inherently project-level. nx `affected` already
- *                      narrows execution to the changed projects.
+ *                      changed file (not just .ts, and not line-scoped).
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { ProjectMode, FrameworkTagConfig, detectBase, getChangedFiles, toError } from '@webpieces/rules-config';
+import { ProjectMode, FrameworkTagConfig } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { shouldSkipRule } from './resolve-mode';
+import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';
 
 const FRAMEWORK_TAG_PREFIX = 'framework:';
 const DEFAULT_KNOWN_TYPES = ['angular', 'react', 'express', 'all'];
 
 /**
- * A project (identified by its project.json) that owns at least one changed
- * file but is missing a `framework:` tag.
+ * Back-compat export used by tests: the framework-tag flavor of the shared
+ * missing-tag scan.
  */
-class UntaggedProject {
-    constructor(
-        public readonly name: string,
-        public readonly projectJsonPath: string
-    ) {}
+export function findUntaggedProjects(workspaceRoot: string, changedFiles: string[]): MissingTagProject[] {
+    return findProjectsMissingTag(workspaceRoot, changedFiles, FRAMEWORK_TAG_PREFIX);
 }
 
-/**
- * Raw shape parsed out of a project.json (only the fields this rule reads).
- */
-type RawProjectJson = { name?: string; tags?: string[] };
-
-/**
- * The parts of a project.json this rule reads.
- */
-class ProjectJson {
-    constructor(
-        public readonly name: string | null,
-        public readonly tags: string[]
-    ) {}
-}
-
-/**
- * Parse the `name` + `tags` from a project.json. Returns an empty ProjectJson
- * (no name, no tags) when the file is unreadable/unparseable — config
- * validation owns malformed-json reporting; this rule just nudges for a tag and
- * must never crash the build.
- */
-function readProjectJson(projectJsonPath: string, workspaceRoot: string): ProjectJson {
-    const fullPath = path.join(workspaceRoot, projectJsonPath);
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const parsed: RawProjectJson = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
-        const name = typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : null;
-        const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((tag: string) => typeof tag === 'string') : [];
-        return new ProjectJson(name, tags);
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error; // swallow — malformed project.json is not this rule's concern
-        return new ProjectJson(null, []);
-    }
-}
-
-/**
- * Walk up from a changed file to the nearest ancestor directory containing a
- * project.json (the file's owning nx project). Returns the repo-relative
- * project.json path, or null when the file belongs to no project (e.g. a
- * workspace-root config file).
- */
-function findOwningProjectJson(changedFile: string, workspaceRoot: string): string | null {
-    let dir = path.dirname(changedFile);
-    while (true) {
-        const candidate = path.join(dir, 'project.json');
-        if (fs.existsSync(path.join(workspaceRoot, candidate))) {
-            return candidate;
-        }
-        const parent = path.dirname(dir);
-        if (parent === dir || dir === '.' || dir === '') {
-            return null;
-        }
-        dir = parent;
-    }
-}
-
-function hasFrameworkTag(tags: string[]): boolean {
-    return tags.some((tag: string) => tag.startsWith(FRAMEWORK_TAG_PREFIX) && tag.slice(FRAMEWORK_TAG_PREFIX.length).trim().length > 0);
-}
-
-export function findUntaggedProjects(workspaceRoot: string, changedFiles: string[]): UntaggedProject[] {
-    const projectJsonPaths = new Set<string>();
-    for (const file of changedFiles) {
-        const owning = findOwningProjectJson(file, workspaceRoot);
-        if (owning !== null) {
-            projectJsonPaths.add(owning);
-        }
-    }
-
-    const untagged: UntaggedProject[] = [];
-    for (const projectJsonPath of Array.from(projectJsonPaths).sort()) {
-        const projectJson = readProjectJson(projectJsonPath, workspaceRoot);
-        if (!hasFrameworkTag(projectJson.tags)) {
-            const name = projectJson.name ?? path.dirname(projectJsonPath);
-            untagged.push(new UntaggedProject(name, projectJsonPath));
-        }
-    }
-    return untagged;
-}
-
-function reportViolations(untagged: UntaggedProject[], knownTypes: string[], mode: ProjectMode): void {
+function reportViolations(untagged: MissingTagProject[], knownTypes: string[], mode: ProjectMode): void {
     const suggestion = knownTypes.map((t: string) => `${FRAMEWORK_TAG_PREFIX}${t}`).join(' | ');
     console.error('');
     console.error('❌ Every modified project must declare which client side it targets (a framework tag)!');
@@ -153,65 +58,13 @@ function reportViolations(untagged: UntaggedProject[], knownTypes: string[], mod
     console.error('');
 }
 
-function resolveMode(normalMode: ProjectMode, epoch: number | undefined, branchPattern: string | undefined): ProjectMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping framework-tag validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
-async function runValidatorImpl(options: FrameworkTagConfig, workspaceRoot: string): Promise<ExecutorResult> {
-    const mode: ProjectMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
-    const knownTypes = options.knownTypes && options.knownTypes.length > 0 ? options.knownTypes : DEFAULT_KNOWN_TYPES;
-
-    if (mode === 'OFF') {
-        console.log('\n⏭️  Skipping framework-tag validation (mode: OFF)');
-        console.log('');
-        return { success: true };
-    }
-
-    console.log('\n📏 Validating Framework Tag\n');
-    console.log(`   Mode: ${mode}`);
-
-    let base = process.env['NX_BASE'];
-    const head = process.env['NX_HEAD'];
-
-    if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
-        if (!base) {
-            console.log('\n⏭️  Skipping framework-tag validation (could not detect base branch)');
-            console.log('');
-            return { success: true };
-        }
-    }
-
-    console.log(`   Base: ${base}`);
-    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-    console.log('');
-
-    // Project-level rule: ANY changed file (not just .ts) makes its owning
-    // project require a tag, so include non-code files too.
-    const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
-    if (changedFiles.length === 0) {
-        console.log('✅ No changed files in any project');
-        return { success: true };
-    }
-
-    const untagged = findUntaggedProjects(workspaceRoot, changedFiles);
-    if (untagged.length === 0) {
-        console.log('✅ Every modified project declares a framework tag');
-        return { success: true };
-    }
-
-    reportViolations(untagged, knownTypes, mode);
-    return { success: false };
-}
+const FRAMEWORK_TAG_SPEC = new TagRuleSpec(
+    FRAMEWORK_TAG_PREFIX,
+    'framework-tag',
+    'Framework Tag',
+    DEFAULT_KNOWN_TYPES,
+    reportViolations
+);
 
 export class FrameworkTagValidator extends CodeValidator<FrameworkTagConfig> {
     constructor(config: FrameworkTagConfig) {
@@ -219,6 +72,6 @@ export class FrameworkTagValidator extends CodeValidator<FrameworkTagConfig> {
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+        return runTagValidator(this.config, workspaceRoot, FRAMEWORK_TAG_SPEC);
     }
 }

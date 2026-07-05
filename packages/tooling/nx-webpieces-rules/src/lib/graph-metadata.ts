@@ -19,6 +19,7 @@ import { createProjectGraphAsync } from '@nx/devkit';
 import type { EnhancedGraph } from './graph-sorter';
 import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
+import { resolveRole } from './role-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
 
 export const RESPONSIBILITIES_FILE_NAME = 'responsibilities.md';
@@ -76,6 +77,13 @@ export function enrichGraph(
             entry.framework = resolution.framework;
         }
 
+        const roleResolution = resolveRole(info);
+        if (roleResolution.problem !== null) {
+            problems.push(roleResolution.problem);
+        } else if (roleResolution.role !== null) {
+            entry.role = roleResolution.role;
+        }
+
         enrichResponsibilities(entry, info, workspaceRoot, problems);
 
         // Only project.json projects get a generated design.json (see di-graph-targets.ts)
@@ -85,11 +93,19 @@ export function enrichGraph(
     }
 
     validateLibraryTypesMatch(graph, problems);
+    validateRoleDependencies(graph, problems);
 
     if (problems.length > 0) {
         throw new MetadataValidationError(problems);
     }
 }
+
+/**
+ * Roles that are terminal APPS — nothing may depend on them. A server or a
+ * client is a top-level runnable; being depended upon means it is really a
+ * library and should be retagged `role:lib`/`role:designed-lib`.
+ */
+export const APP_ROLES: ReadonlyArray<string> = ['server', 'client'];
 
 /**
  * libType usable by any side — a dependency of this type is always allowed.
@@ -127,6 +143,31 @@ export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string
                     `'${dep}' (${toType}) — a '${fromType}' project may depend only on '${fromType}' ` +
                     `or '${ALL_LIB_TYPE}' libraries. Fix the tag on one of them (framework:<angular|react|express|all>) ` +
                     `or remove the dependency.`
+            );
+        }
+    }
+}
+
+/**
+ * `role-dependency` rule.
+ *
+ * A project's `role` is its function (server | designed-lib | lib | client).
+ * Apps (`server`, `client`) are terminal — they consume libraries but are never
+ * consumed. For every edge A → B, depending on a `server`/`client` is a
+ * violation: B is really a library and must be retagged `role:lib` (or
+ * `role:designed-lib`), or the dependency removed.
+ */
+export function validateRoleDependencies(graph: EnhancedGraph, problems: string[]): void {
+    for (const [projectName, entry] of Object.entries(graph)) {
+        for (const dep of entry.dependsOn) {
+            const toRole = graph[dep]?.role;
+            if (toRole === undefined) continue; // role resolution already flagged this project
+            if (!APP_ROLES.includes(toRole)) continue;
+
+            problems.push(
+                `role-dependency: '${projectName}' must not depend on '${dep}' (role:${toRole}) — ` +
+                    `a '${toRole}' is a terminal app and may not be depended upon. Retag '${dep}' ` +
+                    `role:lib (or role:designed-lib) if it is actually a library, or remove the dependency.`
             );
         }
     }

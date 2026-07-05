@@ -232,6 +232,14 @@ class Fixture {
         return buildAngularDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj');
     }
 
+    /** Build a designed-lib graph: roots on @ApiImplementation instead of @Controller. */
+    buildApiImpl(): DiGraph {
+        const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
+        expect(program).not.toBeNull();
+        if (!program) throw new Error('program not created');
+        return buildDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj', false, 'apiImplementation');
+    }
+
     cleanup(): void {
         fs.rmSync(this.workspaceRoot, { recursive: true, force: true });
     }
@@ -616,6 +624,32 @@ describe('di-graph analyzer - angular project', () => {
     });
 });
 
+describe('di-graph analyzer - designed-lib @ApiImplementation roots', () => {
+    const API_IMPL_FIXTURE: Record<string, string> = {
+        'AgentHandler.ts':
+            "import { injectable } from 'inversify';\n" +
+            "import { ApiImplementation } from '@webpieces/http-routing';\n" +
+            '@injectable()\nexport class TodoRegistry {}\n' +
+            '@ApiImplementation()\n@injectable()\nexport class AgentHandler {\n' +
+            '    constructor(private readonly registry: TodoRegistry) {}\n}\n',
+    };
+    let fixture: Fixture;
+    afterEach(() => fixture?.cleanup());
+
+    it('roots on @ApiImplementation and marks the root apiImplementation', () => {
+        fixture = new Fixture(API_IMPL_FIXTURE);
+        const graph = fixture.buildApiImpl();
+        expect(rootNames(graph)).toEqual(['AgentHandler']);
+        expect(designFor(graph, 'AgentHandler')?.rootKind).toBe('apiImplementation');
+        expect(edge(graph, 'AgentHandler', 'TodoRegistry')).toBeDefined();
+    });
+
+    it('produces an empty graph when a designed-lib project has no @ApiImplementation', () => {
+        fixture = new Fixture({ 'plain.ts': 'import { injectable } from "inversify";\n@injectable()\nexport class X {}\n' });
+        expect(fixture.buildApiImpl().designs).toEqual([]);
+    });
+});
+
 describe('di-graph analyzer-strategy - selection', () => {
     it('reads the explicit framework: nx tag', () => {
         expect(explicitFrameworkTag(['scope:app', 'framework:angular'])).toBe('angular');
@@ -623,19 +657,35 @@ describe('di-graph analyzer-strategy - selection', () => {
         expect(explicitFrameworkTag(['scope:app'])).toBeNull();
     });
 
-    it('selects by tag first (express→Inversify, angular→Angular, else→Empty)', () => {
+    it('selects by role first (server→Inversify, designed-lib→Inversify, lib→Empty, client→angular)', () => {
         const noMarkers = new FrameworkMarkers(false, false);
-        expect(selectAnalyzer('express', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
-        expect(selectAnalyzer('angular', noMarkers)).toBeInstanceOf(AngularAnalyzer);
-        expect(selectAnalyzer('all', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
-        expect(selectAnalyzer('react', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer('server', 'express', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer('designed-lib', 'all', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer('lib', 'all', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer('lib', 'express', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        // client keeps the angular design for angular apps, nothing otherwise.
+        expect(selectAnalyzer('client', 'angular', noMarkers)).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer('client', 'express', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
     });
 
-    it('falls back to markers only when the tag is absent', () => {
-        expect(selectAnalyzer(null, new FrameworkMarkers(true, false))).toBeInstanceOf(AngularAnalyzer);
-        expect(selectAnalyzer(null, new FrameworkMarkers(false, true))).toBeInstanceOf(InversifyAnalyzer);
-        expect(selectAnalyzer(null, new FrameworkMarkers(false, false))).toBeInstanceOf(EmptyAnalyzer);
+    it('server roots on @Controller and designed-lib roots on @ApiImplementation', () => {
+        const noMarkers = new FrameworkMarkers(false, false);
+        const server = selectAnalyzer('server', 'express', noMarkers) as InversifyAnalyzer;
+        const designedLib = selectAnalyzer('designed-lib', 'all', noMarkers) as InversifyAnalyzer;
+        // rootMode is private; assert on the constructed analyzer identity via a JSON probe.
+        expect(JSON.stringify(server)).toContain('controller');
+        expect(JSON.stringify(designedLib)).toContain('apiImplementation');
+    });
+
+    it('falls back to legacy framework/markers only when the role tag is absent', () => {
+        const noMarkers = new FrameworkMarkers(false, false);
+        expect(selectAnalyzer(null, 'express', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer(null, 'angular', noMarkers)).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, 'all', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer(null, null, new FrameworkMarkers(true, false))).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, null, new FrameworkMarkers(false, true))).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer(null, null, new FrameworkMarkers(false, false))).toBeInstanceOf(EmptyAnalyzer);
         // Angular marker wins over a stray controller marker.
-        expect(selectAnalyzer(null, new FrameworkMarkers(true, true))).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, null, new FrameworkMarkers(true, true))).toBeInstanceOf(AngularAnalyzer);
     });
 });

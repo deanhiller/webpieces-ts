@@ -15,6 +15,7 @@ import {
     NoSymbolDiTokensConfig,
     EnforceControllerNamingConfig,
     FrameworkTagConfig,
+    RoleTagConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
@@ -45,6 +46,7 @@ export class WebpiecesRulesConfig {
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
     'enforce-controller-naming'?: EnforceControllerNamingConfig;
     'framework-tag'?: FrameworkTagConfig;
+    'role-tag'?: RoleTagConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
     'pr-creation-guard'?: PrCreationGuardConfig;
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;
