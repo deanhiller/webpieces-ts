@@ -13,7 +13,7 @@ const log = LogManager.getLogger('InversifyModule');
  *
  * This module demonstrates the third tier of the three-tier header system:
  * 1. WebpiecesModule (framework core headers)
- * 2. CompanyModule (company-wide headers)
+ * 2. CompanyHeadersModule (company-wide headers)
  * 3. InversifyModule (app-specific headers) ← YOU ARE HERE
  *
  * Examples of app-specific headers:

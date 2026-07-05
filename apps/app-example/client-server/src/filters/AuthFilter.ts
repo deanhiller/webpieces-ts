@@ -3,7 +3,7 @@ import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { HttpUnauthorizedError } from '@webpieces/http-api';
-import { CompanyHeaders } from '../modules/CompanyModule';
+import { CompanyHeaders } from '@webpieces/company-core';
 
 /**
  * AuthFilter - Example auth enforcement filter (app-level, NOT framework).

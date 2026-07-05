@@ -15,7 +15,7 @@ import { SaveApi, SaveResponse, PublicApi, PublicInfoResponse } from '@webpieces
 import { SaveController } from '../controllers/save-controller';
 import { PublicController } from '../controllers/public-controller';
 import { AuthFilter } from '../filters/AuthFilter';
-import { CompanyModule } from '../modules/CompanyModule';
+import { CompanyHeadersModule } from '@webpieces/company-svc-core';
 import { Server2Api } from '@webpieces/server2-api';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
@@ -83,7 +83,7 @@ async function buildContainer(orderRecorder: FilterOrderRecorder): Promise<Conta
     const container = new Container();
     await container.load(buildProviderModule()); // @provideSingleton classes (controllers, ContextFilter, ...)
     await container.load(WebpiecesModule);       // framework headers (required by ContextFilter)
-    await container.load(CompanyModule);         // company headers incl. AUTHORIZATION
+    await container.load(CompanyHeadersModule);  // company headers incl. AUTHORIZATION
     await container.load(InversifyModule);       // Counter, Server2Api simulator, app headers
 
     const testFilters = new ContainerModule((options: ContainerModuleLoadOptions) => {

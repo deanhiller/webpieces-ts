@@ -16,6 +16,7 @@ export default defineConfig({
             '@webpieces/client-server-api': path.resolve(__dirname, 'apps/app-example/client-server-api/src/index.ts'),
             '@webpieces/server2-api': path.resolve(__dirname, 'apps/app-example/server2-api/src/index.ts'),
             '@webpieces/company-core': path.resolve(__dirname, 'apps/app-example/company-core/src/index.ts'),
+            '@webpieces/company-svc-core': path.resolve(__dirname, 'apps/app-example/company-svc-core/src/index.ts'),
             '@webpieces/rules-config': path.resolve(__dirname, 'packages/tooling/rules-config/src/index.ts'),
             '@webpieces/ai-hook-rules': path.resolve(__dirname, 'packages/tooling/ai-hook-rules/src/index.ts'),
             '@webpieces/eslint-rules': path.resolve(__dirname, 'packages/tooling/eslint-rules/src/index.ts'),

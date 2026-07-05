@@ -34,6 +34,12 @@
             "uses": [],
             "dependsOn": []
         },
+        "company-svc-core": {
+            "level": 0,
+            "implements": [],
+            "uses": [],
+            "dependsOn": []
+        },
         "server2": {
             "level": 0,
             "implements": [
