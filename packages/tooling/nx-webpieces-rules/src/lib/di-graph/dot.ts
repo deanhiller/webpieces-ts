@@ -28,7 +28,11 @@ function dotEscape(text: string): string {
 
 function nodeStatement(node: DiNode): string {
     const color = KIND_COLORS[node.kind] ?? '#F5F5F5';
-    const label = `${dotEscape(node.className)}\\n(L${node.level}, ${node.scope})`;
+    // Injected as an API → show the contract on top, the impl class in parens beneath.
+    const name = node.api
+        ? `${dotEscape(node.api)}\\n(${dotEscape(node.className)})`
+        : dotEscape(node.className);
+    const label = `${name}\\n(L${node.level}, ${node.scope})`;
     const styles: string[] = ['filled'];
     if (node.kind === 'constant' || node.kind === 'dynamic') styles.push('rounded');
     if (node.kind === 'unresolved') styles.push('dashed');

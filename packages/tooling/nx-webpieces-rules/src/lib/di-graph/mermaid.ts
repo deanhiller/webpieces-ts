@@ -21,7 +21,8 @@ function label(text: string): string {
 
 function nodeStatement(node: DiNode): string {
     const id = mermaidId(node.id);
-    const text = label(node.className);
+    // Injected as an API → contract on top, impl class in parens (leaves never set `api`).
+    const text = node.api ? `${label(node.api)}<br/>(${label(node.className)})` : label(node.className);
     if (node.kind === 'controller') return `    ${id}["${text}"]:::controller`;
     if (node.kind === 'component') return `    ${id}["${text}"]:::component`;
     if (node.kind === 'constant' || node.kind === 'dynamic') return `    ${id}(["${text}"])`;

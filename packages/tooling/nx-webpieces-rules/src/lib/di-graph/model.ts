@@ -43,6 +43,14 @@ export class DiNode {
      * Omitted (undefined → not serialized) for class/controller/component nodes.
      */
     detail?: string;
+    /**
+     * The declared API/interface type this class was injected AS, when it differs
+     * from the impl class name — e.g. injected `FirestoreAdminApi`, resolved
+     * `.to(FirestoreAdminClient)`. Renderers show it as the primary box label with
+     * `className` in parens beneath. Set on first reach; omitted (not serialized)
+     * for inject-by-type nodes (declared type == class) and leaves.
+     */
+    api?: string;
 
     constructor(
         id: string,

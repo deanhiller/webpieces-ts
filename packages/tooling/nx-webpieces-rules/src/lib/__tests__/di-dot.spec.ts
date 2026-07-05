@@ -43,6 +43,19 @@ describe('generateDesignDot', () => {
         expect(dot).toContain('"MysteryToken" [fillcolor="#FCE4EC", style="filled,dashed"');
     });
 
+    it('labels an API-backed class as "api\\n(impl)\\n(L#, scope)"', () => {
+        const design = makeDesign();
+        // Injected as FirestoreAdminApi, resolved .to(FirestoreAdminClient).
+        design.nodes.push(
+            Object.assign(
+                new DiNode('FirestoreAdminClient', 'FirestoreAdminClient', 'class', 'singleton', 'src/fs.ts', 1),
+                { api: 'FirestoreAdminApi' },
+            ),
+        );
+        const dot = generateDesignDot(design);
+        expect(dot).toContain('label="FirestoreAdminApi\\n(FirestoreAdminClient)\\n(L1, singleton)"');
+    });
+
     it('emits unlabeled edges (the arrow alone shows the dependency)', () => {
         const dot = generateDesignDot(makeDesign());
         expect(dot).toContain('"AgentController" -> "AgentHandler";');
