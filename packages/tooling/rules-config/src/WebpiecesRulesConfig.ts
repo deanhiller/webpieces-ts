@@ -14,6 +14,7 @@ import {
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
     EnforceControllerNamingConfig,
+    FrameworkTagConfig,
     BranchCreationGuardConfig,
     PrCreationGuardConfig,
     MergeInProgressGuardConfig,
@@ -43,6 +44,7 @@ export class WebpiecesRulesConfig {
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
     'enforce-controller-naming'?: EnforceControllerNamingConfig;
+    'framework-tag'?: FrameworkTagConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
     'pr-creation-guard'?: PrCreationGuardConfig;
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;

@@ -84,8 +84,51 @@ export function enrichGraph(
         }
     }
 
+    validateLibraryTypesMatch(graph, problems);
+
     if (problems.length > 0) {
         throw new MetadataValidationError(problems);
+    }
+}
+
+/**
+ * libType usable by any side — a dependency of this type is always allowed.
+ */
+export const ALL_LIB_TYPE = 'all';
+
+/**
+ * `library-types-match-client` rule.
+ *
+ * A project's `framework` field is its libType — which client side it targets
+ * (angular | react | express | all). This keeps side-specific code from
+ * crossing sides: an `express` project must not pull in an `angular`-only
+ * library (and vice-versa), and an `all` library — one that claims to be usable
+ * by everyone — must not depend on a side-specific library (which would quietly
+ * make it un-usable by the other sides).
+ *
+ * For every dependency edge A → B: allowed iff B is `all` or B has the same
+ * libType as A. Every violation is appended to `problems` so `arch:generate`
+ * fails with the full list.
+ */
+export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string[]): void {
+    for (const [projectName, entry] of Object.entries(graph)) {
+        const fromType = entry.framework;
+        if (fromType === undefined) continue; // framework resolution already flagged this project
+
+        for (const dep of entry.dependsOn) {
+            const depEntry = graph[dep];
+            const toType = depEntry?.framework;
+            if (toType === undefined) continue;
+
+            if (toType === ALL_LIB_TYPE || toType === fromType) continue;
+
+            problems.push(
+                `library-types-match-client: '${projectName}' (${fromType}) must not depend on ` +
+                    `'${dep}' (${toType}) — a '${fromType}' project may depend only on '${fromType}' ` +
+                    `or '${ALL_LIB_TYPE}' libraries. Fix the tag on one of them (framework:<angular|react|express|all>) ` +
+                    `or remove the dependency.`
+            );
+        }
     }
 }
 

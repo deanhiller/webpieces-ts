@@ -21,6 +21,7 @@ export const RULE_NAMES = {
     REQUIRE_RETURN_TYPE: 'require-return-type',
     NO_SYMBOL_DI_TOKENS: 'no-symbol-di-tokens',
     ENFORCE_CONTROLLER_NAMING: 'enforce-controller-naming',
+    FRAMEWORK_TAG: 'framework-tag',
     NO_INLINE_TYPES: 'no-inline-types',
     NO_DIRECT_API_RESOLVER: 'no-direct-api-resolver',
     PRISMA_CONVERTER: 'prisma-converter',

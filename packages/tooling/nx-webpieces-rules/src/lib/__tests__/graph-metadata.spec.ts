@@ -16,7 +16,7 @@ import {
     validateShortDescription,
     MAX_SHORT_DESCRIPTION_LENGTH,
 } from '../responsibilities';
-import { enrichGraph, MetadataValidationError } from '../graph-metadata';
+import { enrichGraph, MetadataValidationError, validateLibraryTypesMatch } from '../graph-metadata';
 import { toError } from '../../toError';
 
 describe('extractShortDescription', () => {
@@ -115,14 +115,71 @@ describe('resolveFramework', () => {
         expect(resolveFramework(info, tmpRoot).framework).toBe('express');
     });
 
-    it('falls back to all-ts with no framework deps', () => {
+    it('falls back to all with no framework deps', () => {
         const info = writeProject('lib', { dependencies: { inversify: '7.0.0' } });
-        expect(resolveFramework(info, tmpRoot).framework).toBe('all-ts');
+        expect(resolveFramework(info, tmpRoot).framework).toBe('all');
     });
 
-    it('falls back to all-ts with no package.json', () => {
+    it('falls back to all with no package.json', () => {
         const info = writeProject('bare', null);
-        expect(resolveFramework(info, tmpRoot).framework).toBe('all-ts');
+        expect(resolveFramework(info, tmpRoot).framework).toBe('all');
+    });
+});
+
+describe('validateLibraryTypesMatch', () => {
+    function graphOf(entries: Record<string, { framework?: string; dependsOn: string[] }>): EnhancedGraph {
+        const graph: EnhancedGraph = {};
+        for (const [name, entry] of Object.entries(entries)) {
+            graph[name] = { level: 0, dependsOn: entry.dependsOn, framework: entry.framework };
+        }
+        return graph;
+    }
+
+    it('allows a side project to depend on an all library', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ web: { framework: 'angular', dependsOn: ['lib'] }, lib: { framework: 'all', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toEqual([]);
+    });
+
+    it('allows same-libType dependencies', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ svr: { framework: 'express', dependsOn: ['http'] }, http: { framework: 'express', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toEqual([]);
+    });
+
+    it('flags an express project depending on an angular library', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ svr: { framework: 'express', dependsOn: ['ui'] }, ui: { framework: 'angular', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'svr' (express) must not depend on 'ui' (angular)");
+    });
+
+    it('flags an all library depending on a side-specific library', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ shared: { framework: 'all', dependsOn: ['ng'] }, ng: { framework: 'angular', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'shared' (all) must not depend on 'ng' (angular)");
+    });
+
+    it('skips edges where either endpoint has no resolved framework', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ a: { dependsOn: ['b'] }, b: { framework: 'angular', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toEqual([]);
     });
 });
 
@@ -196,7 +253,7 @@ describe('enrichGraph', () => {
 
         enrichGraph(graph, infos, enrichTmpRoot);
 
-        expect(graph['alpha'].framework).toBe('all-ts');
+        expect(graph['alpha'].framework).toBe('all');
         expect(graph['alpha'].shortDescription).toBe('Does alpha things.');
         expect(graph['alpha'].responsibilitiesFile).toBe('good/alpha/responsibilities.md');
         expect(graph['alpha'].designFile).toBe('good/alpha/design.json');
