@@ -68,13 +68,11 @@ export function generateDesignDot(design: DiDesign): string {
 
     dot += '\n';
 
-    // Constructor-injection edges; labels are the declared param/field NAME
-    // (B0) — the human-meaningful "why", not the raw token expression. The
-    // token/tokenKey stay in design.json for tooling. Mirrors design.md.
+    // Constructor-injection edges, unlabeled — the arrow alone shows the
+    // dependency. The param/field name, token and tokenKey stay in design.json
+    // for tooling that wants them.
     for (const edge of design.edges) {
-        const name = edge.injection === 'multiInject' ? `multiInject ${edge.paramName}` : edge.paramName;
-        const label = name !== '' ? ` [label="${dotEscape(name)}"]` : '';
-        dot += `  "${dotEscape(edge.from)}" -> "${dotEscape(edge.to)}"${label};\n`;
+        dot += `  "${dotEscape(edge.from)}" -> "${dotEscape(edge.to)}";\n`;
     }
 
     dot += '\n  labelloc="t";\n';

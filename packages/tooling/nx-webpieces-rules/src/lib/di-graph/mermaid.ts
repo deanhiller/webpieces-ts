@@ -19,11 +19,6 @@ function label(text: string): string {
     return text.replace(/"/g, '#quot;');
 }
 
-/** Escape an edge label (rendered between pipes). */
-function edgeLabel(text: string): string {
-    return text.replace(/\|/g, '/').replace(/"/g, "'");
-}
-
 function nodeStatement(node: DiNode): string {
     const id = mermaidId(node.id);
     const text = label(node.className);
@@ -42,13 +37,9 @@ function graphBody(design: DiDesign): string[] {
     for (const edge of design.edges) {
         const from = mermaidId(edge.from);
         const to = mermaidId(edge.to);
-        // B0: label edges by the declared param/field NAME, not the raw token.
-        const name = edge.injection === 'multiInject' ? `multiInject ${edge.paramName}` : edge.paramName;
-        if (name !== '') {
-            lines.push(`    ${from} -->|${edgeLabel(name)}| ${to}`);
-        } else {
-            lines.push(`    ${from} --> ${to}`);
-        }
+        // Unlabeled — the arrow alone shows the dependency; the param/field
+        // name and token stay in design.json for tooling that wants them.
+        lines.push(`    ${from} --> ${to}`);
     }
     lines.push('    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d');
     lines.push('    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37');
@@ -96,8 +87,8 @@ export function toDesignMarkdown(graph: DiGraph): string {
 
     const legend = [
         '',
-        'Edges are injections labeled by the target `constructor param`/`inject()` field',
-        'name (`multiInject <name>` for `@multiInject`). Rounded nodes are',
+        'Edges are constructor/`inject()` dependencies (the injected param/field',
+        'name and token are in `design.json`). Rounded nodes are',
         '`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed',
         'nodes are tokens the analyzer could not resolve.',
         '',
