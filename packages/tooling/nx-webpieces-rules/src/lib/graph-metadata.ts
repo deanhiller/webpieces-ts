@@ -152,22 +152,31 @@ export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string
  * `role-dependency` rule.
  *
  * A project's `role` is its function (server | designed-lib | lib | client).
- * Apps (`server`, `client`) are terminal — they consume libraries but are never
- * consumed. For every edge A → B, depending on a `server`/`client` is a
- * violation: B is really a library and must be retagged `role:lib` (or
- * `role:designed-lib`), or the dependency removed.
+ * Apps are terminal — libraries and clients consume them, never the reverse:
+ *   - a `client` is fully terminal: NOTHING may depend on it.
+ *   - a `server` may only be depended upon by another `server` — the one
+ *     legitimate case is a server-side orchestrator/e2e harness that boots
+ *     other servers. A `lib`/`designed-lib`/`client` depending on a `server`
+ *     inverts the dependency direction and is a violation.
  */
 export function validateRoleDependencies(graph: EnhancedGraph, problems: string[]): void {
     for (const [projectName, entry] of Object.entries(graph)) {
+        const fromRole = entry.role;
         for (const dep of entry.dependsOn) {
             const toRole = graph[dep]?.role;
             if (toRole === undefined) continue; // role resolution already flagged this project
             if (!APP_ROLES.includes(toRole)) continue;
+            // A server may orchestrate/boot other servers (e.g. an e2e harness).
+            if (toRole === 'server' && fromRole === 'server') continue;
 
+            const why =
+                toRole === 'client'
+                    ? `a 'client' app is terminal and may never be depended upon`
+                    : `a 'server' may only be depended upon by another 'server' (an orchestrator/e2e harness)`;
             problems.push(
-                `role-dependency: '${projectName}' must not depend on '${dep}' (role:${toRole}) — ` +
-                    `a '${toRole}' is a terminal app and may not be depended upon. Retag '${dep}' ` +
-                    `role:lib (or role:designed-lib) if it is actually a library, or remove the dependency.`
+                `role-dependency: '${projectName}' (role:${fromRole ?? 'none'}) must not depend on ` +
+                    `'${dep}' (role:${toRole}) — ${why}. Retag '${dep}' role:lib/role:designed-lib if it ` +
+                    `is actually a library, or remove the dependency.`
             );
         }
     }

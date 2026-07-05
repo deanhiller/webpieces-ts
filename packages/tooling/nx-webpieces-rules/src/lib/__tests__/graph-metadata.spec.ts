@@ -206,24 +206,37 @@ describe('validateRoleDependencies', () => {
         expect(problems).toEqual([]);
     });
 
-    it('flags depending on a server (a terminal app)', () => {
+    it('flags a lib depending on a server (inverted direction)', () => {
         const problems: string[] = [];
         validateRoleDependencies(
             graphOf({ a: { role: 'lib', dependsOn: ['svr'] }, svr: { role: 'server', dependsOn: [] } }),
             problems
         );
         expect(problems).toHaveLength(1);
-        expect(problems[0]).toContain("'a' must not depend on 'svr' (role:server)");
+        expect(problems[0]).toContain("'a' (role:lib) must not depend on 'svr' (role:server)");
     });
 
-    it('flags depending on a client', () => {
+    it('allows a server to depend on another server (e2e/orchestrator)', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(
+            graphOf({
+                e2e: { role: 'server', dependsOn: ['svr1', 'svr2'] },
+                svr1: { role: 'server', dependsOn: [] },
+                svr2: { role: 'server', dependsOn: [] },
+            }),
+            problems
+        );
+        expect(problems).toEqual([]);
+    });
+
+    it('flags anything depending on a client (fully terminal)', () => {
         const problems: string[] = [];
         validateRoleDependencies(
             graphOf({ a: { role: 'server', dependsOn: ['ng'] }, ng: { role: 'client', dependsOn: [] } }),
             problems
         );
         expect(problems).toHaveLength(1);
-        expect(problems[0]).toContain("'a' must not depend on 'ng' (role:client)");
+        expect(problems[0]).toContain("'ng' (role:client)");
     });
 
     it('skips edges whose target has no resolved role', () => {
