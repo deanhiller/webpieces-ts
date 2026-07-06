@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import type { EnhancedGraph, GraphEntry } from './graph-sorter';
+import type { EnhancedGraph } from './graph-sorter';
 import { toError } from '../toError';
 
 /**
@@ -42,31 +42,19 @@ function frameworkColor(frameworks: string[]): string {
 }
 
 /**
- * Role border styling — fill stays keyed on framework; the border shape shows a
- * project's ROLE at a glance:
- *   server       → double border (a runnable server app)
- *   client       → dashed border (a client app, e.g. angular)
- *   designed-lib → bold border   (a library with a generated @DocumentDesign design)
+ * Role border styling — fill stays keyed on framework; the border shows a
+ * project's ROLE at a glance. Server and client are the top-level runnable
+ * nodes, so they get bold, colored borders to stand out:
+ *   server       → thick GREEN border (a runnable server app)
+ *   client       → thick RED border   (a client app, e.g. angular)
+ *   designed-lib → bold border        (a library with a generated @DocumentDesign design)
  *   lib / other  → plain thin border
  */
 function roleBorderAttrs(role: string): string {
-    if (role === 'server') return ', peripheries=2';
-    if (role === 'client') return ', style="filled,dashed"';
+    if (role === 'server') return ', color="green", penwidth=3';
+    if (role === 'client') return ', color="red", penwidth=3';
     if (role === 'designed-lib') return ', penwidth=2';
     return '';
-}
-
-/**
- * Server and client apps are graph ROOTS — nothing depends on them and they
- * never depend on one another. So instead of scattering them across rows by
- * dependency depth (a server whose deepest dep is L3 vs one at L5), we pin every
- * server/client to a single top row above the whole library stack. This
- * declutters the diagram: the top row reads as "all the runnable apps," and
- * everything below is the shared libraries. Their outgoing edges still point
- * down into the libs, so no dependency is violated.
- */
-function isPromotedRole(role: string): boolean {
-    return role === 'server' || role === 'client';
 }
 
 /**
@@ -109,19 +97,11 @@ export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Depe
     dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
     dot += '  edge [fontname="Arial"];\n\n';
 
-    // Group projects by row rank. Libs sit on their computed topological level;
-    // servers/clients are all promoted to one synthetic top rank (maxLevel + 1)
-    // so they share a single row strictly above every library.
-    const maxLevel = Math.max(0, ...Object.values(graph).map((info: GraphEntry) => info.level));
-    const topRank = maxLevel + 1;
-    const rankOf = (info: GraphEntry): number =>
-        isPromotedRole(info.role ?? 'lib') ? topRank : info.level;
-
+    // Group projects by level
     const levels: Record<number, string[]> = {};
     for (const [project, info] of Object.entries(graph)) {
-        const rank = rankOf(info);
-        if (!levels[rank]) levels[rank] = [];
-        levels[rank].push(project);
+        if (!levels[info.level]) levels[info.level] = [];
+        levels[info.level].push(project);
     }
 
     // Nodes: fill colored by framework env set (libType), border shaped by role;
@@ -136,10 +116,8 @@ export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Depe
         const border = roleBorderAttrs(role);
         const href = designHtmlHref(info.designFile);
         const link = href ? `, URL="${href}", target="_blank"` : '';
-        // Promoted apps (server/client) drop the L# — they no longer sit on their
-        // dependency level, so a level number in the label would be misleading.
         const envSet = `[${frameworks.join(', ')}]`;
-        const labelMeta = isPromotedRole(role) ? `${envSet} · ${role}` : `L${info.level} · ${envSet} · ${role}`;
+        const labelMeta = `L${info.level} · ${envSet} · ${role}`;
         dot += `  "${shortName}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
     }
 
@@ -277,12 +255,12 @@ function generateHTMLLegend(): string {
             <strong>node:</strong> node server base env
         </div>
         <div class="legend-item" style="margin-top: 12px;">
-            <span class="legend-box" style="border: 3px double #333;"></span>
-            <strong>server:</strong> runnable server app (double border)
+            <span class="legend-box" style="border: 3px solid green;"></span>
+            <strong>server:</strong> runnable server app (thick green border)
         </div>
         <div class="legend-item">
-            <span class="legend-box" style="border: 1px dashed #333;"></span>
-            <strong>client:</strong> client app, e.g. angular (dashed border)
+            <span class="legend-box" style="border: 3px solid red;"></span>
+            <strong>client:</strong> client app, e.g. angular (thick red border)
         </div>
         <div class="legend-item">
             <span class="legend-box" style="border: 2px solid #333;"></span>
@@ -293,7 +271,7 @@ function generateHTMLLegend(): string {
             <strong>lib:</strong> plain library, no generated design (thin border)
         </div>
         <div class="legend-item" style="margin-top: 15px;">
-            <em>Library nodes show their dependency level (L#), their framework env set (e.g. [browser, node]), and their role, and are laid out by level, with the deepest libraries at the bottom. Server and client apps are roots (nothing depends on them), so they are all pinned to the single top row regardless of dependency depth — their labels omit the L#. Transitive dependencies are allowed but not shown.</em>
+            <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Rows are laid out by level (top = no dependencies), with the deepest libraries at the bottom. Transitive dependencies are allowed but not shown.</em>
         </div>
     </div>`;
 }

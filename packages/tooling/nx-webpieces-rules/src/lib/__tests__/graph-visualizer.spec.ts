@@ -20,25 +20,22 @@ describe('generateDot', () => {
         expect(dot).toContain('"angular-site" [fillcolor="#FCE4EC"'); // angular = pink
         expect(dot).toContain('"server2" [fillcolor="#E8F5E9"'); // express = green
         expect(dot).toContain('"http-client" [fillcolor="#EDE7F6"'); // browser = purple
-        expect(dot).toContain('peripheries=2'); // server = double border
-        expect(dot).toContain('style="filled,dashed"'); // client = dashed border
+        expect(dot).toContain('color="green", penwidth=3'); // server = thick green border
+        expect(dot).toContain('color="red", penwidth=3'); // client = thick red border
     });
 
-    it('shows the level for libs but drops the L# for promoted server/client apps', () => {
+    it('shows the level, env set, and role in every label (incl. server/client)', () => {
         const dot = generateDot(GRAPH);
-        // servers/clients are pinned to the top row, so their label omits the L#;
-        // the env set + role still shows.
-        expect(dot).toContain('label="angular-site\\n([angular, browser] · client)"');
-        expect(dot).toContain('label="server2\\n([express, node] · server)"');
-        // libs keep their topological level
+        expect(dot).toContain('label="angular-site\\n(L3 · [angular, browser] · client)"');
+        expect(dot).toContain('label="server2\\n(L4 · [express, node] · server)"');
         expect(dot).toContain('label="http-client\\n(L2 · [browser, node] · lib)"');
     });
 
-    it('pins all servers and clients to one top rank above the libs', () => {
+    it('lays every node out on its own dependency level (server/client not pinned)', () => {
         const dot = generateDot(GRAPH);
-        // maxLevel is 4 (server2) → promoted apps share synthetic rank 5,
-        // grouped in a single same-rank row; the lib stays on its own level rank.
-        expect(dot).toContain('{ rank=same; "angular-site"; "server2"; }');
+        // server2 L4, angular-site L3, http-client L2 — each alone on its rank here.
+        expect(dot).toContain('{ rank=same; "server2"; }');
+        expect(dot).toContain('{ rank=same; "angular-site"; }');
         expect(dot).toContain('{ rank=same; "http-client"; }');
     });
 
