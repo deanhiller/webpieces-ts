@@ -5,99 +5,45 @@ import 'reflect-metadata';
  * These are specific to the routing package (server-side only).
  */
 export const ROUTING_METADATA_KEYS = {
-    CONTROLLER: 'webpieces:controller',
-    NOT_CONTROLLER: 'webpieces:not-controller',
-    API_IMPLEMENTATION: 'webpieces:api-implementation',
+    DOCUMENT_DESIGN: 'webpieces:document-design',
     SOURCE_FILEPATH: 'webpieces:source-filepath',
 };
 
 /**
- * @Controller decorator — marks a controller (server-side only).
+ * @DocumentDesign decorator — marks a class as a DI-design ROOT: the top-of-DAG class whose
+ * dependency-injection tree the design-doc generator walks and renders into that project's
+ * `design.json` / `design.md` / `design.html`.
+ *
+ * It is the single marker for every kind of design root — server controllers (the class an
+ * `ApiRoutingFactory(Api, Controller)` binds) and library implementation classes (the top class a
+ * `role:designed-lib` project exports and binds in its `ContainerModule`). A `role:designed-lib`
+ * project is REQUIRED to have at least one `@DocumentDesign` class — otherwise the DI-graph
+ * generator has no root and fails.
+ *
+ * This is a pure marker read STATICALLY by the DI-graph analyzer (by decorator name); nothing reads
+ * its runtime metadata. Routing does NOT depend on it — routes are wired explicitly by
+ * `ApiRoutingFactory(Api, Controller)`, which reads `@ApiPath`/`@Endpoint` off the API class and
+ * `@SourceFile` off the controller. The metadata below exists only for symmetry/debuggability.
  *
  * Usage:
  * ```typescript
- * @Controller()
- * export class SaveController {
- *   // ...
- * }
- * ```
- */
-export function Controller(): ClassDecorator {
-    return (target: any) => {
-        Reflect.defineMetadata(ROUTING_METADATA_KEYS.CONTROLLER, true, target);
-    };
-}
-
-/**
- * Helper function to check if a class is a controller.
- * Server-side only.
- */
-export function isController(controllerClass: any): boolean {
-    return Reflect.getMetadata(ROUTING_METADATA_KEYS.CONTROLLER, controllerClass) === true;
-}
-
-/**
- * @NotController decorator — explicitly marks a class that implements/extends an `*Api` contract
- * as deliberately NOT a controller (e.g. a simulator, an in-process client, a test double).
- *
- * The `enforce-controller-naming` rule requires every class whose heritage ends in `*Api` to declare
- * its intent: either `@Controller` (then it must be named `{Something}Controller` and live in a
- * `{something}-controller.ts` file) OR `@NotController` (then it is exempt from those naming rules).
- * This is a pure marker — it registers no route and only records intent for the lint rule.
- *
- * Usage:
- * ```typescript
- * @NotController()
- * export class Server2Simulator { ... }
- * ```
- */
-export function NotController(): ClassDecorator {
-    return (target: object) => {
-        Reflect.defineMetadata(ROUTING_METADATA_KEYS.NOT_CONTROLLER, true, target);
-    };
-}
-
-/**
- * Helper function to check if a class is explicitly marked as NOT a controller.
- * Server-side only.
- */
-export function isNotController(controllerClass: object): boolean {
-    return Reflect.getMetadata(ROUTING_METADATA_KEYS.NOT_CONTROLLER, controllerClass) === true;
-}
-
-/**
- * @ApiImplementation decorator — marks the top-of-DAG implementation class in a LIBRARY
- * (a `role:designed-lib` project) whose DI design should be generated.
- *
- * It is the library-side analog of `@Controller`: where a server's design roots on its
- * `@Controller` classes, a designed-lib's design roots on its `@ApiImplementation` classes.
- * A `role:designed-lib` project is REQUIRED to have at least one such class — otherwise the
- * DI-graph generator has no root and fails.
- *
- * Put it on the top implementation class a library exports and binds in its `ContainerModule`
- * (e.g. the class an app injects to drive the library). Like `@Controller`, this is a pure
- * marker read by the static DI-graph analyzer (by decorator name); it registers nothing at
- * runtime on its own.
- *
- * Usage:
- * ```typescript
- * @ApiImplementation()
+ * @DocumentDesign()
  * @injectable()
- * export class AgentHandler { ... }
+ * export class SaveController extends SaveApi { ... }
  * ```
  */
-export function ApiImplementation(): ClassDecorator {
+export function DocumentDesign(): ClassDecorator {
     return (target: object) => {
-        Reflect.defineMetadata(ROUTING_METADATA_KEYS.API_IMPLEMENTATION, true, target);
+        Reflect.defineMetadata(ROUTING_METADATA_KEYS.DOCUMENT_DESIGN, true, target);
     };
 }
 
 /**
- * Helper function to check if a class is marked as an API implementation (designed-lib root).
+ * Helper function to check if a class is marked as a DI-design root.
  * Server/library side only.
  */
-export function isApiImplementation(implClass: object): boolean {
-    return Reflect.getMetadata(ROUTING_METADATA_KEYS.API_IMPLEMENTATION, implClass) === true;
+export function isDocumentDesign(designClass: object): boolean {
+    return Reflect.getMetadata(ROUTING_METADATA_KEYS.DOCUMENT_DESIGN, designClass) === true;
 }
 
 /**
@@ -108,7 +54,7 @@ export function isApiImplementation(implClass: object): boolean {
  *
  * Usage:
  * @SourceFile('src/controllers/admin/UserController.ts')
- * @Controller()
+ * @DocumentDesign()
  * export class UserController { ... }
  *
  * @param filepath - The source filepath of the controller

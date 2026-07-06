@@ -1,7 +1,7 @@
 /**
  * Angular Roots
  *
- * The Angular analog of "@Controller classes are the roots". Finds the entry
+ * The Angular analog of "@DocumentDesign classes are the roots". Finds the entry
  * components a DI tree is rendered "from the page/root component on down":
  *
  *   - Bootstrap root: `bootstrapApplication(AppComponent, appConfig)` in main.ts

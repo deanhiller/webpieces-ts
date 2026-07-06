@@ -9,8 +9,8 @@
  *
  * It is the source of truth for the `role` field written into
  * architecture/dependencies.json, for the `role-dependency` edge rule (apps are
- * never depended upon), and for DI-design generation (server → @Controller,
- * designed-lib → @ApiImplementation, lib → none, client → angular design).
+ * never depended upon), and for DI-design generation (server → @DocumentDesign,
+ * designed-lib → @DocumentDesign, lib → none, client → angular design).
  *
  * The project-walking + diff-scoping + mode logic is shared with the
  * `framework-tag` rule in `tag-rule.ts`; this file supplies only the
@@ -35,7 +35,7 @@ function reportViolations(untagged: MissingTagProject[], knownTypes: string[], m
     console.error('❌ Every modified project must declare its role (a role tag)!');
     console.error('');
     console.error(`   Add ONE of these to the project's project.json "tags" array: ${suggestion}`);
-    console.error('   (server = runnable app · designed-lib = library with an @ApiImplementation DI design ·');
+    console.error('   (server = runnable app · designed-lib = library with a @DocumentDesign DI design ·');
     console.error('    lib = plain library, no design · client = client app e.g. angular.)');
     console.error('   This role drives DI-design generation, the arch graph, and the role-dependency rule.');
     console.error('');

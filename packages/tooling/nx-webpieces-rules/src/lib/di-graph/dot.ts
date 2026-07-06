@@ -13,8 +13,8 @@ import { DiDesign, DiNode } from './model';
  * Node fill colors by DI node kind.
  */
 const KIND_COLORS: Record<string, string> = {
-    controller: '#E3F2FD', // light blue — the root/entry class (server @Controller)
-    apiImplementation: '#E0F2F1', // light teal — the root/entry class (designed-lib @ApiImplementation)
+    controller: '#E3F2FD', // light blue — the root/entry class (server @DocumentDesign)
+    apiImplementation: '#E0F2F1', // light teal — the root/entry class (designed-lib @DocumentDesign)
     component: '#E8F5E9', // light green — the root/entry Angular component
     class: '#F5F5F5', // neutral — plain injectable class
     constant: '#FFF3E0', // light orange — toConstantValue leaf
