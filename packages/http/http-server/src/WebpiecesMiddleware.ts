@@ -153,31 +153,31 @@ export class ExpressWrapper {
 
             // Set type-specific fields (MUST match ClientErrorTranslator)
             if (error instanceof HttpUserError) {
-                log.info('[ExpressWrapper] User Error:', error.message);
+                log.info(`[ExpressWrapper] User Error: ${error.message}`);
                 protocolError.errorCode = error.errorCode;
             } else if (error instanceof HttpBadRequestError) {
-                log.info('[ExpressWrapper] Bad Request:', error.message);
+                log.info(`[ExpressWrapper] Bad Request: ${error.message}`);
                 protocolError.field = error.field;
                 protocolError.guiAlertMessage = error.guiMessage;
             } else if (error instanceof HttpNotFoundError) {
-                log.info('[ExpressWrapper] Not Found:', error.message);
+                log.info(`[ExpressWrapper] Not Found: ${error.message}`);
             } else if (error instanceof HttpTimeoutError) {
-                log.error('[ExpressWrapper] Timeout Error:', error.message);
+                log.error(`[ExpressWrapper] Timeout Error: ${error.message}`);
             } else if (error instanceof HttpVendorError) {
-                log.error('[ExpressWrapper] Vendor Error:', error.message);
+                log.error(`[ExpressWrapper] Vendor Error: ${error.message}`);
                 protocolError.waitSeconds = error.waitSeconds;
             } else if (error instanceof HttpUnauthorizedError) {
-                log.info('[ExpressWrapper] Unauthorized:', error.message);
+                log.info(`[ExpressWrapper] Unauthorized: ${error.message}`);
             } else if (error instanceof HttpForbiddenError) {
-                log.info('[ExpressWrapper] Forbidden:', error.message);
+                log.info(`[ExpressWrapper] Forbidden: ${error.message}`);
             } else if (error instanceof HttpInternalServerError) {
-                log.error('[ExpressWrapper] Internal Server Error:', error.message);
+                log.error(`[ExpressWrapper] Internal Server Error: ${error.message}`);
             } else if (error instanceof HttpBadGatewayError) {
-                log.error('[ExpressWrapper] Bad Gateway:', error.message);
+                log.error(`[ExpressWrapper] Bad Gateway: ${error.message}`);
             } else if (error instanceof HttpGatewayTimeoutError) {
-                log.error('[ExpressWrapper] Gateway Timeout:', error.message);
+                log.error(`[ExpressWrapper] Gateway Timeout: ${error.message}`);
             } else {
-                log.info('[ExpressWrapper] Generic HttpError:', error.message);
+                log.info(`[ExpressWrapper] Generic HttpError: ${error.message}`);
             }
 
             // Serialize ProtocolError to JSON (SYMMETRIC with client)
@@ -234,7 +234,7 @@ export class WebpiecesMiddleware {
         res: Response,
         next: NextFunction,
     ): Promise<void> {
-        log.info('🔴 [Layer 1: GlobalErrorHandler] Request START:', req.method, req.path);
+        log.info(`🔴 [Layer 1: GlobalErrorHandler] Request START: ${req.method} ${req.path}`);
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Global error handler IS the top-level catch-all
         try {
@@ -243,9 +243,7 @@ export class WebpiecesMiddleware {
             // 2. Rejected promises from downstream async middleware
             await next();
             log.info(
-                '🔴 [Layer 1: GlobalErrorHandler] Request END (success):',
-                req.method,
-                req.path,
+                `🔴 [Layer 1: GlobalErrorHandler] Request END (success): ${req.method} ${req.path}`,
             );
         } catch (err: unknown) {
             const error = toError(err);
@@ -265,9 +263,7 @@ export class WebpiecesMiddleware {
         `);
             }
             log.info(
-                '🔴 [Layer 1: GlobalErrorHandler] Request END (error):',
-                req.method,
-                req.path,
+                `🔴 [Layer 1: GlobalErrorHandler] Request END (error): ${req.method} ${req.path}`,
             );
         }
     }
@@ -278,9 +274,9 @@ export class WebpiecesMiddleware {
      * IMPORTANT: Must be async and await next() to properly chain with async middleware.
      */
     async logNextLayer(req: Request, res: Response, next: NextFunction): Promise<void> {
-        log.info('🟡 [Layer 2: LogNextLayer] Before next() -', req.method, req.path);
+        log.info(`🟡 [Layer 2: LogNextLayer] Before next() - ${req.method} ${req.path}`);
         await next();
-        log.info('🟡 [Layer 2: LogNextLayer] After next() -', req.method, req.path);
+        log.info(`🟡 [Layer 2: LogNextLayer] After next() - ${req.method} ${req.path}`);
     }
 
     /**

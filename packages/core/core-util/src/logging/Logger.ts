@@ -7,14 +7,6 @@
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
 
 /**
- * A single structured log argument. A logger legitimately accepts arbitrary
- * values (objects, errors, primitives) and lets the backend decide how to
- * render them — mirroring `console.*`/bunyan/winston signatures.
- */
-// webpieces-disable no-any-unknown -- a logger must accept arbitrary values to render; this is the one intentional widening
-export type LogArg = unknown;
-
-/**
  * Logger - the pluggable logging contract for WebPieces.
  *
  * This is a BUSINESS-LOGIC interface (methods with behavior), so per the
@@ -26,14 +18,17 @@ export type LogArg = unknown;
  * React. Node-only backends (bunyan, file writers, ...) are wired in by
  * `framework:express` apps at startup, never in browser-safe libraries.
  *
- * Each method takes a message plus optional structured args (objects, errors,
- * numbers) that the backend decides how to render — matching `console.*` and
- * bunyan/winston signatures.
+ * KISS by design: every method takes ONLY a message plus an OPTIONAL `Error`.
+ * There is deliberately no structured-fields / varargs argument — so nobody can
+ * pass request ids, tenant ids, or other platform-header values into a log line.
+ * Those are already emitted automatically by the framework (see
+ * `HeaderMethods.buildSecureMapForLogs`); duplicating them here is impossible.
+ * See `.webpieces/instruct-ai/webpieces.logging.md`.
  */
 export interface Logger {
-    trace(message: string, ...args: LogArg[]): void;
-    debug(message: string, ...args: LogArg[]): void;
-    info(message: string, ...args: LogArg[]): void;
-    warn(message: string, ...args: LogArg[]): void;
-    error(message: string, ...args: LogArg[]): void;
+    trace(message: string, err?: Error): void;
+    debug(message: string, err?: Error): void;
+    info(message: string, err?: Error): void;
+    warn(message: string, err?: Error): void;
+    error(message: string, err?: Error): void;
 }

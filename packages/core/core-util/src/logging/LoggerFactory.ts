@@ -5,7 +5,7 @@ import { Logger } from './Logger';
  *
  * BUSINESS-LOGIC interface (a method with behavior). An app selects its logging
  * backend by installing one implementation of this factory globally via
- * {@link LogManager.setFactory}. Everything else in the codebase asks
+ * {@link LogManager.setLogger}. Everything else in the codebase asks
  * {@link LogManager.getLogger} for a named logger and never knows which backend
  * is behind it.
  *

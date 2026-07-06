@@ -13,7 +13,7 @@ export { ContextKey } from './ContextKey';
 
 // Logging (merged from former @webpieces/wp-logging).
 // Pluggable logging interface + a browser-safe console default; apps plug in
-// bunyan/winston/pino/etc. via LogManager.setFactory(...). Browser + Node.
+// bunyan/winston/pino/etc. via LogManager.setLogger(...). Browser + Node.
 export type { Logger, LogLevel } from './logging/Logger';
 export type { LoggerFactory } from './logging/LoggerFactory';
 export { ConsoleLogger } from './logging/ConsoleLogger';

@@ -72,7 +72,7 @@ export class TestCaseRecorderImpl implements TestCaseRecorder {
             return testCase;
         } catch (err: unknown) {
             const error = toError(err);
-            log.error('[TestCaseRecorder] Failed to emit test case (request unaffected):', error.message);
+            log.error('[TestCaseRecorder] Failed to emit test case (request unaffected)', error);
             return undefined;
         }
     }
