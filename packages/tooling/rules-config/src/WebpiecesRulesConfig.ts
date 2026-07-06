@@ -24,6 +24,7 @@ import {
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     DiGraphConfig,
+    MissingDesignAnnotationConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
@@ -54,6 +55,7 @@ export class WebpiecesRulesConfig {
     'no-file-import-cycles'?: NoFileImportCyclesConfig;
     'runtime-architecture'?: RuntimeArchitectureConfig;
     'di-graph'?: DiGraphConfig;
+    'missing-design-annotation'?: MissingDesignAnnotationConfig;
     'no-js-files'?: NoJsFilesConfig;
     'validate-ts-in-src'?: ValidateTsInSrcConfig;
     rulesDir?: string[];

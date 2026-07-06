@@ -426,6 +426,17 @@ export class DiGraphConfig extends BaseRuleConfig {
     };
 }
 
+export class MissingDesignAnnotationConfig extends BaseRuleConfig {
+    // Structural: enforced per-project by the di-graph-generate executor, which
+    // roots the whole DI design on @DocumentDesign classes — cannot be line-scoped.
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<MissingDesignAnnotationConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoJsFilesConfig extends BaseRuleConfig {
     // File-tier: NEW_AND_MODIFIED_FILES (active) intercepts a .js/.jsx Write — the file being
     // written is inherently a new/modified file, so it's already diff-scoped in practice.

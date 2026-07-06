@@ -19,7 +19,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadAndValidate } from '@webpieces/rules-config';
+import { loadAndValidate, ResolvedConfig } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -45,6 +45,7 @@ export interface ExecutorResult {
 }
 
 const RULE_NAME = 'di-graph';
+const MISSING_DESIGN_RULE_NAME = 'missing-design-annotation';
 
 // Cheap substring pre-scan: a project whose source never mentions any DI marker
 // gets an empty graph without paying for a ts.Program. Angular markers
@@ -145,12 +146,48 @@ function chooseAnalyzer(tags: string[], srcDir: string): AnalyzerChoice {
     return new AnalyzerChoice(analyzer, role);
 }
 
-function reportDesignedLibMissingRoot(projectName: string): void {
+/**
+ * A server/designed-lib project that produced no design (zero @DocumentDesign
+ * roots) fails the build with role-specific guidance. Enforced under the
+ * `missing-design-annotation` rule.
+ */
+function reportMissingDesignAnnotation(projectName: string, role: string): void {
+    if (role === 'server') {
+        console.error(
+            `❌ ${projectName} is tagged role:server but has no @DocumentDesign class.\n` +
+                `   All controllers should be annotated with @DocumentDesign() ` +
+                `(from @webpieces/http-routing) so their design.json / design.html get generated\n` +
+                `   and linked from architecture/dependencies.html.`,
+        );
+        return;
+    }
     console.error(
         `❌ ${projectName} is tagged role:designed-lib but has no @DocumentDesign class.\n` +
-            `   Annotate the library's top implementation class with @DocumentDesign ` +
-            `(from @webpieces/http-routing), or retag the project role:lib if it has no design.`,
+            `   One or more classes you want a design printed for need @DocumentDesign() ` +
+            `(from @webpieces/http-routing) added —\n` +
+            `   or retag the project role:lib if it has no design.`,
     );
+}
+
+/**
+ * A server/designed-lib project MUST expose at least one @DocumentDesign root,
+ * else its design is empty and the role is meaningless. Returns true (and reports)
+ * when the build should fail. The `missing-design-annotation` rule gates it:
+ * absent (an older published config) → enforce; OFF → skip.
+ */
+function failsMissingDesignAnnotation(
+    shared: ResolvedConfig,
+    role: string | null,
+    graph: DiGraph,
+    projectName: string,
+): boolean {
+    const missingRule = shared.rules.get(MISSING_DESIGN_RULE_NAME);
+    const enforce = !missingRule || !missingRule.isOff;
+    if (enforce && graph.designs.length === 0 && (role === 'server' || role === 'designed-lib')) {
+        reportMissingDesignAnnotation(projectName, role);
+        return true;
+    }
+    return false;
 }
 
 export default async function runExecutor(
@@ -190,10 +227,7 @@ export default async function runExecutor(
         const choice = chooseAnalyzer(projectConfig?.tags ?? [], srcDir);
         const graph = choice.analyzer.analyzeProject(program, context.root, projectRoot, projectName);
 
-        // A designed-lib MUST expose at least one @DocumentDesign root, else its
-        // design would be empty and the tag is meaningless — fail loudly.
-        if (choice.role === 'designed-lib' && graph.designs.length === 0) {
-            reportDesignedLibMissingRoot(projectName);
+        if (failsMissingDesignAnnotation(shared, choice.role, graph, projectName)) {
             return { success: false };
         }
 
