@@ -11,7 +11,7 @@ function baseEntry(): EnhancedGraph[string] {
     return {
         level: 1,
         dependsOn: ['core'],
-        framework: 'all-ts',
+        framework: ['browser', 'node'],
         shortDescription: 'Does things.',
         responsibilitiesFile: 'packages/x/responsibilities.md',
         designFile: 'packages/x/design.json',
@@ -25,15 +25,22 @@ describe('compareGraphs metadata fields', () => {
         expect(compareGraphs(current, saved).identical).toBe(true);
     });
 
-    it('detects a framework change', () => {
-        const current: EnhancedGraph = { x: { ...baseEntry(), framework: 'express' } };
+    it('detects a framework env-set change (compared by value, joined for display)', () => {
+        const current: EnhancedGraph = { x: { ...baseEntry(), framework: ['express', 'node'] } };
         const saved: EnhancedGraph = { x: baseEntry() };
         const result = compareGraphs(current, saved);
         expect(result.identical).toBe(false);
         expect(result.diff.modified[0].changedFields).toEqual([
-            { field: 'framework', from: 'all-ts', to: 'express' },
+            { field: 'framework', from: 'browser, node', to: 'express, node' },
         ]);
-        expect(result.summary).toContain('framework: "all-ts" -> "express"');
+        expect(result.summary).toContain('framework: "browser, node" -> "express, node"');
+    });
+
+    it('treats a reordered env set of the same members as a change (order is significant)', () => {
+        const current: EnhancedGraph = { x: { ...baseEntry(), framework: ['node', 'browser'] } };
+        const saved: EnhancedGraph = { x: baseEntry() };
+        const result = compareGraphs(current, saved);
+        expect(result.identical).toBe(false);
     });
 
     it('detects a shortDescription change and truncates long values in the summary', () => {
@@ -66,13 +73,13 @@ describe('compareGraphs metadata fields', () => {
 
     it('still reports deps and level changes alongside metadata', () => {
         const current: EnhancedGraph = {
-            x: { ...baseEntry(), level: 2, dependsOn: ['core', 'extra'], framework: 'react' },
+            x: { ...baseEntry(), level: 2, dependsOn: ['core', 'extra'], framework: ['react'] },
         };
         const saved: EnhancedGraph = { x: baseEntry() };
         const result = compareGraphs(current, saved);
         const modified = result.diff.modified[0];
         expect(modified.addedDeps).toEqual(['extra']);
         expect(modified.levelChanged).toEqual({ from: 1, to: 2 });
-        expect(modified.changedFields).toEqual([{ field: 'framework', from: 'all-ts', to: 'react' }]);
+        expect(modified.changedFields).toEqual([{ field: 'framework', from: 'browser, node', to: 'react' }]);
     });
 });

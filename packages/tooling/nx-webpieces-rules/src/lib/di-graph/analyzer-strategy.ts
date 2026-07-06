@@ -1,16 +1,16 @@
 /**
  * DI Analyzer Strategy
  *
- * Picks which DI analyzer generates a project's design graph, driven by the
- * project's `framework` nx tag (see the framework/libType tagging PR):
+ * Picks which DI analyzer generates a project's design graph. The primary
+ * driver is the project's `role` nx tag; the `framework` env set (its libType)
+ * only distinguishes the client runtime by set membership:
  *
- *   - `express` → {@link InversifyAnalyzer} (roots on `@Controller`)
- *   - `angular` → {@link AngularAnalyzer}  (roots on the bootstrap/route components)
- *   - anything else (`react`, `all`, ...) → {@link EmptyAnalyzer} (skip; the
- *     controller-less library top-of-DAG behavior is deferred for v1)
+ *   - env set includes `express` → {@link InversifyAnalyzer} (roots on `@Controller`)
+ *   - env set includes `angular` → {@link AngularAnalyzer}  (roots on the bootstrap/route components)
+ *   - anything else (`react`, `browser`, `node`, ...) → {@link EmptyAnalyzer} (skip)
  *
- * The explicit tag is the source of truth. When it is ABSENT (e.g. before the
- * tagging PR lands), a cheap marker pre-scan corroborates: `@Component(` /
+ * The explicit tags are the source of truth. When the role tag is ABSENT (e.g.
+ * before retag), a cheap marker pre-scan corroborates: `@Component(` /
  * `bootstrapApplication` → angular; `@Controller(` → express. This makes the
  * committed design.* identical whether selection is tag- or marker-driven.
  */
@@ -86,9 +86,21 @@ function explicitTag(tags: readonly string[], prefix: string): string | null {
     return null;
 }
 
-/** Extract the explicit `framework:<value>` nx tag, or null when the project has none. */
+/** Extract the FIRST explicit `framework:<value>` nx tag, or null when the project has none. */
 export function explicitFrameworkTag(tags: readonly string[]): string | null {
     return explicitTag(tags, FRAMEWORK_TAG_PREFIX);
+}
+
+/** Extract every explicit `framework:<value>` nx tag as an env set (the project's libType). */
+export function frameworkTags(tags: readonly string[]): string[] {
+    const values: string[] = [];
+    for (const tag of tags) {
+        if (tag.startsWith(FRAMEWORK_TAG_PREFIX)) {
+            const value = tag.slice(FRAMEWORK_TAG_PREFIX.length).trim();
+            if (value.length > 0) values.push(value);
+        }
+    }
+    return values;
 }
 
 /** Extract the explicit `role:<value>` nx tag, or null when the project has none. */
@@ -98,9 +110,10 @@ export function explicitRoleTag(tags: readonly string[]): string | null {
 
 /**
  * Choose the analyzer for a project. `role` (server|designed-lib|lib|client) is
- * the source of truth for WHAT to root on; `framework` distinguishes the client
- * runtime (angular vs other); `markers` corroborate only when the role tag is
- * ABSENT (rollout fallback keeps pre-retag designs identical).
+ * the source of truth for WHAT to root on; `frameworks` is the project's env set
+ * (its libType) and distinguishes the client runtime (angular vs other) by set
+ * membership; `markers` corroborate only when the role tag is ABSENT (rollout
+ * fallback keeps pre-retag designs identical).
  *
  *  - `server`       → Inversify, roots on `@Controller`
  *  - `designed-lib` → Inversify, roots on `@ApiImplementation`
@@ -110,19 +123,19 @@ export function explicitRoleTag(tags: readonly string[]): string | null {
  */
 export function selectAnalyzer(
     role: string | null,
-    framework: string | null,
+    frameworks: string[],
     markers: FrameworkMarkers,
 ): DiAnalyzer {
     if (role === 'server') return new InversifyAnalyzer('controller');
     if (role === 'designed-lib') return new InversifyAnalyzer('apiImplementation');
-    if (role === 'client') return framework === 'angular' ? new AngularAnalyzer() : new EmptyAnalyzer();
+    if (role === 'client') return frameworks.includes('angular') ? new AngularAnalyzer() : new EmptyAnalyzer();
     if (role === 'lib') return new EmptyAnalyzer();
 
     // Role tag absent — fall back to the legacy framework/marker selection so
     // designs stay identical until a project is retagged.
-    if (framework === 'express') return new InversifyAnalyzer('controller');
-    if (framework === 'angular') return new AngularAnalyzer();
-    if (framework !== null) return new EmptyAnalyzer();
+    if (frameworks.includes('express')) return new InversifyAnalyzer('controller');
+    if (frameworks.includes('angular')) return new AngularAnalyzer();
+    if (frameworks.length > 0) return new EmptyAnalyzer();
     if (markers.angular) return new AngularAnalyzer();
     if (markers.controller) return new InversifyAnalyzer('controller');
     return new EmptyAnalyzer();

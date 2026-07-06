@@ -13,7 +13,7 @@ import * as path from 'path';
 import { createProjectProgram } from '../di-graph/program';
 import { buildDiGraph } from '../di-graph/analyzer';
 import { buildAngularDiGraph } from '../di-graph/angular-analyzer';
-import { explicitFrameworkTag, selectAnalyzer, FrameworkMarkers } from '../di-graph/analyzer-strategy';
+import { explicitFrameworkTag, frameworkTags, selectAnalyzer, FrameworkMarkers } from '../di-graph/analyzer-strategy';
 import { AngularAnalyzer, EmptyAnalyzer, InversifyAnalyzer } from '../di-graph/analyzer-strategy';
 import { toDesignJson } from '../di-graph/serializer';
 import { generateDesignDot } from '../di-graph/dot';
@@ -657,21 +657,27 @@ describe('di-graph analyzer-strategy - selection', () => {
         expect(explicitFrameworkTag(['scope:app'])).toBeNull();
     });
 
+    it('reads the full framework env set (multiple framework: tags)', () => {
+        expect(frameworkTags(['scope:app', 'framework:browser', 'framework:node'])).toEqual(['browser', 'node']);
+        expect(frameworkTags(['framework:  angular  '])).toEqual(['angular']);
+        expect(frameworkTags(['scope:app'])).toEqual([]);
+    });
+
     it('selects by role first (server→Inversify, designed-lib→Inversify, lib→Empty, client→angular)', () => {
         const noMarkers = new FrameworkMarkers(false, false);
-        expect(selectAnalyzer('server', 'express', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
-        expect(selectAnalyzer('designed-lib', 'all', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
-        expect(selectAnalyzer('lib', 'all', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
-        expect(selectAnalyzer('lib', 'express', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
-        // client keeps the angular design for angular apps, nothing otherwise.
-        expect(selectAnalyzer('client', 'angular', noMarkers)).toBeInstanceOf(AngularAnalyzer);
-        expect(selectAnalyzer('client', 'express', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer('server', ['express', 'node'], noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer('designed-lib', ['node'], noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer('lib', ['node'], noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer('lib', ['express'], noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        // client keeps the angular design when the env set includes angular, nothing otherwise.
+        expect(selectAnalyzer('client', ['angular', 'browser'], noMarkers)).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer('client', ['browser'], noMarkers)).toBeInstanceOf(EmptyAnalyzer);
     });
 
     it('server roots on @Controller and designed-lib roots on @ApiImplementation', () => {
         const noMarkers = new FrameworkMarkers(false, false);
-        const server = selectAnalyzer('server', 'express', noMarkers) as InversifyAnalyzer;
-        const designedLib = selectAnalyzer('designed-lib', 'all', noMarkers) as InversifyAnalyzer;
+        const server = selectAnalyzer('server', ['express'], noMarkers) as InversifyAnalyzer;
+        const designedLib = selectAnalyzer('designed-lib', ['node'], noMarkers) as InversifyAnalyzer;
         // rootMode is private; assert on the constructed analyzer identity via a JSON probe.
         expect(JSON.stringify(server)).toContain('controller');
         expect(JSON.stringify(designedLib)).toContain('apiImplementation');
@@ -679,13 +685,13 @@ describe('di-graph analyzer-strategy - selection', () => {
 
     it('falls back to legacy framework/markers only when the role tag is absent', () => {
         const noMarkers = new FrameworkMarkers(false, false);
-        expect(selectAnalyzer(null, 'express', noMarkers)).toBeInstanceOf(InversifyAnalyzer);
-        expect(selectAnalyzer(null, 'angular', noMarkers)).toBeInstanceOf(AngularAnalyzer);
-        expect(selectAnalyzer(null, 'all', noMarkers)).toBeInstanceOf(EmptyAnalyzer);
-        expect(selectAnalyzer(null, null, new FrameworkMarkers(true, false))).toBeInstanceOf(AngularAnalyzer);
-        expect(selectAnalyzer(null, null, new FrameworkMarkers(false, true))).toBeInstanceOf(InversifyAnalyzer);
-        expect(selectAnalyzer(null, null, new FrameworkMarkers(false, false))).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer(null, ['express'], noMarkers)).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer(null, ['angular'], noMarkers)).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, ['node'], noMarkers)).toBeInstanceOf(EmptyAnalyzer);
+        expect(selectAnalyzer(null, [], new FrameworkMarkers(true, false))).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, [], new FrameworkMarkers(false, true))).toBeInstanceOf(InversifyAnalyzer);
+        expect(selectAnalyzer(null, [], new FrameworkMarkers(false, false))).toBeInstanceOf(EmptyAnalyzer);
         // Angular marker wins over a stray controller marker.
-        expect(selectAnalyzer(null, null, new FrameworkMarkers(true, true))).toBeInstanceOf(AngularAnalyzer);
+        expect(selectAnalyzer(null, [], new FrameworkMarkers(true, true))).toBeInstanceOf(AngularAnalyzer);
     });
 });

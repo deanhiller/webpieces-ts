@@ -8,6 +8,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { findUntaggedProjects } from '../validate-framework-tag';
+import { findProjectsWithInvalidTagValues } from '../tag-rule';
+
+/** The atomic env values the framework-tag rule allows (mirrors DEFAULT_KNOWN_TYPES). */
+const KNOWN_FRAMEWORKS = ['browser', 'react', 'angular', 'node', 'express'];
 
 let root: string;
 
@@ -27,7 +31,13 @@ describe('findUntaggedProjects', () => {
     });
 
     it('returns nothing when the owning project carries a framework tag', () => {
-        writeProjectJson('packages/lib', { name: 'lib', tags: ['type:util', 'framework:all'] });
+        writeProjectJson('packages/lib', { name: 'lib', tags: ['type:util', 'framework:node'] });
+        const untagged = findUntaggedProjects(root, ['packages/lib/src/index.ts']);
+        expect(untagged).toEqual([]);
+    });
+
+    it('allows MULTIPLE framework tags (an env set) — presence is satisfied', () => {
+        writeProjectJson('packages/lib', { name: 'lib', tags: ['framework:browser', 'framework:node'] });
         const untagged = findUntaggedProjects(root, ['packages/lib/src/index.ts']);
         expect(untagged).toEqual([]);
     });
@@ -68,5 +78,63 @@ describe('findUntaggedProjects', () => {
     it('ignores files that belong to no project', () => {
         const untagged = findUntaggedProjects(root, ['README.md', 'nx.json']);
         expect(untagged).toEqual([]);
+    });
+});
+
+describe('findProjectsWithInvalidTagValues (framework-tag value validation)', () => {
+    beforeEach(() => {
+        root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-fwval-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('rejects the removed framework:all value', () => {
+        writeProjectJson('packages/lib', { name: 'lib', tags: ['framework:all'] });
+        const invalid = findProjectsWithInvalidTagValues(
+            root,
+            ['packages/lib/src/index.ts'],
+            'framework:',
+            KNOWN_FRAMEWORKS
+        );
+        expect(invalid).toHaveLength(1);
+        expect(invalid[0].name).toBe('lib');
+        expect(invalid[0].badValues).toEqual(['all']);
+    });
+
+    it('rejects an unknown framework value', () => {
+        writeProjectJson('packages/lib', { name: 'lib', tags: ['framework:vue'] });
+        const invalid = findProjectsWithInvalidTagValues(
+            root,
+            ['packages/lib/src/index.ts'],
+            'framework:',
+            KNOWN_FRAMEWORKS
+        );
+        expect(invalid).toHaveLength(1);
+        expect(invalid[0].badValues).toEqual(['vue']);
+    });
+
+    it('accepts a valid multi-value env set', () => {
+        writeProjectJson('packages/lib', { name: 'lib', tags: ['framework:browser', 'framework:node'] });
+        const invalid = findProjectsWithInvalidTagValues(
+            root,
+            ['packages/lib/src/index.ts'],
+            'framework:',
+            KNOWN_FRAMEWORKS
+        );
+        expect(invalid).toEqual([]);
+    });
+
+    it('flags only the out-of-set values when a set mixes valid and invalid', () => {
+        writeProjectJson('packages/lib', { name: 'lib', tags: ['framework:node', 'framework:all'] });
+        const invalid = findProjectsWithInvalidTagValues(
+            root,
+            ['packages/lib/src/index.ts'],
+            'framework:',
+            KNOWN_FRAMEWORKS
+        );
+        expect(invalid).toHaveLength(1);
+        expect(invalid[0].badValues).toEqual(['all']);
     });
 });

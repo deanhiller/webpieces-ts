@@ -31,7 +31,7 @@ function makeEnrichedGraph(): EnhancedGraph {
         'http-routing': {
             level: 3,
             dependsOn: ['http-api', 'http-filters'],
-            framework: 'all-ts',
+            framework: ['browser', 'node'],
             shortDescription: 'Matches filters to routes with "quotes" and \\ backslashes.',
             responsibilitiesFile: 'packages/http/http-routing/responsibilities.md',
             designFile: 'packages/http/http-routing/design.json',
@@ -39,7 +39,7 @@ function makeEnrichedGraph(): EnhancedGraph {
         'core-util': {
             level: 0,
             dependsOn: [],
-            framework: 'all-ts',
+            framework: ['node'],
             shortDescription: 'Small shared utilities.',
             responsibilitiesFile: 'packages/core/core-util/responsibilities.md',
         },
@@ -72,8 +72,8 @@ describe('graph-loader wrapper format', () => {
 
     it('is deterministic (same graph → byte-identical file)', () => {
         const graph: EnhancedGraph = {
-            b: { level: 1, dependsOn: ['a'], framework: 'all-ts' },
-            a: { level: 0, dependsOn: [], framework: 'all-ts' },
+            b: { level: 1, dependsOn: ['a'], framework: ['node'] },
+            a: { level: 0, dependsOn: [], framework: ['node'] },
         };
         saveGraph(graph, tmpRoot, 'det/dependencies.json');
         const first = fs.readFileSync(path.join(tmpRoot, 'det/dependencies.json'), 'utf-8');

@@ -73,8 +73,8 @@ export function enrichGraph(
         const resolution = resolveFramework(info, workspaceRoot);
         if (resolution.problem !== null) {
             problems.push(resolution.problem);
-        } else if (resolution.framework !== null) {
-            entry.framework = resolution.framework;
+        } else if (resolution.frameworks !== null) {
+            entry.framework = resolution.frameworks;
         }
 
         const roleResolution = resolveRole(info);
@@ -108,41 +108,57 @@ export function enrichGraph(
 export const APP_ROLES: ReadonlyArray<string> = ['server', 'client'];
 
 /**
- * libType usable by any side — a dependency of this type is always allowed.
+ * Compatibility lattice — the "up-set" of each atomic env is the env itself
+ * PLUS every ancestor it can legally consume code from (specialization edges
+ * child → parent: react → browser, angular → browser, express → node). A
+ * consumer promising env `c` can be satisfied by any dependency env in `up(c)`.
  */
-export const ALL_LIB_TYPE = 'all';
+export const ENV_UP_SETS: Readonly<Record<string, ReadonlyArray<string>>> = {
+    react: ['react', 'browser'],
+    angular: ['angular', 'browser'],
+    browser: ['browser'],
+    express: ['express', 'node'],
+    node: ['node'],
+};
+
+/** The up-set of an env (env itself + ancestors); unknown envs map to just themselves. */
+function upSet(env: string): ReadonlyArray<string> {
+    return ENV_UP_SETS[env] ?? [env];
+}
 
 /**
  * `library-types-match-client` rule.
  *
- * A project's `framework` field is its libType — which client side it targets
- * (angular | react | express | all). This keeps side-specific code from
- * crossing sides: an `express` project must not pull in an `angular`-only
- * library (and vice-versa), and an `all` library — one that claims to be usable
- * by everyone — must not depend on a side-specific library (which would quietly
- * make it un-usable by the other sides).
- *
- * For every dependency edge A → B: allowed iff B is `all` or B has the same
- * libType as A. Every violation is appended to `problems` so `arch:generate`
- * fails with the full list.
+ * A project's `framework` field is its libType — the SET of runtime
+ * environments it is validated to run in (browser | react | angular | node |
+ * express). For a dependency edge Consumer C → Library L, the edge is LEGAL iff
+ * for EVERY env `c` in C's set, up(c) ∩ L's set ≠ ∅ — i.e. every environment
+ * the consumer promises to run in can be satisfied by the dependency. This keeps
+ * an express app from depending on a browser-only lib, and lets a `browser+node`
+ * lib be consumed by both react and express projects. Every violation is
+ * appended to `problems` so `arch:generate` fails with the full list.
  */
 export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string[]): void {
     for (const [projectName, entry] of Object.entries(graph)) {
-        const fromType = entry.framework;
-        if (fromType === undefined) continue; // framework resolution already flagged this project
+        const fromSet = entry.framework;
+        if (fromSet === undefined) continue; // framework resolution already flagged this project
 
         for (const dep of entry.dependsOn) {
             const depEntry = graph[dep];
-            const toType = depEntry?.framework;
-            if (toType === undefined) continue;
+            const toSet = depEntry?.framework;
+            if (toSet === undefined) continue;
 
-            if (toType === ALL_LIB_TYPE || toType === fromType) continue;
+            const unsatisfied = fromSet.filter(
+                (env: string) => !upSet(env).some((up: string) => toSet.includes(up))
+            );
+            if (unsatisfied.length === 0) continue;
 
             problems.push(
-                `library-types-match-client: '${projectName}' (${fromType}) must not depend on ` +
-                    `'${dep}' (${toType}) — a '${fromType}' project may depend only on '${fromType}' ` +
-                    `or '${ALL_LIB_TYPE}' libraries. Fix the tag on one of them (framework:<angular|react|express|all>) ` +
-                    `or remove the dependency.`
+                `library-types-match-client: '${projectName}' [${fromSet.join(', ')}] must not depend on ` +
+                    `'${dep}' [${toSet.join(', ')}] — the consumer env(s) ${unsatisfied.join(', ')} cannot be ` +
+                    `satisfied by the dependency (each consumer env must resolve to itself or an ancestor it ` +
+                    `consumes from: react/angular→browser, express→node). Widen '${dep}' framework tags or ` +
+                    `remove the dependency.`
             );
         }
     }

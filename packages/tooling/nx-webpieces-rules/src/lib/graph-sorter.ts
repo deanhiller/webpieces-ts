@@ -10,9 +10,10 @@
 /**
  * Graph entry with level metadata plus AI-oriented metadata filled in by
  * enrichGraph() (lib/graph-metadata.ts) before the graph is saved:
- *  - framework: the project's libType — angular | react | express | all
- *    ("all" = library usable by any side); from its `framework:` nx tag
- *    (source of truth) or inferred from package.json deps
+ *  - framework: the project's libType — the SET of runtime environments it is
+ *    validated to run in, drawn from browser | react | angular | node | express
+ *    (e.g. ["browser","node"]); from its `framework:` nx tags (source of truth)
+ *    or inferred from package.json deps
  *  - shortDescription: summary extracted from the project's responsibilities.md
  *  - responsibilitiesFile: repo-relative path to the FULL responsibilities doc
  *  - designFile: repo-relative path to the generated DI design.json (only for
@@ -21,7 +22,7 @@
 export interface GraphEntry {
     level: number;
     dependsOn: string[];
-    framework?: string;
+    framework?: string[];
     role?: string;
     shortDescription?: string;
     responsibilitiesFile?: string;

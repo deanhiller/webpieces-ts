@@ -281,11 +281,12 @@ export class EnforceControllerNamingConfig extends BaseRuleConfig {
     };
 }
 
-// framework-tag — every project that a changed source file belongs to must carry a
-// `framework:<angular|react|express|all>` nx tag in its project.json. That tag is the project's
-// "libType" (which client side it targets) — the source of truth for the dependencies.json
-// `framework` field and the `library-types-match-client` rule. `knownTypes` customizes the list
-// suggested to the author when a tag is missing (defaults to angular, react, express, all).
+// framework-tag — every project that a changed source file belongs to must carry >=1
+// `framework:<browser|react|angular|node|express>` nx tag in its project.json. Those tags are the
+// project's "libType" — the SET of runtime environments it runs in — and the source of truth for
+// the dependencies.json `framework` field and the `library-types-match-client` rule. Multiple tags
+// are allowed (the env set) and values are validated against the known set (`framework:all` is a
+// hard error). `knownTypes` customizes that set (defaults to browser, react, angular, node, express).
 export class FrameworkTagConfig extends BaseRuleConfig {
     declare mode?: ProjectMode;
     knownTypes?: string[];
