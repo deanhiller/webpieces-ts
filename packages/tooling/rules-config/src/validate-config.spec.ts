@@ -52,11 +52,11 @@ describe('validateWebpiecesConfig', () => {
 
     it('every rule accepts the universal escape hatches', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
+            'pr-creation-or-push-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
             'pr-merge-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
             'feature-branch-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
         });
-        for (const rule of ['pr-creation-guard', 'pr-merge-guard', 'feature-branch-guard']) {
+        for (const rule of ['pr-creation-or-push-guard', 'pr-merge-guard', 'feature-branch-guard']) {
             const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
             expect(fieldErrors).toEqual([]);
         }
@@ -154,10 +154,10 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
     it('rejects a present rule that is missing the required ignoreModifiedUntilEpoch', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-guard': { mode: 'ON' },
+            'pr-creation-or-push-guard': { mode: 'ON' },
         });
         expect(
-            errorsFor('pr-creation-guard', errors).some(
+            errorsFor('pr-creation-or-push-guard', errors).some(
                 e => e.includes('Missing required field "ignoreModifiedUntilEpoch"'),
             ),
         ).toBe(true);
@@ -165,10 +165,10 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('rejects a present rule that is missing the required mode', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-guard': { ignoreModifiedUntilEpoch: 0 },
+            'pr-creation-or-push-guard': { ignoreModifiedUntilEpoch: 0 },
         });
         expect(
-            errorsFor('pr-creation-guard', errors).some(
+            errorsFor('pr-creation-or-push-guard', errors).some(
                 e => e.includes('Missing required field "mode"'),
             ),
         ).toBe(true);
@@ -176,9 +176,9 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('accepts a fully-specified rule (mode + ignoreModifiedUntilEpoch)', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-guard': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
+            'pr-creation-or-push-guard': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
         });
-        expect(errorsFor('pr-creation-guard', errors)).toEqual([]);
+        expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
     });
 
     it('branch-creation-guard accepts ON_NO_SUBBRANCHES mode and branchFormat', () => {
@@ -260,8 +260,8 @@ describe('validatePrGateSection', () => {
 
 describe('validateSectionPlacement', () => {
     it('flags a guard left in the rules section', () => {
-        const errors = validateSectionPlacement({ 'pr-creation-guard': { mode: 'ON' } }, {});
-        expect(errors.some(e => e.includes('[pr-creation-guard]') && e.includes('"hookGuards"'))).toBe(true);
+        const errors = validateSectionPlacement({ 'pr-creation-or-push-guard': { mode: 'ON' } }, {});
+        expect(errors.some(e => e.includes('[pr-creation-or-push-guard]') && e.includes('"hookGuards"'))).toBe(true);
     });
 
     it('flags a code rule placed in the hookGuards section', () => {
@@ -272,7 +272,7 @@ describe('validateSectionPlacement', () => {
     it('accepts correctly-placed entries', () => {
         const errors = validateSectionPlacement(
             { 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE' } },
-            { 'pr-creation-guard': { mode: 'ON' } },
+            { 'pr-creation-or-push-guard': { mode: 'ON' } },
         );
         expect(errors).toEqual([]);
     });

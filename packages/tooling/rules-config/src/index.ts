@@ -71,7 +71,7 @@ export {
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
-    PrCreationGuardConfig,
+    PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,

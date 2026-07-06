@@ -17,7 +17,7 @@ function applyCommandDefaults(
     rules: Record<string, Record<string, unknown>>,
     commands: CommandsConfig,
 ): void {
-    const prCreation = rules['pr-creation-guard'];
+    const prCreation = rules['pr-creation-or-push-guard'];
     if (prCreation && prCreation['upsertPrCommand'] === undefined) {
         prCreation['upsertPrCommand'] = commands.upsertPr;
     }
@@ -110,6 +110,8 @@ export class LoadedConfig {
 // The old key stays accepted indefinitely; teams can flip to the new name whenever convenient.
 const DEPRECATED_RULE_ALIASES: Readonly<Record<string, string>> = {
     'pr-merge-cleanup': 'pr-merge-guard',
+    // pr-creation-guard was broadened to also block a manual `git push` and renamed accordingly.
+    'pr-creation-guard': 'pr-creation-or-push-guard',
 };
 
 // webpieces-disable no-any-unknown -- opaque per-rule option bags from consumer JSON, validated later

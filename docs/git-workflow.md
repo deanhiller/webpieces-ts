@@ -60,7 +60,7 @@ The net result: your branch contains all your changes, rebased onto latest main,
 
 ### Creating a PR
 
-Before running `gh pr create`, your branch must be up-to-date with `origin/main` (i.e., `origin/main` must be an ancestor of your HEAD). The `pr-creation-guard` AI hook verifies this by checking `git merge-base --is-ancestor origin/main HEAD`.
+Before running `gh pr create`, your branch must be up-to-date with `origin/main` (i.e., `origin/main` must be an ancestor of your HEAD). The `pr-creation-or-push-guard` AI hook verifies this by checking `git merge-base --is-ancestor origin/main HEAD`. That same guard also blocks a manual `git push` — pushes go through `pnpm wp-start-upsert-pr` / `pnpm wp-finish-upsert-pr`, not by hand.
 
 If the check fails:
 ```bash

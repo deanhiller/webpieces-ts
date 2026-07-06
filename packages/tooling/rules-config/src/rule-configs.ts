@@ -332,13 +332,13 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     };
 }
 
-export class PrCreationGuardConfig extends BaseRuleConfig {
+export class PrCreationOrPushGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
-    // The gated command the guard points agents to instead of direct PR creation. Per-project
-    // override; defaults to `pnpm wp-start-upsert-pr` at the point of use.
+    // The gated command the guard points agents to instead of direct PR creation OR a manual push.
+    // Per-project override; defaults to `pnpm wp-start-upsert-pr` at the point of use.
     upsertPrCommand?: string;
 
-    static readonly SCHEMA: SchemaShape<PrCreationGuardConfig> = {
+    static readonly SCHEMA: SchemaShape<PrCreationOrPushGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         upsertPrCommand: FieldDef.optional('string'),
         ...BASE_RULE_SCHEMA,

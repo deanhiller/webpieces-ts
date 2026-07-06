@@ -14,7 +14,7 @@ export const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
 export class CommandsConfig {
     prGate: PrGateConfig;
-    // Command the pr-creation-guard tells agents to run instead of `gh pr create`.
+    // Command the pr-creation-or-push-guard tells agents to run instead of `gh pr create` or a manual push.
     upsertPr: string;
     // Command the merge-in-progress-guard tells agents to run to finish a 3-point merge.
     mergeComplete: string;

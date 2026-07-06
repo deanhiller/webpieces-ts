@@ -47,14 +47,14 @@ describe('migrate', () => {
         const result = migrate({
             rules: {
                 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
-                'pr-creation-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
+                'pr-creation-or-push-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
             },
             'pr-gate': { mode: 'OFF', buildCommand: 'echo ci', gates: [] },
         });
 
         expect(result.config.rules['no-any-unknown']).toBeDefined();
-        expect(result.config.rules['pr-creation-guard']).toBeUndefined();
-        expect(result.config.hookGuards['pr-creation-guard']).toBeDefined();
+        expect(result.config.rules['pr-creation-or-push-guard']).toBeUndefined();
+        expect(result.config.hookGuards['pr-creation-or-push-guard']).toBeDefined();
         expect(result.config.commands['pr-gate']).toBeDefined();
         expect((result.config as { 'pr-gate'?: unknown })['pr-gate']).toBeUndefined();
         expect(result.config.commands['upsertPr']).toBe('pnpm wp-start-upsert-pr');

@@ -12,7 +12,7 @@ export type ConfigSection = 'rules' | 'hookGuards';
 // validator (placement checks), the loader (section merge), and the installer (config seeding).
 export const HOOK_GUARD_NAMES: readonly string[] = [
     'branch-creation-guard',
-    'pr-creation-guard',
+    'pr-creation-or-push-guard',
     'merge-in-progress-guard',
     'pr-merge-guard',
     'redirect-how-to-merge-main',
