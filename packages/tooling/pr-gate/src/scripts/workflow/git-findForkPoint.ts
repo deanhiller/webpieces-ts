@@ -10,7 +10,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 function printMergeFromMainError(commit: string, parent: string, featureName: string, currentBranch: string): void {
     process.stderr.write('\n');
     process.stderr.write(SEP);
-    process.stderr.write('❌ This branch merged main without pnpm wp-git-update\n');
+    process.stderr.write('❌ This branch merged main without pnpm wp-update-start\n');
     process.stderr.write(SEP);
     process.stderr.write('\n');
     process.stderr.write(`Merge commit detected: ${commit}\n`);

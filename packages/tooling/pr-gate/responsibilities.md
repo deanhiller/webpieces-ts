@@ -4,7 +4,7 @@ Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, update-fro
 
 ## In Scope
 
-- Bin commands shipped from `src/scripts/*`: `wp-start-upsert-pr`, `wp-finish-upsert-pr`, `wp-git-update` (update from main), `wp-git-gather` (gather info), `wp-merge-start`, `wp-merge-end`, `wp-build-affected`.
+- Bin commands shipped from `src/scripts/*`: `wp-start-upsert-pr`, `wp-finish-upsert-pr`, `wp-update-start` (update from main; clean → finalizes, conflict → hand off), `wp-update-end` (finalize after resolving conflicts), `wp-git-gather` (gather info), `wp-build-affected`. The full-update composition (`runUpdateFromMain`) is an internal `workflow/` function, not a bin.
 - The 3-point squash-merge / merge-validation gate workflow (`src/scripts/workflow`).
 - The red/yellow/green PR dashboard (`src/dashboard/dashboard.ts`): `computeGateResults`, `countAddedDisables`, `renderDashboard`, and its `GateResult`/`DisableCounts`/`DashboardInput` data classes.
 

@@ -12,9 +12,9 @@ import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExpl
 // the branch context, it (optionally) validates + commits the AI's conflict resolution, then ALWAYS
 // finalizes the merge — promotes `<branch>Squash` to the next numbered generation (base → base2),
 // force-pushes to the stable base branch, stamps a clean main-sync status, clears the marker and
-// sweeps stale tmp. Both wp-git-update (clean path /
-// validated resume) and wp-finish-upsert-pr (conflict resolution) call THIS, so finalization happens
-// in exactly one place and the conflict path can no longer post a PR from the un-swapped squash branch.
+// sweeps stale tmp. The shared runUpdateFromMain (clean path / validated resume), wp-update-end, and
+// wp-finish-upsert-pr (conflict resolution) all call THIS, so finalization happens in exactly one
+// place and the conflict path can no longer post a PR from the un-swapped squash branch.
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 

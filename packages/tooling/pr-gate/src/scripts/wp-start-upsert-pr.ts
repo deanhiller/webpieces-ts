@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { execSync, spawnSync } from 'child_process';
+import { execSync } from 'child_process';
 import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { baseBranchName } from './workflow/branch-naming';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
 import { assertCleanTree, ensurePushed } from './workflow/git-exec';
+import { runUpdateFromMain } from './workflow/run-update';
 
 // START of the AI-first PR flow (webpieces is AI-driven, so we invert trytami's human-first flow):
 // this command does the deterministic setup — update from main, push, run the build gate — then
@@ -13,22 +14,19 @@ import { assertCleanTree, ensurePushed } from './workflow/git-exec';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-// Step A — bring the branch up to date with main via the 3-point engine (child process, so its
-// conflict handback / guard interplay is unaffected by this command's hook context).
-function runUpdateFromMain(): void {
+// Step A — bring the branch up to date with main via the shared 3-point engine (in-process). On
+// conflict the merge process doc it writes names `wp-finish-upsert-pr` as the finish command (this
+// PR flow's finish, which validates + finalizes + builds + posts the PR).
+async function updateBranchFromMain(repoRoot: string): Promise<void> {
     process.stdout.write('\n' + SEP + '① Updating branch from main\n' + SEP + '\n');
-    const result = spawnSync('pnpm', ['wp-git-update'], { stdio: 'inherit' });
-    if (result.status === 2) {
+    const outcome = await runUpdateFromMain(repoRoot, 'wp-finish-upsert-pr');
+    if (outcome === 'conflict' || outcome === 'unvalidatedResume') {
         process.stdout.write('\n⏸️  Conflicts — resolve them, then run pnpm wp-finish-upsert-pr (it validates the merge AND finishes the PR).\n');
         process.exit(2);
     }
-    if (result.status !== 0) {
-        process.stderr.write('\n❌ Branch update failed — see output above.\n');
-        process.exit(result.status ?? 1);
-    }
 }
 
-export function main(): void {
+export async function main(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
     writeTemplate(repoRoot, 'webpieces.git-workflow.md');
@@ -38,7 +36,7 @@ export function main(): void {
     // uncommitted change build green yet push a stale commit. Fail early with instructions if dirty.
     assertCleanTree(repoRoot);
 
-    runUpdateFromMain();
+    await updateBranchFromMain(repoRoot);
     // Local branch may be a numbered generation (base2/…); the remote/PR branch is the stable base.
     ensurePushed(baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim()));
 
@@ -60,5 +58,9 @@ export function main(): void {
 }
 
 if (require.main === module) {
-    main();
+    main().catch((err: Error) => {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(message + '\n');
+        process.exit(1);
+    });
 }
