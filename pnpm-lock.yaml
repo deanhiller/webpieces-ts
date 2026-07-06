@@ -165,9 +165,6 @@ importers:
       '@webpieces/gcp-identity':
         specifier: workspace:*
         version: link:../gcp-identity
-      '@webpieces/http-filters':
-        specifier: workspace:*
-        version: link:../../http/http-filters
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -245,15 +242,18 @@ importers:
 
   packages/http/http-server:
     dependencies:
-      '@webpieces/cloudtasks-client':
-        specifier: workspace:*
-        version: link:../../cloud/cloudtasks-client
       '@webpieces/core-context':
         specifier: workspace:*
         version: link:../../core/core-context
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
+      '@webpieces/gcp-identity':
+        specifier: workspace:*
+        version: link:../../cloud/gcp-identity
+      '@webpieces/http-filters':
+        specifier: workspace:*
+        version: link:../http-filters
       '@webpieces/http-routing':
         specifier: workspace:*
         version: link:../http-routing

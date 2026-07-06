@@ -25,7 +25,6 @@
     "dependencies": {
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
-        "@webpieces/http-filters": "workspace:*",
         "@webpieces/gcp-identity": "workspace:*",
         "@google-cloud/tasks": "5.5.2",
         "inversify": "7.10.4",

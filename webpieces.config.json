@@ -285,6 +285,7 @@
             "disableAllowed": true,
             "allowedPaths": [
                 "packages/http/http-client/**",
+                "packages/cloud/cloudtasks-client/**",
                 "libraries/apis-external/**",
                 "libraries/apis/external/**"
             ]

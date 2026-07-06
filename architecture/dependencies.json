@@ -20,15 +20,15 @@
             ]
         },
         "cloudtasks-client": {
-            "level": 3,
-            "framework": ["express"],
+            "level": 2,
+            "framework": ["node"],
             "role": "lib",
-            "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, the TaskInvoker abstraction (GCP + in-memory), and the `@PubSub` delivery pieces (in-process dispatcher + service-auth filter).",
+            "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, and the TaskInvoker transports (GCP + in-memory), both of which deliver a task over real HTTP.",
             "responsibilitiesFile": "packages/cloud/cloudtasks-client/responsibilities.md",
             "designFile": "packages/cloud/cloudtasks-client/design.json",
             "dependsOn": [
-                "gcp-identity",
-                "http-filters"
+                "core-context",
+                "gcp-identity"
             ]
         },
         "code-rules": {
@@ -75,7 +75,7 @@
         },
         "gcp-identity": {
             "level": 1,
-            "framework": ["express"],
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.",
             "responsibilitiesFile": "packages/cloud/gcp-identity/responsibilities.md",
@@ -86,7 +86,7 @@
         },
         "http-client": {
             "level": 2,
-            "framework": ["express"],
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
             "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
@@ -122,11 +122,11 @@
             "level": 4,
             "framework": ["express"],
             "role": "lib",
-            "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express middleware, ships built-in filters (Context, LogApi, Recording), the in-process test client, and the test-case recorder implementation.",
+            "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "designFile": "packages/http/http-server/design.json",
             "dependsOn": [
-                "cloudtasks-client",
+                "gcp-identity",
                 "http-routing"
             ]
         },

@@ -12,16 +12,15 @@ export {
     JobReference,
     TaskRequest,
     TaskInvoker,
-    LocalTaskDispatcher,
 } from './TaskTypes';
 export { createTaskClient, TaskClientConfig } from './TaskClientFactory';
 export { TaskClientCreator } from './TaskClientCreator';
 export { CloudTaskScheduler, ScheduleOptions } from './CloudTaskScheduler';
+// The two task transports (local HTTP-queue + remote GCP), both delivering over real HTTP.
 export { InMemoryTaskInvoker } from './InMemoryTaskInvoker';
 export { GcpTaskInvoker } from './GcpTaskInvoker';
-// LocalTaskDispatcherImpl moved to @webpieces/http-server (needs http-routing's RouteBuilder);
-// this package declares only the abstract LocalTaskDispatcher (in TaskTypes).
-export { ServiceAuthFilter } from './ServiceAuthFilter';
+// NOTE: ServiceAuthFilter (server-side delivery-auth Filter) lives in @webpieces/http-server —
+// a client library has no server filters / routing machinery.
 export {
     ScheduleFrame,
     setScheduleFrame,
