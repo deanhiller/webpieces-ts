@@ -25,13 +25,15 @@ export {
     RouteMetadata,
     METADATA_KEYS,
     ValidateImplementation,
+    // @DocumentDesign moved to core-util (design-root marker, browser + Node);
+    // re-exported here for back-compat.
+    DocumentDesign,
+    isDocumentDesign,
 } from '@webpieces/core-util';
 export type { AuthMode, ApiKind } from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
 export {
-    DocumentDesign,
-    isDocumentDesign,
     SourceFile,
     ROUTING_METADATA_KEYS,
 } from './decorators';
