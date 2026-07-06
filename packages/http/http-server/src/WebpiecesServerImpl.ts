@@ -7,6 +7,7 @@ import {
     WebAppMeta,
     WEBAPP_META_TOKEN,
 } from '@webpieces/http-routing';
+import {DocumentDesign} from '@webpieces/core-util';
 import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
 import {WebpiecesRouteCreator} from './WebpiecesRouteCreator';
@@ -39,6 +40,7 @@ import {LogManager} from '@webpieces/core-util';
  */
 const log = LogManager.getLogger('WebpiecesServer');
 
+@DocumentDesign()
 @provideSingleton()
 @injectable()
 export class WebpiecesServerImpl implements WebpiecesServer {

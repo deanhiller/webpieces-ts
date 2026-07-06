@@ -1,5 +1,62 @@
 {
     "schemaVersion": 2,
     "project": "cloudtasks-client",
-    "designs": []
+    "designs": [
+        {
+            "root": "TaskClientCreator",
+            "rootKind": "apiImplementation",
+            "file": "packages/cloud/cloudtasks-client/src/TaskClientCreator.ts",
+            "maxLevel": 1,
+            "nodes": [
+                {
+                    "id": "HeaderRegistry",
+                    "className": "HeaderRegistry",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/cloud/cloudtasks-client/src/TaskClientCreator.ts",
+                    "level": 1
+                },
+                {
+                    "id": "TaskClientCreator",
+                    "className": "TaskClientCreator",
+                    "kind": "apiImplementation",
+                    "scope": "singleton",
+                    "file": "packages/cloud/cloudtasks-client/src/TaskClientCreator.ts",
+                    "level": 0
+                },
+                {
+                    "id": "TaskInvoker",
+                    "className": "TaskInvoker",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/cloud/cloudtasks-client/src/TaskClientCreator.ts",
+                    "level": 1
+                }
+            ],
+            "edges": [
+                {
+                    "from": "TaskClientCreator",
+                    "to": "HeaderRegistry",
+                    "injection": "token",
+                    "token": "HeaderRegistry",
+                    "tokenKey": "class:packages/core/core-util/src/http/HeaderRegistry.ts#HeaderRegistry",
+                    "paramName": "registry",
+                    "paramType": "HeaderRegistry"
+                },
+                {
+                    "from": "TaskClientCreator",
+                    "to": "TaskInvoker",
+                    "injection": "token",
+                    "token": "TaskInvoker",
+                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskTypes.ts#TaskInvoker",
+                    "paramName": "invoker",
+                    "paramType": "TaskInvoker"
+                }
+            ],
+            "unresolved": [
+                "HeaderRegistry",
+                "TaskInvoker"
+            ]
+        }
+    ]
 }

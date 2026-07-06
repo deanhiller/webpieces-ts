@@ -12,6 +12,7 @@ import {
     RecorderKeys,
     TestCaseRecorder,
     toError,
+    DocumentDesign,
 } from '@webpieces/core-util';
 import { ContextMgr } from '@webpieces/core-context';
 import { mintIdToken } from '@webpieces/gcp-identity';
@@ -107,31 +108,9 @@ export function createApiClient<T extends object>(
     apiPrototype: ApiPrototype<T>,
     config: ClientConfig
 ): T {
-    // Validate that the API prototype is marked with @ApiPath
-    if (!isApiPath(apiPrototype)) {
-        const className = apiPrototype.name || 'Unknown';
-        throw new Error(`Class ${className} must be decorated with @ApiPath()`);
-    }
-
-    const basePath = getApiPath(apiPrototype)!;
-    const endpoints = getEndpoints(apiPrototype) || {};
-
-    // Build RouteMetadata array from @ApiPath + @Endpoint metadata
-    // (apiName as the class name so client logs read "SaveApi.save", not "undefined.save")
-    const apiName = apiPrototype.name || 'UnknownApi';
-    const routes: RouteMetadata[] = [];
-    for (const [methodName, endpointPath] of Object.entries(endpoints)) {
-        const fullPath = basePath + endpointPath;
-        // Capture the endpoint's auth mode so the client can mint delivery auth
-        // (OIDC bearer) per @AuthOidc / @AuthSharedSecret, just like the server verifies it.
-        const authMeta = getAuthMeta(apiPrototype, methodName);
-        routes.push(new RouteMetadata('POST', fullPath, methodName, apiName, authMeta));
-    }
-
-    // Create ProxyClient with injected LogApiCall
-    // Our own little DI going on here as angular and nodejs are using 2 different DI systems
-    const proxyClient = new ProxyClient(
-        config, new LogApiCall(), new HeaderMethods(), routes, config.contextMgr, apiName);
+    // ProxyClient owns @ApiPath validation + route building from the API's decorators
+    // (see its constructor). It is the @DocumentDesign design root for this package.
+    const proxyClient = new ProxyClient(apiPrototype, config);
 
     // Create a proxy that intercepts method calls and makes HTTP requests
     return new Proxy({} as T, {
@@ -180,21 +159,42 @@ export function createApiClient<T extends object>(
  *
  * LogApiCall is injected for consistent logging across the framework.
  */
+@DocumentDesign()
 export class ProxyClient {
     private routeMap: Map<string, RouteMetadata>;
+    private contextMgr?: ContextMgr;
+    private apiName: string;
 
+    // Our own little DI going on here as angular and nodejs are using 2 different DI systems;
+    // LogApiCall/HeaderMethods are typed params (with defaults) so this reads as the client's
+    // dependency graph in the generated design.
     constructor(
+        apiPrototype: ApiPrototype<object>,
         private config: ClientConfig,
-        private logApiCall: LogApiCall,
-        private headerMethods: HeaderMethods,
-        routes: RouteMetadata[],
-        private contextMgr?: ContextMgr,
-        private apiName: string = 'UnknownApi',
+        private logApiCall: LogApiCall = new LogApiCall(),
+        private headerMethods: HeaderMethods = new HeaderMethods(),
     ) {
-        // Create a map of method name -> route metadata for fast lookup
+        // Validate that the API prototype is marked with @ApiPath
+        if (!isApiPath(apiPrototype)) {
+            const className = apiPrototype.name || 'Unknown';
+            throw new Error(`Class ${className} must be decorated with @ApiPath()`);
+        }
+
+        const basePath = getApiPath(apiPrototype)!;
+        const endpoints = getEndpoints(apiPrototype) || {};
+
+        // apiName as the class name so client logs read "SaveApi.save", not "undefined.save"
+        this.apiName = apiPrototype.name || 'UnknownApi';
+        this.contextMgr = config.contextMgr;
+
+        // Build the map of method name -> route metadata from @ApiPath + @Endpoint metadata
         this.routeMap = new Map<string, RouteMetadata>();
-        for (const route of routes) {
-            this.routeMap.set(route.methodName, route);
+        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
+            const fullPath = basePath + endpointPath;
+            // Capture the endpoint's auth mode so the client can mint delivery auth
+            // (OIDC bearer) per @AuthOidc / @AuthSharedSecret, just like the server verifies it.
+            const authMeta = getAuthMeta(apiPrototype, methodName);
+            this.routeMap.set(methodName, new RouteMetadata('POST', fullPath, methodName, this.apiName, authMeta));
         }
     }
 

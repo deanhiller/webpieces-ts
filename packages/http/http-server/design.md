@@ -4,8 +4,29 @@
 > Machine-readable version: [design.json](./design.json)
 
 Each section below is one root's dependency tree: Level 0 is the root
-(a `@Controller` or top-of-DAG class), and constructor injections fan
+(a `@DocumentDesign` or top-of-DAG class), and constructor injections fan
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-No DI-registered classes found in this project.
+## WebpiecesServerImpl — api-impl, Level 0…1
+
+```mermaid
+graph TD
+    RouteBuilderImpl["RouteBuilderImpl"]
+    WebAppMeta(["WebAppMeta"])
+    WebpiecesMiddleware["WebpiecesMiddleware"]
+    WebpiecesServerImpl["WebpiecesServerImpl"]:::apiImpl
+    WebpiecesServerImpl --> RouteBuilderImpl
+    WebpiecesServerImpl --> WebAppMeta
+    WebpiecesServerImpl --> WebpiecesMiddleware
+    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
+    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
+    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
+```
+
+
+Edges are constructor/`inject()` dependencies (the injected param/field
+name and token are in `design.json`). Rounded nodes are
+`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed
+nodes are tokens the analyzer could not resolve.
