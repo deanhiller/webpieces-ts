@@ -23,11 +23,21 @@ describe('generateDot', () => {
         expect(dot).toContain('style="filled,dashed"'); // client = dashed border
     });
 
-    it('shows the level and the framework-role combo in each label', () => {
+    it('shows the level for libs but drops the L# for promoted server/client apps', () => {
         const dot = generateDot(GRAPH);
-        expect(dot).toContain('label="angular-site\\n(L3 · angular-client)"');
-        expect(dot).toContain('label="server2\\n(L4 · express-server)"');
+        // servers/clients are pinned to the top row, so their label omits the L#
+        expect(dot).toContain('label="angular-site\\n(angular-client)"');
+        expect(dot).toContain('label="server2\\n(express-server)"');
+        // libs keep their topological level
         expect(dot).toContain('label="http-client\\n(L2 · all-lib)"');
+    });
+
+    it('pins all servers and clients to one top rank above the libs', () => {
+        const dot = generateDot(GRAPH);
+        // maxLevel is 4 (server2) → promoted apps share synthetic rank 5,
+        // grouped in a single same-rank row; the lib stays on its own level rank.
+        expect(dot).toContain('{ rank=same; "angular-site"; "server2"; }');
+        expect(dot).toContain('{ rank=same; "http-client"; }');
     });
 
     it('treats an absent framework as "all" and absent role as "lib"', () => {
