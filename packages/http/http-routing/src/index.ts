@@ -30,12 +30,9 @@ export type { AuthMode, ApiKind } from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
 export {
-    Controller,
-    isController,
-    NotController,
-    isNotController,
-    ApiImplementation,
-    isApiImplementation,
+    DocumentDesign,
+    isDocumentDesign,
+    SourceFile,
     ROUTING_METADATA_KEYS,
 } from './decorators';
 

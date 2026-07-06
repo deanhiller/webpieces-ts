@@ -55,7 +55,7 @@ function pageLegend(): string {
     return `<div class="legend">
         <h2>Legend</h2>
         <div class="legend-item"><span class="legend-box" style="background: #E3F2FD;"></span>
-            <strong>Controller / root</strong> — level 0, the entry class of the tree</div>
+            <strong>Design root</strong> — level 0, the @DocumentDesign entry class of the tree
         <div class="legend-item"><span class="legend-box" style="background: #F5F5F5;"></span>
             <strong>Class</strong> — injectable class (constructor injection)</div>
         <div class="legend-item"><span class="legend-box" style="background: #FFF3E0;"></span>

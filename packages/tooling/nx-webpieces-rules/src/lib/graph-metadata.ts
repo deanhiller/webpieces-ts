@@ -21,6 +21,7 @@ import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
+import { toError } from '../toError';
 
 export const RESPONSIBILITIES_FILE_NAME = 'responsibilities.md';
 
@@ -86,8 +87,12 @@ export function enrichGraph(
 
         enrichResponsibilities(entry, info, workspaceRoot, problems);
 
-        // Only project.json projects get a generated design.json (see di-graph-targets.ts)
-        if (fs.existsSync(path.join(workspaceRoot, info.root, 'project.json'))) {
+        // Set designFile ONLY when the project has a REAL generated design (a
+        // non-empty `designs[]`), i.e. it has a @DocumentDesign root. Every
+        // project.json project gets a design.json written, but plain libs get an
+        // empty `{ designs: [] }` — those must NOT become clickable in the arch
+        // viz (designHtmlHref keys off designFile). See graph-visualizer.ts.
+        if (hasGeneratedDesign(workspaceRoot, info.root)) {
             entry.designFile = toRepoRelative(info.root, 'design.json');
         }
     }
@@ -231,4 +236,25 @@ function enrichResponsibilities(
  */
 function toRepoRelative(projectRoot: string, fileName: string): string {
     return [projectRoot.replace(/\\/g, '/').replace(/\/+$/, ''), fileName].join('/');
+}
+
+/**
+ * True when the project has a REAL generated DI design — a committed design.json
+ * whose `designs[]` is non-empty (i.e. it has ≥1 @DocumentDesign root). Plain
+ * libs get a `{ designs: [] }` file written, which must read as "no design" so
+ * the arch viz does not render them as clickable. A missing/unparseable file is
+ * treated as "no design".
+ */
+function hasGeneratedDesign(workspaceRoot: string, projectRoot: string): boolean {
+    const designPath = path.join(workspaceRoot, projectRoot, 'design.json');
+    if (!fs.existsSync(designPath)) return false;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const parsed = JSON.parse(fs.readFileSync(designPath, 'utf-8'));
+        return Array.isArray(parsed.designs) && parsed.designs.length > 0;
+    } catch (err: unknown) {
+        const error = toError(err);
+        console.warn(`⚠️  Skipping unparseable ${designPath}: ${error.message}`);
+        return false;
+    }
 }

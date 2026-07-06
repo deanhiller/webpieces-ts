@@ -9,7 +9,7 @@
  *   - toConstantValue/toDynamicValue bindings → leaf nodes, no recursion
  *   - unresolvable tokens/types → kind "unresolved" nodes (generation never fails)
  *
- * Roots: @Controller() classes when the project has any; otherwise every
+ * Roots: @DocumentDesign() classes when the project has any; otherwise every
  * DI-registered class in the project that no other project class injects
  * (the tops of the local DAG).
  */
@@ -73,23 +73,21 @@ function hasDecoratorNamed(cls: ts.ClassDeclaration, names: Set<string>): boolea
     return false;
 }
 
-export function isControllerClass(cls: ts.ClassDeclaration): boolean {
-    return hasDecoratorNamed(cls, new Set(['Controller']));
+/** A `@DocumentDesign` class — the explicit DI-design root (server controller or designed-lib impl). */
+export function isDocumentDesignClass(cls: ts.ClassDeclaration): boolean {
+    return hasDecoratorNamed(cls, new Set(['DocumentDesign']));
 }
 
-/** A `@ApiImplementation` class — the explicit DI-design root for a `role:designed-lib` project. */
-export function isApiImplementationClass(cls: ts.ClassDeclaration): boolean {
-    return hasDecoratorNamed(cls, new Set(['ApiImplementation']));
-}
-
-/** Node kind for a class: `@Controller` → controller, `@ApiImplementation` → apiImplementation, else class. */
-export function rootKindOfClass(cls: ts.ClassDeclaration): DiNodeKind {
-    if (isControllerClass(cls)) return 'controller';
-    if (isApiImplementationClass(cls)) return 'apiImplementation';
-    return 'class';
-}
-
+/**
+ * The node kind for a `@DocumentDesign` root, chosen by the analyzer's root mode
+ * rather than the decorator (a single `@DocumentDesign` marks both). `server` →
+ * `controller`, `designed-lib` → `apiImplementation`.
+ */
 export type DiRootMode = 'controller' | 'apiImplementation';
+
+export function rootKindForMode(mode: DiRootMode): DiNodeKind {
+    return mode === 'apiImplementation' ? 'apiImplementation' : 'controller';
+}
 
 function isDiRegisteredClass(cls: ts.ClassDeclaration): boolean {
     return hasDecoratorNamed(cls, DI_DECORATORS);
@@ -187,6 +185,7 @@ export abstract class DiDesignBuilder {
     private readonly unresolvedIds = new Map<string, string>();
     private readonly usedIds = new Set<string>();
     private readonly visited = new Set<ts.ClassDeclaration>();
+    protected rootClass: ts.ClassDeclaration | null = null;
 
     constructor(checker: ts.TypeChecker, table: BindingTable, workspaceRoot: string, design: DiDesign) {
         this.checker = checker;
@@ -198,12 +197,18 @@ export abstract class DiDesignBuilder {
     /** Collect the injection sites for one class (constructor params, field inject(), ...). */
     protected abstract collectInjections(cls: ts.ClassDeclaration): Injection[];
 
-    /** Node kind for a root/reached class — `controller`/`apiImplementation` (Inversify) or `component` (Angular). */
+    /**
+     * Node kind for a root/reached class. Default: the ROOT box takes the design's
+     * `rootKind` (`controller`/`apiImplementation`, chosen by root mode); every
+     * reached dependency is a plain `class`. Angular overrides this to render
+     * component classes as `component`.
+     */
     protected rootKindOf(cls: ts.ClassDeclaration): DiNodeKind {
-        return rootKindOfClass(cls);
+        return cls === this.rootClass ? this.design.rootKind : 'class';
     }
 
     addRoot(cls: ts.ClassDeclaration): void {
+        this.rootClass = cls;
         const id = this.classNode(cls);
         this.design.root = id;
         this.walkClass(cls);
@@ -568,11 +573,12 @@ export function buildDesign(
 
 /**
  * Build the full Inversify DI graph for one project: one self-contained
- * `DiDesign` per @Controller root. `projectRoot` is workspace-relative.
+ * `DiDesign` per @DocumentDesign root. `projectRoot` is workspace-relative.
  *
- * `includeLibraryRoots` (default false) roots ONLY on @Controller classes; when
- * true, a controller-less project falls back to top-of-DAG DI classes. `rootMode`
- * `'apiImplementation'` (role:designed-lib) instead roots on `@ApiImplementation`.
+ * Both `rootMode`s root on @DocumentDesign classes; the mode only sets the root
+ * box kind (`'controller'` for server, `'apiImplementation'` for designed-lib).
+ * `includeLibraryRoots` (default false) lets a project with NO @DocumentDesign
+ * class fall back to top-of-DAG DI classes (rendered as plain `class` roots).
  */
 export function buildDiGraph(
     program: ts.Program,
@@ -587,17 +593,19 @@ export function buildDiGraph(
     const graph = new DiGraph(projectName);
 
     const classes = projectClasses(program, workspaceRoot, projectRoot);
+    const designRoots = classes.filter((cls: ts.ClassDeclaration) => isDocumentDesignClass(cls));
+    // Both modes root on @DocumentDesign classes. In controller mode a project with
+    // no explicit design root may fall back to top-of-DAG DI classes (those render
+    // as plain `class` roots, preserving prior behaviour).
     const roots =
-        rootMode === 'apiImplementation'
-            ? classes.filter((cls: ts.ClassDeclaration) => isApiImplementationClass(cls))
-            : ((): ts.ClassDeclaration[] => {
-                  const controllers = classes.filter((cls: ts.ClassDeclaration) => isControllerClass(cls));
-                  if (controllers.length > 0) return controllers;
-                  return includeLibraryRoots ? findLibraryRoots(classes, checker, table, workspaceRoot) : [];
-              })();
+        designRoots.length > 0
+            ? designRoots
+            : rootMode === 'controller' && includeLibraryRoots
+              ? findLibraryRoots(classes, checker, table, workspaceRoot)
+              : [];
 
     for (const root of [...roots].sort(byClassName)) {
-        const rootKind: DiNodeKind = rootKindOfClass(root);
+        const rootKind: DiNodeKind = isDocumentDesignClass(root) ? rootKindForMode(rootMode) : 'class';
         graph.designs.push(
             buildDesign(
                 root,

@@ -15,7 +15,6 @@ import {
     NoUnmanagedExceptionsConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
-    EnforceControllerNamingConfig,
     FrameworkTagConfig,
     RoleTagConfig,
 } from '@webpieces/rules-config';
@@ -34,7 +33,6 @@ import { CatchErrorPatternValidator } from './validate-catch-error-pattern';
 import { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptions';
 import { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 import { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
-import { EnforceControllerNamingValidator } from './validate-enforce-controller-naming';
 import { FrameworkTagValidator } from './validate-framework-tag';
 import { RoleTagValidator } from './validate-role-tag';
 import { MatchRulesValidator } from './validate-match-rules';
@@ -67,7 +65,6 @@ function buildValidators(
         new NoUnmanagedExceptionsValidator(config['no-unmanaged-exceptions'] ?? new NoUnmanagedExceptionsConfig()),
         new NoDirectApiResolverValidator(config['angular-no-direct-api-in-resolver'] ?? new AngularNoDirectApiInResolverConfig()),
         new NoSymbolDiTokensValidator(config['no-symbol-di-tokens'] ?? new NoSymbolDiTokensConfig()),
-        new EnforceControllerNamingValidator(config['enforce-controller-naming'] ?? new EnforceControllerNamingConfig()),
         new FrameworkTagValidator(config['framework-tag'] ?? new FrameworkTagConfig()),
         new RoleTagValidator(config['role-tag'] ?? new RoleTagConfig()),
         // One validator per client-authored match-rules entry (each with its own name/mode/epoch).

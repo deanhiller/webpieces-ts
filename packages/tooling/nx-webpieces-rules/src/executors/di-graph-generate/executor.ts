@@ -51,8 +51,7 @@ const RULE_NAME = 'di-graph';
 // (@Component/bootstrapApplication) are included so an Angular app that uses no
 // Inversify decorator isn't short-circuited to empty.
 const DI_MARKERS = [
-    '@Controller(',
-    '@ApiImplementation(',
+    '@DocumentDesign(',
     '@provideSingleton',
     '@provideTransient',
     '@injectable',
@@ -63,7 +62,9 @@ const DI_MARKERS = [
 ];
 
 const ANGULAR_MARKERS = ['@Component(', 'bootstrapApplication'];
-const CONTROLLER_MARKER = '@Controller(';
+// A non-Angular DI-design root. When no role tag is set, its presence steers the
+// marker-fallback toward the Inversify analyzer (server/controller mode).
+const DESIGN_ROOT_MARKER = '@DocumentDesign(';
 
 /** Recursively read every project .ts file, folding each into `visit`. */
 function forEachSourceFile(dir: string, visit: (content: string) => void): void {
@@ -93,7 +94,7 @@ function detectFrameworkMarkers(dir: string): FrameworkMarkers {
     let controller = false;
     forEachSourceFile(dir, (content: string) => {
         if (!angular && ANGULAR_MARKERS.some((marker: string) => content.includes(marker))) angular = true;
-        if (!controller && content.includes(CONTROLLER_MARKER)) controller = true;
+        if (!controller && content.includes(DESIGN_ROOT_MARKER)) controller = true;
     });
     return new FrameworkMarkers(angular, controller);
 }
@@ -128,7 +129,7 @@ class AnalyzerChoice {
 }
 
 /**
- * Select the analyzer by role (server→@Controller, designed-lib→@ApiImplementation,
+ * Select the analyzer by role (server & designed-lib → @DocumentDesign,
  * client→angular design, lib→skip). The explicit `role:` nx tag is the source of
  * truth; when absent we fall back to the legacy `framework:` selection + marker
  * pre-scan so designs stay identical until a project is retagged.
@@ -146,8 +147,8 @@ function chooseAnalyzer(tags: string[], srcDir: string): AnalyzerChoice {
 
 function reportDesignedLibMissingRoot(projectName: string): void {
     console.error(
-        `❌ ${projectName} is tagged role:designed-lib but has no @ApiImplementation class.\n` +
-            `   Annotate the library's top implementation class with @ApiImplementation ` +
+        `❌ ${projectName} is tagged role:designed-lib but has no @DocumentDesign class.\n` +
+            `   Annotate the library's top implementation class with @DocumentDesign ` +
             `(from @webpieces/http-routing), or retag the project role:lib if it has no design.`,
     );
 }
@@ -189,7 +190,7 @@ export default async function runExecutor(
         const choice = chooseAnalyzer(projectConfig?.tags ?? [], srcDir);
         const graph = choice.analyzer.analyzeProject(program, context.root, projectRoot, projectName);
 
-        // A designed-lib MUST expose at least one @ApiImplementation root, else its
+        // A designed-lib MUST expose at least one @DocumentDesign root, else its
         // design would be empty and the tag is meaningless — fail loudly.
         if (choice.role === 'designed-lib' && graph.designs.length === 0) {
             reportDesignedLibMissingRoot(projectName);

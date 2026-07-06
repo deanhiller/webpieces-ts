@@ -79,7 +79,7 @@ export function toDesignMarkdown(graph: DiGraph): string {
         `> Machine-readable version: [design.json](./design.json)`,
         '',
         `Each section below is one root's dependency tree: Level 0 is the root`,
-        `(a \`@Controller\` or top-of-DAG class), and constructor injections fan`,
+        `(a \`@DocumentDesign\` or top-of-DAG class), and constructor injections fan`,
         `downward through Levels 1, 2, … A dependency shared by multiple roots`,
         `appears in each root's tree.`,
         '',

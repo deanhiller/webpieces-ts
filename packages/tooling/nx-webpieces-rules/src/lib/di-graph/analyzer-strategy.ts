@@ -5,13 +5,13 @@
  * driver is the project's `role` nx tag; the `framework` env set (its libType)
  * only distinguishes the client runtime by set membership:
  *
- *   - env set includes `express` → {@link InversifyAnalyzer} (roots on `@Controller`)
+ *   - env set includes `express` → {@link InversifyAnalyzer} (roots on `@DocumentDesign`)
  *   - env set includes `angular` → {@link AngularAnalyzer}  (roots on the bootstrap/route components)
  *   - anything else (`react`, `browser`, `node`, ...) → {@link EmptyAnalyzer} (skip)
  *
  * The explicit tags are the source of truth. When the role tag is ABSENT (e.g.
  * before retag), a cheap marker pre-scan corroborates: `@Component(` /
- * `bootstrapApplication` → angular; `@Controller(` → express. This makes the
+ * `bootstrapApplication` → angular; `@DocumentDesign(` → Inversify. This makes the
  * committed design.* identical whether selection is tag- or marker-driven.
  */
 
@@ -40,9 +40,10 @@ export interface DiAnalyzer {
 }
 
 /**
- * Inversify analyzer: one design per root decorator.
- *  - `'controller'` (server projects) roots on `@Controller`.
- *  - `'apiImplementation'` (role:designed-lib) roots on `@ApiImplementation`.
+ * Inversify analyzer: one design per `@DocumentDesign` root. The `rootMode` only
+ * sets the root box kind:
+ *  - `'controller'` (server projects) → `controller`.
+ *  - `'apiImplementation'` (role:designed-lib) → `apiImplementation`.
  */
 export class InversifyAnalyzer implements DiAnalyzer {
     private readonly rootMode: DiRootMode;
@@ -115,8 +116,8 @@ export function explicitRoleTag(tags: readonly string[]): string | null {
  * membership; `markers` corroborate only when the role tag is ABSENT (rollout
  * fallback keeps pre-retag designs identical).
  *
- *  - `server`       → Inversify, roots on `@Controller`
- *  - `designed-lib` → Inversify, roots on `@ApiImplementation`
+ *  - `server`       → Inversify, roots on `@DocumentDesign` (controller kind)
+ *  - `designed-lib` → Inversify, roots on `@DocumentDesign` (apiImplementation kind)
  *  - `client`       → Angular design for angular apps; otherwise skip
  *  - `lib`          → skip (plain libraries get no design)
  *  - role absent    → legacy framework/marker selection

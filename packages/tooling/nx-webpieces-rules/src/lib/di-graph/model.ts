@@ -6,7 +6,7 @@
  *
  * A project's design.json is a container (`DiGraph`) holding an ARRAY of
  * per-root designs (`DiDesign`) — one self-contained downward tree per
- * @Controller class (or, for controller-less library projects, per top-of-DAG
+ * @DocumentDesign class (or, for design-root-less library projects, per top-of-DAG
  * class). Each node in a design carries its `level` = BFS depth from that
  * design's root (root = level 0, its direct injections = level 1, and so on).
  *
@@ -110,7 +110,7 @@ export class DiEdge {
 }
 
 /**
- * One self-contained DI design tree: a single root (a @Controller, or a
+ * One self-contained DI design tree: a single root (a @DocumentDesign, or a
  * library top-of-DAG class) and everything it injects "on down". Shared
  * dependencies are duplicated across designs — each design is its own tree so
  * it can be reviewed in isolation.

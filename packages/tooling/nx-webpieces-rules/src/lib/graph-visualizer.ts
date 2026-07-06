@@ -46,7 +46,7 @@ function frameworkColor(frameworks: string[]): string {
  * project's ROLE at a glance:
  *   server       → double border (a runnable server app)
  *   client       → dashed border (a client app, e.g. angular)
- *   designed-lib → bold border   (a library with a generated @ApiImplementation design)
+ *   designed-lib → bold border   (a library with a generated @DocumentDesign design)
  *   lib / other  → plain thin border
  */
 function roleBorderAttrs(role: string): string {
@@ -286,7 +286,7 @@ function generateHTMLLegend(): string {
         </div>
         <div class="legend-item">
             <span class="legend-box" style="border: 2px solid #333;"></span>
-            <strong>designed-lib:</strong> library with a generated @ApiImplementation design (bold border)
+            <strong>designed-lib:</strong> library with a generated @DocumentDesign design (bold border)
         </div>
         <div class="legend-item">
             <span class="legend-box" style="border: 1px solid #ccc;"></span>

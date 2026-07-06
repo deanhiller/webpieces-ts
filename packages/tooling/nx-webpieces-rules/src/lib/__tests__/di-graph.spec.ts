@@ -62,12 +62,12 @@ export class SimpleCounter implements Counter {
 `,
     'controller.ts': `
 import { inject } from 'inversify';
-import { provideSingleton, Controller } from '@webpieces/http-routing';
+import { provideSingleton, DocumentDesign } from '@webpieces/http-routing';
 import { Counter, Remote, TYPES } from './tokens';
 import { HelperService } from './services';
 
 @provideSingleton()
-@Controller()
+@DocumentDesign()
 export class SaveController {
     constructor(
         @inject(TYPES.Counter) counter: Counter,
@@ -77,7 +77,7 @@ export class SaveController {
 }
 
 @provideSingleton()
-@Controller()
+@DocumentDesign()
 export class EmptyController {}
 `,
     'module.ts': `
@@ -99,11 +99,11 @@ export const AppModule = new ContainerModule((options) => {
 const MULTI_INJECT_FIXTURE: Record<string, string> = {
     'filter.ts': `
 import { inject, multiInject, optional } from 'inversify';
-import { provideSingleton, Controller } from '@webpieces/http-routing';
+import { provideSingleton, DocumentDesign } from '@webpieces/http-routing';
 import { EXT_TYPES, MISSING_TYPES, Extension } from './tokens';
 
 @provideSingleton()
-@Controller()
+@DocumentDesign()
 export class ContextFilter {
     constructor(
         @multiInject(EXT_TYPES.Extension) @optional() extensions: Extension[] = [],
@@ -185,17 +185,17 @@ export class SharedService {
 }
 `,
     'controllers.ts': `
-import { provideSingleton, Controller } from '@webpieces/http-routing';
+import { provideSingleton, DocumentDesign } from '@webpieces/http-routing';
 import { SharedService } from './services';
 
 @provideSingleton()
-@Controller()
+@DocumentDesign()
 export class AlphaController {
     constructor(shared: SharedService) {}
 }
 
 @provideSingleton()
-@Controller()
+@DocumentDesign()
 export class BetaController {
     constructor(shared: SharedService) {}
 }
@@ -232,7 +232,7 @@ class Fixture {
         return buildAngularDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj');
     }
 
-    /** Build a designed-lib graph: roots on @ApiImplementation instead of @Controller. */
+    /** Build a designed-lib graph: @DocumentDesign roots rendered as apiImplementation kind. */
     buildApiImpl(): DiGraph {
         const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
         expect(program).not.toBeNull();
@@ -624,19 +624,19 @@ describe('di-graph analyzer - angular project', () => {
     });
 });
 
-describe('di-graph analyzer - designed-lib @ApiImplementation roots', () => {
+describe('di-graph analyzer - designed-lib @DocumentDesign roots', () => {
     const API_IMPL_FIXTURE: Record<string, string> = {
         'AgentHandler.ts':
             "import { injectable } from 'inversify';\n" +
-            "import { ApiImplementation } from '@webpieces/http-routing';\n" +
+            "import { DocumentDesign } from '@webpieces/http-routing';\n" +
             '@injectable()\nexport class TodoRegistry {}\n' +
-            '@ApiImplementation()\n@injectable()\nexport class AgentHandler {\n' +
+            '@DocumentDesign()\n@injectable()\nexport class AgentHandler {\n' +
             '    constructor(private readonly registry: TodoRegistry) {}\n}\n',
     };
     let fixture: Fixture;
     afterEach(() => fixture?.cleanup());
 
-    it('roots on @ApiImplementation and marks the root apiImplementation', () => {
+    it('roots on @DocumentDesign and marks the root apiImplementation', () => {
         fixture = new Fixture(API_IMPL_FIXTURE);
         const graph = fixture.buildApiImpl();
         expect(rootNames(graph)).toEqual(['AgentHandler']);
@@ -644,7 +644,7 @@ describe('di-graph analyzer - designed-lib @ApiImplementation roots', () => {
         expect(edge(graph, 'AgentHandler', 'TodoRegistry')).toBeDefined();
     });
 
-    it('produces an empty graph when a designed-lib project has no @ApiImplementation', () => {
+    it('produces an empty graph when a designed-lib project has no @DocumentDesign', () => {
         fixture = new Fixture({ 'plain.ts': 'import { injectable } from "inversify";\n@injectable()\nexport class X {}\n' });
         expect(fixture.buildApiImpl().designs).toEqual([]);
     });
@@ -674,7 +674,7 @@ describe('di-graph analyzer-strategy - selection', () => {
         expect(selectAnalyzer('client', ['browser'], noMarkers)).toBeInstanceOf(EmptyAnalyzer);
     });
 
-    it('server roots on @Controller and designed-lib roots on @ApiImplementation', () => {
+    it('server and designed-lib both root on @DocumentDesign with different root kinds', () => {
         const noMarkers = new FrameworkMarkers(false, false);
         const server = selectAnalyzer('server', ['express'], noMarkers) as InversifyAnalyzer;
         const designedLib = selectAnalyzer('designed-lib', ['node'], noMarkers) as InversifyAnalyzer;

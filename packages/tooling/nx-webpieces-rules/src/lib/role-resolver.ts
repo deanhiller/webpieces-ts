@@ -5,9 +5,9 @@
  * architecture/dependencies.json — a project's ROLE, orthogonal to its
  * `framework` (libType). Known values:
  *
- *   - `server`       — a runnable server app; DI design roots on `@Controller`.
+ *   - `server`       — a runnable server app; DI design roots on `@DocumentDesign`.
  *   - `designed-lib` — a library whose DI design we generate; roots on
- *                      `@ApiImplementation` (required to have ≥1).
+ *                      `@DocumentDesign` (required to have ≥1).
  *   - `lib`          — a plain library; no DI design is generated.
  *   - `client`       — a client app (e.g. angular-site); angular apps keep their
  *                      component/route design, others get none.

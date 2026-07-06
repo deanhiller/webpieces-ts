@@ -77,10 +77,8 @@
             ]
         },
         "enforce-controller-naming": {
-            "mode": "NEW_AND_MODIFIED_FILES",
-            "disableAllowed": true,
-            "allowedPaths": [],
-            "ignoreModifiedUntilEpoch": 1783409251
+            "mode": "OFF",
+            "ignoreModifiedUntilEpoch": 0
         },
         "framework-tag": {
             "mode": "MODIFIED_PROJECTS",

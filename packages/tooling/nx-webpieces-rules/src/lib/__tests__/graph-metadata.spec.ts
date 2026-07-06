@@ -310,7 +310,9 @@ class FixtureProject {
         public readonly name: string,
         public readonly responsibilitiesMd: string | null,
         public readonly hasProjectJson: boolean,
-        public readonly tags: string[] = []
+        public readonly tags: string[] = [],
+        // Raw design.json contents to write (when hasProjectJson). null → no file.
+        public readonly designJson: string | null = null
     ) {}
 }
 
@@ -334,6 +336,9 @@ function setupWorkspace(prefix: string, projects: FixtureProject[]): Map<string,
                 JSON.stringify({ name: project.name }),
                 'utf-8'
             );
+        }
+        if (project.designJson !== null) {
+            fs.writeFileSync(path.join(enrichTmpRoot, root, 'design.json'), project.designJson, 'utf-8');
         }
         infos.set(project.name, new ProjectInfo(project.name, root, project.tags));
     }
@@ -362,10 +367,11 @@ describe('enrichGraph', () => {
     });
 
     it('fills all metadata fields on a valid workspace', () => {
+        // Non-empty designs[] → a real generated design → designFile set (clickable).
+        const alphaDesign = JSON.stringify({ schemaVersion: 2, project: 'alpha', designs: [{ root: 'A' }] });
         const infos = setupWorkspace('good', [
-            new FixtureProject('alpha', '# Responsibilities — alpha\n\nDoes alpha things.\n', true, [
-                'framework:node',
-            ]),
+            new FixtureProject('alpha', '# Responsibilities — alpha\n\nDoes alpha things.\n', true,
+                ['framework:node'], alphaDesign),
             new FixtureProject('beta', '# Responsibilities — beta\n\nDoes beta things.\n', false, [
                 'framework:express',
             ]),
@@ -415,5 +421,28 @@ describe('enrichGraph', () => {
     it('reports projects absent from the nx project graph', () => {
         const graph: EnhancedGraph = { ghost: { level: 0, dependsOn: [] } };
         expect(() => enrichGraph(graph, new Map(), enrichTmpRoot)).toThrow(/ghost: not found/);
+    });
+});
+
+describe('enrichGraph designFile gating', () => {
+    beforeAll(() => {
+        enrichTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-enrich-gate-'));
+    });
+    afterAll(() => {
+        fs.rmSync(enrichTmpRoot, { recursive: true, force: true });
+    });
+
+    it('leaves designFile unset for a plain lib whose design.json has an empty designs[]', () => {
+        // A plain lib still gets a design.json written, but with no roots → not clickable.
+        const emptyDesign = JSON.stringify({ schemaVersion: 2, project: 'gamma', designs: [] });
+        const infos = setupWorkspace('plainlib', [
+            new FixtureProject('gamma', '# Responsibilities — gamma\n\nDoes gamma things.\n', true,
+                ['framework:node'], emptyDesign),
+        ]);
+        const graph: EnhancedGraph = { gamma: { level: 0, dependsOn: [] } };
+
+        enrichGraph(graph, infos, enrichTmpRoot);
+
+        expect(graph['gamma'].designFile).toBeUndefined();
     });
 });

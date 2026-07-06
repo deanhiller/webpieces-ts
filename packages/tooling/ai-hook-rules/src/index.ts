@@ -26,7 +26,6 @@ export { NoUnmanagedExceptionsRule } from './core/rules/no-unmanaged-exceptions'
 export { CatchErrorPatternRule } from './core/rules/catch-error-pattern';
 export { ThrowCauseRequiredRule } from './core/rules/throw-cause-required';
 export { NoSymbolDiTokensRule } from './core/rules/no-symbol-di-tokens';
-export { EnforceControllerNamingRule } from './core/rules/enforce-controller-naming';
 export { BranchCreationGuardRule } from './core/rules/branch-creation-guard';
 export { PrCreationOrPushGuardRule } from './core/rules/pr-creation-or-push-guard';
 export { MergeInProgressGuardRule } from './core/rules/merge-in-progress-guard';
