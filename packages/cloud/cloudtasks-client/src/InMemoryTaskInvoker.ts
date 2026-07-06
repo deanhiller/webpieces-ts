@@ -1,7 +1,7 @@
 import { inject, injectable } from 'inversify';
 import { provideSingleton } from '@webpieces/http-routing';
 import { mintIdToken } from '@webpieces/gcp-identity';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference, LocalTaskDispatcher } from './TaskTypes';
 
 const log = LogManager.getLogger('InMemoryTaskInvoker');

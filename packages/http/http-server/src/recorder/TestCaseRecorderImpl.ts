@@ -5,10 +5,10 @@ import {
     RecordedTestCase,
     RecordSerializer,
     TestCaseRecorder,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { toError } from '@webpieces/core-util';
 import { SpecGenerator } from './SpecGenerator';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 
 /**
  * TestCaseRecorderImpl - Server-side recorder (port of Java

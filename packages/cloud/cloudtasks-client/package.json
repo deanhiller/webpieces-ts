@@ -25,12 +25,10 @@
     "dependencies": {
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
-        "@webpieces/http-api": "workspace:*",
         "@webpieces/http-filters": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
         "@webpieces/http-client": "workspace:*",
         "@webpieces/gcp-identity": "workspace:*",
-        "@webpieces/wp-logging": "workspace:*",
         "@google-cloud/tasks": "5.5.2",
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2"

@@ -1,5 +1,5 @@
 import { GoogleAuth, OAuth2Client } from 'google-auth-library';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import { toError } from '@webpieces/core-util';
 import { isOnGcp } from './metadata';
 import { getProjectId, getRuntimeServiceAccountEmail } from './urls';

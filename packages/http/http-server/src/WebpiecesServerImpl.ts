@@ -11,7 +11,7 @@ import {WebpiecesServer} from './WebpiecesServer';
 import {WebpiecesMiddleware} from './WebpiecesMiddleware';
 import {WebpiecesRouteCreator} from './WebpiecesRouteCreator';
 import {InProcessApiClientFactory} from './InProcessApiClientFactory';
-import {LogManager} from '@webpieces/wp-logging';
+import {LogManager} from '@webpieces/core-util';
 
 /**
  * WebpiecesServerImpl - Internal server implementation.

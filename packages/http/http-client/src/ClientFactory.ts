@@ -11,7 +11,7 @@ import {
     RecorderKeys,
     TestCaseRecorder,
     toError,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 import { ContextMgr } from './ContextMgr';
 

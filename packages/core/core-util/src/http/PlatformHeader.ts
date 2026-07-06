@@ -1,4 +1,4 @@
-import { Header } from '@webpieces/core-util';
+import { Header } from '../Header';
 
 /**
  * PlatformHeader - Defines an HTTP header that can be transferred between services.

@@ -18,5 +18,5 @@
             }
         }
     },
-    "tags": ["framework:all", "role:lib"]
+    "tags": ["framework:browser", "framework:node", "role:lib"]
 }

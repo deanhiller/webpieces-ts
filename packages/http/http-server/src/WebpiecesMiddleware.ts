@@ -16,11 +16,11 @@ import {
     HttpBadGatewayError,
     HttpGatewayTimeoutError,
     RouteMetadata,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { Service, WpResponse } from '@webpieces/http-filters';
 import { toError } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
 

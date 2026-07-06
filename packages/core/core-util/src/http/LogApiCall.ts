@@ -6,8 +6,8 @@ import {
     HttpNotFoundError,
     HttpUserError,
 } from './errors';
-import {toError} from "@webpieces/core-util";
-import {LogManager} from "@webpieces/wp-logging";
+import {toError} from "../lib/errorUtils";
+import {LogManager} from "../logging/LogManager";
 
 const log = LogManager.getLogger('LogApiCall');
 

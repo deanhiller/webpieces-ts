@@ -7,9 +7,9 @@ import {
     assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
     AuthMode,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { ContextMgr } from '@webpieces/http-client';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, ScheduleInfo } from './TaskTypes';
 import { currentScheduleFrame } from './ScheduleContext';
 

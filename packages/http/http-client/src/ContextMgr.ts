@@ -1,4 +1,4 @@
-import { ContextReader, HeaderMethods, HeaderRegistry } from '@webpieces/http-api';
+import { ContextReader, HeaderMethods, HeaderRegistry } from '@webpieces/core-util';
 import { RequestIdChainProcessor } from './RequestIdChainProcessor';
 
 /**

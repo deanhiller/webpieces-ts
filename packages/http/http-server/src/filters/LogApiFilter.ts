@@ -1,13 +1,13 @@
 import {inject, injectable} from 'inversify';
 import {provideSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import {
     PlatformHeader,
     HeaderMethods,
     HeaderRegistry,
     LogApiCall,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.

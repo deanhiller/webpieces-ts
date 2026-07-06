@@ -1,4 +1,4 @@
-import { RecordedTestCase, RecordedEndpoint } from '@webpieces/http-api';
+import { RecordedTestCase, RecordedEndpoint } from '@webpieces/core-util';
 
 /**
  * SpecGenerator - Deterministic template that turns a RecordedTestCase into a
@@ -93,7 +93,7 @@ export class SpecGenerator {
         return `import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
-import { RecordedTestCase } from '@webpieces/http-api';
+import { RecordedTestCase } from '@webpieces/core-util';
 // TODO(generated): import your ServerMeta, the api class, DI tokens, and the
 // downstream api types, then wire the appOverrides ContainerModule below.
 

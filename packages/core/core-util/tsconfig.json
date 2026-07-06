@@ -2,8 +2,12 @@
     "extends": "../../../tsconfig.base.json",
     "compilerOptions": {
         "module": "commonjs",
+        "lib": ["ES2022", "DOM"],
         "forceConsistentCasingInFileNames": true,
         "strict": true,
+        "importHelpers": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
         "noImplicitOverride": true,
         "noPropertyAccessFromIndexSignature": true,
         "noImplicitReturns": true,

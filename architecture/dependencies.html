@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Monorepo Dependency Architecture</title>
+    <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .hint {
+            text-align: center;
+            color: #555;
+            margin: 0 0 16px;
+        }
+        /* viz.js renders node URLs as <a> — show they are clickable. */
+        #graph a { cursor: pointer; }
+        #graph a:hover polygon { stroke-width: 2.5; }
+        #graph {
+            text-align: center;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .legend {
+            margin: 20px auto;
+            max-width: 600px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .legend h2 {
+            margin-top: 0;
+        }
+        .legend-item {
+            margin: 8px 0;
+        }
+        .legend-box {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <h1>Monorepo Dependency Architecture</h1>
+    <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
+    <div class="legend">
+        <h2>Legend — fill = framework (libType), border = role</h2>
+        <div class="legend-item">
+            <span class="legend-box" style="background: #FCE4EC;"></span>
+            <strong>angular:</strong> Angular front-end
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="background: #E3F2FD;"></span>
+            <strong>react:</strong> React front-end
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="background: #EDE7F6;"></span>
+            <strong>browser:</strong> browser front-end base env
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="background: #E8F5E9;"></span>
+            <strong>express:</strong> Express / server side
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="background: #FFF9C4;"></span>
+            <strong>node:</strong> node server base env
+        </div>
+        <div class="legend-item" style="margin-top: 12px;">
+            <span class="legend-box" style="border: 3px double #333;"></span>
+            <strong>server:</strong> runnable server app (double border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 1px dashed #333;"></span>
+            <strong>client:</strong> client app, e.g. angular (dashed border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 2px solid #333;"></span>
+            <strong>designed-lib:</strong> library with a generated @ApiImplementation design (bold border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 1px solid #ccc;"></span>
+            <strong>lib:</strong> plain library, no generated design (thin border)
+        </div>
+        <div class="legend-item" style="margin-top: 15px;">
+            <em>Library nodes show their dependency level (L#), their framework env set (e.g. [browser, node]), and their role, and are laid out by level, with the deepest libraries at the bottom. Server and client apps are roots (nothing depends on them), so they are all pinned to the single top row regardless of dependency depth — their labels omit the L#. Transitive dependencies are allowed but not shown.</em>
+        </div>
+    </div>
+    <div id="graph"></div>
+    <script>
+        const dot = "digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"core-util\" [fillcolor=\"#EDE7F6\", URL=\"../packages/core/core-util/design.html\", target=\"_blank\", label=\"core-util\\n(L0 · [browser, node] · lib)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", URL=\"../packages/tooling/rules-config/design.html\", target=\"_blank\", label=\"rules-config\\n(L0 · [node] · lib)\"];\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", URL=\"../packages/tooling/ai-hook-rules/design.html\", target=\"_blank\", label=\"ai-hook-rules\\n(L1 · [node] · lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", URL=\"../packages/tooling/code-rules/design.html\", target=\"_blank\", label=\"code-rules\\n(L1 · [node] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", URL=\"../packages/core/core-context/design.html\", target=\"_blank\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", URL=\"../packages/tooling/eslint-rules/design.html\", target=\"_blank\", label=\"eslint-rules\\n(L1 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#E8F5E9\", URL=\"../packages/cloud/gcp-identity/design.html\", target=\"_blank\", label=\"gcp-identity\\n(L1 · [express] · lib)\"];\n  \"http-client\" [fillcolor=\"#EDE7F6\", URL=\"../packages/http/http-client/design.html\", target=\"_blank\", label=\"http-client\\n(L1 · [browser, node] · lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", URL=\"../packages/tooling/pr-gate/design.html\", target=\"_blank\", label=\"pr-gate\\n(L1 · [node] · lib)\"];\n  \"http-filters\" [fillcolor=\"#FFF9C4\", URL=\"../packages/http/http-filters/design.html\", target=\"_blank\", label=\"http-filters\\n(L2 · [node] · lib)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", URL=\"../packages/tooling/nx-webpieces-rules/design.html\", target=\"_blank\", label=\"nx-webpieces-rules\\n(L2 · [node] · lib)\"];\n  \"http-routing\" [fillcolor=\"#E8F5E9\", URL=\"../packages/http/http-routing/design.html\", target=\"_blank\", label=\"http-routing\\n(L3 · [express] · lib)\"];\n  \"cloudtasks-client\" [fillcolor=\"#E8F5E9\", URL=\"../packages/cloud/cloudtasks-client/design.html\", target=\"_blank\", label=\"cloudtasks-client\\n(L4 · [express] · lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", URL=\"../packages/http/http-server/design.html\", target=\"_blank\", label=\"http-server\\n(L4 · [express] · lib)\"];\n\n  { rank=same; \"core-util\"; \"rules-config\"; }\n  { rank=same; \"ai-hook-rules\"; \"code-rules\"; \"core-context\"; \"eslint-rules\"; \"gcp-identity\"; \"http-client\"; \"pr-gate\"; }\n  { rank=same; \"http-filters\"; \"nx-webpieces-rules\"; }\n  { rank=same; \"http-routing\"; }\n  { rank=same; \"cloudtasks-client\"; \"http-server\"; }\n\n  \"ai-hook-rules\" -> \"rules-config\";\n  \"code-rules\" -> \"rules-config\";\n  \"core-context\" -> \"core-util\";\n  \"eslint-rules\" -> \"rules-config\";\n  \"gcp-identity\" -> \"core-util\";\n  \"http-client\" -> \"core-util\";\n  \"pr-gate\" -> \"rules-config\";\n  \"http-filters\" -> \"core-context\";\n  \"nx-webpieces-rules\" -> \"ai-hook-rules\";\n  \"nx-webpieces-rules\" -> \"code-rules\";\n  \"nx-webpieces-rules\" -> \"eslint-rules\";\n  \"nx-webpieces-rules\" -> \"pr-gate\";\n  \"http-routing\" -> \"http-filters\";\n  \"cloudtasks-client\" -> \"gcp-identity\";\n  \"cloudtasks-client\" -> \"http-client\";\n  \"cloudtasks-client\" -> \"http-routing\";\n  \"http-server\" -> \"http-routing\";\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n";
+        const viz = new Viz();
+
+        viz.renderSVGElement(dot)
+            .then(element => {
+                document.getElementById('graph').appendChild(element);
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('graph').innerHTML = '<pre>' + err + '</pre>';
+            });
+    </script>
+</body>
+</html>

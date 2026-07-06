@@ -4,7 +4,7 @@ import {
     PlatformHeader,
     PlatformHeadersExtension,
     WebpiecesCoreHeaders,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { ContextMgr } from '../ContextMgr';
 import { MutableContextStore } from '../MutableContextStore';
 

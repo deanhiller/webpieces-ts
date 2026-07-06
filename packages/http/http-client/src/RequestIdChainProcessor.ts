@@ -1,4 +1,4 @@
-import { WebpiecesCoreHeaders } from '@webpieces/http-api';
+import { WebpiecesCoreHeaders } from '@webpieces/core-util';
 
 /**
  * RequestIdChainProcessor - Builds the per-hop distributed-trace chain.

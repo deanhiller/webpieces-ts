@@ -1,7 +1,7 @@
 import { inject, injectable } from 'inversify';
 import { provideSingleton } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, JobReference, ScheduleInfo } from './TaskTypes';
 import { ScheduleFrame, setScheduleFrame, clearScheduleFrame } from './ScheduleContext';
 

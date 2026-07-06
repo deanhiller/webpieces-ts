@@ -16,7 +16,7 @@ import {
     RecorderKeys,
     WebpiecesCoreHeaders,
     toError,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { TestCaseRecorderImpl } from '../recorder/TestCaseRecorderImpl';
 
 /**

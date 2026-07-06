@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>DI Designs — http-filters</title>
+    <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
+        h1 { text-align: center; color: #333; }
+        .back { max-width: 95%; margin: 0 auto 8px; }
+        .back a { color: #1565C0; text-decoration: none; }
+        .back a:hover { text-decoration: underline; }
+        h2 { color: #333; margin-bottom: 4px; }
+        .meta { color: #777; font-family: monospace; font-size: 13px; margin-bottom: 10px; }
+        .section { background: white; padding: 20px; border-radius: 8px;
+                   box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 20px auto; max-width: 95%; }
+        .graph { text-align: center; overflow-x: auto; }
+        .legend { margin: 20px auto; max-width: 700px; padding: 15px; background: white;
+                  border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .legend-item { margin: 8px 0; }
+        .legend-box { display: inline-block; width: 20px; height: 20px;
+                      border: 1px solid #ccc; margin-right: 10px; vertical-align: middle; }
+    </style>
+</head>
+<body>
+    <p class="back"><a href="../../../architecture/dependencies.html">← Back to architecture graph</a></p>
+    <h1>DI Designs — http-filters</h1>
+    <div class="legend">
+        <h2>Legend</h2>
+        <div class="legend-item"><span class="legend-box" style="background: #E3F2FD;"></span>
+            <strong>Controller / root</strong> — level 0, the entry class of the tree</div>
+        <div class="legend-item"><span class="legend-box" style="background: #F5F5F5;"></span>
+            <strong>Class</strong> — injectable class (constructor injection)</div>
+        <div class="legend-item"><span class="legend-box" style="background: #FFF3E0;"></span>
+            <strong>Constant / dynamic</strong> — toConstantValue / toDynamicValue leaf</div>
+        <div class="legend-item"><span class="legend-box" style="background: #FCE4EC; border-style: dashed;"></span>
+            <strong>Unresolved</strong> — token the analyzer could not resolve</div>
+        <div class="legend-item" style="margin-top: 15px;">
+            <em>One graph per controller/root; a shared dependency appears in each root's tree.
+            Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
+    </div>
+    <div class="section"><em>No DI-registered classes found in this project.</em></div>
+    <script>
+        const graphs = [];
+        const viz = new Viz();
+        for (const g of graphs) {
+            viz.renderSVGElement(g.dot)
+                .then(element => { document.getElementById(g.id).appendChild(element); })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById(g.id).innerHTML = '<pre>' + err + '</pre>';
+                });
+        }
+    </script>
+</body>
+</html>

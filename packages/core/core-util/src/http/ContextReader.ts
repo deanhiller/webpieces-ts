@@ -1,4 +1,4 @@
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey } from '../ContextKey';
 import { PlatformHeader } from './PlatformHeader';
 
 /**

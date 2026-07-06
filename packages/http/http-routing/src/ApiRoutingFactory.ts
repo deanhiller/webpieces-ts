@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
-import { isApiPath, getApiPath, getEndpoints, getAuthMeta, RouteMetadata, AuthMeta } from '@webpieces/http-api';
+import { isApiPath, getApiPath, getEndpoints, getAuthMeta, RouteMetadata, AuthMeta } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
 

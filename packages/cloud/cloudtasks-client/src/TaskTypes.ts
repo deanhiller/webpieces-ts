@@ -1,4 +1,4 @@
-import { AuthMode } from '@webpieces/http-api';
+import { AuthMode } from '@webpieces/core-util';
 
 /**
  * Scheduling options for an enqueued task. Travels out-of-band (via the scheduler
