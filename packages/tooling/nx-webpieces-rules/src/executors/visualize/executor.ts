@@ -46,7 +46,6 @@ export default async function runExecutor(
         // Generate visualization
         console.log('🎨 Generating visualization...');
         const vizPaths = writeVisualization(graph, workspaceRoot);
-        console.log(`✅ Generated: ${vizPaths.dotPath}`);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 
         // Try to open in browser

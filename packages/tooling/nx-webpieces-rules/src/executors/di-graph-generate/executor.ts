@@ -3,10 +3,11 @@
  *
  * Per-project: statically analyzes the project's Inversify dependency DAG
  * (constructor injection from controllers — or library top-of-DAG classes —
- * down to leaves) and writes two checked-in files at the project root:
+ * down to leaves) and writes three checked-in files at the project root:
  *
  *   design.json — machine-readable graph (deterministic, sorted)
  *   design.md   — Mermaid diagram rendered by GitHub/IDEs in PRs
+ *   design.html — clickable viz.js page (linked from architecture/dependencies.html)
  *
  * Runs on every build (cache:false; the build gates on
  * validate-di-graph-unchanged which dependsOn this target). Unrecognized DI
@@ -31,6 +32,7 @@ import {
 import { createProjectProgram } from '../../lib/di-graph/program';
 import { toDesignJson } from '../../lib/di-graph/serializer';
 import { toDesignMarkdown } from '../../lib/di-graph/mermaid';
+import { generateDesignHTML } from '../../lib/di-graph/design-visualizer';
 import { DiDesign, DiGraph } from '../../lib/di-graph/model';
 import { toError } from '../../toError';
 
@@ -96,9 +98,25 @@ function detectFrameworkMarkers(dir: string): FrameworkMarkers {
     return new FrameworkMarkers(angular, controller);
 }
 
-function writeDesignFiles(projectRootAbs: string, graph: DiGraph): void {
+/**
+ * Repo-relative back link from a project's committed design.html up to
+ * architecture/dependencies.html, so a reader who clicked a box in the
+ * architecture graph can click back out. E.g. 'packages/http/http-api' →
+ * '../../../architecture/dependencies.html'.
+ */
+function architectureBackHref(projectRoot: string): string {
+    return path.posix.relative(projectRoot.replace(/\\/g, '/'), 'architecture/dependencies.html');
+}
+
+function writeDesignFiles(projectRootAbs: string, projectRoot: string, graph: DiGraph): void {
+    // toDesignJson sorts the graph in place, so design.md/design.html below all
+    // see the same deterministic ordering (no git churn on re-run).
     fs.writeFileSync(path.join(projectRootAbs, 'design.json'), toDesignJson(graph));
     fs.writeFileSync(path.join(projectRootAbs, 'design.md'), toDesignMarkdown(graph));
+    fs.writeFileSync(
+        path.join(projectRootAbs, 'design.html'),
+        generateDesignHTML(graph, architectureBackHref(projectRoot)),
+    );
 }
 
 /** The analyzer chosen for a project plus the role tag that drove the choice. */
@@ -157,14 +175,14 @@ export default async function runExecutor(
     try {
         if (!sourceHasDiMarkers(srcDir)) {
             console.log('   No DI markers found — writing empty design graph');
-            writeDesignFiles(projectRootAbs, new DiGraph(projectName));
+            writeDesignFiles(projectRootAbs, projectRoot, new DiGraph(projectName));
             return { success: true };
         }
 
         const program = createProjectProgram(projectRootAbs);
         if (!program) {
             console.log('   No usable tsconfig/source — writing empty design graph');
-            writeDesignFiles(projectRootAbs, new DiGraph(projectName));
+            writeDesignFiles(projectRootAbs, projectRoot, new DiGraph(projectName));
             return { success: true };
         }
 
@@ -178,12 +196,12 @@ export default async function runExecutor(
             return { success: false };
         }
 
-        writeDesignFiles(projectRootAbs, graph);
+        writeDesignFiles(projectRootAbs, projectRoot, graph);
 
         const nodeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.nodes.length, 0);
         const edgeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.edges.length, 0);
         console.log(
-            `✅ Wrote ${projectRoot}/design.json + design.md ` +
+            `✅ Wrote ${projectRoot}/design.json + design.md + design.html ` +
                 `(${graph.designs.length} design(s), ${nodeCount} node(s), ${edgeCount} edge(s))`,
         );
         const unresolved = [...new Set(graph.designs.flatMap((d: DiDesign) => d.unresolved))];

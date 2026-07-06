@@ -2,8 +2,8 @@
  * Validate DI Graph Unchanged Executor
  *
  * Per-project gate that runs AFTER di-graph-generate (via target dependsOn):
- * once the generator has rewritten design.json/design.md, this executor asks
- * git whether the files differ from the committed copies. Any difference —
+ * once the generator has rewritten design.json/design.md/design.html, this
+ * executor asks git whether the files differ from the committed copies. Any difference —
  * modified OR brand-new/untracked — fails the build with a "commit the
  * regenerated files" remediation, so the checked-in DI design DAG can never
  * go stale on main.
@@ -32,7 +32,7 @@ export interface ExecutorResult {
 }
 
 const RULE_NAME = 'di-graph';
-const DESIGN_FILES = ['design.json', 'design.md'];
+const DESIGN_FILES = ['design.json', 'design.md', 'design.html'];
 
 function gitStatusPorcelain(workspaceRoot: string, projectRoot: string): string {
     const paths = DESIGN_FILES.map((file: string) => path.posix.join(projectRoot, file));
@@ -51,8 +51,8 @@ function reportStale(projectName: string, projectRoot: string, status: string): 
     }
     console.error('\nThe DI dependency DAG changed (a constructor/binding was added, removed,');
     console.error('or rewired). To fix:');
-    console.error(`  1. Review the diff: git diff -- ${projectRoot}/design.json ${projectRoot}/design.md`);
-    console.error('  2. If intentional, commit the regenerated design.json + design.md');
+    console.error(`  1. Review the diff: git diff -- ${projectRoot}/design.json ${projectRoot}/design.md ${projectRoot}/design.html`);
+    console.error('  2. If intentional, commit the regenerated design.json + design.md + design.html');
     console.error(`  3. To turn this gate off, set rules["${RULE_NAME}"].mode="OFF" in webpieces.config.json\n`);
 }
 

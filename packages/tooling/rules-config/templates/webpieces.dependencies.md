@@ -6,8 +6,13 @@ A clean dependency graph keeps you out of huge trouble later.
 
 If you are a human, simply run these commands:
 * nx run architecture:visualize - to see the new dependencies and validate that change is desired
-* nx run architecture:generate - updates the dep graph
+* nx run architecture:generate - updates the dep graph (also regenerates the committed, clickable `architecture/dependencies.html`)
 * git diff architecture/dependencies.json - to see the deps changes you made
+
+The committed `architecture/dependencies.html` is a clickable map: each box with a
+generated DI design links to that project's `design.html` (regenerated next to its
+`design.json`/`design.md`), so you can click into any module to see the exact DI graph
+the AI sees.
 
 **READ THIS FILE FIRST before making any changes!**
 

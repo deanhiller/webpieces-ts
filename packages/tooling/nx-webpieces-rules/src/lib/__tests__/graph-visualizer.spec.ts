@@ -41,6 +41,26 @@ describe('generateDot', () => {
         expect(dot).toContain('"odd" [fillcolor="#FFF3E0"');
         expect(dot).toContain('label="odd\\n(L0 · vue-lib)"');
     });
+
+    it('makes a node with a design.json clickable, linking to design.html relative to architecture/', () => {
+        const dot = generateDot({
+            'http-api': {
+                level: 0,
+                dependsOn: [],
+                framework: 'all',
+                role: 'lib',
+                designFile: 'packages/http/http-api/design.json',
+            },
+        });
+        expect(dot).toContain('URL="../packages/http/http-api/design.html"');
+        expect(dot).toContain('target="_blank"');
+    });
+
+    it('leaves a node without a design.json non-clickable (no URL)', () => {
+        const dot = generateDot({ 'no-design': { level: 0, dependsOn: [] } });
+        expect(dot).not.toContain('URL=');
+        expect(dot).not.toContain('target="_blank"');
+    });
 });
 
 describe('generateHTML', () => {
