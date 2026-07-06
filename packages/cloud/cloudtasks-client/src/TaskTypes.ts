@@ -76,26 +76,11 @@ export class TaskRequest {
 /**
  * The transport that actually enqueues a task. Abstract class so it doubles as the
  * inversify DI token (inject by type, no Symbol). Bind GcpTaskInvoker in prod or
- * InMemoryTaskInvoker in tests/local dev.
+ * InMemoryTaskInvoker in tests/local dev. Both deliver a task the same way — a plain
+ * HTTP POST to `targetUrl + path` — GcpTaskInvoker via Google Cloud Tasks, and
+ * InMemoryTaskInvoker via an in-process queue that fetches the target directly.
  */
 export abstract class TaskInvoker {
     abstract enqueue(request: TaskRequest): Promise<JobReference>;
     abstract delete(ref: JobReference): Promise<void>;
-}
-
-/**
- * Server-side seam that runs a delivered task through the real per-route filter
- * chain + controller in-process. Abstract class = DI token; the concrete impl lives
- * in @webpieces/http-server (it needs the RouteBuilder). Used by InMemoryTaskInvoker.
- */
-export abstract class LocalTaskDispatcher {
-    /**
-     * Dispatch a task as if Cloud Tasks POSTed it: build the request headers (the
-     * caller has already added auth) and run the endpoint's filter chain + controller.
-     * @param path endpoint path (e.g. /email/send)
-     * @param body the request DTO
-     * @param headers inbound HTTP headers (lowercased name → single value)
-     */
-    // webpieces-disable no-any-unknown -- request DTO type is erased at the task boundary
-    abstract dispatch(path: string, body: unknown, headers: Map<string, string>): Promise<void>;
 }

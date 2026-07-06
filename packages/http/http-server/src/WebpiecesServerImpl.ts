@@ -93,8 +93,7 @@ export class WebpiecesServerImpl implements WebpiecesServer {
         // buildProviderModule bound a SEPARATE RouteBuilderImpl into appContainer; make
         // app-side singletons resolve the SAME framework instance that actually holds the
         // registered routes (setContainer + addRoute happen on `this.routeBuilder`). Without
-        // this, an app singleton that injects RouteBuilderImpl (e.g. LocalTaskDispatcherImpl,
-        // used by InMemoryTaskInvoker) would see an empty route table.
+        // this, an app singleton that injects RouteBuilderImpl would see an empty route table.
         (await this.appContainer.rebind(RouteBuilderImpl)).toConstantValue(this.routeBuilder);
 
         // 2. Register routes and filters

@@ -3,10 +3,10 @@ export { WebpiecesFactory } from './WebpiecesFactory';
 export { WebpiecesMiddleware } from './WebpiecesMiddleware';
 export { WebpiecesRouteCreator } from './WebpiecesRouteCreator';
 export { InProcessApiClientFactory } from './InProcessApiClientFactory';
-export { LocalTaskDispatcherImpl } from './LocalTaskDispatcherImpl';
 export { ContextFilter } from './filters/ContextFilter';
 export { LogApiFilter } from './filters/LogApiFilter';
 export { RecordingFilter } from './filters/RecordingFilter';
+export { ServiceAuthFilter } from './filters/ServiceAuthFilter';
 
 // Test-case recording (contract lives in @webpieces/core-util)
 export { TestCaseRecorderImpl } from './recorder/TestCaseRecorderImpl';

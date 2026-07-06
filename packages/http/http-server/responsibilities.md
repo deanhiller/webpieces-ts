@@ -1,13 +1,13 @@
 # Responsibilities — http-server
 
-Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express middleware, ships built-in filters (Context, LogApi, Recording), the in-process test client, and the test-case recorder implementation.
+Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.
 
 ## In Scope
 
 - Server bootstrap and lifecycle (`WebpiecesServer`, `WebpiecesFactory`, `WebpiecesServerImpl`)
 - Express integration and request dispatch (`WebpiecesMiddleware`, `WebpiecesRouteCreator`, CORS)
 - DI container/module wiring (`WebpiecesModule`) binding framework singletons
-- Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter`
+- Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter`, `ServiceAuthFilter` (service-to-service `@AuthOidc`/`@AuthSharedSecret` enforcement on Cloud Tasks / cross-service delivery)
 - In-process (HTTP-less) client factory for tests (`InProcessApiClientFactory`)
 - Test-case recorder implementation and spec generation (`TestCaseRecorderImpl`, `SpecGenerator`, `recordable`)
 
