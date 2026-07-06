@@ -16,7 +16,7 @@ import { PlatformHeader, ContextReader } from '@webpieces/http-api';
  * const client = createApiClient(SaveApi, config);
  *
  * // later, when the user logs in / picks a tenant:
- * store.set(CompanyHeaders.AUTHORIZATION, token);
+ * store.set(WebpiecesCoreHeaders.AUTHORIZATION, token);
  * store.set(CompanyHeaders.TENANT_ID, tenantId);
  * ```
  */

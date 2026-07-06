@@ -1,0 +1,22 @@
+{
+    "name": "gcp-identity",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/cloud/gcp-identity/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/cloud/gcp-identity",
+                "main": "packages/cloud/gcp-identity/src/index.ts",
+                "tsConfig": "packages/cloud/gcp-identity/tsconfig.lib.json",
+                "assets": [
+                    "packages/cloud/gcp-identity/package.json",
+                    "packages/cloud/gcp-identity/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["framework:express", "role:lib"]
+}

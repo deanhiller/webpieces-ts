@@ -23,15 +23,31 @@ export {
     Endpoint,
     Authentication,
     AuthenticationConfig,
+    // Auth mode decorators (clean service-to-service + user JWT model)
+    Public,
+    AuthJwt,
+    AuthOidc,
+    AuthSharedSecret,
+    // API kind (RPC vs PubSub/Cloud Tasks) + queue naming
+    Rpc,
+    PubSub,
+    Queue,
     getApiPath,
     getEndpoints,
     isApiPath,
     getAuthMeta,
+    getAuthMode,
+    assertEveryEndpointHasAuthMode,
+    getApiKind,
+    assertApiKind,
+    assertPubSubConventions,
+    getQueueName,
     validateNoConflictingDecorators,
     AuthMeta,
     RouteMetadata,
     METADATA_KEYS,
 } from './decorators';
+export type { AuthMode, ApiKind } from './decorators';
 
 // Type validators
 export { ValidateImplementation } from './validators';

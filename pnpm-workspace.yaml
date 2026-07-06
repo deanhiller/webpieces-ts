@@ -2,5 +2,6 @@ packages:
   - 'packages/rules'
   - 'packages/core/*'
   - 'packages/http/*'
+  - 'packages/cloud/*'
   - 'packages/tooling/*'
   - 'libraries/apis/*'

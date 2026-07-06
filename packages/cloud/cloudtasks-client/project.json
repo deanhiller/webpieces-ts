@@ -1,0 +1,22 @@
+{
+    "name": "cloudtasks-client",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/cloud/cloudtasks-client/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/cloud/cloudtasks-client",
+                "main": "packages/cloud/cloudtasks-client/src/index.ts",
+                "tsConfig": "packages/cloud/cloudtasks-client/tsconfig.lib.json",
+                "assets": [
+                    "packages/cloud/cloudtasks-client/package.json",
+                    "packages/cloud/cloudtasks-client/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["framework:express", "role:lib"]
+}
