@@ -2,15 +2,75 @@ import { RecordedTestCase, RecordedEndpoint } from '@webpieces/http-api';
 
 /**
  * SpecGenerator - Deterministic template that turns a RecordedTestCase into a
- * small vitest spec (~30 lines) which loads the fixture JSON, primes a
- * createMock per downstream api, invokes the endpoint in-process, and
- * deep-equal asserts the response + the requests each mock received.
+ * small vitest spec (~30 lines) which loads the fixture JSON, primes an inline
+ * createMock per downstream api, invokes the endpoint in-process, and deep-equal
+ * asserts the response + the requests each mock received.
+ *
+ * The mock test-double is emitted inline into the generated spec (see
+ * INLINE_MOCK_SOURCE) so the generated file is fully self-contained and does not
+ * depend on any external mock package.
  *
  * Deliberately NO deep reflection over DTOs (the fragile part of the Java
  * TestCaseRecorderImpl codegen) - all data lives in the fixture; the spec is
  * pure plumbing. The fixture is also a stable artifact for an AI to write a
  * richer spec from.
  */
+
+/**
+ * Self-contained recording test-double emitted into every generated spec. Mirrors
+ * the small slice of the former @webpieces/core-mock API the template relies on:
+ *   createMock<T>(name)                       -> T & { mock: MockControls }
+ *   .mock.addValueToReturn(method, value)     queue a return value (FIFO)
+ *   .mock.addExceptionToThrow(method, ()=>Err) queue an exception (FIFO)
+ *   .mock.getSingleRequestList(method)        first argument of each recorded call
+ */
+const INLINE_MOCK_SOURCE = `type MockControls = {
+    addValueToReturn(method: string, value: unknown): void;
+    addExceptionToThrow(method: string, errorFactory: () => Error): void;
+    getSingleRequestList(method: string): unknown[];
+};
+
+function createMock<T>(_name: string): T & { mock: MockControls } {
+    const returns = new Map<string, unknown[]>();
+    const throwers = new Map<string, Array<() => Error>>();
+    const requests = new Map<string, unknown[]>();
+    const controls: MockControls = {
+        addValueToReturn(method, value) {
+            const queue = returns.get(method) ?? [];
+            queue.push(value);
+            returns.set(method, queue);
+        },
+        addExceptionToThrow(method, errorFactory) {
+            const queue = throwers.get(method) ?? [];
+            queue.push(errorFactory);
+            throwers.set(method, queue);
+        },
+        getSingleRequestList(method) {
+            return requests.get(method) ?? [];
+        },
+    };
+    return new Proxy({} as Record<string, unknown>, {
+        get(_target, prop: string | symbol): unknown {
+            if (prop === 'mock') return controls;
+            const method = String(prop);
+            return (...args: unknown[]): unknown => {
+                const recorded = requests.get(method) ?? [];
+                recorded.push(args[0]);
+                requests.set(method, recorded);
+                const throwQueue = throwers.get(method);
+                if (throwQueue && throwQueue.length > 0) {
+                    throw throwQueue.shift()!();
+                }
+                const returnQueue = returns.get(method);
+                if (returnQueue && returnQueue.length > 0) {
+                    return returnQueue.shift();
+                }
+                return undefined;
+            };
+        },
+    }) as T & { mock: MockControls };
+}`;
+
 export class SpecGenerator {
     generate(testCase: RecordedTestCase, fixtureFileName: string): string {
         const endpoint = testCase.serverEndpoint;
@@ -33,10 +93,11 @@ export class SpecGenerator {
         return `import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createMock } from '@webpieces/core-mock';
 import { RecordedTestCase } from '@webpieces/http-api';
 // TODO(generated): import your ServerMeta, the api class, DI tokens, and the
 // downstream api types, then wire the appOverrides ContainerModule below.
+
+${INLINE_MOCK_SOURCE}
 
 describe('${endpoint.apiName}.${endpoint.methodName} (recorded ${testCase.recordedAt})', () => {
     const fixture: RecordedTestCase = JSON.parse(

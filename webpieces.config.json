@@ -101,14 +101,8 @@
         },
         "runtime-architecture": {
             "mode": "RUN_EVERY_TIME",
-            "servicePaths": [
-                "apps/*",
-                "apps/app-example/*"
-            ],
-            "apiProjectPaths": [
-                "apps/app-example/client-server-api",
-                "apps/app-example/server2-api"
-            ],
+            "servicePaths": [],
+            "apiProjectPaths": [],
             "allowedCycles": [],
             "ignoreModifiedUntilEpoch": 0
         },
@@ -130,10 +124,7 @@
                 ".git",
                 "**/*.d.ts",
                 "**/jest.config.ts",
-                "**/codegen.ts",
-                "apps/example-server/**",
-                "apps/example-client/**",
-                "apps/example-apis/**"
+                "**/codegen.ts"
             ]
         },
         "nx-wiring": {

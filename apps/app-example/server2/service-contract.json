@@ -1,4 +1,0 @@
-{
-    "implements": ["@webpieces/server2-api"],
-    "uses": []
-}

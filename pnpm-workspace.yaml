@@ -4,5 +4,3 @@ packages:
   - 'packages/http/*'
   - 'packages/tooling/*'
   - 'libraries/apis/*'
-  - 'apps/*'
-  - 'apps/app-example/*'
