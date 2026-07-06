@@ -6,7 +6,7 @@ import {
     NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig,
     NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
-    NoSymbolDiTokensConfig, EnforceControllerNamingConfig, BranchCreationGuardConfig, PrCreationGuardConfig,
+    NoSymbolDiTokensConfig, EnforceControllerNamingConfig, BranchCreationGuardConfig, PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
     NoJsFilesConfig, FeatureBranchGuardConfig, MatchRuleConfig,
 } from '@webpieces/rules-config';
@@ -29,7 +29,7 @@ import { ThrowCauseRequiredRule } from './rules/throw-cause-required';
 import { NoSymbolDiTokensRule } from './rules/no-symbol-di-tokens';
 import { EnforceControllerNamingRule } from './rules/enforce-controller-naming';
 import { BranchCreationGuardRule } from './rules/branch-creation-guard';
-import { PrCreationGuardRule } from './rules/pr-creation-guard';
+import { PrCreationOrPushGuardRule } from './rules/pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
 import { PrMergeGuardRule } from './rules/pr-merge-guard';
 import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
@@ -58,7 +58,7 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'no-symbol-di-tokens': (c: BaseRuleConfig) => new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig),
     'enforce-controller-naming': (c: BaseRuleConfig) => new EnforceControllerNamingRule(c as EnforceControllerNamingConfig),
     'branch-creation-guard': (c: BaseRuleConfig) => new BranchCreationGuardRule(c as BranchCreationGuardConfig),
-    'pr-creation-guard': (c: BaseRuleConfig) => new PrCreationGuardRule(c as PrCreationGuardConfig),
+    'pr-creation-or-push-guard': (c: BaseRuleConfig) => new PrCreationOrPushGuardRule(c as PrCreationOrPushGuardConfig),
     'merge-in-progress-guard': (c: BaseRuleConfig) => new MergeInProgressGuardRule(c as MergeInProgressGuardConfig),
     'pr-merge-guard': (c: BaseRuleConfig) => new PrMergeGuardRule(c as PrMergeGuardConfig),
     'redirect-how-to-merge-main': (c: BaseRuleConfig) => new RedirectHowToMergeMainRule(c as RedirectHowToMergeMainConfig),

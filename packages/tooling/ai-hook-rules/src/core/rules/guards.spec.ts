@@ -6,27 +6,38 @@ import {
     WEBPIECES_TMP_DIR,
     MERGE_INFO_DIR,
     MERGE_IN_PROGRESS_FILE,
-    PrCreationGuardConfig,
+    PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig,
 } from '@webpieces/rules-config';
 import type { BashContext } from '../types';
-import { PrCreationGuardRule } from './pr-creation-guard';
+import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';
 
-const prCreationGuard = new PrCreationGuardRule(new PrCreationGuardConfig());
+const prCreationOrPushGuard = new PrCreationOrPushGuardRule(new PrCreationOrPushGuardConfig());
 const mergeInProgressGuard = new MergeInProgressGuardRule(new MergeInProgressGuardConfig());
 
 function ctx(command: string, workspaceRoot: string): BashContext {
     return { command, workspaceRoot, options: {} } as BashContext;
 }
 
-describe('pr-creation-guard', () => {
+describe('pr-creation-or-push-guard', () => {
     it('blocks direct PR creation paths, allows read-only and the gated command', () => {
         const root = '/tmp/x';
-        expect(prCreationGuard.check(ctx('gh pr create --title x', root)).length).toBe(1);
-        expect(prCreationGuard.check(ctx('gh api repos/o/r/pulls -f title=x', root)).length).toBe(1);
-        expect(prCreationGuard.check(ctx('gh pr list', root)).length).toBe(0);
-        expect(prCreationGuard.check(ctx('pnpm wp-finish-upsert-pr', root)).length).toBe(0);
+        expect(prCreationOrPushGuard.check(ctx('gh pr create --title x', root)).length).toBe(1);
+        expect(prCreationOrPushGuard.check(ctx('gh api repos/o/r/pulls -f title=x', root)).length).toBe(1);
+        expect(prCreationOrPushGuard.check(ctx('gh pr list', root)).length).toBe(0);
+        expect(prCreationOrPushGuard.check(ctx('pnpm wp-finish-upsert-pr', root)).length).toBe(0);
+    });
+
+    it('blocks a manual git push, but not the gated commands or other git reads', () => {
+        const root = '/tmp/x';
+        expect(prCreationOrPushGuard.check(ctx('git push origin HEAD', root)).length).toBe(1);
+        expect(prCreationOrPushGuard.check(ctx('git push -u origin base', root)).length).toBe(1);
+        expect(prCreationOrPushGuard.check(ctx('git push --force-with-lease', root)).length).toBe(1);
+        // The gated flow pushes internally as a child process — its own invocation string has no push.
+        expect(prCreationOrPushGuard.check(ctx('pnpm wp-start-upsert-pr', root)).length).toBe(0);
+        expect(prCreationOrPushGuard.check(ctx('git status', root)).length).toBe(0);
+        expect(prCreationOrPushGuard.check(ctx('git log --oneline -5', root)).length).toBe(0);
     });
 });
 

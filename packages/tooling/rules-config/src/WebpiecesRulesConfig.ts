@@ -17,7 +17,7 @@ import {
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
-    PrCreationGuardConfig,
+    PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
@@ -48,7 +48,7 @@ export class WebpiecesRulesConfig {
     'framework-tag'?: FrameworkTagConfig;
     'role-tag'?: RoleTagConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
-    'pr-creation-guard'?: PrCreationGuardConfig;
+    'pr-creation-or-push-guard'?: PrCreationOrPushGuardConfig;
     'merge-in-progress-guard'?: MergeInProgressGuardConfig;
     'pr-merge-guard'?: PrMergeGuardConfig;
     'redirect-how-to-merge-main'?: RedirectHowToMergeMainConfig;

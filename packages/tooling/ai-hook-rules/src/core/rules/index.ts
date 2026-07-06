@@ -12,7 +12,7 @@ export const builtInRuleNames: readonly string[] = [
     'no-symbol-di-tokens',
     'enforce-controller-naming',
     'branch-creation-guard',
-    'pr-creation-guard',
+    'pr-creation-or-push-guard',
     'merge-in-progress-guard',
     'pr-merge-guard',
     'redirect-how-to-merge-main',

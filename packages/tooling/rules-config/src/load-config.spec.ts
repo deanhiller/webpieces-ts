@@ -17,7 +17,7 @@ function mktmp(contents: Record<string, string>): string {
 // now-required ignoreModifiedUntilEpoch (0 = active), plus a valid commands.pr-gate block.
 // Code rules go under `rules`; the 6 bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
-    'branch-creation-guard', 'pr-creation-guard', 'merge-in-progress-guard', 'pr-merge-guard',
+    'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
     'redirect-how-to-merge-main', 'feature-branch-guard',
 ];
 const CODE_RULE_NAMES = [
@@ -141,7 +141,7 @@ describe('loadAndValidate — sections & commands', () => {
     it('errors when a guard is left in the rules section (placement)', () => {
         const sections = allRulesOff();
         // Misplace a guard into rules.
-        (sections['rules'] as Record<string, unknown>)['pr-creation-guard'] = { mode: 'ON', ignoreModifiedUntilEpoch: 0 };
+        (sections['rules'] as Record<string, unknown>)['pr-creation-or-push-guard'] = { mode: 'ON', ignoreModifiedUntilEpoch: 0 };
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': validPrGate() } }) });
         expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
     });
@@ -151,7 +151,7 @@ describe('loadAndValidate — sections & commands', () => {
         expect(() => loadAndValidate(dir)).toThrow('top-level "pr-gate" block is deprecated');
     });
 
-    it('injects commands.upsertPr as the pr-creation-guard default', () => {
+    it('injects commands.upsertPr as the pr-creation-or-push-guard default', () => {
         const sections = allRulesOff();
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
             ...sections,
@@ -160,7 +160,7 @@ describe('loadAndValidate — sections & commands', () => {
         }) });
         const loaded = loadAndValidate(dir);
         expect(loaded.commands.upsertPr).toBe('pnpm my-upsert');
-        const guard = loaded.rulesConfig['pr-creation-guard'] as Record<string, unknown>;
+        const guard = loaded.rulesConfig['pr-creation-or-push-guard'] as Record<string, unknown>;
         expect(guard['upsertPrCommand']).toBe('pnpm my-upsert');
     });
 });
@@ -177,5 +177,18 @@ describe('loadAndValidate — deprecated key aliasing', () => {
         expect(loaded.rulesConfig['pr-merge-guard']).toBeDefined();
         expect(loaded.resolved.userConfiguredRuleNames.has('pr-merge-guard')).toBe(true);
         expect(loaded.resolved.userConfiguredRuleNames.has('pr-merge-cleanup')).toBe(false);
+    });
+
+    it('accepts the deprecated pr-creation-guard key and normalizes it to pr-creation-or-push-guard', () => {
+        const sections = allRulesOff();
+        // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
+        const guards = sections.hookGuards as Record<string, unknown>;
+        guards['pr-creation-guard'] = guards['pr-creation-or-push-guard'];
+        delete guards['pr-creation-or-push-guard'];
+        const dir = writeConfig(sections);
+        const loaded = loadAndValidate(dir); // must NOT throw on the deprecated key
+        expect(loaded.rulesConfig['pr-creation-or-push-guard']).toBeDefined();
+        expect(loaded.resolved.userConfiguredRuleNames.has('pr-creation-or-push-guard')).toBe(true);
+        expect(loaded.resolved.userConfiguredRuleNames.has('pr-creation-guard')).toBe(false);
     });
 });

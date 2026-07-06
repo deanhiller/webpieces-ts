@@ -28,7 +28,7 @@ export { ThrowCauseRequiredRule } from './core/rules/throw-cause-required';
 export { NoSymbolDiTokensRule } from './core/rules/no-symbol-di-tokens';
 export { EnforceControllerNamingRule } from './core/rules/enforce-controller-naming';
 export { BranchCreationGuardRule } from './core/rules/branch-creation-guard';
-export { PrCreationGuardRule } from './core/rules/pr-creation-guard';
+export { PrCreationOrPushGuardRule } from './core/rules/pr-creation-or-push-guard';
 export { MergeInProgressGuardRule } from './core/rules/merge-in-progress-guard';
 export { PrMergeGuardRule } from './core/rules/pr-merge-guard';
 export { RedirectHowToMergeMainRule } from './core/rules/redirect-how-to-merge-main';
