@@ -36,11 +36,11 @@ export {
     isNotController,
     ApiImplementation,
     isApiImplementation,
-    provideSingleton,
-    provideSingletonAs,
-    provideTransient,
     ROUTING_METADATA_KEYS,
 } from './decorators';
+
+// DI provider decorators moved to core-context; re-exported here for back-compat
+export { provideSingleton, provideSingletonAs, provideTransient } from '@webpieces/core-context';
 
 export { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
 
@@ -54,8 +54,8 @@ export {
     FilterDefinition,
 } from './WebAppMeta';
 
-// Method metadata and route handler
-export { MethodMeta } from './MethodMeta';
+// Method metadata (moved to http-filters) re-exported for back-compat; route handler
+export { MethodMeta } from '@webpieces/http-filters';
 export { RouteHandler } from './RouteHandler';
 
 // Route builder implementation
@@ -69,8 +69,8 @@ export {
 // Filter matching
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
-// Context readers (Node.js only)
-export { RequestContextReader } from './RequestContextReader';
+// Context readers (Node.js only) moved to core-context; re-exported for back-compat
+export { RequestContextReader } from '@webpieces/core-context';
 
 // Server configuration
 export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';

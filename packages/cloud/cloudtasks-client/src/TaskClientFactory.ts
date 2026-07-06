@@ -8,7 +8,7 @@ import {
     assertEveryEndpointHasAuthMode,
     AuthMode,
 } from '@webpieces/core-util';
-import { ContextMgr } from '@webpieces/http-client';
+import { ContextMgr } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, ScheduleInfo } from './TaskTypes';
 import { currentScheduleFrame } from './ScheduleContext';

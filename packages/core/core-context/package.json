@@ -22,6 +22,9 @@
         "access": "public"
     },
     "dependencies": {
-        "@webpieces/core-util": "*"
+        "@webpieces/core-util": "*",
+        "@inversifyjs/binding-decorators": "1.1.5",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2"
     }
 }

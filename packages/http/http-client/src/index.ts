@@ -35,9 +35,9 @@ export { ClientErrorTranslator } from './ClientErrorTranslator';
 
 // Context management for header propagation
 export { StaticContextReader, CompositeContextReader } from './ContextReader';
-export { ContextMgr } from './ContextMgr';
 export { MutableContextStore } from './MutableContextStore';
-export { RequestIdChainProcessor } from './RequestIdChainProcessor';
+// ContextMgr + RequestIdChainProcessor moved to core-context; re-exported for back-compat
+export { ContextMgr, RequestIdChainProcessor } from '@webpieces/core-context';
 
 // Re-export header contract from http-api for convenience (browser one-import)
 export {

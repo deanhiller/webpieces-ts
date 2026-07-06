@@ -1,5 +1,5 @@
 import { inject, injectable } from 'inversify';
-import { provideSingleton } from '@webpieces/http-routing';
+import { provideSingleton } from '@webpieces/core-context';
 import { mintIdToken } from '@webpieces/gcp-identity';
 import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference, LocalTaskDispatcher } from './TaskTypes';

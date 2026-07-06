@@ -22,9 +22,12 @@
         "access": "public"
     },
     "dependencies": {
+        "@webpieces/cloudtasks-client": "workspace:*",
+        "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
-        "cors": "2.8.5"
+        "cors": "2.8.5",
+        "inversify": "7.10.4"
     },
     "devDependencies": {
         "@types/cors": "2.8.19"

@@ -6,6 +6,11 @@ import { RouteMetadata, AuthMeta } from '@webpieces/core-util';
  *
  * MethodMeta is DTO-only - it does NOT contain Express req/res directly.
  *
+ * Lives in @webpieces/http-filters (the filter-chain primitives package) because
+ * it is the meta type every `Filter<MethodMeta, …>` is parameterized over — so
+ * filter authors (including cloudtasks-client) reference it without depending on
+ * the server-side @webpieces/http-routing package. http-routing re-exports it.
+ *
  * Fields:
  * - routeMeta: Static route information (httpMethod, path, methodName)
  * - requestHeaders: HTTP headers from the request (NEW)
@@ -44,6 +49,7 @@ export class MethodMeta {
     /**
      * The deserialized request DTO.
      */
+    // webpieces-disable no-any-unknown -- request DTO type is erased at the filter boundary
     requestDto?: unknown;
 
     /**
@@ -56,12 +62,15 @@ export class MethodMeta {
      * Additional metadata for storing request-scoped data.
      * Used by filters to pass data to other filters/controllers.
      */
+    // webpieces-disable no-any-unknown -- request-scoped bag holds heterogeneous filter data
     metadata: Map<string, unknown>;
 
     constructor(
         routeMeta: RouteMetadata,
         requestHeaders?: Map<string, string[]>,
+        // webpieces-disable no-any-unknown -- request DTO type is erased at the filter boundary
         requestDto?: unknown,
+        // webpieces-disable no-any-unknown -- request-scoped bag holds heterogeneous filter data
         metadata?: Map<string, unknown>,
         authMeta?: AuthMeta,
     ) {

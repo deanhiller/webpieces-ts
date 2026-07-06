@@ -1,6 +1,4 @@
 import 'reflect-metadata';
-import { provide } from '@inversifyjs/binding-decorators';
-import type { BindInWhenOnFluentSyntax, ServiceIdentifier } from 'inversify';
 
 /**
  * Metadata keys for server-side routing.
@@ -121,60 +119,6 @@ export function SourceFile(filepath: string): ClassDecorator {
     };
 }
 
-/**
- * Provides a singleton-scoped dependency.
- * When called without arguments, the decorated class binds to itself.
- *
- * Server-side only - registers classes in the DI container.
- *
- * Usage:
- * ```typescript
- * @provideSingleton()
- * @Controller()
- * export class SaveController {
- *   // ...
- * }
- * ```
- */
-export function provideSingleton() {
-    return (target: any) => {
-        return provide(target, (bind) => bind.inSingletonScope())(target);
-    };
-}
-
-/**
- * Provides a singleton-scoped dependency bound to a specific token (Symbol or abstract class).
- * Use this in libraries/apis-external/** to bind an impl to the Symbol defined in libraries/apis/**.
- *
- * Usage:
- * ```typescript
- * import { SOME_API_TOKEN } from '@myorg/some-api';
- *
- * @provideSingletonAs(SOME_API_TOKEN)
- * export class SomeApiImpl { ... }
- * ```
- */
-export function provideSingletonAs<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
-    return provide(serviceIdentifier, (bind: BindInWhenOnFluentSyntax<T>) => bind.inSingletonScope());
-}
-
-/**
- * Provides a transient-scoped dependency (new instance every time).
- * When called without arguments, the decorated class binds to itself.
- *
- * Server-side only - registers classes in the DI container.
- *
- * Usage:
- * ```typescript
- * @provideTransient()
- * @Controller()
- * export class TransientController {
- *   // ...
- * }
- * ```
- */
-export function provideTransient() {
-    return (target: any) => {
-        return provide(target)(target);
-    };
-}
+// NOTE: provideSingleton / provideSingletonAs / provideTransient moved to
+// @webpieces/core-context (the shared DI seam). http-routing re-exports them
+// from there in index.ts for back-compat.

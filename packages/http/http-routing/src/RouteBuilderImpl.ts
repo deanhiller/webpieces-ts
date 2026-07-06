@@ -1,9 +1,9 @@
 import { Container, injectable } from 'inversify';
 import { Request, Response, NextFunction } from 'express';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
-import { provideSingleton } from './decorators';
+import { provideSingleton } from '@webpieces/core-context';
 import { RouteHandler } from './RouteHandler';
-import { MethodMeta } from './MethodMeta';
+import { MethodMeta } from '@webpieces/http-filters';
 import { RouteMetadata } from '@webpieces/core-util';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';

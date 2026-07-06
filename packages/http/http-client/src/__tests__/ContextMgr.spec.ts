@@ -5,7 +5,7 @@ import {
     PlatformHeadersExtension,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { ContextMgr } from '../ContextMgr';
+import { ContextMgr } from '@webpieces/core-context';
 import { MutableContextStore } from '../MutableContextStore';
 
 const TENANT = new PlatformHeader('x-tenant-id', true, false, true, 'tenantId');

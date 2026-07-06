@@ -1,5 +1,5 @@
 import { Filter, WpResponse } from '@webpieces/http-filters';
-import { MethodMeta } from './MethodMeta';
+import { MethodMeta } from '@webpieces/http-filters';
 import { FilterDefinition } from './WebAppMeta';
 import { minimatch } from 'minimatch';
 

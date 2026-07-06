@@ -1,6 +1,6 @@
 import { PlatformHeader, ContextReader } from '@webpieces/core-util';
 import { ContextKey } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext } from './RequestContext';
 
 /**
  * RequestContextReader - Reads headers from Node.js RequestContext.
@@ -8,9 +8,9 @@ import { RequestContext } from '@webpieces/core-context';
  * Only works in Node.js with active AsyncLocalStorage context.
  * This is a server-side only implementation.
  *
- * NOTE: This class is in @webpieces/http-routing (Node.js only) instead of
- * @webpieces/http-client (cross-platform) because it has a hard dependency
- * on @webpieces/core-context which uses Node.js AsyncLocalStorage.
+ * Lives in @webpieces/core-context (Node.js only) alongside the RequestContext
+ * (AsyncLocalStorage) it reads from, so libraries can build a context-propagating
+ * ContextMgr without pulling in @webpieces/http-routing.
  *
  * For browser environments, use StaticContextReader from @webpieces/http-client.
  */

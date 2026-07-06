@@ -1,5 +1,5 @@
 import { inject, injectable } from 'inversify';
-import { provideSingleton } from '@webpieces/http-routing';
+import { provideSingleton } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, JobReference, ScheduleInfo } from './TaskTypes';

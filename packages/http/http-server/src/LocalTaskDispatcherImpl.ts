@@ -1,8 +1,9 @@
 import { inject, injectable } from 'inversify';
-import { provideSingleton, RouteBuilderImpl, MethodMeta } from '@webpieces/http-routing';
+import { provideSingleton } from '@webpieces/core-context';
+import { RouteBuilderImpl, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
-import { LocalTaskDispatcher } from './TaskTypes';
+import { LocalTaskDispatcher } from '@webpieces/cloudtasks-client';
 
 const log = LogManager.getLogger('LocalTaskDispatcherImpl');
 
@@ -12,9 +13,11 @@ const log = LogManager.getLogger('LocalTaskDispatcherImpl');
  * chain + controller in-process — exactly the path production HTTP delivery takes —
  * so tests exercise ContextFilter + ServiceAuthFilter + the controller for real.
  *
- * Lives here (not http-server) to respect the architecture layering: it only needs
- * http-routing's RouteBuilder, which cloudtasks-client already depends on. Bind it
- * alongside InMemoryTaskInvoker in a test/local container.
+ * Lives in @webpieces/http-server (not cloudtasks-client) because it needs
+ * http-routing's RouteBuilder: cloudtasks-client must stay free of http-routing so it
+ * can be a pure client library. Bind it alongside InMemoryTaskInvoker in a test/local
+ * container; DI resolves the abstract LocalTaskDispatcher (declared in cloudtasks-client)
+ * to this impl at runtime.
  */
 @provideSingleton()
 @injectable()
