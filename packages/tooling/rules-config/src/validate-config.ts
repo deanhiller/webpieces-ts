@@ -30,6 +30,7 @@ import {
     RuntimeArchitectureConfig,
     NxWiringConfig,
     DiGraphConfig,
+    MissingDesignAnnotationConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
@@ -63,6 +64,7 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'runtime-architecture': RuntimeArchitectureConfig.SCHEMA,
     'nx-wiring': NxWiringConfig.SCHEMA,
     'di-graph': DiGraphConfig.SCHEMA,
+    'missing-design-annotation': MissingDesignAnnotationConfig.SCHEMA,
     'no-js-files': NoJsFilesConfig.SCHEMA,
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
 };
