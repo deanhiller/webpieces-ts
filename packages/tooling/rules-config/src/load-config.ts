@@ -125,6 +125,28 @@ function normalizeDeprecatedKeys(section: RuleSectionMap): RuleSectionMap {
     return out;
 }
 
+// Assemble the validation-failure banner. Most of these errors are version skew, not bad config: a dep
+// bump updated webpieces.config.json (+ package.json/lockfile) with new rule names/values, but this
+// checkout's node_modules was never re-installed, so the OLDER guard binary that is running rejects the
+// newer config. Deleting the flagged keys destroys valid config — so lead the AI to `pnpm install`
+// first. Both `pnpm install` (installer bypass) and edits to webpieces.config.json (fix-target bypass)
+// are ALWAYS allowed through the guard even while the config is invalid, so neither step can deadlock.
+function formatConfigErrorsBanner(errors: string[]): string {
+    return (
+        `webpieces.config.json has ${errors.length} validation error(s) — fix ALL, then retry:\n\n` +
+        errors.map(e => `  • ${e}`).join('\n') +
+        `\n\n👉 FIX ORDER (do NOT start by deleting keys — that usually deletes VALID config):\n` +
+        `  1. Run \`pnpm install\`. It is ALWAYS allowed through the guard (installer bypass), even ` +
+        `while this config is invalid. This is the #1 cause: your installed @webpieces guard is a ` +
+        `release BEHIND webpieces.config.json (a dep bump updated the config + lockfile, but ` +
+        `node_modules here was never re-installed), so the running validator doesn't know the newer ` +
+        `rule names/values yet. \`pnpm install\` syncs node_modules to the pinned version.\n` +
+        `  2. Retry your command. If the errors are gone, you're DONE — do not touch webpieces.config.json.\n` +
+        `  3. ONLY if an error survives a fresh install is it a genuine typo / removed / renamed rule. ` +
+        `Then edit webpieces.config.json (edits to it are ALWAYS allowed) to fix each • above.`
+    );
+}
+
 /**
  * The single load+validate entry point for ALL consumers (ai-hook-rules, code-rules,
  * nx-webpieces-rules, pr-gate scripts). Reads webpieces.config.json once, validates BOTH the `rules`
@@ -168,10 +190,7 @@ export function loadAndValidate(cwd: string): LoadedConfig {
         ...validateMatchRulesSection(consumerConfig['match-rules']),
     ];
     if (errors.length > 0) {
-        throw new InformAiError(
-            `webpieces.config.json has ${errors.length} validation error(s) — fix ALL, then retry:\n\n` +
-            errors.map(e => `  • ${e}`).join('\n'),
-        );
+        throw new InformAiError(formatConfigErrorsBanner(errors));
     }
     const commands = buildCommandsConfig(consumerConfig.commands, legacyPrGate);
     applyCommandDefaults(overrideRules, commands);

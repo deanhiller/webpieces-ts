@@ -137,13 +137,22 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
     return out;
 }
 
-// A config key under rules/hookGuards that is not a known built-in rule (and no rulesDir is set to
-// supply custom rules). Almost always a removed/renamed rule left behind, or a typo. Actionable.
+// A config key under rules/hookGuards that the RUNNING validator has no schema for (and no rulesDir is
+// set to supply custom rules). Two very different causes, so the message leads with the common one:
+//   1. Version skew (most common — happens right after a dep bump): webpieces.config.json references a
+//      rule a NEWER @webpieces release added, but the installed guard is OLDER and doesn't know it yet.
+//      Fix = `pnpm install` (NOT deleting the key — the key is valid, the validator is just stale).
+//   2. A genuinely removed/renamed rule left behind, or a typo. Fix = remove the key.
+// Do NOT tell the AI to delete first — that destroys valid config in case 1 (the trap that made the AI
+// gut a working config instead of running `pnpm install`). The banner in load-config.ts spells out the
+// ordered "run pnpm install, THEN edit only if it persists" fix.
 function unknownRuleError(ruleName: string): string {
     return (
-        `[${ruleName}] Unknown rule — not a built-in rule and no "rulesDir" is configured to supply ` +
-        `custom rules. Remove the "${ruleName}" key from webpieces.config.json (it is likely a removed ` +
-        `or renamed rule, or a typo).`
+        `[${ruleName}] Unknown rule — the running @webpieces validator has no schema for it, and no ` +
+        `"rulesDir" is configured to supply custom rules. Most often this means your installed guard is a ` +
+        `release BEHIND this webpieces.config.json: run \`pnpm install\` first (see the fix steps below) so ` +
+        `the validator learns "${ruleName}". Only if it is STILL unknown after a fresh install is it a ` +
+        `removed/renamed rule or a typo — then remove the "${ruleName}" key from webpieces.config.json.`
     );
 }
 
