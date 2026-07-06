@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { run, runBash } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
-import { logGuardDecision, GuardDecision, branchForLog } from '../core/decision-log';
+import { logGuardDecision, GuardDecision, branchForLog, logGuardInvocation } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode } from '../core/types';
@@ -163,7 +163,14 @@ export async function runMain(mode: HookMode): Promise<void> {
         // fail-closed escape hatch + installer allowlist never go stale — no human hand-edits it.
         // Runs only when the guards binary is actually installed (i.e. now), is best-effort, and
         // never throws into the decision below. 'rules' hook skips it (guards owns the shim).
-        if (mode !== 'rules') healShim(cwd);
+        if (mode !== 'rules') {
+            healShim(cwd);
+            // Per-invocation guard log (guard-invocations.log): tool + command/file + live branch +
+            // main-sync-status snapshot, on EVERY guards call, for later cleanup automation. Best-
+            // effort; never blocks the call.
+            const target = payload.tool_name === 'Bash' ? (payload.tool_input.command ?? '') : (payload.tool_input.file_path ?? '');
+            logGuardInvocation(cwd, payload.tool_name, target);
+        }
 
         if (payload.tool_name === 'Bash') {
             // No code-style rule is bash-scoped, so the rules hook ignores Bash.

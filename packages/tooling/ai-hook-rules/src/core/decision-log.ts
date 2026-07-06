@@ -2,6 +2,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { readMainSyncStatus, MainSyncStatus } from '@webpieces/rules-config';
+
 import { toError } from './to-error';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
@@ -12,6 +14,10 @@ import { toError } from './to-error';
 const HOOKS_DIR = '.webpieces/hooks';
 const LOG_FILE = 'guard-sync-decisions.log';
 const LOG_FILE_PREV = 'guard-sync-decisions.1.log';
+// The per-INVOCATION stream (companion to the per-DECISION log above): one line for every guards-hook
+// call, so cleanup automation can mine tool + branch + sync-status over time. See logGuardInvocation.
+const INVOCATION_LOG_FILE = 'guard-invocations.log';
+const INVOCATION_LOG_FILE_PREV = 'guard-invocations.1.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
 const MAX_TARGET_LEN = 160;
 
@@ -71,6 +77,58 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
         const error = toError(err);
         void error;
     }
+}
+
+/**
+ * Append one line per GUARDS-hook invocation to `.webpieces/hooks/guard-invocations.log` — the raw
+ * "what did the guard see" stream, written on EVERY call (allow or block, bash or file), unlike
+ * guard-sync-decisions.log which only records actual decisions. Captures the tool, the command/file,
+ * the live git branch, and the async-written main-sync-status.json (branch / merged / fork-point /
+ * conflict) so cleanup automation can later mine it — e.g. "on an already-merged branch, a
+ * `git checkout main` should also delete the branch". `cwd` is the AI's working dir; the repo root
+ * that owns `.webpieces` is resolved from it. Swallows all errors — logging never blocks a hook.
+ */
+export function logGuardInvocation(cwd: string, tool: string, target: string): void {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const root = gitToplevelForLog(cwd);
+        const branch = branchForLog(root);
+        const sync = summarizeSyncStatus(readMainSyncStatus(root));
+
+        const hooksDir = path.join(root, HOOKS_DIR);
+        fs.mkdirSync(hooksDir, { recursive: true });
+        const logPath = path.join(hooksDir, INVOCATION_LOG_FILE);
+        rotateLogFile(logPath, path.join(hooksDir, INVOCATION_LOG_FILE_PREV));
+
+        const line = [`[${new Date().toISOString()}]`, tool, oneLine(target), `branch=${branch}`, sync].join('\t') + '\n';
+        fs.appendFileSync(logPath, line);
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error;
+    }
+}
+
+// The repo root that owns `.webpieces` (git toplevel of cwd), or cwd itself when git is unavailable /
+// cwd is not a repo. Best-effort; the invocation log is diagnostic, never a control decision.
+function gitToplevelForLog(cwd: string): string {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const root = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        return root !== '' ? root : cwd;
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error;
+        return cwd;
+    }
+}
+
+// One-field summary of main-sync-status.json for the invocation log: the branch the cache is FOR,
+// whether it is already merged (and its PR), fork-point presence, and conflict state — the signals a
+// cleanup step keys off. 'sync=none' when the cache has not been written yet (first call of a session).
+function summarizeSyncStatus(status: MainSyncStatus | null): string {
+    if (status === null) return 'sync=none';
+    const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
+    return `sync=${status.branch} merged=${merged} fork=${String(status.hasForkPoint)} conflict=${String(status.conflict)} ts=${status.timestamp}`;
 }
 
 // Best-effort current branch for the log line. Returns 'unknown' on any failure (e.g. not a git
