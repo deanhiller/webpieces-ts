@@ -27,6 +27,8 @@
             "@webpieces/http-filters": ["packages/http/http-filters/src/index.ts"],
             "@webpieces/http-server": ["packages/http/http-server/src/index.ts"],
             "@webpieces/http-client": ["packages/http/http-client/src/index.ts"],
+            "@webpieces/gcp-identity": ["packages/cloud/gcp-identity/src/index.ts"],
+            "@webpieces/cloudtasks-client": ["packages/cloud/cloudtasks-client/src/index.ts"],
             "@webpieces/rules-config": ["packages/tooling/rules-config/src/index.ts"],
             "@webpieces/ai-hook-rules": ["packages/tooling/ai-hook-rules/src/index.ts"],
             "@webpieces/eslint-rules": ["packages/tooling/eslint-rules/src/index.ts"],

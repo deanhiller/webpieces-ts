@@ -19,6 +19,19 @@
                 "rules-config"
             ]
         },
+        "cloudtasks-client": {
+            "level": 4,
+            "framework": "express",
+            "role": "lib",
+            "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, the TaskInvoker abstraction (GCP + in-memory), and the `@PubSub` delivery pieces (in-process dispatcher + service-auth filter).",
+            "responsibilitiesFile": "packages/cloud/cloudtasks-client/responsibilities.md",
+            "designFile": "packages/cloud/cloudtasks-client/design.json",
+            "dependsOn": [
+                "gcp-identity",
+                "http-client",
+                "http-routing"
+            ]
+        },
         "code-rules": {
             "level": 1,
             "framework": "all",
@@ -59,6 +72,18 @@
             "designFile": "packages/tooling/eslint-rules/design.json",
             "dependsOn": [
                 "rules-config"
+            ]
+        },
+        "gcp-identity": {
+            "level": 1,
+            "framework": "express",
+            "role": "lib",
+            "shortDescription": "GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.",
+            "responsibilitiesFile": "packages/cloud/gcp-identity/responsibilities.md",
+            "designFile": "packages/cloud/gcp-identity/design.json",
+            "dependsOn": [
+                "core-util",
+                "wp-logging"
             ]
         },
         "http-api": {

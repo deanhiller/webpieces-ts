@@ -4,6 +4,7 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 import { provideSingleton } from './decorators';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from './MethodMeta';
+import { RouteMetadata } from '@webpieces/http-api';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/wp-logging';
@@ -268,7 +269,10 @@ export class RouteBuilderImpl implements RouteBuilder {
         const controllerService: Service<MethodMeta, WpResponse<unknown>> = {
             invoke: async (meta: MethodMeta): Promise<WpResponse<unknown>> => {
                 const result = await routeWithMeta.invokeControllerHandler.execute(meta);
-                return new WpResponse(result);
+                // A void endpoint (e.g. a @PubSub cloud-task handler returning Promise<void>)
+                // yields undefined; coerce to {} so the response is a non-null JSON body
+                // (downstream LogApiCall/serialization require one), mirroring `result ?? {}`.
+                return new WpResponse(result ?? {});
             },
         };
 
@@ -311,5 +315,17 @@ export class RouteBuilderImpl implements RouteBuilder {
 
         // Setup filter chain ONCE (not on every invocation!)
         return this.createRouteHandler(routeWithMeta);
+    }
+
+    /**
+     * Look up the RouteMetadata (incl. authMeta) for a registered route by method+path.
+     * Used to build a MethodMeta for an in-process dispatch (e.g. a delivered cloud
+     * task) so the filter chain sees the same routeMeta production HTTP would.
+     *
+     * @returns the route's RouteMetadata, or undefined if no route is registered.
+     */
+    getRouteMeta(method: string, path: string): RouteMetadata | undefined {
+        const key = this.createRouteKey(method, path);
+        return this.routeMap.get(key)?.definition.routeMeta;
     }
 }

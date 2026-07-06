@@ -66,6 +66,33 @@ export class WebpiecesCoreHeaders {
     );
 
     /**
+     * The bearer credential for an authenticated request. Carries BOTH a user-facing
+     * JWT (@AuthJwt, validated by the app AuthFilter) and a service-to-service Google
+     * OIDC token (@AuthOidc, validated by the framework ServiceAuthFilter) — the two
+     * modes are mutually exclusive per endpoint, so one header serves both. When a
+     * Cloud Task is delivered, Google injects the OIDC token here as `Authorization`.
+     * SECURED — masked in logs.
+     */
+    static readonly AUTHORIZATION = new PlatformHeader(
+        'authorization',
+        true,   // transfer into RequestContext
+        true,   // SECURED - mask in logs
+        false
+    );
+
+    /**
+     * Shared-secret credential for internal callers that cannot mint OIDC tokens
+     * (@AuthSharedSecret, validated by ServiceAuthFilter via constant-time compare).
+     * SECURED — masked in logs.
+     */
+    static readonly SHARED_SECRET = new PlatformHeader(
+        'x-webpieces-shared-secret',
+        true,   // transfer into RequestContext
+        true,   // SECURED - mask in logs
+        false
+    );
+
+    /**
      * Get all core headers as an array.
      * Used by WebpiecesModule to bind headers to DI container.
      *
@@ -77,6 +104,8 @@ export class WebpiecesCoreHeaders {
             WebpiecesCoreHeaders.PREVIOUS_REQUEST_ID,
             WebpiecesCoreHeaders.CORRELATION_ID,
             WebpiecesCoreHeaders.RECORDING,
+            WebpiecesCoreHeaders.AUTHORIZATION,
+            WebpiecesCoreHeaders.SHARED_SECRET,
         ];
     }
 }

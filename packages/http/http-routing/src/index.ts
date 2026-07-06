@@ -4,15 +4,29 @@ export {
     Endpoint,
     Authentication,
     AuthenticationConfig,
+    Public,
+    AuthJwt,
+    AuthOidc,
+    AuthSharedSecret,
+    Rpc,
+    PubSub,
+    Queue,
     getApiPath,
     getEndpoints,
     isApiPath,
     getAuthMeta,
+    getAuthMode,
+    assertEveryEndpointHasAuthMode,
+    getApiKind,
+    assertApiKind,
+    assertPubSubConventions,
+    getQueueName,
     AuthMeta,
     RouteMetadata,
     METADATA_KEYS,
     ValidateImplementation,
 } from '@webpieces/http-api';
+export type { AuthMode, ApiKind } from '@webpieces/http-api';
 
 // Server-side routing decorators and utilities
 export {

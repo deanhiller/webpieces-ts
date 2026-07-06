@@ -1,0 +1,38 @@
+{
+    "name": "@webpieces/cloudtasks-client",
+    "version": "0.0.0-dev",
+    "description": "Cloud Tasks enqueue client generated from a shared @PubSub API contract (twin of http-client)",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/cloud/cloudtasks-client"
+    },
+    "keywords": [
+        "webpieces",
+        "gcp",
+        "cloud-tasks",
+        "pubsub",
+        "queue"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-context": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "@webpieces/http-api": "workspace:*",
+        "@webpieces/http-filters": "workspace:*",
+        "@webpieces/http-routing": "workspace:*",
+        "@webpieces/http-client": "workspace:*",
+        "@webpieces/gcp-identity": "workspace:*",
+        "@webpieces/wp-logging": "workspace:*",
+        "@google-cloud/tasks": "5.5.2",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2"
+    }
+}

@@ -1,0 +1,31 @@
+{
+    "name": "@webpieces/gcp-identity",
+    "version": "0.0.0-dev",
+    "description": "GCP runtime identity: project/region metadata, Cloud Run URLs, OIDC mint/verify",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/cloud/gcp-identity"
+    },
+    "keywords": [
+        "webpieces",
+        "gcp",
+        "oidc",
+        "cloud-run",
+        "identity"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-util": "workspace:*",
+        "@webpieces/wp-logging": "workspace:*",
+        "google-auth-library": "9.15.1",
+        "gcp-metadata": "6.1.1"
+    }
+}

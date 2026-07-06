@@ -54,5 +54,12 @@ export {
     Endpoint,
     Authentication,
     AuthenticationConfig,
+    Public,
+    AuthJwt,
+    AuthOidc,
+    AuthSharedSecret,
+    Rpc,
+    PubSub,
+    Queue,
     ValidateImplementation,
 } from '@webpieces/http-api';

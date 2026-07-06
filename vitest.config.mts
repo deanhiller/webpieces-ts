@@ -13,6 +13,8 @@ export default defineConfig({
             '@webpieces/http-filters': path.resolve(__dirname, 'packages/http/http-filters/src/index.ts'),
             '@webpieces/http-server': path.resolve(__dirname, 'packages/http/http-server/src/index.ts'),
             '@webpieces/http-client': path.resolve(__dirname, 'packages/http/http-client/src/index.ts'),
+            '@webpieces/gcp-identity': path.resolve(__dirname, 'packages/cloud/gcp-identity/src/index.ts'),
+            '@webpieces/cloudtasks-client': path.resolve(__dirname, 'packages/cloud/cloudtasks-client/src/index.ts'),
             '@webpieces/client-server-api': path.resolve(__dirname, 'apps/app-example/client-server-api/src/index.ts'),
             '@webpieces/server2-api': path.resolve(__dirname, 'apps/app-example/server2-api/src/index.ts'),
             '@webpieces/company-core': path.resolve(__dirname, 'apps/app-example/company-core/src/index.ts'),

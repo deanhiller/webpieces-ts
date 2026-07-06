@@ -8,6 +8,10 @@ export const METADATA_KEYS = {
     API_PATH: 'webpieces:api-path',
     ENDPOINTS: 'webpieces:endpoints',
     AUTH_META: 'webpieces:auth-meta',
+    /** 'rpc' (default, sync request/response) vs 'pubsub' (fire-and-forget cloud task). */
+    API_KIND: 'webpieces:api-kind',
+    /** Per-method Cloud Tasks queue-name override (set via @Queue). */
+    QUEUE_OVERRIDE: 'webpieces:queue-override',
 };
 
 /**
@@ -39,20 +43,44 @@ export class RouteMetadata {
 }
 
 /**
- * Auth metadata attached to a class or method via @Authentication().
+ * The service-to-service / user auth mode of an endpoint. Discriminated union so
+ * a filter can `switch (mode.kind)` and get the data it needs, exhaustively.
  *
- * - authenticated=false → public endpoint (no auth check)
- * - authenticated=true, no roles → requires authentication
- * - authenticated=true, roles=['admin'] → requires authentication + specific roles
- * - authenticated=false + roles → INVALID (caught at decorator time)
+ * - `public`        → no auth check
+ * - `jwt`           → user-facing JWT (optionally role-gated), validated by the app AuthFilter
+ * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
+ *                     `callers` is the allow-list of caller service accounts ('self' = this service's SA)
+ * - `shared-secret` → constant-time compare of a header against `process.env[secretEnv]`
+ */
+export type AuthMode =
+    | { kind: 'public' }
+    | { kind: 'jwt'; roles: string[] }
+    | { kind: 'oidc'; callers: string[] }
+    | { kind: 'shared-secret'; secretEnv: string };
+
+/**
+ * Auth metadata attached to a class or method via one of the auth decorators
+ * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret) or the legacy @Authentication.
+ *
+ * Carries a discriminated {@link AuthMode}. The `authenticated`/`roles` getters are
+ * kept for back-compat with readers that only understand the user-JWT model
+ * (e.g. the example AuthFilter).
  */
 export class AuthMeta {
-    authenticated: boolean;
-    roles: string[];
+    mode: AuthMode;
 
-    constructor(authenticated: boolean, roles?: string[]) {
-        this.authenticated = authenticated;
-        this.roles = roles ?? [];
+    constructor(mode: AuthMode) {
+        this.mode = mode;
+    }
+
+    /** True for every non-public mode (jwt, oidc, shared-secret). */
+    get authenticated(): boolean {
+        return this.mode.kind !== 'public';
+    }
+
+    /** JWT roles, or empty for non-jwt modes. */
+    get roles(): string[] {
+        return this.mode.kind === 'jwt' ? this.mode.roles : [];
     }
 }
 
@@ -140,7 +168,19 @@ export function Authentication(config: AuthenticationConfig): ClassDecorator & M
         );
     }
 
-    const authMeta = new AuthMeta(config.authenticated, config.roles);
+    const mode: AuthMode = config.authenticated
+        ? { kind: 'jwt', roles: config.roles ?? [] }
+        : { kind: 'public' };
+    return defineAuthMode(mode);
+}
+
+/**
+ * Shared implementation for every auth decorator: stores an {@link AuthMeta} for
+ * the given {@link AuthMode} at class- or method-level, rejecting a second auth
+ * decorator on the same target.
+ */
+function defineAuthMode(mode: AuthMode): ClassDecorator & MethodDecorator {
+    const authMeta = new AuthMeta(mode);
 
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey?: string | symbol, _descriptor?: PropertyDescriptor) => {
@@ -155,6 +195,38 @@ export function Authentication(config: AuthenticationConfig): ClassDecorator & M
             Reflect.defineMetadata(METADATA_KEYS.AUTH_META, authMeta, target);
         }
     };
+}
+
+/**
+ * @Public() - endpoint requires no authentication. Class- or method-level.
+ */
+export function Public(): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'public' });
+}
+
+/**
+ * @AuthJwt(...roles) - user-facing JWT auth, optionally role-gated. The app-level
+ * AuthFilter validates the token; roles=[] means "any authenticated user".
+ */
+export function AuthJwt(...roles: string[]): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'jwt', roles });
+}
+
+/**
+ * @AuthOidc(...callers) - Google OIDC service-to-service auth (Cloud Tasks delivery
+ * / cross-service RPC). `callers` is the allow-list of caller service accounts;
+ * defaults to ['self'] (only this service's own runtime SA, e.g. self-enqueue).
+ */
+export function AuthOidc(...callers: string[]): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'oidc', callers: callers.length > 0 ? callers : ['self'] });
+}
+
+/**
+ * @AuthSharedSecret(envVarName) - constant-time compare of an inbound header against
+ * process.env[envVarName]. For internal callers that cannot mint OIDC tokens.
+ */
+export function AuthSharedSecret(envVarName: string): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'shared-secret', secretEnv: envVarName });
 }
 
 // ============================================================
@@ -198,6 +270,134 @@ export function getAuthMeta(apiClass: Function, methodName?: string): AuthMeta |
 
     // Fall back to class-level
     return Reflect.getMetadata(METADATA_KEYS.AUTH_META, apiClass);
+}
+
+/**
+ * Get the auth mode for a method (falling back to class-level), or undefined.
+ * Convenience wrapper over getAuthMeta for callers that only want the mode.
+ */
+export function getAuthMode(apiClass: Function, methodName?: string): AuthMode | undefined {
+    return getAuthMeta(apiClass, methodName)?.mode;
+}
+
+/**
+ * Fail-fast at wiring time if any endpoint lacks an auth mode. Both the server
+ * (ApiRoutingFactory) and the task/rpc clients call this so a missing auth
+ * decorator is a startup error, never a silent open endpoint.
+ * @throws Error naming the first endpoint with no @Authentication/@Public/@Auth* decorator.
+ */
+export function assertEveryEndpointHasAuthMode(apiClass: Function): void {
+    const apiName = apiClass.name || 'Unknown';
+    const endpoints = getEndpoints(apiClass) || {};
+    for (const methodName of Object.keys(endpoints)) {
+        if (!getAuthMeta(apiClass, methodName)) {
+            throw new Error(
+                `Endpoint '${methodName}' in ${apiName} has no auth decorator. ` +
+                `Add @Public(), @AuthJwt(...), @AuthOidc(...) or @AuthSharedSecret(...) ` +
+                `to the class or method.`,
+            );
+        }
+    }
+}
+
+// ============================================================
+// API kind (RPC vs PubSub/Cloud Tasks) + queue naming
+// ============================================================
+
+/**
+ * API kind. 'rpc' = synchronous request/response (http-client ↔ ApiRoutingFactory).
+ * 'pubsub' = fire-and-forget cloud task; the enqueue client (cloudtasks-client)
+ * schedules a Cloud Task that is later delivered to the SAME controller endpoint.
+ */
+export type ApiKind = 'rpc' | 'pubsub';
+
+/**
+ * @Rpc() - marks an API class as synchronous request/response (the default kind).
+ * Present mostly for symmetry/readability; an undecorated API is treated as 'rpc'.
+ */
+export function Rpc(): ClassDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any) => {
+        Reflect.defineMetadata(METADATA_KEYS.API_KIND, 'rpc' as ApiKind, target);
+    };
+}
+
+/**
+ * @PubSub() - marks an API class as fire-and-forget over Cloud Tasks. Every method
+ * MUST return Promise<void> (a compile-time contract on the abstract API). The
+ * enqueue client and the controller share this one class, exactly like RPC.
+ */
+export function PubSub(): ClassDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any) => {
+        Reflect.defineMetadata(METADATA_KEYS.API_KIND, 'pubsub' as ApiKind, target);
+    };
+}
+
+/**
+ * @Queue(name) - override the Cloud Tasks queue name for a @PubSub method. Default
+ * (no decorator) is `${ApiClassName}-${methodName}`, matched 1:1 by Terraform.
+ */
+export function Queue(name: string): MethodDecorator {
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
+        const metadataTarget = typeof target === 'function' ? target : target.constructor;
+        const overrides: Record<string, string> =
+            Reflect.getMetadata(METADATA_KEYS.QUEUE_OVERRIDE, metadataTarget) || {};
+        overrides[propertyKey as string] = name;
+        Reflect.defineMetadata(METADATA_KEYS.QUEUE_OVERRIDE, overrides, metadataTarget);
+    };
+}
+
+/**
+ * Get the API kind. Defaults to 'rpc' when neither @Rpc nor @PubSub is present.
+ */
+export function getApiKind(apiClass: Function): ApiKind {
+    return (Reflect.getMetadata(METADATA_KEYS.API_KIND, apiClass) as ApiKind) ?? 'rpc';
+}
+
+/**
+ * Assert the API class is of the expected kind (used by the clients: the RPC
+ * client rejects a @PubSub api and vice-versa).
+ * @throws Error if the kind doesn't match.
+ */
+export function assertApiKind(apiClass: Function, expected: ApiKind): void {
+    const actual = getApiKind(apiClass);
+    if (actual !== expected) {
+        const apiName = apiClass.name || 'Unknown';
+        throw new Error(
+            `API ${apiName} is @${actual === 'pubsub' ? 'PubSub' : 'Rpc'} but a ` +
+            `${expected === 'pubsub' ? '@PubSub (cloud task)' : '@Rpc'} API was required here.`,
+        );
+    }
+}
+
+/**
+ * Validate @PubSub conventions at wiring time: the class must be @ApiPath + @PubSub
+ * and declare at least one endpoint. (Return-type is Promise<void>, a compile-time
+ * contract — TS erases types at runtime so it cannot be re-checked here.)
+ * @throws Error if conventions are violated.
+ */
+export function assertPubSubConventions(apiClass: Function): void {
+    assertApiKind(apiClass, 'pubsub');
+    const apiName = apiClass.name || 'Unknown';
+    if (!isApiPath(apiClass)) {
+        throw new Error(`@PubSub API ${apiName} must also be decorated with @ApiPath()`);
+    }
+    const endpoints = getEndpoints(apiClass) || {};
+    if (Object.keys(endpoints).length === 0) {
+        throw new Error(`@PubSub API ${apiName} declares no @Endpoint methods`);
+    }
+}
+
+/**
+ * Resolve the Cloud Tasks queue name for a @PubSub method: the @Queue override if
+ * present, else `${ApiClassName}-${methodName}`.
+ */
+export function getQueueName(apiClass: Function, methodName: string): string {
+    const overrides: Record<string, string> =
+        Reflect.getMetadata(METADATA_KEYS.QUEUE_OVERRIDE, apiClass) || {};
+    return overrides[methodName] ?? `${apiClass.name || 'Unknown'}-${methodName}`;
 }
 
 /**
