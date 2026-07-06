@@ -35,5 +35,5 @@
             }
         }
     },
-    "tags": ["type:tooling", "framework:all", "role:lib"]
+    "tags": ["type:tooling", "framework:node", "role:lib"]
 }

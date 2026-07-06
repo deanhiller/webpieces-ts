@@ -6,7 +6,7 @@ import {
     getRegion,
     getRuntimeServiceAccountEmail,
 } from '@webpieces/gcp-identity';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('GcpTaskInvoker');

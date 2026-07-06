@@ -10,7 +10,7 @@
     "projects": {
         "ai-hook-rules": {
             "level": 1,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.",
             "responsibilitiesFile": "packages/tooling/ai-hook-rules/responsibilities.md",
@@ -21,7 +21,7 @@
         },
         "cloudtasks-client": {
             "level": 4,
-            "framework": "express",
+            "framework": ["express"],
             "role": "lib",
             "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, the TaskInvoker abstraction (GCP + in-memory), and the `@PubSub` delivery pieces (in-process dispatcher + service-auth filter).",
             "responsibilitiesFile": "packages/cloud/cloudtasks-client/responsibilities.md",
@@ -34,7 +34,7 @@
         },
         "code-rules": {
             "level": 1,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
@@ -45,7 +45,7 @@
         },
         "core-context": {
             "level": 1,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and copy/restore key-value data automatically across async boundaries.",
             "responsibilitiesFile": "packages/core/core-context/responsibilities.md",
@@ -56,7 +56,7 @@
         },
         "core-util": {
             "level": 0,
-            "framework": "all",
+            "framework": ["browser","node"],
             "role": "lib",
             "shortDescription": "Lowest-level, zero-dependency utilities shared across webpieces (browser and Node). Provides `toError()` for standardized catch handling, plus the `Header` interface and `ContextKey` class that higher packages build request-context and HTTP-header abstractions on.",
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
@@ -65,7 +65,7 @@
         },
         "eslint-rules": {
             "level": 1,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Custom ESLint plugin exporting WebPieces lint rules — architecture dependency boundaries, exception/catch-error patterns, method/file size limits, no-JsonProperty-primitive, and Angular template rules — consumed by the shared eslint config and the nx-webpieces build validators.",
             "responsibilitiesFile": "packages/tooling/eslint-rules/responsibilities.md",
@@ -76,42 +76,29 @@
         },
         "gcp-identity": {
             "level": 1,
-            "framework": "express",
+            "framework": ["express"],
             "role": "lib",
             "shortDescription": "GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.",
             "responsibilitiesFile": "packages/cloud/gcp-identity/responsibilities.md",
             "designFile": "packages/cloud/gcp-identity/design.json",
             "dependsOn": [
-                "core-util",
-                "wp-logging"
-            ]
-        },
-        "http-api": {
-            "level": 1,
-            "framework": "all",
-            "role": "lib",
-            "shortDescription": "Shared HTTP API contract consumed by both client and server: REST decorators (ApiPath, Endpoint, Authentication), the HttpError hierarchy, datetime DTOs, platform-header registry/readers, ValidateImplementation, and the test-case recorder contract. Pure definitions, no runtime.",
-            "responsibilitiesFile": "packages/http/http-api/responsibilities.md",
-            "designFile": "packages/http/http-api/design.json",
-            "dependsOn": [
-                "core-util",
-                "wp-logging"
+                "core-util"
             ]
         },
         "http-client": {
-            "level": 2,
-            "framework": "all",
+            "level": 1,
+            "framework": ["browser","node"],
             "role": "lib",
             "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
             "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
             "designFile": "packages/http/http-client/design.json",
             "dependsOn": [
-                "http-api"
+                "core-util"
             ]
         },
         "http-filters": {
             "level": 2,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Minimal filter-chain primitives for cross-cutting concerns: the `Filter`/`Service` interfaces, the `WpResponse` type, and `FilterChain`, which invokes filters in order and wraps the terminal controller call. Pure infrastructure with no concrete filters.",
             "responsibilitiesFile": "packages/http/http-filters/responsibilities.md",
@@ -122,19 +109,18 @@
         },
         "http-routing": {
             "level": 3,
-            "framework": "express",
+            "framework": ["express"],
             "role": "lib",
             "shortDescription": "Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`RouteBuilder` wiring, `RouteDefinition`/`FilterDefinition`, `MethodMeta`, `FilterMatcher` (glob-based filter-to-route matching), and `ApiRoutingFactory` that maps http-api decorators to controller handlers.",
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",
             "designFile": "packages/http/http-routing/design.json",
             "dependsOn": [
-                "http-api",
                 "http-filters"
             ]
         },
         "http-server": {
             "level": 4,
-            "framework": "express",
+            "framework": ["express"],
             "role": "lib",
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express middleware, ships built-in filters (Context, LogApi, Recording), the in-process test client, and the test-case recorder implementation.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
@@ -145,7 +131,7 @@
         },
         "nx-webpieces-rules": {
             "level": 2,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
@@ -159,7 +145,7 @@
         },
         "pr-gate": {
             "level": 1,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, update-from-main, gather-info, merge start/end, build-affected — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
@@ -170,20 +156,11 @@
         },
         "rules-config": {
             "level": 0,
-            "framework": "all",
+            "framework": ["node"],
             "role": "lib",
             "shortDescription": "Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate and main-sync state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "designFile": "packages/tooling/rules-config/design.json",
-            "dependsOn": []
-        },
-        "wp-logging": {
-            "level": 0,
-            "framework": "all",
-            "role": "lib",
-            "shortDescription": "Pluggable logging interface for WebPieces, usable in browser (Angular/React) and Node.js. Ships the `Logger`/`LoggerFactory` interfaces, a browser-safe console default, and the slf4j-style `LogManager` holder, so code logs through one seam while each app plugs in its own backend at startup.",
-            "responsibilitiesFile": "packages/core/wp-logging/responsibilities.md",
-            "designFile": "packages/core/wp-logging/design.json",
             "dependsOn": []
         }
     }

@@ -1,4 +1,4 @@
-import { RouteMetadata, AuthMeta } from '@webpieces/http-api';
+import { RouteMetadata, AuthMeta } from '@webpieces/core-util';
 
 /**
  * Metadata about the method being invoked.

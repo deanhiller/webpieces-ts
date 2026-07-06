@@ -1,4 +1,4 @@
-// Re-export API decorators from http-api for convenience
+// Re-export API decorators from core-util for convenience
 export {
     ApiPath,
     Endpoint,
@@ -25,8 +25,8 @@ export {
     RouteMetadata,
     METADATA_KEYS,
     ValidateImplementation,
-} from '@webpieces/http-api';
-export type { AuthMode, ApiKind } from '@webpieces/http-api';
+} from '@webpieces/core-util';
+export type { AuthMode, ApiKind } from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
 export {

@@ -1,4 +1,4 @@
-import { PlatformHeader, ContextReader } from '@webpieces/http-api';
+import { PlatformHeader, ContextReader } from '@webpieces/core-util';
 
 /**
  * StaticContextReader - Returns static header values from a Map.

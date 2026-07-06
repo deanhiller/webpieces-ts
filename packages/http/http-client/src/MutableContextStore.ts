@@ -1,4 +1,4 @@
-import { PlatformHeader, ContextReader } from '@webpieces/http-api';
+import { PlatformHeader, ContextReader } from '@webpieces/core-util';
 
 /**
  * MutableContextStore - Browser-side context store + ContextReader.

@@ -4,10 +4,10 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 import { provideSingleton } from './decorators';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from './MethodMeta';
-import { RouteMetadata } from '@webpieces/http-api';
+import { RouteMetadata } from '@webpieces/core-util';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('RouteBuilder');
 

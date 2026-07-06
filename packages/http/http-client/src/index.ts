@@ -8,7 +8,7 @@
  * - Server (@webpieces/http-routing): API decorators -> route HTTP to controllers
  * - Client (@webpieces/http-client): API decorators -> generate HTTP from method calls
  *
- * Both packages depend on @webpieces/http-api for shared decorator definitions.
+ * Both packages depend on @webpieces/core-util for shared decorator definitions.
  *
  * Architecture:
  * ```
@@ -46,7 +46,7 @@ export {
     PlatformHeader,
     PlatformHeadersExtension,
     WebpiecesCoreHeaders,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 
 // Re-export API decorators for convenience (same as http-routing does)
 export {
@@ -62,4 +62,4 @@ export {
     PubSub,
     Queue,
     ValidateImplementation,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';

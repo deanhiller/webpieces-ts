@@ -1,7 +1,7 @@
 import { inject, injectable } from 'inversify';
 import { provideSingleton, RouteBuilderImpl, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 import { LocalTaskDispatcher } from './TaskTypes';
 
 const log = LogManager.getLogger('LocalTaskDispatcherImpl');

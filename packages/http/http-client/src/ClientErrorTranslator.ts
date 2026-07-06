@@ -11,7 +11,7 @@ import {
     HttpInternalServerError,
     HttpBadGatewayError,
     HttpGatewayTimeoutError,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 
 /**
  * ClientErrorTranslator - Translates HTTP error responses to HttpError exceptions.

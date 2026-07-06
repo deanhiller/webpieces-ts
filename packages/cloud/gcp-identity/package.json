@@ -24,7 +24,6 @@
     },
     "dependencies": {
         "@webpieces/core-util": "workspace:*",
-        "@webpieces/wp-logging": "workspace:*",
         "google-auth-library": "9.15.1",
         "gcp-metadata": "6.1.1"
     }

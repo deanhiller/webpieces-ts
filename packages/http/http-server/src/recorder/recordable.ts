@@ -4,7 +4,7 @@ import {
     RecorderKeys,
     TestCaseRecorder,
     toError,
-} from '@webpieces/http-api';
+} from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
 /**

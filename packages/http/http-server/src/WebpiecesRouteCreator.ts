@@ -10,7 +10,7 @@ import {
 } from '@webpieces/http-routing';
 import { WebpiecesMiddleware } from './WebpiecesMiddleware';
 import { InProcessApiClientFactory } from './InProcessApiClientFactory';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 
 /**
  * WebpiecesRouteCreator - Embeddable adapter that mounts the webpieces

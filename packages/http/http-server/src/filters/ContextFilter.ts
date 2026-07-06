@@ -2,10 +2,10 @@ import {inject, injectable} from 'inversify';
 import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { PlatformHeader, HeaderRegistry } from '@webpieces/http-api';
+import { PlatformHeader, HeaderRegistry } from '@webpieces/core-util';
 import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
 import {ContextKeys} from "../headers/ContextKeys";
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 
 /**
  * ContextFilter - Transfers platform headers and stores request metadata in RequestContext.

@@ -1,7 +1,7 @@
 import { ContainerModule, ResolutionContext } from 'inversify';
-import { HEADER_TYPES, PlatformHeadersExtension, HeaderMethods, HeaderRegistry } from '@webpieces/http-api';
+import { HEADER_TYPES, PlatformHeadersExtension, HeaderMethods, HeaderRegistry } from '@webpieces/core-util';
 import { WebpiecesCoreHeaders } from '../headers/WebpiecesCoreHeaders';
-import { LogManager } from '@webpieces/wp-logging';
+import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('WebpiecesModule');
 

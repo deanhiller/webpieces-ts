@@ -22,8 +22,8 @@
         "access": "public"
     },
     "dependencies": {
+        "@webpieces/core-util": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
-        "@webpieces/wp-logging": "workspace:*",
         "cors": "2.8.5"
     },
     "devDependencies": {

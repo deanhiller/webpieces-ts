@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import {RouteMetadata} from "@webpieces/http-api";
+import {RouteMetadata} from "@webpieces/core-util";
 
 /**
  * Represents a route configuration that can be registered with the router.

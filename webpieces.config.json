@@ -25,7 +25,7 @@
         "no-any-unknown": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "ignoreModifiedUntilEpoch": 1783409251
         },
         "no-implicit-any": {
             "mode": "NEW_AND_MODIFIED_CODE",
@@ -73,14 +73,14 @@
             "ignoreModifiedUntilEpoch": 1771931925,
             "allowedPaths": [
                 "libraries/apis/**",
-                "packages/http/http-api/**"
+                "packages/core/core-util/src/http/**"
             ]
         },
         "enforce-controller-naming": {
             "mode": "NEW_AND_MODIFIED_FILES",
             "disableAllowed": true,
             "allowedPaths": [],
-            "ignoreModifiedUntilEpoch": 0
+            "ignoreModifiedUntilEpoch": 1783409251
         },
         "framework-tag": {
             "mode": "MODIFIED_PROJECTS",

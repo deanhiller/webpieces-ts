@@ -1,4 +1,4 @@
-import { PlatformHeader, ContextReader } from '@webpieces/http-api';
+import { PlatformHeader, ContextReader } from '@webpieces/core-util';
 import { ContextKey } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 

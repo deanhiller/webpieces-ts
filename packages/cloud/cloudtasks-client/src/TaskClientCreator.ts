@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify';
 import { provideSingleton, RequestContextReader } from '@webpieces/http-routing';
-import { HeaderRegistry } from '@webpieces/http-api';
+import { HeaderRegistry } from '@webpieces/core-util';
 import { ContextMgr } from '@webpieces/http-client';
 import { getCloudRunUrl } from '@webpieces/gcp-identity';
 import { TaskInvoker } from './TaskTypes';
