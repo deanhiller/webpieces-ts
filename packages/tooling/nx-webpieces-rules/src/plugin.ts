@@ -430,13 +430,14 @@ function createGenerateTarget(graphPath: string): TargetConfiguration {
         cache: false,
         outputs: [
             '{workspaceRoot}/architecture/dependencies.json',
+            '{workspaceRoot}/architecture/dependencies.html',
             '{workspaceRoot}/architecture/runtime-dependencies.json',
         ],
         options: { graphPath },
         metadata: {
             technologies: ['nx'],
             description:
-                'Generate the architecture dependency graph and the runtime microservice graph',
+                'Generate the architecture dependency graph (+ clickable dependencies.html) and the runtime microservice graph',
         },
     };
 }

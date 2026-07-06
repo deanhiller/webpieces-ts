@@ -35,6 +35,9 @@ function pageStyles(): string {
     return `
         body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
         h1 { text-align: center; color: #333; }
+        .back { max-width: 95%; margin: 0 auto 8px; }
+        .back a { color: #1565C0; text-decoration: none; }
+        .back a:hover { text-decoration: underline; }
         h2 { color: #333; margin-bottom: 4px; }
         .meta { color: #777; font-family: monospace; font-size: 13px; margin-bottom: 10px; }
         .section { background: white; padding: 20px; border-radius: 8px;
@@ -83,11 +86,18 @@ function renderScript(entries: DesignGraphEntry[]): string {
 /**
  * Build the full HTML page for a project's DI designs — one section (heading
  * + meta + rendered graph) per controller/root design.
+ *
+ * `backHref`, when given, renders a "back to architecture" link at the top —
+ * used by the committed per-project design.html so a reader who clicked in from
+ * dependencies.html can click back out. Omitted for the tmp view.
  */
-export function generateDesignHTML(graph: DiGraph): string {
+export function generateDesignHTML(graph: DiGraph, backHref?: string): string {
     const title = `DI Designs — ${graph.project}`;
     const entries: DesignGraphEntry[] = [];
     const sections: string[] = [];
+    const backLink = backHref
+        ? `<p class="back"><a href="${htmlEscape(backHref)}">← Back to architecture graph</a></p>`
+        : '';
 
     graph.designs.forEach((design: DiDesign, index: number) => {
         const id = `graph-${index}`;
@@ -107,12 +117,14 @@ export function generateDesignHTML(graph: DiGraph): string {
     return `<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
     <title>${htmlEscape(title)}</title>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
     <style>${pageStyles()}</style>
 </head>
 <body>
+    ${backLink}
     <h1>${htmlEscape(title)}</h1>
     ${pageLegend()}
     ${body}

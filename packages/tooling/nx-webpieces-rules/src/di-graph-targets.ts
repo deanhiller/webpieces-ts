@@ -15,10 +15,11 @@ export function createDiGraphGenerateTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:di-graph-generate',
         cache: false,
-        outputs: ['{projectRoot}/design.json', '{projectRoot}/design.md'],
+        outputs: ['{projectRoot}/design.json', '{projectRoot}/design.md', '{projectRoot}/design.html'],
         metadata: {
             technologies: ['nx'],
-            description: 'Generate the Inversify DI dependency DAG into design.json + design.md',
+            description:
+                'Generate the Inversify DI dependency DAG into design.json + design.md + clickable design.html',
         },
     };
 }

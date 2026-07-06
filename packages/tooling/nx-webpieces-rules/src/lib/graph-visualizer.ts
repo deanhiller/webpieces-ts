@@ -53,6 +53,28 @@ function getShortName(name: string): string {
 }
 
 /**
+ * Directory (repo-relative) that the committed architecture HTML lives in.
+ * Node click-through links are computed relative to this so they resolve when
+ * the file is opened straight from the checkout.
+ */
+const ARCH_OUTPUT_DIR = 'architecture';
+
+/**
+ * Click-through href for a node: the project's committed design.html, made
+ * relative to architecture/dependencies.html. Returns null when the project has
+ * no generated DI design (no design.json → no clickable design page).
+ *
+ * designFile is repo-relative posix (e.g. 'packages/http/http-api/design.json');
+ * we swap the extension and re-root it at architecture/ so the browser resolves
+ * '../packages/http/http-api/design.html' from the checkout.
+ */
+function designHtmlHref(designFile: string | undefined): string | null {
+    if (!designFile) return null;
+    const designHtml = designFile.replace(/design\.json$/, 'design.html');
+    return path.posix.relative(ARCH_OUTPUT_DIR, designHtml);
+}
+
+/**
  * Generate Graphviz DOT format from the graph
  */
 export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): string {
@@ -70,13 +92,17 @@ export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Depe
 
     // Nodes: fill colored by framework (libType), border shaped by role; the
     // label shows the framework-role combo (e.g. express-server, all-lib).
+    // A node with a generated DI design gets a URL so the rendered SVG box is
+    // clickable — it opens that project's committed design.html in a new tab.
     for (const [project, info] of Object.entries(graph)) {
         const shortName = getShortName(project);
         const framework = info.framework ?? 'all';
         const role = info.role ?? 'lib';
         const color = FRAMEWORK_COLORS[framework] ?? DEFAULT_FRAMEWORK_COLOR;
         const border = roleBorderAttrs(role);
-        dot += `  "${shortName}" [fillcolor="${color}"${border}, label="${shortName}\\n(L${info.level} · ${framework}-${role})"];\n`;
+        const href = designHtmlHref(info.designFile);
+        const link = href ? `, URL="${href}", target="_blank"` : '';
+        dot += `  "${shortName}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(L${info.level} · ${framework}-${role})"];\n`;
     }
 
     dot += '\n';
@@ -121,6 +147,7 @@ export function generateHTML(dot: string, title: string = 'Monorepo Dependency A
     return `<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
     <title>${title}</title>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
@@ -128,6 +155,7 @@ export function generateHTML(dot: string, title: string = 'Monorepo Dependency A
 </head>
 <body>
     <h1>${title}</h1>
+    <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
     ${legend}
     <div id="graph"></div>
     <script>${script}</script>
@@ -147,6 +175,14 @@ function generateHTMLStyles(): string {
             text-align: center;
             color: #333;
         }
+        .hint {
+            text-align: center;
+            color: #555;
+            margin: 0 0 16px;
+        }
+        /* viz.js renders node URLs as <a> — show they are clickable. */
+        #graph a { cursor: pointer; }
+        #graph a:hover polygon { stroke-width: 2.5; }
         #graph {
             text-align: center;
             background: white;
@@ -237,36 +273,37 @@ function generateHTMLScript(dot: string): string {
 }
 
 interface VisualizationPaths {
-    dotPath: string;
     htmlPath: string;
 }
 
 /**
- * Write visualization files to tmp/webpieces/
+ * Write the committed architecture visualization to architecture/dependencies.html,
+ * next to dependencies.json.
+ *
+ * This is a checked-in artifact, regenerated deterministically by
+ * architecture:generate so the boxes stay clickable into each project's
+ * design.html. The DOT is embedded in the HTML (rendered client-side by
+ * viz.js), so no separate .dot file is committed — same as design.html. Output
+ * is deterministic (sorted graph in → same bytes out) so git only shows a diff
+ * when the architecture actually changed.
  */
 export function writeVisualization(
     graph: EnhancedGraph,
     workspaceRoot: string,
     title: string = 'Monorepo Dependency Architecture'
 ): VisualizationPaths {
-    const outputDir = path.join(workspaceRoot, 'tmp', 'webpieces');
+    const outputDir = path.join(workspaceRoot, ARCH_OUTPUT_DIR);
 
     // Ensure directory exists
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Generate DOT
-    const dot = generateDot(graph, title);
-    const dotPath = path.join(outputDir, 'architecture.dot');
-    fs.writeFileSync(dotPath, dot, 'utf-8');
-
-    // Generate HTML
-    const html = generateHTML(dot, title);
-    const htmlPath = path.join(outputDir, 'architecture.html');
+    const html = generateHTML(generateDot(graph, title), title);
+    const htmlPath = path.join(outputDir, 'dependencies.html');
     fs.writeFileSync(htmlPath, html, 'utf-8');
 
-    return { dotPath, htmlPath };
+    return { htmlPath };
 }
 
 /**
