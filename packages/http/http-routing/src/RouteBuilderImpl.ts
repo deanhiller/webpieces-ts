@@ -4,7 +4,7 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 import { provideSingleton } from '@webpieces/core-context';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from '@webpieces/http-filters';
-import { RouteMetadata } from '@webpieces/core-util';
+import { RouteMetadata, DocumentDesign } from '@webpieces/core-util';
 import { WpResponse, Service } from '@webpieces/http-filters';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/core-util';
@@ -79,6 +79,7 @@ export class RouteHandlerWithMeta {
  * but needs appContainer to resolve filters/controllers. The container is set via
  * setContainer() after appContainer is created (late binding pattern).
  */
+@DocumentDesign()
 @provideSingleton()
 @injectable()
 export class RouteBuilderImpl implements RouteBuilder {

@@ -29,7 +29,7 @@
     <div class="legend">
         <h2>Legend</h2>
         <div class="legend-item"><span class="legend-box" style="background: #E3F2FD;"></span>
-            <strong>Controller / root</strong> — level 0, the entry class of the tree</div>
+            <strong>Design root</strong> — level 0, the @DocumentDesign entry class of the tree
         <div class="legend-item"><span class="legend-box" style="background: #F5F5F5;"></span>
             <strong>Class</strong> — injectable class (constructor injection)</div>
         <div class="legend-item"><span class="legend-box" style="background: #FFF3E0;"></span>
@@ -40,9 +40,13 @@
             <em>One graph per controller/root; a shared dependency appears in each root's tree.
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>
-    <div class="section"><em>No DI-registered classes found in this project.</em></div>
+    <div class="section">
+        <h2>RouteBuilderImpl — apiImplementation, Level 0…0</h2>
+        <div class="meta">packages/http/http-routing/src/RouteBuilderImpl.ts</div>
+        <div id="graph-0" class="graph"></div>
+    </div>
     <script>
-        const graphs = [];
+        const graphs = [{"id":"graph-0","dot":"digraph \"RouteBuilderImpl\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"RouteBuilderImpl\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"RouteBuilderImpl\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"RouteBuilderImpl\"; }\n\n\n  labelloc=\"t\";\n  label=\"RouteBuilderImpl\\n(apiImplementation, Level 0-0)\";\n  fontsize=16;\n}\n"}];
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)

@@ -1,5 +1,77 @@
 {
     "schemaVersion": 2,
     "project": "http-server",
-    "designs": []
+    "designs": [
+        {
+            "root": "WebpiecesServerImpl",
+            "rootKind": "apiImplementation",
+            "file": "packages/http/http-server/src/WebpiecesServerImpl.ts",
+            "maxLevel": 1,
+            "nodes": [
+                {
+                    "id": "RouteBuilderImpl",
+                    "className": "RouteBuilderImpl",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/http/http-routing/src/RouteBuilderImpl.ts",
+                    "level": 1
+                },
+                {
+                    "id": "WebAppMeta",
+                    "className": "WebAppMeta",
+                    "kind": "constant",
+                    "scope": "unknown",
+                    "file": "packages/http/http-server/src/WebpiecesFactory.ts",
+                    "level": 1,
+                    "detail": "meta"
+                },
+                {
+                    "id": "WebpiecesMiddleware",
+                    "className": "WebpiecesMiddleware",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/http/http-server/src/WebpiecesMiddleware.ts",
+                    "level": 1
+                },
+                {
+                    "id": "WebpiecesServerImpl",
+                    "className": "WebpiecesServerImpl",
+                    "kind": "apiImplementation",
+                    "scope": "singleton",
+                    "file": "packages/http/http-server/src/WebpiecesServerImpl.ts",
+                    "level": 0
+                }
+            ],
+            "edges": [
+                {
+                    "from": "WebpiecesServerImpl",
+                    "to": "RouteBuilderImpl",
+                    "injection": "token",
+                    "token": "RouteBuilderImpl",
+                    "tokenKey": "class:packages/http/http-routing/src/RouteBuilderImpl.ts#RouteBuilderImpl",
+                    "paramName": "routeBuilder",
+                    "paramType": "RouteBuilderImpl"
+                },
+                {
+                    "from": "WebpiecesServerImpl",
+                    "to": "WebAppMeta",
+                    "injection": "token",
+                    "token": "WEBAPP_META_TOKEN",
+                    "tokenKey": "symbol.for:WebAppMeta",
+                    "paramName": "meta",
+                    "paramType": "WebAppMeta"
+                },
+                {
+                    "from": "WebpiecesServerImpl",
+                    "to": "WebpiecesMiddleware",
+                    "injection": "token",
+                    "token": "WebpiecesMiddleware",
+                    "tokenKey": "class:packages/http/http-server/src/WebpiecesMiddleware.ts#WebpiecesMiddleware",
+                    "paramName": "middleware",
+                    "paramType": "WebpiecesMiddleware"
+                }
+            ],
+            "unresolved": []
+        }
+    ]
 }

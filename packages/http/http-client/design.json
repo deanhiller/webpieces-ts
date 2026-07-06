@@ -1,5 +1,201 @@
 {
     "schemaVersion": 2,
     "project": "http-client",
-    "designs": []
+    "designs": [
+        {
+            "root": "ProxyClient",
+            "rootKind": "apiImplementation",
+            "file": "packages/http/http-client/src/ClientFactory.ts",
+            "maxLevel": 4,
+            "nodes": [
+                {
+                    "id": "ApiPrototype<object>",
+                    "className": "ApiPrototype<object>",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "level": 1
+                },
+                {
+                    "id": "ClientConfig",
+                    "className": "ClientConfig",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "level": 1
+                },
+                {
+                    "id": "ContextMgr",
+                    "className": "ContextMgr",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/core/core-context/src/ContextMgr.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ContextReader",
+                    "className": "ContextReader",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/core/core-context/src/ContextMgr.ts",
+                    "level": 3
+                },
+                {
+                    "id": "HeaderMethods",
+                    "className": "HeaderMethods",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/core/core-util/src/http/HeaderMethods.ts",
+                    "level": 1
+                },
+                {
+                    "id": "HeaderRegistry",
+                    "className": "HeaderRegistry",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/core/core-util/src/http/HeaderRegistry.ts",
+                    "level": 3
+                },
+                {
+                    "id": "LogApiCall",
+                    "className": "LogApiCall",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/core/core-util/src/http/LogApiCall.ts",
+                    "level": 1
+                },
+                {
+                    "id": "PlatformHeadersExtension[]",
+                    "className": "PlatformHeadersExtension[]",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/core/core-util/src/http/HeaderRegistry.ts",
+                    "level": 4
+                },
+                {
+                    "id": "ProxyClient",
+                    "className": "ProxyClient",
+                    "kind": "apiImplementation",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "level": 0
+                },
+                {
+                    "id": "boolean",
+                    "className": "boolean",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/core/core-context/src/ContextMgr.ts",
+                    "level": 3
+                },
+                {
+                    "id": "string",
+                    "className": "string",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "level": 2
+                }
+            ],
+            "edges": [
+                {
+                    "from": "ClientConfig",
+                    "to": "ContextMgr",
+                    "injection": "type",
+                    "token": "ContextMgr",
+                    "tokenKey": "class:packages/core/core-context/src/ContextMgr.ts#ContextMgr",
+                    "paramName": "contextMgr",
+                    "paramType": "ContextMgr"
+                },
+                {
+                    "from": "ClientConfig",
+                    "to": "string",
+                    "injection": "type",
+                    "token": "string",
+                    "tokenKey": "type:string",
+                    "paramName": "baseUrl",
+                    "paramType": "string"
+                },
+                {
+                    "from": "ContextMgr",
+                    "to": "ContextReader",
+                    "injection": "type",
+                    "token": "ContextReader",
+                    "tokenKey": "type:ContextReader",
+                    "paramName": "contextReader",
+                    "paramType": "ContextReader"
+                },
+                {
+                    "from": "ContextMgr",
+                    "to": "HeaderRegistry",
+                    "injection": "type",
+                    "token": "HeaderRegistry",
+                    "tokenKey": "class:packages/core/core-util/src/http/HeaderRegistry.ts#HeaderRegistry",
+                    "paramName": "registry",
+                    "paramType": "HeaderRegistry"
+                },
+                {
+                    "from": "ContextMgr",
+                    "to": "boolean",
+                    "injection": "type",
+                    "token": "boolean",
+                    "tokenKey": "type:boolean",
+                    "paramName": "chainRequestIds",
+                    "paramType": "boolean"
+                },
+                {
+                    "from": "HeaderRegistry",
+                    "to": "PlatformHeadersExtension[]",
+                    "injection": "type",
+                    "token": "PlatformHeadersExtension[]",
+                    "tokenKey": "type:PlatformHeadersExtension[]",
+                    "paramName": "extensions",
+                    "paramType": "PlatformHeadersExtension[]"
+                },
+                {
+                    "from": "ProxyClient",
+                    "to": "ApiPrototype<object>",
+                    "injection": "type",
+                    "token": "ApiPrototype<object>",
+                    "tokenKey": "type:ApiPrototype<object>",
+                    "paramName": "apiPrototype",
+                    "paramType": "ApiPrototype<object>"
+                },
+                {
+                    "from": "ProxyClient",
+                    "to": "ClientConfig",
+                    "injection": "type",
+                    "token": "ClientConfig",
+                    "tokenKey": "class:packages/http/http-client/src/ClientFactory.ts#ClientConfig",
+                    "paramName": "config",
+                    "paramType": "ClientConfig"
+                },
+                {
+                    "from": "ProxyClient",
+                    "to": "HeaderMethods",
+                    "injection": "type",
+                    "token": "HeaderMethods",
+                    "tokenKey": "class:packages/core/core-util/src/http/HeaderMethods.ts#HeaderMethods",
+                    "paramName": "headerMethods",
+                    "paramType": "HeaderMethods"
+                },
+                {
+                    "from": "ProxyClient",
+                    "to": "LogApiCall",
+                    "injection": "type",
+                    "token": "LogApiCall",
+                    "tokenKey": "class:packages/core/core-util/src/http/LogApiCall.ts#LogApiCall",
+                    "paramName": "logApiCall",
+                    "paramType": "LogApiCall"
+                }
+            ],
+            "unresolved": [
+                "ApiPrototype<object>",
+                "ContextReader",
+                "PlatformHeadersExtension[]",
+                "boolean",
+                "string"
+            ]
+        }
+    ]
 }

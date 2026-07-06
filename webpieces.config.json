@@ -76,8 +76,8 @@
                 "packages/core/core-util/src/http/**"
             ]
         },
-        "enforce-controller-naming": {
-            "mode": "OFF",
+        "missing-design-annotation": {
+            "mode": "RUN_EVERY_TIME",
             "ignoreModifiedUntilEpoch": 0
         },
         "framework-tag": {
