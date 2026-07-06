@@ -11,6 +11,11 @@ export { toError } from './lib/errorUtils';
 export { Header } from './Header';
 export { ContextKey } from './ContextKey';
 
+// @DocumentDesign — DI-design-root marker. Applies to ANY project kind (server
+// controllers AND library impl classes), so it lives here (browser + Node) rather
+// than in a server-only routing package.
+export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './DocumentDesign';
+
 // Logging (merged from former @webpieces/wp-logging).
 // Pluggable logging interface + a browser-safe console default; apps plug in
 // bunyan/winston/pino/etc. via LogManager.setLogger(...). Browser + Node.
