@@ -3,45 +3,89 @@ import { LoggerFactory } from './LoggerFactory';
 import { ConsoleLoggerFactory } from './ConsoleLoggerFactory';
 
 /**
+ * A stable per-name facade that re-resolves the currently installed factory on
+ * EVERY call. This is why a module-scope `const log = LogManager.getLogger('X')`
+ * captured at import time (before the app runs) still starts using the real
+ * backend the instant `LogManager.setLogger(...)` installs it — and the bootstrap
+ * AWAITING banner disappears. Backends cache their concrete logger per name, so
+ * this indirection is a cheap Map lookup.
+ */
+class DeferredLogger implements Logger {
+    constructor(private readonly name: string) {}
+
+    trace(message: string, err?: Error): void {
+        LogManager.resolveBackend(this.name).trace(message, err);
+    }
+
+    debug(message: string, err?: Error): void {
+        LogManager.resolveBackend(this.name).debug(message, err);
+    }
+
+    info(message: string, err?: Error): void {
+        LogManager.resolveBackend(this.name).info(message, err);
+    }
+
+    warn(message: string, err?: Error): void {
+        LogManager.resolveBackend(this.name).warn(message, err);
+    }
+
+    error(message: string, err?: Error): void {
+        LogManager.resolveBackend(this.name).error(message, err);
+    }
+}
+
+/**
  * LogManager - the global, slf4j-style entry point for logging.
  *
  * Every call site in the codebase does:
  *
  * ```ts
  * const log = LogManager.getLogger('MyClass');
- * log.info('hello', { some: 'context' });
+ * log.info('did the thing');
+ * log.error('it failed', err); // err?: Error — the ONLY extra arg
  * ```
  *
  * and never knows which backend is behind it. Apps choose their backend ONCE at
  * startup by installing a {@link LoggerFactory}:
  *
  * ```ts
- * LogManager.setFactory(new BunyanLoggerFactory(...)); // node-only app
+ * LogManager.setLogger(new BunyanLoggerFactory(...)); // node-only app
  * ```
  *
- * Until a factory is installed, logging goes to the browser-safe
- * {@link ConsoleLoggerFactory}, so libraries can log at import time without any
- * app wiring. This is a data-less coordination holder (all static), which is why
- * it is a class with static members rather than an instance.
+ * Until one is installed, logging goes to a bootstrap {@link ConsoleLoggerFactory}
+ * that prefixes every line with an AWAITING banner (so a forgotten `setLogger` is
+ * obvious). See `.webpieces/instruct-ai/webpieces.logging.md`.
  */
 export class LogManager {
-    private static factory: LoggerFactory = new ConsoleLoggerFactory();
+    private static factory: LoggerFactory = new ConsoleLoggerFactory(true);
+    private static readonly deferred = new Map<string, Logger>();
 
     /**
-     * Install the process-wide logging backend. Call once at app startup, before
-     * other modules fetch their loggers, so early loggers use the chosen backend.
+     * Install the process-wide logging backend. Call once at app startup. Loggers
+     * already handed out via {@link getLogger} switch to it immediately (they are
+     * deferred facades), so import-time loggers are covered too.
      */
-    static setFactory(factory: LoggerFactory): void {
+    static setLogger(factory: LoggerFactory): void {
         LogManager.factory = factory;
     }
 
-    /** Get a named logger from the currently installed factory. */
+    /** Get a named logger (a stable deferred facade over the current backend). */
     static getLogger(name: string): Logger {
-        return LogManager.factory.getLogger(name);
+        let logger = LogManager.deferred.get(name);
+        if (!logger) {
+            logger = new DeferredLogger(name);
+            LogManager.deferred.set(name, logger);
+        }
+        return logger;
     }
 
     /** The currently installed factory (mainly for tests / diagnostics). */
     static getFactory(): LoggerFactory {
         return LogManager.factory;
+    }
+
+    /** Internal: resolve the concrete backend logger for a name (used by DeferredLogger). */
+    static resolveBackend(name: string): Logger {
+        return LogManager.factory.getLogger(name);
     }
 }
