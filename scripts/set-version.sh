@@ -49,9 +49,12 @@ update_package() {
   rm -f "$tmp_file"
 }
 
-# Update source package.json files
+# Update source package.json files.
+# Glob every <group>/<pkg> under packages/ (core, http, tooling, cloud, …) so a NEW
+# package group can never be silently missed — the old hardcoded core/http/tooling list
+# dropped packages/cloud/* (gcp-identity, cloudtasks-client), publishing them as 0.0.0-dev.
 echo "📝 Updating source package.json files..."
-for pkg in packages/core/*/package.json packages/http/*/package.json packages/tooling/*/package.json packages/rules/package.json; do
+for pkg in packages/*/*/package.json; do
   if [ -f "$pkg" ]; then
     update_package "$pkg"
   fi
@@ -60,7 +63,7 @@ done
 # Update dist package.json files if they exist
 if [ -d "dist/packages" ]; then
   echo "📝 Updating dist package.json files..."
-  for pkg in dist/packages/core/*/package.json dist/packages/http/*/package.json dist/packages/tooling/*/package.json dist/packages/rules/package.json; do
+  for pkg in dist/packages/*/*/package.json; do
     if [ -f "$pkg" ]; then
       update_package "$pkg"
     fi
