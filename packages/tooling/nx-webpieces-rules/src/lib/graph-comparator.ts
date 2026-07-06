@@ -146,11 +146,21 @@ function findModifiedProjects(
     }
 }
 
+/**
+ * Normalize a metadata field value to a comparable/displayable string. The
+ * `framework` field is a string[] env set (compared by value, joined for
+ * display); every other field is already a plain string.
+ */
+function normalizeFieldValue(value: string | string[] | undefined): string | undefined {
+    if (value === undefined) return undefined;
+    return Array.isArray(value) ? value.join(', ') : value;
+}
+
 function findChangedFields(currentEntry: GraphEntry, savedEntry: GraphEntry): FieldChange[] {
     const changes: FieldChange[] = [];
     for (const field of METADATA_FIELDS) {
-        const from = savedEntry[field] as string | undefined;
-        const to = currentEntry[field] as string | undefined;
+        const from = normalizeFieldValue(savedEntry[field] as string | string[] | undefined);
+        const to = normalizeFieldValue(currentEntry[field] as string | string[] | undefined);
         if (from !== to) {
             changes.push({ field, from, to });
         }

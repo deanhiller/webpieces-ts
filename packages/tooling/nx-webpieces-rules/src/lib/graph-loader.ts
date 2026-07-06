@@ -13,10 +13,10 @@
  *     }
  * }
  *
- * `framework` is the project's libType — which client side it targets:
- * angular | react | express | all ("all" = usable by any side). It comes from
- * the project's `framework:` nx tag and is enforced across edges by the
- * `library-types-match-client` rule.
+ * `framework` is the project's libType — the SET of runtime environments it is
+ * validated to run in, drawn from browser | react | angular | node | express
+ * (e.g. ["browser","node"]). It comes from the project's `framework:` nx tags
+ * and is enforced across edges by the `library-types-match-client` rule.
  *
  * The legacy format (flat { "<project>": { level, dependsOn } } map) is still
  * readable so validation against a pre-upgrade file produces a clean
@@ -159,7 +159,7 @@ function formatEntryLines(entry: GraphEntry): string[] {
     const lines: string[] = [];
     lines.push(`            "level": ${entry.level},`);
 
-    pushOptionalField(lines, 'framework', entry.framework);
+    pushOptionalArrayField(lines, 'framework', entry.framework);
     pushOptionalField(lines, 'role', entry.role);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
@@ -182,6 +182,16 @@ function formatEntryLines(entry: GraphEntry): string[] {
  * Emit one optional string field (12-space indent), skipped when undefined.
  */
 function pushOptionalField(lines: string[], field: string, value: string | undefined): void {
+    if (value !== undefined) {
+        lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
+    }
+}
+
+/**
+ * Emit one optional string-array field (12-space indent) as a compact inline
+ * JSON array (e.g. `"framework": ["browser","node"],`), skipped when undefined.
+ */
+function pushOptionalArrayField(lines: string[], field: string, value: string[] | undefined): void {
     if (value !== undefined) {
         lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
     }

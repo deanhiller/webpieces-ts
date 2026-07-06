@@ -24,7 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     DiAnalyzer,
-    explicitFrameworkTag,
+    frameworkTags,
     explicitRoleTag,
     FrameworkMarkers,
     selectAnalyzer,
@@ -135,11 +135,11 @@ class AnalyzerChoice {
  */
 function chooseAnalyzer(tags: string[], srcDir: string): AnalyzerChoice {
     const role = explicitRoleTag(tags);
-    const framework = explicitFrameworkTag(tags);
-    const analyzer = selectAnalyzer(role, framework, detectFrameworkMarkers(srcDir));
+    const frameworks = frameworkTags(tags);
+    const analyzer = selectAnalyzer(role, frameworks, detectFrameworkMarkers(srcDir));
     console.log(
         `   Analyzer: ${analyzer.constructor.name} ` +
-            `(role tag: ${role ?? 'none'}, framework tag: ${framework ?? 'none'})`,
+            `(role tag: ${role ?? 'none'}, framework tags: ${frameworks.length > 0 ? frameworks.join(', ') : 'none'})`,
     );
     return new AnalyzerChoice(analyzer, role);
 }

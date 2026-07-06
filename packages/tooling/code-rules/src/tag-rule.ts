@@ -21,6 +21,26 @@ export class MissingTagProject {
     ) {}
 }
 
+/**
+ * A project carrying one or more `<prefix>` tag VALUES outside the known set
+ * (e.g. `framework:all`). `role-tag` never uses this — only rules that opt into
+ * value validation via {@link TagRuleSpec.validateValues}.
+ */
+export class InvalidTagProject {
+    constructor(
+        public readonly name: string,
+        public readonly projectJsonPath: string,
+        public readonly badValues: string[]
+    ) {}
+}
+
+/** Print the invalid-value report for projects carrying out-of-set tag values. */
+export type ReportInvalidValues = (
+    invalid: InvalidTagProject[],
+    knownTypes: string[],
+    mode: ProjectMode
+) => void;
+
 /** The knobs and messages that make a concrete tag rule out of the shared engine. */
 export class TagRuleSpec {
     constructor(
@@ -33,7 +53,15 @@ export class TagRuleSpec {
         /** Default allowed values when config.knownTypes is empty. */
         public readonly defaultKnownTypes: string[],
         /** Print the violation report for the missing-tag projects. */
-        public readonly report: (untagged: MissingTagProject[], knownTypes: string[], mode: ProjectMode) => void
+        public readonly report: (untagged: MissingTagProject[], knownTypes: string[], mode: ProjectMode) => void,
+        /**
+         * When true, ALSO validate that every `<prefix>` tag value is in the
+         * known set (framework-tag opts in to reject `framework:all` and typos;
+         * role-tag leaves this false so its single-value behavior is unchanged).
+         */
+        public readonly validateValues: boolean = false,
+        /** Report for out-of-set values; required when {@link validateValues} is true. */
+        public readonly reportInvalidValues: ReportInvalidValues | null = null
     ) {}
 }
 
@@ -98,12 +126,16 @@ function hasTag(tags: string[], tagPrefix: string): boolean {
     return tags.some((tag: string) => tag.startsWith(tagPrefix) && tag.slice(tagPrefix.length).trim().length > 0);
 }
 
-/** Every owning project of a changed file that is missing a `<tagPrefix>` tag. */
-export function findProjectsMissingTag(
-    workspaceRoot: string,
-    changedFiles: string[],
-    tagPrefix: string
-): MissingTagProject[] {
+/** The non-empty values of every `<tagPrefix>` tag on a project (the env/role set). */
+function tagValues(tags: string[], tagPrefix: string): string[] {
+    return tags
+        .filter((tag: string) => tag.startsWith(tagPrefix))
+        .map((tag: string) => tag.slice(tagPrefix.length).trim())
+        .filter((value: string) => value.length > 0);
+}
+
+/** The distinct owning project.json paths of a set of changed files. */
+function collectOwningProjectJsons(workspaceRoot: string, changedFiles: string[]): string[] {
     const projectJsonPaths = new Set<string>();
     for (const file of changedFiles) {
         const owning = findOwningProjectJson(file, workspaceRoot);
@@ -111,9 +143,17 @@ export function findProjectsMissingTag(
             projectJsonPaths.add(owning);
         }
     }
+    return Array.from(projectJsonPaths).sort();
+}
 
+/** Every owning project of a changed file that is missing a `<tagPrefix>` tag. */
+export function findProjectsMissingTag(
+    workspaceRoot: string,
+    changedFiles: string[],
+    tagPrefix: string
+): MissingTagProject[] {
     const missing: MissingTagProject[] = [];
-    for (const projectJsonPath of Array.from(projectJsonPaths).sort()) {
+    for (const projectJsonPath of collectOwningProjectJsons(workspaceRoot, changedFiles)) {
         const projectJson = readProjectJson(projectJsonPath, workspaceRoot);
         if (!hasTag(projectJson.tags, tagPrefix)) {
             const name = projectJson.name ?? path.dirname(projectJsonPath);
@@ -121,6 +161,32 @@ export function findProjectsMissingTag(
         }
     }
     return missing;
+}
+
+/**
+ * Every owning project of a changed file that carries one or more `<tagPrefix>`
+ * tag VALUES outside `knownTypes`. Multiple values per project are allowed (an
+ * env set) — this only flags values not in the known set (e.g. `framework:all`
+ * or a typo). Projects with no `<tagPrefix>` tag are skipped here (the
+ * missing-tag scan owns that case).
+ */
+export function findProjectsWithInvalidTagValues(
+    workspaceRoot: string,
+    changedFiles: string[],
+    tagPrefix: string,
+    knownTypes: string[]
+): InvalidTagProject[] {
+    const known = new Set(knownTypes);
+    const invalid: InvalidTagProject[] = [];
+    for (const projectJsonPath of collectOwningProjectJsons(workspaceRoot, changedFiles)) {
+        const projectJson = readProjectJson(projectJsonPath, workspaceRoot);
+        const badValues = tagValues(projectJson.tags, tagPrefix).filter((value: string) => !known.has(value));
+        if (badValues.length > 0) {
+            const name = projectJson.name ?? path.dirname(projectJsonPath);
+            invalid.push(new InvalidTagProject(name, projectJsonPath, badValues));
+        }
+    }
+    return invalid;
 }
 
 function resolveMode(
@@ -189,11 +255,21 @@ export async function runTagValidator(
     }
 
     const missing = findProjectsMissingTag(workspaceRoot, changedFiles, spec.tagPrefix);
-    if (missing.length === 0) {
-        console.log(`✅ Every modified project declares a ${spec.tagPrefix.replace(/:$/, '')} tag`);
+    const invalid =
+        spec.validateValues && spec.reportInvalidValues !== null
+            ? findProjectsWithInvalidTagValues(workspaceRoot, changedFiles, spec.tagPrefix, knownTypes)
+            : [];
+
+    if (missing.length === 0 && invalid.length === 0) {
+        console.log(`✅ Every modified project declares a valid ${spec.tagPrefix.replace(/:$/, '')} tag`);
         return { success: true };
     }
 
-    spec.report(missing, knownTypes, mode);
+    if (missing.length > 0) {
+        spec.report(missing, knownTypes, mode);
+    }
+    if (invalid.length > 0 && spec.reportInvalidValues !== null) {
+        spec.reportInvalidValues(invalid, knownTypes, mode);
+    }
     return { success: false };
 }

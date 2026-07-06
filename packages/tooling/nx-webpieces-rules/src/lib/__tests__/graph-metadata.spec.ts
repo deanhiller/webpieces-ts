@@ -62,122 +62,152 @@ describe('validateShortDescription', () => {
     });
 });
 
-describe('resolveFramework', () => {
-    let tmpRoot: string;
+let tmpRoot: string;
 
-    beforeAll(() => {
-        tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-framework-'));
-    });
+beforeAll(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-framework-'));
+});
 
-    afterAll(() => {
-        fs.rmSync(tmpRoot, { recursive: true, force: true });
-    });
+afterAll(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
 
-    function writeProject(name: string, pkgJson: object | null): ProjectInfo {
-        const root = path.join('projects', name);
-        fs.mkdirSync(path.join(tmpRoot, root), { recursive: true });
-        if (pkgJson !== null) {
-            fs.writeFileSync(
-                path.join(tmpRoot, root, 'package.json'),
-                JSON.stringify(pkgJson),
-                'utf-8'
-            );
-        }
-        return new ProjectInfo(name, root, []);
+function writeProject(name: string, pkgJson: object | null): ProjectInfo {
+    const root = path.join('projects', name);
+    fs.mkdirSync(path.join(tmpRoot, root), { recursive: true });
+    if (pkgJson !== null) {
+        fs.writeFileSync(path.join(tmpRoot, root, 'package.json'), JSON.stringify(pkgJson), 'utf-8');
     }
+    return new ProjectInfo(name, root, []);
+}
 
-    it('explicit framework tag wins over inference', () => {
+describe('resolveFramework', () => {
+    it('explicit framework tag wins over inference (single-element env set)', () => {
         const info = writeProject('tagged', { dependencies: { react: '18.0.0' } });
         const tagged = new ProjectInfo(info.name, info.root, ['framework:angular']);
         const resolution = resolveFramework(tagged, tmpRoot);
-        expect(resolution.framework).toBe('angular');
+        expect(resolution.frameworks).toEqual(['angular']);
         expect(resolution.problem).toBeNull();
     });
 
-    it('reports a problem for multiple framework tags', () => {
-        const info = new ProjectInfo('dupe', 'projects/dupe', ['framework:react', 'framework:express']);
+    it('resolves MULTIPLE framework tags to an env set', () => {
+        const info = new ProjectInfo('multi', 'projects/multi', ['framework:browser', 'framework:node']);
         const resolution = resolveFramework(info, tmpRoot);
-        expect(resolution.framework).toBeNull();
-        expect(resolution.problem).toContain('at most one');
+        expect(resolution.frameworks).toEqual(['browser', 'node']);
+        expect(resolution.problem).toBeNull();
+    });
+
+    it('de-duplicates repeated framework tags', () => {
+        const info = new ProjectInfo('dupe', 'projects/dupe', ['framework:node', 'framework:node']);
+        expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['node']);
+    });
+
+    it('reports a problem for an empty framework value', () => {
+        const info = new ProjectInfo('blank', 'projects/blank', ['framework:']);
+        const resolution = resolveFramework(info, tmpRoot);
+        expect(resolution.frameworks).toBeNull();
+        expect(resolution.problem).toContain('empty value');
     });
 
     it('infers angular from @angular/core', () => {
         const info = writeProject('ng', { dependencies: { '@angular/core': '20.0.0' } });
-        expect(resolveFramework(info, tmpRoot).framework).toBe('angular');
+        expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['angular']);
     });
 
     it('infers react from react dependency', () => {
         const info = writeProject('rx', { devDependencies: { react: '18.0.0' } });
-        expect(resolveFramework(info, tmpRoot).framework).toBe('react');
+        expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['react']);
     });
 
     it('infers express from express dependency', () => {
         const info = writeProject('ex', { dependencies: { express: '5.0.0' } });
-        expect(resolveFramework(info, tmpRoot).framework).toBe('express');
+        expect(resolveFramework(info, tmpRoot).frameworks).toEqual(['express']);
     });
 
-    it('falls back to all with no framework deps', () => {
+    it('is a PROBLEM (no silent "all") when nothing is inferable from package.json', () => {
         const info = writeProject('lib', { dependencies: { inversify: '7.0.0' } });
-        expect(resolveFramework(info, tmpRoot).framework).toBe('all');
+        const resolution = resolveFramework(info, tmpRoot);
+        expect(resolution.frameworks).toBeNull();
+        expect(resolution.problem).toContain('no');
     });
 
-    it('falls back to all with no package.json', () => {
+    it('is a PROBLEM when there is no framework tag and no package.json', () => {
         const info = writeProject('bare', null);
-        expect(resolveFramework(info, tmpRoot).framework).toBe('all');
+        const resolution = resolveFramework(info, tmpRoot);
+        expect(resolution.frameworks).toBeNull();
+        expect(resolution.problem).toContain('declare the env set');
     });
 });
 
-describe('validateLibraryTypesMatch', () => {
-    function graphOf(entries: Record<string, { framework?: string; dependsOn: string[] }>): EnhancedGraph {
-        const graph: EnhancedGraph = {};
-        for (const [name, entry] of Object.entries(entries)) {
-            graph[name] = { level: 0, dependsOn: entry.dependsOn, framework: entry.framework };
-        }
-        return graph;
+function graphOf(entries: Record<string, { framework?: string[]; dependsOn: string[] }>): EnhancedGraph {
+    const graph: EnhancedGraph = {};
+    for (const [name, entry] of Object.entries(entries)) {
+        graph[name] = { level: 0, dependsOn: entry.dependsOn, framework: entry.framework };
     }
+    return graph;
+}
 
-    it('allows a side project to depend on an all library', () => {
+describe('validateLibraryTypesMatch (up-set lattice on env sets)', () => {
+    it('lets react consume its own browser ancestor (react → browser)', () => {
         const problems: string[] = [];
         validateLibraryTypesMatch(
-            graphOf({ web: { framework: 'angular', dependsOn: ['lib'] }, lib: { framework: 'all', dependsOn: [] } }),
+            graphOf({ web: { framework: ['react'], dependsOn: ['lib'] }, lib: { framework: ['browser'], dependsOn: [] } }),
             problems
         );
         expect(problems).toEqual([]);
     });
 
-    it('allows same-libType dependencies', () => {
+    it('allows same-env dependencies', () => {
         const problems: string[] = [];
         validateLibraryTypesMatch(
-            graphOf({ svr: { framework: 'express', dependsOn: ['http'] }, http: { framework: 'express', dependsOn: [] } }),
+            graphOf({ svr: { framework: ['express'], dependsOn: ['http'] }, http: { framework: ['express'], dependsOn: [] } }),
             problems
         );
         expect(problems).toEqual([]);
     });
 
-    it('flags an express project depending on an angular library', () => {
+    it('lets both express and react depend on a browser+node lib', () => {
+        const dual = { web: { framework: ['react'], dependsOn: ['shared'] }, api: { framework: ['express'], dependsOn: ['shared'] }, shared: { framework: ['browser', 'node'], dependsOn: [] } };
         const problems: string[] = [];
-        validateLibraryTypesMatch(
-            graphOf({ svr: { framework: 'express', dependsOn: ['ui'] }, ui: { framework: 'angular', dependsOn: [] } }),
-            problems
-        );
-        expect(problems).toHaveLength(1);
-        expect(problems[0]).toContain("'svr' (express) must not depend on 'ui' (angular)");
+        validateLibraryTypesMatch(graphOf(dual), problems);
+        expect(problems).toEqual([]);
     });
 
-    it('flags an all library depending on a side-specific library', () => {
+    it('rejects an express app depending on a browser-only lib', () => {
         const problems: string[] = [];
         validateLibraryTypesMatch(
-            graphOf({ shared: { framework: 'all', dependsOn: ['ng'] }, ng: { framework: 'angular', dependsOn: [] } }),
+            graphOf({ api: { framework: ['express'], dependsOn: ['ui'] }, ui: { framework: ['browser'], dependsOn: [] } }),
             problems
         );
         expect(problems).toHaveLength(1);
-        expect(problems[0]).toContain("'shared' (all) must not depend on 'ng' (angular)");
+        expect(problems[0]).toContain("'api' [express] must not depend on 'ui' [browser]");
+    });
+
+    it('rejects a react app depending on a node-only lib', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ web: { framework: ['react'], dependsOn: ['svc'] }, svc: { framework: ['node'], dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'web' [react] must not depend on 'svc' [node]");
+    });
+
+    it('rejects a browser+node consumer when the dep only covers one env', () => {
+        const problems: string[] = [];
+        validateLibraryTypesMatch(
+            graphOf({ dual: { framework: ['browser', 'node'], dependsOn: ['b'] }, b: { framework: ['browser'], dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        // the node env is unsatisfiable by a browser-only dep
+        expect(problems[0]).toContain('node');
     });
 
     it('skips edges where either endpoint has no resolved framework', () => {
         const problems: string[] = [];
         validateLibraryTypesMatch(
-            graphOf({ a: { dependsOn: ['b'] }, b: { framework: 'angular', dependsOn: [] } }),
+            graphOf({ a: { dependsOn: ['b'] }, b: { framework: ['angular'], dependsOn: [] } }),
             problems
         );
         expect(problems).toEqual([]);
@@ -333,7 +363,9 @@ describe('enrichGraph', () => {
 
     it('fills all metadata fields on a valid workspace', () => {
         const infos = setupWorkspace('good', [
-            new FixtureProject('alpha', '# Responsibilities — alpha\n\nDoes alpha things.\n', true),
+            new FixtureProject('alpha', '# Responsibilities — alpha\n\nDoes alpha things.\n', true, [
+                'framework:node',
+            ]),
             new FixtureProject('beta', '# Responsibilities — beta\n\nDoes beta things.\n', false, [
                 'framework:express',
             ]),
@@ -345,24 +377,25 @@ describe('enrichGraph', () => {
 
         enrichGraph(graph, infos, enrichTmpRoot);
 
-        expect(graph['alpha'].framework).toBe('all');
+        expect(graph['alpha'].framework).toEqual(['node']);
         expect(graph['alpha'].shortDescription).toBe('Does alpha things.');
         expect(graph['alpha'].responsibilitiesFile).toBe('good/alpha/responsibilities.md');
         expect(graph['alpha'].designFile).toBe('good/alpha/design.json');
 
-        expect(graph['beta'].framework).toBe('express');
+        expect(graph['beta'].framework).toEqual(['express']);
         // no project.json → no generated design.json → no designFile
         expect(graph['beta'].designFile).toBeUndefined();
     });
 
     it('aggregates ALL problems across projects into one error', () => {
         const infos = setupWorkspace('bad', [
-            new FixtureProject('missing', null, true),
-            new FixtureProject('empty', '# Heading only\n', true),
+            new FixtureProject('missing', null, true, ['framework:node']),
+            new FixtureProject('empty', '# Heading only\n', true, ['framework:node']),
             new FixtureProject(
                 'toolong',
                 '# T\n\n' + 'x'.repeat(MAX_SHORT_DESCRIPTION_LENGTH + 50) + '\n',
-                true
+                true,
+                ['framework:node']
             ),
         ]);
         const graph: EnhancedGraph = {

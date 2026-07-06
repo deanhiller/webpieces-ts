@@ -15,18 +15,31 @@ import type { EnhancedGraph, GraphEntry } from './graph-sorter';
 import { toError } from '../toError';
 
 /**
- * Framework (libType) colors for visualization — nodes are colored by which
- * client side they target so it is obvious at a glance which projects are
- * Angular, which are Express, and which libraries are shared ("all").
+ * Framework (libType) colors for visualization — nodes are filled by the FIRST
+ * env in their set that has a color, so it is obvious at a glance which side a
+ * project targets. A project's full env set is shown in the label.
  */
 const FRAMEWORK_COLORS: Record<string, string> = {
     angular: '#FCE4EC', // pink   - Angular front-end
     react: '#E3F2FD', // blue   - React front-end
+    browser: '#EDE7F6', // purple - browser (front-end base env)
     express: '#E8F5E9', // green  - Express / server side
-    all: '#F5F5F5', // grey   - library usable by any side
+    node: '#FFF9C4', // yellow - node (server base env)
 };
 
-const DEFAULT_FRAMEWORK_COLOR = '#FFF3E0'; // orange - unknown/other libType
+const DEFAULT_FRAMEWORK_COLOR = '#F5F5F5'; // grey - unknown/empty env set
+
+/**
+ * Fill color for an env set — the color of the first env in the set that has a
+ * known color, else the default.
+ */
+function frameworkColor(frameworks: string[]): string {
+    for (const env of frameworks) {
+        const color = FRAMEWORK_COLORS[env];
+        if (color !== undefined) return color;
+    }
+    return DEFAULT_FRAMEWORK_COLOR;
+}
 
 /**
  * Role border styling — fill stays keyed on framework; the border shape shows a
@@ -111,21 +124,22 @@ export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Depe
         levels[rank].push(project);
     }
 
-    // Nodes: fill colored by framework (libType), border shaped by role; the
-    // label shows the framework-role combo (e.g. express-server, all-lib).
-    // A node with a generated DI design gets a URL so the rendered SVG box is
-    // clickable — it opens that project's committed design.html in a new tab.
+    // Nodes: fill colored by framework env set (libType), border shaped by role;
+    // the label shows the env set + role (e.g. [browser, node] · server).
+    // A node with a generated DI design also gets a URL so the rendered SVG box
+    // is clickable — it opens that project's committed design.html in a new tab.
     for (const [project, info] of Object.entries(graph)) {
         const shortName = getShortName(project);
-        const framework = info.framework ?? 'all';
+        const frameworks = info.framework ?? [];
         const role = info.role ?? 'lib';
-        const color = FRAMEWORK_COLORS[framework] ?? DEFAULT_FRAMEWORK_COLOR;
+        const color = frameworkColor(frameworks);
         const border = roleBorderAttrs(role);
         const href = designHtmlHref(info.designFile);
         const link = href ? `, URL="${href}", target="_blank"` : '';
         // Promoted apps (server/client) drop the L# — they no longer sit on their
         // dependency level, so a level number in the label would be misleading.
-        const labelMeta = isPromotedRole(role) ? `${framework}-${role}` : `L${info.level} · ${framework}-${role}`;
+        const envSet = `[${frameworks.join(', ')}]`;
+        const labelMeta = isPromotedRole(role) ? `${envSet} · ${role}` : `L${info.level} · ${envSet} · ${role}`;
         dot += `  "${shortName}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
     }
 
@@ -251,12 +265,16 @@ function generateHTMLLegend(): string {
             <strong>react:</strong> React front-end
         </div>
         <div class="legend-item">
+            <span class="legend-box" style="background: #EDE7F6;"></span>
+            <strong>browser:</strong> browser front-end base env
+        </div>
+        <div class="legend-item">
             <span class="legend-box" style="background: #E8F5E9;"></span>
             <strong>express:</strong> Express / server side
         </div>
         <div class="legend-item">
-            <span class="legend-box" style="background: #F5F5F5;"></span>
-            <strong>all:</strong> Library usable by any side
+            <span class="legend-box" style="background: #FFF9C4;"></span>
+            <strong>node:</strong> node server base env
         </div>
         <div class="legend-item" style="margin-top: 12px;">
             <span class="legend-box" style="border: 3px double #333;"></span>
@@ -275,7 +293,7 @@ function generateHTMLLegend(): string {
             <strong>lib:</strong> plain library, no generated design (thin border)
         </div>
         <div class="legend-item" style="margin-top: 15px;">
-            <em>Library nodes show their dependency level (L#) and framework-role (e.g. all-lib) and are laid out by level, with the deepest libraries at the bottom. Server and client apps are roots (nothing depends on them), so they are all pinned to the single top row regardless of dependency depth — their labels omit the L#. Transitive dependencies are allowed but not shown.</em>
+            <em>Library nodes show their dependency level (L#), their framework env set (e.g. [browser, node]), and their role, and are laid out by level, with the deepest libraries at the bottom. Server and client apps are roots (nothing depends on them), so they are all pinned to the single top row regardless of dependency depth — their labels omit the L#. Transitive dependencies are allowed but not shown.</em>
         </div>
     </div>`;
 }
