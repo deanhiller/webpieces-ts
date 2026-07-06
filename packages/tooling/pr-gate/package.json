@@ -5,13 +5,12 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-git-update": "./src/scripts/git-updateFromMain.js",
         "wp-git-gather": "./src/scripts/git-gatherInfo.js",
         "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
         "wp-build-affected": "./src/scripts/wp-build-affected.js",
         "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
-        "wp-merge-start": "./src/scripts/wp-merge-start.js",
-        "wp-merge-end": "./src/scripts/wp-merge-end.js"
+        "wp-update-start": "./src/scripts/wp-update-start.js",
+        "wp-update-end": "./src/scripts/wp-update-end.js"
     },
     "files": [
         "src/**/*"

@@ -9,7 +9,7 @@ import { FixHint } from '../fix-hint';
 
 const FIX_HINT = new FixHint(
     'Direct merge/rebase/pull from main on a feature branch is blocked.',
-    "To bring main's changes into your feature branch, run 'pnpm wp-git-update' to squash-update from main — never `git merge/rebase/pull main`. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.\n"
+    "To bring main's changes into your feature branch, run 'pnpm wp-update-start' to squash-update from main — never `git merge/rebase/pull main`. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See docs/git-workflow.md for details.\n"
     + 'Add that info to memory so you remember next time.',
 );
 

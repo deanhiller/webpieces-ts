@@ -45,7 +45,7 @@ export async function main(): Promise<void> {
     process.stdout.write(SEP);
     process.stdout.write('\n');
     process.stdout.write('1. Update your branch with latest main:\n');
-    process.stdout.write('   pnpm wp-git-update\n');
+    process.stdout.write('   pnpm wp-update-start\n');
     process.stdout.write('\n');
     process.stdout.write('2. ⚠️  IMPORTANT: REVIEW THE CODE AFTER MERGE!\n');
     process.stdout.write('   - Check for merge conflicts\n');
