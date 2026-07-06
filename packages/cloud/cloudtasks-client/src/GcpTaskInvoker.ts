@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
-import { provideSingleton } from '@webpieces/http-routing';
+import { provideSingleton } from '@webpieces/core-context';
 import {
     getProjectId,
     getRegion,

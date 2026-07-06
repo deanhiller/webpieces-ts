@@ -2,6 +2,7 @@ import {
     isApiPath,
     getApiPath,
     getEndpoints,
+    getAuthMeta,
     RouteMetadata,
     ProtocolError,
     HeaderMethods,
@@ -12,8 +13,9 @@ import {
     TestCaseRecorder,
     toError,
 } from '@webpieces/core-util';
+import { ContextMgr } from '@webpieces/core-context';
+import { mintIdToken } from '@webpieces/gcp-identity';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
-import { ContextMgr } from './ContextMgr';
 
 /**
  * Type representing a class constructor whose prototype is T.
@@ -120,7 +122,10 @@ export function createApiClient<T extends object>(
     const routes: RouteMetadata[] = [];
     for (const [methodName, endpointPath] of Object.entries(endpoints)) {
         const fullPath = basePath + endpointPath;
-        routes.push(new RouteMetadata('POST', fullPath, methodName, apiName));
+        // Capture the endpoint's auth mode so the client can mint delivery auth
+        // (OIDC bearer) per @AuthOidc / @AuthSharedSecret, just like the server verifies it.
+        const authMeta = getAuthMeta(apiPrototype, methodName);
+        routes.push(new RouteMetadata('POST', fullPath, methodName, apiName, authMeta));
     }
 
     // Create ProxyClient with injected LogApiCall
@@ -235,6 +240,13 @@ export class ProxyClient {
             for (const entry of outboundHeaders.entries()) {
                 httpHeaders[entry[0]] = entry[1];
             }
+        }
+
+        // For an @AuthOidc endpoint, attach a Google ID token minted as THIS caller's
+        // own runtime SA (audience = the callee base URL), via gcp-identity. The server
+        // verifies the signature AND that this SA is in the endpoint's allow-list.
+        if (route.authMeta?.mode.kind === 'oidc') {
+            httpHeaders['Authorization'] = `Bearer ${await mintIdToken(this.config.baseUrl)}`;
         }
 
         // Build masked headers map for logging (secured values masked, MDC keys)

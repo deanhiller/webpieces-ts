@@ -1,8 +1,7 @@
 import { injectable } from 'inversify';
 import { timingSafeEqual } from 'crypto';
-import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
-import { RequestContext } from '@webpieces/core-context';
-import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { provideSingleton, RequestContext } from '@webpieces/core-context';
+import { Filter, WpResponse, Service, MethodMeta } from '@webpieces/http-filters';
 import { HttpUnauthorizedError, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
 import { LogManager } from '@webpieces/core-util';

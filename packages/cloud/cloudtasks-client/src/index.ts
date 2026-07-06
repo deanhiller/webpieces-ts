@@ -19,7 +19,8 @@ export { TaskClientCreator } from './TaskClientCreator';
 export { CloudTaskScheduler, ScheduleOptions } from './CloudTaskScheduler';
 export { InMemoryTaskInvoker } from './InMemoryTaskInvoker';
 export { GcpTaskInvoker } from './GcpTaskInvoker';
-export { LocalTaskDispatcherImpl } from './LocalTaskDispatcherImpl';
+// LocalTaskDispatcherImpl moved to @webpieces/http-server (needs http-routing's RouteBuilder);
+// this package declares only the abstract LocalTaskDispatcher (in TaskTypes).
 export { ServiceAuthFilter } from './ServiceAuthFilter';
 export {
     ScheduleFrame,

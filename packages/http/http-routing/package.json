@@ -21,6 +21,7 @@
         "access": "public"
     },
     "dependencies": {
+        "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/http-filters": "workspace:*",
         "inversify": "7.10.4",

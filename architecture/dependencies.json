@@ -20,7 +20,7 @@
             ]
         },
         "cloudtasks-client": {
-            "level": 4,
+            "level": 3,
             "framework": ["express"],
             "role": "lib",
             "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, the TaskInvoker abstraction (GCP + in-memory), and the `@PubSub` delivery pieces (in-process dispatcher + service-auth filter).",
@@ -28,8 +28,7 @@
             "designFile": "packages/cloud/cloudtasks-client/design.json",
             "dependsOn": [
                 "gcp-identity",
-                "http-client",
-                "http-routing"
+                "http-filters"
             ]
         },
         "code-rules": {
@@ -86,14 +85,15 @@
             ]
         },
         "http-client": {
-            "level": 1,
-            "framework": ["browser","node"],
+            "level": 2,
+            "framework": ["express"],
             "role": "lib",
             "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
             "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
             "designFile": "packages/http/http-client/design.json",
             "dependsOn": [
-                "core-util"
+                "core-context",
+                "gcp-identity"
             ]
         },
         "http-filters": {
@@ -126,6 +126,7 @@
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "designFile": "packages/http/http-server/design.json",
             "dependsOn": [
+                "cloudtasks-client",
                 "http-routing"
             ]
         },
