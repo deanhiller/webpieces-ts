@@ -10,6 +10,7 @@ import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
 import { formatReport } from './report';
+import { INSTALLER_ALLOW_JS } from '../bin/shim';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
     Rule, Violation, RuleGroup, RuleFailError,
@@ -124,7 +125,23 @@ export function runBash(command: string, cwd: string, mode: HookMode = 'all'): B
     return runBashInternal(command, cwd, mode);
 }
 
+// Installer bypass — package-manager install commands ALWAYS pass, ahead of any config load. A
+// webpieces.config.json that is ahead of the installed validator (new rule tokens the published
+// binary doesn't know yet) makes loadAndValidate() throw and would deny `pnpm install` — the very
+// command that updates the validator (deadlock). Mirrors the fail-closed shim's INSTALLER_ALLOW_ERE
+// (missing-bin case); INSTALLER_ALLOW_JS is its locked JS twin. Match is tight (`pnpm install` /
+// `npm i` + `--flags` only, no chaining) so `pnpm install && rm -rf /` still falls to the guards.
+function isInstallerCommand(command: string): boolean {
+    return INSTALLER_ALLOW_JS.test(command.trim());
+}
+
 function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
+    if (isInstallerCommand(command)) {
+        const root = gitToplevel(cwd) ?? cwd;
+        logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'installer bypass (always allowed)'));
+        return null;
+    }
+
     const loaded = loadAndValidate(cwd);
     if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 

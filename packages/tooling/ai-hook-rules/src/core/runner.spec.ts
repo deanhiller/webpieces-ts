@@ -1,7 +1,11 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as nodePath from 'path';
+
 import { ExcludePaths, RuleFailError } from '@webpieces/rules-config';
 
-import { filterByExcludedPaths, isGitOrGhCommand, runRuleCheck } from './runner';
-import { Rule, Violation, BashContext } from './types';
+import { filterByExcludedPaths, isGitOrGhCommand, runRuleCheck, runBash } from './runner';
+import { Rule, Violation, BashContext, BlockedResult } from './types';
 
 // The helper only reads `rule.name` to classify a rule as guard vs code rule (via isHookGuard), so
 // a minimal stand-in is enough. 'feature-branch-guard' is a hook guard; 'max-file-lines' is a code rule.
@@ -97,5 +101,28 @@ describe('isGitOrGhCommand (drives force-to-root)', () => {
         expect(isGitOrGhCommand('echo github.com')).toBe(false);
         expect(isGitOrGhCommand('ls digital/')).toBe(false);
         expect(isGitOrGhCommand('cat gitignore-notes.md')).toBe(false);
+    });
+});
+
+describe('runBash installer bypass (deadlock escape: installs pass even with no/invalid config)', () => {
+    // A dir with NO webpieces.config.json anywhere above it → a normal command is blocked with the
+    // CONFIG_MISSING report. Installer commands must slip past that (and past config validation) so
+    // `pnpm install` can re-enable the guards when the config is ahead of the installed validator.
+    function tmpDirOutsideRepo(): string {
+        return fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-ai-hook-'));
+    }
+
+    it('lets `pnpm install` / `npm i` through (null = allow) where a normal command is blocked', () => {
+        const dir = tmpDirOutsideRepo();
+        expect(runBash('pnpm install', dir, 'guards')).toBeNull();
+        expect(runBash('  npm i --frozen-lockfile ', dir, 'guards')).toBeNull();
+        // Contrast: a non-installer command in the same config-less dir is NOT bypassed.
+        expect(runBash('ls', dir, 'guards')).toBeInstanceOf(BlockedResult);
+    });
+
+    it('does NOT bypass a chained command that merely starts with an installer', () => {
+        const dir = tmpDirOutsideRepo();
+        // Falls through to config handling instead of short-circuiting to allow.
+        expect(runBash('pnpm install && rm -rf /', dir, 'guards')).toBeInstanceOf(BlockedResult);
     });
 });

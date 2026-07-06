@@ -40,9 +40,10 @@ export function shimPath(projectRoot: string): string {
 export const INSTALLER_ALLOW_ERE =
     '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*[[:space:]]*$';
 
-// JS-regex twin of INSTALLER_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). Not used by the fail-closed
-// shim (which is pure sh), but kept as the single JS-side definition should a future guard ever need
-// to recognise installer commands in the runner. A unit test asserts the two agree on a sample set.
+// JS-regex twin of INSTALLER_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). The fail-closed shim (pure sh)
+// uses the ERE for the missing-bin case; the runner uses THIS twin (runBashInternal) so installer
+// commands also pass when the bin IS installed but the config is invalid/ahead of the validator —
+// same deadlock, other side. A unit test asserts the two agree on a sample set.
 export const INSTALLER_ALLOW_JS =
     /^(pnpm|npm)\s+(install|i)(\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*\s*$/;
 
