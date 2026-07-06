@@ -45,6 +45,14 @@ describe('validateWebpiecesConfig', () => {
         expect(errors.some(e => e.includes('[no-shell-substitution]') && e.includes('Unknown rule'))).toBe(true);
     });
 
+    it('leads the unknown-rule fix with `pnpm install` (version skew), not with deleting the key', () => {
+        // The common cause is a stale install (config newer than the running validator). Deleting the
+        // flagged key would gut valid config, so the message must point at `pnpm install` first.
+        const [msg] = validateWebpiecesConfig({ 'brand-new-rule': { mode: 'ON' } });
+        expect(msg).toContain('pnpm install');
+        expect(msg.indexOf('pnpm install')).toBeLessThan(msg.indexOf('remove'));
+    });
+
     it('allows an unknown rule key when a rulesDir is configured (may be a custom rule)', () => {
         const errors = validateWebpiecesConfig({ 'my-custom-rule': { mode: 'ON' } }, true);
         expect(errors.some(e => e.includes('[my-custom-rule]'))).toBe(false);
