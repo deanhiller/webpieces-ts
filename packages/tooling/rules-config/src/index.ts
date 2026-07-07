@@ -63,6 +63,7 @@ export {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    NoProcessExitOutsideMainConfig,
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,

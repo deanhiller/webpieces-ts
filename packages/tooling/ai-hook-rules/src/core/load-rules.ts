@@ -6,7 +6,7 @@ import {
     NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig,
     NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
-    NoSymbolDiTokensConfig, BranchCreationGuardConfig, PrCreationOrPushGuardConfig,
+    NoSymbolDiTokensConfig, NoProcessExitOutsideMainConfig, BranchCreationGuardConfig, PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
     NoJsFilesConfig, FeatureBranchGuardConfig, MatchRuleConfig,
 } from '@webpieces/rules-config';
@@ -27,6 +27,7 @@ import { NoUnmanagedExceptionsRule } from './rules/no-unmanaged-exceptions';
 import { CatchErrorPatternRule } from './rules/catch-error-pattern';
 import { ThrowCauseRequiredRule } from './rules/throw-cause-required';
 import { NoSymbolDiTokensRule } from './rules/no-symbol-di-tokens';
+import { NoProcessExitOutsideMainRule } from './rules/no-process-exit-outside-main';
 import { BranchCreationGuardRule } from './rules/branch-creation-guard';
 import { PrCreationOrPushGuardRule } from './rules/pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
@@ -55,6 +56,7 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'catch-error-pattern': (c: BaseRuleConfig) => new CatchErrorPatternRule(c as CatchErrorPatternConfig),
     'throw-cause-required': (c: BaseRuleConfig) => new ThrowCauseRequiredRule(c as ThrowCauseRequiredConfig),
     'no-symbol-di-tokens': (c: BaseRuleConfig) => new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig),
+    'no-process-exit-outside-main': (c: BaseRuleConfig) => new NoProcessExitOutsideMainRule(c as NoProcessExitOutsideMainConfig),
     'branch-creation-guard': (c: BaseRuleConfig) => new BranchCreationGuardRule(c as BranchCreationGuardConfig),
     'pr-creation-or-push-guard': (c: BaseRuleConfig) => new PrCreationOrPushGuardRule(c as PrCreationOrPushGuardConfig),
     'merge-in-progress-guard': (c: BaseRuleConfig) => new MergeInProgressGuardRule(c as MergeInProgressGuardConfig),

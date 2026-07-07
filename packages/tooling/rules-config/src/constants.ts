@@ -20,6 +20,7 @@ export const RULE_NAMES = {
     THROW_CAUSE_REQUIRED: 'throw-cause-required',
     REQUIRE_RETURN_TYPE: 'require-return-type',
     NO_SYMBOL_DI_TOKENS: 'no-symbol-di-tokens',
+    NO_PROCESS_EXIT_OUTSIDE_MAIN: 'no-process-exit-outside-main',
     FRAMEWORK_TAG: 'framework-tag',
     ROLE_TAG: 'role-tag',
     NO_INLINE_TYPES: 'no-inline-types',

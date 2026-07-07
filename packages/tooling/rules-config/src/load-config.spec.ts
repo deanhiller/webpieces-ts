@@ -24,7 +24,7 @@ const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
     'no-any-unknown', 'no-implicit-any', 'prisma-validate-dtos', 'prisma-converter',
     'no-destructure', 'no-unmanaged-exceptions', 'catch-error-pattern', 'throw-cause-required',
-    'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'framework-tag',
+    'angular-no-direct-api-in-resolver', 'no-symbol-di-tokens', 'no-process-exit-outside-main', 'framework-tag',
     'role-tag', 'no-file-import-cycles',
     'runtime-architecture', 'nx-wiring', 'di-graph', 'missing-design-annotation', 'no-js-files',
     'validate-ts-in-src',
