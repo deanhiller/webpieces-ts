@@ -241,15 +241,9 @@ importers:
 
   packages/http/http-client:
     dependencies:
-      '@webpieces/core-context':
-        specifier: workspace:*
-        version: link:../../core/core-context
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
-      '@webpieces/gcp-identity':
-        specifier: workspace:*
-        version: link:../../cloud/gcp-identity
 
   packages/http/http-filters:
     dependencies:
