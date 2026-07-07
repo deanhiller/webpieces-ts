@@ -1,14 +1,19 @@
 import 'reflect-metadata';
+import { ConsoleLoggerFactory } from '@webpieces/core-util';
 import { bootstrapServer, BootstrapOptions } from '@webpieces/company-svc-core';
-import { ProdServerMeta } from './ProdServerMeta';
+import { APP_MODULES, configureRoutes } from './AppServerConfig';
 
 /**
  * Main entry point for client-server. All startup boilerplate (logging backend,
- * WebpiecesFactory.create, listen, SIGTERM/SIGINT, error handling) lives in the
- * shared bootstrapServer() so every company service boots identically.
+ * router build, express bind + listen, SIGTERM/SIGINT, error handling) lives in the
+ * shared bootstrapServer() so every company service boots identically. This service just
+ * supplies its options + a configure(router) callback that adds its filters/routes.
  */
 async function main(): Promise<void> {
-    await bootstrapServer(new ProdServerMeta(), new BootstrapOptions(8200, 'Server'));
+    await bootstrapServer(
+        new BootstrapOptions(8200, 'Server', new ConsoleLoggerFactory(), APP_MODULES),
+        configureRoutes,
+    );
 }
 
 // Always run main() when this file is loaded

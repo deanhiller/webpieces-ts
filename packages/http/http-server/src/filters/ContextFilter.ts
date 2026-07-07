@@ -1,5 +1,5 @@
 import {inject, injectable} from 'inversify';
-import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
+import { provideFrameworkSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { PlatformHeader, HeaderRegistry } from '@webpieces/core-util';
@@ -28,7 +28,7 @@ import { LogManager } from '@webpieces/core-util';
  */
 const log = LogManager.getLogger('ContextFilter');
 
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private transferredHeaders: PlatformHeader[];

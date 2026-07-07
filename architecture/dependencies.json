@@ -179,7 +179,7 @@
         },
         "http-routing": {
             "level": 3,
-            "framework": ["express"],
+            "framework": ["node"],
             "role": "designed-lib",
             "shortDescription": "Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`RouteBuilder` wiring, `RouteDefinition`/`FilterDefinition`, `MethodMeta`, `FilterMatcher` (glob-based filter-to-route matching), and `ApiRoutingFactory` that maps http-api decorators to controller handlers.",
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",

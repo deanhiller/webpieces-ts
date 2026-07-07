@@ -3,15 +3,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { WebpiecesServer, WebpiecesFactory, recordable } from '@webpieces/http-server';
-import { WebpiecesConfig } from '@webpieces/http-routing';
+import { recordable } from '@webpieces/http-server';
+import { WebpiecesConfig, WebpiecesRouter } from '@webpieces/http-routing';
+import { createCompanyRouter } from '@webpieces/company-svc-core';
 import { RecordedTestCase, RecordSerializer } from '@webpieces/core-util';
 import { createMock } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
 import { SaveApi } from '@webpieces/client-server-api';
 import { Server2Api, FetchValueResponse, FetchValueRequest } from '@webpieces/server2-api';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { ProdServerMeta } from '../ProdServerMeta';
+import { APP_MODULES, configureRoutes } from '../AppServerConfig';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 
@@ -21,7 +22,7 @@ import { Server2Simulator } from '../remote/Server2Simulator';
  * - recordable(Server2Simulator) records the in-process downstream call
  * - TestCaseRecorderImpl writes a JSON fixture + generated spec to recordingDir
  */
-let server: WebpiecesServer;
+let router: WebpiecesRouter;
 let recordingDir: string;
 
 /**
@@ -40,13 +41,11 @@ async function bootRecordingServer(): Promise<void> {
         const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
         rebindResult.toConstantValue(recordable('Server2Api', new Server2Simulator()));
     });
-    server = await WebpiecesFactory.create(new ProdServerMeta(), config, appOverrides);
+    router = await createCompanyRouter({ modules: APP_MODULES, appOverrides, config });
+    configureRoutes(router);
 }
 
-async function stopRecordingServer(): Promise<void> {
-    if (server) {
-        await server.stop();
-    }
+function stopRecordingServer(): void {
     fs.rmSync(recordingDir, { recursive: true, force: true });
 }
 
@@ -55,7 +54,7 @@ describe('Test-case recording', () => {
     afterAll(stopRecordingServer);
 
     it('records the endpoint + downstream call into a fixture and generates a spec', async () => {
-        const saveApi = server.createApiClient<SaveApi>(SaveApi);
+        const saveApi = router.createApiClient<SaveApi>(SaveApi);
 
         await RequestContext.run(async () => {
             RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
@@ -105,7 +104,7 @@ describe('Test-case recording', () => {
  * MockServer2Api pattern from Integration.spec.ts.
  */
 describe('createMock replaces hand-rolled mocks', () => {
-    let server: WebpiecesServer;
+    let router: WebpiecesRouter;
     const mockServer2Api = createMock<Server2Api>('Server2Api');
 
     beforeAll(async () => {
@@ -113,19 +112,14 @@ describe('createMock replaces hand-rolled mocks', () => {
             const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
             rebindResult.toConstantValue(mockServer2Api);
         });
-        server = await WebpiecesFactory.create(new ProdServerMeta(), new WebpiecesConfig(), appOverrides);
-    });
-
-    afterAll(async () => {
-        if (server) {
-            await server.stop();
-        }
+        router = await createCompanyRouter({ modules: APP_MODULES, appOverrides });
+        configureRoutes(router);
     });
 
     it('primes responses and asserts captured requests through the full filter chain', async () => {
         mockServer2Api.mock.addValueToReturn('fetchValue', { value: 'MOCKED: from createMock' });
 
-        const saveApi = server.createApiClient<SaveApi>(SaveApi);
+        const saveApi = router.createApiClient<SaveApi>(SaveApi);
         await RequestContext.run(async () => {
             RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
             const response = await saveApi.save({ query: 'mock-query' });
@@ -138,7 +132,7 @@ describe('createMock replaces hand-rolled mocks', () => {
     });
 
     it('throws the helpful not-enough-values error when unprimed', async () => {
-        const saveApi = server.createApiClient<SaveApi>(SaveApi);
+        const saveApi = router.createApiClient<SaveApi>(SaveApi);
         await RequestContext.run(async () => {
             RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
             await expect(saveApi.save({ query: 'unprimed' })).rejects.toThrow(/did not add enough return values/);

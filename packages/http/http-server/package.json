@@ -28,9 +28,11 @@
         "@webpieces/http-filters": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
         "cors": "2.8.5",
+        "express": "5.1.0",
         "inversify": "7.10.4"
     },
     "devDependencies": {
-        "@types/cors": "2.8.19"
+        "@types/cors": "2.8.19",
+        "@types/express": "5.0.5"
     }
 }

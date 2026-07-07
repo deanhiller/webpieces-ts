@@ -1,5 +1,5 @@
 import { inject, injectable } from 'inversify';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 import { TaskInvoker, JobReference, ScheduleInfo } from './TaskTypes';
@@ -60,7 +60,7 @@ export class ScheduleOptions {
  * queue-shaped (dedup, delay, timeout, cancel) lives on CloudTaskScheduler /
  * ScheduleOptions here, never on the API.
  */
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class CloudTaskScheduler {
     constructor(

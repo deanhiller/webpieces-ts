@@ -1,8 +1,9 @@
-export { WebpiecesServer } from './WebpiecesServer';
-export { WebpiecesFactory } from './WebpiecesFactory';
+// Express adapter (the only place express lifecycle lives) over the node-only WebpiecesRouter
+export { WebpiecesExpress } from './WebpiecesExpress';
 export { WebpiecesMiddleware } from './WebpiecesMiddleware';
 export { WebpiecesRouteCreator } from './WebpiecesRouteCreator';
-export { InProcessApiClientFactory } from './InProcessApiClientFactory';
+// InProcessApiClientFactory moved to node-only http-routing; re-export for back-compat
+export { InProcessApiClientFactory } from '@webpieces/http-routing';
 export { ContextFilter } from './filters/ContextFilter';
 export { LogApiFilter } from './filters/LogApiFilter';
 export { RecordingFilter } from './filters/RecordingFilter';
@@ -22,7 +23,6 @@ export { HeaderRegistry } from '@webpieces/core-util';
 // (FilterDefinition re-exported for one-import adapter ergonomics)
 export {
     RouteHandler,
-    ExpressRouteHandler,
     MethodMeta,
     RouteBuilderImpl,
     RouteHandlerWithMeta,
@@ -31,3 +31,5 @@ export {
     FilterMatcher,
     FilterDefinition,
 } from '@webpieces/http-routing';
+// ExpressRouteHandler now lives in http-server (express adapter), not node-only http-routing
+export { ExpressRouteHandler } from './WebpiecesMiddleware';

@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideFrameworkSingleton } from '@webpieces/core-context';
 import {
     getProjectId,
     getRegion,
@@ -20,7 +20,7 @@ type ITask = protos.google.cloud.tasks.v2.ITask;
  * shared-secret header). The task name is derived from the dedup name for idempotency
  * (a duplicate enqueue is rejected ALREADY_EXISTS = idempotent success upstream).
  */
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class GcpTaskInvoker extends TaskInvoker {
     private readonly client = new CloudTasksClient();

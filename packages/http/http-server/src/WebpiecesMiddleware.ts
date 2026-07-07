@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { injectable } from 'inversify';
-import { provideSingleton, MethodMeta, ExpressRouteHandler } from '@webpieces/http-routing';
+import { provideFrameworkSingleton, MethodMeta } from '@webpieces/http-routing';
 import {
     ProtocolError,
     HttpError,
@@ -23,6 +23,17 @@ import { RequestContext } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
+
+/**
+ * Express route handler function type. Lives in http-server (the express adapter),
+ * NOT in the node-only http-routing package, so http-routing stays express-free.
+ * Used by WebpiecesRouteCreator to register handlers Express can call.
+ */
+export type ExpressRouteHandler = (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => Promise<void>;
 
 export class ExpressWrapper {
     constructor(
@@ -218,7 +229,7 @@ export class ExpressWrapper {
  * - Extensions (DI-level): Contribute capabilities to framework (headers, converters, etc.)
  * - Plugins (App-level): Provide complete features with modules + routes (Hibernate, Jackson, etc.)
  */
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class WebpiecesMiddleware {
 

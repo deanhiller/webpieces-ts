@@ -1,4 +1,5 @@
 import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
+import { ContainerModule } from 'inversify';
 
 /**
  * BootstrapOptions - the per-server inputs to {@link bootstrapServer}.
@@ -14,10 +15,13 @@ export class BootstrapOptions {
      * @param loggerFactory - The server-side logging backend to install. Defaults
      *   to the browser-safe console factory; this is the seam where a node-only
      *   backend (bunyan/winston/pino/file writer) is plugged in per service.
+     * @param modules - App-specific DI ContainerModules (beyond the standard company
+     *   set WebpiecesModule + CompanyHeadersModule, which bootstrapServer adds itself).
      */
     constructor(
         public readonly port: number,
         public readonly logName: string,
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
+        public readonly modules: ContainerModule[] = [],
     ) {}
 }

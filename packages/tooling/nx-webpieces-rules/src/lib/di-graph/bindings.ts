@@ -181,11 +181,13 @@ function collectDecoratorBindings(
     const file = relativeFile(workspaceRoot, cls.getSourceFile());
     for (const decorator of classDecorators(cls)) {
         const name = decoratorName(decorator);
-        if (name === 'provideSingleton' || name === 'provideTransient') {
+        // provideFrameworkSingleton(As) are the framework-registry twins of provideSingleton(As)
+        // (see @webpieces/core-context frameworkProvide.ts) — same self/token binding, singleton scope.
+        if (name === 'provideSingleton' || name === 'provideTransient' || name === 'provideFrameworkSingleton') {
             const token = classTokenKey(cls, workspaceRoot);
-            const scope: DiScope = name === 'provideSingleton' ? 'singleton' : 'transient';
+            const scope: DiScope = name === 'provideTransient' ? 'transient' : 'singleton';
             table.add(new Binding(token.key, token.display, 'decorator', scope, cls, '', file));
-        } else if (name === 'provideSingletonAs') {
+        } else if (name === 'provideSingletonAs' || name === 'provideFrameworkSingletonAs') {
             const call = decoratorCall(decorator);
             const tokenExpr = call?.arguments[0];
             if (!tokenExpr) continue;

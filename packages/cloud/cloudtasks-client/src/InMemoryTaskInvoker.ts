@@ -1,5 +1,5 @@
 import { injectable } from 'inversify';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { mintIdToken } from '@webpieces/gcp-identity';
 import { LogManager, toError } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
@@ -22,7 +22,7 @@ const log = LogManager.getLogger('InMemoryTaskInvoker');
  * Bind it (via appOverrides) in place of GcpTaskInvoker:
  *   bind(TaskInvoker).to(InMemoryTaskInvoker)
  */
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class InMemoryTaskInvoker extends TaskInvoker {
     private counter = 0;

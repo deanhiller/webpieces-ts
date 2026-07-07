@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import { timingSafeEqual } from 'crypto';
-import { provideSingleton, RequestContext } from '@webpieces/core-context';
+import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service, MethodMeta } from '@webpieces/http-filters';
 import { HttpUnauthorizedError, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
@@ -17,7 +17,7 @@ const log = LogManager.getLogger('ServiceAuthFilter');
  * accepts a request carrying a valid Google OIDC token from an allowed caller SA. The
  * `public` and `jwt` modes are NOT this filter's job (jwt stays in the app AuthFilter).
  */
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response type flexibility
 export class ServiceAuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {

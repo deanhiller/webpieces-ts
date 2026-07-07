@@ -1,5 +1,5 @@
 import { inject, injectable } from 'inversify';
-import { provideSingleton, RequestContextReader, ContextMgr } from '@webpieces/core-context';
+import { provideFrameworkSingleton, RequestContextReader, ContextMgr } from '@webpieces/core-context';
 import { HeaderRegistry, DocumentDesign } from '@webpieces/core-util';
 import { getCloudRunUrl } from '@webpieces/gcp-identity';
 import { TaskInvoker } from './TaskTypes';
@@ -16,7 +16,7 @@ type ApiPrototype<T> = Function & { prototype: T };
  *   const emailTasks = creator.createClientOnService(EmailApi, 'email-svc'); // self/other svc
  */
 @DocumentDesign()
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class TaskClientCreator {
     constructor(

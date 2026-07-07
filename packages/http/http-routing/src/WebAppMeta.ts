@@ -1,4 +1,3 @@
-import { ContainerModule } from 'inversify';
 import {RouteMetadata} from "@webpieces/core-util";
 
 /**
@@ -36,6 +35,16 @@ export class RouteDefinition {
 }
 
 /**
+ * A filter's execution tier:
+ *  - 'api'     : runs for BOTH real HTTP requests AND the in-process createApiClient
+ *                (business/cross-cutting filters — logging, recording, context seeding).
+ *  - 'express' : runs ONLY for real HTTP requests mounted on express (transport-boundary
+ *                filters that need the raw request — e.g. service auth reading the
+ *                Authorization header). Skipped by the in-process client so tests don't 401.
+ */
+export type FilterTier = 'express' | 'api';
+
+/**
  * Definition of a filter with priority.
  *
  * Use filepathPattern to scope filters to specific controllers:
@@ -44,10 +53,15 @@ export class RouteDefinition {
  *   - '**' + '/UserController.ts' - Specific controller file
  *
  * If filepathPattern is not specified, the filter matches all controllers.
+ *
+ * tier defaults to 'api' so a filter runs in-process (via createApiClient) as well as over
+ * HTTP. Pass 'express' for transport-boundary filters that must be skipped in-process.
  */
 export class FilterDefinition {
     priority: number;
+    // webpieces-disable no-any-unknown -- an arbitrary DI filter class used as a container token
     filterClass: any;
+    // webpieces-disable no-any-unknown -- the resolved filter instance, of arbitrary shape
     filter?: any; // Filter instance (set by RouteBuilder when resolving from DI)
 
     /**
@@ -56,36 +70,20 @@ export class FilterDefinition {
      */
     filepathPattern: string;
 
-    constructor(priority: number, filterClass: any, filepathPattern: string) {
+    /** Execution tier — see {@link FilterTier}. Defaults to 'api'. */
+    tier: FilterTier;
+
+    // webpieces-disable no-any-unknown -- filterClass param is an arbitrary DI filter class token
+    constructor(priority: number, filterClass: any, filepathPattern: string, tier: FilterTier = 'api') {
         this.priority = priority;
         this.filterClass = filterClass;
         this.filepathPattern = filepathPattern;
+        this.tier = tier;
         this.filter = undefined; // Set later by RouteBuilder
     }
 }
 
 
-/**
- * Main application metadata interface.
- * Similar to Java WebPieces WebAppMeta.
- *
- * This is the entry point that WebpiecesServer calls to configure your application.
- */
-export interface WebAppMeta {
-    /**
-     * Returns the list of Inversify container modules for dependency injection.
-     * Similar to getGuiceModules() in Java.
-     */
-    getDIModules(): ContainerModule[];
-
-    /**
-     * Returns the list of route configurations.
-     * Similar to getRouteModules() in Java.
-     */
-    getRoutes(): Routes[];
-}
-
-/**
- * DI token for WebAppMeta injection.
- */
-export const WEBAPP_META_TOKEN = Symbol.for('WebAppMeta');
+// The old WebAppMeta interface + WEBAPP_META_TOKEN were removed with the WebpiecesServer/
+// WebpiecesFactory flip. Apps now configure routes/filters imperatively on WebpiecesRouter
+// (see WebpiecesRouter.addRoutes/addFilter) instead of implementing WebAppMeta.getDIModules/getRoutes.
