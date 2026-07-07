@@ -33,16 +33,16 @@ class RecordingLoggerFactory implements LoggerFactory {
 
 describe('LogManager', () => {
     beforeEach(() => {
-        LogManager.setLogger(new ConsoleLoggerFactory());
+        LogManager.setFactory(new ConsoleLoggerFactory());
     });
     afterEach(() => {
         vi.restoreAllMocks();
-        LogManager.setLogger(new ConsoleLoggerFactory());
+        LogManager.setFactory(new ConsoleLoggerFactory());
     });
 
     it('routes log calls through an installed custom factory', () => {
         const factory = new RecordingLoggerFactory();
-        LogManager.setLogger(factory);
+        LogManager.setFactory(factory);
 
         const log = LogManager.getLogger('MyClass');
         log.info('hello');
@@ -54,12 +54,12 @@ describe('LogManager', () => {
         ]);
     });
 
-    it('a logger obtained BEFORE setLogger uses the backend installed AFTER', () => {
+    it('a logger obtained BEFORE setFactory uses the backend installed AFTER', () => {
         // Captured under the default console factory (the import-time scenario).
         const log = LogManager.getLogger('Early');
 
         const factory = new RecordingLoggerFactory();
-        LogManager.setLogger(factory);
+        LogManager.setFactory(factory);
 
         log.info('after');
         expect(factory.created.get('Early')?.lines).toEqual(['info [Early] after']);
@@ -68,7 +68,7 @@ describe('LogManager', () => {
     it('resolves the backend lazily (per call), not at getLogger time', () => {
         const factory = new RecordingLoggerFactory();
         const spy = vi.spyOn(factory, 'getLogger');
-        LogManager.setLogger(factory);
+        LogManager.setFactory(factory);
 
         const log = LogManager.getLogger('A');
         expect(spy).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ describe('ConsoleLoggerFactory', () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
         new ConsoleLoggerFactory(true).getLogger('B').info('hi');
         new ConsoleLoggerFactory().getLogger('B').info('hi');
-        expect(String(spy.mock.calls[0][0])).toContain('AWAITING LogManager.setLogger');
+        expect(String(spy.mock.calls[0][0])).toContain('AWAITING LogManager.setFactory');
         expect(String(spy.mock.calls[1][0])).not.toContain('AWAITING');
     });
 

@@ -23,6 +23,6 @@ export class CompanyLogging {
      *   use. Express services may pass a node-only factory (bunyan/winston/...).
      */
     static configure(factory: LoggerFactory = new ConsoleLoggerFactory()): void {
-        LogManager.setLogger(factory);
+        LogManager.setFactory(factory);
     }
 }
