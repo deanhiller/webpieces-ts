@@ -84,18 +84,6 @@ describe('feature-branch-guard', () => {
         expect(violations[0].message).toContain('dean/x-v2');
     });
 
-    it('blocks on conflict and lists the conflicting files', () => {
-        state.status = status({ conflict: true, conflictFiles: ['src/a.ts', 'src/b.ts'] });
-        const violations = rule().check(ctx());
-        expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('src/a.ts');
-        // Mid-work conflicts steer to the UPDATE-ONLY flow; the PR flow is mentioned only for the
-        // "already have an open PR" case.
-        expect(violations[0].message).toContain('wp-update-start');
-        expect(violations[0].message).toContain('wp-update-end');
-        expect(violations[0].message).toContain('wp-start-upsert-pr');
-    });
-
     it('fails open when the cache is for a DIFFERENT branch (stale cross-branch)', () => {
         // Cache was written for another branch (e.g. just switched branches); even though it says
         // merged+conflict, the guard must NOT block this branch on another branch's signals.
@@ -108,5 +96,36 @@ describe('feature-branch-guard', () => {
         state.status = status({ branchAlreadyMerged: true, mergedPr: '9', conflict: true, conflictFiles: ['x'] });
         const violations = rule().check(ctx());
         expect(violations[0].message).toContain('already merged');
+    });
+});
+
+// Conflict-block steering (Bug #3): mid-work conflicts recommend the update-only flow, but if a PR is
+// already open (cached openPr) the block steers ONLY to the PR flow — the update-only flow would just
+// fail-fast, so recommending it would waste the AI's tokens.
+describe('feature-branch-guard conflict steering', () => {
+    beforeEach(() => {
+        state.branch = 'dean/x';
+        state.status = null;
+    });
+
+    it('with NO open PR, steers to the UPDATE-ONLY flow and lists the conflicting files', () => {
+        state.status = status({ conflict: true, conflictFiles: ['src/a.ts', 'src/b.ts'] });
+        const violations = rule().check(ctx());
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('src/a.ts');
+        expect(violations[0].message).toContain('wp-update-start');
+        expect(violations[0].message).toContain('wp-update-end');
+        expect(violations[0].message).toContain('wp-start-upsert-pr');
+    });
+
+    it('with an open PR, steers ONLY to the PR flow (no wasted update-only steps)', () => {
+        state.status = status({ conflict: true, conflictFiles: ['src/a.ts'], openPr: '303' });
+        const violations = rule().check(ctx());
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('#303');
+        expect(violations[0].message).toContain('wp-start-upsert-pr');
+        expect(violations[0].message).toContain('wp-finish-upsert-pr');
+        // Must NOT tell the AI to run the update-only flow — it would just fail-fast.
+        expect(violations[0].message).not.toContain('wp-update-start');
     });
 });

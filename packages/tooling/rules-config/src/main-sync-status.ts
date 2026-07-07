@@ -36,6 +36,12 @@ export class MainSyncStatus {
     conflict: boolean;
     conflictFiles: string[];
     timestamp: string;
+    // An OPEN (not merged) PR tracking this branch, if any — '' = none or not-yet-known. Set by the
+    // refresher (best-effort) and read by the feature-branch-guard so a mid-work conflict block can
+    // steer straight to the PR flow instead of the update-only flow (which would just fail-fast when a
+    // PR exists). Advisory only — the authoritative gate is wp-update-start's own fail-fast check.
+    // Kept OUT of the positional constructor (a defaulted field) so existing call sites don't churn.
+    openPr: string = '';
 
     constructor(
         branch: string,
@@ -91,6 +97,7 @@ interface RawStatus {
     conflict?: boolean;
     conflictFiles?: string[];
     timestamp?: string;
+    openPr?: string;
 }
 
 interface RawLock {
@@ -125,7 +132,7 @@ export function readMainSyncStatus(repoRoot: string): MainSyncStatus | null {
         const statusPath = mainSyncStatusPath(repoRoot);
         if (!fs.existsSync(statusPath)) return null;
         const raw = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as RawStatus;
-        return new MainSyncStatus(
+        const status = new MainSyncStatus(
             raw.branch ?? '',
             raw.branchAlreadyMerged ?? false,
             raw.mergedPr ?? '',
@@ -137,6 +144,8 @@ export function readMainSyncStatus(repoRoot: string): MainSyncStatus | null {
             raw.conflictFiles ?? [],
             raw.timestamp ?? '',
         );
+        status.openPr = raw.openPr ?? '';
+        return status;
     } catch (err: unknown) {
         const error = toError(err);
         void error;
@@ -263,6 +272,15 @@ function detectMergedPr(repoRoot: string, branch: string): string {
     return result.ok ? result.out : '';
 }
 
+// An OPEN PR tracking this branch, if any. Best-effort — this is ADVISORY (it only lets the guard's
+// conflict block steer to the PR flow early), so an unreachable gh degrades to '' here. The HARD gate
+// that must never guess is wp-update-start's own openPrForBranch, which fails fast instead.
+function detectOpenPr(repoRoot: string, branch: string): string {
+    if (!branch || branch === 'main') return '';
+    const result = capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '--jq', '.[0].number']);
+    return result.ok ? result.out : '';
+}
+
 // A benign status that never blocks — used when origin/main can't be resolved (no remote yet,
 // offline before first fetch). hasForkPoint=true + conflict=false so the guard allows the edit.
 function benignStatus(branch: string, featureHead: string): MainSyncStatus {
@@ -279,6 +297,8 @@ function benignStatus(branch: string, featureHead: string): MainSyncStatus {
 export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
     const branch = gitBranch(repoRoot);
     const mergedPr = detectMergedPr(repoRoot, branch);
+    // Advisory: lets the guard's conflict block steer to the PR flow early when a PR is already open.
+    const openPr = detectOpenPr(repoRoot, branch);
 
     // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
     spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore' });
@@ -290,20 +310,23 @@ export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
         const status = benignStatus(branch, featureHead);
         status.branchAlreadyMerged = mergedPr !== '';
         status.mergedPr = mergedPr;
+        status.openPr = openPr;
         return status;
     }
 
     const forkPoint = capture(repoRoot, 'git', ['merge-base', 'origin/main', 'HEAD']);
     if (!forkPoint.ok || forkPoint.out === '') {
         // No common ancestor — main was merged into the branch. Force the human to squash.
-        return new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
+        const noFork = new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
+        noFork.openPr = openPr;
+        return noFork;
     }
 
     const featureFiles = new Set(featureChangedFiles(repoRoot, forkPoint.out));
     const mainFiles = changedFiles(repoRoot, forkPoint.out, 'origin/main');
     const conflictFiles = mainFiles.filter((file: string): boolean => featureFiles.has(file));
 
-    return new MainSyncStatus(
+    const status = new MainSyncStatus(
         branch,
         mergedPr !== '',
         mergedPr,
@@ -315,6 +338,8 @@ export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
         conflictFiles,
         new Date().toISOString(),
     );
+    status.openPr = openPr;
+    return status;
 }
 
 // The recovery steps when there is no fork point with origin/main (someone merged main into the

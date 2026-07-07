@@ -86,7 +86,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         }
         // State 4: origin/main moved and touches files you changed.
         if (status.conflict) {
-            return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(status.conflictFiles), cache);
+            return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(status.conflictFiles, status.openPr), cache);
         }
         return this.allow(ctx, branch, 'clean-feature-branch', cache);
     }
@@ -156,26 +156,41 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         ].join('\n');
     }
 
-    private conflictMessage(conflictFiles: readonly string[]): string {
+    private conflictMessage(conflictFiles: readonly string[], openPr: string): string {
         const files = conflictFiles.length > 0
             ? conflictFiles.map((f: string): string => `  - ${f}`).join('\n')
             : '  (see git diff)';
-        return [
+        const header = [
             'origin/main moved and touched files you also changed since your fork point:',
             files,
             '',
+        ];
+        // Steer EARLY: if a PR already tracks this branch, the update-only flow would just fail-fast
+        // (a 3-point update strands the PR on the old branch generation), so recommend ONLY the PR
+        // flow and don't waste the AI's tokens on wp-update-start.
+        if (openPr !== '') {
+            return header.concat([
+                `An OPEN PR (#${openPr}) already tracks this branch, so you MUST use the PR flow (it`,
+                're-merges main AND updates the PR — the update-only flow would strand the PR on the',
+                'old branch generation):',
+                '  1. pnpm wp-start-upsert-pr   ← merges main + writes 3-point context',
+                '  2. /wp-merge                 ← resolve each conflicted file (only if conflicts)',
+                '  3. pnpm wp-finish-upsert-pr  ← validate, build, push, upsert the PR',
+            ]).join('\n');
+        }
+        return header.concat([
             'You must merge main in before editing further. If you are mid-work and just want to keep',
             'editing (no PR yet), use the UPDATE-ONLY flow:',
             '  1. pnpm wp-update-start   ← merges main (auto-finalizes if clean; renames <branch>wpN → wpN+1)',
             '  2. /wp-merge              ← resolve each conflicted file (only if there are conflicts)',
             '  3. pnpm wp-update-end     ← finalize the merge (only after resolving)',
             '',
-            'If you already have an OPEN PR for this branch, use the PR flow instead (it updates the',
-            "PR's pushed branch — wp-update-start does NOT push):",
+            'If you already have an OPEN PR for this branch, use the PR flow instead (wp-update-start',
+            'refuses when a PR exists — it would strand the PR on the old branch generation):',
             '  1. pnpm wp-start-upsert-pr   ← merges main + writes 3-point context',
             '  2. /wp-merge                 ← resolve each conflicted file',
             '  3. pnpm wp-finish-upsert-pr  ← validate, build, push, upsert the PR',
-        ].join('\n');
+        ]).join('\n');
     }
 
     private noForkPointMessage(branch: string): string {

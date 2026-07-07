@@ -12,18 +12,21 @@ import { runUpdateFromMain } from './workflow/run-update';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-// wp-update-start is the "sync but keep editing, no PR" flow: it does NOT run the build gate, write
-// review.json, or update the PR body/dashboard. So if a PR is already open, force the PR flow instead
-// (wp-start-upsert-pr → wp-finish-upsert-pr), which pushes + rebuilds the dashboard + updates the PR.
+// If a PR is already OPEN for this branch, wp-update-start must refuse. The 3-point update squash-
+// merges onto a NEW branch generation (base → basewp2), and the existing PR stays pinned to the old
+// branch — so running the update-only flow would leave the PR pointing at stale, pre-merge code. The
+// PR flow (wp-start-upsert-pr → wp-finish-upsert-pr) is the ONLY correct path once a PR exists: it
+// re-merges main AND updates the PR. Fail fast and steer there. (openPrForBranch itself fails fast if
+// GitHub can't be reached — we never assume "no PR" when we simply couldn't ask.)
 export function assertNoOpenPr(repoRoot: string): void {
     const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim();
     const openPr = openPrForBranch(repoRoot, branch);
     if (openPr === '') return;
     throw new CliExitError(2,
         '\n' + SEP + `⛔ An open PR (#${openPr}) already tracks this branch\n` + SEP + '\n' +
-        'wp-update-start is the "sync from main and keep editing" flow — it does NOT run the build\n' +
-        `gate, refresh review.json, or update the PR body/dashboard, so PR #${openPr} would go stale.\n` +
-        'Use the PR flow instead — it merges main AND keeps the PR in sync:\n' +
+        'wp-update-start does a 3-point squash-merge onto a NEW branch generation (base → basewp2),\n' +
+        `but PR #${openPr} is pinned to the current branch — so it would be left pointing at stale,\n` +
+        'pre-merge code. Use the PR flow instead — it re-merges main AND updates the PR:\n' +
         '  1. pnpm wp-start-upsert-pr\n' +
         '  2. /wp-merge   (only if conflicts)\n' +
         '  3. pnpm wp-finish-upsert-pr\n',
@@ -35,7 +38,8 @@ export async function main(): Promise<void> {
     // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
     writeTemplate(repoRoot, 'webpieces.git-workflow.md');
 
-    // An open PR means the PR flow (which pushes) must be used — wp-update-start does not push.
+    // An open PR means the PR flow must be used — a 3-point update would strand the PR on the old
+    // branch generation. Fails fast if GitHub can't be reached (never guesses "no PR").
     assertNoOpenPr(repoRoot);
 
     const outcome = await runUpdateFromMain(repoRoot, 'wp-update-start', 'wp-update-end');
