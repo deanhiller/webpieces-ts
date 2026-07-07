@@ -3,21 +3,39 @@
     "project": "http-routing",
     "designs": [
         {
-            "root": "RouteBuilderImpl",
+            "root": "WebpiecesRouter",
             "rootKind": "apiImplementation",
-            "file": "packages/http/http-routing/src/RouteBuilderImpl.ts",
-            "maxLevel": 0,
+            "file": "packages/http/http-routing/src/WebpiecesRouter.ts",
+            "maxLevel": 1,
             "nodes": [
                 {
                     "id": "RouteBuilderImpl",
                     "className": "RouteBuilderImpl",
-                    "kind": "apiImplementation",
+                    "kind": "class",
                     "scope": "singleton",
                     "file": "packages/http/http-routing/src/RouteBuilderImpl.ts",
+                    "level": 1
+                },
+                {
+                    "id": "WebpiecesRouter",
+                    "className": "WebpiecesRouter",
+                    "kind": "apiImplementation",
+                    "scope": "singleton",
+                    "file": "packages/http/http-routing/src/WebpiecesRouter.ts",
                     "level": 0
                 }
             ],
-            "edges": [],
+            "edges": [
+                {
+                    "from": "WebpiecesRouter",
+                    "to": "RouteBuilderImpl",
+                    "injection": "token",
+                    "token": "RouteBuilderImpl",
+                    "tokenKey": "class:packages/http/http-routing/src/RouteBuilderImpl.ts#RouteBuilderImpl",
+                    "paramName": "routeBuilder",
+                    "paramType": "RouteBuilderImpl"
+                }
+            ],
             "unresolved": []
         }
     ]

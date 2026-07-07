@@ -36,17 +36,19 @@
             <strong>Constant / dynamic</strong> — toConstantValue / toDynamicValue leaf</div>
         <div class="legend-item"><span class="legend-box" style="background: #FCE4EC; border-style: dashed;"></span>
             <strong>Unresolved</strong> — token the analyzer could not resolve</div>
+        <div class="legend-item"><span class="legend-box" style="background: #EDE7F6; border: 3px double #5e35b1;"></span>
+            <strong>External</strong> — class from a published package outside this workspace; shown as a boundary, not expanded</div>
         <div class="legend-item" style="margin-top: 15px;">
             <em>One graph per controller/root; a shared dependency appears in each root's tree.
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>
     <div class="section">
-        <h2>RouteBuilderImpl — apiImplementation, Level 0…0</h2>
-        <div class="meta">packages/http/http-routing/src/RouteBuilderImpl.ts</div>
+        <h2>WebpiecesRouter — apiImplementation, Level 0…1</h2>
+        <div class="meta">packages/http/http-routing/src/WebpiecesRouter.ts</div>
         <div id="graph-0" class="graph"></div>
     </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"RouteBuilderImpl\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"RouteBuilderImpl\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"RouteBuilderImpl\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"RouteBuilderImpl\"; }\n\n\n  labelloc=\"t\";\n  label=\"RouteBuilderImpl\\n(apiImplementation, Level 0-0)\";\n  fontsize=16;\n}\n"}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"WebpiecesRouter\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"RouteBuilderImpl\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"RouteBuilderImpl\\n(L1, singleton)\"];\n  \"WebpiecesRouter\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"WebpiecesRouter\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"WebpiecesRouter\"; }\n  { rank=same; \"RouteBuilderImpl\"; }\n\n  \"WebpiecesRouter\" -> \"RouteBuilderImpl\";\n\n  labelloc=\"t\";\n  label=\"WebpiecesRouter\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n"}];
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)

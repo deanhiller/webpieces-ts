@@ -191,10 +191,9 @@
         "http-server": {
             "level": 4,
             "framework": ["express"],
-            "role": "designed-lib",
+            "role": "lib",
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
-            "designFile": "packages/http/http-server/design.json",
             "dependsOn": [
                 "gcp-identity",
                 "http-routing"
