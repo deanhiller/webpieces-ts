@@ -1,10 +1,10 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { createCompanyRouter, configureCompanyHeaders } from '@webpieces/company-svc-core';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { WebpiecesRouter } from '@webpieces/http-routing';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
-import { HttpUnauthorizedError } from '@webpieces/core-util';
+import { HttpUnauthorizedError, ConsoleLoggerFactory } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Counter } from '../controllers/save-controller';
@@ -20,12 +20,14 @@ import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
 
 /** Build a router with the app's routes/filters and Server2Api rebound to a mock. */
 async function createRouterWithMock(mock: MockedApi<Server2Api>): Promise<WebpiecesRouter> {
-    // Filters read the GLOBAL HeaderRegistry at construction — configure it first.
-    configureCompanyHeaders(APP_HEADERS);
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mock);
     });
-    const router = await createCompanyRouter({ modules: APP_MODULES, appOverrides });
+    // setupCompanyRuntime runs the same headers → logging → router sequence as the server
+    // (a plain ConsoleLoggerFactory instead of the server's, so no [AWAITING...] banner).
+    const router = await setupCompanyRuntime(
+        new CompanySetupOptions(new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS, appOverrides),
+    );
     configureRoutes(router);
     return router;
 }

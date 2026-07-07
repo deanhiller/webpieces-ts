@@ -7,5 +7,6 @@
  * browser-safe @webpieces/company-core is for.
  */
 
-export { bootstrapServer, createCompanyRouter, configureCompanyHeaders } from './bootstrapServer';
+export { bootstrapServer, createCompanyRouter, configureCompanyHeaders, setupCompanyRuntime } from './bootstrapServer';
 export { BootstrapOptions } from './BootstrapOptions';
+export { CompanySetupOptions } from './CompanySetupOptions';

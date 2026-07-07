@@ -199,6 +199,16 @@
                 "http-routing"
             ]
         },
+        "legacy-server": {
+            "level": 7,
+            "framework": ["express"],
+            "role": "server",
+            "shortDescription": "Example of INCREMENTAL webpieces adoption: a pre-existing express app (own routes, untouched) with the webpieces api → filters → controller pipeline bolted on via `WebpiecesRouteCreator`, using the SAME shared `setupCompanyRuntime` startup as the greenfield server. Proven by an integration test.",
+            "responsibilitiesFile": "apps/app-example/legacy-server/responsibilities.md",
+            "dependsOn": [
+                "client-server"
+            ]
+        },
         "nx-webpieces-rules": {
             "level": 2,
             "framework": ["node"],
