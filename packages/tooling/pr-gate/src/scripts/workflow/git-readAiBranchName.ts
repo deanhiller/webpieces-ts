@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import { runMain } from '@webpieces/rules-config';
 import { baseBranchName } from './branch-naming';
 
 // Stable feature identity used to key the merge-context dir and PR-body dir. It MUST stay constant
@@ -13,10 +14,4 @@ export async function main(): Promise<void> {
     process.stdout.write(getFeatureName() + '\n');
 }
 
-if (require.main === module) {
-    main().catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);

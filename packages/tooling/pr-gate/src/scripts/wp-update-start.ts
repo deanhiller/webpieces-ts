@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { writeTemplate } from '@webpieces/rules-config';
+import { writeTemplate, CliExitError, runMain } from '@webpieces/rules-config';
 import { runUpdateFromMain } from './workflow/run-update';
 
 // wp-update-start: the "sync this feature branch from main" entry point (the redirect target of the
@@ -19,21 +19,16 @@ export async function main(): Promise<void> {
     const outcome = await runUpdateFromMain(repoRoot, 'wp-update-end');
     if (outcome === 'conflict') {
         // Context + marker + merge process doc already written by merge-start; hand back to the AI.
-        process.exit(2);
+        throw new CliExitError(2, '');
     }
     if (outcome === 'unvalidatedResume') {
-        process.stdout.write('\n' + SEP + '⏸️  Merge in progress — not yet validated\n' + SEP + '\n');
-        process.stdout.write('Resolve the remaining conflicts in the working tree, then run:\n');
-        process.stdout.write('  pnpm wp-update-end\n\n');
-        process.exit(1);
+        throw new CliExitError(1,
+            '\n' + SEP + '⏸️  Merge in progress — not yet validated\n' + SEP + '\n' +
+            'Resolve the remaining conflicts in the working tree, then run:\n' +
+            '  pnpm wp-update-end\n',
+        );
     }
     process.stdout.write('\n✅ Updated from main — clean. No need to call wp-update-end.\n');
 }
 
-if (require.main === module) {
-    main().catch((err: Error) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);

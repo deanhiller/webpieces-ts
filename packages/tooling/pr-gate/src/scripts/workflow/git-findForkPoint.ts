@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { prDirFor } from '@webpieces/rules-config';
+import { prDirFor, CliExitError, runMain } from '@webpieces/rules-config';
 import { getFeatureName } from './git-readAiBranchName';
 import { mergeDirFor } from './merge-state';
 
@@ -62,7 +62,7 @@ function checkMergeCommits(mergeCommits: string[], outputDir: string, prefix: st
 
                 fs.writeFileSync(path.join(outputDir, `${prefix}forkpoint-error.json`), errorJson + '\n');
                 printMergeFromMainError(commit, parent, featureName, currentBranch);
-                process.exit(1);
+                throw new CliExitError(1, '');
             }
         }
     }
@@ -81,10 +81,11 @@ export function forkPointOutputDir(repoRoot: string, featureName: string, workfl
 
 export async function findForkPoint(workflow: string): Promise<void> {
     if (workflow !== 'review' && workflow !== 'merge') {
-        process.stderr.write('ERROR: Workflow argument required\n');
-        process.stderr.write('Usage: git-findForkPoint <workflow>\n');
-        process.stderr.write("  workflow: 'review' or 'merge'\n");
-        process.exit(1);
+        throw new CliExitError(1,
+            'ERROR: Workflow argument required\n' +
+            'Usage: git-findForkPoint <workflow>\n' +
+            "  workflow: 'review' or 'merge'",
+        );
     }
 
     const featureName = getFeatureName();
@@ -106,8 +107,7 @@ export async function findForkPoint(workflow: string): Promise<void> {
     const forkPoint = (forkPointResult.stdout ?? '').trim();
 
     if (!forkPoint || forkPointResult.status !== 0) {
-        process.stderr.write('ERROR: Could not find common ancestor with origin/main\n');
-        process.exit(1);
+        throw new CliExitError(1, 'ERROR: Could not find common ancestor with origin/main');
     }
 
     process.stderr.write(`✅ Fork point found: ${forkPoint.slice(0, 7)}\n`);
@@ -138,10 +138,4 @@ export async function main(): Promise<void> {
     await findForkPoint(process.argv[2] ?? '');
 }
 
-if (require.main === module) {
-    main().catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);

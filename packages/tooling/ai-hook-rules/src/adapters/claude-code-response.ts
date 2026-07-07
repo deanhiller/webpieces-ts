@@ -49,6 +49,10 @@ export function denyJson(reason: string, toolName: string): string {
 
 // Block the tool call and surface `reason` to both the user (terminal UI) and the model. `toolName`
 // selects whether the red `systemMessage` is added (Bash) or omitted (file tools) — see denyJson.
+// NOTE: emitDeny/emitAllow are the hook's designated terminal boundary — the exit code IS the
+// Claude Code PreToolUse protocol (exit 0 + JSON = the contract). When the
+// @webpieces/no-process-exit-outside-main rule is activated repo-wide (after the tooling release
+// carrying it), add its eslint-disable-next-line above each process.exit below.
 export function emitDeny(reason: string, toolName: string): never {
     process.stdout.write(denyJson(reason, toolName) + '\n');
     process.exit(0);

@@ -13,6 +13,7 @@
  * - no-json-property-primitive-type: Ban @JsonProperty({ type: String/Number/Boolean })
  * - require-typed-template: Require [templateClassType] on ng-template with let- variables (Angular)
  * - no-mat-cell-def: Ban *matCellDef/*matHeaderCellDef — use div-grid tables (Angular)
+ * - no-process-exit-outside-main: process.exit only in main()/runMain; never import another module's main
  */
 
 import catchErrorPattern from './rules/catch-error-pattern';
@@ -23,6 +24,7 @@ import enforceArchitecture from './rules/enforce-architecture';
 import noJsonPropertyPrimitiveType from './rules/no-json-property-primitive-type';
 import requireTypedTemplate from './rules/require-typed-template';
 import noMatCellDef from './rules/no-mat-cell-def';
+import noProcessExitOutsideMain from './rules/no-process-exit-outside-main';
 
 export = {
     rules: {
@@ -34,5 +36,6 @@ export = {
         'no-json-property-primitive-type': noJsonPropertyPrimitiveType,
         'require-typed-template': requireTypedTemplate,
         'no-mat-cell-def': noMatCellDef,
+        'no-process-exit-outside-main': noProcessExitOutsideMain,
     },
 };

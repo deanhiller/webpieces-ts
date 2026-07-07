@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate } from '@webpieces/rules-config';
+import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate, CliExitError, runMain } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { baseBranchName } from './workflow/branch-naming';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
@@ -21,8 +21,9 @@ async function updateBranchFromMain(repoRoot: string): Promise<void> {
     process.stdout.write('\n' + SEP + '① Updating branch from main\n' + SEP + '\n');
     const outcome = await runUpdateFromMain(repoRoot, 'wp-finish-upsert-pr');
     if (outcome === 'conflict' || outcome === 'unvalidatedResume') {
-        process.stdout.write('\n⏸️  Conflicts — resolve them, then run pnpm wp-finish-upsert-pr (it validates the merge AND finishes the PR).\n');
-        process.exit(2);
+        throw new CliExitError(2,
+            '\n⏸️  Conflicts — resolve them, then run pnpm wp-finish-upsert-pr (it validates the merge AND finishes the PR).',
+        );
     }
 }
 
@@ -57,10 +58,4 @@ export async function main(): Promise<void> {
     );
 }
 
-if (require.main === module) {
-    main().catch((err: Error) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);

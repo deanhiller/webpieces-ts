@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { loadAndValidate } from '@webpieces/rules-config';
+import { loadAndValidate, CliExitError } from '@webpieces/rules-config';
 
 // Single source of truth for the build gate. Both `wp-build-affected` (CI + local) and the
 // merge validation gate (`wp-finish-upsert-pr`) run THIS, so "what CI runs" and "what the
@@ -64,9 +64,10 @@ export class BuildGateOptions {
 }
 
 /**
- * Run the configured build gate with consistent framing, exiting the process on failure. Single
- * source of truth: wp-start-upsert-pr and wp-finish-upsert-pr both call THIS (only the BuildGateOptions
- * differ) so a fix to the gate flow is made once, not in two near-identical copies.
+ * Run the configured build gate with consistent framing, throwing CliExitError(buildCode) on failure
+ * so the bin's main()/runMain owns the exit. Single source of truth: wp-start-upsert-pr and
+ * wp-finish-upsert-pr both call THIS (only the BuildGateOptions differ) so a fix to the gate flow is
+ * made once, not in two near-identical copies.
  */
 export function runBuildGate(repoRoot: string, opts: BuildGateOptions): void {
     const buildCommand = resolveBuildCommand(repoRoot);
@@ -77,12 +78,11 @@ export function runBuildGate(repoRoot: string, opts: BuildGateOptions): void {
     );
     const buildCode = runConfiguredBuildGate(repoRoot);
     if (buildCode !== 0) {
-        process.stderr.write(
+        throw new CliExitError(buildCode,
             `\n❌ ${opts.failureHeadline}\n\n` +
             `Run THIS exact command to reproduce and fix all errors, then re-run ${opts.rerunCommand}:\n\n` +
-            `    ${buildCommand}\n\n`,
+            `    ${buildCommand}\n`,
         );
-        process.exit(buildCode);
     }
     process.stdout.write('\n✅ Build passed.\n');
 }

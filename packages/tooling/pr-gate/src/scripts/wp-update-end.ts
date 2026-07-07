@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
+import { CliExitError, runMain } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { mergeDirFor, readMergeMarker } from './workflow/merge-state';
 import { mergeEnd } from './workflow/merge-end';
@@ -18,9 +19,10 @@ export async function main(): Promise<void> {
 
     const marker = readMergeMarker(mergeDir);
     if (!marker) {
-        process.stderr.write('❌ No merge in progress (no marker) — nothing to finalize.\n');
-        process.stderr.write('Start one with:  pnpm wp-update-start  (a clean update finalizes itself).\n');
-        process.exit(1);
+        throw new CliExitError(1,
+            '❌ No merge in progress (no marker) — nothing to finalize.\n' +
+            'Start one with:  pnpm wp-update-start  (a clean update finalizes itself).',
+        );
     }
 
     // Not yet validated => a conflict resolution the AI owns, so validate + commit it first; already
@@ -34,10 +36,4 @@ export async function main(): Promise<void> {
     process.stdout.write('\n✅ Merge finalized on ' + marker.currentBranch + '.\n');
 }
 
-if (require.main === module) {
-    main().catch((err: Error) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);
