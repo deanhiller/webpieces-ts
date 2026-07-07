@@ -23,6 +23,7 @@ import {
     collectBindings,
     decoratorCall,
     decoratorName,
+    isExternalClass,
     resolveClassDeclaration,
 } from './bindings';
 import { classTokenKey, relativeFile, resolveTokenKey } from './token-resolver';
@@ -233,7 +234,12 @@ export abstract class DiDesignBuilder {
 
         const declaredScope = this.classScope(cls);
         const scope = declaredScope !== 'unknown' ? declaredScope : scopeHint;
-        const node = new DiNode(id, className, this.rootKindOf(cls), scope, file);
+        // A class from a published package (resolved to a .d.ts under node_modules)
+        // is a boundary leaf: shown so the dependency is visible, but never expanded
+        // (walkClass stops there). Roots are always project classes, so this never
+        // relabels a root.
+        const kind: DiNodeKind = isExternalClass(cls) ? 'external' : this.rootKindOf(cls);
+        const node = new DiNode(id, className, kind, scope, file);
         // Injected AS an API/interface that resolves to a differently-named impl —
         // record the contract (strip a trailing `[]` from multiInject array params).
         const api = apiType.replace(/\[\]$/, '');
@@ -324,6 +330,11 @@ export abstract class DiDesignBuilder {
     protected walkClass(cls: ts.ClassDeclaration): void {
         if (this.visited.has(cls)) return;
         this.visited.add(cls);
+
+        // External boundary: the node is already registered by the caller's
+        // classNode() (kind 'external'); we intentionally do NOT descend into a
+        // published package's internals (e.g. an SDK Client's ClientOptions/impl).
+        if (isExternalClass(cls)) return;
 
         const fromId = this.classNode(cls);
         for (const injection of this.collectInjections(cls)) {

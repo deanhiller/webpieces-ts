@@ -43,6 +43,15 @@ describe('generateDesignDot', () => {
         expect(dot).toContain('"MysteryToken" [fillcolor="#FCE4EC", style="filled,dashed"');
     });
 
+    it('renders an external boundary node with a bold double border, distinct from unresolved', () => {
+        const design = makeDesign();
+        design.nodes.push(new DiNode('ExternalClient', 'ExternalClient', 'external', 'unknown', 'node_modules/@sdk/index.d.ts', 1));
+        const dot = generateDesignDot(design);
+        expect(dot).toContain(
+            '"ExternalClient" [fillcolor="#EDE7F6", style="filled,bold", label="ExternalClient\\n(L1, unknown)", penwidth=2, peripheries=2];',
+        );
+    });
+
     it('labels an API-backed class as "api\\n(impl)\\n(L#, scope)"', () => {
         const design = makeDesign();
         // Injected as FirestoreAdminApi, resolved .to(FirestoreAdminClient).
