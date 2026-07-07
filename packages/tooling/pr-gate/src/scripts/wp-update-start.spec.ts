@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CliExitError } from '@webpieces/rules-config';
 
-// Mutable state the child_process mock reads. vi.hoisted so the factory can close over it.
-const state = vi.hoisted(() => ({ branch: 'dean/x', openPrNumber: '' }));
+// Mutable state the child_process mock reads. vi.hoisted so the factory can close over it. `ghStatus`
+// simulates gh's exit code (0 = answered; non-zero = couldn't reach GitHub → must fail fast).
+const state = vi.hoisted(() => ({ branch: 'dean/x', openPrNumber: '', ghStatus: 0, ghStderr: '' }));
 
 // execSync → current branch; spawnSync → the `gh pr list … --state open` lookup (openPrForBranch).
 vi.mock('child_process', () => ({
     execSync: (): string => `${state.branch}\n`,
-    spawnSync: (): { status: number; stdout: string } => ({ status: 0, stdout: `${state.openPrNumber}\n` }),
+    spawnSync: (): { status: number; stdout: string; stderr: string } =>
+        ({ status: state.ghStatus, stdout: `${state.openPrNumber}\n`, stderr: state.ghStderr }),
 }));
 
 import { assertNoOpenPr } from './wp-update-start';
@@ -16,11 +18,23 @@ describe('wp-update-start assertNoOpenPr (Bug #4: fail-fast when an open PR exis
     beforeEach(() => {
         state.branch = 'dean/x';
         state.openPrNumber = '';
+        state.ghStatus = 0;
+        state.ghStderr = '';
     });
 
     it('does nothing when there is no open PR', () => {
         state.openPrNumber = '';
         expect(() => assertNoOpenPr('/repo')).not.toThrow();
+    });
+
+    it('FAILS FAST when gh cannot reach GitHub (never assumes "no PR")', () => {
+        // gh exits non-zero (offline / not authenticated). We must NOT treat that as "no open PR" and
+        // proceed — that is exactly how a PR gets stranded on the old branch generation.
+        state.ghStatus = 1;
+        state.ghStderr = 'gh: not authenticated';
+        state.openPrNumber = '';
+        expect(() => assertNoOpenPr('/repo')).toThrow(CliExitError);
+        expect(() => assertNoOpenPr('/repo')).toThrow(/Could not ask GitHub/);
     });
 
     it('throws a CliExitError steering to the PR flow when an open PR exists', () => {

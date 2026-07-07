@@ -96,6 +96,15 @@ describe('main-sync status IO', () => {
         expect(read?.mergedPr).toBe('42');
     });
 
+    it('round-trips openPr (defaulted field, not in the positional constructor)', () => {
+        const status = new MainSyncStatus('dean/x', false, '', true, 'aaa', 'bbb', 'ccc', true, ['q.ts'], 'ts');
+        status.openPr = '303';
+        writeMainSyncStatus(root, status);
+        expect(readMainSyncStatus(root)?.openPr).toBe('303');
+        // A legacy cache with no openPr key reads back as '' (fail-safe default).
+        expect(new MainSyncStatus('b', false, '', true, null, '', '', false, [], 'ts').openPr).toBe('');
+    });
+
     it('returns null for a missing file', () => {
         expect(readMainSyncStatus(root)).toBeNull();
     });
