@@ -20,6 +20,7 @@
         "baseUrl": ".",
         "paths": {
             "@webpieces/core-context": ["packages/core/core-context/src/index.ts"],
+            "@webpieces/core-mock": ["packages/core/core-mock/src/index.ts"],
             "@webpieces/core-util": ["packages/core/core-util/src/index.ts"],
             "@webpieces/http-routing": ["packages/http/http-routing/src/index.ts"],
             "@webpieces/http-filters": ["packages/http/http-filters/src/index.ts"],
@@ -31,7 +32,11 @@
             "@webpieces/ai-hook-rules": ["packages/tooling/ai-hook-rules/src/index.ts"],
             "@webpieces/eslint-rules": ["packages/tooling/eslint-rules/src/index.ts"],
             "@webpieces/code-rules": ["packages/tooling/code-rules/src/index.ts"],
-            "@webpieces/nx-webpieces-rules": ["packages/tooling/nx-webpieces-rules/src/index.ts"]
+            "@webpieces/nx-webpieces-rules": ["packages/tooling/nx-webpieces-rules/src/index.ts"],
+            "@webpieces/client-server-api": ["apps/app-example/client-server-api/src/index.ts"],
+            "@webpieces/server2-api": ["apps/app-example/server2-api/src/index.ts"],
+            "@webpieces/company-core": ["apps/app-example/company-core/src/index.ts"],
+            "@webpieces/company-svc-core": ["apps/app-example/company-svc-core/src/index.ts"]
         }
     },
     "exclude": ["node_modules", "tmp"]

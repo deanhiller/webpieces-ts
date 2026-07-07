@@ -1,0 +1,23 @@
+{
+  "name": "company-svc-core",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/app-example/company-svc-core/src",
+  "projectType": "library",
+  "tags": ["framework:express", "role:lib"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/apps/app-example/company-svc-core",
+        "main": "apps/app-example/company-svc-core/src/index.ts",
+        "tsConfig": "apps/app-example/company-svc-core/tsconfig.lib.json",
+        "assets": [
+          "apps/app-example/company-svc-core/package.json"
+        ]
+      }
+    }
+  }
+}

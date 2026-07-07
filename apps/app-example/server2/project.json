@@ -1,0 +1,34 @@
+{
+    "name": "server2",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/app-example/server2/src",
+    "projectType": "application",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run apps/app-example/server2/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/apps/app-example/server2",
+                "main": "apps/app-example/server2/src/server.ts",
+                "tsConfig": "apps/app-example/server2/tsconfig.app.json",
+                "assets": []
+            }
+        },
+        "serve": {
+            "continuous": true,
+            "executor": "@nx/js:node",
+            "dependsOn": ["build"],
+            "options": {
+                "buildTarget": "server2:build",
+                "runBuildTargetDependencies": false
+            }
+        }
+    },
+    "tags": ["framework:express", "role:server"]
+}

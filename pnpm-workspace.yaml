@@ -5,3 +5,4 @@ packages:
   - 'packages/cloud/*'
   - 'packages/tooling/*'
   - 'libraries/apis/*'
+  - 'apps/app-example/*'

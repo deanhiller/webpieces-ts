@@ -1,0 +1,132 @@
+{
+    "schemaVersion": 2,
+    "project": "angular-site",
+    "designs": [
+        {
+            "root": "AppComponent",
+            "rootKind": "component",
+            "file": "apps/app-example/angular-site/src/app/app.component.ts",
+            "maxLevel": 3,
+            "nodes": [
+                {
+                    "id": "AppComponent",
+                    "className": "AppComponent",
+                    "kind": "component",
+                    "scope": "unknown",
+                    "file": "apps/app-example/angular-site/src/app/app.component.ts",
+                    "level": 0
+                },
+                {
+                    "id": "ClientConfig",
+                    "className": "ClientConfig",
+                    "kind": "dynamic",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "level": 2,
+                    "detail": "ClientConfig (dynamic)"
+                },
+                {
+                    "id": "EnvironmentConfig",
+                    "className": "EnvironmentConfig",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/services/EnvironmentConfig.ts",
+                    "level": 3
+                },
+                {
+                    "id": "MutableContextStore",
+                    "className": "MutableContextStore",
+                    "kind": "constant",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "level": 3,
+                    "detail": "new MutableContextStore()"
+                },
+                {
+                    "id": "PublicApi",
+                    "className": "PublicApi",
+                    "kind": "dynamic",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "level": 1,
+                    "detail": "PublicApi (dynamic)"
+                },
+                {
+                    "id": "SaveApi",
+                    "className": "SaveApi",
+                    "kind": "dynamic",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "level": 1,
+                    "detail": "SaveApi (dynamic)"
+                }
+            ],
+            "edges": [
+                {
+                    "from": "AppComponent",
+                    "to": "EnvironmentConfig",
+                    "injection": "token",
+                    "token": "EnvironmentConfig",
+                    "tokenKey": "class:apps/app-example/angular-site/src/services/EnvironmentConfig.ts#EnvironmentConfig",
+                    "paramName": "envConfig",
+                    "paramType": "EnvironmentConfig"
+                },
+                {
+                    "from": "AppComponent",
+                    "to": "PublicApi",
+                    "injection": "token",
+                    "token": "PublicApi",
+                    "tokenKey": "class:apps/app-example/client-server-api/src/PublicApi.ts#PublicApi",
+                    "paramName": "publicApi",
+                    "paramType": "PublicApi"
+                },
+                {
+                    "from": "AppComponent",
+                    "to": "SaveApi",
+                    "injection": "token",
+                    "token": "SaveApi",
+                    "tokenKey": "class:apps/app-example/client-server-api/src/SaveApi.ts#SaveApi",
+                    "paramName": "saveApi",
+                    "paramType": "SaveApi"
+                },
+                {
+                    "from": "ClientConfig",
+                    "to": "EnvironmentConfig",
+                    "injection": "type",
+                    "token": "EnvironmentConfig",
+                    "tokenKey": "class:apps/app-example/angular-site/src/services/EnvironmentConfig.ts#EnvironmentConfig",
+                    "paramName": "EnvironmentConfig",
+                    "paramType": "EnvironmentConfig"
+                },
+                {
+                    "from": "ClientConfig",
+                    "to": "MutableContextStore",
+                    "injection": "type",
+                    "token": "MutableContextStore",
+                    "tokenKey": "class:packages/http/http-client/src/MutableContextStore.ts#MutableContextStore",
+                    "paramName": "MutableContextStore",
+                    "paramType": "MutableContextStore"
+                },
+                {
+                    "from": "PublicApi",
+                    "to": "ClientConfig",
+                    "injection": "type",
+                    "token": "ClientConfig",
+                    "tokenKey": "class:packages/http/http-client/src/ClientFactory.ts#ClientConfig",
+                    "paramName": "ClientConfig",
+                    "paramType": "ClientConfig"
+                },
+                {
+                    "from": "SaveApi",
+                    "to": "ClientConfig",
+                    "injection": "type",
+                    "token": "ClientConfig",
+                    "tokenKey": "class:packages/http/http-client/src/ClientFactory.ts#ClientConfig",
+                    "paramName": "ClientConfig",
+                    "paramType": "ClientConfig"
+                }
+            ],
+            "unresolved": []
+        }
+    ]
+}
