@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { CONFIG_FILENAME } from './config-file';
 import { loadAndValidate } from './load-config';
+import { toError } from './to-error';
 
 function mktmp(contents: Record<string, string>): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-config-'));
@@ -163,6 +164,43 @@ describe('loadAndValidate — sections & commands', () => {
         expect(loaded.commands.upsertPr).toBe('pnpm my-upsert');
         const guard = loaded.rulesConfig['pr-creation-or-push-guard'] as Record<string, unknown>;
         expect(guard['upsertPrCommand']).toBe('pnpm my-upsert');
+    });
+});
+
+// Regression for the config-validation banner (bugReport.md, released 0.3.241): a stale/unknown rule
+// key made the guard fail closed on every Bash/Write/Edit EXCEPT edits to webpieces.config.json, but
+// the surfaced banner never said so — so an AI read "everything is blocked" and escalated to the human
+// instead of editing the config to unblock itself. The banner must (1) tell the reader that editing
+// webpieces.config.json is ALWAYS allowed through the guard, and (2) lead with `pnpm install` (the #1
+// cause is version skew), NOT with deleting the key (which destroys valid config on a stale checkout).
+describe('loadAndValidate — config-error banner (unblock instructions)', () => {
+    function bannerFor(unknownRuleKey: string): string {
+        const sections = allRulesOff();
+        (sections['rules'] as Record<string, unknown>)[unknownRuleKey] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+        const dir = writeConfig(sections);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            loadAndValidate(dir);
+        } catch (err: unknown) {
+            const error = toError(err);
+            return error.message;
+        }
+        throw new Error('expected loadAndValidate to throw on an unknown rule key');
+    }
+
+    it('tells the reader that editing webpieces.config.json is ALWAYS allowed (so an AI never deadlocks)', () => {
+        const msg = bannerFor('totally-made-up-rule');
+        expect(msg).toContain('ALWAYS allowed');
+        expect(msg).toContain('webpieces.config.json');
+    });
+
+    it('leads the fix with `pnpm install` (version skew), not with deleting the key', () => {
+        const msg = bannerFor('totally-made-up-rule');
+        expect(msg).toContain('FIX ORDER');
+        expect(msg).toContain('pnpm install');
+        // `pnpm install` must come BEFORE any "delete/remove the key" guidance so a stale checkout
+        // syncs first instead of gutting valid config.
+        expect(msg.indexOf('pnpm install')).toBeLessThan(msg.indexOf('remove'));
     });
 });
 
