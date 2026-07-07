@@ -1,18 +1,24 @@
 import { ContainerModule } from 'inversify';
+import { ContextKey } from '@webpieces/core-util';
 import { FilterDefinition, WebpiecesRouter } from '@webpieces/http-routing';
 import { ContextFilter, LogApiFilter, RecordingFilter } from '@webpieces/http-server';
-import { InversifyModule } from './modules/InversifyModule';
+import { InversifyModule, AppHeaders } from './modules/InversifyModule';
 import { AuthFilter } from './filters/AuthFilter';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { SaveController } from './controllers/save-controller';
 import { PublicController } from './controllers/public-controller';
 
 /**
- * App DI modules beyond the standard company set (WebpiecesModule + CompanyHeadersModule,
- * which createCompanyRouter/bootstrapServer add themselves). InversifyModule binds this
- * app's controllers, the outbound Server2 client, the Counter, and app headers.
+ * App DI modules beyond the standard company set. InversifyModule binds this app's
+ * controllers, the outbound Server2 client, and the Counter.
  */
 export const APP_MODULES: ContainerModule[] = [InversifyModule];
+
+/**
+ * This app's own context keys, registered into the global HeaderRegistry at startup
+ * (server.ts / test setup) via configureCompanyHeaders(APP_HEADERS).
+ */
+export const APP_HEADERS: ContextKey[] = AppHeaders.getAllHeaders();
 
 /**
  * Configure the app's filters + routes on a WebpiecesRouter. Shared by production

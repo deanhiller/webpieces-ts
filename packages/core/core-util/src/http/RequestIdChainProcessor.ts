@@ -19,8 +19,9 @@ export class RequestIdChainProcessor {
      * Rewrite the outbound header map in place: x-request-id -> x-previous-request-id.
      */
     process(outboundHeaders: Map<string, string>): void {
-        const requestIdName = WebpiecesCoreHeaders.REQUEST_ID.headerName;
-        const previousIdName = WebpiecesCoreHeaders.PREVIOUS_REQUEST_ID.headerName;
+        // The outbound map is keyed by wire (HTTP header) name.
+        const requestIdName = WebpiecesCoreHeaders.REQUEST_ID.httpHeader!;
+        const previousIdName = WebpiecesCoreHeaders.PREVIOUS_REQUEST_ID.httpHeader!;
 
         const currentRequestId = outboundHeaders.get(requestIdName);
         if (currentRequestId === undefined) {

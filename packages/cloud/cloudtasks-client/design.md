@@ -12,10 +12,8 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
-    HeaderRegistry{{"HeaderRegistry ?"}}:::unresolved
     TaskClientCreator["TaskClientCreator"]:::apiImpl
     TaskInvoker{{"TaskInvoker ?"}}:::unresolved
-    TaskClientCreator --> HeaderRegistry
     TaskClientCreator --> TaskInvoker
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e

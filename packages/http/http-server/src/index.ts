@@ -14,8 +14,7 @@ export { TestCaseRecorderImpl } from './recorder/TestCaseRecorderImpl';
 export { SpecGenerator } from './recorder/SpecGenerator';
 export { recordable } from './recorder/recordable';
 
-// Platform Headers
-export { WebpiecesModule } from './modules/WebpiecesModule';
+// Context keys + registry (the global magic-context header system)
 export { WebpiecesCoreHeaders } from './headers/WebpiecesCoreHeaders';
 export { HeaderRegistry } from '@webpieces/core-util';
 

@@ -34,18 +34,16 @@ export { createApiClient, ClientConfig } from './ClientFactory';
 export type { IdTokenMinter } from './ClientFactory';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
 
-// Context management for header propagation
-export { StaticContextReader, CompositeContextReader } from './ContextReader';
+// Context management for header propagation (browser reader)
 export { MutableContextStore } from './MutableContextStore';
 // ContextMgr + RequestIdChainProcessor live in browser+node core-util; re-exported for back-compat
 export { ContextMgr, RequestIdChainProcessor } from '@webpieces/core-util';
 
-// Re-export header contract from http-api for convenience (browser one-import)
+// Re-export the context-key contract from core-util for convenience (browser one-import)
 export {
     ContextReader,
+    ContextKey,
     HeaderRegistry,
-    PlatformHeader,
-    PlatformHeadersExtension,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 

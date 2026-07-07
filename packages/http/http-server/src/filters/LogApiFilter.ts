@@ -1,9 +1,9 @@
-import {inject, injectable} from 'inversify';
+import { injectable } from 'inversify';
 import {provideFrameworkSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { LogManager } from '@webpieces/core-util';
 import {
-    PlatformHeader,
+    ContextKey,
     HeaderMethods,
     HeaderRegistry,
     LogApiCall,
@@ -31,19 +31,17 @@ const log = LogManager.getLogger('LogApiFilter');
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private logApiCall: LogApiCall;
-    private allHeaders: PlatformHeader[];
+    private headerMethods = new HeaderMethods();
+    private loggedKeys: ContextKey[];
 
-    constructor(
-        @inject(HeaderRegistry) registry: HeaderRegistry,
-        @inject(HeaderMethods) private headerMethods: HeaderMethods
-    ) {
+    constructor() {
         super();
 
-        // The registry is the single source of truth (all modules' extensions,
-        // duplicate-validated at startup). Log map keys use loggerMdcKey when set.
-        this.allHeaders = registry.getHeaders();
+        // The global registry is the single source of truth (configured at startup,
+        // duplicate-validated). Log map keys off each key's `name`.
+        this.loggedKeys = HeaderRegistry.get().getLoggedKeys();
 
-        log.info(`[LogApiFilter] Using ${this.allHeaders.length} platform headers from HeaderRegistry`);
+        log.info(`[LogApiFilter] Using ${this.loggedKeys.length} logged context keys from HeaderRegistry`);
 
         this.logApiCall = new LogApiCall();
     }
@@ -52,9 +50,9 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        // Build header map from RequestContext (headers are already transferred by ContextFilter)
+        // Build log map from RequestContext (keys already transferred by ContextFilter)
         const contextReader = new RequestContextReader();
-        const headers = this.headerMethods.buildSecureMapForLogs(this.allHeaders, contextReader);
+        const headers = this.headerMethods.buildSecureMapForLogs(this.loggedKeys, contextReader);
 
         // Wrap nextFilter.invoke in a method that returns the response
         const method = async (): Promise<unknown> => {

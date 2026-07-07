@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify';
 import { provideFrameworkSingleton, RequestContextReader, ContextMgr } from '@webpieces/core-context';
-import { HeaderRegistry, DocumentDesign } from '@webpieces/core-util';
+import { DocumentDesign } from '@webpieces/core-util';
 import { getCloudRunUrl } from '@webpieces/gcp-identity';
 import { TaskInvoker } from './TaskTypes';
 import { createTaskClient, TaskClientConfig } from './TaskClientFactory';
@@ -21,7 +21,6 @@ type ApiPrototype<T> = Function & { prototype: T };
 export class TaskClientCreator {
     constructor(
         @inject(TaskInvoker) private readonly invoker: TaskInvoker,
-        @inject(HeaderRegistry) private readonly registry: HeaderRegistry,
     ) {}
 
     /** Enqueue client whose delivery URL is another Cloud Run service (by name). */
@@ -41,6 +40,6 @@ export class TaskClientCreator {
     }
 
     private buildContextMgr(): ContextMgr {
-        return new ContextMgr(new RequestContextReader(), this.registry);
+        return new ContextMgr(new RequestContextReader());
     }
 }

@@ -1,8 +1,8 @@
-import {inject, injectable} from 'inversify';
+import { injectable } from 'inversify';
 import { provideFrameworkSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
-import { PlatformHeader, HeaderRegistry } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
 import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
 import {ContextKeys} from "../headers/ContextKeys";
 import { LogManager } from '@webpieces/core-util';
@@ -31,18 +31,17 @@ const log = LogManager.getLogger('ContextFilter');
 @provideFrameworkSingleton()
 @injectable()
 export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-    private transferredHeaders: PlatformHeader[];
+    private transferredKeys: ContextKey[];
 
-    constructor(
-        @inject(HeaderRegistry) registry: HeaderRegistry
-    ) {
+    constructor() {
         super();
 
-        // The registry is the single source of truth (all modules' extensions,
-        // duplicate-validated at startup)
-        this.transferredHeaders = registry.getTransferredHeaders();
+        // The global registry is the single source of truth (configured at startup,
+        // duplicate-validated). No DI — HeaderRegistry.configure(...) ran first.
+        const registry = HeaderRegistry.get();
+        this.transferredKeys = registry.getTransferredKeys();
 
-        log.info(`[ContextFilter] Using ${registry.getHeaders().length} platform headers from HeaderRegistry (${this.transferredHeaders.length} transferred)`);
+        log.info(`[ContextFilter] Using ${registry.getKeys().length} context keys from HeaderRegistry (${this.transferredKeys.length} transferred)`);
     }
 
     async filter(
@@ -63,8 +62,9 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * Transfer platform headers from MethodMeta.requestHeaders to RequestContext.
-     * Uses HeaderMethods.findTransferHeaders() to filter by isWantTransferred=true.
+     * Transfer transferred keys from MethodMeta.requestHeaders to RequestContext.
+     * A key is transferred when it has an httpHeader (wire name); the value is read
+     * from the incoming request under that httpHeader and stored under the key's name.
      */
     private transferHeaders(meta: MethodMeta): void {
         if (!meta.requestHeaders) {
@@ -73,13 +73,12 @@ export class ContextFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             return;
         }
 
-        // Transfer each header to RequestContext using RequestContext.putHeader()
-        for (const header of this.transferredHeaders) {
-            // Get values from requestHeaders (case-insensitive lookup)
-            const values = meta.requestHeaders.get(header.headerName.toLowerCase());
+        // Transfer each key to RequestContext (read by wire name, store by key name).
+        for (const key of this.transferredKeys) {
+            // Get values from requestHeaders (case-insensitive lookup by wire name)
+            const values = meta.requestHeaders.get(key.httpHeader!.toLowerCase());
             if (values && values.length > 0) {
-                // Use RequestContext.putHeader() which calls header.getHeaderName()
-                RequestContext.putHeader(header, values[0]);
+                RequestContext.putHeader(key, values[0]);
             }
         }
 

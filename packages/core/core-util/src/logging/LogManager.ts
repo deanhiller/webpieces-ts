@@ -1,6 +1,7 @@
 import { Logger } from './Logger';
 import { LoggerFactory } from './LoggerFactory';
 import { ConsoleLoggerFactory } from './ConsoleLoggerFactory';
+import { HeaderRegistry } from '../http/HeaderRegistry';
 
 /**
  * A stable per-name facade that re-resolves the currently installed factory on
@@ -64,8 +65,21 @@ export class LogManager {
      * Install the process-wide logging backend. Call once at app startup. Loggers
      * already handed out via {@link getLogger} switch to it immediately (they are
      * deferred facades), so import-time loggers are covered too.
+     *
+     * FAIL-FAST ORDERING: {@link HeaderRegistry} MUST be configured first — logging
+     * masks secured values and keys log lines off the registry's context keys, so a
+     * factory installed before the registry exists would log an incomplete/incorrect
+     * context. We log + throw rather than silently mis-log.
      */
     static setFactory(factory: LoggerFactory): void {
+        if (!HeaderRegistry.isConfigured()) {
+            const msg =
+                'HeaderRegistry.configure(...) MUST be called before LogManager.setFactory(...) — ' +
+                'the registry defines which context keys are logged and which are masked.';
+            // Log via the current (bootstrap console) backend, then fail fast.
+            LogManager.resolveBackend('LogManager').error(msg);
+            throw new Error(msg);
+        }
         LogManager.factory = factory;
     }
 

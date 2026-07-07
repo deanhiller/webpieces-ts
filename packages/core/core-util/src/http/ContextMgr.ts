@@ -4,30 +4,24 @@ import { HeaderRegistry } from './HeaderRegistry';
 import { RequestIdChainProcessor } from './RequestIdChainProcessor';
 
 /**
- * ContextMgr - Manages context reader + header registry for HTTP clients.
+ * ContextMgr - propagates the magic context onto outbound HTTP requests.
  *
- * Passed to createApiClient() via ClientConfig.contextMgr to enable automatic
- * header propagation: every header in the registry with isWantTransferred=true
- * is read from the ContextReader and added to outbound requests.
+ * Passed to createApiClient() via ClientConfig.contextMgr: every transferred key
+ * (httpHeader set) in the GLOBAL {@link HeaderRegistry} is read from the ContextReader
+ * and added to outbound requests. The registry is a process global (configured once at
+ * startup, like LogManager), so ContextMgr no longer takes a registry argument.
  *
- * Browser-safe (no AsyncLocalStorage): the server-side reader
- * (RequestContextReader, in @webpieces/core-context) and the browser store
- * (MutableContextStore, in @webpieces/http-client) both implement ContextReader,
- * so ContextMgr itself lives here in browser+node core-util.
- *
- * BREAKING (migration from the PlatformHeader[] constructor):
- *   new ContextMgr(reader, headerArray)
- * becomes
- *   new ContextMgr(reader, new HeaderRegistry([new PlatformHeadersExtension(headerArray)]))
+ * Browser-safe (no AsyncLocalStorage): the server-side reader (RequestContextReader,
+ * in @webpieces/core-context) and the browser store (MutableContextStore, in
+ * @webpieces/http-client) both implement ContextReader.
  *
  * Example usage:
  * ```typescript
  * // Node.js server-side (reads the magic context from RequestContext):
- * const contextMgr = new ContextMgr(new RequestContextReader(), registry);
+ * const contextMgr = new ContextMgr(new RequestContextReader());
  *
  * // Browser client-side (app-managed store, no AsyncLocalStorage):
- * const store = new MutableContextStore();
- * const contextMgr = new ContextMgr(store, registry);
+ * const contextMgr = new ContextMgr(new MutableContextStore());
  *
  * // Both cases:
  * const config = new ClientConfig('http://api.example.com', contextMgr);
@@ -39,16 +33,10 @@ export class ContextMgr {
 
     constructor(
         /**
-         * The context reader that provides header values.
+         * The context reader that provides context-key values.
          * Different implementations for Node.js vs browser.
          */
         public readonly contextReader: ContextReader,
-
-        /**
-         * The single source of truth for which headers exist and how they behave
-         * (transferred/secured/MDC). Shared with the server-side filters.
-         */
-        public readonly registry: HeaderRegistry,
 
         /**
          * When true (default), outbound calls send the current x-request-id as
@@ -61,19 +49,19 @@ export class ContextMgr {
     }
 
     /**
-     * Build the headers to send on an outbound request: every transferred
-     * header (isWantTransferred=true) with a non-empty value in the context,
-     * then request-id chaining applied (unless opted out).
+     * Build the headers to send on an outbound request: every transferred key
+     * (httpHeader set) with a non-empty value in the context, emitted under its
+     * `httpHeader` wire name, then request-id chaining applied (unless opted out).
      *
      * Values are RAW (unmasked) - this map goes on the wire, not in logs.
      */
     buildOutboundHeaders(): Map<string, string> {
         const outbound = new Map<string, string>();
 
-        for (const header of this.registry.getTransferredHeaders()) {
-            const value = this.contextReader.read(header);
+        for (const key of HeaderRegistry.get().getTransferredKeys()) {
+            const value = this.contextReader.read(key);
             if (value !== undefined && value !== null && value !== '') {
-                outbound.set(header.headerName, value);
+                outbound.set(key.httpHeader!, value);
             }
         }
 
@@ -85,10 +73,10 @@ export class ContextMgr {
     }
 
     /**
-     * Build the header map for LOGGING: secured header values are masked,
-     * and headers are keyed by loggerMdcKey when defined.
+     * Build the header map for LOGGING: secured values masked, keyed by each key's
+     * `name`, only for keys with isLogged=true.
      */
     buildHeadersForLogging(headerMethods: HeaderMethods): Map<string, string> {
-        return headerMethods.buildSecureMapForLogs(this.registry.getHeaders(), this.contextReader);
+        return headerMethods.buildSecureMapForLogs(HeaderRegistry.get().getLoggedKeys(), this.contextReader);
     }
 }

@@ -2,9 +2,9 @@ import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { WebpiecesExpress } from '@webpieces/http-server';
-import { createCompanyRouter } from '@webpieces/company-svc-core';
+import { createCompanyRouter, configureCompanyHeaders } from '@webpieces/company-svc-core';
 import { SaveResponse } from '@webpieces/client-server-api';
-import { APP_MODULES, configureRoutes } from '../../client-server/src/AppServerConfig';
+import { APP_MODULES, APP_HEADERS, configureRoutes } from '../../client-server/src/AppServerConfig';
 import { configureServer2Routes } from '../../server2/src/Server2Config';
 
 /**
@@ -33,6 +33,10 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 async function bootBothServers(): Promise<void> {
     // client-server's InversifyModule reads SERVER2_URL for its outbound client
     process.env['SERVER2_URL'] = `http://localhost:${server2Port}`;
+
+    // Both servers share this test process, so ONE global HeaderRegistry (the union:
+    // company + platform + client-server's app keys) serves both.
+    configureCompanyHeaders(APP_HEADERS);
 
     const server2Router = await createCompanyRouter();
     configureServer2Routes(server2Router);
