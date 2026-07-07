@@ -38,7 +38,8 @@ export async function main(): Promise<void> {
     assertCleanTree(repoRoot);
 
     await updateBranchFromMain(repoRoot);
-    // Local branch may be a numbered generation (base2/…); the remote/PR branch is the stable base.
+    // Local branch, remote branch, and PR share the one stable feature name (baseBranchName also
+    // tolerates a leftover `…wpN` from the old scheme).
     ensurePushed(baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim()));
 
     // Advisory build gate — early feedback before the AI writes review.json. wp-finish-upsert-pr runs

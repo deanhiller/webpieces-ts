@@ -39,7 +39,15 @@ function gitOut(args: string[]): string {
     return result.status === 0 ? (result.stdout ?? '').trim() : '';
 }
 
-function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJson): string {
+// The user-facing PR title: the AI-authored review.title, or — if the AI omitted it — a readable
+// fallback derived from the stable feature name (NEVER the internal `Squash merge of <branch>` commit
+// subject, which leaked bookkeeping into the PR title).
+function prTitleFrom(review: ReviewJson): string {
+    if (review.title !== '') return review.title;
+    return getFeatureName().replace(/[-/]+/g, ' ').trim();
+}
+
+function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string): string {
     const config = loadAndValidate(repoRoot).prGate;
     const forkPoint = gitOut(['merge-base', 'origin/main', 'HEAD']);
     const featureHead = gitOut(['rev-parse', 'HEAD']);
@@ -47,7 +55,6 @@ function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJs
     const range = `${forkPoint}..${featureHead}`;
     const changedFiles = gitOut(['diff', range, '--name-only']).split('\n').filter((f: string): boolean => f.trim() !== '');
     const patch = gitOut(['diff', range]);
-    const title = gitOut(['log', '-1', '--format=%s']);
 
     const gateResults = computeGateResults(config.gates, changedFiles);
     const disables = countAddedDisables(patch);
@@ -55,16 +62,15 @@ function buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJs
     return renderDashboard(input);
 }
 
-// The PR always lives on the stable base branch (the local branch may be a numbered generation
-// base2/base3/…). Look up / create / merge against `baseBranch`, never the numbered branch, or
-// generation 2+ would fail to find its PR and open a duplicate.
-function upsertPr(repoRoot: string, baseBranch: string, body: string): void {
+// The PR, the remote branch, and the local branch all share the one stable feature name now. Look up /
+// create / merge against `baseBranch` (baseBranchName also tolerates a leftover `…wpN` mid-transition),
+// or a resolve from such a leftover could fail to find its PR and open a duplicate.
+function upsertPr(repoRoot: string, baseBranch: string, body: string, title: string): string {
     const prDir = prDirFor(repoRoot, getFeatureName());
     fs.mkdirSync(prDir, { recursive: true });
     const bodyFile = path.join(prDir, 'pr-body.md');
     fs.writeFileSync(bodyFile, body + '\n');
 
-    const existing = gitOut(['log', '-1', '--format=%s']); // title fallback
     const prNumber = spawnSync(
         'gh', ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
         { encoding: 'utf8' },
@@ -73,16 +79,18 @@ function upsertPr(repoRoot: string, baseBranch: string, body: string): void {
 
     if (num === '') {
         process.stdout.write('Creating PR...\n');
-        const create = spawnSync('gh', ['pr', 'create', '--head', baseBranch, '--base', 'main', '--title', existing, '--body-file', bodyFile], { stdio: 'inherit' });
+        const create = spawnSync('gh', ['pr', 'create', '--head', baseBranch, '--base', 'main', '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
         if (create.status !== 0) {
             process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
-            return;
+            return '';
         }
     } else {
         process.stdout.write(`Updating PR #${num}...\n`);
-        spawnSync('gh', ['pr', 'edit', num, '--body-file', bodyFile], { stdio: 'inherit' });
+        // Keep the title in sync with the latest review.title (not just the body).
+        spawnSync('gh', ['pr', 'edit', num, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
     }
     spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash'], { stdio: 'inherit' });
+    return num;
 }
 
 export async function main(): Promise<void> {
@@ -114,15 +122,24 @@ export async function main(): Promise<void> {
     runBuildGate(repoRoot, new BuildGateOptions(
         '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
     ));
-    // After finalize the local branch is the numbered generation (base2/…); the remote branch and
-    // PR live on the stable base name — push and upsert against that.
+    // After finalize the local branch, the remote branch, and the PR all share the SAME stable name —
+    // push and upsert against it. (baseBranchName is a no-op on the already-stable name; it also
+    // tolerates a leftover `…wpN` mid-transition.)
     const base = baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
     ensurePushed(base);
 
     process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
-    const body = buildDashboard(repoRoot, true, review);
-    upsertPr(repoRoot, base, body);
-    process.stdout.write('\n✅ Done.\n');
+    const title = prTitleFrom(review);
+    const body = buildDashboard(repoRoot, true, review, title);
+    const prNum = upsertPr(repoRoot, base, body, title);
+
+    process.stdout.write(
+        '\n' + SEP + '✅ PR finished — here is exactly what I did\n' + SEP + '\n' +
+        `   1. validated the build gate (authoritative)\n` +
+        `   2. force-pushed your work to origin/${base}\n` +
+        `   3. ${prNum ? `updated/created PR #${prNum}` : 'created the PR'} titled: "${title}"\n` +
+        `   You are on  ${base}  — same name as the remote branch and the PR head.\n\n`,
+    );
 }
 
 if (require.main === module) runMain(main);

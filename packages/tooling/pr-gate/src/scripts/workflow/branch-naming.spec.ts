@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { baseBranchName, nextBranchName, preMergeBackupName } from './branch-naming';
+import { baseBranchName, preMergeBackupName, nextFreePreMergeSlot } from './branch-naming';
 
 describe('baseBranchName', () => {
     it('leaves a gen-1 branch unchanged', () => {
@@ -23,28 +23,25 @@ describe('baseBranchName', () => {
     });
 });
 
-describe('nextBranchName', () => {
-    it('bumps gen 1 to wp2', () => {
-        expect(nextBranchName('feat/x-migration')).toBe('feat/x-migrationwp2');
+describe('preMergeBackupName', () => {
+    it('slot 1 (default) appends a bare PreMerge', () => {
+        expect(preMergeBackupName('feat/x-migration')).toBe('feat/x-migrationPreMerge');
+        expect(preMergeBackupName('feat/x-migration', 1)).toBe('feat/x-migrationPreMerge');
     });
 
-    it('bumps a numbered generation', () => {
-        expect(nextBranchName('feat/x-migrationwp2')).toBe('feat/x-migrationwp3');
-    });
-
-    it('is stable through a Squash temp name', () => {
-        expect(nextBranchName('feat/x-migrationSquash')).toBe('feat/x-migrationwp2');
-        expect(nextBranchName('feat/x-migrationwp2Squash')).toBe('feat/x-migrationwp3');
-    });
-
-    it('gives a version-upgrade branch a clean wp2 (no digit mangling)', () => {
-        expect(nextBranchName('deanhiller/upgrade-webpieces-0.3.213')).toBe('deanhiller/upgrade-webpieces-0.3.213wp2');
+    it('slot 2+ appends the numbered PreMerge<n>', () => {
+        expect(preMergeBackupName('feat/x-migration', 2)).toBe('feat/x-migrationPreMerge2');
+        expect(preMergeBackupName('feat/x-migration', 3)).toBe('feat/x-migrationPreMerge3');
     });
 });
 
-describe('preMergeBackupName', () => {
-    it('appends PreMerge to the current branch', () => {
-        expect(preMergeBackupName('feat/x-migration')).toBe('feat/x-migrationPreMerge');
-        expect(preMergeBackupName('feat/x-migrationwp2')).toBe('feat/x-migrationwp2PreMerge');
+describe('nextFreePreMergeSlot', () => {
+    it('returns the bare PreMerge when nothing exists yet', () => {
+        expect(nextFreePreMergeSlot('feat/x', () => false)).toBe('feat/xPreMerge');
+    });
+
+    it('skips taken slots and returns the first free numbered one', () => {
+        const taken = new Set(['feat/xPreMerge', 'feat/xPreMerge2']);
+        expect(nextFreePreMergeSlot('feat/x', (name: string): boolean => taken.has(name))).toBe('feat/xPreMerge3');
     });
 });

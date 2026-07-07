@@ -5,7 +5,7 @@ import { baseBranchName } from './branch-naming';
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 // The open PR (if any) tracking a feature branch, looked up by its STABLE base name (the PR always
-// lives on `base`, never on the numbered generation basewp2/basewp3/…). Returns '' ONLY when GitHub
+// lives on the stable feature name, and a leftover `…wpN` still resolves there). Returns '' ONLY when GitHub
 // answered and there is genuinely no open PR.
 //
 // This is a HARD GATE, not an advisory hint: it FAILS FAST if `gh` cannot answer (not installed, not

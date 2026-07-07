@@ -37,8 +37,16 @@ by the `redirect-how-to-merge-main` guard.
 3. **`pnpm wp-start-upsert-pr`** — the PR flow: update from main (same 3-point engine), push, run an
    advisory build gate, then tells you to write `review.json`. Never creates the PR itself. On a merge
    conflict here, finish with `pnpm wp-finish-upsert-pr` (not `wp-update-end`).
-4. **`pnpm wp-finish-upsert-pr`** — validates any in-progress merge, requires your `review.json`, runs
-   the **authoritative** build gate, pushes, and creates/updates the PR.
+4. **`pnpm wp-finish-upsert-pr`** — validates any in-progress merge, requires your `review.json` (its
+   `title` becomes the PR title), runs the **authoritative** build gate, pushes, and creates/updates the PR.
+
+## One branch name — local, remote, and PR are always identical
+
+A sync does its work on a transient `<feature>Squash` branch and, when it finishes, force-pushes and
+**renames back to `<feature>`** — so your local branch, `origin/<feature>`, and the PR head are always
+the *same* name. There is no `wpN` generation suffix to reconcile. Each sync also leaves a numbered
+pre-merge snapshot — `<feature>PreMerge`, `<feature>PreMerge2`, … — a local trail you can diff against
+or delete (`git branch --list '<feature>PreMerge*'`); they are not auto-pruned.
 
 ## Two possible outcomes of a squash-update
 
@@ -51,11 +59,12 @@ decides who does the work.
 ```
 you: pnpm wp-update-start
   tool: assertCleanTree            # you must have committed your own work first
-  tool: backup branch; checkout main; pull; create <feature>Squash off main
+  tool: snapshot pre-merge state -> <feature>PreMerge[N] (numbered trail, never overwritten)
+  tool: checkout main; pull; create transient <feature>Squash off main
   tool: git merge --squash <feature>          # SUCCEEDS — stages the combined result
   tool: git commit -m "Squash merge of <feature>"     # <-- the TOOL commits (mechanical)
-  tool: delete old branch; force-push to the stable base; rename to next generation
-  done — no AI/human merge work.
+  tool: force-push to origin/<feature>; rename <feature>Squash back to <feature>
+  done — you are on <feature> again (== origin/<feature> == PR head; names always match).
 ```
 
 There is **no `git add` here** — `git merge --squash` staged only the merge result, and the tool
@@ -65,17 +74,17 @@ commits exactly that. The commit is a pure function of your already-committed wo
 
 ```
 you: pnpm wp-update-start
-  tool: assertCleanTree; backup; checkout main; pull; create <feature>Squash
+  tool: assertCleanTree; snapshot -> <feature>PreMerge[N]; checkout main; pull; create <feature>Squash
   tool: git merge --squash <feature>          # CONFLICTS — conflicted files left with markers
   tool: writes .webpieces/merge-info/<feature>/ (A=fork / B=feature / C=main context + diffs)
   tool: writes .webpieces/instruct-ai/webpieces.mergeprocess.md, then exits (code 2)
-  ---- hand-off to the AI ----
+  ---- hand-off to the AI (you are on the transient <feature>Squash branch) ----
   AI:  read webpieces.mergeprocess.md
   AI:  per conflicted file -> resolve markers -> git add <file> -> write merge-explanation.md
   AI:  pnpm wp-update-end            # standalone; in the wp-start-upsert-pr flow run wp-finish-upsert-pr instead
   tool: validateResolution (no markers left, every file has an explanation)
   tool: assertNoUntracked -> git add -u -> git commit "... (conflicts resolved)"   # <-- TOOL commits
-  tool: build gate -> push -> create/update PR
+  tool: force-push origin/<feature>; rename <feature>Squash back to <feature>; build gate -> create/update PR
 ```
 
 Who does what on the conflict path:
