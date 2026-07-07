@@ -9,6 +9,7 @@ import {
 import { toError, Logger, LogManager, HeaderRegistry, ContextKey } from '@webpieces/core-util';
 import { CompanyLogging, CompanyHeaders } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
+import { CompanySetupOptions } from './CompanySetupOptions';
 
 /**
  * Options for {@link createCompanyRouter}.
@@ -50,6 +51,35 @@ export async function createCompanyRouter(options: CompanyRouterOptions = {}): P
 }
 
 /**
+ * setupCompanyRuntime - the ONE method that runs the canonical startup sequence in the
+ * correct fail-fast order and returns a ready {@link WebpiecesRouter}:
+ *
+ *   1. HeaderRegistry.configure  (filters read it at construction; logging masks off it)
+ *   2. LogManager.setFactory     (fails fast unless the registry is configured first)
+ *   3. build the router + DI container
+ *
+ * Shared by ALL three startup scenarios so none of them re-derive (and drift on) this
+ * order: the express server (via {@link bootstrapServer}), the in-process createApiClient
+ * tests, and the legacy-server example (which then hands `router.getContainer()` to
+ * WebpiecesRouteCreator). Tests pass their own {@link CompanySetupOptions.loggerFactory};
+ * everything else is identical to production.
+ */
+export async function setupCompanyRuntime(options: CompanySetupOptions): Promise<WebpiecesRouter> {
+    // 1. Register the global HeaderRegistry FIRST.
+    configureCompanyHeaders(options.svrHeaders);
+
+    // 2. Install the logging backend ONCE, before anything else logs.
+    CompanyLogging.configure(options.loggerFactory);
+
+    // 3. Build the node-only router + DI container.
+    return createCompanyRouter({
+        modules: options.modules,
+        appOverrides: options.appOverrides,
+        config: options.config,
+    });
+}
+
+/**
  * bootstrapServer - the ONE shared startup every company express service uses.
  *
  * The app supplies its options and a `configure` callback that adds its routes/filters
@@ -62,7 +92,7 @@ export async function createCompanyRouter(options: CompanyRouterOptions = {}): P
  * });
  * ```
  *
- * Sequence: install the log backend (bunyan/winston seam) → createCompanyRouter →
+ * Sequence: {@link setupCompanyRuntime} (HeaderRegistry → log backend → router+container) →
  * app configure(router) → WebpiecesExpress.bindAndStartExpress (express + CORS + error
  * handling + route mounting + listen) → park on SIGTERM/SIGINT → on startup error, log + exit(1).
  * Express lifecycle lives entirely in @webpieces/http-server (WebpiecesExpress).
@@ -71,20 +101,17 @@ export async function bootstrapServer(
     options: BootstrapOptions,
     configure: (router: WebpiecesRouter) => void,
 ): Promise<void> {
-    // Register the global HeaderRegistry FIRST — logging masks/keys off it, and
-    // LogManager.setFactory fails fast if the registry is not configured yet.
-    configureCompanyHeaders(options.svrHeaders);
-
-    // Install the server-side logging backend ONCE, before anything else logs.
-    CompanyLogging.configure(options.loggerFactory);
-
     const log = LogManager.getLogger(options.logName);
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Top-level server startup needs to catch and exit on error
     try {
-        log.info(`[${options.logName}] Starting server...`);
+        // Headers → logging → router: the ONE shared sequence (also used by tests and
+        // the legacy-server example) so every entry point starts identically.
+        const router = await setupCompanyRuntime(
+            new CompanySetupOptions(options.loggerFactory, options.modules, options.svrHeaders),
+        );
 
-        const router = await createCompanyRouter({ modules: options.modules });
+        log.info(`[${options.logName}] Starting server...`);
         configure(router);
 
         const port = parseInt(process.env['PORT'] || String(options.port), 10);

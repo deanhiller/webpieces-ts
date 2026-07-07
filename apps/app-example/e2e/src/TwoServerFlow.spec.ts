@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { WebpiecesExpress } from '@webpieces/http-server';
-import { createCompanyRouter, configureCompanyHeaders } from '@webpieces/company-svc-core';
+import { createCompanyRouter, setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
+import { ConsoleLoggerFactory } from '@webpieces/core-util';
 import { SaveResponse } from '@webpieces/client-server-api';
 import { APP_MODULES, APP_HEADERS, configureRoutes } from '../../client-server/src/AppServerConfig';
 import { configureServer2Routes } from '../../server2/src/Server2Config';
@@ -34,17 +35,19 @@ async function bootBothServers(): Promise<void> {
     // client-server's InversifyModule reads SERVER2_URL for its outbound client
     process.env['SERVER2_URL'] = `http://localhost:${server2Port}`;
 
-    // Both servers share this test process, so ONE global HeaderRegistry (the union:
-    // company + platform + client-server's app keys) serves both.
-    configureCompanyHeaders(APP_HEADERS);
+    // One process, one global HeaderRegistry + one logger install serving TWO routers.
+    // setupCompanyRuntime runs the shared headers → logging → router sequence for the
+    // primary (client-server, carrying the union of app keys); server2's router then reuses
+    // that same global registry via createCompanyRouter (no second header/logging install).
+    const clientRouter = await setupCompanyRuntime(
+        new CompanySetupOptions(new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS),
+    );
+    configureRoutes(clientRouter);
+    clientServerHttp = await new WebpiecesExpress(clientRouter).bindAndStartExpress(express(), clientServerPort);
 
     const server2Router = await createCompanyRouter();
     configureServer2Routes(server2Router);
     server2Http = await new WebpiecesExpress(server2Router).bindAndStartExpress(express(), server2Port);
-
-    const clientRouter = await createCompanyRouter({ modules: APP_MODULES });
-    configureRoutes(clientRouter);
-    clientServerHttp = await new WebpiecesExpress(clientRouter).bindAndStartExpress(express(), clientServerPort);
 
     // Capture BOTH servers' log output (they share this test process)
     logLines = [];

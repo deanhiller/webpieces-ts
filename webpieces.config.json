@@ -62,6 +62,11 @@
             "disableAllowed": false,
             "ignoreModifiedUntilEpoch": 1771931925
         },
+        "no-process-exit-outside-main": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 0
+        },
         "angular-no-direct-api-in-resolver": {
             "mode": "OFF",
             "disableAllowed": true,

@@ -1,0 +1,15 @@
+{
+    "name": "legacy-server",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/app-example/legacy-server/src",
+    "projectType": "application",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run apps/app-example/legacy-server/"
+            }
+        }
+    },
+    "tags": ["framework:express", "role:server"]
+}

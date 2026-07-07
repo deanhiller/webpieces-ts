@@ -20,12 +20,14 @@ import { LogManager } from '@webpieces/core-util';
  * self-contained (own body parsing, own RequestContext, own error->JSON mapping).
  * This class never calls app.use() - it only registers per-route handlers.
  *
- * Usage:
+ * Usage (the legacy-server example app builds the container via the shared
+ * setupCompanyRuntime + router.getContainer(); a bare standalone user can also
+ * assemble one directly):
  * ```typescript
  * const app = express();                       // your existing legacy app
  * const container = new Container();
- * await container.load(buildProviderModule()); // picks up @provideSingleton classes
- * await container.load(WebpiecesModule);       // required if you use ContextFilter
+ * await container.load(buildFrameworkModule()); // webpieces framework classes (ContextFilter, ...)
+ * await container.load(buildProviderModule());  // your @provideSingleton controllers/filters
  *
  * const creator = new WebpiecesRouteCreator(app, container);
  * creator.wireFilters(
@@ -46,8 +48,8 @@ import { LogManager } from '@webpieces/core-util';
  * - Want webpieces' localhost CORS? Opt in yourself:
  *   `app.use(new WebpiecesMiddleware().corsForLocalhost())`.
  *
- * This same class is used internally by WebpiecesServerImpl.start(), so the
- * full server and the embeddable adapter share one code path.
+ * This same class is used internally by WebpiecesExpress (the full-server express
+ * adapter), so the full server and the embeddable adapter share one code path.
  */
 const log = LogManager.getLogger('WebpiecesRouteCreator');
 
@@ -62,8 +64,8 @@ export class WebpiecesRouteCreator {
     /**
      * @param app - The Express app to mount routes on (yours - never taken over)
      * @param container - Inversify container used to resolve controllers and filters
-     * @param routeBuilder - Internal: WebpiecesServerImpl passes its DI singleton; standalone users omit
-     * @param middleware - Internal: WebpiecesServerImpl passes its DI singleton; standalone users omit
+     * @param routeBuilder - Internal: WebpiecesExpress passes its DI singleton; standalone users omit
+     * @param middleware - Internal: WebpiecesExpress passes its DI singleton; standalone users omit
      */
     constructor(
         private app: Express,
@@ -119,8 +121,8 @@ export class WebpiecesRouteCreator {
 
     /**
      * Mount every route currently registered on the RouteBuilder.
-     * Used by WebpiecesServerImpl.start() where routes were registered up front
-     * from WebAppMeta.getRoutes().
+     * Used by WebpiecesExpress (the full-server path) where routes were registered
+     * up front on the shared RouteBuilder.
      *
      * @returns Number of routes mounted
      */
