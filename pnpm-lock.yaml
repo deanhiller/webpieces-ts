@@ -151,6 +151,42 @@ importers:
         specifier: 0.15.0
         version: 0.15.0
 
+  apps/app-example/client-server-api:
+    dependencies:
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../../packages/core/core-util
+
+  apps/app-example/company-core:
+    dependencies:
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../../packages/core/core-util
+
+  apps/app-example/company-svc-core:
+    dependencies:
+      '@webpieces/company-core':
+        specifier: workspace:*
+        version: link:../company-core
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../../packages/core/core-util
+      '@webpieces/http-routing':
+        specifier: workspace:*
+        version: link:../../../packages/http/http-routing
+      '@webpieces/http-server':
+        specifier: workspace:*
+        version: link:../../../packages/http/http-server
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
+
+  apps/app-example/server2-api:
+    dependencies:
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../../packages/core/core-util
+
   packages/cloud/cloudtasks-client:
     dependencies:
       '@google-cloud/tasks':
@@ -199,19 +235,15 @@ importers:
         specifier: 0.2.2
         version: 0.2.2
 
+  packages/core/core-mock: {}
+
   packages/core/core-util: {}
 
   packages/http/http-client:
     dependencies:
-      '@webpieces/core-context':
-        specifier: workspace:*
-        version: link:../../core/core-context
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
-      '@webpieces/gcp-identity':
-        specifier: workspace:*
-        version: link:../../cloud/gcp-identity
 
   packages/http/http-filters:
     dependencies:

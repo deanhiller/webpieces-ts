@@ -18,6 +18,55 @@
                 "rules-config"
             ]
         },
+        "angular-site": {
+            "level": 2,
+            "framework": ["angular"],
+            "role": "client",
+            "shortDescription": "Angular single-page frontend demonstrating the webpieces browser client. It injects `SaveApi`/`PublicApi` as generated HTTP clients from `client-server-api` and calls the client-server service, wiring a HeaderRegistry from `company-core` for context header transfer.",
+            "responsibilitiesFile": "apps/app-example/angular-site/responsibilities.md",
+            "designFile": "apps/app-example/angular-site/design.json",
+            "dependsOn": [
+                "client-server-api",
+                "company-core",
+                "http-client"
+            ]
+        },
+        "app-example-e2e": {
+            "level": 7,
+            "framework": ["express"],
+            "role": "server",
+            "shortDescription": "End-to-end test project for the two-service example. Boots both `client-server` and `server2` on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.",
+            "responsibilitiesFile": "apps/app-example/e2e/responsibilities.md",
+            "dependsOn": [
+                "client-server",
+                "server2"
+            ]
+        },
+        "client-server": {
+            "level": 6,
+            "framework": ["express"],
+            "role": "server",
+            "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
+            "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
+            "designFile": "apps/app-example/client-server/design.json",
+            "dependsOn": [
+                "client-server-api",
+                "company-svc-core",
+                "core-mock",
+                "http-client",
+                "server2-api"
+            ]
+        },
+        "client-server-api": {
+            "level": 1,
+            "framework": ["browser","node"],
+            "role": "lib",
+            "shortDescription": "Shared API contract for the client-server service: `SaveApi`/`PublicApi` abstract classes plus request/response DTOs, annotated with webpieces routing/auth decorators. Single source of truth implemented server-side and consumed by browser clients.",
+            "responsibilitiesFile": "apps/app-example/client-server-api/responsibilities.md",
+            "dependsOn": [
+                "core-util"
+            ]
+        },
         "cloudtasks-client": {
             "level": 2,
             "framework": ["node"],
@@ -40,6 +89,27 @@
                 "rules-config"
             ]
         },
+        "company-core": {
+            "level": 1,
+            "framework": ["browser","node"],
+            "role": "lib",
+            "shortDescription": "Company-wide shared core library, browser-safe, brought in by ALL example projects. Defines the second-tier `CompanyHeaders` (tenant id, api version) as `PlatformHeader` constants that servers bind and browsers register — the company layer between framework core headers and app headers.",
+            "responsibilitiesFile": "apps/app-example/company-core/responsibilities.md",
+            "dependsOn": [
+                "core-util"
+            ]
+        },
+        "company-svc-core": {
+            "level": 5,
+            "framework": ["express"],
+            "role": "lib",
+            "shortDescription": "Company-wide shared SERVER core (node-only, `framework:express`). Holds the single shared server bootstrap and shared server DI so every express service starts the same way. It is the node-only counterpart to the browser-safe `company-core` and is NOT imported by Angular.",
+            "responsibilitiesFile": "apps/app-example/company-svc-core/responsibilities.md",
+            "dependsOn": [
+                "company-core",
+                "http-server"
+            ]
+        },
         "core-context": {
             "level": 1,
             "framework": ["node"],
@@ -49,6 +119,14 @@
             "dependsOn": [
                 "core-util"
             ]
+        },
+        "core-mock": {
+            "level": 0,
+            "framework": ["browser","node"],
+            "role": "lib",
+            "shortDescription": "Typed mock framework for feature tests (port of Java webpieces MockSuperclass). `createMock<T>()` returns a Proxy implementing any api plus a `.mock` control facade for the prime/assert vocabulary; `MockHandler` is the underlying queue/default/drain engine.",
+            "responsibilitiesFile": "packages/core/core-mock/responsibilities.md",
+            "dependsOn": []
         },
         "core-util": {
             "level": 0,
@@ -79,15 +157,14 @@
             ]
         },
         "http-client": {
-            "level": 2,
-            "framework": ["node"],
+            "level": 1,
+            "framework": ["browser","node"],
             "role": "designed-lib",
             "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
             "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
             "designFile": "packages/http/http-client/design.json",
             "dependsOn": [
-                "core-context",
-                "gcp-identity"
+                "core-util"
             ]
         },
         "http-filters": {
@@ -153,6 +230,28 @@
             "shortDescription": "Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate and main-sync state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "dependsOn": []
+        },
+        "server2": {
+            "level": 6,
+            "framework": ["express"],
+            "role": "server",
+            "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
+            "responsibilitiesFile": "apps/app-example/server2/responsibilities.md",
+            "designFile": "apps/app-example/server2/design.json",
+            "dependsOn": [
+                "company-svc-core",
+                "server2-api"
+            ]
+        },
+        "server2-api": {
+            "level": 1,
+            "framework": ["browser","node"],
+            "role": "lib",
+            "shortDescription": "Shared API contract for server2: the `Server2Api` abstract class (fetchValue) plus its request/response DTOs, annotated with webpieces routing/auth decorators. Implemented by `server2` and consumed by `client-server` as an HTTP client.",
+            "responsibilitiesFile": "apps/app-example/server2-api/responsibilities.md",
+            "dependsOn": [
+                "core-util"
+            ]
         }
     }
 }

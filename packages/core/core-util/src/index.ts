@@ -113,6 +113,13 @@ export { HeaderMethods } from './http/HeaderMethods';
 export { ContextReader } from './http/ContextReader';
 export { HEADER_TYPES } from './http/HeaderTypes';
 
+// Outbound-header machinery (context reader + registry -> outbound HTTP headers).
+// Browser-safe — the server-side reader (RequestContextReader) and browser store
+// (MutableContextStore) both implement ContextReader, so this lives here rather
+// than in the Node-only @webpieces/core-context (which re-exports for back-compat).
+export { ContextMgr } from './http/ContextMgr';
+export { RequestIdChainProcessor } from './http/RequestIdChainProcessor';
+
 // API-call logging helper (uses LogManager above)
 export { LogApiCall } from './http/LogApiCall';
 

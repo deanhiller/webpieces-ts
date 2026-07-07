@@ -29,7 +29,7 @@
                     "className": "ContextMgr",
                     "kind": "class",
                     "scope": "unknown",
-                    "file": "packages/core/core-context/src/ContextMgr.ts",
+                    "file": "packages/core/core-util/src/http/ContextMgr.ts",
                     "level": 2
                 },
                 {
@@ -37,7 +37,7 @@
                     "className": "ContextReader",
                     "kind": "unresolved",
                     "scope": "unknown",
-                    "file": "packages/core/core-context/src/ContextMgr.ts",
+                    "file": "packages/core/core-util/src/http/ContextMgr.ts",
                     "level": 3
                 },
                 {
@@ -55,6 +55,14 @@
                     "scope": "unknown",
                     "file": "packages/core/core-util/src/http/HeaderRegistry.ts",
                     "level": 3
+                },
+                {
+                    "id": "IdTokenMinter",
+                    "className": "IdTokenMinter",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "level": 2
                 },
                 {
                     "id": "LogApiCall",
@@ -85,7 +93,7 @@
                     "className": "boolean",
                     "kind": "unresolved",
                     "scope": "unknown",
-                    "file": "packages/core/core-context/src/ContextMgr.ts",
+                    "file": "packages/core/core-util/src/http/ContextMgr.ts",
                     "level": 3
                 },
                 {
@@ -103,9 +111,18 @@
                     "to": "ContextMgr",
                     "injection": "type",
                     "token": "ContextMgr",
-                    "tokenKey": "class:packages/core/core-context/src/ContextMgr.ts#ContextMgr",
+                    "tokenKey": "class:packages/core/core-util/src/http/ContextMgr.ts#ContextMgr",
                     "paramName": "contextMgr",
                     "paramType": "ContextMgr"
+                },
+                {
+                    "from": "ClientConfig",
+                    "to": "IdTokenMinter",
+                    "injection": "type",
+                    "token": "IdTokenMinter",
+                    "tokenKey": "type:IdTokenMinter",
+                    "paramName": "idTokenMinter",
+                    "paramType": "IdTokenMinter"
                 },
                 {
                     "from": "ClientConfig",
@@ -192,6 +209,7 @@
             "unresolved": [
                 "ApiPrototype<object>",
                 "ContextReader",
+                "IdTokenMinter",
                 "PlatformHeadersExtension[]",
                 "boolean",
                 "string"

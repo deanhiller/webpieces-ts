@@ -1,0 +1,22 @@
+{
+    "name": "core-mock",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/core/core-mock/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/core/core-mock",
+                "main": "packages/core/core-mock/src/index.ts",
+                "tsConfig": "packages/core/core-mock/tsconfig.lib.json",
+                "assets": [
+                    "packages/core/core-mock/package.json",
+                    "packages/core/core-mock/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["framework:browser", "framework:node", "role:lib"]
+}

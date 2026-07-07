@@ -1,0 +1,10 @@
+{
+  "name": "@webpieces/client-server-api",
+  "version": "0.0.0-dev",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "dependencies": {
+    "@webpieces/core-util": "workspace:*"
+  }
+}

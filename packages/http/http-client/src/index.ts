@@ -31,13 +31,14 @@
  */
 
 export { createApiClient, ClientConfig } from './ClientFactory';
+export type { IdTokenMinter } from './ClientFactory';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
 
 // Context management for header propagation
 export { StaticContextReader, CompositeContextReader } from './ContextReader';
 export { MutableContextStore } from './MutableContextStore';
-// ContextMgr + RequestIdChainProcessor moved to core-context; re-exported for back-compat
-export { ContextMgr, RequestIdChainProcessor } from '@webpieces/core-context';
+// ContextMgr + RequestIdChainProcessor live in browser+node core-util; re-exported for back-compat
+export { ContextMgr, RequestIdChainProcessor } from '@webpieces/core-util';
 
 // Re-export header contract from http-api for convenience (browser one-import)
 export {

@@ -15,9 +15,11 @@ export default [
     // Import Angular-specific rules (remove if not using Angular)
     ...angularConfig,
 
-    // Workspace-specific ignores
+    // Workspace-specific ignores. design.html is a GENERATED di-graph view (viz.js
+    // output committed alongside design.json/design.md) — never source, and the
+    // Angular template linter would otherwise try to parse it as an ng template.
     {
-        ignores: ['scripts/**'],
+        ignores: ['scripts/**', '**/design.html'],
     },
 
     // Workspace-specific TypeScript and general rules

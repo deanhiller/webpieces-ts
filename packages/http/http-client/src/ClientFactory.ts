@@ -14,8 +14,7 @@ import {
     toError,
     DocumentDesign,
 } from '@webpieces/core-util';
-import { ContextMgr } from '@webpieces/core-context';
-import { mintIdToken } from '@webpieces/gcp-identity';
+import { ContextMgr } from '@webpieces/core-util';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 
 /**
@@ -23,6 +22,15 @@ import { ClientErrorTranslator } from './ClientErrorTranslator';
  * Used as the apiPrototype parameter for createApiClient.
  */
 type ApiPrototype<T> = Function & { prototype: T };
+
+/**
+ * Mints a Google OIDC ID token for an @AuthOidc endpoint (audience = callee
+ * base URL). Server-side callers pass gcp-identity's `mintIdToken`; browsers
+ * cannot mint service-to-service tokens and pass nothing (see the fail-fast in
+ * ProxyClient's constructor). Keeping this a seam is what makes http-client a
+ * browser-safe, isomorphic package (no static @webpieces/gcp-identity import).
+ */
+export type IdTokenMinter = (audience: string) => Promise<string>;
 
 /**
  * Configuration options for HTTP client.
@@ -37,9 +45,17 @@ export class ClientConfig {
      */
     contextMgr?: ContextMgr;
 
-    constructor(baseUrl: string, contextMgr?: ContextMgr) {
+    /**
+     * Optional OIDC ID-token minter for @AuthOidc endpoints (server-side only).
+     * Browsers leave this undefined; a client built for an API that has any
+     * @AuthOidc endpoint without a minter fails fast at construction.
+     */
+    idTokenMinter?: IdTokenMinter;
+
+    constructor(baseUrl: string, contextMgr?: ContextMgr, idTokenMinter?: IdTokenMinter) {
         this.baseUrl = baseUrl;
         this.contextMgr = contextMgr;
+        this.idTokenMinter = idTokenMinter;
     }
 }
 
@@ -189,12 +205,27 @@ export class ProxyClient {
 
         // Build the map of method name -> route metadata from @ApiPath + @Endpoint metadata
         this.routeMap = new Map<string, RouteMetadata>();
+        let hasOidcEndpoint = false;
         for (const [methodName, endpointPath] of Object.entries(endpoints)) {
             const fullPath = basePath + endpointPath;
             // Capture the endpoint's auth mode so the client can mint delivery auth
             // (OIDC bearer) per @AuthOidc / @AuthSharedSecret, just like the server verifies it.
             const authMeta = getAuthMeta(apiPrototype, methodName);
+            if (authMeta?.mode.kind === 'oidc') {
+                hasOidcEndpoint = true;
+            }
             this.routeMap.set(methodName, new RouteMetadata('POST', fullPath, methodName, this.apiName, authMeta));
+        }
+
+        // Fail fast: an @AuthOidc endpoint needs a server-side OIDC minter. Browsers
+        // cannot mint service-to-service tokens, so a client built for such an API
+        // without a minter is a wiring bug — surface it here, not on first call.
+        if (hasOidcEndpoint && !config.idTokenMinter) {
+            throw new Error(
+                `API ${this.apiName} has @AuthOidc endpoint(s) but ClientConfig has no idTokenMinter. ` +
+                `Browsers cannot mint OIDC tokens; build this client server-side with ` +
+                `new ClientConfig(baseUrl, contextMgr, mintIdToken) from @webpieces/gcp-identity.`
+            );
         }
     }
 
@@ -243,10 +274,16 @@ export class ProxyClient {
         }
 
         // For an @AuthOidc endpoint, attach a Google ID token minted as THIS caller's
-        // own runtime SA (audience = the callee base URL), via gcp-identity. The server
-        // verifies the signature AND that this SA is in the endpoint's allow-list.
+        // own runtime SA (audience = the callee base URL), via the injected minter
+        // (server-side gcp-identity.mintIdToken). The server verifies the signature
+        // AND that this SA is in the endpoint's allow-list. Guaranteed present by the
+        // ProxyClient constructor's fail-fast check, but guarded here defensively.
         if (route.authMeta?.mode.kind === 'oidc') {
-            httpHeaders['Authorization'] = `Bearer ${await mintIdToken(this.config.baseUrl)}`;
+            const idTokenMinter = this.config.idTokenMinter;
+            if (!idTokenMinter) {
+                throw new Error(`No idTokenMinter configured for @AuthOidc endpoint ${route.methodName}`);
+            }
+            httpHeaders['Authorization'] = `Bearer ${await idTokenMinter(this.config.baseUrl)}`;
         }
 
         // Build masked headers map for logging (secured values masked, MDC keys)

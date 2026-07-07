@@ -1,0 +1,23 @@
+{
+  "name": "server2-api",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/app-example/server2-api/src",
+  "projectType": "library",
+  "tags": ["framework:browser", "framework:node", "role:lib"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/apps/app-example/server2-api",
+        "main": "apps/app-example/server2-api/src/index.ts",
+        "tsConfig": "apps/app-example/server2-api/tsconfig.lib.json",
+        "assets": [
+          "apps/app-example/server2-api/package.json"
+        ]
+      }
+    }
+  }
+}

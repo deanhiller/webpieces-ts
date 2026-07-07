@@ -1,0 +1,17 @@
+{
+    "name": "@webpieces/company-svc-core",
+    "version": "0.0.0-dev",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "description": "Company-wide shared SERVER core (node-only) - shared server bootstrap + DI so every express service starts the same way. Not browser-safe; NOT imported by Angular.",
+    "dependencies": {
+        "@webpieces/company-core": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "@webpieces/http-routing": "workspace:*",
+        "@webpieces/http-server": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "inversify": "7.10.4"
+    }
+}
