@@ -112,7 +112,9 @@ jobs:
                   # cloudtasks-client (both depend on it).
                   npm publish dist/packages/core/core-context --access public --provenance
                   npm publish dist/packages/core/core-util --access public --provenance
-                  npm publish dist/packages/core/core-mock --access public --provenance
+                  # core-mock is intentionally NOT published (it is a test/mock helper, not a
+                  # released package; the npm token can't create it, which 404'd and aborted the
+                  # whole release before the tooling packages below could publish).
                   npm publish dist/packages/cloud/gcp-identity --access public --provenance
                   npm publish dist/packages/http/http-filters --access public --provenance
                   npm publish dist/packages/http/http-routing --access public --provenance
