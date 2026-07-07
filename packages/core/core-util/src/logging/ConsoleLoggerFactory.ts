@@ -7,10 +7,10 @@ import { ConsoleLogger } from './ConsoleLogger';
  *
  * Produces (and caches per name) {@link ConsoleLogger}s. This is what
  * {@link LogManager} uses until an app installs a different backend
- * (bunyan/winston/pino/...) via {@link LogManager.setLogger}.
+ * (bunyan/winston/pino/...) via {@link LogManager.setFactory}.
  *
  * When constructed with `isBootstrap = true` (the framework default before any
- * app calls `setLogger`), every line is prefixed with an AWAITING banner so it's
+ * app calls `setFactory`), every line is prefixed with an AWAITING banner so it's
  * obvious no real backend was wired. An app that genuinely wants console logging
  * installs `new ConsoleLoggerFactory()` (isBootstrap defaults to false → no banner).
  */
@@ -20,7 +20,7 @@ export class ConsoleLoggerFactory implements LoggerFactory {
 
     constructor(isBootstrap = false) {
         this.bootstrapPrefix = isBootstrap
-            ? '[AWAITING LogManager.setLogger(...) — see .webpieces/instruct-ai/webpieces.logging.md] '
+            ? '[AWAITING LogManager.setFactory(...) — see .webpieces/instruct-ai/webpieces.logging.md] '
             : '';
     }
 

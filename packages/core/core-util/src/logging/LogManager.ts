@@ -6,7 +6,7 @@ import { ConsoleLoggerFactory } from './ConsoleLoggerFactory';
  * A stable per-name facade that re-resolves the currently installed factory on
  * EVERY call. This is why a module-scope `const log = LogManager.getLogger('X')`
  * captured at import time (before the app runs) still starts using the real
- * backend the instant `LogManager.setLogger(...)` installs it — and the bootstrap
+ * backend the instant `LogManager.setFactory(...)` installs it — and the bootstrap
  * AWAITING banner disappears. Backends cache their concrete logger per name, so
  * this indirection is a cheap Map lookup.
  */
@@ -49,11 +49,11 @@ class DeferredLogger implements Logger {
  * startup by installing a {@link LoggerFactory}:
  *
  * ```ts
- * LogManager.setLogger(new BunyanLoggerFactory(...)); // node-only app
+ * LogManager.setFactory(new BunyanLoggerFactory(...)); // node-only app
  * ```
  *
  * Until one is installed, logging goes to a bootstrap {@link ConsoleLoggerFactory}
- * that prefixes every line with an AWAITING banner (so a forgotten `setLogger` is
+ * that prefixes every line with an AWAITING banner (so a forgotten `setFactory` is
  * obvious). See `.webpieces/instruct-ai/webpieces.logging.md`.
  */
 export class LogManager {
@@ -65,7 +65,7 @@ export class LogManager {
      * already handed out via {@link getLogger} switch to it immediately (they are
      * deferred facades), so import-time loggers are covered too.
      */
-    static setLogger(factory: LoggerFactory): void {
+    static setFactory(factory: LoggerFactory): void {
         LogManager.factory = factory;
     }
 
