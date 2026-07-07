@@ -8,7 +8,7 @@ import { LoggerFactory, ConsoleLoggerFactory, LogManager } from '@webpieces/core
  * ONCE at startup (in its server.ts / bootstrap) before other modules fetch their
  * loggers.
  *
- * BROWSER-SAFETY: company-core is `framework:all` (Angular imports it), so this
+ * BROWSER-SAFETY: company-core is `framework:browser + framework:node` (Angular imports it), so this
  * class may only reference the browser-safe {@link ConsoleLoggerFactory}. To plug
  * in a node-only backend (bunyan, winston, a file writer, ...), a
  * `framework:express` app passes its own {@link LoggerFactory} here — the
@@ -23,6 +23,6 @@ export class CompanyLogging {
      *   use. Express services may pass a node-only factory (bunyan/winston/...).
      */
     static configure(factory: LoggerFactory = new ConsoleLoggerFactory()): void {
-        LogManager.setFactory(factory);
+        LogManager.setLogger(factory);
     }
 }
