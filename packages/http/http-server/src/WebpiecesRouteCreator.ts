@@ -3,13 +3,12 @@ import { Container } from 'inversify';
 import {
     ApiRoutingFactory,
     ClassType,
-    ExpressRouteHandler,
     FilterDefinition,
     RouteBuilderImpl,
     RouteHandlerWithMeta,
+    InProcessApiClientFactory,
 } from '@webpieces/http-routing';
-import { WebpiecesMiddleware } from './WebpiecesMiddleware';
-import { InProcessApiClientFactory } from './InProcessApiClientFactory';
+import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 import { LogManager } from '@webpieces/core-util';
 
 /**

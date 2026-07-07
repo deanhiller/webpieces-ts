@@ -177,6 +177,9 @@ importers:
       '@webpieces/http-server':
         specifier: workspace:*
         version: link:../../../packages/http/http-server
+      express:
+        specifier: 5.1.0
+        version: 5.1.0
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -256,6 +259,9 @@ importers:
 
   packages/http/http-routing:
     dependencies:
+      '@inversifyjs/binding-decorators':
+        specifier: 1.1.5
+        version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
       '@webpieces/core-context':
         specifier: workspace:*
         version: link:../../core/core-context
@@ -292,6 +298,9 @@ importers:
       cors:
         specifier: 2.8.5
         version: 2.8.5
+      express:
+        specifier: 5.1.0
+        version: 5.1.0
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -299,6 +308,9 @@ importers:
       '@types/cors':
         specifier: 2.8.19
         version: 2.8.19
+      '@types/express':
+        specifier: 5.0.5
+        version: 5.0.5
 
   packages/tooling/ai-hook-rules:
     dependencies:

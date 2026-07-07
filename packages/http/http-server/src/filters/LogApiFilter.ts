@@ -1,5 +1,5 @@
 import {inject, injectable} from 'inversify';
-import {provideSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
+import {provideFrameworkSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-filters';
 import { LogManager } from '@webpieces/core-util';
 import {
@@ -27,7 +27,7 @@ import {
  */
 const log = LogManager.getLogger('LogApiFilter');
 
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private logApiCall: LogApiCall;

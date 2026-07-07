@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify';
 import {
-    provideSingleton,
+    provideFrameworkSingleton,
     MethodMeta,
     RequestContextReader,
     WebpiecesConfig,
@@ -37,7 +37,7 @@ import { TestCaseRecorderImpl } from '../recorder/TestCaseRecorderImpl';
  * Recording NEVER alters the response - failures inside the recorder are
  * caught and logged.
  */
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response type flexibility
 export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {

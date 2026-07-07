@@ -54,6 +54,7 @@ const MISSING_DESIGN_RULE_NAME = 'missing-design-annotation';
 const DI_MARKERS = [
     '@DocumentDesign(',
     '@provideSingleton',
+    '@provideFrameworkSingleton',
     '@provideTransient',
     '@injectable',
     'new ContainerModule',

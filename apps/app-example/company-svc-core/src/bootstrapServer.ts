@@ -1,26 +1,63 @@
-import { WebpiecesFactory } from '@webpieces/http-server';
-import { WebpiecesConfig, WebAppMeta } from '@webpieces/http-routing';
+import express from 'express';
+import { ContainerModule } from 'inversify';
+import { WebpiecesExpress, WebpiecesModule } from '@webpieces/http-server';
+import {
+    WebpiecesConfig,
+    WebpiecesRouter,
+    WebpiecesRouterFactory,
+} from '@webpieces/http-routing';
 import { toError, Logger, LogManager } from '@webpieces/core-util';
 import { CompanyLogging } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
+import { CompanyHeadersModule } from './CompanyHeadersModule';
+
+/**
+ * Options for {@link createCompanyRouter}.
+ * modules      - app DI modules beyond the standard company set.
+ * appOverrides - single module loaded LAST so tests can rebind bindings to mocks.
+ * config       - optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
+ */
+export interface CompanyRouterOptions {
+    modules?: ContainerModule[];
+    appOverrides?: ContainerModule;
+    config?: WebpiecesConfig;
+}
+
+/**
+ * Build a node-only {@link WebpiecesRouter} with the standard company DI stack
+ * (WebpiecesModule framework headers + CompanyHeadersModule company headers) plus any
+ * app modules. Shared by BOTH the production server (bootstrapServer) and tests, so a
+ * createApiClient() test exercises the exact same container + filter chain as production.
+ */
+export async function createCompanyRouter(options: CompanyRouterOptions = {}): Promise<WebpiecesRouter> {
+    return WebpiecesRouterFactory.create(options.config ?? new WebpiecesConfig(), {
+        appBindings: [WebpiecesModule, CompanyHeadersModule, ...(options.modules ?? [])],
+        appOverrides: options.appOverrides,
+    });
+}
 
 /**
  * bootstrapServer - the ONE shared startup every company express service uses.
  *
- * Node-only (lives in @webpieces/company-svc-core, framework:express). It owns
- * the entire boot sequence so each service's entry point shrinks to a single
- * call plus its `WebAppMeta`:
+ * The app supplies its options and a `configure` callback that adds its routes/filters
+ * to the router. bootstrapServer owns the standard sequence so each entry point stays tiny:
  *
  * ```ts
- * bootstrapServer(new ProdServerMeta(), new BootstrapOptions(8200, 'Server'));
+ * bootstrapServer(new BootstrapOptions(8200, 'Server', factory, [InversifyModule]), (router) => {
+ *     router.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
+ *     router.addRoutes(SaveApi, SaveController);
+ * });
  * ```
  *
- * Sequence: install the server log backend (the bunyan/winston seam) → build
- * WebpiecesConfig → WebpiecesFactory.create(meta) → server.start(port) → park on
- * SIGTERM/SIGINT → on any startup error, log and exit(1). The heavy lifting
- * (Express, CORS, error handling, route mounting) stays in @webpieces/http-server.
+ * Sequence: install the log backend (bunyan/winston seam) → createCompanyRouter →
+ * app configure(router) → WebpiecesExpress.bindAndStartExpress (express + CORS + error
+ * handling + route mounting + listen) → park on SIGTERM/SIGINT → on startup error, log + exit(1).
+ * Express lifecycle lives entirely in @webpieces/http-server (WebpiecesExpress).
  */
-export async function bootstrapServer(meta: WebAppMeta, options: BootstrapOptions): Promise<void> {
+export async function bootstrapServer(
+    options: BootstrapOptions,
+    configure: (router: WebpiecesRouter) => void,
+): Promise<void> {
     // Install the server-side logging backend ONCE, before anything else logs.
     CompanyLogging.configure(options.loggerFactory);
 
@@ -30,11 +67,11 @@ export async function bootstrapServer(meta: WebAppMeta, options: BootstrapOption
     try {
         log.info(`[${options.logName}] Starting server...`);
 
-        const config = new WebpiecesConfig();
-        const server = await WebpiecesFactory.create(meta, config);
+        const router = await createCompanyRouter({ modules: options.modules });
+        configure(router);
 
         const port = parseInt(process.env['PORT'] || String(options.port), 10);
-        await server.start(port);
+        await new WebpiecesExpress(router).bindAndStartExpress(express(), port);
         log.info(`[${options.logName}] Listening on port ${port}`);
 
         await keepAliveUntilSignal(log, options.logName);

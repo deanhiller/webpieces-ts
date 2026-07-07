@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import express, { Express, Request, Response } from 'express';
 import { Container, ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
+import { buildFrameworkModule } from '@webpieces/core-context';
 import { AddressInfo } from 'net';
 import {
     ContextFilter,
@@ -81,7 +82,8 @@ let httpServer: ReturnType<Express['listen']>;
  */
 async function buildContainer(orderRecorder: FilterOrderRecorder): Promise<Container> {
     const container = new Container();
-    await container.load(buildProviderModule()); // @provideSingleton classes (controllers, ContextFilter, ...)
+    await container.load(buildFrameworkModule());  // webpieces framework classes (ContextFilter, ...)
+    await container.load(buildProviderModule());   // app @provideSingleton classes (controllers, test filters)
     await container.load(WebpiecesModule);       // framework headers (required by ContextFilter)
     await container.load(CompanyHeadersModule);  // company headers incl. AUTHORIZATION
     await container.load(InversifyModule);       // Counter, Server2Api simulator, app headers

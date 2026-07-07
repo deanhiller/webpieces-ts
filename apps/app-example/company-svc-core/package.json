@@ -8,10 +8,9 @@
     "dependencies": {
         "@webpieces/company-core": "workspace:*",
         "@webpieces/core-util": "workspace:*",
-        "@webpieces/core-util": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
         "@webpieces/http-server": "workspace:*",
-        "@webpieces/core-util": "workspace:*",
+        "express": "5.1.0",
         "inversify": "7.10.4"
     }
 }

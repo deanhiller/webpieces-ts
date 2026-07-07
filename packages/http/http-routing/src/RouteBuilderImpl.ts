@@ -1,7 +1,6 @@
 import { Container, injectable } from 'inversify';
-import { Request, Response, NextFunction } from 'express';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { RouteHandler } from './RouteHandler';
 import { MethodMeta } from '@webpieces/http-filters';
 import { RouteMetadata, DocumentDesign } from '@webpieces/core-util';
@@ -10,16 +9,6 @@ import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('RouteBuilder');
-
-/**
- * Express route handler function type.
- * Used by wrapExpress to create handlers that Express can call.
- */
-export type ExpressRouteHandler = (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-) => Promise<void>;
 
 /**
  * FilterWithMeta - Pairs a resolved filter instance with its definition.
@@ -75,12 +64,11 @@ export class RouteHandlerWithMeta {
  * - Make the code easier to understand
  * - Enable better IDE navigation (Cmd+Click on addRoute works!)
  *
- * DI Pattern: This class is registered in webpiecesContainer via @provideSingleton()
+ * DI Pattern: This class is registered in webpiecesContainer via @provideFrameworkSingleton()
  * but needs appContainer to resolve filters/controllers. The container is set via
  * setContainer() after appContainer is created (late binding pattern).
  */
-@DocumentDesign()
-@provideSingleton()
+@provideFrameworkSingleton()
 @injectable()
 export class RouteBuilderImpl implements RouteBuilder {
     private routes: RouteHandlerWithMeta[] = [];
@@ -251,14 +239,19 @@ export class RouteBuilderImpl implements RouteBuilder {
      */
     public createRouteHandler(
         routeWithMeta: RouteHandlerWithMeta,
+        includeExpressTier: boolean = true,
     ): Service<MethodMeta, WpResponse<unknown>> {
         const route = routeWithMeta.definition;
         const routeMeta = route.routeMeta;
 
         log.info(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
 
-        // Get cached filter definitions
-        const filterDefinitions = this.getFilterDefinitions();
+        // Get cached filter definitions, then drop express-tier filters when composing an
+        // in-process (createApiClient) chain — those need the raw HTTP request (e.g. auth
+        // reading the Authorization header) and would wrongly reject a headerless in-process call.
+        const filterDefinitions = this.getFilterDefinitions().filter(
+            (def: FilterDefinition) => includeExpressTier || def.tier !== 'express',
+        );
 
         // Find matching filters for this route
         const matchingFilters = FilterMatcher.findMatchingFilters(
@@ -314,8 +307,9 @@ export class RouteBuilderImpl implements RouteBuilder {
             throw new Error(`Route not found: ${method} ${path}`);
         }
 
-        // Setup filter chain ONCE (not on every invocation!)
-        return this.createRouteHandler(routeWithMeta);
+        // Setup filter chain ONCE (not on every invocation!).
+        // In-process client → api-tier filters only (skip express-tier like ServiceAuthFilter).
+        return this.createRouteHandler(routeWithMeta, false);
     }
 
     /**

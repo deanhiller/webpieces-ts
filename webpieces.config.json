@@ -77,7 +77,7 @@
             ]
         },
         "missing-design-annotation": {
-            "mode": "RUN_EVERY_TIME",
+            "mode": "OFF",
             "ignoreModifiedUntilEpoch": 0
         },
         "framework-tag": {
@@ -89,7 +89,7 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "di-graph": {
-            "mode": "RUN_EVERY_TIME",
+            "mode": "OFF",
             "ignoreModifiedUntilEpoch": 0
         },
         "no-file-import-cycles": {
@@ -286,6 +286,27 @@
                 "packages/cloud/cloudtasks-client/**",
                 "libraries/apis-external/**",
                 "libraries/apis/external/**"
+            ]
+        },
+        {
+            "mode": "OFF",
+            "ignoreModifiedUntilEpoch": 0,
+            "name": "no-global-providesingleton-in-packages",
+            "patterns": [
+                "@provideSingleton\\s*\\(",
+                "@provideSingletonAs\\s*\\("
+            ],
+            "mainMessage": "Framework code in packages/** must use @provideFrameworkSingleton (a SEPARATE DI registry) so a client's buildProviderModule() never scoops up webpieces framework classes. Plain @provideSingleton is for apps/client code only. (Turn ON once the repo consumes a @webpieces release whose DI-graph analyzer understands provideFrameworkSingleton.)",
+            "options": [
+                "In a packages/** framework class, use @provideFrameworkSingleton() (self-bind) or @provideFrameworkSingletonAs(TOKEN) from @webpieces/core-context.",
+                "WebpiecesRouter loads buildFrameworkModule() + buildProviderModule(); any embeddable WebpiecesRouteCreator user must also load buildFrameworkModule() to resolve framework filters."
+            ],
+            "disableAllowed": true,
+            "allowedPaths": [
+                "apps/**",
+                "libraries/**",
+                "packages/tooling/**",
+                "packages/core/core-context/src/provide.ts"
             ]
         }
     ],

@@ -2,20 +2,19 @@ import {
     getApiPath,
     getAuthMeta,
     getEndpoints,
-    MethodMeta,
-    RouteBuilderImpl,
     RouteMetadata,
-} from '@webpieces/http-routing';
+} from '@webpieces/core-util';
+import { MethodMeta, Service, WpResponse } from '@webpieces/http-filters';
 import { RequestContext } from '@webpieces/core-context';
-import { Service, WpResponse } from '@webpieces/http-filters';
+import { RouteBuilderImpl } from './RouteBuilderImpl';
 
 /**
  * InProcessApiClientFactory - Creates API client proxies that invoke routes
- * in-process (full filter chain + controller) WITHOUT any HTTP overhead.
+ * in-process (api-tier filter chain + controller) WITHOUT any HTTP/express overhead.
  *
- * Extracted from WebpiecesServerImpl so both the full server
- * (WebpiecesServer.createApiClient) and the embeddable adapter
- * (WebpiecesRouteCreator.createApiClient) share one code path.
+ * This is the PRIMARY in-process/test builder. It lives in the node-only http-routing
+ * package (no express dependency) so both the node-only WebpiecesRouter and the express
+ * adapter (WebpiecesRouteCreator) share one code path.
  *
  * The client uses the ApiPrototype class to discover routes via decorators,
  * then creates pre-configured invoker functions for each API method.

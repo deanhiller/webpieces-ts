@@ -40,17 +40,22 @@ export {
 
 // DI provider decorators moved to core-context; re-exported here for back-compat
 export { provideSingleton, provideSingletonAs, provideTransient } from '@webpieces/core-context';
+// Framework-only DI registry (packages/** framework classes use these; see frameworkProvide.ts)
+export {
+    provideFrameworkSingleton,
+    provideFrameworkSingletonAs,
+    buildFrameworkModule,
+} from '@webpieces/core-context';
 
 export { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
 
-// Core routing types (moved from core-meta)
+// Core routing types
 export {
-    WebAppMeta,
-    WEBAPP_META_TOKEN,
     Routes,
     RouteBuilder,
     RouteDefinition,
     FilterDefinition,
+    FilterTier,
 } from './WebAppMeta';
 
 // Method metadata (moved to http-filters) re-exported for back-compat; route handler
@@ -62,11 +67,16 @@ export {
     RouteBuilderImpl,
     RouteHandlerWithMeta,
     FilterWithMeta,
-    ExpressRouteHandler,
 } from './RouteBuilderImpl';
 
 // Filter matching
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
+
+// In-process API client builder (node-only; the primary test/in-process path)
+export { InProcessApiClientFactory } from './InProcessApiClientFactory';
+
+// Node-only router (the express-free heart: container + filter chain + in-process client)
+export { WebpiecesRouter, WebpiecesRouterFactory, WebpiecesRouterOptions } from './WebpiecesRouter';
 
 // Context readers (Node.js only) moved to core-context; re-exported for back-compat
 export { RequestContextReader } from '@webpieces/core-context';

@@ -1,9 +1,11 @@
 import 'reflect-metadata';
-import { WebpiecesServer, WebpiecesFactory } from '@webpieces/http-server';
-import { WebpiecesConfig } from '@webpieces/http-routing';
+import express from 'express';
+import type { Server as HttpServer } from 'http';
+import { WebpiecesExpress } from '@webpieces/http-server';
+import { createCompanyRouter } from '@webpieces/company-svc-core';
 import { SaveResponse } from '@webpieces/client-server-api';
-import { ProdServerMeta } from '../../client-server/src/ProdServerMeta';
-import { Server2Meta } from '../../server2/src/Server2Meta';
+import { APP_MODULES, configureRoutes } from '../../client-server/src/AppServerConfig';
+import { configureServer2Routes } from '../../server2/src/Server2Config';
 
 /**
  * THE full-flow example test: two real microservices, real HTTP between them,
@@ -15,20 +17,16 @@ import { Server2Meta } from '../../server2/src/Server2Meta';
  *                      |  server's RequestContext -> outbound headers)
  *                      +--HTTP--> server2 :18202  (implements server2-api)
  *
- * The caller sends x-correlation-id (the transaction id) + x-tenant-id.
- * Assertions:
- * - BOTH servers' [API-SVR-req] log lines contain correlationId=txn-... (the
- *   context logging works end-to-end)
- * - server2's log shows previousId = client-server's request id (per-hop chain)
- * - the secured authorization header is MASKED in logs, never the raw token
- * - the response echo proves tenant + chain arrived at hop 2
+ * Each server is built with the node-only WebpiecesRouter (createCompanyRouter + its
+ * configure callback) and served over an app-owned express via WebpiecesExpress
+ * (bindAndStartExpress) — the same production path, just with the test owning express.
  *
  * Test ports 18200/18202 avoid clashing with dev servers on 8200/8202.
  */
 const clientServerPort = 18200;
 const server2Port = 18202;
-let clientServer: WebpiecesServer;
-let server2: WebpiecesServer;
+let clientServerHttp: HttpServer;
+let server2Http: HttpServer;
 let logLines: string[];
 let logSpy: ReturnType<typeof vi.spyOn>;
 
@@ -36,11 +34,13 @@ async function bootBothServers(): Promise<void> {
     // client-server's InversifyModule reads SERVER2_URL for its outbound client
     process.env['SERVER2_URL'] = `http://localhost:${server2Port}`;
 
-    server2 = await WebpiecesFactory.create(new Server2Meta(), new WebpiecesConfig());
-    await server2.start(server2Port);
+    const server2Router = await createCompanyRouter();
+    configureServer2Routes(server2Router);
+    server2Http = await new WebpiecesExpress(server2Router).bindAndStartExpress(express(), server2Port);
 
-    clientServer = await WebpiecesFactory.create(new ProdServerMeta(), new WebpiecesConfig());
-    await clientServer.start(clientServerPort);
+    const clientRouter = await createCompanyRouter({ modules: APP_MODULES });
+    configureRoutes(clientRouter);
+    clientServerHttp = await new WebpiecesExpress(clientRouter).bindAndStartExpress(express(), clientServerPort);
 
     // Capture BOTH servers' log output (they share this test process)
     logLines = [];
@@ -52,8 +52,8 @@ async function bootBothServers(): Promise<void> {
 async function stopBothServers(): Promise<void> {
     logSpy.mockRestore();
     delete process.env['SERVER2_URL'];
-    await clientServer.stop();
-    await server2.stop();
+    await new Promise<void>((resolve: () => void) => clientServerHttp.close(() => resolve()));
+    await new Promise<void>((resolve: () => void) => server2Http.close(() => resolve()));
 }
 
 describe('Full flow: caller -> client-server -> server2 with context logging', () => {

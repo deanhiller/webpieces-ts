@@ -28,7 +28,14 @@ import {
 } from './bindings';
 import { classTokenKey, relativeFile, resolveTokenKey } from './token-resolver';
 
-const DI_DECORATORS = new Set(['provideSingleton', 'provideTransient', 'provideSingletonAs', 'injectable']);
+const DI_DECORATORS = new Set([
+    'provideSingleton',
+    'provideTransient',
+    'provideSingletonAs',
+    'provideFrameworkSingleton',
+    'provideFrameworkSingletonAs',
+    'injectable',
+]);
 
 export class ParamInjection {
     expr: ts.Expression | null;
