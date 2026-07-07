@@ -53,12 +53,12 @@ export function denyJson(reason: string, toolName: string): string {
 // PreToolUse protocol (exit 0 + JSON = the contract), so the process.exit stays and is allowlisted.
 export function emitDeny(reason: string, toolName: string): never {
     process.stdout.write(denyJson(reason, toolName) + '\n');
-    // eslint-disable-next-line @webpieces/no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (exit 0 + JSON = the contract); designated terminal boundary.
+    // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (exit 0 + JSON = the contract); designated terminal boundary.
     process.exit(0);
 }
 
 // Allow the tool call. No JSON needed — a silent exit 0 is "allow" in the PreToolUse protocol.
 export function emitAllow(): never {
-    // eslint-disable-next-line @webpieces/no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (silent exit 0 = "allow"); designated terminal boundary.
+    // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (silent exit 0 = "allow"); designated terminal boundary.
     process.exit(0);
 }

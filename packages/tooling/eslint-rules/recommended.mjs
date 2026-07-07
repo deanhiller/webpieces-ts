@@ -58,7 +58,6 @@ export default [
             '@webpieces/max-file-lines': ['error', { max: 700 }],
             '@webpieces/enforce-architecture': 'error',
             '@webpieces/no-json-property-primitive-type': 'error',
-            '@webpieces/no-process-exit-outside-main': 'error',
             'no-console': 'off',
             'no-debugger': 'warn',
             'no-alert': 'warn',

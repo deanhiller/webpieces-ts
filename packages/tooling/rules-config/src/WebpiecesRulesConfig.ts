@@ -13,6 +13,7 @@ import {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    NoProcessExitOutsideMainConfig,
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
@@ -44,6 +45,7 @@ export class WebpiecesRulesConfig {
     'throw-cause-required'?: ThrowCauseRequiredConfig;
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
+    'no-process-exit-outside-main'?: NoProcessExitOutsideMainConfig;
     'framework-tag'?: FrameworkTagConfig;
     'role-tag'?: RoleTagConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;

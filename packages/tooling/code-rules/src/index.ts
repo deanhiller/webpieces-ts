@@ -12,6 +12,7 @@ export { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptio
 export { NoDestructureValidator } from './validate-no-destructure';
 export { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 export { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
+export { NoProcessExitOutsideMainValidator } from './validate-no-process-exit-outside-main';
 export { FrameworkTagValidator } from './validate-framework-tag';
 export { RoleTagValidator } from './validate-role-tag';
 export { PrismaValidateDtosValidator } from './validate-dtos';

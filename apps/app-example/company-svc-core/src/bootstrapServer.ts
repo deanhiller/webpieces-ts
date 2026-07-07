@@ -78,7 +78,7 @@ export async function bootstrapServer(
     } catch (err: unknown) {
         const error = toError(err);
         log.error(`[${options.logName}] Error during startup:`, error);
-        // eslint-disable-next-line @webpieces/no-process-exit-outside-main -- top-level server startup boundary: service entry points call bootstrapServer() directly (no main()/runMain wrapper), so this IS the terminal exit site.
+        // webpieces-disable no-process-exit-outside-main -- top-level server startup boundary: service entry points call bootstrapServer() directly (no main()/runMain wrapper), so this IS the terminal exit site.
         process.exit(1);
     }
 }

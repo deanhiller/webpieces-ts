@@ -263,6 +263,21 @@ export class NoSymbolDiTokensConfig extends BaseRuleConfig {
     };
 }
 
+// Flags `process.exit(...)` outside a main()/runMain wrapper (and `import { main }`) so a deep exit
+// can't silently kill a reused server/command. Gradual-rollout knobs via the standard base: mode
+// (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch, branch, and
+// disableAllowed for the inline `// webpieces-disable` escape at genuine terminal boundaries.
+export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
+    declare mode?: ModifiedCodeMode;
+    disableAllowed?: boolean;
+
+    static readonly SCHEMA: SchemaShape<NoProcessExitOutsideMainConfig> = {
+        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 // framework-tag — every project that a changed source file belongs to must carry >=1
 // `framework:<browser|react|angular|node|express>` nx tag in its project.json. Those tags are the
 // project's "libType" — the SET of runtime environments it runs in — and the source of truth for

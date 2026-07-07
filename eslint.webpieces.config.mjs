@@ -25,10 +25,9 @@ export default [
             '@webpieces/max-file-lines': ['error', { max: 700 }],
             '@webpieces/enforce-architecture': 'error',
             '@webpieces/no-json-property-primitive-type': 'error',
-            // process.exit only inside main()/runMain; library code throws CliExitError. Enabled once
-            // @webpieces/* reached 0.3.283 (the release carrying the rule) — the published plugin now
-            // defines it. Clients get it too via @webpieces/eslint-rules/recommended on 0.3.283+.
-            '@webpieces/no-process-exit-outside-main': 'error',
+            // process.exit-outside-main is enforced by the config-driven webpieces rule
+            // `no-process-exit-outside-main` (webpieces.config.json), NOT eslint — so it gets the
+            // gradual-rollout knobs (mode / ignoreModifiedUntilEpoch / disableAllowed / branch).
         },
     },
 ];
