@@ -1,15 +1,14 @@
 import express from 'express';
 import { ContainerModule } from 'inversify';
-import { WebpiecesExpress, WebpiecesModule } from '@webpieces/http-server';
+import { WebpiecesExpress } from '@webpieces/http-server';
 import {
     WebpiecesConfig,
     WebpiecesRouter,
     WebpiecesRouterFactory,
 } from '@webpieces/http-routing';
-import { toError, Logger, LogManager } from '@webpieces/core-util';
-import { CompanyLogging } from '@webpieces/company-core';
+import { toError, Logger, LogManager, HeaderRegistry, ContextKey } from '@webpieces/core-util';
+import { CompanyLogging, CompanyHeaders } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
-import { CompanyHeadersModule } from './CompanyHeadersModule';
 
 /**
  * Options for {@link createCompanyRouter}.
@@ -24,14 +23,28 @@ export interface CompanyRouterOptions {
 }
 
 /**
- * Build a node-only {@link WebpiecesRouter} with the standard company DI stack
- * (WebpiecesModule framework headers + CompanyHeadersModule company headers) plus any
- * app modules. Shared by BOTH the production server (bootstrapServer) and tests, so a
- * createApiClient() test exercises the exact same container + filter chain as production.
+ * Register the global {@link HeaderRegistry} for a company service: this server's own
+ * keys + the shared CompanyHeaders + the webpieces platform defaults. MUST run before
+ * the logger is installed (LogManager.setFactory fails fast otherwise) and before the
+ * router is built (filters read the registry at construction).
+ *
+ * Idempotent-friendly for tests: safe to call again with the same inputs.
+ */
+export function configureCompanyHeaders(svrHeaders: ContextKey[] = []): void {
+    HeaderRegistry.configure(svrHeaders, CompanyHeaders.getAllHeaders(), /*platformHeaders*/ true);
+}
+
+/**
+ * Build a node-only {@link WebpiecesRouter} with the app DI modules. Shared by BOTH the
+ * production server (bootstrapServer) and tests, so a createApiClient() test exercises the
+ * exact same container + filter chain as production.
+ *
+ * NOTE: the header system is now a global (HeaderRegistry.configure), NOT DI — callers
+ * that use ContextFilter/LogApiFilter must call {@link configureCompanyHeaders} first.
  */
 export async function createCompanyRouter(options: CompanyRouterOptions = {}): Promise<WebpiecesRouter> {
     return WebpiecesRouterFactory.create(options.config ?? new WebpiecesConfig(), {
-        appBindings: [WebpiecesModule, CompanyHeadersModule, ...(options.modules ?? [])],
+        appBindings: [...(options.modules ?? [])],
         appOverrides: options.appOverrides,
     });
 }
@@ -58,6 +71,10 @@ export async function bootstrapServer(
     options: BootstrapOptions,
     configure: (router: WebpiecesRouter) => void,
 ): Promise<void> {
+    // Register the global HeaderRegistry FIRST — logging masks/keys off it, and
+    // LogManager.setFactory fails fast if the registry is not configured yet.
+    configureCompanyHeaders(options.svrHeaders);
+
     // Install the server-side logging backend ONCE, before anything else logs.
     CompanyLogging.configure(options.loggerFactory);
 

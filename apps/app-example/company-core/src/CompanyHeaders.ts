@@ -1,59 +1,39 @@
-import { PlatformHeader } from '@webpieces/core-util';
+import { ContextKey } from '@webpieces/core-util';
 
 /**
- * Company-wide headers shared across all company applications.
+ * Company-wide context keys shared across all company applications.
  *
  * Lives in @webpieces/company-core (shared, browser-safe) - the company-wide
- * lib that ALL projects bring in. Api packages do NOT know about these:
- * - Servers: their modules bind these via PlatformHeadersExtension
- * - Browser: app.config.ts builds a HeaderRegistry from the same class
+ * lib that ALL projects bring in. Passed to `HeaderRegistry.configure(...)` as the
+ * `companyHeaders` argument on both server and browser.
  *
  * Second tier of the three-tier header system:
- * 1. WebpiecesCoreHeaders (framework core headers)
- * 2. CompanyHeaders (company-wide headers) <- YOU ARE HERE
- * 3. AppHeaders (app-specific headers)
+ * 1. WebpiecesCoreHeaders (framework core keys, via platformHeaders=true)
+ * 2. CompanyHeaders (company-wide keys) <- YOU ARE HERE
+ * 3. AppHeaders (app-specific keys)
  */
 export class CompanyHeaders {
     /**
-     * Tenant ID for multi-tenant applications.
-     * Used to isolate data and resources by tenant.
+     * Tenant ID for multi-tenant applications. Transferred to downstream services,
+     * logged under 'tenantId'.
      */
-    static readonly TENANT_ID = new PlatformHeader(
-        'x-tenant-id',
-        true,      // transfer to downstream services
-        false,     // not secured (it's an ID, not sensitive data)
-        true,      // use for metrics dimensions (track per-tenant metrics)
-        'tenantId' // MDC key for structured logging
-    );
+    static readonly TENANT_ID = new ContextKey('tenantId', 'x-tenant-id');
 
     /**
-     * API version for this request.
-     * Allows gradual API migration and version-specific behavior.
+     * API version for this request. Allows gradual API migration and
+     * version-specific behavior.
      */
-    static readonly API_VERSION = new PlatformHeader(
-        'x-api-version',
-        true,
-        false,
-        true   // use for metrics (track API version usage)
-    );
+    static readonly API_VERSION = new ContextKey('apiVersion', 'x-api-version');
 
     /**
-     * Authorization token for authentication.
-     * This is a SECURE header - value will be masked in logs.
+     * Authorization token for authentication. SECURED - masked in logs.
      */
-    static readonly AUTHORIZATION = new PlatformHeader(
-        'authorization',
-        true,   // transfer to downstream services
-        true,   // SECURED - mask in logs!
-        false   // not a metrics dimension
-    );
+    static readonly AUTHORIZATION = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
 
     /**
-     * Get all company headers as an array.
-     *
-     * @returns Array of all company platform headers
+     * Get all company context keys as an array.
      */
-    static getAllHeaders(): PlatformHeader[] {
+    static getAllHeaders(): ContextKey[] {
         return [
             CompanyHeaders.TENANT_ID,
             CompanyHeaders.API_VERSION,

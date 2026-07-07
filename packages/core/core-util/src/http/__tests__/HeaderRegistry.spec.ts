@@ -1,73 +1,92 @@
-import { PlatformHeader } from '../PlatformHeader';
-import { PlatformHeadersExtension } from '../PlatformHeadersExtension';
+import { describe, it, expect } from 'vitest';
+import { ContextKey } from '../../ContextKey';
 import { HeaderRegistry } from '../HeaderRegistry';
 
-function registryOf(...headerGroups: PlatformHeader[][]): HeaderRegistry {
-    const extensions = headerGroups.map((headers: PlatformHeader[]) => new PlatformHeadersExtension(headers));
-    return new HeaderRegistry(extensions);
+/**
+ * Configure the GLOBAL registry from a flat set of server keys (no company keys,
+ * no platform defaults) and return it. Each test fully re-configures, so the global
+ * singleton is deterministic per test.
+ */
+function configureWith(...keys: ContextKey[]): HeaderRegistry {
+    HeaderRegistry.configure(keys, [], /*platformHeaders*/ false);
+    return HeaderRegistry.get();
 }
 
-describe('HeaderRegistry', () => {
-    it('collects headers across multiple extensions', () => {
-        const tenant = new PlatformHeader('x-tenant-id');
-        const auth = new PlatformHeader('authorization', true, true);
-        const registry = registryOf([tenant], [auth]);
-
-        expect(registry.getHeaders()).toHaveLength(2);
-        expect(registry.findByName('X-Tenant-Id')).toBe(tenant); // case-insensitive
+describe('HeaderRegistry.configure + queries', () => {
+    it('get() throws before configure() is ever called', () => {
+        // This runs first, before any configureWith(), so the global is unset.
+        if (!HeaderRegistry.isConfigured()) {
+            expect(() => HeaderRegistry.get()).toThrow(/configure/);
+        }
     });
 
-    it('collapses exact duplicate definitions to one entry', () => {
-        const a = new PlatformHeader('x-tenant-id', true, false, true, 'tenantId');
-        const b = new PlatformHeader('x-tenant-id', true, false, true, 'tenantId');
-        const registry = registryOf([a], [b]);
-
-        expect(registry.getHeaders()).toHaveLength(1);
+    it('configure() merges platform defaults + company + server, in that order', () => {
+        HeaderRegistry.configure(
+            [new ContextKey('clientType', 'x-client-type')],
+            [new ContextKey('tenantId', 'x-tenant-id')],
+            /*platformHeaders*/ true,
+        );
+        const names = HeaderRegistry.get().getKeys().map(k => k.name);
+        expect(names).toContain('requestId');   // from DEFAULT_HEADERS
+        expect(names).toContain('tenantId');    // company
+        expect(names).toContain('clientType');  // server
+        expect(HeaderRegistry.isConfigured()).toBe(true);
     });
 
-    it('throws when two modules disagree on isSecured for the same header name', () => {
-        const open = new PlatformHeader('x-api-key', true, false);
-        const secured = new PlatformHeader('x-api-key', true, true);
+    it('collapses exact duplicates; findByHttpHeader is case-insensitive', () => {
+        const tenant = new ContextKey('tenantId', 'x-tenant-id');
+        const dupe = new ContextKey('tenantId', 'x-tenant-id');
+        const registry = configureWith(tenant, dupe);
 
-        expect(() => registryOf([open], [secured])).toThrow(/Conflicting PlatformHeader definitions for 'x-api-key'.*isSecured/);
+        expect(registry.getKeys()).toHaveLength(1);
+        expect(registry.findByHttpHeader('X-Tenant-Id')).toBe(tenant);
     });
 
-    it('throws when two modules disagree on isWantTransferred for the same header name', () => {
-        const transferred = new PlatformHeader('x-flag', true);
-        const local = new PlatformHeader('x-flag', false);
+    it('getTransferredKeys filters to keys with an httpHeader', () => {
+        const wire = new ContextKey('a', 'x-a');
+        const local = new ContextKey('b'); // no httpHeader -> context-only
+        const registry = configureWith(wire, local);
 
-        expect(() => registryOf([transferred, local])).toThrow(/isWantTransferred/);
+        expect(registry.getTransferredKeys()).toEqual([wire]);
     });
 
-    it('throws when two modules disagree on loggerMdcKey for the same header name', () => {
-        const withKey = new PlatformHeader('x-req', true, false, false, 'requestId');
-        const otherKey = new PlatformHeader('x-req', true, false, false, 'reqId');
-
-        expect(() => registryOf([withKey], [otherKey])).toThrow(/loggerMdcKey/);
-    });
-
-    it('throws when two DIFFERENT headers claim the same loggerMdcKey', () => {
-        const first = new PlatformHeader('x-request-id', true, false, false, 'requestId');
-        const second = new PlatformHeader('x-req-id-alt', true, false, false, 'requestId');
-
-        expect(() => registryOf([first, second])).toThrow(/Duplicate PlatformHeader loggerMdcKey 'requestId'/);
-    });
-
-    it('getTransferredHeaders filters to isWantTransferred=true', () => {
-        const transferred = new PlatformHeader('x-a', true);
-        const local = new PlatformHeader('x-b', false);
-        const registry = registryOf([transferred, local]);
-
-        expect(registry.getTransferredHeaders()).toEqual([transferred]);
-    });
-
-    it('getSecuredNames and getMdcHeaders expose the right subsets', () => {
-        const auth = new PlatformHeader('authorization', true, true);
-        const reqId = new PlatformHeader('x-request-id', true, false, true, 'requestId');
-        const plain = new PlatformHeader('x-plain');
-        const registry = registryOf([auth, reqId, plain]);
+    it('getSecuredNames and getLoggedKeys expose the right subsets', () => {
+        const auth = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
+        const reqId = new ContextKey('requestId', 'x-request-id');
+        const hidden = new ContextKey('meta', undefined, false, /*isLogged*/ false);
+        const registry = configureWith(auth, reqId, hidden);
 
         expect(registry.getSecuredNames()).toEqual(['authorization']);
-        expect(registry.getMdcHeaders()).toEqual([reqId]);
+        expect(registry.getLoggedKeys()).toEqual([auth, reqId]); // hidden excluded
+    });
+});
+
+describe('HeaderRegistry dedup validation', () => {
+    it('throws when two keys with the same name disagree on isSecured', () => {
+        const open = new ContextKey('apiKey', 'x-api-key', false);
+        const secured = new ContextKey('apiKey', 'x-api-key', true);
+
+        expect(() => configureWith(open, secured)).toThrow(/Conflicting ContextKey definitions for 'apiKey'.*isSecured/);
+    });
+
+    it('throws when two keys with the same name disagree on httpHeader', () => {
+        const a = new ContextKey('flag', 'x-flag-a');
+        const b = new ContextKey('flag', 'x-flag-b');
+
+        expect(() => configureWith(a, b)).toThrow(/httpHeader/);
+    });
+
+    it('throws when two keys with the same name disagree on isLogged', () => {
+        const logged = new ContextKey('meta', undefined, false, true);
+        const notLogged = new ContextKey('meta', undefined, false, false);
+
+        expect(() => configureWith(logged, notLogged)).toThrow(/isLogged/);
+    });
+
+    it('throws when two DIFFERENT keys claim the same httpHeader', () => {
+        const first = new ContextKey('requestId', 'x-request-id');
+        const second = new ContextKey('reqIdAlt', 'x-request-id');
+
+        expect(() => configureWith(first, second)).toThrow(/Duplicate ContextKey httpHeader 'x-request-id'/);
     });
 });

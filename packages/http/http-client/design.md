@@ -8,7 +8,7 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## ProxyClient — api-impl, Level 0…4
+## ProxyClient — api-impl, Level 0…3
 
 ```mermaid
 graph TD
@@ -17,10 +17,8 @@ graph TD
     ContextMgr["ContextMgr"]
     ContextReader{{"ContextReader ?"}}:::unresolved
     HeaderMethods["HeaderMethods"]
-    HeaderRegistry["HeaderRegistry"]
     IdTokenMinter{{"IdTokenMinter ?"}}:::unresolved
     LogApiCall["LogApiCall"]
-    PlatformHeadersExtension__{{"PlatformHeadersExtension[] ?"}}:::unresolved
     ProxyClient["ProxyClient"]:::apiImpl
     boolean{{"boolean ?"}}:::unresolved
     string{{"string ?"}}:::unresolved
@@ -28,9 +26,7 @@ graph TD
     ClientConfig --> IdTokenMinter
     ClientConfig --> string
     ContextMgr --> ContextReader
-    ContextMgr --> HeaderRegistry
     ContextMgr --> boolean
-    HeaderRegistry --> PlatformHeadersExtension__
     ProxyClient --> ApiPrototype_object_
     ProxyClient --> ClientConfig
     ProxyClient --> HeaderMethods

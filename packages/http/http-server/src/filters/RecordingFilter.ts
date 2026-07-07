@@ -17,6 +17,7 @@ import {
     WebpiecesCoreHeaders,
     toError,
 } from '@webpieces/core-util';
+
 import { TestCaseRecorderImpl } from '../recorder/TestCaseRecorderImpl';
 
 /**
@@ -45,7 +46,6 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     constructor(
         @inject(WEBPIECES_CONFIG_TOKEN) private config: WebpiecesConfig,
-        @inject(HeaderRegistry) private registry: HeaderRegistry,
     ) {
         super();
     }
@@ -74,7 +74,7 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             serverEndpoint.failureResponse = new RecordedError(error.name, error.message);
             throw err;
         } finally {
-            RequestContext.remove(RecorderKeys.RECORDER.getHeaderName());
+            RequestContext.remove(RecorderKeys.RECORDER.name);
             recorder.spitOutTestCase(serverEndpoint, this.config.recordingDir);
         }
     }
@@ -88,8 +88,8 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     private buildServerEndpoint(meta: MethodMeta): RecordedEndpoint {
-        // Masked snapshot of the magic context (secured values masked, MDC keys)
-        const logMap = this.headerMethods.buildSecureMapForLogs(this.registry.getHeaders(), new RequestContextReader());
+        // Masked snapshot of the magic context (secured values masked, keyed by name)
+        const logMap = this.headerMethods.buildSecureMapForLogs(HeaderRegistry.get().getLoggedKeys(), new RequestContextReader());
         const ctxSnapshot: Record<string, string> = {};
         for (const entry of logMap.entries()) {
             ctxSnapshot[entry[0]] = entry[1];

@@ -8,7 +8,6 @@ import {
     ContextFilter,
     FilterDefinition,
     MethodMeta,
-    WebpiecesModule,
     WebpiecesRouteCreator,
 } from '@webpieces/http-server';
 import { Filter, Service, WpResponse } from '@webpieces/http-filters';
@@ -16,11 +15,12 @@ import { SaveApi, SaveResponse, PublicApi, PublicInfoResponse } from '@webpieces
 import { SaveController } from '../controllers/save-controller';
 import { PublicController } from '../controllers/public-controller';
 import { AuthFilter } from '../filters/AuthFilter';
-import { CompanyHeadersModule } from '@webpieces/company-svc-core';
+import { configureCompanyHeaders } from '@webpieces/company-svc-core';
 import { Server2Api } from '@webpieces/server2-api';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 import { InversifyModule } from '../modules/InversifyModule';
+import { APP_HEADERS } from '../AppServerConfig';
 
 /**
  * Records the order filters executed in, so tests can assert priority ordering
@@ -81,12 +81,13 @@ let httpServer: ReturnType<Express['listen']>;
  * Build the user's Inversify container (the adapter requires one).
  */
 async function buildContainer(orderRecorder: FilterOrderRecorder): Promise<Container> {
+    // Filters read the GLOBAL HeaderRegistry (configured once, like LogManager) — no DI.
+    configureCompanyHeaders(APP_HEADERS);
+
     const container = new Container();
     await container.load(buildFrameworkModule());  // webpieces framework classes (ContextFilter, ...)
     await container.load(buildProviderModule());   // app @provideSingleton classes (controllers, test filters)
-    await container.load(WebpiecesModule);       // framework headers (required by ContextFilter)
-    await container.load(CompanyHeadersModule);  // company headers incl. AUTHORIZATION
-    await container.load(InversifyModule);       // Counter, Server2Api simulator, app headers
+    await container.load(InversifyModule);       // Counter, Server2Api simulator
 
     const testFilters = new ContainerModule((options: ContainerModuleLoadOptions) => {
         options.bind(GlobalOrderFilter).toConstantValue(new GlobalOrderFilter(orderRecorder, 'global'));

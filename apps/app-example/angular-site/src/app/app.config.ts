@@ -6,13 +6,9 @@ import {
   ContextMgr,
   MutableContextStore,
   createApiClient,
-  HeaderRegistry,
-  PlatformHeadersExtension,
-  WebpiecesCoreHeaders,
 } from '@webpieces/http-client';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-import { CompanyHeaders } from '@webpieces/company-core';
 
 /**
  * Application configuration with dependency injection setup.
@@ -48,12 +44,8 @@ export const appConfig: ApplicationConfig = {
     {
       provide: ClientConfig,
       useFactory: (envConfig: EnvironmentConfig, store: MutableContextStore) => {
-        // Same header definitions the server modules register
-        const registry = new HeaderRegistry([
-          new PlatformHeadersExtension(WebpiecesCoreHeaders.getAllHeaders()),
-          new PlatformHeadersExtension(CompanyHeaders.getAllHeaders()),
-        ]);
-        const contextMgr = new ContextMgr(store, registry);
+        // ContextMgr reads the GLOBAL HeaderRegistry (configured in main.ts at startup).
+        const contextMgr = new ContextMgr(store);
         return new ClientConfig(envConfig.apiBaseUrl(), contextMgr);
       },
       deps: [EnvironmentConfig, MutableContextStore]

@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { LogManager } from './LogManager';
 import { ConsoleLoggerFactory } from './ConsoleLoggerFactory';
 import { Logger } from './Logger';
 import { LoggerFactory } from './LoggerFactory';
+import { HeaderRegistry } from '../http/HeaderRegistry';
+
+// LogManager.setFactory fails fast unless the HeaderRegistry is configured first.
+beforeAll(() => {
+    HeaderRegistry.configure([], [], /*platformHeaders*/ true);
+});
 
 /** A trivial in-memory factory used to prove the plug-in seam. Caches per name,
  * like every real factory (ConsoleLoggerFactory / bunyan / winston). */

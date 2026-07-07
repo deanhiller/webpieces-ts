@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { ConsoleLoggerFactory } from '@webpieces/core-util';
 import { bootstrapServer, BootstrapOptions } from '@webpieces/company-svc-core';
-import { APP_MODULES, configureRoutes } from './AppServerConfig';
+import { APP_MODULES, APP_HEADERS, configureRoutes } from './AppServerConfig';
 
 /**
  * Main entry point for client-server. All startup boilerplate (logging backend,
@@ -11,7 +11,7 @@ import { APP_MODULES, configureRoutes } from './AppServerConfig';
  */
 async function main(): Promise<void> {
     await bootstrapServer(
-        new BootstrapOptions(8200, 'Server', new ConsoleLoggerFactory(), APP_MODULES),
+        new BootstrapOptions(8200, 'Server', new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS),
         configureRoutes,
     );
 }

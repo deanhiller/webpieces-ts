@@ -1,11 +1,9 @@
 import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
-import { PlatformHeader, PlatformHeadersExtension, HEADER_TYPES, HeaderRegistry, LogManager } from '@webpieces/core-util';
+import { ContextKey } from '@webpieces/core-util';
 import { RequestContextReader } from '@webpieces/http-routing';
 import { createApiClient, ClientConfig, ContextMgr } from '@webpieces/http-client';
-
-const log = LogManager.getLogger('InversifyModule');
 
 /**
  * App-specific headers unique to this application.
@@ -25,19 +23,12 @@ export class AppHeaders {
      * Type of client making the request.
      * Examples: 'web', 'mobile-ios', 'mobile-android', 'cli'
      */
-    static readonly CLIENT_TYPE = new PlatformHeader(
-        'x-client-type',
-        true,  // transfer to downstream services
-        false, // not secured
-        true   // use for metrics (track usage by client type)
-    );
+    static readonly CLIENT_TYPE = new ContextKey('clientType', 'x-client-type');
 
     /**
-     * Get all app headers as an array.
-     *
-     * @returns Array of all app-specific platform headers
+     * Get all app context keys as an array.
      */
-    static getAllHeaders(): PlatformHeader[] {
+    static getAllHeaders(): ContextKey[] {
         return [AppHeaders.CLIENT_TYPE];
     }
 }
@@ -64,18 +55,11 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // (correlation id, tenant, request-id chain) transfers onto every outbound
     // call automatically. Tests rebind this token to a mock/simulator.
     bind<Server2Api>(TYPES.Server2Api)
-        .toDynamicValue((ctx: ResolutionContext) => {
+        .toDynamicValue((_ctx: ResolutionContext) => {
             const server2Url = process.env['SERVER2_URL'] ?? 'http://localhost:8202';
-            const contextMgr = new ContextMgr(new RequestContextReader(), ctx.get(HeaderRegistry));
+            // ContextMgr reads the GLOBAL HeaderRegistry (configured at startup).
+            const contextMgr = new ContextMgr(new RequestContextReader());
             return createApiClient(Server2Api, new ClientConfig(server2Url, contextMgr));
         })
         .inSingletonScope();
-
-    // Create extension with app-specific headers
-    const appExtension = new PlatformHeadersExtension(AppHeaders.getAllHeaders());
-
-    // Bind extension for multiInject collection
-    bind<PlatformHeadersExtension>(HEADER_TYPES.PlatformHeadersExtension).toConstantValue(appExtension);
-
-    log.info(`[InversifyModule] Registered app platform headers extension with ${appExtension.headers.length} headers`);
 });

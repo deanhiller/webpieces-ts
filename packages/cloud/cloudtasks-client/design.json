@@ -9,14 +9,6 @@
             "maxLevel": 1,
             "nodes": [
                 {
-                    "id": "HeaderRegistry",
-                    "className": "HeaderRegistry",
-                    "kind": "unresolved",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskClientCreator.ts",
-                    "level": 1
-                },
-                {
                     "id": "TaskClientCreator",
                     "className": "TaskClientCreator",
                     "kind": "apiImplementation",
@@ -36,15 +28,6 @@
             "edges": [
                 {
                     "from": "TaskClientCreator",
-                    "to": "HeaderRegistry",
-                    "injection": "token",
-                    "token": "HeaderRegistry",
-                    "tokenKey": "class:packages/core/core-util/src/http/HeaderRegistry.ts#HeaderRegistry",
-                    "paramName": "registry",
-                    "paramType": "HeaderRegistry"
-                },
-                {
-                    "from": "TaskClientCreator",
                     "to": "TaskInvoker",
                     "injection": "token",
                     "token": "TaskInvoker",
@@ -54,7 +37,6 @@
                 }
             ],
             "unresolved": [
-                "HeaderRegistry",
                 "TaskInvoker"
             ]
         }

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { Header } from '@webpieces/core-util';
+import { ContextKey } from '@webpieces/core-util';
 
 /**
  * Context management using AsyncLocalStorage.
@@ -38,20 +38,23 @@ class RequestContextImpl {
         return this.storage.run(context, fn);
     }
 
-    getHeader(header: Header) {
-        return this.get(header.getHeaderName());
+    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
+    getHeader<T = unknown>(key: ContextKey): T | undefined {
+        return this.get<T>(key.name);
     }
 
-    putHeader(header: Header, value: any) {
-        this.put(header.getHeaderName(), value);
+    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
+    putHeader(key: ContextKey, value: unknown): void {
+        this.put(key.name, value);
     }
 
-    hasHeader(header: Header) {
-        return this.has(header.getHeaderName());
+    hasHeader(key: ContextKey): boolean {
+        return this.has(key.name);
     }
 
-    getHeaders(headers: Header[]): any[] {
-        return headers.map(header => this.getHeader(header));
+    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
+    getHeaders(keys: ContextKey[]): unknown[] {
+        return keys.map(key => this.getHeader(key));
     }
 
     /**

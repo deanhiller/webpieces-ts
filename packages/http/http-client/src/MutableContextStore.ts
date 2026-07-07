@@ -1,18 +1,19 @@
-import { PlatformHeader, ContextReader } from '@webpieces/core-util';
+import { ContextKey, ContextReader } from '@webpieces/core-util';
 
 /**
- * MutableContextStore - Browser-side context store + ContextReader.
+ * MutableContextStore - the BROWSER ContextReader.
  *
  * Browsers have no AsyncLocalStorage, so apps (Angular/React) hold one of these
- * (e.g. as an Angular service / React context value) and set header values as
- * they become known (login token, selected tenant, ...). The ContextMgr then
- * reads from it on every outbound request.
+ * (e.g. as an Angular service / React context value) and set values as they become
+ * known (login token, selected tenant, ...). The ContextMgr then reads from it on
+ * every outbound request.
  *
  * Example (Angular):
  * ```typescript
  * const store = new MutableContextStore();
- * const registry = new HeaderRegistry([new PlatformHeadersExtension(CompanyHeaders.getAllHeaders())]);
- * const config = new ClientConfig(baseUrl, new ContextMgr(store, registry));
+ * // startup:
+ * HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeaders(), true);
+ * const config = new ClientConfig(baseUrl, new ContextMgr(store));
  * const client = createApiClient(SaveApi, config);
  *
  * // later, when the user logs in / picks a tenant:
@@ -23,28 +24,22 @@ import { PlatformHeader, ContextReader } from '@webpieces/core-util';
 export class MutableContextStore implements ContextReader {
     private values: Map<string, string> = new Map();
 
-    /**
-     * Set (or overwrite) the current value for a header.
-     */
-    set(header: PlatformHeader, value: string): void {
-        this.values.set(header.headerName, value);
+    /** Set (or overwrite) the current value for a context key. */
+    set(key: ContextKey, value: string): void {
+        this.values.set(key.name, value);
     }
 
-    /**
-     * Remove the current value for a header (e.g. on logout).
-     */
-    remove(header: PlatformHeader): void {
-        this.values.delete(header.headerName);
+    /** Remove the current value for a context key (e.g. on logout). */
+    remove(key: ContextKey): void {
+        this.values.delete(key.name);
     }
 
-    /**
-     * Clear all stored values.
-     */
+    /** Clear all stored values. */
     clear(): void {
         this.values.clear();
     }
 
-    read(header: PlatformHeader): string | undefined {
-        return this.values.get(header.headerName);
+    read(key: ContextKey): string | undefined {
+        return this.values.get(key.name);
     }
 }

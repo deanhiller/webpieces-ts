@@ -5,14 +5,14 @@ import * as os from 'os';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { recordable } from '@webpieces/http-server';
 import { WebpiecesConfig, WebpiecesRouter } from '@webpieces/http-routing';
-import { createCompanyRouter } from '@webpieces/company-svc-core';
+import { createCompanyRouter, configureCompanyHeaders } from '@webpieces/company-svc-core';
 import { RecordedTestCase, RecordSerializer } from '@webpieces/core-util';
 import { createMock } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
 import { SaveApi } from '@webpieces/client-server-api';
 import { Server2Api, FetchValueResponse, FetchValueRequest } from '@webpieces/server2-api';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { APP_MODULES, configureRoutes } from '../AppServerConfig';
+import { APP_MODULES, APP_HEADERS, configureRoutes } from '../AppServerConfig';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 
@@ -31,6 +31,7 @@ let recordingDir: string;
  * call is captured WITHOUT a second server (recordable = port of Java ApiRecorder).
  */
 async function bootRecordingServer(): Promise<void> {
+    configureCompanyHeaders(APP_HEADERS); // filters read the global HeaderRegistry
     recordingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-recording-'));
 
     const config = new WebpiecesConfig();
@@ -108,6 +109,7 @@ describe('createMock replaces hand-rolled mocks', () => {
     const mockServer2Api = createMock<Server2Api>('Server2Api');
 
     beforeAll(async () => {
+        configureCompanyHeaders(APP_HEADERS); // filters read the global HeaderRegistry
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
             rebindResult.toConstantValue(mockServer2Api);

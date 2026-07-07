@@ -8,7 +8,6 @@
  */
 
 export { toError } from './lib/errorUtils';
-export { Header } from './Header';
 export { ContextKey } from './ContextKey';
 
 // @DocumentDesign — DI-design-root marker. Applies to ANY project kind (server
@@ -104,14 +103,11 @@ export {
     DateTimeUtil,
 } from './http/datetime';
 
-// Platform Headers
-export { PlatformHeader } from './http/PlatformHeader';
-export { PlatformHeadersExtension } from './http/PlatformHeadersExtension';
+// Context keys + registry (the global magic-context header system)
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { HeaderMethods } from './http/HeaderMethods';
 export { ContextReader } from './http/ContextReader';
-export { HEADER_TYPES } from './http/HeaderTypes';
 
 // Outbound-header machinery (context reader + registry -> outbound HTTP headers).
 // Browser-safe — the server-side reader (RequestContextReader) and browser store

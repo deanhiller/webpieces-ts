@@ -1,103 +1,130 @@
-import { PlatformHeader } from './PlatformHeader';
-import { PlatformHeadersExtension } from './PlatformHeadersExtension';
+import { ContextKey } from '../ContextKey';
+import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 
 /**
- * HeaderRegistry - The single source of truth for all PlatformHeaders known to
- * the platform. Port of Java webpieces' HeaderTranslation.
+ * HeaderRegistry - the single, GLOBAL source of truth for every ContextKey the
+ * platform knows about. Port of Java webpieces' HeaderTranslation.
  *
- * Every consumer (server filters, logging, metrics, outbound HTTP clients)
- * reads the header set from this registry, so externally-defined headers are
- * honored everywhere ("infinitely scalable magic context").
+ * Configured exactly like {@link LogManager} — once, at process startup — and then
+ * globally accessible. There is NO DI wiring: filters/clients call
+ * `HeaderRegistry.get()` instead of injecting it.
  *
- * Constructible in BOTH environments:
- * - Server (Inversify): WebpiecesModule binds it via
- *   `toDynamicValue(ctx => new HeaderRegistry(ctx.getAll(HEADER_TYPES.PlatformHeadersExtension)))`
- *   so every module's PlatformHeadersExtension is collected automatically.
- * - Browser (no DI): `new HeaderRegistry([new PlatformHeadersExtension([...])])`.
+ * ```ts
+ * // startup (server AND browser), BEFORE LogManager.setFactory(...):
+ * HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeaders(), true);
+ * ```
  *
- * Duplicate validation (port of Java checkForDuplicates) runs at construction,
+ * - `svrHeaders`      this server's own keys.
+ * - `companyHeaders`  keys from a shared company lib all services use.
+ * - `platformHeaders` when true, also include {@link HeaderRegistry.DEFAULT_HEADERS}
+ *                     (the webpieces common keys: request-id, correlation-id, ...).
+ *
+ * Duplicate validation (port of Java checkForDuplicates) runs at configure() time,
  * so conflicting definitions fail fast at startup:
- * - Two headers with the same headerName must agree on ALL flags and loggerMdcKey.
- * - Two headers with the same loggerMdcKey must agree on headerName (and therefore flags).
- * - Exact duplicates (same name, same flags) collapse to one entry.
+ * - Two keys with the same `name` must agree on httpHeader/isSecured/isLogged.
+ * - Two keys with the same `httpHeader` must agree on `name`.
+ * - Exact duplicates collapse to one entry.
  */
 export class HeaderRegistry {
-    private readonly headers: PlatformHeader[];
+    /** The webpieces-supplied common keys; included when platformHeaders=true. */
+    static readonly DEFAULT_HEADERS: ContextKey[] = WebpiecesCoreHeaders.getAllHeaders();
 
-    constructor(extensions: PlatformHeadersExtension[]) {
-        const allHeaders: PlatformHeader[] = [];
-        for (const extension of extensions) {
-            allHeaders.push(...extension.getHeaders());
+    private static instance: HeaderRegistry | undefined;
+
+    private readonly keys: ContextKey[];
+
+    private constructor(keys: ContextKey[]) {
+        this.keys = this.checkForDuplicates(keys);
+    }
+
+    /**
+     * Install the process-wide registry. Call once at startup, BEFORE
+     * LogManager.setFactory(...) (logging masks/keys off this registry).
+     */
+    static configure(svrHeaders: ContextKey[], companyHeaders: ContextKey[], platformHeaders: boolean): void {
+        const all: ContextKey[] = [
+            ...(platformHeaders ? HeaderRegistry.DEFAULT_HEADERS : []),
+            ...companyHeaders,
+            ...svrHeaders,
+        ];
+        HeaderRegistry.instance = new HeaderRegistry(all);
+    }
+
+    /** The configured registry. Throws if configure() has not been called. */
+    static get(): HeaderRegistry {
+        if (!HeaderRegistry.instance) {
+            throw new Error(
+                'HeaderRegistry.configure(...) has not been called. Configure the registry ' +
+                'at startup (before LogManager.setFactory) so filters/logging know the context keys.',
+            );
         }
-        this.headers = this.checkForDuplicates(allHeaders);
+        return HeaderRegistry.instance;
+    }
+
+    /** True once configure() has run. Used by LogManager.setFactory to fail fast. */
+    static isConfigured(): boolean {
+        return HeaderRegistry.instance !== undefined;
+    }
+
+    /** All registered keys (deduplicated). */
+    getKeys(): ContextKey[] {
+        return this.keys;
     }
 
     /**
-     * All registered headers (deduplicated).
+     * Keys that transfer over the wire (inbound request -> context, and context ->
+     * outbound request): those with an httpHeader set.
      */
-    getHeaders(): PlatformHeader[] {
-        return this.headers;
+    getTransferredKeys(): ContextKey[] {
+        return this.keys.filter((k: ContextKey) => k.httpHeader !== undefined);
     }
 
-    /**
-     * Headers that transfer over the wire (inbound request -> context, and
-     * context -> outbound request). isWantTransferred=true.
-     */
-    getTransferredHeaders(): PlatformHeader[] {
-        return this.headers.filter((h: PlatformHeader) => h.isWantTransferred);
-    }
-
-    /**
-     * Header names whose values must be masked in logs. isSecured=true.
-     */
+    /** Names (log keys) whose values must be masked in logs. isSecured=true. */
     getSecuredNames(): string[] {
-        return this.headers
-            .filter((h: PlatformHeader) => h.isSecured)
-            .map((h: PlatformHeader) => h.headerName);
+        return this.keys
+            .filter((k: ContextKey) => k.isSecured)
+            .map((k: ContextKey) => k.name);
+    }
+
+    /** Keys that appear in logs. isLogged=true. */
+    getLoggedKeys(): ContextKey[] {
+        return this.keys.filter((k: ContextKey) => k.isLogged);
+    }
+
+    /** Look up a key by its HTTP header name (case-insensitive). */
+    findByHttpHeader(httpHeader: string): ContextKey | undefined {
+        const lower = httpHeader.toLowerCase();
+        return this.keys.find((k: ContextKey) => k.httpHeader?.toLowerCase() === lower);
     }
 
     /**
-     * Headers exposed as MDC/structured-log dimensions (loggerMdcKey set).
+     * Collapse exact duplicates, throw on conflicting definitions sharing a `name`
+     * or an `httpHeader`.
      */
-    getMdcHeaders(): PlatformHeader[] {
-        return this.headers.filter((h: PlatformHeader) => h.loggerMdcKey !== undefined);
-    }
+    private checkForDuplicates(allKeys: ContextKey[]): ContextKey[] {
+        const byName = new Map<string, ContextKey>();
+        const byHttpHeader = new Map<string, ContextKey>();
 
-    /**
-     * Look up a header definition by its HTTP name (case-insensitive).
-     */
-    findByName(headerName: string): PlatformHeader | undefined {
-        const lower = headerName.toLowerCase();
-        return this.headers.find((h: PlatformHeader) => h.headerName.toLowerCase() === lower);
-    }
-
-    /**
-     * Port of Java HeaderTranslation.checkForDuplicates: collapse exact
-     * duplicates, throw on conflicting definitions sharing a name or MDC key.
-     */
-    private checkForDuplicates(allHeaders: PlatformHeader[]): PlatformHeader[] {
-        const byName = new Map<string, PlatformHeader>();
-        const byMdcKey = new Map<string, PlatformHeader>();
-
-        for (const header of allHeaders) {
-            const nameKey = header.headerName.toLowerCase();
+        for (const key of allKeys) {
+            const nameKey = key.name.toLowerCase();
             const existing = byName.get(nameKey);
             if (existing) {
-                this.assertSameDefinition(existing, header);
+                this.assertSameDefinition(existing, key);
                 continue; // exact duplicate - collapse
             }
-            byName.set(nameKey, header);
+            byName.set(nameKey, key);
 
-            if (header.loggerMdcKey !== undefined) {
-                const mdcClash = byMdcKey.get(header.loggerMdcKey);
-                if (mdcClash) {
+            if (key.httpHeader !== undefined) {
+                const headerKey = key.httpHeader.toLowerCase();
+                const clash = byHttpHeader.get(headerKey);
+                if (clash) {
                     throw new Error(
-                        `Duplicate PlatformHeader loggerMdcKey '${header.loggerMdcKey}': ` +
-                        `defined by header '${mdcClash.headerName}' AND header '${header.headerName}'. ` +
-                        `Each MDC key must map to exactly one header.`,
+                        `Duplicate ContextKey httpHeader '${key.httpHeader}': ` +
+                        `defined by key '${clash.name}' AND key '${key.name}'. ` +
+                        `Each HTTP header must map to exactly one context key.`,
                     );
                 }
-                byMdcKey.set(header.loggerMdcKey, header);
+                byHttpHeader.set(headerKey, key);
             }
         }
 
@@ -105,29 +132,26 @@ export class HeaderRegistry {
     }
 
     /**
-     * Two headers sharing a headerName must agree on every flag and the MDC key,
+     * Two keys sharing a `name` must agree on httpHeader/isSecured/isLogged,
      * otherwise the platform would behave differently depending on which module's
      * definition happened to load first.
      */
-    private assertSameDefinition(existing: PlatformHeader, duplicate: PlatformHeader): void {
+    private assertSameDefinition(existing: ContextKey, duplicate: ContextKey): void {
         const conflicts: string[] = [];
-        if (existing.isWantTransferred !== duplicate.isWantTransferred) {
-            conflicts.push(`isWantTransferred (${existing.isWantTransferred} vs ${duplicate.isWantTransferred})`);
+        if (existing.httpHeader !== duplicate.httpHeader) {
+            conflicts.push(`httpHeader ('${existing.httpHeader}' vs '${duplicate.httpHeader}')`);
         }
         if (existing.isSecured !== duplicate.isSecured) {
             conflicts.push(`isSecured (${existing.isSecured} vs ${duplicate.isSecured})`);
         }
-        if (existing.isDimensionForMetrics !== duplicate.isDimensionForMetrics) {
-            conflicts.push(`isDimensionForMetrics (${existing.isDimensionForMetrics} vs ${duplicate.isDimensionForMetrics})`);
-        }
-        if (existing.loggerMdcKey !== duplicate.loggerMdcKey) {
-            conflicts.push(`loggerMdcKey ('${existing.loggerMdcKey}' vs '${duplicate.loggerMdcKey}')`);
+        if (existing.isLogged !== duplicate.isLogged) {
+            conflicts.push(`isLogged (${existing.isLogged} vs ${duplicate.isLogged})`);
         }
         if (conflicts.length > 0) {
             throw new Error(
-                `Conflicting PlatformHeader definitions for '${existing.headerName}': ` +
+                `Conflicting ContextKey definitions for '${existing.name}': ` +
                 `two modules registered it with different ${conflicts.join(', ')}. ` +
-                `Headers sharing a name must agree on all flags.`,
+                `Keys sharing a name must agree on all flags.`,
             );
         }
     }
