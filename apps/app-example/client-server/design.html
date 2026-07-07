@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>DI Designs — http-client</title>
+    <title>DI Designs — client-server</title>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
     <style>
@@ -25,7 +25,7 @@
 </head>
 <body>
     <p class="back"><a href="../../../architecture/dependencies.html">← Back to architecture graph</a></p>
-    <h1>DI Designs — http-client</h1>
+    <h1>DI Designs — client-server</h1>
     <div class="legend">
         <h2>Legend</h2>
         <div class="legend-item"><span class="legend-box" style="background: #E3F2FD;"></span>
@@ -41,12 +41,17 @@
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>
     <div class="section">
-        <h2>ProxyClient — apiImplementation, Level 0…4</h2>
-        <div class="meta">packages/http/http-client/src/ClientFactory.ts</div>
+        <h2>PublicController — controller, Level 0…0</h2>
+        <div class="meta">apps/app-example/client-server/src/controllers/public-controller.ts</div>
         <div id="graph-0" class="graph"></div>
     </div>
+    <div class="section">
+        <h2>SaveController — controller, Level 0…1</h2>
+        <div class="meta">apps/app-example/client-server/src/controllers/save-controller.ts</div>
+        <div id="graph-1" class="graph"></div>
+    </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"ProxyClient\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ApiPrototype<object>\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"ApiPrototype<object>\\n(L1, unknown)\"];\n  \"ClientConfig\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"ClientConfig\\n(L1, unknown)\"];\n  \"ContextMgr\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"ContextMgr\\n(L2, unknown)\"];\n  \"ContextReader\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"ContextReader\\n(L3, unknown)\"];\n  \"HeaderMethods\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"HeaderMethods\\n(L1, unknown)\"];\n  \"HeaderRegistry\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"HeaderRegistry\\n(L3, unknown)\"];\n  \"IdTokenMinter\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"IdTokenMinter\\n(L2, unknown)\"];\n  \"LogApiCall\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"LogApiCall\\n(L1, unknown)\"];\n  \"PlatformHeadersExtension[]\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"PlatformHeadersExtension[]\\n(L4, unknown)\"];\n  \"ProxyClient\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ProxyClient\\n(L0, unknown)\", penwidth=2];\n  \"boolean\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"boolean\\n(L3, unknown)\"];\n  \"string\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"string\\n(L2, unknown)\"];\n\n  { rank=same; \"ProxyClient\"; }\n  { rank=same; \"ApiPrototype<object>\"; \"ClientConfig\"; \"HeaderMethods\"; \"LogApiCall\"; }\n  { rank=same; \"ContextMgr\"; \"IdTokenMinter\"; \"string\"; }\n  { rank=same; \"ContextReader\"; \"HeaderRegistry\"; \"boolean\"; }\n  { rank=same; \"PlatformHeadersExtension[]\"; }\n\n  \"ClientConfig\" -> \"ContextMgr\";\n  \"ClientConfig\" -> \"IdTokenMinter\";\n  \"ClientConfig\" -> \"string\";\n  \"ContextMgr\" -> \"ContextReader\";\n  \"ContextMgr\" -> \"HeaderRegistry\";\n  \"ContextMgr\" -> \"boolean\";\n  \"HeaderRegistry\" -> \"PlatformHeadersExtension[]\";\n  \"ProxyClient\" -> \"ApiPrototype<object>\";\n  \"ProxyClient\" -> \"ClientConfig\";\n  \"ProxyClient\" -> \"HeaderMethods\";\n  \"ProxyClient\" -> \"LogApiCall\";\n\n  labelloc=\"t\";\n  label=\"ProxyClient\\n(apiImplementation, Level 0-4)\";\n  fontsize=16;\n}\n"}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"PublicController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"PublicController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"PublicController\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"PublicController\"; }\n\n\n  labelloc=\"t\";\n  label=\"PublicController\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n"},{"id":"graph-1","dot":"digraph \"SaveController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"SaveController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"SaveController\\n(L0, singleton)\", penwidth=2];\n  \"Server2Api\" [fillcolor=\"#FFF3E0\", style=\"filled,rounded\", label=\"Server2Api\\n(L1, singleton)\"];\n  \"SimpleCounter\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"Counter\\n(SimpleCounter)\\n(L1, singleton)\"];\n\n  { rank=same; \"SaveController\"; }\n  { rank=same; \"Server2Api\"; \"SimpleCounter\"; }\n\n  \"SaveController\" -> \"Server2Api\";\n  \"SaveController\" -> \"SimpleCounter\";\n\n  labelloc=\"t\";\n  label=\"SaveController\\n(controller, Level 0-1)\";\n  fontsize=16;\n}\n"}];
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)

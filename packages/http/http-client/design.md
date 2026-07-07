@@ -18,12 +18,14 @@ graph TD
     ContextReader{{"ContextReader ?"}}:::unresolved
     HeaderMethods["HeaderMethods"]
     HeaderRegistry["HeaderRegistry"]
+    IdTokenMinter{{"IdTokenMinter ?"}}:::unresolved
     LogApiCall["LogApiCall"]
     PlatformHeadersExtension__{{"PlatformHeadersExtension[] ?"}}:::unresolved
     ProxyClient["ProxyClient"]:::apiImpl
     boolean{{"boolean ?"}}:::unresolved
     string{{"string ?"}}:::unresolved
     ClientConfig --> ContextMgr
+    ClientConfig --> IdTokenMinter
     ClientConfig --> string
     ContextMgr --> ContextReader
     ContextMgr --> HeaderRegistry

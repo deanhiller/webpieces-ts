@@ -1,4 +1,6 @@
-import { ContextReader, HeaderMethods, HeaderRegistry } from '@webpieces/core-util';
+import { ContextReader } from './ContextReader';
+import { HeaderMethods } from './HeaderMethods';
+import { HeaderRegistry } from './HeaderRegistry';
 import { RequestIdChainProcessor } from './RequestIdChainProcessor';
 
 /**
@@ -7,6 +9,11 @@ import { RequestIdChainProcessor } from './RequestIdChainProcessor';
  * Passed to createApiClient() via ClientConfig.contextMgr to enable automatic
  * header propagation: every header in the registry with isWantTransferred=true
  * is read from the ContextReader and added to outbound requests.
+ *
+ * Browser-safe (no AsyncLocalStorage): the server-side reader
+ * (RequestContextReader, in @webpieces/core-context) and the browser store
+ * (MutableContextStore, in @webpieces/http-client) both implement ContextReader,
+ * so ContextMgr itself lives here in browser+node core-util.
  *
  * BREAKING (migration from the PlatformHeader[] constructor):
  *   new ContextMgr(reader, headerArray)
