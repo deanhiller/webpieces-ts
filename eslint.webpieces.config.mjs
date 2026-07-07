@@ -25,11 +25,10 @@ export default [
             '@webpieces/max-file-lines': ['error', { max: 700 }],
             '@webpieces/enforce-architecture': 'error',
             '@webpieces/no-json-property-primitive-type': 'error',
-            // NOTE: '@webpieces/no-process-exit-outside-main' is defined in this repo's eslint-rules
-            // source (+ recommended.mjs) but NOT enabled here yet: eslint loads the @webpieces plugin
-            // from the PUBLISHED node_modules build, which won't contain the rule until the next
-            // tooling release. Enable this line in the follow-up that bumps @webpieces/* past the
-            // release carrying the rule (same "config is one release behind" lifecycle as new rules).
+            // process.exit only inside main()/runMain; library code throws CliExitError. Enabled once
+            // @webpieces/* reached 0.3.283 (the release carrying the rule) — the published plugin now
+            // defines it. Clients get it too via @webpieces/eslint-rules/recommended on 0.3.283+.
+            '@webpieces/no-process-exit-outside-main': 'error',
         },
     },
 ];
