@@ -19,7 +19,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // PR flow's finish, which validates + finalizes + builds + posts the PR).
 async function updateBranchFromMain(repoRoot: string): Promise<void> {
     process.stdout.write('\n' + SEP + '① Updating branch from main\n' + SEP + '\n');
-    const outcome = await runUpdateFromMain(repoRoot, 'wp-finish-upsert-pr');
+    const outcome = await runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', 'wp-finish-upsert-pr');
     if (outcome === 'conflict' || outcome === 'unvalidatedResume') {
         throw new CliExitError(2,
             '\n⏸️  Conflicts — resolve them, then run pnpm wp-finish-upsert-pr (it validates the merge AND finishes the PR).',

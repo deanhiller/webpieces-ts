@@ -232,6 +232,29 @@ function changedFiles(repoRoot: string, base: string, head: string): string[] {
     return result.out.split('\n').map((line: string): string => line.trim()).filter((line: string): boolean => line.length > 0);
 }
 
+// Every file this feature branch has touched since the fork point — committed AND still in the
+// working tree (staged / unstaged / untracked). The committed-only `git diff forkPoint..HEAD` was
+// BLIND to uncommitted edits: for most of an editing session the files you are actively changing are
+// not yet in HEAD, so the overlap with main's changes was empty and conflict=false even when
+// origin/main had already moved onto those same files. Unioning in the working-tree changes makes the
+// conflict visible WHILE editing, so the guard can force an early merge instead of a painful late one.
+function featureChangedFiles(repoRoot: string, forkPoint: string): string[] {
+    const out = new Set<string>();
+    const add = (args: string[]): void => {
+        const r = capture(repoRoot, 'git', args);
+        if (!r.ok || r.out === '') return;
+        for (const line of r.out.split('\n')) {
+            const f = line.trim();
+            if (f.length > 0) out.add(f);
+        }
+    };
+    add(['diff', '--name-only', forkPoint, 'HEAD']);      // committed since the fork point
+    add(['diff', '--name-only', 'HEAD']);                 // unstaged working-tree edits
+    add(['diff', '--name-only', '--cached', 'HEAD']);     // staged edits
+    add(['ls-files', '--others', '--exclude-standard']);  // untracked new files (respects .gitignore)
+    return [...out];
+}
+
 // Has this feature branch already been merged into main? Reliable signal: a MERGED PR exists for the
 // branch. Best-effort — if gh is missing/unauthenticated we just report not-merged (false).
 function detectMergedPr(repoRoot: string, branch: string): string {
@@ -276,7 +299,7 @@ export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
         return new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
     }
 
-    const featureFiles = new Set(changedFiles(repoRoot, forkPoint.out, 'HEAD'));
+    const featureFiles = new Set(featureChangedFiles(repoRoot, forkPoint.out));
     const mainFiles = changedFiles(repoRoot, forkPoint.out, 'origin/main');
     const conflictFiles = mainFiles.filter((file: string): boolean => featureFiles.has(file));
 

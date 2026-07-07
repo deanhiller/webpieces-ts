@@ -96,7 +96,7 @@ export async function main(): Promise<void> {
     const marker = readMergeMarker(mergeDir);
     if (marker && !marker.validated) {
         await mergeEnd(
-            repoRoot, mergeDir,
+            repoRoot, 'wp-finish-upsert-pr', mergeDir,
             new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
             marker.conflictedFiles,
         );

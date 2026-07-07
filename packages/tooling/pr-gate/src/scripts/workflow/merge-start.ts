@@ -1,7 +1,10 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, CliExitError } from '@webpieces/rules-config';
+import {
+    WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, CliExitError,
+    MutationVerb, BranchMutationEvent, logBranchMutation,
+} from '@webpieces/rules-config';
 import { gatherInfo } from '../git-gatherInfo';
 import { baseBranchName, preMergeBackupName } from './branch-naming';
 import { runGitChecked } from './git-exec';
@@ -234,7 +237,30 @@ function handleConflictsHandback(
     printConflictHandback(docPath, mergeDir, squashBranch, conflictedFiles);
 }
 
-export async function mergeStart(repoRoot: string, mergeDir: string, finishCommand: string): Promise<MergeStartResult> {
+// Short sha of a ref (best-effort — '' if it can't resolve), for the branch-mutation log's
+// oldMain→newMain annotation.
+function shortSha(ref: string): string {
+    const result = spawnSync('git', ['rev-parse', '--short', ref], { encoding: 'utf8' });
+    return result.status === 0 ? (result.stdout ?? '').trim() : '';
+}
+
+// Log the CONFLICT phase with the conflicted-file list + the artifact paths a resolver needs — the
+// per-file 3-point context dir and the generated merge-process doc — so the branch-mutation log alone
+// tells the next agent where to look (no reflog/log archaeology).
+function logConflict(repoRoot: string, verb: MutationVerb, mergeDir: string): void {
+    const raw = spawnSync('git', ['diff', '--name-only', '--diff-filter=U'], { cwd: repoRoot, encoding: 'utf8' });
+    const files = (raw.status === 0 ? (raw.stdout ?? '') : '').split('\n').map((f: string): string => f.trim()).filter((f: string): boolean => f !== '');
+    const event = new BranchMutationEvent(verb, 'CONFLICT');
+    event.conflict = true;
+    event.conflictFiles = files;
+    event.artifacts = [
+        path.join(mergeDir, 'updatemain-<file>'),
+        path.join(repoRoot, WEBPIECES_TMP_DIR, 'instruct-ai', 'webpieces.mergeprocess.md'),
+    ];
+    logBranchMutation(repoRoot, event);
+}
+
+export async function mergeStart(repoRoot: string, verb: MutationVerb, mergeDir: string, finishCommand: string): Promise<MergeStartResult> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     if (currentBranch.endsWith('Squash')) {
         throw new CliExitError(1, `❌ On a leftover ${currentBranch} branch with no merge marker. Clean up: git branch -D ${currentBranch}`);
@@ -255,21 +281,34 @@ export async function mergeStart(repoRoot: string, mergeDir: string, finishComma
     process.stdout.write(prNumber ? `Existing PR #${prNumber} will be updated.\n` : 'No existing PR (one can be created later).\n');
 
     const backupBranch = createBackup(currentBranch);
+    const backupEvent = new BranchMutationEvent(verb, 'BACKUP');
+    backupEvent.fromBranch = currentBranch;
+    backupEvent.toBranch = backupBranch;
+    logBranchMutation(repoRoot, backupEvent);
+
     const squashBranch = `${currentBranch}Squash`;
     if (spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${squashBranch}`]).status === 0) {
         throw new CliExitError(1, `❌ Stale ${squashBranch} from a previous run. Delete it: git branch -D ${squashBranch}`);
     }
 
+    const mainBeforePull = shortSha('main');
     runGitChecked(['checkout', 'main'], 'Failed to checkout main');
+    logBranchMutation(repoRoot, new BranchMutationEvent(verb, 'CHECKOUT_MAIN'));
     runGitChecked(['pull', 'origin', 'main'], 'Failed to pull origin/main');
+    const pullEvent = new BranchMutationEvent(verb, 'PULL');
+    pullEvent.oldMain = mainBeforePull;
+    pullEvent.newMain = shortSha('main');
+    logBranchMutation(repoRoot, pullEvent);
     runGitChecked(['checkout', '-b', squashBranch], 'Failed to create squash branch');
 
     process.stdout.write('\n' + SEP + `🔀 Squash merging ${currentBranch}\n` + SEP + '\n');
     const merge = spawnSync('git', ['merge', '--squash', currentBranch], { stdio: 'inherit' });
     if (merge.status !== 0) {
         handleConflictsHandback(repoRoot, mergeDir, currentBranch, squashBranch, backupBranch, prNumber, hashes, finishCommand);
+        logConflict(repoRoot, verb, mergeDir);
         return new MergeStartResult('conflict', null);
     }
+    logBranchMutation(repoRoot, new BranchMutationEvent(verb, 'SQUASH'));
 
     const nothingStaged = spawnSync('git', ['diff-index', '--quiet', '--cached', 'HEAD', '--']).status === 0;
     if (nothingStaged) {

@@ -89,6 +89,10 @@ describe('feature-branch-guard', () => {
         const violations = rule().check(ctx());
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('src/a.ts');
+        // Mid-work conflicts steer to the UPDATE-ONLY flow; the PR flow is mentioned only for the
+        // "already have an open PR" case.
+        expect(violations[0].message).toContain('wp-update-start');
+        expect(violations[0].message).toContain('wp-update-end');
         expect(violations[0].message).toContain('wp-start-upsert-pr');
     });
 
