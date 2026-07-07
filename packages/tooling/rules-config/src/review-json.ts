@@ -9,6 +9,7 @@ import { toError } from './to-error';
 // schema + instructions) and `wp-finish-upsert-pr` (which reads it to render the RISK section and
 // post the PR). Data-only (per CLAUDE.md, classes for data).
 export class ReviewJson {
+    title: string; // human PR title describing the change; used as the `gh pr` title (empty → caller falls back)
     riskScore: number; // 0–100, drives the risk bar
     riskLevel: string; // 'green' | 'yellow' | 'red'
     riskEmoji: string; // '🟢' | '🟡' | '🔴' — derived from riskLevel when omitted
@@ -18,6 +19,7 @@ export class ReviewJson {
     filesToReview: string[];
 
     constructor(
+        title: string,
         riskScore: number,
         riskLevel: string,
         riskEmoji: string,
@@ -26,6 +28,7 @@ export class ReviewJson {
         risks: string[],
         filesToReview: string[],
     ) {
+        this.title = title;
         this.riskScore = riskScore;
         this.riskLevel = riskLevel;
         this.riskEmoji = riskEmoji;
@@ -59,6 +62,7 @@ export function reviewJsonSchemaHint(filePath: string): string {
         `Write your PR review to:\n  ${filePath}\n\n` +
         `with this exact JSON shape (riskEmoji optional — derived from riskLevel):\n\n` +
         `{\n` +
+        `  "title": "concise PR title describing the change (imperative, no branch names)",\n` +
         `  "riskScore": 0,                       // integer 0–100 (higher = riskier)\n` +
         `  "riskLevel": "green | yellow | red",\n` +
         `  "summary": "5–10 sentence review summary",\n` +
@@ -137,8 +141,12 @@ export function loadReviewJson(filePath: string): ReviewJson {
         ? (raw['riskEmoji'] as string)
         : (EMOJI_FOR_LEVEL[level] ?? '🟡');
     const summary = typeof raw['summary'] === 'string' ? (raw['summary'] as string) : '';
+    // Title is lenient: absent/blank → '' and the finish command falls back to the feature name, so an
+    // older review.json (pre-title field) never hard-fails; the schema hint still asks the AI for it.
+    const title = typeof raw['title'] === 'string' ? (raw['title'] as string).trim() : '';
 
     return new ReviewJson(
+        title,
         riskScore as number,
         level,
         emoji,

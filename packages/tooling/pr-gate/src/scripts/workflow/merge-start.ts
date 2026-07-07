@@ -6,7 +6,7 @@ import {
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
 import { gatherInfo } from '../git-gatherInfo';
-import { baseBranchName, preMergeBackupName } from './branch-naming';
+import { baseBranchName, nextFreePreMergeSlot } from './branch-naming';
 import { runGitChecked } from './git-exec';
 import { MergeMarker, perFileContextDir, writeMergeMarker } from './merge-state';
 
@@ -54,8 +54,8 @@ export class MergeStartResult {
     }
 }
 
-// Detect the PR by its STABLE base branch — the PR always lives on `base`, never on the numbered
-// generation (base2/base3/…) you may currently be on, so pass baseBranchName(currentBranch).
+// Detect the PR by its STABLE feature branch — pass baseBranchName(currentBranch) so a leftover
+// `…wpN` from the old scheme still resolves to the one name the PR lives on.
 function detectPr(baseBranch: string): string {
     const result = spawnSync(
         'gh', ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
@@ -64,15 +64,16 @@ function detectPr(baseBranch: string): string {
     return result.status === 0 ? (result.stdout ?? '').trim() : '';
 }
 
-// Snapshot the pre-merge state as `<currentBranch>PreMerge`. One overwritable slot per generation:
-// if a stale PreMerge from a crashed rerun of THIS branch exists, delete it first so we never
-// accumulate backups (the old scheme minted a fresh Backup1/Backup2/… on every run).
+// Snapshot the pre-merge state into the next free NUMBERED slot — `<currentBranch>PreMerge`, then
+// `PreMerge2`, `PreMerge3`, … — never overwriting an existing one. The feature branch name is now
+// constant across syncs, so the numbered snapshot itself is the trail of "how many times I re-merged
+// main" that the old `wpN` branch name used to carry.
 function createBackup(currentBranch: string): string {
     process.stdout.write('\n' + SEP + '💾 Creating Pre-Merge Backup\n' + SEP + '\n');
-    const backupBranch = preMergeBackupName(currentBranch);
-    if (spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${backupBranch}`]).status === 0) {
-        runGitChecked(['branch', '-D', backupBranch], 'Failed to delete stale pre-merge backup');
-    }
+    const backupBranch = nextFreePreMergeSlot(
+        currentBranch,
+        (name: string): boolean => spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0,
+    );
     runGitChecked(['checkout', '-b', backupBranch], 'Failed to create backup branch');
     runGitChecked(['checkout', currentBranch], 'Failed to return to feature branch');
     process.stdout.write(`✅ Backup created: ${backupBranch}\n\n`);
@@ -207,11 +208,22 @@ function writeMergeProcessDoc(repoRoot: string, mergeDir: string, squashBranch: 
     return docPath;
 }
 
-function printConflictHandback(docPath: string, mergeDir: string, squashBranch: string, conflictedFiles: string[]): void {
+// The AI-facing "what just happened / what to do next" recap on the conflict path. Explicit and
+// numbered so an agent (or human) can't miss where the context lives or which command finishes.
+function printConflictHandback(
+    docPath: string, mergeDir: string, squashBranch: string, conflictedFiles: string[], finishCommand: string,
+): void {
     process.stdout.write('\n' + SEP + `⚠️  Conflicts in ${conflictedFiles.length} file(s) — handing control back to you\n` + SEP + '\n');
-    process.stdout.write(`You are on branch ${squashBranch} with conflicts in the working tree.\n\n`);
-    process.stdout.write(`FOLLOW THE MERGE PROCESS:  ${docPath}\n`);
-    process.stdout.write(`3-point context per file in: ${mergeDir}/updatemain-<file>/\n\n`);
+    process.stdout.write('Here is exactly what I did and what you need to do:\n\n');
+    process.stdout.write('What I did:\n');
+    process.stdout.write('   1. snapshotted your pre-merge state to a PreMerge branch\n');
+    process.stdout.write('   2. pulled origin/main and squash-merged your work onto it\n');
+    process.stdout.write(`   3. hit conflicts — you are now on the transient branch  ${squashBranch}\n\n`);
+    process.stdout.write('What you need to do:\n');
+    process.stdout.write(`   1. read the merge process doc:  ${docPath}\n`);
+    process.stdout.write(`   2. resolve each conflicted file below (its 3-point A/B/C context + diffs are in\n`);
+    process.stdout.write(`      ${mergeDir}/updatemain-<file>/), and write that file's merge-explanation.md\n`);
+    process.stdout.write(`   3. run  pnpm ${finishCommand}  — it validates, commits, and finalizes (do NOT git add/commit/push yourself)\n\n`);
     process.stdout.write('Conflicted files:\n');
     for (const file of conflictedFiles) process.stdout.write(`  - ${file}\n`);
     process.stdout.write('\n' + SEP);
@@ -234,7 +246,7 @@ function handleConflictsHandback(
     );
     writeMergeMarker(mergeDir, marker);
     const docPath = writeMergeProcessDoc(repoRoot, mergeDir, squashBranch, conflictedFiles, finishCommand);
-    printConflictHandback(docPath, mergeDir, squashBranch, conflictedFiles);
+    printConflictHandback(docPath, mergeDir, squashBranch, conflictedFiles, finishCommand);
 }
 
 // Short sha of a ref (best-effort — '' if it can't resolve), for the branch-mutation log's

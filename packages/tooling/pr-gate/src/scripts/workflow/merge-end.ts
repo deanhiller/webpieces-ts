@@ -5,7 +5,7 @@ import {
     MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError,
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
-import { baseBranchName, nextBranchName } from './branch-naming';
+import { baseBranchName } from './branch-naming';
 import { cleanTmp } from './cleanTmp';
 import { assertNoUntracked, runGitChecked } from './git-exec';
 import { MergeContext } from './merge-start';
@@ -13,9 +13,9 @@ import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExpl
 
 // merge-END: the second half of the 3-point squash-merge lifecycle, symmetric with merge-START. Given
 // the branch context, it (optionally) validates + commits the AI's conflict resolution, then ALWAYS
-// finalizes the merge — promotes `<branch>Squash` to the next numbered generation (base → base2),
-// force-pushes to the stable base branch, stamps a clean main-sync status, clears the marker and
-// sweeps stale tmp. The shared runUpdateFromMain (clean path / validated resume), wp-update-end, and
+// finalizes the merge — force-pushes `<branch>Squash` to the stable feature branch and renames it
+// BACK to that same feature name (local == remote == PR head), stamps a clean main-sync status,
+// clears the marker and sweeps stale tmp. The shared runUpdateFromMain (clean path / validated resume), wp-update-end, and
 // wp-finish-upsert-pr (conflict resolution) all call THIS, so finalization happens in exactly one
 // place and the conflict path can no longer post a PR from the un-swapped squash branch.
 
@@ -63,13 +63,17 @@ function validateResolution(repoRoot: string, mergeDir: string, conflictedFiles:
     process.stdout.write('✅ Merge explanations present for all resolved files.\n');
 }
 
-// Promote the squash branch to the NEXT numbered generation, force-push to the stable base
-// branch (where the single PR lives), and stamp clean main-sync. The local branch numbers up
-// (base → base2 → base3) so the generation is visible; the remote/PR name stays `base`.
+function localBranchExists(name: string): boolean {
+    return spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0;
+}
+
+// Force-push the squash branch to the stable feature branch (where the single PR lives), then RENAME
+// the local squash branch back to that SAME feature name — so the local branch, the remote branch,
+// and the PR head are all one name (no `wpN` divergence). The pre-merge snapshot is preserved as a
+// numbered PreMerge trail. Ends with an explicit "here is exactly what I did" recap for the AI/human.
 function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext): void {
     process.stdout.write('\n' + SEP + '🗑️  Finalizing\n' + SEP + '\n');
     const base = baseBranchName(ctx.currentBranch);
-    const next = nextBranchName(ctx.currentBranch);
     runGitChecked(['branch', '-D', ctx.currentBranch], 'Failed to delete old feature branch');
 
     const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', base]).status === 0;
@@ -80,10 +84,15 @@ function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext)
         process.stdout.write('No remote branch — local only.\n');
     }
     runGitChecked(['checkout', ctx.squashBranch], 'Failed to checkout squash branch');
-    runGitChecked(['branch', '-m', next], 'Failed to rename squash branch');
+    // Free the rename target: `base` is normally the branch we just deleted (ctx.currentBranch), but on
+    // a backward-compat sync from a leftover `…wpN` a separate stale `base` can linger — drop it too.
+    if (base !== ctx.currentBranch && localBranchExists(base)) {
+        runGitChecked(['branch', '-D', base], 'Failed to delete stale base branch');
+    }
+    runGitChecked(['branch', '-m', base], 'Failed to rename squash branch to the feature name');
     const renameEvent = new BranchMutationEvent(verb, 'RENAME');
     renameEvent.fromBranch = ctx.currentBranch;
-    renameEvent.toBranch = next;
+    renameEvent.toBranch = base;
     logBranchMutation(repoRoot, renameEvent);
 
     // Branch now contains origin/main — stamp a clean main-sync status so the feature-branch-guard
@@ -92,13 +101,30 @@ function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext)
 
     const finalizeEvent = new BranchMutationEvent(verb, 'FINALIZE');
     finalizeEvent.fromBranch = ctx.currentBranch;
-    finalizeEvent.toBranch = next;
+    finalizeEvent.toBranch = base;
     finalizeEvent.outcome = 'finalized';
     finalizeEvent.artifacts = [`backup=${ctx.backupBranch}`, `remotePR=${base}`];
     logBranchMutation(repoRoot, finalizeEvent);
 
-    process.stdout.write(`\n✅ Now on ${next} (remote/PR: ${base}), updated from main. Backup: ${ctx.backupBranch}\n`);
-    process.stdout.write(`   Delete backup when safe: git branch -D ${ctx.backupBranch}\n\n`);
+    printSyncRecap(base, ctx.backupBranch, ctx.prNumber, remoteExists);
+}
+
+// The explicit, numbered "here is exactly what I did" recap the AI (and human) reads after a sync.
+// The whole point of the branch-name change is that step 4 can now say "same name as remote/PR" —
+// there is no confusing local-vs-remote divergence left to explain.
+function printSyncRecap(feature: string, backupBranch: string, prNumber: string, pushed: boolean): void {
+    const remoteLine = pushed
+        ? `landed back on  ${feature}   (== origin/${feature}${prNumber ? ` == PR #${prNumber}` : ''} — names match)`
+        : `landed back on  ${feature}   (local only — no remote branch yet)`;
+    process.stdout.write(
+        '\n' + SEP + '✅ Sync complete — here is exactly what I did\n' + SEP + '\n' +
+        `   1. snapshotted your pre-merge state → ${backupBranch}\n` +
+        `   2. pulled origin/main\n` +
+        `   3. squash-merged your work onto main\n` +
+        `   4. ${remoteLine}\n\n` +
+        `   Pre-merge snapshot trail:  git branch --list '${feature}PreMerge*'\n` +
+        `   Prune this run's snapshot when safe:  git branch -D ${backupBranch}\n\n`,
+    );
 }
 
 /**

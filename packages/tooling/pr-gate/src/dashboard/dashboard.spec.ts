@@ -8,7 +8,7 @@ import {
 } from './dashboard';
 
 function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
-    const base = new ReviewJson(20, 'green', '🟢', 'A short summary.', [], [], []);
+    const base = new ReviewJson('A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
     return Object.assign(base, overrides);
 }
 

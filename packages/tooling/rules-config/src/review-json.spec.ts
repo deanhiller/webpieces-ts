@@ -39,6 +39,13 @@ describe('loadReviewJson', () => {
         expect(review.filesToReview).toEqual(['x.ts']);
     });
 
+    it('reads a trimmed title, defaulting to empty when absent', () => {
+        const withTitle = tmpFile(JSON.stringify({ title: '  Fix the thing  ', riskScore: 10, riskLevel: 'green' }));
+        expect(loadReviewJson(withTitle).title).toBe('Fix the thing');
+        const without = tmpFile(JSON.stringify({ riskScore: 10, riskLevel: 'green' }));
+        expect(loadReviewJson(without).title).toBe('');
+    });
+
     it('throws InformAiError with the schema when the file is missing', () => {
         expect(() => loadReviewJson('/nope/review.json')).toThrowError(InformAiError);
         expect(() => loadReviewJson('/nope/review.json')).toThrowError(/Required review.json not found/);

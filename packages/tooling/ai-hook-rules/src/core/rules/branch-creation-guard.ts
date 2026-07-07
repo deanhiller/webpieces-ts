@@ -20,9 +20,10 @@ const BRANCH_PATTERNS: RegExp[] = [
     /git\s+branch\s+(?!-[dDmMrRla])([^\s-][^\s]*)/,
 ];
 
-// The squash-merge tooling reserves a trailing `wp<number>` as its generation marker
-// (base → basewp2 → basewp3). A human branch ending that way would collide with it, so
-// block it at creation time and steer the name back to the plain feature form.
+// A trailing `wp<number>` was the old squash-merge generation marker (base → basewp2 → basewp3).
+// The tooling NO LONGER produces it — a sync now lands back on the same feature name — but the suffix
+// stays RESERVED so a human branch can't collide with a leftover `…wpN` still floating in a consumer
+// repo mid-transition. Block it at creation time and steer the name back to the plain feature form.
 const RESERVED_GENERATION_SUFFIX = /wp\d+$/;
 
 function extractBranchName(command: string): string | null {
