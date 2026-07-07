@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/rules-config';
 import { getFeatureName } from './git-readAiBranchName';
 import { mergeDirFor, readMergeMarker } from './merge-state';
 import { mergeStart, MergeContext } from './merge-start';
@@ -12,10 +13,23 @@ import { mergeEnd } from './merge-end';
 //
 // `finishCommand` is the command the AI is told to run after resolving conflicts — the standalone
 // caller passes `wp-update-end`, the PR flow passes `wp-finish-upsert-pr`.
+//
+// `verb` is the invoking bin, threaded through purely so every branch mutation (backup, checkout,
+// pull, squash, rename) is recorded in `.webpieces/hooks/branch-mutations.log` under the command the
+// user actually ran — the audit trail that used to exist only in `git reflog`.
 
 export type UpdateOutcome = 'finalized' | 'conflict' | 'unvalidatedResume';
 
-export async function runUpdateFromMain(repoRoot: string, finishCommand: string): Promise<UpdateOutcome> {
+export async function runUpdateFromMain(repoRoot: string, verb: MutationVerb, finishCommand: string): Promise<UpdateOutcome> {
+    logBranchMutation(repoRoot, new BranchMutationEvent(verb, 'START'));
+    const outcome = await runUpdate(repoRoot, verb, finishCommand);
+    const end = new BranchMutationEvent(verb, 'END');
+    end.outcome = outcome;
+    logBranchMutation(repoRoot, end);
+    return outcome;
+}
+
+async function runUpdate(repoRoot: string, verb: MutationVerb, finishCommand: string): Promise<UpdateOutcome> {
     const mergeDir = mergeDirFor(repoRoot, getFeatureName());
     fs.mkdirSync(mergeDir, { recursive: true });
 
@@ -25,7 +39,7 @@ export async function runUpdateFromMain(repoRoot: string, finishCommand: string)
         if (!existing.validated) return 'unvalidatedResume';
         // Already validated → just finalize the branch swap.
         await mergeEnd(
-            repoRoot, mergeDir,
+            repoRoot, verb, mergeDir,
             new MergeContext(existing.currentBranch, existing.squashBranch, existing.backupBranch, existing.prNumber),
             null,
         );
@@ -33,10 +47,10 @@ export async function runUpdateFromMain(repoRoot: string, finishCommand: string)
     }
 
     // Fresh update: start, then finalize on clean / hand back on conflict.
-    const result = await mergeStart(repoRoot, mergeDir, finishCommand);
+    const result = await mergeStart(repoRoot, verb, mergeDir, finishCommand);
     if (result.status === 'conflict' || result.context === null) {
         return 'conflict';
     }
-    await mergeEnd(repoRoot, mergeDir, result.context, null);
+    await mergeEnd(repoRoot, verb, mergeDir, result.context, null);
     return 'finalized';
 }

@@ -29,7 +29,7 @@ export async function main(): Promise<void> {
     // validated => clean merge (or previously validated) => finalize only.
     const conflictedFiles = marker.validated ? null : marker.conflictedFiles;
     await mergeEnd(
-        repoRoot, mergeDir,
+        repoRoot, 'wp-update-end', mergeDir,
         new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
         conflictedFiles,
     );

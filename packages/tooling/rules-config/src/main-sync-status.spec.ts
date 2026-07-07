@@ -136,9 +136,13 @@ function buildRepo(work: string, mainEdits: string[], featureEdits: string[]): v
     git(work, 'branch -M main');
 
     git(work, 'checkout -b feature');
-    for (const f of featureEdits) fs.writeFileSync(path.join(work, f), 'feature change\n');
-    git(work, 'add -A');
-    git(work, 'commit -m feature');
+    // No featureEdits => leave the feature branch even with base (used by the uncommitted/staged/
+    // untracked overlap tests, where the ONLY feature-side change lives in the working tree).
+    if (featureEdits.length > 0) {
+        for (const f of featureEdits) fs.writeFileSync(path.join(work, f), 'feature change\n');
+        git(work, 'add -A');
+        git(work, 'commit -m feature');
+    }
 
     git(work, 'checkout main');
     for (const f of mainEdits) fs.writeFileSync(path.join(work, f), 'main change\n');
@@ -199,5 +203,50 @@ describe('computeMainSyncStatus (integration)', () => {
         const status = computeMainSyncStatus(work);
         expect(status.hasForkPoint).toBe(false);
         expect(status.forkPoint).toBeNull();
+    });
+});
+
+// Bug #1 regression: conflict detection must see WORKING-TREE changes (uncommitted / staged /
+// untracked), not just committed history. Before the fix, `git diff forkPoint..HEAD` was blind to the
+// files you were actively editing, so an overlap with main stayed conflict=false until you committed.
+describe('computeMainSyncStatus — working-tree overlap (Bug #1)', () => {
+    let work: string;
+
+    beforeEach(() => {
+        work = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-wt-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(work, { recursive: true, force: true });
+    });
+
+    it('flags conflict=true for an UNCOMMITTED edit overlapping main (blind before the fix)', () => {
+        // The feature branch commits nothing over the fork point; its only change to `shared.txt`
+        // (which main also changed) is an unstaged working-tree edit — the exact "invisible until
+        // committed" regression. featureChangedFiles must union the working tree in.
+        buildRepo(work, ['shared.txt'], []);
+        fs.writeFileSync(path.join(work, 'shared.txt'), 'uncommitted feature edit\n');
+        const status = computeMainSyncStatus(work);
+        expect(status.hasForkPoint).toBe(true);
+        expect(status.conflict).toBe(true);
+        expect(status.conflictFiles).toContain('shared.txt');
+    });
+
+    it('flags conflict=true for a STAGED edit overlapping main', () => {
+        buildRepo(work, ['shared.txt'], []);
+        fs.writeFileSync(path.join(work, 'shared.txt'), 'staged feature edit\n');
+        git(work, 'add shared.txt');
+        const status = computeMainSyncStatus(work);
+        expect(status.conflict).toBe(true);
+        expect(status.conflictFiles).toContain('shared.txt');
+    });
+
+    it('flags conflict=true for an UNTRACKED new file overlapping a file main added', () => {
+        // main adds `newfile.txt` in a commit; the feature side has it only as an untracked file.
+        buildRepo(work, ['newfile.txt'], []);
+        fs.writeFileSync(path.join(work, 'newfile.txt'), 'untracked on feature\n');
+        const status = computeMainSyncStatus(work);
+        expect(status.conflict).toBe(true);
+        expect(status.conflictFiles).toContain('newfile.txt');
     });
 });

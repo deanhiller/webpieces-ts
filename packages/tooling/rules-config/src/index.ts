@@ -143,6 +143,12 @@ export {
     stampCleanMainSyncStatus,
     squashRecoverySteps,
 } from './main-sync-status';
+export type { MutationVerb, MutationPhase } from './branch-mutation-log';
+export {
+    BranchMutationEvent,
+    branchMutationLogPath,
+    logBranchMutation,
+} from './branch-mutation-log';
 export {
     CommandsConfig,
     buildCommandsConfig,

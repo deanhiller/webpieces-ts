@@ -43,7 +43,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         'You must be on a clean, up-to-date feature branch to edit code. Pick one:',
         [
             new Option('On main → create a feature branch. Already merged → branch off fresh main.', true),
-            new Option('main moved/conflicts → `pnpm wp-start-upsert-pr` (merge), `/wp-merge` (resolve), `pnpm wp-finish-upsert-pr`.'),
+            new Option('main moved/conflicts (mid-work) → `pnpm wp-update-start` (merge), `/wp-merge` (resolve), `pnpm wp-update-end`. Have an OPEN PR? use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr`.'),
             new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
         ],
     );
@@ -164,8 +164,15 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
             'origin/main moved and touched files you also changed since your fork point:',
             files,
             '',
-            'Merge main in before editing further:',
-            '  1. pnpm wp-start-upsert-pr   ← merges main, writes 3-point conflict context',
+            'You must merge main in before editing further. If you are mid-work and just want to keep',
+            'editing (no PR yet), use the UPDATE-ONLY flow:',
+            '  1. pnpm wp-update-start   ← merges main (auto-finalizes if clean; renames <branch>wpN → wpN+1)',
+            '  2. /wp-merge              ← resolve each conflicted file (only if there are conflicts)',
+            '  3. pnpm wp-update-end     ← finalize the merge (only after resolving)',
+            '',
+            'If you already have an OPEN PR for this branch, use the PR flow instead (it updates the',
+            "PR's pushed branch — wp-update-start does NOT push):",
+            '  1. pnpm wp-start-upsert-pr   ← merges main + writes 3-point context',
             '  2. /wp-merge                 ← resolve each conflicted file',
             '  3. pnpm wp-finish-upsert-pr  ← validate, build, push, upsert the PR',
         ].join('\n');

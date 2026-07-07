@@ -1,7 +1,10 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError } from '@webpieces/rules-config';
+import {
+    MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError,
+    MutationVerb, BranchMutationEvent, logBranchMutation,
+} from '@webpieces/rules-config';
 import { baseBranchName, nextBranchName } from './branch-naming';
 import { cleanTmp } from './cleanTmp';
 import { assertNoUntracked, runGitChecked } from './git-exec';
@@ -63,7 +66,7 @@ function validateResolution(repoRoot: string, mergeDir: string, conflictedFiles:
 // Promote the squash branch to the NEXT numbered generation, force-push to the stable base
 // branch (where the single PR lives), and stamp clean main-sync. The local branch numbers up
 // (base → base2 → base3) so the generation is visible; the remote/PR name stays `base`.
-function finalizeBranch(ctx: MergeContext): void {
+function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext): void {
     process.stdout.write('\n' + SEP + '🗑️  Finalizing\n' + SEP + '\n');
     const base = baseBranchName(ctx.currentBranch);
     const next = nextBranchName(ctx.currentBranch);
@@ -78,10 +81,21 @@ function finalizeBranch(ctx: MergeContext): void {
     }
     runGitChecked(['checkout', ctx.squashBranch], 'Failed to checkout squash branch');
     runGitChecked(['branch', '-m', next], 'Failed to rename squash branch');
+    const renameEvent = new BranchMutationEvent(verb, 'RENAME');
+    renameEvent.fromBranch = ctx.currentBranch;
+    renameEvent.toBranch = next;
+    logBranchMutation(repoRoot, renameEvent);
 
     // Branch now contains origin/main — stamp a clean main-sync status so the feature-branch-guard
     // unblocks edits immediately (no wait for the async refresher).
     stampCleanMainSyncStatus(execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim());
+
+    const finalizeEvent = new BranchMutationEvent(verb, 'FINALIZE');
+    finalizeEvent.fromBranch = ctx.currentBranch;
+    finalizeEvent.toBranch = next;
+    finalizeEvent.outcome = 'finalized';
+    finalizeEvent.artifacts = [`backup=${ctx.backupBranch}`, `remotePR=${base}`];
+    logBranchMutation(repoRoot, finalizeEvent);
 
     process.stdout.write(`\n✅ Now on ${next} (remote/PR: ${base}), updated from main. Backup: ${ctx.backupBranch}\n`);
     process.stdout.write(`   Delete backup when safe: git branch -D ${ctx.backupBranch}\n\n`);
@@ -93,7 +107,7 @@ function finalizeBranch(ctx: MergeContext): void {
  * already committed (finalize only). Either way the merge ends fully finalized on the feature branch.
  */
 export async function mergeEnd(
-    repoRoot: string, mergeDir: string, ctx: MergeContext, conflictedFiles: string[] | null,
+    repoRoot: string, verb: MutationVerb, mergeDir: string, ctx: MergeContext, conflictedFiles: string[] | null,
 ): Promise<void> {
     if (conflictedFiles !== null) {
         process.stdout.write('\n' + SEP + '🔎 Validating Merge Resolution\n' + SEP + '\n');
@@ -115,7 +129,7 @@ export async function mergeEnd(
         process.stdout.write('\n✅ Merge validated and committed.\n');
     }
 
-    finalizeBranch(ctx);
+    finalizeBranch(repoRoot, verb, ctx);
     clearMergeMarker(mergeDir);
     await cleanTmp();
 }
