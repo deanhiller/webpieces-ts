@@ -62,6 +62,8 @@ function pageLegend(): string {
             <strong>Constant / dynamic</strong> — toConstantValue / toDynamicValue leaf</div>
         <div class="legend-item"><span class="legend-box" style="background: #FCE4EC; border-style: dashed;"></span>
             <strong>Unresolved</strong> — token the analyzer could not resolve</div>
+        <div class="legend-item"><span class="legend-box" style="background: #EDE7F6; border: 3px double #5e35b1;"></span>
+            <strong>External</strong> — class from a published package outside this workspace; shown as a boundary, not expanded</div>
         <div class="legend-item" style="margin-top: 15px;">
             <em>One graph per controller/root; a shared dependency appears in each root's tree.
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>

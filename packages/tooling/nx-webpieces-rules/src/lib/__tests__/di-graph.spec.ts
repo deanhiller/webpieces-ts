@@ -7,29 +7,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { createProjectProgram } from '../di-graph/program';
-import { buildDiGraph } from '../di-graph/analyzer';
-import { buildAngularDiGraph } from '../di-graph/angular-analyzer';
 import { explicitFrameworkTag, frameworkTags, selectAnalyzer, FrameworkMarkers } from '../di-graph/analyzer-strategy';
 import { AngularAnalyzer, EmptyAnalyzer, InversifyAnalyzer } from '../di-graph/analyzer-strategy';
 import { toDesignJson } from '../di-graph/serializer';
 import { generateDesignDot } from '../di-graph/dot';
 import { toDesignMarkdown } from '../di-graph/mermaid';
 import { DiDesign, DiGraph, DiEdge, DiNode } from '../di-graph/model';
-
-const TSCONFIG = JSON.stringify({
-    compilerOptions: {
-        target: 'ES2022',
-        module: 'commonjs',
-        experimentalDecorators: true,
-        emitDecoratorMetadata: true,
-        moduleResolution: 'node',
-    },
-    include: ['src/**/*.ts'],
-});
+import { Fixture, designFor, rootNames, allEdges, allNodes, allUnresolved, edge, node, nodeIn } from './di-graph-testkit';
 
 const CONTROLLER_FIXTURE: Record<string, string> = {
     'tokens.ts': `
@@ -201,84 +185,6 @@ export class BetaController {
 }
 `,
 };
-
-class Fixture {
-    workspaceRoot: string;
-    projectRoot = 'proj';
-
-    constructor(files: Record<string, string>) {
-        this.workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'di-graph-spec-'));
-        const projDir = path.join(this.workspaceRoot, this.projectRoot);
-        fs.mkdirSync(path.join(projDir, 'src'), { recursive: true });
-        fs.writeFileSync(path.join(projDir, 'tsconfig.json'), TSCONFIG);
-        for (const name of Object.keys(files)) {
-            const filePath = path.join(projDir, 'src', name);
-            fs.mkdirSync(path.dirname(filePath), { recursive: true });
-            fs.writeFileSync(filePath, files[name]);
-        }
-    }
-
-    build(includeLibraryRoots = false): DiGraph {
-        const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
-        expect(program).not.toBeNull();
-        if (!program) throw new Error('program not created');
-        return buildDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj', includeLibraryRoots);
-    }
-
-    buildAngular(): DiGraph {
-        const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
-        expect(program).not.toBeNull();
-        if (!program) throw new Error('program not created');
-        return buildAngularDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj');
-    }
-
-    /** Build a designed-lib graph: @DocumentDesign roots rendered as apiImplementation kind. */
-    buildApiImpl(): DiGraph {
-        const program = createProjectProgram(path.join(this.workspaceRoot, this.projectRoot));
-        expect(program).not.toBeNull();
-        if (!program) throw new Error('program not created');
-        return buildDiGraph(program, this.workspaceRoot, this.projectRoot, 'proj', false, 'apiImplementation');
-    }
-
-    cleanup(): void {
-        fs.rmSync(this.workspaceRoot, { recursive: true, force: true });
-    }
-}
-
-function designFor(graph: DiGraph, root: string): DiDesign | undefined {
-    return graph.designs.find((d: DiDesign) => d.root === root);
-}
-
-function rootNames(graph: DiGraph): string[] {
-    return graph.designs.map((d: DiDesign) => d.root);
-}
-
-function allEdges(graph: DiGraph): DiEdge[] {
-    return graph.designs.flatMap((d: DiDesign) => d.edges);
-}
-
-function allNodes(graph: DiGraph): DiNode[] {
-    return graph.designs.flatMap((d: DiDesign) => d.nodes);
-}
-
-function allUnresolved(graph: DiGraph): string[] {
-    return graph.designs.flatMap((d: DiDesign) => d.unresolved);
-}
-
-/** Find an edge across every design's tree. */
-function edge(graph: DiGraph, from: string, to: string): DiEdge | undefined {
-    return allEdges(graph).find((e: DiEdge) => e.from === from && e.to === to);
-}
-
-/** Find a node across every design's tree. */
-function node(graph: DiGraph, id: string): DiNode | undefined {
-    return allNodes(graph).find((n: DiNode) => n.id === id);
-}
-
-/** Find a node within one specific design's tree. */
-function nodeIn(design: DiDesign | undefined, id: string): DiNode | undefined {
-    return design?.nodes.find((n: DiNode) => n.id === id);
-}
 
 describe('di-graph analyzer - controller project', () => {
     let fixture: Fixture;

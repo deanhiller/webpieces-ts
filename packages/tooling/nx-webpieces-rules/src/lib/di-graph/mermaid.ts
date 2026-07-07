@@ -28,6 +28,8 @@ function nodeStatement(node: DiNode): string {
     if (node.kind === 'component') return `    ${id}["${text}"]:::component`;
     if (node.kind === 'constant' || node.kind === 'dynamic') return `    ${id}(["${text}"])`;
     if (node.kind === 'unresolved') return `    ${id}{{"${text} ?"}}:::unresolved`;
+    // External boundary — subroutine box (double vertical bars) + distinct class.
+    if (node.kind === 'external') return `    ${id}[["${text}"]]:::external`;
     return `    ${id}["${text}"]`;
 }
 
@@ -47,6 +49,7 @@ function graphBody(design: DiDesign): string[] {
     lines.push('    classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e');
     lines.push('    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37');
     lines.push('    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5');
+    lines.push('    classDef external fill:#b39ddb,color:#000000,stroke:#5e35b1,stroke-width:3px');
     return lines;
 }
 
@@ -99,7 +102,9 @@ export function toDesignMarkdown(graph: DiGraph): string {
         'Edges are constructor/`inject()` dependencies (the injected param/field',
         'name and token are in `design.json`). Rounded nodes are',
         '`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed',
-        'nodes are tokens the analyzer could not resolve.',
+        'nodes are tokens the analyzer could not resolve; double-bordered nodes are',
+        'classes from a published package outside this workspace — shown as a boundary',
+        'but not expanded into their internals.',
         '',
     ];
 

@@ -23,7 +23,8 @@ export type DiNodeKind =
     | 'class'
     | 'constant'
     | 'dynamic'
-    | 'unresolved';
+    | 'unresolved'
+    | 'external';
 
 export type DiInjectionKind = 'token' | 'type' | 'multiInject';
 

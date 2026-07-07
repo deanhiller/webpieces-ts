@@ -20,6 +20,7 @@ const KIND_COLORS: Record<string, string> = {
     constant: '#FFF3E0', // light orange — toConstantValue leaf
     dynamic: '#FFF3E0', // light orange — toDynamicValue leaf
     unresolved: '#FCE4EC', // light pink — token the analyzer could not resolve
+    external: '#EDE7F6', // light violet — class from a published package; walk stops here
 };
 
 /** Escape a string for use inside a double-quoted DOT identifier/label. */
@@ -37,10 +38,14 @@ function nodeStatement(node: DiNode): string {
     const styles: string[] = ['filled'];
     if (node.kind === 'constant' || node.kind === 'dynamic') styles.push('rounded');
     if (node.kind === 'unresolved') styles.push('dashed');
+    // External boundary: bold double border so it reads as "stops here, not expanded"
+    // and is not mistaken for the pink dashed `unresolved` boxes.
+    if (node.kind === 'external') styles.push('bold');
     const isRootKind =
         node.kind === 'controller' || node.kind === 'apiImplementation' || node.kind === 'component';
-    const penwidth = isRootKind ? ', penwidth=2' : '';
-    return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}];\n`;
+    const penwidth = isRootKind || node.kind === 'external' ? ', penwidth=2' : '';
+    const peripheries = node.kind === 'external' ? ', peripheries=2' : '';
+    return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}${peripheries}];\n`;
 }
 
 /**

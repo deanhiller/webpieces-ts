@@ -42,6 +42,20 @@ function isAnalyzableFile(sourceFile: ts.SourceFile): boolean {
     return true;
 }
 
+/**
+ * A class the walker treats as an EXTERNAL boundary: its declaration lives in a
+ * `.d.ts` file or under `node_modules` — i.e. a published package outside this
+ * nx workspace. The exact inverse of {@link isAnalyzableFile}'s file test. In an
+ * nx monorepo internal libs resolve through tsconfig path mappings to real `.ts`
+ * source, so they are NOT external and keep expanding; only third-party packages
+ * (resolved to `.d.ts` in `node_modules`) trip this. Pass-2 renders such a class
+ * as a leaf `external` node and stops — it does not descend into its ctor deps.
+ */
+export function isExternalClass(cls: ts.ClassDeclaration): boolean {
+    const sourceFile = cls.getSourceFile();
+    return sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/');
+}
+
 /** Walk `.inSingletonScope()` / `.inTransientScope()` suffixes above a binding call. */
 function scopeFromChain(bindingCall: ts.CallExpression): DiScope {
     let node: ts.Node = bindingCall;
