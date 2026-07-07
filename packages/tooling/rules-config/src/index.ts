@@ -1,6 +1,8 @@
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 export { InformAiError } from './inform-ai-error';
 export { RuleFailError } from './rule-fail-error';
+export { CliExitError } from './cli-exit-error';
+export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig } from './load-config';
 export { findConfigFile, CONFIG_FILENAME } from './config-file';

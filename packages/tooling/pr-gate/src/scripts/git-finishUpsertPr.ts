@@ -9,6 +9,7 @@ import {
     reviewJsonPath,
     ReviewJson,
     writeTemplate,
+    runMain,
 } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { baseBranchName } from './workflow/branch-naming';
@@ -124,10 +125,4 @@ export async function main(): Promise<void> {
     process.stdout.write('\n✅ Done.\n');
 }
 
-if (require.main === module) {
-    main().catch((err: Error) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);

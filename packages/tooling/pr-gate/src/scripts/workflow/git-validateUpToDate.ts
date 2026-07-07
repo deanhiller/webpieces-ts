@@ -1,4 +1,5 @@
 import { execSync, spawnSync } from 'child_process';
+import { CliExitError, runMain } from '@webpieces/rules-config';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -68,13 +69,9 @@ export async function main(): Promise<void> {
     process.stdout.write('\n');
     process.stdout.write(SEP);
 
-    process.exit(1);
+    // The full guidance was already printed to stdout above; throw with an empty message so runMain
+    // exits 1 without echoing a redundant line.
+    throw new CliExitError(1, '');
 }
 
-if (require.main === module) {
-    main().catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(main);

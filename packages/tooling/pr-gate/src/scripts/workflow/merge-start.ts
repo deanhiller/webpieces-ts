@@ -1,8 +1,8 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
-import { main as gatherInfo } from '../git-gatherInfo';
+import { WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, CliExitError } from '@webpieces/rules-config';
+import { gatherInfo } from '../git-gatherInfo';
 import { baseBranchName, preMergeBackupName } from './branch-naming';
 import { runGitChecked } from './git-exec';
 import { MergeMarker, perFileContextDir, writeMergeMarker } from './merge-state';
@@ -237,13 +237,19 @@ function handleConflictsHandback(
 export async function mergeStart(repoRoot: string, mergeDir: string, finishCommand: string): Promise<MergeStartResult> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     if (currentBranch.endsWith('Squash')) {
-        process.stderr.write(`❌ On a leftover ${currentBranch} branch with no merge marker. Clean up: git branch -D ${currentBranch}\n`);
-        process.exit(1);
+        throw new CliExitError(1, `❌ On a leftover ${currentBranch} branch with no merge marker. Clean up: git branch -D ${currentBranch}`);
     }
 
     process.stdout.write('\n' + SEP + '🔄 Squash-Merge Update from Main\n' + SEP + '\n');
-    await gatherInfo();
-    const hashes = JSON.parse(fs.readFileSync(path.join(mergeDir, 'updatemain-hashes.json'), 'utf8')) as HashPoints;
+    // gatherInfo RETURNS (never exits): an already-even-with-main branch is NOT special-cased here —
+    // we flow straight on. The squash merge below becomes a no-op that the `nothingStaged` path
+    // (further down) handles, so the caller still proceeds to push + build. (Previously gatherInfo
+    // process.exit(0)'d on this case, silently killing wp-start-upsert-pr before push/build.)
+    const info = await gatherInfo();
+    const hashes = info.hashes;
+    if (info.alreadyUpToDate) {
+        process.stdout.write('ℹ️  Branch already even with main; nothing to merge, continuing to push/build.\n');
+    }
 
     const prNumber = detectPr(baseBranchName(currentBranch));
     process.stdout.write(prNumber ? `Existing PR #${prNumber} will be updated.\n` : 'No existing PR (one can be created later).\n');
@@ -251,8 +257,7 @@ export async function mergeStart(repoRoot: string, mergeDir: string, finishComma
     const backupBranch = createBackup(currentBranch);
     const squashBranch = `${currentBranch}Squash`;
     if (spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${squashBranch}`]).status === 0) {
-        process.stderr.write(`❌ Stale ${squashBranch} from a previous run. Delete it: git branch -D ${squashBranch}\n`);
-        process.exit(1);
+        throw new CliExitError(1, `❌ Stale ${squashBranch} from a previous run. Delete it: git branch -D ${squashBranch}`);
     }
 
     runGitChecked(['checkout', 'main'], 'Failed to checkout main');

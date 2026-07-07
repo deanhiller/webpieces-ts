@@ -1,9 +1,9 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus } from '@webpieces/rules-config';
+import { MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError } from '@webpieces/rules-config';
 import { baseBranchName, nextBranchName } from './branch-naming';
-import { main as cleanTmp } from './cleanTmp';
+import { cleanTmp } from './cleanTmp';
 import { assertNoUntracked, runGitChecked } from './git-exec';
 import { MergeContext } from './merge-start';
 import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExplanations } from './merge-state';
@@ -19,24 +19,26 @@ import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExpl
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 // Validate the AI's resolution of the conflicted files — the part of the process the AI owns
-// (branch creation/finalization is the script's job, so it is not re-checked here). Exits the
-// process with a fix instruction on any failure; returns only when all three checks pass.
+// (branch creation/finalization is the script's job, so it is not re-checked here). Throws
+// CliExitError with a fix instruction on any failure; returns only when all three checks pass.
 function validateResolution(repoRoot: string, mergeDir: string, conflictedFiles: string[]): void {
     // 1. Scoped conflict-marker scan (only the conflicted files — O(conflicts), not O(repo)).
     const scan = scanConflictMarkers(repoRoot, conflictedFiles);
     if (!scan.clean) {
-        process.stderr.write('❌ Unresolved conflict markers (<<<<<<< / ======= / >>>>>>>) remain in:\n');
-        for (const file of scan.filesWithMarkers) process.stderr.write(`  - ${file}\n`);
-        process.stderr.write('\nResolve them, then re-run: pnpm wp-finish-upsert-pr\n');
-        process.exit(1);
+        throw new CliExitError(1,
+            '❌ Unresolved conflict markers (<<<<<<< / ======= / >>>>>>>) remain in:\n' +
+            scan.filesWithMarkers.map((file: string): string => `  - ${file}`).join('\n') +
+            '\n\nResolve them, then re-run: pnpm wp-finish-upsert-pr',
+        );
     }
 
     // 2. Ensure git itself has no remaining unmerged entries.
     const unmerged = execSync('git diff --name-only --diff-filter=U', { encoding: 'utf8' }).trim();
     if (unmerged !== '') {
-        process.stderr.write('❌ Git still reports unmerged files:\n' + unmerged + '\n');
-        process.stderr.write('\nResolve and `git add` them, then re-run: pnpm wp-finish-upsert-pr\n');
-        process.exit(1);
+        throw new CliExitError(1,
+            '❌ Git still reports unmerged files:\n' + unmerged +
+            '\n\nResolve and `git add` them, then re-run: pnpm wp-finish-upsert-pr',
+        );
     }
     process.stdout.write('✅ No conflict markers in resolved files.\n');
 
@@ -45,15 +47,15 @@ function validateResolution(repoRoot: string, mergeDir: string, conflictedFiles:
     // rather than blindly taking one side. A sidecar file works for any type, incl. JSON/deletes.
     const explanations = scanMergeExplanations(mergeDir, conflictedFiles);
     if (!explanations.clean) {
-        process.stderr.write(`❌ Missing/empty merge explanation (${MERGE_EXPLANATION_FILE}) for:\n`);
-        for (const file of explanations.filesWithMarkers) {
-            process.stderr.write(`  - ${file}\n      → ${path.join(perFileContextDir(mergeDir, file), MERGE_EXPLANATION_FILE)}\n`);
-        }
-        process.stderr.write(
-            '\nWrite a few sentences on how you resolved each (which side, what you combined, why),\n' +
-            'then re-run: pnpm wp-finish-upsert-pr\n',
+        const missing = explanations.filesWithMarkers
+            .map((file: string): string => `  - ${file}\n      → ${path.join(perFileContextDir(mergeDir, file), MERGE_EXPLANATION_FILE)}`)
+            .join('\n');
+        throw new CliExitError(1,
+            `❌ Missing/empty merge explanation (${MERGE_EXPLANATION_FILE}) for:\n` +
+            missing +
+            '\n\nWrite a few sentences on how you resolved each (which side, what you combined, why),\n' +
+            'then re-run: pnpm wp-finish-upsert-pr',
         );
-        process.exit(1);
     }
     process.stdout.write('✅ Merge explanations present for all resolved files.\n');
 }

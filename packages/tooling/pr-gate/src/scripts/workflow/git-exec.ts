@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import { CliExitError } from '@webpieces/rules-config';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -11,8 +12,7 @@ const GIT_WORKFLOW_DOC = '.webpieces/instruct-ai/webpieces.git-workflow.md';
 function gitQuery(args: string[], cwd: string, failMsg: string): string {
     const out = spawnSync('git', args, { encoding: 'utf8', cwd });
     if (out.status !== 0) {
-        process.stderr.write(`❌ ${failMsg}\n`);
-        process.exit(1);
+        throw new CliExitError(1, `❌ ${failMsg}`);
     }
     return out.stdout.trim();
 }
@@ -38,16 +38,17 @@ export function untrackedFiles(cwd: string): string {
 export function assertCleanTree(cwd: string): void {
     const dirty = uncommittedFiles(cwd);
     if (dirty === '') return;
-    process.stderr.write('\n' + SEP);
-    process.stderr.write('❌ ERROR: You have uncommitted or untracked changes\n');
-    process.stderr.write(SEP + '\n');
-    process.stderr.write('The webpieces PR tooling will NOT commit your work for you. Commit your\n');
-    process.stderr.write('changes, and either commit or delete any untracked files, then re-run.\n\n');
-    process.stderr.write('Working tree (git status --porcelain):\n');
-    process.stderr.write(dirty + '\n\n');
-    process.stderr.write(`See ${GIT_WORKFLOW_DOC} for the full merge + PR process.\n`);
-    process.stderr.write(SEP);
-    process.exit(1);
+    throw new CliExitError(1,
+        '\n' + SEP +
+        '❌ ERROR: You have uncommitted or untracked changes\n' +
+        SEP + '\n' +
+        'The webpieces PR tooling will NOT commit your work for you. Commit your\n' +
+        'changes, and either commit or delete any untracked files, then re-run.\n\n' +
+        'Working tree (git status --porcelain):\n' +
+        dirty + '\n\n' +
+        `See ${GIT_WORKFLOW_DOC} for the full merge + PR process.\n` +
+        SEP,
+    );
 }
 
 /**
@@ -58,15 +59,16 @@ export function assertCleanTree(cwd: string): void {
 export function assertNoUntracked(cwd: string): void {
     const untracked = untrackedFiles(cwd);
     if (untracked === '') return;
-    process.stderr.write('\n' + SEP);
-    process.stderr.write('❌ ERROR: Untracked files present during merge finalize\n');
-    process.stderr.write(SEP + '\n');
-    process.stderr.write('The tooling will not sweep untracked files into the squash commit. Commit\n');
-    process.stderr.write('or delete these, then re-run:\n\n');
-    process.stderr.write(untracked + '\n\n');
-    process.stderr.write(`See ${GIT_WORKFLOW_DOC} for the full merge + PR process.\n`);
-    process.stderr.write(SEP);
-    process.exit(1);
+    throw new CliExitError(1,
+        '\n' + SEP +
+        '❌ ERROR: Untracked files present during merge finalize\n' +
+        SEP + '\n' +
+        'The tooling will not sweep untracked files into the squash commit. Commit\n' +
+        'or delete these, then re-run:\n\n' +
+        untracked + '\n\n' +
+        `See ${GIT_WORKFLOW_DOC} for the full merge + PR process.\n` +
+        SEP,
+    );
 }
 
 /**
@@ -77,8 +79,7 @@ export function assertNoUntracked(cwd: string): void {
 export function runGitChecked(args: string[], errMsg: string): void {
     const result = spawnSync('git', args, { stdio: 'inherit' });
     if (result.status !== 0) {
-        process.stderr.write(`❌ ${errMsg} (git ${args.join(' ')} exited ${String(result.status)})\n`);
-        process.exit(1);
+        throw new CliExitError(1, `❌ ${errMsg} (git ${args.join(' ')} exited ${String(result.status)})`);
     }
 }
 

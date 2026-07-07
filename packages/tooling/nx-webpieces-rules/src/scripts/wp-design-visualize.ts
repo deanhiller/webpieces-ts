@@ -17,11 +17,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+import { CliExitError, runMain } from '@webpieces/rules-config';
 import { DesignFileRef, findDesignFiles, resolveSelections } from '../lib/di-graph/design-finder';
 import { writeDesignVisualization } from '../lib/di-graph/design-visualizer';
 import { openVisualization } from '../lib/graph-visualizer';
 import { DiGraph } from '../lib/di-graph/model';
-import { toError } from '../toError';
 
 /** Walk up from cwd to the workspace root (dir containing nx.json). */
 function findWorkspaceRoot(): string {
@@ -80,8 +80,7 @@ async function main(): Promise<void> {
     const files = findDesignFiles(workspaceRoot);
 
     if (files.length === 0) {
-        console.error('❌ No design.json files found. Run a build or: pnpm nx run-many --target=di-graph-generate');
-        process.exit(1);
+        throw new CliExitError(1, '❌ No design.json files found. Run a build or: pnpm nx run-many --target=di-graph-generate');
     }
 
     let selections = process.argv.slice(2);
@@ -100,8 +99,4 @@ async function main(): Promise<void> {
     }
 }
 
-main().catch((err: Error) => {
-    const error = toError(err);
-    console.error('❌', error.message);
-    process.exit(1);
-});
+if (require.main === module) runMain(main);

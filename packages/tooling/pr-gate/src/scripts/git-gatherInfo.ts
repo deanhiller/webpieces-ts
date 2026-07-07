@@ -1,7 +1,7 @@
-#!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { CliExitError } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
 import { findForkPoint } from './workflow/git-findForkPoint';
 import { mergeDirFor } from './workflow/merge-state';
@@ -15,10 +15,23 @@ interface HashPoints {
     hashMainHead: string;
 }
 
+// Result of gathering merge context: whether the branch is already even with main (fork point == main
+// HEAD, so there is nothing to merge) plus the 3 hash points. A class (not an object literal) per the
+// codebase's data-structure convention. gatherInfo RETURNS this instead of calling process.exit — a
+// library function must never exit the process (see CliExitError / runMain).
+export class GatherInfoResult {
+    alreadyUpToDate: boolean;
+    hashes: HashPoints;
+
+    constructor(alreadyUpToDate: boolean, hashes: HashPoints) {
+        this.alreadyUpToDate = alreadyUpToDate;
+        this.hashes = hashes;
+    }
+}
+
 function validateCleanTree(currentBranch: string, repoRoot: string): void {
     if (currentBranch === 'main') {
-        process.stderr.write('❌ Error: Already on main branch. No need to update from main.\n');
-        process.exit(1);
+        throw new CliExitError(1, '❌ Error: Already on main branch. No need to update from main.');
     }
     process.stderr.write(`Current branch: ${currentBranch}\n`);
     // Require a fully-committed tree (tracked AND untracked). The old check used `git diff-index`,
@@ -43,7 +56,11 @@ function printHashPoints(hashes: HashPoints, currentBranch: string, mergeDir: st
     process.stderr.write('\n');
 }
 
-export async function main(): Promise<void> {
+// Gather the 3-point merge context for the current feature branch (fetches main, finds the fork
+// point, writes updatemain-hashes.json) and RETURN whether the branch is already even with main.
+// NEVER calls process.exit: it is called both as a library (merge-start) and via the wp-git-gather
+// bin. Callers decide what to do with an up-to-date branch; the bin just prints and exits 0.
+export async function gatherInfo(): Promise<GatherInfoResult> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     const featureName = getFeatureName();
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
@@ -76,19 +93,12 @@ export async function main(): Promise<void> {
         process.stderr.write('There are no new changes from main to merge.\n');
         process.stderr.write('\n');
         process.stderr.write(SEP);
-        process.exit(0);
+        return new GatherInfoResult(true, hashes);
     }
 
     process.stderr.write('Main has advanced. Merge will be needed.\n');
     process.stderr.write('\n');
     process.stderr.write(SEP);
     process.stderr.write('\n');
-}
-
-if (require.main === module) {
-    main().catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
+    return new GatherInfoResult(false, hashes);
 }

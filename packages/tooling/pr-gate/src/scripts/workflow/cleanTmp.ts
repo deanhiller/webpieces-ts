@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_INFO_DIR } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_INFO_DIR, runMain } from '@webpieces/rules-config';
 
 const CUTOFF_DAYS = 30;
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -12,7 +12,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // (`merge-<feature>`/`review-<feature>`/`pr-<feature>`) so it self-clears after the move.
 const LEGACY_PREFIXES = ['merge-', 'review-', 'pr-'];
 
-export async function main(): Promise<void> {
+export async function cleanTmp(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     const tmpBase = path.join(repoRoot, WEBPIECES_TMP_DIR);
 
@@ -86,10 +86,4 @@ function cleanLegacyTopLevel(tmpBase: string, now: number, cutoffMs: number): nu
     return count;
 }
 
-if (require.main === module) {
-    main().catch((err: Error) => {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(message + '\n');
-        process.exit(1);
-    });
-}
+if (require.main === module) runMain(cleanTmp);

@@ -5,7 +5,7 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-git-gather": "./src/scripts/git-gatherInfo.js",
+        "wp-git-gather": "./src/scripts/wp-git-gather.js",
         "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
         "wp-build-affected": "./src/scripts/wp-build-affected.js",
         "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
