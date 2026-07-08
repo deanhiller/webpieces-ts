@@ -334,15 +334,17 @@ export async function mergeStart(repoRoot: string, verb: MutationVerb, home: str
         throw new CliExitError(1, `❌ Stale ${squashBranch} from a previous run. Delete it: git branch -D ${squashBranch}`);
     }
 
-    const mainBeforePull = shortSha('main');
-    runGitChecked(['checkout', 'main'], 'Failed to checkout main');
-    logBranchMutation(repoRoot, new BranchMutationEvent(verb, 'CHECKOUT_MAIN'));
-    runGitChecked(['pull', 'origin', 'main'], 'Failed to pull origin/main');
-    const pullEvent = new BranchMutationEvent(verb, 'PULL');
-    pullEvent.oldMain = mainBeforePull;
-    pullEvent.newMain = shortSha('main');
-    logBranchMutation(repoRoot, pullEvent);
-    runGitChecked(['checkout', '-b', squashBranch], 'Failed to create squash branch');
+    // Branch the squash off origin/main directly — worktree-native. Never checks out or mutates local
+    // `main`, which fatals inside a linked worktree (`git checkout main` → "'main' is already checked
+    // out at <primary>"). origin/main was already fetched in gatherInfo() above, and the fork point +
+    // all three hash points (A/B/C) are computed purely from origin/main, so the squash merge base is
+    // identical to the old checkout-main + pull path — this is a behavior-preserving change on the
+    // primary repo and an unblock inside worktrees.
+    const originMainSha = shortSha('origin/main');
+    runGitChecked(['checkout', '-b', squashBranch, 'origin/main'], 'Failed to create squash branch off origin/main');
+    const baseEvent = new BranchMutationEvent(verb, 'PULL');
+    baseEvent.newMain = originMainSha;
+    logBranchMutation(repoRoot, baseEvent);
 
     process.stdout.write('\n' + SEP + `🔀 Squash merging ${currentBranch}\n` + SEP + '\n');
     const merge = spawnSync('git', ['merge', '--squash', currentBranch], { stdio: 'inherit' });
