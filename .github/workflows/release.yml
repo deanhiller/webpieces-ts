@@ -107,16 +107,17 @@ jobs:
                   echo "📦 Publishing all packages with version ${{ steps.version.outputs.full_version }}"
 
                   # Publish in dependency order.
-                  # NOTE: http-api + wp-logging were collapsed into core-util (deleted), so they
-                  # are NOT published here. gcp-identity must publish BEFORE http-client /
-                  # cloudtasks-client (both depend on it).
+                  # NOTE: http-api + wp-logging were collapsed into core-util (deleted), and
+                  # http-filters was likewise removed from source (its package dir no longer builds a
+                  # dist/.../package.json), so they are NOT published here — a stale entry ENOENTs and
+                  # aborts the whole release before the tooling packages below can publish.
+                  # gcp-identity must publish BEFORE http-client / cloudtasks-client (both depend on it).
                   npm publish dist/packages/core/core-context --access public --provenance
                   npm publish dist/packages/core/core-util --access public --provenance
                   # core-mock is intentionally NOT published (it is a test/mock helper, not a
                   # released package; the npm token can't create it, which 404'd and aborted the
                   # whole release before the tooling packages below could publish).
                   npm publish dist/packages/cloud/gcp-identity --access public --provenance
-                  npm publish dist/packages/http/http-filters --access public --provenance
                   npm publish dist/packages/http/http-routing --access public --provenance
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/cloud/cloudtasks-client --access public --provenance
@@ -150,7 +151,6 @@ jobs:
                       - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/gcp-identity@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/gcp-identity/v/${{ steps.version.outputs.full_version }})
-                      - [@webpieces/http-filters@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-filters/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/cloudtasks-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/cloudtasks-client/v/${{ steps.version.outputs.full_version }})
