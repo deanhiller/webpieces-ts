@@ -177,6 +177,9 @@ importers:
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../../packages/core/core-util
+      '@webpieces/gcp-identity':
+        specifier: workspace:*
+        version: link:../../../packages/cloud/gcp-identity
       '@webpieces/http-routing':
         specifier: workspace:*
         version: link:../../../packages/http/http-routing

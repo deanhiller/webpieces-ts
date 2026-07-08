@@ -77,8 +77,8 @@ export { FilterMatcher, HttpFilter } from './FilterMatcher';
 export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';
 
-// Auth: the app-provided, container-bound verifiers the framework AuthFilter injects.
-export { AuthConfig, Principal } from './AuthConfig';
+// Auth: the app-provided, container-bound AuthConfig the framework AuthFilter injects.
+export { AuthConfig, AuthValues, ContextValue } from './AuthConfig';
 
 // Above-boundary context setup shared by every transport adapter.
 export { fillContext } from './fillContext';

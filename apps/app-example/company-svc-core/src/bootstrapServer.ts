@@ -1,7 +1,7 @@
 import express from 'express';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { ApiFactory, WebpiecesRouter, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
-import { toError, Logger, LogManager } from '@webpieces/core-util';
+import { toError, LogManager } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
@@ -65,28 +65,12 @@ export async function bootstrapServer(
         const port = parseInt(process.env['PORT'] || String(options.port), 10);
         await new WebpiecesExpressRouter(apiFactory).bindAndStartExpress(express(), port);
         log.info(`[${options.logName}] Listening on port ${port}`);
-
-        await keepAliveUntilSignal(log, options.logName);
+        // The listening socket keeps the process alive; SIGTERM/SIGINT fall through to Node's
+        // default (clean, immediate terminate). No keep-alive loop is needed.
     } catch (err: unknown) {
         const error = toError(err);
         log.error(`[${options.logName}] Error during startup:`, error);
         // webpieces-disable no-process-exit-outside-main -- top-level server startup boundary: service entry points call bootstrapServer() directly (no main()/runMain wrapper), so this IS the terminal exit site.
         process.exit(1);
     }
-}
-
-/**
- * Keep the process alive until SIGTERM/SIGINT (graceful-shutdown seam).
- */
-function keepAliveUntilSignal(log: Logger, logName: string): Promise<void> {
-    return new Promise<void>((resolve: () => void) => {
-        process.on('SIGTERM', () => {
-            log.info(`[${logName}] Received SIGTERM signal, shutting down...`);
-            resolve();
-        });
-        process.on('SIGINT', () => {
-            log.info(`[${logName}] Received SIGINT signal, shutting down...`);
-            resolve();
-        });
-    });
 }

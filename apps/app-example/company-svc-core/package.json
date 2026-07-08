@@ -8,6 +8,7 @@
     "dependencies": {
         "@webpieces/company-core": "workspace:*",
         "@webpieces/core-util": "workspace:*",
+        "@webpieces/gcp-identity": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
         "@webpieces/http-server": "workspace:*",
         "express": "5.1.0",
