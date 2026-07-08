@@ -13,17 +13,18 @@ import { ErrorLogFilter } from './filters/ErrorLogFilter';
 import { AuthFilter } from './filters/AuthFilter';
 
 /**
- * Options for {@link WebpiecesRouterFactory.create}.
+ * Options for {@link WebpiecesRouterFactory.create} — one object (config lives inside it).
  *
- * appBindings  - REQUIRED DI ContainerModules to load (framework + app), e.g.
- *                [WebpiecesModule, CompanyHeadersModule, AppModule]. Loaded after the
+ * appBindings  - DI ContainerModules to load (framework + app). Loaded after the
  *                @provideSingleton auto-scan so they can add/override bindings.
  * appOverrides - A single ContainerModule loaded LAST so tests can rebind real
  *                controllers/clients to mocks (see @webpieces/core-mock createMock()).
+ * config       - Optional {@link WebpiecesConfig} (recording flags, etc.); defaults to a fresh one.
  */
 export interface WebpiecesRouterOptions {
     appBindings: ContainerModule[];
     appOverrides?: ContainerModule;
+    config?: WebpiecesConfig;
 }
 
 /**
@@ -41,9 +42,7 @@ export interface WebpiecesRouterOptions {
  *
  * Usage:
  * ```typescript
- * const router = await WebpiecesRouterFactory.create(new WebpiecesConfig(), {
- *     appBindings: [WebpiecesModule, CompanyHeadersModule],
- * });
+ * const router = await WebpiecesRouterFactory.create({ appBindings: [AppModule] });
  * router.addRoutes(SaveApi, SaveController);
  * router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));  // your own filters
  * // (ErrorLogFilter + AuthFilter are auto-installed above yours; auth is AuthMode-driven)
@@ -103,7 +102,7 @@ export class WebpiecesRouter implements ApiFactory {
         await this.appContainer.load(buildFrameworkModule());
         await this.appContainer.load(buildProviderModule());
 
-        // Load all modules into application container
+        // Load all app modules into application container
         // (webpiecesContainer is currently empty, reserved for future framework bindings)
         for (const module of options.appBindings) {
             await this.appContainer.load(module);
@@ -166,15 +165,12 @@ export class WebpiecesRouter implements ApiFactory {
  * container with the @provideSingleton auto-scan + appBindings + optional test overrides.
  */
 export class WebpiecesRouterFactory {
-    static async create(
-        config: WebpiecesConfig,
-        options: WebpiecesRouterOptions,
-    ): Promise<WebpiecesRouter> {
+    static async create(options: WebpiecesRouterOptions): Promise<WebpiecesRouter> {
         // Platform (framework) container — build via buildFrameworkModule so framework
         // singletons (WebpiecesRouter, RouteBuilderImpl) come from the webpieces registry,
         // NOT the client's global one.
         const webpiecesContainer = new Container();
-        webpiecesContainer.bind(WEBPIECES_CONFIG_TOKEN).toConstantValue(config);
+        webpiecesContainer.bind(WEBPIECES_CONFIG_TOKEN).toConstantValue(options.config ?? new WebpiecesConfig());
         await webpiecesContainer.load(buildFrameworkModule());
 
         // Resolve the router from the container (NOT new'd) so @DocumentDesign + DI hold.

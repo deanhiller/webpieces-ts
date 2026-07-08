@@ -86,6 +86,10 @@ export { fillContext } from './fillContext';
 // Node-only router (the express-free heart: container + filter chain + in-process client)
 export { WebpiecesRouter, WebpiecesRouterFactory, WebpiecesRouterOptions } from './WebpiecesRouter';
 
+// The ONE transport-free startup sequence (headers → logging → router → routes) → ApiFactory.
+// Reusable by any company/app and any framework adapter; a company wraps it with its own headers.
+export { setupRuntime, RuntimeSetupOptions } from './setupRuntime';
+
 // Context readers (Node.js only) moved to core-context; re-exported for back-compat
 export { RequestContextReader } from '@webpieces/core-context';
 
