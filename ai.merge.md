@@ -1,115 +1,46 @@
-Merge tools
-* A three point merge involves A(forkpoint), B(head feature branch), C(head main branch)
-* git does a 2 point merge and IDE's try to simulate a 3 point merge on top of that. PROOF: the file only has B and C not the A code !!!
-* Humans and AI can do a way better job merging on 3 point merge as B-A and C-A shows the intent of each branch
-* To accomplish a 3 point merge on any feature branch
+# Merge tools — why a 3-point merge
 
-Must hope either below is true for a 3 point merge (if no #2, you must first deal with merge to main :( ))
-   1. any previous merges from main to feature branch were 3 point merges OR
-   2. hope that a merge --squash back to main is CLEAN
+* A three point merge involves A (fork point), B (head of feature branch), C (head of main branch).
+* git does a 2-point merge and IDEs try to simulate a 3-point merge on top of that. PROOF: the file only
+  has B and C, not the A code.
+* Humans and AI can do a far better job merging with a 3-point merge, because **B-A** and **C-A** show
+  the *intent* of each branch (what the feature changed vs. what main changed since the fork).
+* Basically, all developers should be doing a squashed rebase (`git merge --squash` replays all your
+  commits as a single commit onto a fresh base).
 
-BASICALLY, all developers should be doing a squashed rebase (git merge --squash is actually a rebase but replaying all your commits as a single commit)
-
-⏺ Instructions on Performing 3-Point Merge with AI
-
-Visual Summary with Branches and Files
-
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Find fork point and record A, B, C                       │
-│    git-gatherInfo.sh → git-findForkPoint.sh                 │
-│    ✏️ CREATES: updatemain-hashes.json                        │
-│    → FORK_POINT (A), FEATURE_HEAD (B), MAIN_HEAD (C)        │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 2. Create backup branch                                     │
-│    git checkout -b deanhiller/myFeatureBackup1              │
-│    git checkout deanhiller/myFeature                        │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 3. Update main, create squash branch from main              │
-│    git checkout main && git pull origin main                │
-│    git checkout -b deanhiller/myFeatureSquash               │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 4. Attempt squash merge (on Squash branch)                  │
-│    git merge --squash deanhiller/myFeature                  │
-│    → If succeeds: commit and skip to step 11                │
-│    → If fails: conflicts detected, continue to step 5       │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 5. Get conflicted files list                                │
-│    git diff --name-only --diff-filter=U                     │
-│    ✏️ CREATES: updatemain-conflicted-files.txt               │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 6. Loop through each conflicted file                        │
-│    📖 READS: updatemain-conflicted-files.txt                 │
-│    ✏️ CREATES: updatemain-${SAFE_PATH}/ directory            │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 7. Extract full files at each point (A, B, C)               │
-│    git show $FORK_POINT:$file                               │
-│    ✏️ CREATES: A-forkpoint.txt                               │
-│                                                             │
-│    git show $FEATURE_HEAD:$file                             │
-│    ✏️ CREATES: B-feature.txt                                 │
-│                                                             │
-│    git show $MAIN_HEAD:$file                                │
-│    ✏️ CREATES: C-main.txt                                    │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 8. Generate diffs showing what changed                      │
-│    git diff $FORK_POINT $FEATURE_HEAD -- $file              │
-│    ✏️ CREATES: B-A.diff (feature branch changes)             │
-│                                                             │
-│    git diff $FORK_POINT $MAIN_HEAD -- $file                 │
-│    ✏️ CREATES: C-A.diff (main branch changes)                │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 9. Resolve conflicts (AI or manual)                         │
-│    📖 READS: All files from steps 5-8                        │
-│    AI: claude /merge                                        │
-│    Manual: user resolves and commits                        │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 10. Delete old feature branch                               │
-│    git branch -D deanhiller/myFeature                       │
-└─────────────────────────────────────────────────────────────┘
-↓
-┌─────────────────────────────────────────────────────────────┐
-│ 11. Rename squash branch to feature branch                  │
-│    git branch -m deanhiller/myFeature                       │
-│    git push -u --force-with-lease origin (if PR exists)     │
-└─────────────────────────────────────────────────────────────┘
-
-Files Created Summary
-
-~/workspace/trytami/tmp/merge-${FEATURE_NAME}/
-├── updatemain-hashes.json              ← Step 1
-├── updatemain-conflicted-files.txt     ← Step 5
-└── updatemain-src__app__component.ts/  ← Step 6 (per conflicted file)
-├── A-forkpoint.txt                 ← Step 7
-├── B-feature.txt                   ← Step 7
-├── C-main.txt                      ← Step 7
-├── B-A.diff                        ← Step 8
-└── C-A.diff                        ← Step 8
-
-3-Point Merge Diagram
-
+```
           A (fork point)
          / \
         /   \
        B     C
-(feature) (main)
+   (feature) (main)
 
-B-A.diff = What developer changed on feature branch
-C-A.diff = What changed on main since branch was created
+B-A.diff = what the developer changed on the feature branch
+C-A.diff = what changed on main since the branch forked
+```
+
+For a clean 3-point merge to be possible, one of these must hold (else you must first deal with getting
+main mergeable):
+1. every previous update from main into the feature branch was itself a 3-point squash-update, OR
+2. a `git merge --squash` back onto fresh main is CLEAN.
+
+## How to actually run it (automated)
+
+You do **not** run the fork-point/backup/squash steps by hand anymore — the `@webpieces/pr-gate`
+commands do all of it (worktree-safe), and they record the 3-point context for you:
+
+```bash
+pnpm wp-start-update      # standalone update from main (no PR); or pnpm wp-start-upsert-pr for the PR flow
+# clean   → finalizes automatically
+# conflict → the tool writes A/B/C context + per-file B-A.diff / C-A.diff under
+#            .webpieces/merge-info/<slug>/merge-<n>/ and hands resolution to you:
+/wp-merge                 # resolve each conflicted file using the A/B/C context
+pnpm wp-finish-update     # finalize (standalone); in the PR flow run pnpm wp-finish-upsert-pr instead
+```
+
+The tool takes a pre-merge snapshot branch and, on a clean merge, force-pushes and renames back to your
+feature branch so local / `origin/<feature>` / PR head always share one name.
+
+The authoritative, always-current step-by-step lives at
+`.webpieces/instruct-ai/webpieces.git-workflow.md` (regenerated on every `wp-*` command). See also
+`docs/git-workflow.md`.

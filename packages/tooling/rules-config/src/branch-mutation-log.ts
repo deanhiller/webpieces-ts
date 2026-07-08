@@ -5,7 +5,7 @@ import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
 
 // The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches
-// (wp-update-start / wp-update-end / wp-start-upsert-pr / wp-finish-upsert-pr and the merge-start /
+// (wp-start-update / wp-finish-update / wp-start-upsert-pr / wp-finish-upsert-pr and the merge-start /
 // merge-end primitives they compose). Before this, a branch could silently rename wpN → wpN+1 under
 // the agent (backup, checkout main, pull, squash-merge, rename) with ONLY `git reflog` as evidence —
 // nothing in `.webpieces/`. This log records START / each phase boundary / END-with-outcome so the
@@ -22,7 +22,7 @@ const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors th
 const MAX_DETAIL_LEN = 400;
 
 // The workflow verb whose branch mutation is being logged (the bin the AI/human invoked).
-export type MutationVerb = 'wp-update-start' | 'wp-update-end' | 'wp-start-upsert-pr' | 'wp-finish-upsert-pr';
+export type MutationVerb = 'wp-start-update' | 'wp-finish-update' | 'wp-start-upsert-pr' | 'wp-finish-upsert-pr';
 
 // A boundary within a verb's execution. START/END bracket the whole run; the middle phases mark each
 // irreversible git step so an interrupt leaves a breadcrumb at the last phase reached.

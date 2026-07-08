@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { runMain, CliExitError } from '@webpieces/rules-config';
 
 interface HookEntry {
     matcher: string;
@@ -19,15 +20,17 @@ interface DevHookBackup {
     previousHooks: ClaudeSettings['hooks'] | null;
 }
 
-export function main(): void {
+// NOTE: this is a dev-only tool, no longer a `wp-*` bin. Run it directly with node against the local
+// build: `node dist/packages/tooling/ai-hook-rules/src/bin/dev-hook-uninstall.js`.
+export async function runDevHookUninstall(): Promise<void> {
     const cwd = process.cwd();
     const homeDir = homedir();
     const backupPath = join(homeDir, '.webpieces', 'dev-hook-backup.json');
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
 
     if (!existsSync(backupPath)) {
-        console.error('[wp-dev-hook-uninstall] No dev hook backup found — dev hook was not installed.');
-        process.exit(1);
+        console.error('[dev-hook-uninstall] No dev hook backup found — dev hook was not installed.');
+        throw new CliExitError(1, '');
     }
 
     const backup = JSON.parse(readFileSync(backupPath, 'utf8')) as DevHookBackup;
@@ -59,6 +62,4 @@ export function main(): void {
     console.log('  Dev hook removed. Previous hook configuration restored.');
 }
 
-if (require.main === module) {
-    main();
-}
+if (require.main === module) runMain(runDevHookUninstall);

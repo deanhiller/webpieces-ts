@@ -216,7 +216,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
-            "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, update-from-main, gather-info, merge start/end, build-affected — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
+            "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "dependsOn": [
                 "rules-config"

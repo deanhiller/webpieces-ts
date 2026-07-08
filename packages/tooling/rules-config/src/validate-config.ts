@@ -463,7 +463,7 @@ export function validateSectionPlacement(
         if (isHookGuard(name)) {
             errors.push(
                 `[${name}] is a hook guard and belongs in the "hookGuards" section, not "rules". ` +
-                `Move it (or run \`wp-setup-ai-hooks --sync\` to migrate automatically).`,
+                `Move it (or run \`wp-install-ai-hooks --sync\` to migrate automatically).`,
             );
         }
     }
@@ -472,7 +472,7 @@ export function validateSectionPlacement(
         if (!isHookGuard(name) && RULE_SCHEMAS[name]) {
             errors.push(
                 `[${name}] is a code rule and belongs in the "rules" section, not "hookGuards". ` +
-                `Move it (or run \`wp-setup-ai-hooks --sync\` to migrate automatically).`,
+                `Move it (or run \`wp-install-ai-hooks --sync\` to migrate automatically).`,
             );
         }
     }
@@ -491,7 +491,7 @@ export function validateCommandsSection(commands: unknown, legacyPrGate: unknown
     if (legacyPrGate !== undefined) {
         errors.push(
             `[pr-gate] The top-level "pr-gate" block is deprecated. Move it under the "commands" ` +
-            `section as commands["pr-gate"] (run \`wp-setup-ai-hooks --sync\` to migrate automatically).`,
+            `section as commands["pr-gate"] (run \`wp-install-ai-hooks --sync\` to migrate automatically).`,
         );
     }
 

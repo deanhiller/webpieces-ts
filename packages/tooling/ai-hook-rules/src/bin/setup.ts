@@ -443,8 +443,8 @@ export async function main(): Promise<void> {
     await wireHook(RULES_HOOK, targets, projectRoot);
     await wireHook(GUARDS_HOOK, targets, projectRoot);
     console.log('');
-    console.log('Done. Re-run wp-setup-ai-hooks anytime to move or uninstall a hook.');
-    console.log('(Non-interactive: wp-setup-ai-hooks --target=project|project-personal|global|none)');
+    console.log('Done. Re-run wp-install-ai-hooks anytime to move or uninstall a hook.');
+    console.log('(Non-interactive: wp-install-ai-hooks --target=project|project-personal|global|none)');
 }
 
 if (require.main === module) {

@@ -19,7 +19,7 @@ Both share the same rules and the same `webpieces.config.json` config file.
 
 ```bash
 npm install --save-dev @webpieces/nx-webpieces-rules  # pulls in ai-hook-rules transitively
-npx wp-setup-ai-hooks
+npx wp-install-ai-hooks
 # Restart your Claude Code session
 ```
 
@@ -33,7 +33,7 @@ openclaw plugins enable @webpieces/ai-hook-rules
 
 ## The two hooks (Claude Code)
 
-`wp-setup-ai-hooks` wires two independent `PreToolUse` hooks into the chosen
+`wp-install-ai-hooks` wires two independent `PreToolUse` hooks into the chosen
 `settings.json`, each invoked via the project's `./node_modules/.bin/`:
 
 - `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit`. Runs the code-style rules.
@@ -49,7 +49,7 @@ location, or pick "none" to remove the hook from every target.
 ### Disabling enforcement
 
 There is no runtime escape-hatch file. To stop enforcement, **uninstall the hook**
-(re-run `wp-setup-ai-hooks` and choose "none" for it). Per-rule opt-outs stay in
+(re-run `wp-install-ai-hooks` and choose "none" for it). Per-rule opt-outs stay in
 `webpieces.config.json` (`mode: "OFF"`, `ignoreModifiedUntilEpoch`, `ignoreRuleWhileOnBranch`)
 and per-line opt-outs use `// webpieces-disable <rule> -- reason`.
 

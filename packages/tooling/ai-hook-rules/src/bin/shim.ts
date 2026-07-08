@@ -92,7 +92,7 @@ fi`;
 
 export function renderShim(): string {
     return `#!/bin/sh
-# Managed by @webpieces/ai-hook-rules (wp-setup-ai-hooks) — do not edit; the installer AND the running
+# Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit; the installer AND the running
 # guards binary both overwrite this file (self-healing) from renderShim(). Checked in on purpose so the
 # hook has a stable, committed entry point even when node_modules is absent. Safe to delete along with
 # the matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.

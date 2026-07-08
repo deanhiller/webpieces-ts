@@ -6,7 +6,7 @@
     "main": "index.js",
     "scripts": {
         "test": "vitest run",
-        "webpieces:ci": "pnpm nx affected --target=ci",
+        "webpieces:ci": "wp-ci",
         "build-all": "pnpm run webpieces:ci",
         "arch:generate": "pnpm nx run architecture:generate",
         "arch:visualize": "pnpm nx run architecture:visualize",

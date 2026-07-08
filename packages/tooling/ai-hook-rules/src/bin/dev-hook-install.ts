@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
+import { runMain, CliExitError } from '@webpieces/rules-config';
 
 interface HookEntry {
     matcher: string;
@@ -35,21 +36,26 @@ function wireLocalRulesConfig(cwd: string, distRulesConfigPath: string): void {
     symlinkSync(distRulesConfigPath, overrideLink);
 }
 
-export function main(): void {
+// NOTE: this is a dev-only tool, no longer a `wp-*` bin. Run it directly with node against the local
+// build: `node dist/packages/tooling/ai-hook-rules/src/bin/dev-hook-install.js`.
+export async function runDevHookInstall(): Promise<void> {
     const cwd = process.cwd();
-    const distHookPath = join(cwd, 'dist', 'packages', 'tooling', 'ai-hook-rules', 'src', 'adapters', 'claude-code-hook.js');
+    const adaptersDir = join(cwd, 'dist', 'packages', 'tooling', 'ai-hook-rules', 'src', 'adapters');
+    // Mirror production .claude/settings.json: two independent PreToolUse hooks, one per category.
+    const rulesHookPath = join(adaptersDir, 'rules-hook.js');
+    const guardsHookPath = join(adaptersDir, 'guards-hook.js');
 
-    if (!existsSync(distHookPath)) {
-        console.error(`[wp-dev-hook-install] Local build not found at: ${distHookPath}`);
+    if (!existsSync(rulesHookPath) || !existsSync(guardsHookPath)) {
+        console.error(`[dev-hook-install] Local build not found at: ${adaptersDir}`);
         console.error('  Run `pnpm run build-all` first.');
-        process.exit(1);
+        throw new CliExitError(1, '');
     }
 
     const distRulesConfigPath = join(cwd, 'dist', 'packages', 'tooling', 'rules-config');
     if (!existsSync(distRulesConfigPath)) {
-        console.error(`[wp-dev-hook-install] Local rules-config build not found at: ${distRulesConfigPath}`);
+        console.error(`[dev-hook-install] Local rules-config build not found at: ${distRulesConfigPath}`);
         console.error('  Run `pnpm run build-all` first.');
-        process.exit(1);
+        throw new CliExitError(1, '');
     }
 
     const homeDir = homedir();
@@ -58,9 +64,9 @@ export function main(): void {
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
 
     if (existsSync(backupPath)) {
-        console.error('[wp-dev-hook-install] Dev hook is already installed (backup file exists).');
-        console.error('  Run `wp-dev-hook-uninstall` first to remove the current dev hook.');
-        process.exit(1);
+        console.error('[dev-hook-install] Dev hook is already installed (backup file exists).');
+        console.error('  Run `node dist/packages/tooling/ai-hook-rules/src/bin/dev-hook-uninstall.js` first to remove the current dev hook.');
+        throw new CliExitError(1, '');
     }
 
     wireLocalRulesConfig(cwd, distRulesConfigPath);
@@ -77,12 +83,16 @@ export function main(): void {
     }
     writeFileSync(backupPath, JSON.stringify(backup, null, 4) + '\n');
 
-    const hookCommand = `node ${distHookPath}`;
+    // Mirror production wiring: rules hook on file tools, guards hook on file + Bash tools.
     settings.hooks = {
         PreToolUse: [
             {
+                matcher: 'Write|Edit|MultiEdit',
+                hooks: [{ type: 'command', command: `node ${rulesHookPath}` }],
+            },
+            {
                 matcher: 'Write|Edit|MultiEdit|Bash',
-                hooks: [{ type: 'command', command: hookCommand }],
+                hooks: [{ type: 'command', command: `node ${guardsHookPath}` }],
             },
         ],
     };
@@ -90,10 +100,8 @@ export function main(): void {
     mkdirSync(dirname(claudeSettingsPath), { recursive: true });
     writeFileSync(claudeSettingsPath, JSON.stringify(settings, null, 4) + '\n');
 
-    console.log(`  Dev hook installed → ${hookCommand}`);
-    console.log('  Run `wp-dev-hook-uninstall` when done testing.');
+    console.log(`  Dev hooks installed → node ${rulesHookPath} (rules), node ${guardsHookPath} (guards)`);
+    console.log('  Run `node dist/packages/tooling/ai-hook-rules/src/bin/dev-hook-uninstall.js` when done testing.');
 }
 
-if (require.main === module) {
-    main();
-}
+if (require.main === module) runMain(runDevHookInstall);

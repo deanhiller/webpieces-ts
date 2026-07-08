@@ -16,7 +16,7 @@ import { healShim } from '../bin/shim';
 //  - 'rules'  → code-style rules (file/edit scope). Bash payloads pass through (no code rules apply).
 //  - 'guards' → hookGuards section: bash git/PR guards on Bash AND file guards (feature-branch-guard)
 //               on Write/Edit. Matcher is Write|Edit|MultiEdit|Bash.
-//  - 'all'    → both categories, for the combined back-compat `wp-ai-hook` bin.
+//  - 'all'    → both categories, used by the openclaw plugin adapter (a single before_tool_call hook).
 export type { HookMode };
 
 const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
