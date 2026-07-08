@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { injectable } from 'inversify';
-import { provideFrameworkSingleton, MethodMeta, fillContext } from '@webpieces/http-routing';
+import { provideFrameworkSingleton, fillContext } from '@webpieces/http-routing';
 import {
     ProtocolError,
     HttpError,
@@ -15,9 +15,7 @@ import {
     HttpInternalServerError,
     HttpBadGatewayError,
     HttpGatewayTimeoutError,
-    RouteMetadata,
 } from '@webpieces/core-util';
-import { Service, WpResponse } from '@webpieces/http-routing';
 import { toError } from '@webpieces/core-util';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
@@ -37,8 +35,9 @@ export type ExpressRouteHandler = (
 
 export class ExpressWrapper {
     constructor(
-        private service: Service<MethodMeta, WpResponse<unknown>>,
-        private routeMeta: RouteMetadata
+        // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
+        private clientMethod: (requestDto: unknown) => Promise<unknown>,
+        private path: string
     ) {
     }
 
@@ -76,20 +75,16 @@ export class ExpressWrapper {
 
         // 3. Publish the transport-neutral HttpRequest + fill the context (platform-header
         //    transfer + request id) ABOVE the boundary — the chain reads it, never express req.
-        RequestContext.setRequest(new HttpRequest(req.method, this.routeMeta.path, requestHeaders));
+        RequestContext.setRequest(new HttpRequest(req.method, this.path, requestHeaders));
         fillContext();
-        const methodMeta = new MethodMeta(this.routeMeta, requestDto);
 
-        // 4. Invoke the service (filter chain + controller)
-        const wpResponse = await this.service.invoke(methodMeta);
-        if (!wpResponse.response) {
-            throw new Error(
-                `Route chain(filters & all) is not returning a response. ${this.routeMeta.controllerClassName}.${this.routeMeta.methodName}`
-            );
-        }
+        // 4. Invoke the api CLIENT method — the SAME proxy tests use. Its filter chain + controller
+        //    run here; because the request is already published above, the proxy uses it (it does
+        //    not re-synthesize one). So HTTP and in-process share one invocation path.
+        const result = await this.clientMethod(requestDto);
 
-        // 5. Serialize response DTO to JSON (SYMMETRIC with client's response.json())
-        const responseJson = JSON.stringify(wpResponse.response);
+        // 5. Serialize the response DTO to JSON (SYMMETRIC with client's response.json())
+        const responseJson = JSON.stringify(result);
         res.status(200).setHeader('Content-Type', 'application/json').send(responseJson);
     }
 
@@ -331,18 +326,19 @@ export class WebpiecesMiddleware {
 
     /**
      * Create an ExpressWrapper for a route.
-     * The wrapper handles the full request/response cycle (symmetric design).
+     * The wrapper handles the full request/response cycle (symmetric design): it publishes the
+     * HttpRequest + fills the context, then invokes the api client method (the proxy).
      *
-     * NEW: Simplified - no longer passes headers (ContextFilter handles it now)
-     *
-     * @param service - The service wrapping the filter chain and controller
-     * @param routeMeta - Route metadata for MethodMeta and DTO type
+     * @param clientMethod - The api client's method for this route (dto → response); the proxy
+     *   runs the filter chain + controller.
+     * @param path - The route path (used to build the HttpRequest).
      * @returns ExpressWrapper instance
      */
     createExpressWrapper(
-        service: Service<MethodMeta, WpResponse<unknown>>,
-        routeMeta: RouteMetadata,
+        // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
+        clientMethod: (requestDto: unknown) => Promise<unknown>,
+        path: string,
     ): ExpressWrapper {
-        return new ExpressWrapper(service, routeMeta);
+        return new ExpressWrapper(clientMethod, path);
     }
 }

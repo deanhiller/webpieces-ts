@@ -6,15 +6,23 @@
             "root": "WebpiecesRouter",
             "rootKind": "apiImplementation",
             "file": "packages/http/http-routing/src/WebpiecesRouter.ts",
-            "maxLevel": 1,
+            "maxLevel": 2,
             "nodes": [
+                {
+                    "id": "ApiClientFactory",
+                    "className": "ApiClientFactory",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/http/http-routing/src/ApiClientFactory.ts",
+                    "level": 1
+                },
                 {
                     "id": "RouteBuilderImpl",
                     "className": "RouteBuilderImpl",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/http/http-routing/src/RouteBuilderImpl.ts",
-                    "level": 1
+                    "level": 2
                 },
                 {
                     "id": "WebpiecesRouter",
@@ -26,6 +34,24 @@
                 }
             ],
             "edges": [
+                {
+                    "from": "ApiClientFactory",
+                    "to": "RouteBuilderImpl",
+                    "injection": "token",
+                    "token": "RouteBuilderImpl",
+                    "tokenKey": "class:packages/http/http-routing/src/RouteBuilderImpl.ts#RouteBuilderImpl",
+                    "paramName": "routeBuilder",
+                    "paramType": "RouteBuilderImpl"
+                },
+                {
+                    "from": "WebpiecesRouter",
+                    "to": "ApiClientFactory",
+                    "injection": "token",
+                    "token": "ApiClientFactory",
+                    "tokenKey": "class:packages/http/http-routing/src/ApiClientFactory.ts#ApiClientFactory",
+                    "paramName": "apiClientFactory",
+                    "paramType": "ApiClientFactory"
+                },
                 {
                     "from": "WebpiecesRouter",
                     "to": "RouteBuilderImpl",

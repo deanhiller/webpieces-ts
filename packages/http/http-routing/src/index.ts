@@ -75,7 +75,7 @@ export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
 // The public API-surface abstraction: declare routes/filters, get them back as ApiClient[].
 export { ApiFactory } from './ApiFactory';
-export { ApiClient } from './ApiClient';
+export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound verifiers the framework AuthFilter injects.
 export { AuthConfig, Principal } from './AuthConfig';

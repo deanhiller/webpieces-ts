@@ -6,7 +6,7 @@ import { RouteBuilderImpl } from './RouteBuilderImpl';
 import { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
 import { FilterDefinition } from './WebAppMeta';
 import { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
-import { InProcessApiClientFactory } from './InProcessApiClientFactory';
+import { ApiClientFactory } from './ApiClientFactory';
 import { ApiFactory } from './ApiFactory';
 import { ApiClient } from './ApiClient';
 import { ErrorLogFilter } from './filters/ErrorLogFilter';
@@ -66,6 +66,7 @@ export class WebpiecesRouter implements ApiFactory {
 
     constructor(
         @inject(RouteBuilderImpl) private readonly routeBuilder: RouteBuilderImpl,
+        @inject(ApiClientFactory) private readonly apiClientFactory: ApiClientFactory,
     ) {}
 
     /**
@@ -141,16 +142,16 @@ export class WebpiecesRouter implements ApiFactory {
      */
     // webpieces-disable no-any-unknown -- abstract constructor signature requires any[] args
     createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T {
-        return new InProcessApiClientFactory(this.routeBuilder).createApiClient(apiPrototype);
+        return this.apiClientFactory.createApiClient(apiPrototype);
     }
 
     /**
-     * Reify the registered routes as {@link ApiClient}s (api contract + routeMeta + composed
-     * filter-chain→controller impl). This is the ONLY handoff to the express layer — the
-     * internal RouteBuilder never leaves this class.
+     * Reify the registered APIs as {@link ApiClient}s (contract + the createApiClient proxy +
+     * per-endpoint route metadata) via the shared {@link ApiClientFactory}. This is the ONLY
+     * handoff to the express layer — the internal RouteBuilder never leaves.
      */
     apiClients(): ApiClient[] {
-        return this.routeBuilder.apiClients();
+        return this.apiClientFactory.apiClients();
     }
 
     /** The application DI container (child of the framework container). */

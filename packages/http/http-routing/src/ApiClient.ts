@@ -1,22 +1,26 @@
-import { RouteMetadata } from '@webpieces/core-util';
 import { ClassType } from './ApiRoutingFactory';
-import { MethodMeta } from './MethodMeta';
-import { Service, WpResponse } from './Filter';
 
 /**
- * ApiClient - one reified endpoint of an API: the API contract it belongs to, its route
- * metadata (http method + path + auth), and the composed `impl` — the filter chain that
- * ends in the controller method, invoked per request.
+ * ApiClientProxy - the in-process client createApiClient(api) returns: a map of method name →
+ * invoker(dto) that runs the filter chain → controller. (Cast to the API interface T for callers.)
+ */
+// webpieces-disable no-any-unknown -- proxy holds methods of arbitrary API shapes; DTOs are erased
+export type ApiClientProxy = Record<string, (requestDto: unknown) => Promise<unknown>>;
+
+/**
+ * ApiClient - one registered API surface, reified by {@link ApiClientFactory}:
+ *  - `api`    : the contract class passed to addRoutes,
+ *  - `client` : exactly what createApiClient(api) returns — a proxy whose methods run the
+ *               filter chain → controller.
  *
- * Data-only structure (a class, per the webpieces guidelines). {@link ApiFactory.apiClients}
- * returns the full list; the express layer (WebpiecesExpressRouter) binds each `impl` to a
- * route, so the internal RouteBuilder never leaks to upper layers.
+ * That is ALL a transport needs: the express layer reads the api's @ApiPath/@Endpoint decorators
+ * to bind each method's HTTP route to the matching `client` method — one-to-one with a test call
+ * `client.method(dto)`. The proxy forms the RouteMetadata and drives it through the filters, so
+ * the internal RouteBuilder never leaks out. Data-only structure (a class, per the guidelines).
  */
 export class ApiClient {
     constructor(
         public readonly api: ClassType,
-        public readonly routeMeta: RouteMetadata,
-        // webpieces-disable no-any-unknown -- WpResponse<unknown>: the composed impl is response-type-erased at the filter boundary
-        public readonly impl: Service<MethodMeta, WpResponse<unknown>>,
+        public readonly client: ApiClientProxy,
     ) {}
 }

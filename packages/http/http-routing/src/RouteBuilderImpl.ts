@@ -6,8 +6,6 @@ import { MethodMeta } from './MethodMeta';
 import { RouteMetadata, DocumentDesign } from '@webpieces/core-util';
 import { WpResponse, Service } from './Filter';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
-import { ApiClient } from './ApiClient';
-import { ClassType } from './ApiRoutingFactory';
 import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('RouteBuilder');
@@ -195,23 +193,6 @@ export class RouteBuilderImpl implements RouteBuilder {
      */
     getRoutes(): RouteHandlerWithMeta[] {
         return this.routes;
-    }
-
-    /**
-     * Reify every registered route as an {@link ApiClient}: its API contract + routeMeta +
-     * the composed express-tier impl (filter chain → controller). This is what
-     * {@link ApiFactory.apiClients} returns; the express layer binds each ApiClient's impl
-     * WITHOUT ever seeing this RouteBuilder.
-     */
-    apiClients(): ApiClient[] {
-        return this.routes.map(
-            (routeWithMeta: RouteHandlerWithMeta) =>
-                new ApiClient(
-                    routeWithMeta.definition.apiClass as ClassType,
-                    routeWithMeta.definition.routeMeta,
-                    this.createRouteHandler(routeWithMeta),
-                ),
-        );
     }
 
     /**
