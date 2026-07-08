@@ -1,84 +1,35 @@
 import express from 'express';
-import { ContainerModule } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import {
-    ApiFactory,
-    WebpiecesConfig,
-    WebpiecesRouter,
-    WebpiecesRouterFactory,
-} from '@webpieces/http-routing';
-import { toError, Logger, LogManager, HeaderRegistry, ContextKey } from '@webpieces/core-util';
+import { ApiFactory, WebpiecesRouter, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
+import { toError, Logger, LogManager } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
 
 /**
- * Options for {@link createCompanyRouter}.
- * modules      - app DI modules beyond the standard company set.
- * appOverrides - single module loaded LAST so tests can rebind bindings to mocks.
- * config       - optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
+ * setupCompanyRuntime - the thin COMPANY wrapper over the framework {@link setupRuntime}. It
+ * supplies the org-wide {@link CompanyHeaders} (the one company-specific input) and forwards the
+ * rest, so the whole canonical sequence (headers → logging → router → the app's routes/filters
+ * block → {@link ApiFactory}) lives in the framework and is reused verbatim. Every company express
+ * service + its tests call this with their options + a routes block; tests pass their own
+ * {@link CompanySetupOptions.loggerFactory}, else identical to prod.
  */
-export interface CompanyRouterOptions {
-    modules?: ContainerModule[];
-    appOverrides?: ContainerModule;
-    config?: WebpiecesConfig;
-}
-
-/**
- * Register the global {@link HeaderRegistry} for a company service: this server's own
- * keys + the shared CompanyHeaders + the webpieces platform defaults. MUST run before
- * the logger is installed (LogManager.setFactory fails fast otherwise) and before the
- * router is built (filters read the registry at construction).
- *
- * Idempotent-friendly for tests: safe to call again with the same inputs.
- */
-export function configureCompanyHeaders(svrHeaders: ContextKey[] = []): void {
-    HeaderRegistry.configure(svrHeaders, CompanyHeaders.getAllHeaders(), /*platformHeaders*/ true);
-}
-
-/**
- * Build a node-only {@link WebpiecesRouter} with the app DI modules. Shared by BOTH the
- * production server (bootstrapServer) and tests, so a createApiClient() test exercises the
- * exact same container + filter chain as production.
- *
- * NOTE: the header system is now a global (HeaderRegistry.configure), NOT DI — callers
- * that use ContextFilter/LogApiFilter must call {@link configureCompanyHeaders} first.
- */
-export async function createCompanyRouter(options: CompanyRouterOptions = {}): Promise<WebpiecesRouter> {
-    return WebpiecesRouterFactory.create(options.config ?? new WebpiecesConfig(), {
-        appBindings: [...(options.modules ?? [])],
-        appOverrides: options.appOverrides,
-    });
-}
-
-/**
- * setupCompanyRuntime - the ONE method that runs the canonical startup sequence in the
- * correct fail-fast order and returns a ready {@link ApiFactory}:
- *
- *   1. HeaderRegistry.configure  (filters read it at construction; logging masks off it)
- *   2. LogManager.setFactory     (fails fast unless the registry is configured first)
- *   3. build the router + DI container
- *
- * Returns the concrete {@link WebpiecesRouter} (the BUILD surface): the per-app
- * `buildXxxApiFactory` helpers call this, use addRoutes/addFilter to declare their routes +
- * filters, then return it narrowed to the {@link ApiFactory} consumer surface — so the express
- * server (via {@link bootstrapServer}), the in-process createApiClient tests, and the
- * legacy-server embed all share one path. Tests pass their own
- * {@link CompanySetupOptions.loggerFactory}; else identical to prod.
- */
-export async function setupCompanyRuntime(options: CompanySetupOptions): Promise<WebpiecesRouter> {
-    // 1. Register the global HeaderRegistry FIRST.
-    configureCompanyHeaders(options.svrHeaders);
-
-    // 2. Install the logging backend ONCE, before anything else logs.
-    LogManager.setFactory(options.loggerFactory);
-
-    // 3. Build the node-only router + DI container.
-    return createCompanyRouter({
-        modules: options.modules,
-        appOverrides: options.appOverrides,
-        config: options.config,
-    });
+export async function setupCompanyRuntime(
+    options: CompanySetupOptions,
+    configureRoutes: (router: WebpiecesRouter) => void,
+): Promise<ApiFactory> {
+    return setupRuntime(
+        new RuntimeSetupOptions(
+            options.loggerFactory,
+            options.svrHeaders,
+            CompanyHeaders.getAllHeaders(),
+            /*platformHeaders*/ true,
+            options.modules,
+            options.appOverrides,
+            options.config,
+        ),
+        configureRoutes,
+    );
 }
 
 /**

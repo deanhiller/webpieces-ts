@@ -1,6 +1,6 @@
 import { ContainerModule } from 'inversify';
 import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
-import { ApiFactory, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
+import { ApiFactory, WebpiecesRouter, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogApiFilter, RecordingFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { Server2Api } from '@webpieces/server2-api';
@@ -26,16 +26,15 @@ export class Server2ApiFactoryOptions {
 export async function buildServer2ApiFactory(
     options: Server2ApiFactoryOptions = new Server2ApiFactoryOptions(),
 ): Promise<ApiFactory> {
-    const apiFactory = await setupCompanyRuntime(
+    return setupCompanyRuntime(
         new CompanySetupOptions(options.loggerFactory, [], [], options.appOverrides, options.config),
+        (apiFactory: WebpiecesRouter) => {
+            // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only user filters.
+            // server2 is public (@Authentication(false)), so AuthFilter is a no-op and no AuthConfig
+            // need be bound. Priority (higher runs first): 1850 RecordingFilter → 1800 LogApiFilter.
+            apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
+            apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
+            apiFactory.addRoutes(Server2Api, Server2Controller);
+        },
     );
-
-    // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only user filters.
-    // server2 is public (@Authentication(false)), so AuthFilter is a no-op and no AuthConfig
-    // need be bound. Priority order (higher runs first): 1850 RecordingFilter → 1800 LogApiFilter.
-    apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
-    apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
-
-    apiFactory.addRoutes(Server2Api, Server2Controller);
-    return apiFactory;
 }

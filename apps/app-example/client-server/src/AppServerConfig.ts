@@ -1,6 +1,6 @@
 import { ContainerModule } from 'inversify';
 import { ContextKey, LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
-import { ApiFactory, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
+import { ApiFactory, WebpiecesRouter, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogApiFilter, RecordingFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { InversifyModule, AppHeaders } from './modules/InversifyModule';
@@ -42,16 +42,15 @@ export class ClientServerApiFactoryOptions {
 export async function buildClientServerApiFactory(
     options: ClientServerApiFactoryOptions = new ClientServerApiFactoryOptions(),
 ): Promise<ApiFactory> {
-    const apiFactory = await setupCompanyRuntime(
+    return setupCompanyRuntime(
         new CompanySetupOptions(options.loggerFactory, APP_MODULES, APP_HEADERS, options.appOverrides, options.config),
+        (apiFactory: WebpiecesRouter) => {
+            // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only this app's
+            // USER filters. Priority (higher runs first): 1850 RecordingFilter → 1800 LogApiFilter.
+            apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
+            apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
+            apiFactory.addRoutes(SaveApi, SaveController);
+            apiFactory.addRoutes(PublicApi, PublicController);
+        },
     );
-
-    // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only this app's USER
-    // filters. Priority order (higher runs first): 1850 RecordingFilter → 1800 LogApiFilter.
-    apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
-    apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
-
-    apiFactory.addRoutes(SaveApi, SaveController);
-    apiFactory.addRoutes(PublicApi, PublicController);
-    return apiFactory;
 }

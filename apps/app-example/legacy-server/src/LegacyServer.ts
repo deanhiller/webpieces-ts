@@ -1,7 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import { ContainerModule } from 'inversify';
 import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
-import { ApiFactory, FilterDefinition } from '@webpieces/http-routing';
+import { ApiFactory, WebpiecesRouter, FilterDefinition } from '@webpieces/http-routing';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 // Reuse the client-server app's real controllers/modules — this example is about the WIRING
@@ -53,16 +53,15 @@ export class LegacyApiFactoryOptions {
 export async function buildLegacyApiFactory(
     options: LegacyApiFactoryOptions = new LegacyApiFactoryOptions(),
 ): Promise<ApiFactory> {
-    const apiFactory = await setupCompanyRuntime(
+    return setupCompanyRuntime(
         new CompanySetupOptions(options.loggerFactory, APP_MODULES, APP_HEADERS, options.appOverrides),
+        (apiFactory: WebpiecesRouter) => {
+            // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only extra user filters.
+            for (const filter of options.additionalFilters) {
+                apiFactory.addFilter(filter);
+            }
+            apiFactory.addRoutes(SaveApi, SaveController);
+            apiFactory.addRoutes(PublicApi, PublicController);
+        },
     );
-
-    // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only extra user filters.
-    for (const filter of options.additionalFilters) {
-        apiFactory.addFilter(filter);
-    }
-
-    apiFactory.addRoutes(SaveApi, SaveController);
-    apiFactory.addRoutes(PublicApi, PublicController);
-    return apiFactory;
 }
