@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { ApiFactory, AuthConfig } from '@webpieces/http-routing';
+import { AuthConfig } from '@webpieces/http-routing';
 import { TestAuthConfig } from './TestAuthConfig';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
@@ -12,31 +12,15 @@ import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../A
 import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
 
 /**
- * These tests exercise the FULL api-tier filter chain + controller through the in-process
- * client (router.createApiClient) — NO express, NO HTTP, NO ports. The downstream Server2Api
- * is mocked via @webpieces/core-mock and injected through the router's appOverrides seam, so
- * this is the exact same container + filter chain production uses (see AppServerConfig.configureRoutes).
+ * These tests exercise the FULL api-tier filter chain + controller through the in-process client
+ * (createApiClient) — NO express, NO HTTP, NO ports. Each test declares its OWN container overrides
+ * INLINE (Server2Api → a mock, AuthConfig → a stub, and whatever else it needs), then builds the
+ * app's ApiFactory with the SAME builder the real server uses (buildClientServerApiFactory) and
+ * drives the api contract. It is the exact same container + filter chain production uses.
+ *
+ * (AuthConfig is stubbed because the framework AuthFilter is AuthMode-driven; the stub lets the
+ * test's token pass without minting a real JWT — a no-token call still 401s through the chain.)
  */
-
-/**
- * Build the app's ApiFactory with Server2Api rebound to a mock. Pass a `counter` to also rebind
- * the controller's Counter to a test-held instance — so a test can observe it via the object it
- * owns, WITHOUT reaching into the DI container (tests only need createApiClient).
- */
-async function createApiFactoryWithMock(mock: MockedApi<Server2Api>, counter?: Counter): Promise<ApiFactory> {
-    const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
-        (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mock);
-        // The framework AuthFilter is AuthMode-driven; rebind AuthConfig to a stub so the test's
-        // token passes without minting a real JWT (a no-token call still 401s through the chain).
-        (await options.rebind(AuthConfig)).to(TestAuthConfig);
-        if (counter) {
-            (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
-        }
-    });
-    // ONE call — the SAME builder the real server uses (buildClientServerApiFactory), with the
-    // default ConsoleLoggerFactory (no [AWAITING...] banner). Only the mock override differs.
-    return buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
-}
 
 function createMockFetchResponse(value: string): FetchValueResponse {
     return {
@@ -55,8 +39,12 @@ describe('SaveApi with mocked Server2Api', () => {
 
     beforeEach(async () => {
         mockServer2Api = createMock<Server2Api>('Server2Api');
-        const router = await createApiFactoryWithMock(mockServer2Api);
-        saveApi = router.createApiClient<SaveApi>(SaveApi);
+        const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
+            (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
+            (await options.rebind(AuthConfig)).to(TestAuthConfig);
+        });
+        const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
+        saveApi = factory.createApiClient<SaveApi>(SaveApi);
     });
 
     it('should use mocked Server2Api response in SaveResponse', async () => {
@@ -77,11 +65,17 @@ describe('SaveApi with mocked Server2Api', () => {
     });
 
     it('should increment counter through filter chain', async () => {
-        // Bind a test-held counter so we observe it via the object we own — no container access;
-        // the api client (createApiClient) is the only surface the test drives.
+        // The test declares its OWN bindings inline — including a test-held counter it observes
+        // directly (no container access; createApiClient is the only surface the test drives).
         const counter = new SimpleCounter();
-        const counterApi = (await createApiFactoryWithMock(mockServer2Api, counter)).createApiClient<SaveApi>(SaveApi);
         mockServer2Api.mock.setDefaultReturnValue('fetchValue', createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE'));
+        const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
+            (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
+            (await options.rebind(AuthConfig)).to(TestAuthConfig);
+            (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
+        });
+        const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
+        const counterApi = factory.createApiClient<SaveApi>(SaveApi);
 
         await RequestContext.run(async () => {
             RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
@@ -117,8 +111,12 @@ describe('PublicApi', () => {
     let publicApi: PublicApi;
 
     beforeEach(async () => {
-        const router = await createApiFactoryWithMock(createMock<Server2Api>('Server2Api'));
-        publicApi = router.createApiClient<PublicApi>(PublicApi);
+        const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
+            (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(createMock<Server2Api>('Server2Api'));
+            (await options.rebind(AuthConfig)).to(TestAuthConfig);
+        });
+        const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
+        publicApi = factory.createApiClient<PublicApi>(PublicApi);
     });
 
     it('should return greeting with name (no auth needed)', async () => {

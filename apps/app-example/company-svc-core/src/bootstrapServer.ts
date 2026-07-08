@@ -8,7 +8,7 @@ import {
     WebpiecesRouterFactory,
 } from '@webpieces/http-routing';
 import { toError, Logger, LogManager, HeaderRegistry, ContextKey } from '@webpieces/core-util';
-import { CompanyLogging, CompanyHeaders } from '@webpieces/company-core';
+import { CompanyHeaders } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
 
@@ -71,7 +71,7 @@ export async function setupCompanyRuntime(options: CompanySetupOptions): Promise
     configureCompanyHeaders(options.svrHeaders);
 
     // 2. Install the logging backend ONCE, before anything else logs.
-    CompanyLogging.configure(options.loggerFactory);
+    LogManager.setFactory(options.loggerFactory);
 
     // 3. Build the node-only router + DI container.
     return createCompanyRouter({
