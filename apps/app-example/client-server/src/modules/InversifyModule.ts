@@ -1,7 +1,7 @@
 import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, Secrets } from '@webpieces/core-util';
 import { RequestContextReader, AuthConfig } from '@webpieces/http-routing';
 import { CompanyAuthConfig } from '@webpieces/company-svc-core';
 import { createApiClient, ClientConfig, ContextMgr } from '@webpieces/http-client';
@@ -55,6 +55,12 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
     bind(AuthConfig).to(CompanyAuthConfig).inSingletonScope();
 
+    // The ONE shared-secret store for ALL of this service's outbound clients (RPC + Cloud Tasks).
+    // The VALUE it sends per @AuthSharedSecret(key); read from config ONCE here, never in the send
+    // path (so tests stay parallel-safe). Rotate a client by changing its value here.
+    const secrets = new Secrets({ INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] });
+    bind(Secrets).toConstantValue(secrets); // injected into the Cloud Tasks invokers
+
     // PROD binding: Server2Api is a REAL HTTP client to the server2 service.
     // The ContextMgr reads this server's RequestContext, so the magic context
     // (correlation id, tenant, request-id chain) transfers onto every outbound
@@ -64,7 +70,8 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
             const server2Url = process.env['SERVER2_URL'] ?? 'http://localhost:8202';
             // ContextMgr reads the GLOBAL HeaderRegistry (configured at startup).
             const contextMgr = new ContextMgr(new RequestContextReader());
-            return createApiClient(Server2Api, new ClientConfig(server2Url, contextMgr));
+            // Pass the SAME secrets to every client — an @AuthSharedSecret endpoint sends secrets.get(key).
+            return createApiClient(Server2Api, new ClientConfig(server2Url, contextMgr, undefined, secrets));
         })
         .inSingletonScope();
 });

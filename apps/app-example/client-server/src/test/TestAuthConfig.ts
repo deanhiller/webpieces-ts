@@ -1,5 +1,5 @@
 import { injectable } from 'inversify';
-import { AuthConfig, AuthValues, ContextValue } from '@webpieces/http-routing';
+import { AuthConfig, AuthValues, ContextValue, SharedSecrets } from '@webpieces/http-routing';
 import { CompanyHeaders } from '@webpieces/company-core';
 
 /**
@@ -14,7 +14,10 @@ import { CompanyHeaders } from '@webpieces/company-core';
  */
 @injectable()
 export class TestAuthConfig extends AuthConfig {
-    readonly sharedSecrets: Record<string, string> = { INTERNAL_API_SECRET: 'some-test-key' };
+    // Two accepted values so tests can prove BOTH secret1 and secret2 pass (rotation window).
+    readonly sharedSecrets: Record<string, SharedSecrets> = {
+        INTERNAL_API_SECRET: new SharedSecrets('some-test-key', 'some-test-key-rotating'),
+    };
 
     override parseJwt(_token: string): AuthValues {
         return new AuthValues('test-user', ['admin'], [new ContextValue(CompanyHeaders.USER_ID, 'test-user')]);

@@ -1,10 +1,10 @@
 import { inject, injectable, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
-import { WebpiecesCoreHeaders, HttpUnauthorizedError, HttpForbiddenError, LogManager, toError } from '@webpieces/core-util';
+import { WebpiecesCoreHeaders, HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
-import { AuthConfig, AuthValues } from '../AuthConfig';
+import { AuthConfig, AuthValues, SharedSecrets } from '../AuthConfig';
 
 const log = LogManager.getLogger('AuthFilter');
 
@@ -54,7 +54,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
         switch (mode.kind) {
             case 'jwt':
-                this.enforceJwt(authHeader, mode.roles);
+                this.enforceJwt(authHeader, mode.requirement);
                 break;
             case 'oidc':
                 await this.enforceOidc(authHeader, mode.callers);
@@ -62,7 +62,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             case 'shared-secret':
                 this.enforceSharedSecret(
                     RequestContext.getRequest()?.getHeader(WebpiecesCoreHeaders.SHARED_SECRET),
-                    mode.secretEnv,
+                    mode.secretKey,
                 );
                 break;
         }
@@ -76,17 +76,15 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         return this.authConfig;
     }
 
-    private enforceJwt(header: string | undefined, roles: string[]): void {
+    private enforceJwt(header: string | undefined, requirement: JwtRequirement): void {
         const token = this.stripBearer(header);
         if (!token) {
             throw new HttpUnauthorizedError('Authentication required');
         }
-        const values = this.requireAuthConfig().parseJwt(token); // throws HttpUnauthorizedError if invalid
+        const config = this.requireAuthConfig();
+        const values = config.parseJwt(token); // AUTHENTICATE — throws HttpUnauthorizedError if invalid
         this.applyAuthValues(values);
-        // @AuthJwt(...roles): empty = any authenticated user; non-empty = must hold at least one.
-        if (roles.length > 0 && !roles.some((role: string) => values.roles.includes(role))) {
-            throw new HttpForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
-        }
+        config.authorizeJwt(values, requirement); // AUTHORIZE — app policy; throws HttpForbiddenError to deny
     }
 
     private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
@@ -97,11 +95,19 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         await this.requireAuthConfig().verifyOidc(token, callers);
     }
 
-    private enforceSharedSecret(provided: string | undefined, secretEnv: string): void {
-        const expected = this.requireAuthConfig().sharedSecrets[secretEnv];
-        if (!expected || !provided || !this.constantTimeEquals(provided, expected)) {
+    private enforceSharedSecret(provided: string | undefined, secretKey: string): void {
+        const accepted = this.requireAuthConfig().sharedSecrets[secretKey];
+        if (!accepted || !provided || !this.matchesEither(provided, accepted)) {
             throw new HttpUnauthorizedError('Invalid shared secret for @AuthSharedSecret endpoint');
         }
+    }
+
+    /** EITHER secret1 or secret2 passes — the rotation window. Constant-time on each non-empty slot. */
+    private matchesEither(provided: string, accepted: SharedSecrets): boolean {
+        return (
+            (accepted.secret1 !== '' && this.constantTimeEquals(provided, accepted.secret1)) ||
+            (accepted.secret2 !== '' && this.constantTimeEquals(provided, accepted.secret2))
+        );
     }
 
     /** Parse a JWT if one is present, else do nothing — used on public routes; never throws. */

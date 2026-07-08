@@ -78,7 +78,7 @@ export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound AuthConfig the framework AuthFilter injects.
-export { AuthConfig, AuthValues, ContextValue } from './AuthConfig';
+export { AuthConfig, AuthValues, ContextValue, SharedSecrets } from './AuthConfig';
 
 // Above-boundary context setup shared by every transport adapter.
 export { fillContext } from './fillContext';

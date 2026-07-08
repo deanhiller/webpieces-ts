@@ -1,7 +1,7 @@
-import { injectable } from 'inversify';
+import { injectable, inject, optional } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { mintIdToken } from '@webpieces/gcp-identity';
-import { LogManager, toError } from '@webpieces/core-util';
+import { LogManager, toError, Secrets } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('InMemoryTaskInvoker');
@@ -28,6 +28,11 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     private counter = 0;
     /** Scheduled (not-yet-delivered) jobs, so delete() can cancel them. */
     private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+
+    // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
+    constructor(@optional() @inject(Secrets) private readonly secrets?: Secrets) {
+        super();
+    }
 
     override async enqueue(request: TaskRequest): Promise<JobReference> {
         this.counter += 1;
@@ -106,7 +111,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
             return;
         }
         if (mode.kind === 'shared-secret') {
-            const secret = process.env[mode.secretEnv];
+            const secret = this.secrets?.get(mode.secretKey);
             if (secret) {
                 headers['x-webpieces-shared-secret'] = secret;
             }

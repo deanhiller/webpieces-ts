@@ -26,6 +26,7 @@ export {
     AuthConfig,
     AuthValues,
     ContextValue,
+    SharedSecrets,
 } from '@webpieces/http-routing';
 // ExpressRouteHandler now lives in http-server (express adapter), not node-only http-routing
 export { ExpressRouteHandler } from './WebpiecesMiddleware';

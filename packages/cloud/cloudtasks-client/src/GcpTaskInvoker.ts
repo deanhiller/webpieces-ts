@@ -1,4 +1,4 @@
-import { injectable } from 'inversify';
+import { injectable, inject, optional } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import {
@@ -6,7 +6,7 @@ import {
     getRegion,
     getRuntimeServiceAccountEmail,
 } from '@webpieces/gcp-identity';
-import { LogManager } from '@webpieces/core-util';
+import { LogManager, Secrets } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('GcpTaskInvoker');
@@ -24,6 +24,11 @@ type ITask = protos.google.cloud.tasks.v2.ITask;
 @injectable()
 export class GcpTaskInvoker extends TaskInvoker {
     private readonly client = new CloudTasksClient();
+
+    // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
+    constructor(@optional() @inject(Secrets) private readonly secrets?: Secrets) {
+        super();
+    }
 
     override async enqueue(request: TaskRequest): Promise<JobReference> {
         const projectId = await getProjectId();
@@ -81,7 +86,7 @@ export class GcpTaskInvoker extends TaskInvoker {
             return;
         }
         if (mode.kind === 'shared-secret') {
-            const secret = process.env[mode.secretEnv];
+            const secret = this.secrets?.get(mode.secretKey);
             if (secret) {
                 headers.set('x-webpieces-shared-secret', secret);
                 httpRequest.headers = Object.fromEntries(headers);

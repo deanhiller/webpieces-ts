@@ -1,7 +1,7 @@
 import { injectable } from 'inversify';
 import jwt from 'jsonwebtoken';
-import { AuthConfig, AuthValues, ContextValue } from '@webpieces/http-routing';
-import { HttpUnauthorizedError, toError } from '@webpieces/core-util';
+import { AuthConfig, AuthValues, ContextValue, SharedSecrets } from '@webpieces/http-routing';
+import { HttpUnauthorizedError, HttpForbiddenError, JwtRequirement, toError } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
 
@@ -19,10 +19,14 @@ import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
 export class CompanyAuthConfig extends AuthConfig {
     private readonly jwtSecret = process.env['JWT_SECRET'] ?? 'dev-insecure-jwt-secret-change-me';
 
-    // Prod reads the expected secret VALUES from env by the @AuthSharedSecret name. Tests rebind
-    // this class (or bind a subclass) with fixed values.
-    readonly sharedSecrets: Record<string, string> = {
-        INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] ?? '',
+    // Prod reads the expected secret VALUES from env by the @AuthSharedSecret name. Two slots so a
+    // secret can be ROTATED with zero dropped requests (either passes): shift _2 → _1 on rotation.
+    // Tests rebind this class (or a subclass) with fixed values.
+    readonly sharedSecrets: Record<string, SharedSecrets> = {
+        INTERNAL_API_SECRET: new SharedSecrets(
+            process.env['INTERNAL_API_SECRET'] ?? '',
+            process.env['INTERNAL_API_SECRET_2'] ?? '',
+        ),
     };
 
     override parseJwt(token: string): AuthValues {
@@ -33,7 +37,20 @@ export class CompanyAuthConfig extends AuthConfig {
         }
         const userId = String(subject);
         const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
-        return new AuthValues(userId, roles, [new ContextValue(CompanyHeaders.USER_ID, userId)]);
+        return new AuthValues(userId, roles, [new ContextValue(CompanyHeaders.USER_ID, userId)], claims);
+    }
+
+    /**
+     * AUTHORIZATION: the company policy over the endpoint's @Auth/@AuthJwt requirement. Default
+     * roles any-of (via super), PLUS this company's custom rule: @Auth({ inOrg: true }) requires the
+     * JWT to carry an orgId claim. This is the pluggable seam — apps enforce their own rules here
+     * without touching the framework.
+     */
+    override authorizeJwt(values: AuthValues, requirement: JwtRequirement): void {
+        super.authorizeJwt(values, requirement); // roles any-of
+        if (requirement['inOrg'] === true && !values.claims['orgId']) {
+            throw new HttpForbiddenError('Endpoint requires an organization (orgId claim) on the JWT');
+        }
     }
 
     override async verifyOidc(token: string, callers: string[]): Promise<void> {

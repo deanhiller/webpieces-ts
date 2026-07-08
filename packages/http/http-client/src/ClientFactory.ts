@@ -14,7 +14,7 @@ import {
     toError,
     DocumentDesign,
 } from '@webpieces/core-util';
-import { ContextMgr } from '@webpieces/core-util';
+import { ContextMgr, Secrets } from '@webpieces/core-util';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
 
 /**
@@ -52,10 +52,18 @@ export class ClientConfig {
      */
     idTokenMinter?: IdTokenMinter;
 
-    constructor(baseUrl: string, contextMgr?: ContextMgr, idTokenMinter?: IdTokenMinter) {
+    /**
+     * Optional shared-secret store. For an @AuthSharedSecret(key) endpoint, the client sends
+     * `secrets.get(key)` as the x-webpieces-shared-secret header. Bind ONE {@link Secrets} for all
+     * clients (see the app's DI module).
+     */
+    secrets?: Secrets;
+
+    constructor(baseUrl: string, contextMgr?: ContextMgr, idTokenMinter?: IdTokenMinter, secrets?: Secrets) {
         this.baseUrl = baseUrl;
         this.contextMgr = contextMgr;
         this.idTokenMinter = idTokenMinter;
+        this.secrets = secrets;
     }
 }
 
@@ -249,10 +257,35 @@ export class ProxyClient {
     }
 
     /**
+     * Attach the outbound credential for the endpoint's AuthMode: an @AuthOidc bearer minted as this
+     * caller's runtime SA (audience = the callee base URL, via the injected gcp-identity minter — the
+     * server verifies the signature + caller allow-list), or the @AuthSharedSecret(key) value THIS
+     * client sends from its bound {@link Secrets}. Symmetric with the Cloud Tasks invokers; never
+     * reads process.env.
+     */
+    private async attachOutboundAuth(route: RouteMetadata, httpHeaders: Record<string, string>): Promise<void> {
+        const mode = route.authMeta?.mode;
+        if (mode?.kind === 'oidc') {
+            const idTokenMinter = this.config.idTokenMinter;
+            if (!idTokenMinter) {
+                throw new Error(`No idTokenMinter configured for @AuthOidc endpoint ${route.methodName}`);
+            }
+            httpHeaders['Authorization'] = `Bearer ${await idTokenMinter(this.config.baseUrl)}`;
+        } else if (mode?.kind === 'shared-secret') {
+            const secret = this.config.secrets?.get(mode.secretKey);
+            if (!secret) {
+                throw new Error(`No shared secret configured for @AuthSharedSecret('${mode.secretKey}') endpoint ${route.methodName}`);
+            }
+            httpHeaders['x-webpieces-shared-secret'] = secret;
+        }
+    }
+
+    /**
      * Make an HTTP request based on route metadata and arguments.
      *
      * All endpoints are POST-only. The request body is the first argument.
      */
+    // webpieces-disable no-any-unknown -- proxy method: the request DTO (args) + response are erased at the client boundary
     async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
         const { httpMethod, path } = route;
 
@@ -273,18 +306,8 @@ export class ProxyClient {
             }
         }
 
-        // For an @AuthOidc endpoint, attach a Google ID token minted as THIS caller's
-        // own runtime SA (audience = the callee base URL), via the injected minter
-        // (server-side gcp-identity.mintIdToken). The server verifies the signature
-        // AND that this SA is in the endpoint's allow-list. Guaranteed present by the
-        // ProxyClient constructor's fail-fast check, but guarded here defensively.
-        if (route.authMeta?.mode.kind === 'oidc') {
-            const idTokenMinter = this.config.idTokenMinter;
-            if (!idTokenMinter) {
-                throw new Error(`No idTokenMinter configured for @AuthOidc endpoint ${route.methodName}`);
-            }
-            httpHeaders['Authorization'] = `Bearer ${await idTokenMinter(this.config.baseUrl)}`;
-        }
+        // Attach the endpoint's outbound credential (@AuthOidc bearer / @AuthSharedSecret value).
+        await this.attachOutboundAuth(route, httpHeaders);
 
         // Build masked headers map for logging (secured values masked, MDC keys)
         const headersForLogging = this.contextMgr
