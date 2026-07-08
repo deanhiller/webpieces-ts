@@ -146,9 +146,9 @@ export class WebpiecesRouter implements ApiFactory {
     }
 
     /**
-     * Reify the registered APIs as {@link ApiClient}s (contract + the createApiClient proxy +
-     * per-endpoint route metadata) via the shared {@link ApiClientFactory}. This is the ONLY
-     * handoff to the express layer — the internal RouteBuilder never leaves.
+     * Reify the registered APIs as {@link ApiClient}s (contract + the createApiClient proxy) via
+     * the shared {@link ApiClientFactory}. This is the ONLY handoff to the express layer — the
+     * internal RouteBuilder never leaves.
      */
     apiClients(): ApiClient[] {
         return this.apiClientFactory.apiClients();

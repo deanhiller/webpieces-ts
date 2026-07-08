@@ -1,34 +1,23 @@
-import { Container } from 'inversify';
-import { ClassType } from './ApiRoutingFactory';
-import { FilterDefinition } from './WebAppMeta';
 import { ApiClient } from './ApiClient';
 
 /**
- * ApiFactory - the node-only, EXPRESS-FREE surface for declaring an app's API surface and
- * getting it back as data. It is the ONE abstraction upper layers use:
+ * ApiFactory - the node-only, EXPRESS-FREE CONSUMER surface of a built app. It is exactly the
+ * two things something downstream of the router needs, and nothing else (no RouteBuilder, no
+ * container):
  *
- *  - {@link addRoutes} / {@link addFilter} declare the surface (api → controller, + filters).
- *  - {@link apiClients} returns each endpoint as an {@link ApiClient} (api + routeMeta +
- *    composed impl). The express layer (WebpiecesExpressRouter) binds these; the internal
- *    RouteBuilder is never exposed.
- *  - {@link createApiClient} builds an in-process proxy (the primary test path, no HTTP).
- *  - {@link getContainer} exposes the DI container for test rebinds.
+ *  - {@link apiClients} — the PLATFORM path: each registered api as an {@link ApiClient}
+ *    (api + its client proxy). The express layer (WebpiecesExpressRouter) binds these.
+ *  - {@link createApiClient} — the TEST path: an in-process proxy for one api (no HTTP, no ports).
  *
- * Implemented by {@link WebpiecesRouter} (the node-only heart). Hand an ApiFactory to
- * WebpiecesExpressRouter in @webpieces/http-server to serve it over HTTP.
+ * apiClients() is literally a loop over createApiClient, so the two are 1-to-1: what the platform
+ * serves over HTTP is the exact same proxy a test drives in-process.
+ *
+ * Implemented by {@link WebpiecesRouter} (the node-only heart, which also owns the BUILD surface
+ * addRoutes/addFilter). Hand an ApiFactory to WebpiecesExpressRouter to serve it over HTTP.
  */
 export interface ApiFactory {
-    addRoutes<TApi, TController extends TApi>(
-        api: ClassType<TApi>,
-        controller: ClassType<TController>,
-    ): this;
-
-    addFilter(filter: FilterDefinition): this;
-
     apiClients(): ApiClient[];
 
     // webpieces-disable no-any-unknown -- abstract constructor signature requires any[] args
     createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T;
-
-    getContainer(): Container;
 }

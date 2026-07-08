@@ -53,7 +53,13 @@ export class ApiClientFactory {
         for (const route of this.routeBuilder.getRoutes()) {
             apis.add(route.definition.apiClass as ClassType);
         }
-        return [...apis].map((api: ClassType) => new ApiClient(api, this.buildProxy(api)));
+        // apiClients() just loops createApiClient — the EXACT method tests call — so the platform
+        // (HTTP) and tests (in-process) bind the identical proxy, 1-to-1.
+        return [...apis].map((api: ClassType) => {
+            // webpieces-disable no-any-unknown -- the registered api is an unconstrained ClassType
+            const client = this.createApiClient<ApiClientProxy>(api as any);
+            return new ApiClient(api, client);
+        });
     }
 
     /** Build the proxy record (method name → invoker) from the API prototype's decorators. */
