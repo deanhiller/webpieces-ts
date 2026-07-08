@@ -1,6 +1,6 @@
 import { injectable } from 'inversify';
 import {provideFrameworkSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
-import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import {
     ContextKey,

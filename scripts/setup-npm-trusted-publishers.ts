@@ -4,7 +4,6 @@ const packages = [
     '@webpieces/core-context',
     '@webpieces/core-util',
     '@webpieces/http-api',
-    '@webpieces/http-filters',
     '@webpieces/http-routing',
     '@webpieces/http-client',
     '@webpieces/http-server',

@@ -29,8 +29,11 @@ export interface RouteBuilder {
 export class RouteDefinition {
     constructor(
         public routeMeta: RouteMetadata,
+        // webpieces-disable no-any-unknown -- arbitrary DI controller class used as a container token
         public controllerClass: any,
         public controllerFilepath?: string,
+        // The @ApiPath prototype this route belongs to; surfaced on ApiFactory.apiClients().
+        public apiClass?: unknown,
     ) {}
 }
 

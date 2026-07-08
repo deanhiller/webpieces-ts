@@ -17,7 +17,7 @@ import {
     HttpGatewayTimeoutError,
     RouteMetadata,
 } from '@webpieces/core-util';
-import { Service, WpResponse } from '@webpieces/http-filters';
+import { Service, WpResponse } from '@webpieces/http-routing';
 import { toError } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
@@ -27,7 +27,7 @@ const log = LogManager.getLogger('WebpiecesMiddleware');
 /**
  * Express route handler function type. Lives in http-server (the express adapter),
  * NOT in the node-only http-routing package, so http-routing stays express-free.
- * Used by WebpiecesRouteCreator to register handlers Express can call.
+ * Used by WebpiecesExpressRouter to register handlers Express can call.
  */
 export type ExpressRouteHandler = (
     req: Request,

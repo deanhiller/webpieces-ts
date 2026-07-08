@@ -24,7 +24,6 @@
         "@inversifyjs/binding-decorators": "1.1.5",
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
-        "@webpieces/http-filters": "workspace:*",
         "inversify": "7.10.4",
         "minimatch": "10.0.1"
     }

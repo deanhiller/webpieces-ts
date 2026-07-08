@@ -4,7 +4,8 @@ import {
     getEndpoints,
     RouteMetadata,
 } from '@webpieces/core-util';
-import { MethodMeta, Service, WpResponse } from '@webpieces/http-filters';
+import { MethodMeta } from './MethodMeta';
+import { Service, WpResponse } from './Filter';
 import { RequestContext } from '@webpieces/core-context';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
 

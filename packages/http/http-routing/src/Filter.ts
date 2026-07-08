@@ -9,6 +9,7 @@
  * 2. Writing the JSON to the HTTP response body
  * 3. Setting the HTTP status code from WpResponse.statusCode
  */
+// webpieces-disable no-any-unknown -- generic default: the filter chain handles all response types uniformly
 export class WpResponse<TResult = unknown> {
     response: TResult;
 

@@ -1,7 +1,7 @@
 import { injectable } from 'inversify';
 import { provideSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 

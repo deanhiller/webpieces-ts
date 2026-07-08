@@ -4,15 +4,14 @@ import * as path from 'path';
 import * as os from 'os';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { recordable } from '@webpieces/http-server';
-import { WebpiecesConfig, WebpiecesRouter } from '@webpieces/http-routing';
-import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { RecordedTestCase, RecordSerializer, ConsoleLoggerFactory } from '@webpieces/core-util';
+import { WebpiecesConfig, ApiFactory } from '@webpieces/http-routing';
+import { RecordedTestCase, RecordSerializer } from '@webpieces/core-util';
 import { createMock } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
 import { SaveApi } from '@webpieces/client-server-api';
 import { Server2Api, FetchValueResponse, FetchValueRequest } from '@webpieces/server2-api';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { APP_MODULES, APP_HEADERS, configureRoutes } from '../AppServerConfig';
+import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 
@@ -22,7 +21,7 @@ import { Server2Simulator } from '../remote/Server2Simulator';
  * - recordable(Server2Simulator) records the in-process downstream call
  * - TestCaseRecorderImpl writes a JSON fixture + generated spec to recordingDir
  */
-let router: WebpiecesRouter;
+let router: ApiFactory;
 let recordingDir: string;
 
 /**
@@ -41,11 +40,10 @@ async function bootRecordingServer(): Promise<void> {
         const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
         rebindResult.toConstantValue(recordable('Server2Api', new Server2Simulator()));
     });
-    // Same headers → logging → router sequence as the server (see setupCompanyRuntime).
-    router = await setupCompanyRuntime(
-        new CompanySetupOptions(new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS, appOverrides, config),
+    // ONE call — the SAME builder the real server uses; only the recordable override + config differ.
+    router = await buildClientServerApiFactory(
+        new ClientServerApiFactoryOptions(undefined, appOverrides, config),
     );
-    configureRoutes(router);
 }
 
 function stopRecordingServer(): void {
@@ -107,7 +105,7 @@ describe('Test-case recording', () => {
  * MockServer2Api pattern from Integration.spec.ts.
  */
 describe('createMock replaces hand-rolled mocks', () => {
-    let router: WebpiecesRouter;
+    let router: ApiFactory;
     const mockServer2Api = createMock<Server2Api>('Server2Api');
 
     beforeAll(async () => {
@@ -115,10 +113,7 @@ describe('createMock replaces hand-rolled mocks', () => {
             const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
             rebindResult.toConstantValue(mockServer2Api);
         });
-        router = await setupCompanyRuntime(
-            new CompanySetupOptions(new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS, appOverrides),
-        );
-        configureRoutes(router);
+        router = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
     });
 
     it('primes responses and asserts captured requests through the full filter chain', async () => {

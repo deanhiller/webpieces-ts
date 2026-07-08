@@ -1,7 +1,7 @@
 import { injectable } from 'inversify';
 import { provideFrameworkSingleton, MethodMeta } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
 import {WebpiecesCoreHeaders} from "../headers/WebpiecesCoreHeaders";
 import {ContextKeys} from "../headers/ContextKeys";

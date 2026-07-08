@@ -1,14 +1,13 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { WebpiecesRouter } from '@webpieces/http-routing';
+import { ApiFactory } from '@webpieces/http-routing';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
-import { HttpUnauthorizedError, ConsoleLoggerFactory } from '@webpieces/core-util';
+import { HttpUnauthorizedError } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Counter } from '../controllers/save-controller';
-import { APP_MODULES, APP_HEADERS, configureRoutes } from '../AppServerConfig';
+import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
 import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
 
 /**
@@ -18,18 +17,14 @@ import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
  * this is the exact same container + filter chain production uses (see AppServerConfig.configureRoutes).
  */
 
-/** Build a router with the app's routes/filters and Server2Api rebound to a mock. */
-async function createRouterWithMock(mock: MockedApi<Server2Api>): Promise<WebpiecesRouter> {
+/** Build the app's ApiFactory with Server2Api rebound to a mock. */
+async function createApiFactoryWithMock(mock: MockedApi<Server2Api>): Promise<ApiFactory> {
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mock);
     });
-    // setupCompanyRuntime runs the same headers → logging → router sequence as the server
-    // (a plain ConsoleLoggerFactory instead of the server's, so no [AWAITING...] banner).
-    const router = await setupCompanyRuntime(
-        new CompanySetupOptions(new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS, appOverrides),
-    );
-    configureRoutes(router);
-    return router;
+    // ONE call — the SAME builder the real server uses (buildClientServerApiFactory), with the
+    // default ConsoleLoggerFactory (no [AWAITING...] banner). Only the mock override differs.
+    return buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
 }
 
 function createMockFetchResponse(value: string): FetchValueResponse {
@@ -46,11 +41,11 @@ function createMockFetchResponse(value: string): FetchValueResponse {
 describe('SaveApi with mocked Server2Api', () => {
     let mockServer2Api: MockedApi<Server2Api>;
     let saveApi: SaveApi;
-    let router: WebpiecesRouter;
+    let router: ApiFactory;
 
     beforeEach(async () => {
         mockServer2Api = createMock<Server2Api>('Server2Api');
-        router = await createRouterWithMock(mockServer2Api);
+        router = await createApiFactoryWithMock(mockServer2Api);
         saveApi = router.createApiClient<SaveApi>(SaveApi);
     });
 
@@ -109,7 +104,7 @@ describe('PublicApi', () => {
     let publicApi: PublicApi;
 
     beforeEach(async () => {
-        const router = await createRouterWithMock(createMock<Server2Api>('Server2Api'));
+        const router = await createApiFactoryWithMock(createMock<Server2Api>('Server2Api'));
         publicApi = router.createApiClient<PublicApi>(PublicApi);
     });
 
@@ -133,7 +128,7 @@ describe('PublicApi', () => {
 describe('Container access', () => {
     it('should provide access to DI container with the mock bound', async () => {
         const mockServer2Api = createMock<Server2Api>('Server2Api');
-        const router = await createRouterWithMock(mockServer2Api);
+        const router = await createApiFactoryWithMock(mockServer2Api);
 
         const container = router.getContainer();
         expect(container).toBeDefined();

@@ -1,4 +1,4 @@
-import { MethodMeta } from '@webpieces/http-filters';
+import { MethodMeta } from './MethodMeta';
 
 /**
  * Handler class for routes.

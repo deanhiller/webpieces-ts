@@ -1,7 +1,8 @@
 import express from 'express';
 import { ContainerModule } from 'inversify';
-import { WebpiecesExpress } from '@webpieces/http-server';
+import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import {
+    ApiFactory,
     WebpiecesConfig,
     WebpiecesRouter,
     WebpiecesRouterFactory,
@@ -52,19 +53,18 @@ export async function createCompanyRouter(options: CompanyRouterOptions = {}): P
 
 /**
  * setupCompanyRuntime - the ONE method that runs the canonical startup sequence in the
- * correct fail-fast order and returns a ready {@link WebpiecesRouter}:
+ * correct fail-fast order and returns a ready {@link ApiFactory}:
  *
  *   1. HeaderRegistry.configure  (filters read it at construction; logging masks off it)
  *   2. LogManager.setFactory     (fails fast unless the registry is configured first)
  *   3. build the router + DI container
  *
- * Shared by ALL three startup scenarios so none of them re-derive (and drift on) this
- * order: the express server (via {@link bootstrapServer}), the in-process createApiClient
- * tests, and the legacy-server example (which then hands `router.getContainer()` to
- * WebpiecesRouteCreator). Tests pass their own {@link CompanySetupOptions.loggerFactory};
- * everything else is identical to production.
+ * The per-app `buildXxxApiFactory` helpers call this, then add their routes/filters and
+ * return the ApiFactory — so the express server (via {@link bootstrapServer}), the
+ * in-process createApiClient tests, and the legacy-server embed all share one path.
+ * Tests pass their own {@link CompanySetupOptions.loggerFactory}; else identical to prod.
  */
-export async function setupCompanyRuntime(options: CompanySetupOptions): Promise<WebpiecesRouter> {
+export async function setupCompanyRuntime(options: CompanySetupOptions): Promise<ApiFactory> {
     // 1. Register the global HeaderRegistry FIRST.
     configureCompanyHeaders(options.svrHeaders);
 
@@ -82,40 +82,35 @@ export async function setupCompanyRuntime(options: CompanySetupOptions): Promise
 /**
  * bootstrapServer - the ONE shared startup every company express service uses.
  *
- * The app supplies its options and a `configure` callback that adds its routes/filters
- * to the router. bootstrapServer owns the standard sequence so each entry point stays tiny:
+ * The app supplies its port/logName + a `buildApiFactory` — the SAME per-app builder its
+ * tests call, which runs {@link setupCompanyRuntime} and declares its routes/filters. So
+ * each entry point stays tiny and the server + tests share one API-surface declaration:
  *
  * ```ts
- * bootstrapServer(new BootstrapOptions(8200, 'Server', factory, [InversifyModule]), (router) => {
- *     router.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
- *     router.addRoutes(SaveApi, SaveController);
- * });
+ * bootstrapServer(new BootstrapOptions(8200, 'Server'), buildClientServerApiFactory);
  * ```
  *
- * Sequence: {@link setupCompanyRuntime} (HeaderRegistry → log backend → router+container) →
- * app configure(router) → WebpiecesExpress.bindAndStartExpress (express + CORS + error
- * handling + route mounting + listen) → park on SIGTERM/SIGINT → on startup error, log + exit(1).
- * Express lifecycle lives entirely in @webpieces/http-server (WebpiecesExpress).
+ * Sequence: buildApiFactory() (HeaderRegistry → log backend → router+container → addRoutes/
+ * addFilter) → WebpiecesExpressRouter.bindAndStartExpress (express + CORS + error handling +
+ * route mounting + listen) → park on SIGTERM/SIGINT → on startup error, log + exit(1).
+ * Express lifecycle lives entirely in @webpieces/http-server (WebpiecesExpressRouter).
  */
 export async function bootstrapServer(
     options: BootstrapOptions,
-    configure: (router: WebpiecesRouter) => void,
+    buildApiFactory: () => Promise<ApiFactory>,
 ): Promise<void> {
     const log = LogManager.getLogger(options.logName);
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Top-level server startup needs to catch and exit on error
     try {
-        // Headers → logging → router: the ONE shared sequence (also used by tests and
-        // the legacy-server example) so every entry point starts identically.
-        const router = await setupCompanyRuntime(
-            new CompanySetupOptions(options.loggerFactory, options.modules, options.svrHeaders),
-        );
+        // The per-app builder runs the shared headers→logging→router sequence and declares
+        // its routes/filters, returning a ready ApiFactory (the same call the tests make).
+        const apiFactory = await buildApiFactory();
 
         log.info(`[${options.logName}] Starting server...`);
-        configure(router);
 
         const port = parseInt(process.env['PORT'] || String(options.port), 10);
-        await new WebpiecesExpress(router).bindAndStartExpress(express(), port);
+        await new WebpiecesExpressRouter(apiFactory).bindAndStartExpress(express(), port);
         log.info(`[${options.logName}] Listening on port ${port}`);
 
         await keepAliveUntilSignal(log, options.logName);

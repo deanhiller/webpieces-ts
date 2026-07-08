@@ -7,7 +7,7 @@ import {
     WEBPIECES_CONFIG_TOKEN,
 } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { Filter, WpResponse, Service } from '@webpieces/http-filters';
+import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import {
     HeaderMethods,
     HeaderRegistry,

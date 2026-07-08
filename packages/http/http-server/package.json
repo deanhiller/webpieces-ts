@@ -25,7 +25,6 @@
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/gcp-identity": "workspace:*",
-        "@webpieces/http-filters": "workspace:*",
         "@webpieces/http-routing": "workspace:*",
         "cors": "2.8.5",
         "express": "5.1.0",
