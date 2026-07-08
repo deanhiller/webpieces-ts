@@ -1,10 +1,13 @@
 import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
+import { AuthConfig } from '@webpieces/http-routing';
 import { SaveResponse } from '@webpieces/client-server-api';
-import { buildClientServerApiFactory } from '../../client-server/src/AppServerConfig';
+import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../../client-server/src/AppServerConfig';
 import { buildServer2ApiFactory } from '../../server2/src/Server2Config';
+import { TestAuthConfig } from '../../client-server/src/test/TestAuthConfig';
 
 /**
  * THE full-flow example test: two real microservices, real HTTP between them,
@@ -39,7 +42,12 @@ async function bootBothServers(): Promise<void> {
     const server2ApiFactory = await buildServer2ApiFactory();
     server2Http = await new WebpiecesExpressRouter(server2ApiFactory).bindAndStartExpress(express(), server2Port);
 
-    const clientApiFactory = await buildClientServerApiFactory();
+    // Rebind AuthConfig to the test stub so the request's bearer token passes the framework
+    // AuthFilter (this test is about context propagation, not real JWT verification).
+    const authOverride = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
+        (await options.rebind(AuthConfig)).to(TestAuthConfig);
+    });
+    const clientApiFactory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, authOverride));
     clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(express(), clientServerPort);
 
     // Capture BOTH servers' log output (they share this test process)

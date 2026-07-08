@@ -2,14 +2,13 @@ import express, { Express, Request, Response } from 'express';
 import { ContainerModule } from 'inversify';
 import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
 import { ApiFactory, FilterDefinition } from '@webpieces/http-routing';
-import { ContextFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-// Reuse the client-server app's real controllers/filters/modules — this example is about
-// the WIRING difference (embed onto a pre-existing express app), not new business logic.
+// Reuse the client-server app's real controllers/modules — this example is about the WIRING
+// difference (embed onto a pre-existing express app), not new business logic. Auth (framework
+// AuthFilter) + AuthConfig come from those reused modules automatically.
 import { SaveController } from '../../client-server/src/controllers/save-controller';
 import { PublicController } from '../../client-server/src/controllers/public-controller';
-import { AuthFilter } from '../../client-server/src/filters/AuthFilter';
 import { APP_MODULES, APP_HEADERS } from '../../client-server/src/AppServerConfig';
 
 /**
@@ -30,8 +29,8 @@ export function createLegacyExpressApp(): Express {
  * @param loggerFactory - Logging backend to install; defaults to the console factory.
  * @param appOverrides - DI module loaded LAST, so callers can rebind bindings. The test rebinds
  *   Server2Api to an in-process simulator (prod would call real server2 over HTTP).
- * @param additionalFilters - Extra filters on top of ContextFilter + AuthFilter. Extension/test
- *   seam (the test adds order-recording filters to assert priority + glob scoping).
+ * @param additionalFilters - Extra user filters (below the auto-installed framework
+ *   ErrorLogFilter + AuthFilter). Extension/test seam (the test adds order-recording filters).
  */
 export class LegacyApiFactoryOptions {
     constructor(
@@ -58,8 +57,7 @@ export async function buildLegacyApiFactory(
         new CompanySetupOptions(options.loggerFactory, APP_MODULES, APP_HEADERS, options.appOverrides),
     );
 
-    apiFactory.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
-    apiFactory.addFilter(new FilterDefinition(1900, AuthFilter, '*'));
+    // ErrorLogFilter + AuthFilter are auto-installed by the framework; add only extra user filters.
     for (const filter of options.additionalFilters) {
         apiFactory.addFilter(filter);
     }

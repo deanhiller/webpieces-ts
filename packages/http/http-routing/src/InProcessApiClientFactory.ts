@@ -3,11 +3,13 @@ import {
     getAuthMeta,
     getEndpoints,
     RouteMetadata,
+    ContextMgr,
 } from '@webpieces/core-util';
 import { MethodMeta } from './MethodMeta';
 import { Service, WpResponse } from './Filter';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, HttpRequest, RequestContextReader } from '@webpieces/core-context';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
+import { fillContext } from './fillContext';
 
 /**
  * InProcessApiClientFactory - Creates API client proxies that invoke routes
@@ -25,6 +27,10 @@ import { RouteBuilderImpl } from './RouteBuilderImpl';
  * so subsequent calls reuse the same filter chain (efficient!).
  */
 export class InProcessApiClientFactory {
+    // Builds request headers the SAME way the real HTTP client does — from the ambient
+    // RequestContext — so a credential a test put in context travels as a real request header.
+    private readonly contextMgr = new ContextMgr(new RequestContextReader());
+
     constructor(private routeBuilder: RouteBuilderImpl) {}
 
     /**
@@ -78,8 +84,16 @@ export class InProcessApiClientFactory {
 
     // webpieces-disable no-any-unknown -- DTO types are erased at the routing layer
     private async runMethod(routeMeta: RouteMetadata, requestDto: unknown, service: Service<MethodMeta, WpResponse<unknown>>): Promise<unknown> {
-        // Create MethodMeta without headers (in-process mode - no HTTP involved)
-        const meta = new MethodMeta(routeMeta, undefined, requestDto);
+        // In-process: publish a transport-neutral HttpRequest (headers come from whatever the
+        // caller set in the context; empty by default) so the SAME chain that runs over HTTP
+        // can read RequestContext.getRequest(). Then build the DTO-only meta.
+        const headers = new Map<string, string[]>();
+        this.contextMgr.buildOutboundHeaders().forEach((value: string, name: string) => {
+            headers.set(name.toLowerCase(), [value]);
+        });
+        RequestContext.setRequest(new HttpRequest(routeMeta.httpMethod, routeMeta.path, headers));
+        fillContext();
+        const meta = new MethodMeta(routeMeta, requestDto);
         const responseWrapper = await service.invoke(meta);
         return responseWrapper.response;
     }

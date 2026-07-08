@@ -38,16 +38,6 @@ export class RouteDefinition {
 }
 
 /**
- * A filter's execution tier:
- *  - 'api'     : runs for BOTH real HTTP requests AND the in-process createApiClient
- *                (business/cross-cutting filters — logging, recording, context seeding).
- *  - 'express' : runs ONLY for real HTTP requests mounted on express (transport-boundary
- *                filters that need the raw request — e.g. service auth reading the
- *                Authorization header). Skipped by the in-process client so tests don't 401.
- */
-export type FilterTier = 'express' | 'api';
-
-/**
  * Definition of a filter with priority.
  *
  * Use filepathPattern to scope filters to specific controllers:
@@ -57,8 +47,9 @@ export type FilterTier = 'express' | 'api';
  *
  * If filepathPattern is not specified, the filter matches all controllers.
  *
- * tier defaults to 'api' so a filter runs in-process (via createApiClient) as well as over
- * HTTP. Pass 'express' for transport-boundary filters that must be skipped in-process.
+ * Every filter runs for BOTH real HTTP requests AND the in-process createApiClient — there is
+ * no transport tier. Transport-boundary auth is a fixed framework filter (AuthFilter) that
+ * reads the transport-neutral HttpRequest, so it runs identically in both.
  */
 export class FilterDefinition {
     priority: number;
@@ -73,15 +64,11 @@ export class FilterDefinition {
      */
     filepathPattern: string;
 
-    /** Execution tier — see {@link FilterTier}. Defaults to 'api'. */
-    tier: FilterTier;
-
     // webpieces-disable no-any-unknown -- filterClass param is an arbitrary DI filter class token
-    constructor(priority: number, filterClass: any, filepathPattern: string, tier: FilterTier = 'api') {
+    constructor(priority: number, filterClass: any, filepathPattern: string) {
         this.priority = priority;
         this.filterClass = filterClass;
         this.filepathPattern = filepathPattern;
-        this.tier = tier;
         this.filter = undefined; // Set later by RouteBuilder
     }
 }

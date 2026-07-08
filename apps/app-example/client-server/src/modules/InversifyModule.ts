@@ -2,7 +2,8 @@ import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from '
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
 import { ContextKey } from '@webpieces/core-util';
-import { RequestContextReader } from '@webpieces/http-routing';
+import { RequestContextReader, AuthConfig } from '@webpieces/http-routing';
+import { CompanyAuthConfig } from '@webpieces/company-svc-core';
 import { createApiClient, ClientConfig, ContextMgr } from '@webpieces/http-client';
 
 /**
@@ -49,6 +50,10 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
 
     // Bind services
     bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
+
+    // User JWT auth: the framework AuthFilter injects AuthConfig; bind this app's impl.
+    // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
+    bind(AuthConfig).to(CompanyAuthConfig).inSingletonScope();
 
     // PROD binding: Server2Api is a REAL HTTP client to the server2 service.
     // The ContextMgr reads this server's RequestContext, so the magic context

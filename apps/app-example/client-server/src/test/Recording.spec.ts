@@ -4,7 +4,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { recordable } from '@webpieces/http-server';
-import { WebpiecesConfig, ApiFactory } from '@webpieces/http-routing';
+import { WebpiecesConfig, ApiFactory, AuthConfig } from '@webpieces/http-routing';
+import { TestAuthConfig } from './TestAuthConfig';
 import { RecordedTestCase, RecordSerializer } from '@webpieces/core-util';
 import { createMock } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
@@ -39,6 +40,7 @@ async function bootRecordingServer(): Promise<void> {
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
         rebindResult.toConstantValue(recordable('Server2Api', new Server2Simulator()));
+        (await options.rebind(AuthConfig)).to(TestAuthConfig);
     });
     // ONE call — the SAME builder the real server uses; only the recordable override + config differ.
     router = await buildClientServerApiFactory(
@@ -112,6 +114,7 @@ describe('createMock replaces hand-rolled mocks', () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
             rebindResult.toConstantValue(mockServer2Api);
+            (await options.rebind(AuthConfig)).to(TestAuthConfig);
         });
         router = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
     });

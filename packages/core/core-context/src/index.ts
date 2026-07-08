@@ -1,5 +1,7 @@
 // Context management with AsyncLocalStorage
 export { RequestContext } from './RequestContext';
+// Transport-neutral request stored in the context (http-routing's request type; re-exported there)
+export { HttpRequest } from './HttpRequest';
 
 // DI provider decorators (shared DI seam; http-routing re-exports for back-compat)
 export { provideSingleton, provideSingletonAs, provideTransient } from './provide';
