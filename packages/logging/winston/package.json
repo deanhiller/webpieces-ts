@@ -1,0 +1,31 @@
+{
+    "name": "@webpieces/winston",
+    "version": "0.0.0-dev",
+    "description": "Node-only winston LoggerFactory backends for webpieces: Console (local pretty) + GCP (Cloud Run stdout JSON), auto-enriched with HeaderRegistry context keys",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/logging/winston"
+    },
+    "keywords": [
+        "webpieces",
+        "winston",
+        "logging",
+        "gcp",
+        "cloud-run"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-util": "workspace:*",
+        "winston": "3.11.0",
+        "logform": "2.7.0",
+        "safe-stable-stringify": "2.5.0"
+    }
+}

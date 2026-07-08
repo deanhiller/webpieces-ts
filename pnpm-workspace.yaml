@@ -3,6 +3,7 @@ packages:
   - 'packages/core/*'
   - 'packages/http/*'
   - 'packages/cloud/*'
+  - 'packages/logging/*'
   - 'packages/tooling/*'
   - 'libraries/apis/*'
   - 'apps/app-example/*'

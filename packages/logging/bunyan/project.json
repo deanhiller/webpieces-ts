@@ -1,0 +1,22 @@
+{
+    "name": "bunyan",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/logging/bunyan/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/logging/bunyan",
+                "main": "packages/logging/bunyan/src/index.ts",
+                "tsConfig": "packages/logging/bunyan/tsconfig.lib.json",
+                "assets": [
+                    "packages/logging/bunyan/package.json",
+                    "packages/logging/bunyan/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["framework:node", "role:lib"]
+}
