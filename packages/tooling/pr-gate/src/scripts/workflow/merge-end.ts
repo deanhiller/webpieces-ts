@@ -9,7 +9,7 @@ import { baseBranchName } from './branch-naming';
 import { cleanTmp } from './cleanTmp';
 import { assertNoUntracked, runGitChecked } from './git-exec';
 import { MergeContext } from './merge-start';
-import { clearMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExplanations } from './merge-state';
+import { clearMergeMarker, readMergeMarker, perFileContextDir, scanConflictMarkers, scanMergeExplanations } from './merge-state';
 
 // merge-END: the second half of the 3-point squash-merge lifecycle, symmetric with merge-START. Given
 // the branch context, it (optionally) validates + commits the AI's conflict resolution, then ALWAYS
@@ -69,9 +69,10 @@ function localBranchExists(name: string): boolean {
 
 // Force-push the squash branch to the stable feature branch (where the single PR lives), then RENAME
 // the local squash branch back to that SAME feature name — so the local branch, the remote branch,
-// and the PR head are all one name (no `wpN` divergence). The pre-merge snapshot is preserved as a
-// numbered PreMerge trail. Ends with an explicit "here is exactly what I did" recap for the AI/human.
-function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext): void {
+// and the PR head are all one name (no `wpN` divergence). On a CLEAN sync (`!hadConflict`) the
+// pre-merge snapshot is disposable, so it's deleted at the very end; a CONFLICT sync keeps it (paired
+// with its `merge-<n>/` context). Ends with an explicit "here is exactly what I did" recap.
+function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext, hadConflict: boolean): void {
     process.stdout.write('\n' + SEP + '🗑️  Finalizing\n' + SEP + '\n');
     const base = baseBranchName(ctx.currentBranch);
     runGitChecked(['branch', '-D', ctx.currentBranch], 'Failed to delete old feature branch');
@@ -99,31 +100,45 @@ function finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext)
     // unblocks edits immediately (no wait for the async refresher).
     stampCleanMainSyncStatus(execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim());
 
+    // Clean sync → the pre-merge snapshot was never needed; delete it (LAST, so any earlier finalize
+    // failure above keeps it). Conflict sync → keep it as the undo point + trail.
+    const backupKept = hadConflict;
+    if (!backupKept && localBranchExists(ctx.backupBranch)) {
+        runGitChecked(['branch', '-D', ctx.backupBranch], 'Failed to delete clean-merge backup');
+    }
+
     const finalizeEvent = new BranchMutationEvent(verb, 'FINALIZE');
     finalizeEvent.fromBranch = ctx.currentBranch;
     finalizeEvent.toBranch = base;
     finalizeEvent.outcome = 'finalized';
-    finalizeEvent.artifacts = [`backup=${ctx.backupBranch}`, `remotePR=${base}`];
+    finalizeEvent.artifacts = [backupKept ? `backup=${ctx.backupBranch}` : `backupDeleted=${ctx.backupBranch}`, `remotePR=${base}`];
     logBranchMutation(repoRoot, finalizeEvent);
 
-    printSyncRecap(base, ctx.backupBranch, ctx.prNumber, remoteExists);
+    printSyncRecap(base, ctx.backupBranch, ctx.prNumber, remoteExists, backupKept);
 }
 
 // The explicit, numbered "here is exactly what I did" recap the AI (and human) reads after a sync.
 // The whole point of the branch-name change is that step 4 can now say "same name as remote/PR" —
 // there is no confusing local-vs-remote divergence left to explain.
-function printSyncRecap(feature: string, backupBranch: string, prNumber: string, pushed: boolean): void {
+function printSyncRecap(feature: string, backupBranch: string, prNumber: string, pushed: boolean, backupKept: boolean): void {
     const remoteLine = pushed
         ? `landed back on  ${feature}   (== origin/${feature}${prNumber ? ` == PR #${prNumber}` : ''} — names match)`
         : `landed back on  ${feature}   (local only — no remote branch yet)`;
+    const step1 = backupKept
+        ? `snapshotted your pre-merge state → ${backupBranch} (kept — this merge had conflicts)`
+        : `snapshotted your pre-merge state → ${backupBranch} (auto-removed — clean merge, no undo needed)`;
+    const trailer = backupKept
+        ? `   Pre-merge snapshot trail:  git branch --list '${feature}PreMerge*'\n` +
+          `   Its conflict context lives in the paired  merge-<n>/  folder under .webpieces/merge-info/\n` +
+          `   Prune this run's snapshot when safe:  git branch -D ${backupBranch}\n\n`
+        : '\n';
     process.stdout.write(
         '\n' + SEP + '✅ Sync complete — here is exactly what I did\n' + SEP + '\n' +
-        `   1. snapshotted your pre-merge state → ${backupBranch}\n` +
+        `   1. ${step1}\n` +
         `   2. pulled origin/main\n` +
         `   3. squash-merged your work onto main\n` +
         `   4. ${remoteLine}\n\n` +
-        `   Pre-merge snapshot trail:  git branch --list '${feature}PreMerge*'\n` +
-        `   Prune this run's snapshot when safe:  git branch -D ${backupBranch}\n\n`,
+        trailer,
     );
 }
 
@@ -155,7 +170,11 @@ export async function mergeEnd(
         process.stdout.write('\n✅ Merge validated and committed.\n');
     }
 
-    finalizeBranch(repoRoot, verb, ctx);
+    // A marker in THIS run dir means the sync hit conflicts (marker is written only on hand-back) —
+    // correct even for the validated-resume path (conflictedFiles=null yet a conflict). Read it BEFORE
+    // clearMergeMarker so finalize knows whether to keep the pre-merge snapshot.
+    const hadConflict = readMergeMarker(mergeDir) !== null;
+    finalizeBranch(repoRoot, verb, ctx, hadConflict);
     clearMergeMarker(mergeDir);
     await cleanTmp();
 }

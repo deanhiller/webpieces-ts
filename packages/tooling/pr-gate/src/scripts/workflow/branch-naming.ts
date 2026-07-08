@@ -7,9 +7,10 @@
 // generation number survives a sync — the old scheme numbered the LOCAL branch up (base → basewp2 →
 // basewp3) while the remote/PR stayed on `base`, which read as "the PR moved" when it never did.
 //
-// The pre-merge safety snapshot is a NUMBERED trail — `<branch>PreMerge`, `<branch>PreMerge2`,
-// `<branch>PreMerge3`, … — one per sync, never overwritten (the branch name is constant now, so the
-// snapshot itself carries the generation count that the branch name used to). See nextFreePreMergeSlot.
+// The pre-merge safety snapshot is a NUMBERED trail from 1 — `<branch>PreMerge1`, `<branch>PreMerge2`,
+// `<branch>PreMerge3`, … Each snapshot is paired 1:1 with a conflict-context folder `merge-<n>/` under
+// the same number (see merge-state). A CLEAN sync deletes its snapshot at finalize (no undo point
+// needed); only CONFLICT syncs leave a snapshot + its `merge-<n>/` behind. See nextFreePreMergeNumber.
 //
 // `baseBranchName` still strips a trailing `Squash` (the transient temp-branch suffix) AND a trailing
 // `wp<digits>` — the latter only for BACKWARD COMPATIBILITY, so a consumer sitting on a leftover
@@ -45,17 +46,19 @@ export function baseBranchName(branch: string): string {
     return parseGeneration(branch).base;
 }
 
-/** Pre-merge snapshot name for slot `n`: `n<=1` → `<branch>PreMerge`, `n>=2` → `<branch>PreMerge<n>`.
- *  Snapshots accumulate one per sync (never overwritten), since the branch name is now constant. */
-export function preMergeBackupName(branch: string, n: number = 1): string {
-    return n <= 1 ? `${branch}PreMerge` : `${branch}PreMerge${n}`;
+/** Pre-merge snapshot name for slot `n`, ALWAYS numbered from 1: `<branch>PreMerge1`,
+ *  `<branch>PreMerge2`, … The same `n` also names the paired conflict-context folder
+ *  (`merge-info/<slug>/merge-<n>/`, see merge-state.mergeRunDirFor), so the branch and its context
+ *  share one number. Clean syncs delete their snapshot at finalize; only conflict syncs leave one. */
+export function preMergeBackupName(branch: string, n: number): string {
+    return `${branch}PreMerge${n}`;
 }
 
-/** First free PreMerge slot for `branch`, probing 1, 2, 3, … via the `exists` predicate. Pure (the
- *  branch-existence check is injected) so it unit-tests without touching git. */
-export function nextFreePreMergeSlot(branch: string, exists: (name: string) => boolean): string {
+/** First free PreMerge slot NUMBER for `branch`, probing 1, 2, 3, … via the `exists` predicate. Pure
+ *  (the branch-existence check is injected) so it unit-tests without touching git. This integer is the
+ *  single source of truth for both the backup branch name and its paired `merge-<n>` context folder. */
+export function nextFreePreMergeNumber(branch: string, exists: (name: string) => boolean): number {
     for (let n = 1; ; n++) {
-        const name = preMergeBackupName(branch, n);
-        if (!exists(name)) return name;
+        if (!exists(preMergeBackupName(branch, n))) return n;
     }
 }

@@ -1,7 +1,6 @@
-import * as fs from 'fs';
 import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/rules-config';
 import { getFeatureName } from './git-readAiBranchName';
-import { mergeDirFor, readMergeMarker } from './merge-state';
+import { mergeDirFor, readMergeMarker, findActiveMergeRunDir } from './merge-state';
 import { mergeStart, MergeContext } from './merge-start';
 import { mergeEnd } from './merge-end';
 
@@ -30,27 +29,28 @@ export async function runUpdateFromMain(repoRoot: string, verb: MutationVerb, fi
 }
 
 async function runUpdate(repoRoot: string, verb: MutationVerb, finishCommand: string): Promise<UpdateOutcome> {
-    const mergeDir = mergeDirFor(repoRoot, getFeatureName());
-    fs.mkdirSync(mergeDir, { recursive: true });
+    const home = mergeDirFor(repoRoot, getFeatureName());
 
-    // Resume path: a marker means a merge is already in progress.
-    const existing = readMergeMarker(mergeDir);
-    if (existing) {
-        if (!existing.validated) return 'unvalidatedResume';
-        // Already validated → just finalize the branch swap.
+    // Resume path: an in-progress merge is the `merge-<n>/` run dir that holds a marker.
+    const activeDir = findActiveMergeRunDir(home);
+    if (activeDir) {
+        const existing = readMergeMarker(activeDir);
+        if (existing === null || !existing.validated) return 'unvalidatedResume';
+        // Already validated → just finalize the branch swap (reads THIS run dir's marker).
         await mergeEnd(
-            repoRoot, verb, mergeDir,
+            repoRoot, verb, activeDir,
             new MergeContext(existing.currentBranch, existing.squashBranch, existing.backupBranch, existing.prNumber),
             null,
         );
         return 'finalized';
     }
 
-    // Fresh update: start, then finalize on clean / hand back on conflict.
-    const result = await mergeStart(repoRoot, verb, mergeDir, finishCommand);
+    // Fresh update: mergeStart picks the slot number, creates its own `merge-<n>/` run dir, and
+    // returns that path for merge-END to finalize against.
+    const result = await mergeStart(repoRoot, verb, home, finishCommand);
     if (result.status === 'conflict' || result.context === null) {
         return 'conflict';
     }
-    await mergeEnd(repoRoot, verb, mergeDir, result.context, null);
+    await mergeEnd(repoRoot, verb, result.runDir, result.context, null);
     return 'finalized';
 }
