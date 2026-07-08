@@ -43,7 +43,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         'You must be on a clean, up-to-date feature branch to edit code. Pick one:',
         [
             new Option('On main → create a feature branch. Already merged → branch off fresh main.', true),
-            new Option('main moved/conflicts (mid-work) → `pnpm wp-update-start` (merge), `/wp-merge` (resolve), `pnpm wp-update-end`. Have an OPEN PR? use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr`.'),
+            new Option('main moved/conflicts (mid-work) → `pnpm wp-start-update` (merge), `/wp-merge` (resolve), `pnpm wp-finish-update`. Have an OPEN PR? use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr`.'),
             new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
         ],
     );
@@ -167,7 +167,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         ];
         // Steer EARLY: if a PR already tracks this branch, the update-only flow would just fail-fast
         // (a 3-point update strands the PR on the old branch generation), so recommend ONLY the PR
-        // flow and don't waste the AI's tokens on wp-update-start.
+        // flow and don't waste the AI's tokens on wp-start-update.
         if (openPr !== '') {
             return header.concat([
                 `An OPEN PR (#${openPr}) already tracks this branch, so you MUST use the PR flow (it`,
@@ -181,11 +181,11 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         return header.concat([
             'You must merge main in before editing further. If you are mid-work and just want to keep',
             'editing (no PR yet), use the UPDATE-ONLY flow:',
-            '  1. pnpm wp-update-start   ← merges main (auto-finalizes if clean; renames <branch>wpN → wpN+1)',
+            '  1. pnpm wp-start-update   ← merges main (auto-finalizes if clean; renames <branch>wpN → wpN+1)',
             '  2. /wp-merge              ← resolve each conflicted file (only if there are conflicts)',
-            '  3. pnpm wp-update-end     ← finalize the merge (only after resolving)',
+            '  3. pnpm wp-finish-update  ← finalize the merge (only after resolving)',
             '',
-            'If you already have an OPEN PR for this branch, use the PR flow instead (wp-update-start',
+            'If you already have an OPEN PR for this branch, use the PR flow instead (wp-start-update',
             'refuses when a PR exists — it would strand the PR on the old branch generation):',
             '  1. pnpm wp-start-upsert-pr   ← merges main + writes 3-point context',
             '  2. /wp-merge                 ← resolve each conflicted file',

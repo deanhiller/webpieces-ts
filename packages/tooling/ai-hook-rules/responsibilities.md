@@ -6,7 +6,7 @@ Edit-time validation engine for AI coding agents. Intercepts proposed file write
 
 - Write-time rule engine: `Rule`/`RuleGroup` model, scope-specific bases (`EditRuleBase`, `FileRuleBase`, `BashRuleBase`), runner, report/fix-hint formatting.
 - Built-in edit-time rule implementations (no-any, max-file-lines, no-destructure, require-return-type, controller-naming, DI-token, exception guards, etc.).
-- Harness adapters and hook binaries: Claude Code `PreToolUse` (`wp-ai-rules-hook`, `wp-ai-guards-hook`) and openclaw plugin; setup/install CLIs (`wp-setup-ai-hooks`).
+- Harness adapters and hook binaries: Claude Code `PreToolUse` (`wp-ai-rules-hook`, `wp-ai-guards-hook`) and openclaw plugin; setup/install CLI (`wp-install-ai-hooks`).
 - Git/PR/branch guards fired on Bash and file edits (`hookGuards` section).
 
 ## Out of Scope

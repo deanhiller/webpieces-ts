@@ -39,7 +39,7 @@ export class MainSyncStatus {
     // An OPEN (not merged) PR tracking this branch, if any — '' = none or not-yet-known. Set by the
     // refresher (best-effort) and read by the feature-branch-guard so a mid-work conflict block can
     // steer straight to the PR flow instead of the update-only flow (which would just fail-fast when a
-    // PR exists). Advisory only — the authoritative gate is wp-update-start's own fail-fast check.
+    // PR exists). Advisory only — the authoritative gate is wp-start-update's own fail-fast check.
     // Kept OUT of the positional constructor (a defaulted field) so existing call sites don't churn.
     openPr: string = '';
 
@@ -274,7 +274,7 @@ function detectMergedPr(repoRoot: string, branch: string): string {
 
 // An OPEN PR tracking this branch, if any. Best-effort — this is ADVISORY (it only lets the guard's
 // conflict block steer to the PR flow early), so an unreachable gh degrades to '' here. The HARD gate
-// that must never guess is wp-update-start's own openPrForBranch, which fails fast instead.
+// that must never guess is wp-start-update's own openPrForBranch, which fails fast instead.
 function detectOpenPr(repoRoot: string, branch: string): string {
     if (!branch || branch === 'main') return '';
     const result = capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '--jq', '.[0].number']);

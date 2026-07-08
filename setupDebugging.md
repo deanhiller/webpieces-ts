@@ -1,6 +1,15 @@
 # Setup Debugging: ai-hook-rules auto-install attempts
 
-## Goal
+> **⚠️ HISTORICAL — SUPERSEDED.** This is a dated journal of an *abandoned* approach: auto-installing
+> the hook via a `pnpm install` **postinstall** bridge (`.webpieces/ai-hooks/claude-code-hook.js`).
+> None of that mechanism exists anymore. The current install is a **manual, explicit** command:
+> `npx wp-install-ai-hooks` (renamed from `wp-setup-ai-hooks`), which wires **two split PreToolUse
+> hooks** (`wp-ai-rules-hook` + `wp-ai-guards-hook`) through the committed self-healing shim
+> `.claude/webpieces/ai-hook.sh`. There is no postinstall and no global-dispatch. See
+> `packages/tooling/ai-hook-rules/README.md` for the current flow. Kept only for the pnpm-v10 /
+> shim / bin-symlink lessons at the bottom.
+
+## Goal (of the abandoned attempt)
 When a consumer runs `pnpm install` in their project, `@webpieces/ai-hook-rules` should:
 1. Create `.webpieces/ai-hooks/claude-code-hook.js` bridge file
 2. Optionally modify `.claude/settings.json` to wire up the hook

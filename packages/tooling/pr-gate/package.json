@@ -5,12 +5,10 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-git-gather": "./src/scripts/wp-git-gather.js",
         "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
-        "wp-build-affected": "./src/scripts/wp-build-affected.js",
         "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
-        "wp-update-start": "./src/scripts/wp-update-start.js",
-        "wp-update-end": "./src/scripts/wp-update-end.js"
+        "wp-start-update": "./src/scripts/wp-start-update.js",
+        "wp-finish-update": "./src/scripts/wp-finish-update.js"
     },
     "files": [
         "src/**/*"

@@ -6,12 +6,12 @@ import { mergeDirFor, readMergeMarker, findActiveMergeRunDir } from './workflow/
 import { mergeEnd } from './workflow/merge-end';
 import { MergeContext } from './workflow/merge-start';
 
-// wp-update-end — finalize half of the 3-point squash-merge lifecycle. Run it AFTER `wp-update-start`
+// wp-finish-update — finalize half of the 3-point squash-merge lifecycle. Run it AFTER `wp-start-update`
 // handed back conflicts and you resolved them. Given an in-progress merge marker it validates +
 // commits the AI's resolution (when the marker is not yet validated) and ALWAYS finalizes the branch
 // swap (squash→feature, push, stamp clean, clear marker). It does NOT run the build gate / dashboard
 // / PR — that is wp-finish-upsert-pr (the PR flow's finish). Refuses to run when there is no merge in
-// progress (a clean `wp-update-start` finalizes on its own — there is nothing left for this to do).
+// progress (a clean `wp-start-update` finalizes on its own — there is nothing left for this to do).
 
 export async function main(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
@@ -23,7 +23,7 @@ export async function main(): Promise<void> {
     if (!activeDir || !marker) {
         throw new CliExitError(1,
             '❌ No merge in progress (no marker) — nothing to finalize.\n' +
-            'Start one with:  pnpm wp-update-start  (a clean update finalizes itself).',
+            'Start one with:  pnpm wp-start-update  (a clean update finalizes itself).',
         );
     }
 
@@ -31,7 +31,7 @@ export async function main(): Promise<void> {
     // validated => clean merge (or previously validated) => finalize only.
     const conflictedFiles = marker.validated ? null : marker.conflictedFiles;
     await mergeEnd(
-        repoRoot, 'wp-update-end', activeDir,
+        repoRoot, 'wp-finish-update', activeDir,
         new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
         conflictedFiles,
     );

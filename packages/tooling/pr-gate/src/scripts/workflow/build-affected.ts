@@ -1,10 +1,9 @@
 import { spawnSync } from 'child_process';
 import { loadAndValidate, CliExitError } from '@webpieces/rules-config';
 
-// Single source of truth for the build gate. Both `wp-build-affected` (CI + local) and the
-// merge validation gate (`wp-finish-upsert-pr`) run THIS, so "what CI runs" and "what the
-// PR command runs" can never drift. nx `affected` only rebuilds changed projects, so this
-// stays fast on a large monorepo.
+// Single source of truth for the build gate. The PR flow's advisory gate (`wp-start-upsert-pr`)
+// and authoritative merge gate (`wp-finish-upsert-pr`) both run THIS, so the two can never drift.
+// nx `affected` only rebuilds changed projects, so this stays fast on a large monorepo.
 // `--base=$(git merge-base origin/main HEAD)` (the fork point) instead of `--base=origin/main`:
 // origin/main rebuilds projects touched by OTHER people's merged PRs (your branch still holds the
 // pre-merge versions, so nx sees them as "affected"). The fork point scopes affected to only YOUR

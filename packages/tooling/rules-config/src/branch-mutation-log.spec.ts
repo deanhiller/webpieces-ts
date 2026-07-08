@@ -19,17 +19,17 @@ describe('branch-mutation-log', () => {
     afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
     it('writes to .webpieces/hooks/branch-mutations.log', () => {
-        logBranchMutation(root, new BranchMutationEvent('wp-update-start', 'START'));
+        logBranchMutation(root, new BranchMutationEvent('wp-start-update', 'START'));
         const logPath = branchMutationLogPath(root);
         expect(logPath.endsWith(path.join('.webpieces', 'hooks', 'branch-mutations.log'))).toBe(true);
         expect(fs.existsSync(logPath)).toBe(true);
         const line = fs.readFileSync(logPath, 'utf8');
-        expect(line).toContain('wp-update-start');
+        expect(line).toContain('wp-start-update');
         expect(line).toContain('START');
     });
 
     it('renders only the fields the event set (RENAME → from/to)', () => {
-        const event = new BranchMutationEvent('wp-update-end', 'RENAME');
+        const event = new BranchMutationEvent('wp-finish-update', 'RENAME');
         event.fromBranch = 'dean/x';
         event.toBranch = 'dean/xwp2';
         logBranchMutation(root, event);
@@ -71,6 +71,6 @@ describe('branch-mutation-log', () => {
         // A path that cannot be created (a file where a dir is expected) must be swallowed.
         const filePath = path.join(root, 'not-a-dir');
         fs.writeFileSync(filePath, 'x');
-        expect(() => logBranchMutation(filePath, new BranchMutationEvent('wp-update-start', 'START'))).not.toThrow();
+        expect(() => logBranchMutation(filePath, new BranchMutationEvent('wp-start-update', 'START'))).not.toThrow();
     });
 });

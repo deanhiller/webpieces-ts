@@ -7,7 +7,8 @@ import { FixHint } from './fix-hint';
 export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
 export type RuleScope = 'edit' | 'file' | 'bash';
 // Which category of built-in rules a hook invocation runs: code-style 'rules', git/PR/branch
-// 'guards' (the hookGuards section), or 'all' (the combined back-compat bin).
+// 'guards' (the hookGuards section), or 'all' (both categories — used by the openclaw plugin adapter,
+// which is a single before_tool_call hook rather than two split PreToolUse hooks).
 export type HookMode = 'rules' | 'guards' | 'all';
 export type IsLineDisabled = (lineNum: number, ruleName: string) => boolean;
 

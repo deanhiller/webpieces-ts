@@ -12,9 +12,9 @@ vi.mock('child_process', () => ({
         ({ status: state.ghStatus, stdout: `${state.openPrNumber}\n`, stderr: state.ghStderr }),
 }));
 
-import { assertNoOpenPr } from './wp-update-start';
+import { assertNoOpenPr } from './wp-start-update';
 
-describe('wp-update-start assertNoOpenPr (Bug #4: fail-fast when an open PR exists)', () => {
+describe('wp-start-update assertNoOpenPr (Bug #4: fail-fast when an open PR exists)', () => {
     beforeEach(() => {
         state.branch = 'dean/x';
         state.openPrNumber = '';

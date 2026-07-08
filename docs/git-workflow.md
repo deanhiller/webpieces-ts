@@ -2,16 +2,24 @@
 
 **READ THIS BEFORE RUNNING ANY GIT COMMANDS ON A FEATURE BRANCH.**
 
+> The always-current, authoritative version of this flow is regenerated on every `wp-*` command at
+> **`.webpieces/instruct-ai/webpieces.git-workflow.md`** (it can't drift). This file is the human
+> overview; when in doubt, read the generated one.
+
 ## The 3-Point Fork-Point System
 
-This repo enforces a specific merge discipline that preserves clean fork-point history. Violating it breaks code review tooling and automated checks.
+This repo enforces a merge discipline that preserves clean fork-point history. Violating it breaks code
+review tooling and automated checks.
 
 The three points are:
-- **A** — fork point: `git merge-base origin/main HEAD` — the last common ancestor between your branch and main
+- **A** — fork point: `git merge-base origin/main HEAD` — last common ancestor of your branch and main
 - **B** — feature HEAD: your current `HEAD`
 - **C** — main HEAD: `origin/main`
 
-The fork point **only stays valid** if you update from main using the squash-update process described below. Direct `git merge origin/main` or `git rebase origin/main` creates a merge commit that shifts A forward in a way that breaks the diff range used by PR review and AI code analysis tools.
+The fork point **only stays valid** if you update from main using the squash-update commands below.
+Direct `git merge origin/main` / `git rebase origin/main` creates a merge commit that shifts A forward
+and breaks the diff range used by PR review and AI code analysis. These are blocked by the
+`redirect-how-to-merge-main` AI hook.
 
 ---
 
@@ -19,54 +27,54 @@ The fork point **only stays valid** if you update from main using the squash-upd
 
 ### Creating a new branch
 
-**You MUST be on `main`** to create a new feature branch.
+**You MUST branch off fresh `main`.** Name it `{whoami}/<short-feature-description>` — lowercase, no
+version numbers, no `sub/` prefix (e.g. `dean/upgrade-webpieces`). The `branch-creation-guard` blocks
+anything else. Sub-branches (branching off another feature branch) are disabled; to allow one
+temporarily, set `branch-creation-guard.ignoreModifiedUntilEpoch` to a future epoch in
+`webpieces.config.json`.
 
+**Primary clone:**
 ```bash
 git checkout main
 git pull origin main
-git checkout -b my-feature-name
+git checkout -b dean/my-feature
 ```
 
-If you are on a non-main branch and need a sub-branch:
+**Worktree:** do **not** `git checkout main` inside a linked worktree (git refuses — `main` is checked
+out in the primary). Add a worktree branched straight off fresh main instead:
 ```bash
-git checkout -b sub/my-sub-feature    # "sub/" prefix required
+git fetch origin main
+git worktree add ../my-feature -b dean/my-feature origin/main
+cd ../my-feature
 ```
-
-The AI hooks will block any branch creation that violates these rules.
 
 ### Updating your feature branch from main
 
-**NEVER run:**
-- `git merge origin/main`
-- `git merge main`
-- `git rebase origin/main`
-- `git rebase main`
-- `git pull origin main` (while on a feature branch)
+**NEVER run** `git merge origin/main`, `git merge main`, `git rebase origin/main`, `git rebase main`,
+or `git pull origin main` on a feature branch — all blocked by `redirect-how-to-merge-main`.
 
-These are all blocked by the `redirect-how-to-merge-main` AI hook.
-
-**ALWAYS use the squash-update script:**
+**ALWAYS use the squash-update commands** (worktree-native — they branch off `origin/main` and never
+check out local `main`):
 ```bash
-./scripts/git-updateFromMain.sh
+pnpm wp-start-update     # 3-point squash-update from main (standalone, no PR)
+# clean merge  → finalizes automatically (nothing else to run)
+# conflicts    → /wp-merge to resolve, then:
+pnpm wp-finish-update    # finalize after you've resolved conflicts
 ```
-
-This script performs a 3-point squash merge that preserves fork-point A correctly:
-1. Identifies fork point A = `git merge-base origin/main HEAD`
-2. Creates a squash branch off latest main (C)
-3. Squash-merges all commits between A and B onto the new base
-4. Force-pushes the squash result back as your feature branch
-
-The net result: your branch contains all your changes, rebased onto latest main, with no merge commits, and with fork point A correctly pointing to the current main tip.
 
 ### Creating a PR
 
-Before running `gh pr create`, your branch must be up-to-date with `origin/main` (i.e., `origin/main` must be an ancestor of your HEAD). The `pr-creation-or-push-guard` AI hook verifies this by checking `git merge-base --is-ancestor origin/main HEAD`. That same guard also blocks a manual `git push` — pushes go through `pnpm wp-start-upsert-pr` / `pnpm wp-finish-upsert-pr`, not by hand.
-
-If the check fails:
+Manual `git push` and direct PR creation (`gh pr create`, `gh api .../pulls`, curl) are blocked by
+`pr-creation-or-push-guard`. Everything goes through the gated flow, which updates from main, runs the
+real build, and pushes for you:
 ```bash
-./scripts/git-updateFromMain.sh    # sync first
-gh pr create ...                    # then create PR
+pnpm wp-start-upsert-pr    # update from main + advisory build, then tells you to write review.json
+# resolve conflicts with /wp-merge if prompted
+pnpm wp-finish-upsert-pr   # authoritative build gate, push, create/update the PR + dashboard
 ```
+
+If a human genuinely needs an out-of-band push (no PR), they must run it themselves — a manual push
+bypasses the build gate, `review.json`, and dashboard.
 
 ---
 
@@ -77,100 +85,38 @@ If you suspect broken fork-point history, check for merge commits between A and 
 A=$(git merge-base origin/main HEAD)
 git log --merges $A..HEAD
 ```
-
-If this shows any commits, the squash-update process was bypassed. Fix by running `./scripts/git-updateFromMain.sh`.
-
----
-
-## Branch naming conventions
-
-| Situation | Naming |
-|-----------|--------|
-| New feature from main | `feature-name` or `fix-something` |
-| Sub-branch from a feature branch | `sub/sub-feature-name` |
-
-The `sub/` prefix tells the `branch-creation-guard` AI hook that you intentionally branched from a non-main branch. Without it, the hook will block and ask you to rename.
+Any commits here mean the squash-update was bypassed. Fix by running `pnpm wp-start-update`.
 
 ---
 
-## Merge conflict resolution script reference
+## Merge conflict resolution
 
-| Script | Purpose |
-|--------|---------|
-| `./scripts/git-updateFromMain.sh` | Main entry point — squash-merge from main with optional AI conflict resolution |
-| `./scripts/git-gatherInfo.sh` | Validates tree state and gathers A/B/C hash points (called by updateFromMain) |
-| `wp-finish-upsert-pr` (`git-finishUpsertPr.ts`) | Validates AI conflict resolution, requires review.json, runs the build, then renders the dashboard and creates/updates the PR |
-| `./scripts/.workflow/git-findForkPoint.sh` | Calculates fork point and detects illegal merge commits |
-| `./scripts/.workflow/git-readAiBranchName.sh` | Converts branch name to safe directory name |
-| `./scripts/.workflow/git-validateUpToDate.sh` | Verifies branch is up-to-date with origin/main |
-| `./scripts/.workflow/cleanTmp.sh` | Removes .webpieces/ workflow dirs (merge-/review-/pr-) older than 30 days |
-
-Merge context is saved to `.webpieces/merge-{branch-name}/` (gitignored, 30-day retention). When AI resolves conflicts, it reads A-forkpoint.txt, B-feature.txt, C-main.txt, B-A.diff, and C-A.diff for each conflicted file, then writes a `merge-summary.md` for human review.
-
-The AI merge command lives at `.claude/commands/wp-merge.md` and is launched with:
-```
-/wp-merge
-```
+When `wp-start-update` / `wp-start-upsert-pr` hit conflicts, they write the 3-point context under
+`.webpieces/merge-info/<slug>/merge-<n>/` (A-forkpoint / B-feature / C-main plus `B-A.diff` / `C-A.diff`
+per conflicted file) and hand resolution to you. The AI merge command lives at
+`.claude/commands/wp-merge.md` and is launched with `/wp-merge`. After resolving, finish with
+`pnpm wp-finish-update` (standalone) or `pnpm wp-finish-upsert-pr` (PR flow) — the tooling makes the
+commit; you never `git commit` the merge yourself.
 
 ---
 
-## Installing `@webpieces/nx-webpieces-rules` in a new project
+## Installing the webpieces rules in a new project
 
-Install the **one** bundle package — `@webpieces/nx-webpieces-rules`. It pulls in everything:
-the AI hook (`@webpieces/ai-hook-rules`), the code validators (`@webpieces/code-rules`), the
-ESLint rules (`@webpieces/eslint-rules`), the PR-gate scripts (`@webpieces/pr-gate`), and the
-shared config (`@webpieces/rules-config`). Do **not** also add `@webpieces/ai-hook-rules`
-directly — it comes transitively, and a direct dep is redundant.
-
-### Single-package project
+Install the **one** bundle package — `@webpieces/nx-webpieces-rules`. It pulls in everything: the AI
+hooks (`@webpieces/ai-hook-rules`), the code validators (`@webpieces/code-rules`), the ESLint rules
+(`@webpieces/eslint-rules`), the PR-gate commands (`@webpieces/pr-gate`), and the shared config
+(`@webpieces/rules-config`). Do not also add `@webpieces/ai-hook-rules` directly — it comes transitively.
 
 ```bash
-pnpm add -D @webpieces/nx-webpieces-rules
-# If pnpm build approval is required:
-pnpm approve-builds
+pnpm add -Dw @webpieces/nx-webpieces-rules   # -w for the monorepo root; drop -w in a single-package project
+npx wp-install-ai-hooks                       # wire the hooks + seed webpieces.config.json
+# Restart your Claude Code session
 ```
 
-The postinstall script automatically:
-1. Creates `.webpieces/ai-hooks/claude-code-hook.js` (bridge to the npm package)
-2. Merges a `PreToolUse` hook entry into `.claude/settings.json` if `.claude/` exists
-3. Seeds `webpieces.config.json` if missing
+`wp-install-ai-hooks` wires **two independent `PreToolUse` hooks** into the chosen `settings.json`, each
+invoked through the committed shim `.claude/webpieces/ai-hook.sh` (which the guards self-heal so it can't
+go stale):
+- `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit` — runs the code-style rules.
+- `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash` — runs the git/PR/branch guards.
 
-### Monorepo-nx project
-
-Add the package to the **root** `package.json` devDependencies (not a workspace package):
-
-```bash
-# From the monorepo root:
-pnpm add -Dw @webpieces/nx-webpieces-rules
-pnpm approve-builds   # if prompted
-# Verify:
-cat .webpieces/ai-hooks/claude-code-hook.js
-```
-
-In a pnpm workspace, the package is hoisted to the root `node_modules/`, so the postinstall fires once for the monorepo root. The hook file is created at the root `.webpieces/ai-hooks/claude-code-hook.js`.
-
-### Global dispatch (machine-level, run once)
-
-The global dispatch script (`~/.webpieces/ai-hooks/global-dispatch.js`) delegates to each project's own hook, so any project with `.webpieces/ai-hooks/claude-code-hook.js` gets the rules automatically — even without a per-project `.claude/settings.json` entry.
-
-To set up global dispatch:
-```bash
-mkdir -p ~/.webpieces/ai-hooks
-# Copy global-dispatch.js to ~/.webpieces/ai-hooks/global-dispatch.js
-# Then add to ~/.claude/settings.json:
-```
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit|Bash",
-        "hooks": [{ "type": "command", "command": "node /Users/YOUR_USER/.webpieces/ai-hooks/global-dispatch.js" }]
-      }
-    ]
-  }
-}
-```
-
-The dispatch automatically skips projects that already have `claude-code-hook.js` in their `.claude/settings.json` to avoid double-firing.
+To move or uninstall, re-run `wp-install-ai-hooks` and pick a different target (or "none").

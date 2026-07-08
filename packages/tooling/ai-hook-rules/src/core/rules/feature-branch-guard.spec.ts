@@ -113,8 +113,8 @@ describe('feature-branch-guard conflict steering', () => {
         const violations = rule().check(ctx());
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('src/a.ts');
-        expect(violations[0].message).toContain('wp-update-start');
-        expect(violations[0].message).toContain('wp-update-end');
+        expect(violations[0].message).toContain('wp-start-update');
+        expect(violations[0].message).toContain('wp-finish-update');
         expect(violations[0].message).toContain('wp-start-upsert-pr');
     });
 
@@ -126,6 +126,6 @@ describe('feature-branch-guard conflict steering', () => {
         expect(violations[0].message).toContain('wp-start-upsert-pr');
         expect(violations[0].message).toContain('wp-finish-upsert-pr');
         // Must NOT tell the AI to run the update-only flow — it would just fail-fast.
-        expect(violations[0].message).not.toContain('wp-update-start');
+        expect(violations[0].message).not.toContain('wp-start-update');
     });
 });

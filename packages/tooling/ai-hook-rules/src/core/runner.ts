@@ -19,7 +19,8 @@ import {
 
 // Restrict loaded rules to the category this hook invocation runs. The two split hooks each pass a
 // disjoint category ('rules' = code-style, 'guards' = the hookGuards section); 'all' runs both (the
-// combined back-compat bin). isHookGuard is the shared classifier in @webpieces/rules-config.
+// openclaw plugin adapter, a single before_tool_call hook). isHookGuard is the shared classifier in
+// @webpieces/rules-config.
 function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     if (mode === 'all') return rules;
     if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.name));

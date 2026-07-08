@@ -6,12 +6,12 @@ import { mergeEnd } from './merge-end';
 
 // The shared "sync this feature branch from main" engine — a thin composition of the two lifecycle
 // primitives (merge-START brings main in, merge-END finalizes). It is an INTERNAL function, not a
-// bin: `wp-update-start` (standalone) and `wp-start-upsert-pr` (PR flow) both call it. It NEVER
+// bin: `wp-start-update` (standalone) and `wp-start-upsert-pr` (PR flow) both call it. It NEVER
 // creates a PR and — unlike the old wp-git-update bin — it does NOT process.exit; it RETURNS an
 // outcome so each caller can print the handoff that fits its context.
 //
 // `finishCommand` is the command the AI is told to run after resolving conflicts — the standalone
-// caller passes `wp-update-end`, the PR flow passes `wp-finish-upsert-pr`.
+// caller passes `wp-finish-update`, the PR flow passes `wp-finish-upsert-pr`.
 //
 // `verb` is the invoking bin, threaded through purely so every branch mutation (backup, checkout,
 // pull, squash, rename) is recorded in `.webpieces/hooks/branch-mutations.log` under the command the

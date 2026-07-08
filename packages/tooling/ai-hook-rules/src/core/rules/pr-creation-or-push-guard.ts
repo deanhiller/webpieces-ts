@@ -20,6 +20,7 @@ function fixHintFor(upsertPrCommand: string): FixHint {
         + 'There is nothing to paste or attest to; the commands do the work.\n'
         + 'If a HUMAN genuinely needs an out-of-band push (no PR), do NOT do it yourself — ask them to run\n'
         + 'the push, since a manual push bypasses the build gate, review.json, and dashboard.\n'
+        + 'Full branch → update → PR flow: READ .webpieces/instruct-ai/webpieces.git-workflow.md.\n'
         + 'Add this to your memory so you don\'t forget next time and waste tokens.',
     );
 }

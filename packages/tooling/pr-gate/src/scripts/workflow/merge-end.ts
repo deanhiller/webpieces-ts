@@ -15,7 +15,7 @@ import { clearMergeMarker, readMergeMarker, perFileContextDir, scanConflictMarke
 // the branch context, it (optionally) validates + commits the AI's conflict resolution, then ALWAYS
 // finalizes the merge — force-pushes `<branch>Squash` to the stable feature branch and renames it
 // BACK to that same feature name (local == remote == PR head), stamps a clean main-sync status,
-// clears the marker and sweeps stale tmp. The shared runUpdateFromMain (clean path / validated resume), wp-update-end, and
+// clears the marker and sweeps stale tmp. The shared runUpdateFromMain (clean path / validated resume), wp-finish-update, and
 // wp-finish-upsert-pr (conflict resolution) all call THIS, so finalization happens in exactly one
 // place and the conflict path can no longer post a PR from the un-swapped squash branch.
 

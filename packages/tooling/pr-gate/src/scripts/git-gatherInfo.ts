@@ -58,8 +58,8 @@ function printHashPoints(hashes: HashPoints, currentBranch: string, mergeDir: st
 
 // Gather the 3-point merge context for the current feature branch (fetches main, finds the fork
 // point, writes updatemain-hashes.json) and RETURN whether the branch is already even with main.
-// NEVER calls process.exit: it is called both as a library (merge-start) and via the wp-git-gather
-// bin. Callers decide what to do with an up-to-date branch; the bin just prints and exits 0.
+// NEVER calls process.exit: it is called as a library (from merge-start). Callers decide what to
+// do with an up-to-date branch.
 export async function gatherInfo(): Promise<GatherInfoResult> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     const featureName = getFeatureName();

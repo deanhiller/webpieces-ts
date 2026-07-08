@@ -11,7 +11,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // This is a HARD GATE, not an advisory hint: it FAILS FAST if `gh` cannot answer (not installed, not
 // authenticated, offline). We must NOT degrade "couldn't ask GitHub" into "no PR" — a 3-point update
 // makes a new branch generation and the existing PR would be left pointing at the OLD branch (stale),
-// so running wp-update-start blind when a PR might exist is exactly the disaster we are guarding
+// so running wp-start-update blind when a PR might exist is exactly the disaster we are guarding
 // against. Refuse rather than guess.
 export function openPrForBranch(repoRoot: string, currentBranch: string): string {
     const base = baseBranchName(currentBranch);
@@ -25,7 +25,7 @@ export function openPrForBranch(repoRoot: string, currentBranch: string): string
             '\n' + SEP + '❌ Could not ask GitHub whether an open PR exists for this branch\n' + SEP + '\n' +
             `gh failed for base branch "${base}": ${detail}\n\n` +
             'This check must NOT be skipped: a 3-point update creates a NEW branch generation, so if a\n' +
-            'PR already exists, wp-update-start would leave it pointing at the OLD branch. Fix gh first\n' +
+            'PR already exists, wp-start-update would leave it pointing at the OLD branch. Fix gh first\n' +
             '(install / `gh auth login` / restore network), then re-run — or, if a PR does exist, use\n' +
             'the PR flow: pnpm wp-start-upsert-pr → /wp-merge → pnpm wp-finish-upsert-pr\n',
         );
