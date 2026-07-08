@@ -1,19 +1,22 @@
 import 'reflect-metadata';
+import type { Server as HttpServer } from 'http';
+import { AddressInfo } from 'net';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
-import { FilterDefinition, MethodMeta } from '@webpieces/http-server';
-import { Filter, Service, WpResponse } from '@webpieces/http-filters';
+import { ApiFactory, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
+import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { SaveResponse, PublicApi, PublicInfoResponse } from '@webpieces/client-server-api';
 import { Server2Api } from '@webpieces/server2-api';
 import { TYPES } from '../../../client-server/src/remote/Server2Client';
 import { Server2Simulator } from '../../../client-server/src/remote/Server2Simulator';
-import { startLegacyServer, LegacyServerOptions, LegacyServerHandle } from '../LegacyServer';
+import { buildLegacyApiFactory, LegacyApiFactoryOptions, createLegacyExpressApp } from '../LegacyServer';
 
 /**
  * Integration test for the legacy-server example: a pre-existing express app with webpieces
- * bolted on via WebpiecesRouteCreator. Proves the legacy route stays untouched, the wired
- * webpieces routes run the full filter chain (priority + glob scoping + auth + error mapping),
- * and the in-process createApiClient works — all off the SAME DI container the shared
- * setupCompanyRuntime path built (see src/LegacyServer.ts).
+ * embedded via WebpiecesExpressRouter.bindExpress. It calls ONE method — buildLegacyApiFactory
+ * (the same one the server main uses) — to get a node-only ApiFactory, then either binds it onto
+ * the legacy app (HTTP assertions) or calls apiFactory.createApiClient (in-process). Proves the
+ * legacy route stays untouched, the webpieces routes run the full filter chain (priority + glob
+ * scoping + auth + error mapping), and the in-process client works — all off the same ApiFactory.
  */
 
 /** Records the order filters executed in, so we can assert priority ordering + glob scoping. */
@@ -56,12 +59,15 @@ class GlobalOrderFilter extends OrderRecordingFilter {}
 @injectable()
 class ScopedOrderFilter extends OrderRecordingFilter {}
 
-let handle: LegacyServerHandle;
+let apiFactory: ApiFactory;
+let httpServer: HttpServer;
+let baseUrl: string;
 let recorder: FilterOrderRecorder;
 
 /**
- * Boot the legacy-server example. Rebind Server2Api to the in-process simulator (no running
- * server2), and add two order-recording filters to assert priority + glob scoping.
+ * Build the legacy webpieces API surface (the SAME buildLegacyApiFactory the server main calls),
+ * rebinding Server2Api to the in-process simulator and adding two order-recording filters to
+ * assert priority + glob scoping. Then embed it onto a pre-existing legacy express app + listen.
  */
 async function bootLegacyServer(): Promise<void> {
     recorder = new FilterOrderRecorder();
@@ -72,17 +78,26 @@ async function bootLegacyServer(): Promise<void> {
         options.bind(ScopedOrderFilter).toConstantValue(new ScopedOrderFilter(recorder, 'scoped-save-only'));
     });
 
-    handle = await startLegacyServer(
-        new LegacyServerOptions(0, appOverrides, [
+    apiFactory = await buildLegacyApiFactory(
+        new LegacyApiFactoryOptions(undefined, appOverrides, [
             new FilterDefinition(1500, GlobalOrderFilter, '*'),
             new FilterDefinition(1400, ScopedOrderFilter, '**/SaveController.ts'),
         ]),
     );
+
+    // Embed webpieces onto a pre-existing legacy express app, then listen for the HTTP assertions.
+    const app = createLegacyExpressApp();
+    new WebpiecesExpressRouter(apiFactory).bindExpress(app);
+    httpServer = await new Promise<HttpServer>((resolve: (server: HttpServer) => void) => {
+        const server = app.listen(0, () => resolve(server));
+    });
+    const address = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${address.port}`;
 }
 
 async function teardownLegacyServer(): Promise<void> {
     await new Promise<void>((resolve: () => void, reject: (err: Error) => void) => {
-        handle.server.close((err?: Error) => (err ? reject(err) : resolve()));
+        httpServer.close((err?: Error) => (err ? reject(err) : resolve()));
     });
 }
 
@@ -94,7 +109,7 @@ describe('legacy-server: coexistence, filter chain, priority + glob scoping', ()
     });
 
     it('legacy route keeps working untouched (no webpieces filters run)', async () => {
-        const res = await fetch(`${handle.baseUrl}/legacy/ping`);
+        const res = await fetch(`${baseUrl}/legacy/ping`);
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.pong).toBe(true);
@@ -102,7 +117,7 @@ describe('legacy-server: coexistence, filter chain, priority + glob scoping', ()
     });
 
     it('wired api runs the full filter chain in priority order', async () => {
-        const res = await fetch(`${handle.baseUrl}/search/item`, {
+        const res = await fetch(`${baseUrl}/search/item`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -120,7 +135,7 @@ describe('legacy-server: coexistence, filter chain, priority + glob scoping', ()
     });
 
     it('scoped filter does NOT run for a controller outside its glob pattern', async () => {
-        const res = await fetch(`${handle.baseUrl}/public/info`, {
+        const res = await fetch(`${baseUrl}/public/info`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: 'Legacy' }),
@@ -134,7 +149,7 @@ describe('legacy-server: coexistence, filter chain, priority + glob scoping', ()
     });
 });
 
-describe('legacy-server: errors, in-process client, lifecycle', () => {
+describe('legacy-server: errors + in-process client', () => {
     beforeAll(bootLegacyServer);
     afterAll(teardownLegacyServer);
     beforeEach(() => {
@@ -142,7 +157,7 @@ describe('legacy-server: errors, in-process client, lifecycle', () => {
     });
 
     it('maps HttpError to status + ProtocolError JSON (401 without auth header)', async () => {
-        const res = await fetch(`${handle.baseUrl}/search/item`, {
+        const res = await fetch(`${baseUrl}/search/item`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: 'no-auth' }),
@@ -153,15 +168,9 @@ describe('legacy-server: errors, in-process client, lifecycle', () => {
     });
 
     it('createApiClient() gives in-process access through the same filter chain', async () => {
-        const publicApi = handle.creator.createApiClient<PublicApi>(PublicApi);
+        const publicApi = apiFactory.createApiClient<PublicApi>(PublicApi);
         const response = await publicApi.getInfo({ name: 'InProcess' });
         expect(response.greeting).toBe('Hello, InProcess!');
         expect(recorder.executed).toEqual(['global']);
-    });
-
-    it('throws when wireFilters is called after wireApi', () => {
-        expect(() => handle.creator.wireFilters(new FilterDefinition(100, GlobalOrderFilter, '*'))).toThrow(
-            /wireFilters\(\) must be called before wireApi\(\)/,
-        );
     });
 });

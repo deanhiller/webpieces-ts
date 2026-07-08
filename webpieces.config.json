@@ -125,6 +125,7 @@
                 "dist",
                 ".nx",
                 ".git",
+                "scripts/**",
                 "**/*.d.ts",
                 "**/jest.config.ts",
                 "**/codegen.ts"

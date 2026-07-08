@@ -58,22 +58,21 @@ export {
     FilterTier,
 } from './WebAppMeta';
 
-// Method metadata (moved to http-filters) re-exported for back-compat; route handler
-export { MethodMeta } from '@webpieces/http-filters';
+// Filter-chain primitives (absorbed from the former @webpieces/http-filters package)
+export { Filter, WpResponse, Service } from './Filter';
+export { FilterChain } from './FilterChain';
+export { MethodMeta } from './MethodMeta';
 export { RouteHandler } from './RouteHandler';
 
-// Route builder implementation
-export {
-    RouteBuilderImpl,
-    RouteHandlerWithMeta,
-    FilterWithMeta,
-} from './RouteBuilderImpl';
+// RouteBuilderImpl (the route table + chain composer) is now INTERNAL — it is never
+// handed to upper layers. The express layer consumes ApiFactory.apiClients() instead.
 
 // Filter matching
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
-// In-process API client builder (node-only; the primary test/in-process path)
-export { InProcessApiClientFactory } from './InProcessApiClientFactory';
+// The public API-surface abstraction: declare routes/filters, get them back as ApiClient[].
+export { ApiFactory } from './ApiFactory';
+export { ApiClient } from './ApiClient';
 
 // Node-only router (the express-free heart: container + filter chain + in-process client)
 export { WebpiecesRouter, WebpiecesRouterFactory, WebpiecesRouterOptions } from './WebpiecesRouter';

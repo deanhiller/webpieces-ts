@@ -1,7 +1,8 @@
 import { ContainerModule } from 'inversify';
-import { ContextKey } from '@webpieces/core-util';
-import { FilterDefinition, WebpiecesRouter } from '@webpieces/http-routing';
+import { ContextKey, LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
+import { ApiFactory, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
 import { ContextFilter, LogApiFilter, RecordingFilter } from '@webpieces/http-server';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { InversifyModule, AppHeaders } from './modules/InversifyModule';
 import { AuthFilter } from './filters/AuthFilter';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
@@ -15,26 +16,60 @@ import { PublicController } from './controllers/public-controller';
 export const APP_MODULES: ContainerModule[] = [InversifyModule];
 
 /**
- * This app's own context keys, registered into the global HeaderRegistry at startup
- * (server.ts / test setup) via configureCompanyHeaders(APP_HEADERS).
+ * This app's own context keys, registered into the global HeaderRegistry by
+ * {@link buildClientServerApiFactory} (server startup AND tests).
  */
 export const APP_HEADERS: ContextKey[] = AppHeaders.getAllHeaders();
 
 /**
- * Configure the app's filters + routes on a WebpiecesRouter. Shared by production
- * (bootstrapServer) and the in-process createApiClient tests, so both exercise the exact
- * same chain. All filters here are api-tier (run in-process AND over HTTP): AuthFilter reads
- * the AUTHORIZATION value from RequestContext, so it works for createApiClient too.
+ * Declare the app's filters + routes on the {@link ApiFactory}. All filters here are api-tier
+ * (run in-process AND over HTTP): AuthFilter reads the AUTHORIZATION value from RequestContext,
+ * so it works for createApiClient too.
  *
  * Priority order (higher runs first): 2000 ContextFilter → 1900 AuthFilter →
  * 1850 RecordingFilter → 1800 LogApiFilter.
  */
-export function configureRoutes(router: WebpiecesRouter): void {
-    router.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
-    router.addFilter(new FilterDefinition(1900, AuthFilter, '*'));
-    router.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
-    router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
+export function configureRoutes(apiFactory: ApiFactory): void {
+    apiFactory.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
+    apiFactory.addFilter(new FilterDefinition(1900, AuthFilter, '*'));
+    apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
+    apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
 
-    router.addRoutes(SaveApi, SaveController);
-    router.addRoutes(PublicApi, PublicController);
+    apiFactory.addRoutes(SaveApi, SaveController);
+    apiFactory.addRoutes(PublicApi, PublicController);
+}
+
+/**
+ * Options for {@link buildClientServerApiFactory} — the server uses the defaults; tests pass
+ * overrides. Data-only structure (a class, per the webpieces guidelines).
+ */
+export class ClientServerApiFactoryOptions {
+    constructor(
+        public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
+        public readonly appOverrides?: ContainerModule,
+        public readonly config?: WebpiecesConfig,
+    ) {}
+}
+
+/**
+ * Build THE client-server {@link ApiFactory}: this app's modules + headers + filters + routes,
+ * the ONE declaration used by BOTH the real server (server.ts via bootstrapServer) and every
+ * integration test. Tests pass overrides (mock the downstream Api, recording config); the
+ * server uses defaults. It runs the shared {@link setupCompanyRuntime} sequence, so headers,
+ * logging, and the DI container are identical to production.
+ */
+export async function buildClientServerApiFactory(
+    options: ClientServerApiFactoryOptions = new ClientServerApiFactoryOptions(),
+): Promise<ApiFactory> {
+    const apiFactory = await setupCompanyRuntime(
+        new CompanySetupOptions(
+            options.loggerFactory,
+            APP_MODULES,
+            APP_HEADERS,
+            options.appOverrides,
+            options.config,
+        ),
+    );
+    configureRoutes(apiFactory);
+    return apiFactory;
 }

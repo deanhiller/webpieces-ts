@@ -1,12 +1,10 @@
 import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
-import { WebpiecesExpress } from '@webpieces/http-server';
-import { createCompanyRouter, setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { ConsoleLoggerFactory } from '@webpieces/core-util';
+import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { SaveResponse } from '@webpieces/client-server-api';
-import { APP_MODULES, APP_HEADERS, configureRoutes } from '../../client-server/src/AppServerConfig';
-import { configureServer2Routes } from '../../server2/src/Server2Config';
+import { buildClientServerApiFactory } from '../../client-server/src/AppServerConfig';
+import { buildServer2ApiFactory } from '../../server2/src/Server2Config';
 
 /**
  * THE full-flow example test: two real microservices, real HTTP between them,
@@ -18,8 +16,8 @@ import { configureServer2Routes } from '../../server2/src/Server2Config';
  *                      |  server's RequestContext -> outbound headers)
  *                      +--HTTP--> server2 :18202  (implements server2-api)
  *
- * Each server is built with the node-only WebpiecesRouter (createCompanyRouter + its
- * configure callback) and served over an app-owned express via WebpiecesExpress
+ * Each server is built with its app-owned ApiFactory builder (buildXxxApiFactory — the SAME
+ * one its own main + tests use) and served over an app-owned express via WebpiecesExpressRouter
  * (bindAndStartExpress) — the same production path, just with the test owning express.
  *
  * Test ports 18200/18202 avoid clashing with dev servers on 8200/8202.
@@ -35,19 +33,14 @@ async function bootBothServers(): Promise<void> {
     // client-server's InversifyModule reads SERVER2_URL for its outbound client
     process.env['SERVER2_URL'] = `http://localhost:${server2Port}`;
 
-    // One process, one global HeaderRegistry + one logger install serving TWO routers.
-    // setupCompanyRuntime runs the shared headers → logging → router sequence for the
-    // primary (client-server, carrying the union of app keys); server2's router then reuses
-    // that same global registry via createCompanyRouter (no second header/logging install).
-    const clientRouter = await setupCompanyRuntime(
-        new CompanySetupOptions(new ConsoleLoggerFactory(), APP_MODULES, APP_HEADERS),
-    );
-    configureRoutes(clientRouter);
-    clientServerHttp = await new WebpiecesExpress(clientRouter).bindAndStartExpress(express(), clientServerPort);
+    // One process, one global HeaderRegistry serving TWO servers. Build server2 FIRST (no
+    // app-specific headers) and client-server LAST (it carries the header superset), so the
+    // shared global registry ends configured as the UNION both servers need.
+    const server2ApiFactory = await buildServer2ApiFactory();
+    server2Http = await new WebpiecesExpressRouter(server2ApiFactory).bindAndStartExpress(express(), server2Port);
 
-    const server2Router = await createCompanyRouter();
-    configureServer2Routes(server2Router);
-    server2Http = await new WebpiecesExpress(server2Router).bindAndStartExpress(express(), server2Port);
+    const clientApiFactory = await buildClientServerApiFactory();
+    clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(express(), clientServerPort);
 
     // Capture BOTH servers' log output (they share this test process)
     logLines = [];

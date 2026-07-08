@@ -134,7 +134,7 @@ interface DepClassification {
 /**
  * Compute the transitive closure of a project's dependencies in the graph.
  * Example: server → [core-meta, http-server]; transitive closure includes
- * http-server and everything http-server reaches (http-routing, http-filters,
+ * http-server and everything http-server reaches (http-routing,
  * core-context, core-util, http-api).
  *
  * Used to allow package.json entries for transitive deps (a legitimate pattern:

@@ -6,10 +6,10 @@ import { RouteMetadata, AuthMeta } from '@webpieces/core-util';
  *
  * MethodMeta is DTO-only - it does NOT contain Express req/res directly.
  *
- * Lives in @webpieces/http-filters (the filter-chain primitives package) because
- * it is the meta type every `Filter<MethodMeta, …>` is parameterized over — so
- * filter authors (including cloudtasks-client) reference it without depending on
- * the server-side @webpieces/http-routing package. http-routing re-exports it.
+ * It is the meta type every `Filter<MethodMeta, …>` is parameterized over. It lives in
+ * @webpieces/http-routing (the node-only routing package, which absorbed the former
+ * @webpieces/http-filters primitives) and is still express-free, so filter authors
+ * reference it without pulling in any express dependency.
  *
  * Fields:
  * - routeMeta: Static route information (httpMethod, path, methodName)
