@@ -148,11 +148,11 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         return [
             `It looks like you forgot to switch to main and delete this branch "${branch}" — its PR is already merged into main${pr}.`,
             'Your work is in main — do NOT keep editing this stale branch (you will reconflict with main).',
-            'Start fresh:',
-            '  1. git checkout main',
-            '  2. git pull',
-            '  3. git checkout -b <new-feature-branch>',
-            'Please add to memory: switch to main (and delete the branch) after a PR is merged.',
+            'Start fresh — branch off origin/main (works on the primary repo AND inside a worktree; never',
+            '`git checkout main`, which fatals in a worktree):',
+            '  1. git fetch origin main',
+            '  2. git checkout -b <new-feature-branch> origin/main',
+            'Please add to memory: start a new branch off origin/main after a PR is merged.',
         ].join('\n');
     }
 

@@ -28,7 +28,7 @@ describe('reviewJsonPath', () => {
 describe('loadReviewJson', () => {
     it('loads a valid review and derives the emoji from riskLevel', () => {
         const file = tmpFile(JSON.stringify({
-            riskScore: 42, riskLevel: 'yellow', summary: 'ok',
+            title: 'Fix the thing', riskScore: 42, riskLevel: 'yellow', summary: 'ok',
             violations: ['a'], risks: [], filesToReview: ['x.ts'],
         }));
         const review = loadReviewJson(file);
@@ -39,11 +39,13 @@ describe('loadReviewJson', () => {
         expect(review.filesToReview).toEqual(['x.ts']);
     });
 
-    it('reads a trimmed title, defaulting to empty when absent', () => {
+    it('reads a trimmed title and REQUIRES it (hard-reject when absent or blank)', () => {
         const withTitle = tmpFile(JSON.stringify({ title: '  Fix the thing  ', riskScore: 10, riskLevel: 'green' }));
         expect(loadReviewJson(withTitle).title).toBe('Fix the thing');
         const without = tmpFile(JSON.stringify({ riskScore: 10, riskLevel: 'green' }));
-        expect(loadReviewJson(without).title).toBe('');
+        expect(() => loadReviewJson(without)).toThrowError(/"title" must be a non-empty/);
+        const blank = tmpFile(JSON.stringify({ title: '   ', riskScore: 10, riskLevel: 'green' }));
+        expect(() => loadReviewJson(blank)).toThrowError(/"title" must be a non-empty/);
     });
 
     it('throws InformAiError with the schema when the file is missing', () => {

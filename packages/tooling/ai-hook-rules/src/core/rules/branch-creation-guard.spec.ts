@@ -67,8 +67,8 @@ describe('branch-creation-guard', () => {
         const violations = rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/another'));
         expect(violations.length).toBe(1);
         const msg = violations[0].message;
-        expect(msg).toContain('git checkout main && git pull && git checkout -b dean/another');
-        expect(msg).toContain('instead of branching from this branch');
+        expect(msg).toContain('git fetch origin main && git checkout -b dean/another origin/main');
+        expect(msg).toContain('instead of stacking it on this branch');
         expect(msg).toContain('ignoreModifiedUntilEpoch');
         // The strict mode must NOT dangle the sub-branch naming convention.
         expect(msg).not.toContain('subBranchNaming');
@@ -91,6 +91,17 @@ describe('branch-creation-guard', () => {
 
         const normal = flatten(rule('ON').fixHint);
         expect(normal).toContain('subBranchNaming');
+    });
+});
+
+describe('branch-creation-guard origin/main base (worktree-native)', () => {
+    it('allows an explicit origin/main base from any branch or worktree', () => {
+        git.branch = 'dean/existing';
+        expect(rule('ON').check(ctx('git checkout -b dean/feature origin/main')).length).toBe(0);
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/feature origin/main')).length).toBe(0);
+        expect(rule('ON').check(ctx('git switch -c dean/feature origin/main')).length).toBe(0);
+        // ...but a reserved wp<number> name is still blocked even when based off origin/main.
+        expect(rule('ON').check(ctx('git checkout -b dean/featwp2 origin/main')).length).toBe(1);
     });
 });
 
