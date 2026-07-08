@@ -36,6 +36,18 @@ graph TD
     classDef external fill:#b39ddb,color:#000000,stroke:#5e35b1,stroke-width:3px
 ```
 
+## SecureController — controller, Level 0…0
+
+```mermaid
+graph TD
+    SecureController["SecureController"]:::controller
+    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
+    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
+    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
+    classDef external fill:#b39ddb,color:#000000,stroke:#5e35b1,stroke-width:3px
+```
+
 
 Edges are constructor/`inject()` dependencies (the injected param/field
 name and token are in `design.json`). Rounded nodes are

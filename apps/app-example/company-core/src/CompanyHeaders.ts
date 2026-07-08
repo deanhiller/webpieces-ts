@@ -31,6 +31,12 @@ export class CompanyHeaders {
     static readonly AUTHORIZATION = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
 
     /**
+     * The authenticated user's id — STAMPED by the framework AuthFilter from a parsed JWT (see
+     * AuthConfig.parseJwt), then transferred to downstream services + logged under 'userId'.
+     */
+    static readonly USER_ID = new ContextKey('userId', 'x-webpieces-user-id');
+
+    /**
      * Get all company context keys as an array.
      */
     static getAllHeaders(): ContextKey[] {
@@ -38,6 +44,7 @@ export class CompanyHeaders {
             CompanyHeaders.TENANT_ID,
             CompanyHeaders.API_VERSION,
             CompanyHeaders.AUTHORIZATION,
+            CompanyHeaders.USER_ID,
         ];
     }
 }

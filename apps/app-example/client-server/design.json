@@ -74,6 +74,24 @@
                 }
             ],
             "unresolved": []
+        },
+        {
+            "root": "SecureController",
+            "rootKind": "controller",
+            "file": "apps/app-example/client-server/src/controllers/secure-controller.ts",
+            "maxLevel": 0,
+            "nodes": [
+                {
+                    "id": "SecureController",
+                    "className": "SecureController",
+                    "kind": "controller",
+                    "scope": "singleton",
+                    "file": "apps/app-example/client-server/src/controllers/secure-controller.ts",
+                    "level": 0
+                }
+            ],
+            "edges": [],
+            "unresolved": []
         }
     ]
 }

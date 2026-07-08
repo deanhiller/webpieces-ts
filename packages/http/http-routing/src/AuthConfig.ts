@@ -1,35 +1,56 @@
+import { ContextKey } from '@webpieces/core-util';
+
 /**
- * Principal - the authenticated caller established by {@link AuthConfig.verifyJwt}.
- * Data-only structure (a class, per the webpieces guidelines).
+ * ContextValue - one (ContextKey, value) pair the JWT parse plugin wants stamped into the
+ * RequestContext (e.g. USER_ID, ORG_ID). Data-only structure (a class, per the guidelines).
  */
-export class Principal {
+export class ContextValue {
     constructor(
-        public readonly userId: string,
-        // webpieces-disable no-any-unknown -- JWT claims are an arbitrary provider-defined bag
-        public readonly claims: Record<string, unknown> = {},
+        public readonly key: ContextKey,
+        // webpieces-disable no-any-unknown -- context values are arbitrary app-defined data
+        public readonly value: unknown,
     ) {}
 }
 
 /**
- * AuthConfig - the app-provided verifiers the framework {@link AuthFilter} injects to enforce
- * each endpoint's AuthMode. It is an ABSTRACT CLASS (not a Symbol) so it is injected by type
- * (per the webpieces no-symbol-di-tokens guidance) and rebindable in tests.
+ * AuthValues - what {@link AuthConfig.parseJwt} returns: the authenticated user's id + roles (used
+ * by the framework to stamp a principal and enforce @AuthJwt(...roles)) plus any extra context
+ * entries the app wants set (orgId, tenant, ...). The framework sets `entries` into RequestContext
+ * via {@link RequestContext.putHeader}. Data-only structure (a class, per the guidelines).
+ */
+export class AuthValues {
+    constructor(
+        public readonly userId: string,
+        public readonly roles: string[] = [],
+        public readonly entries: ContextValue[] = [],
+    ) {}
+}
+
+/**
+ * AuthConfig - the ONE app-provided auth binding the framework {@link AuthFilter} injects to enforce
+ * each endpoint's AuthMode. It is a single abstract class (injected by type, per no-symbol-di-tokens)
+ * bound in the APP container and rebindable in tests. Each mechanism has its RIGHT shape:
  *
- * It is BOUND IN THE APP CONTAINER (appBindings) — remember the two containers: the framework
- * AuthFilter is resolved from the app child container, so the app's binding (or a test's
- * appOverrides rebind) is what it sees. Keeping the concrete verifiers here (not in http-routing)
- * means http-routing needs NO crypto / gcp-identity — it stays transport- and provider-neutral.
+ *  - `sharedSecrets`  — STATE: the expected secret VALUE per name (from `@AuthSharedSecret(name)`).
+ *                       Prod fills it from env; a test binds `{ NAME: 'some-test-key' }` and can then
+ *                       exercise the shared-secret path (and a negative test with a wrong key).
+ *  - `parseJwt`       — PLUGIN: decode/verify a user JWT into {@link AuthValues} (userId, roles,
+ *                       context entries). Minting a JWT is a controller concern (login), not here.
+ *  - `verifyOidc`     — PLUGIN: verify a Google OIDC service-to-service token against the endpoint's
+ *                       caller allow-list. Fully generic — the company base wires it to
+ *                       @webpieces/gcp-identity once, so apps never customize OIDC.
  *
- * A public-only server need not bind one (AuthFilter injects it @optional); a non-public route
- * with no AuthConfig bound fails fast.
+ * Keeping the plugins app-side means http-routing needs NO jsonwebtoken / gcp-identity. AuthFilter
+ * injects this `@optional`: a public-only server binds none; a non-public route with no AuthConfig
+ * (or no value/plugin for its mode) fails fast.
  */
 export abstract class AuthConfig {
-    /** Verify a user JWT (kind:'jwt'); return the principal or throw HttpUnauthorizedError. */
-    abstract verifyJwt(token: string): Principal;
+    /** Expected shared-secret values keyed by the `@AuthSharedSecret(name)` name. STATE. */
+    abstract readonly sharedSecrets: Record<string, string>;
 
-    /** Verify a Google OIDC token from an allowed caller SA (kind:'oidc'); throw on failure. */
+    /** Parse a user JWT (kind:'jwt'); return the auth values or throw HttpUnauthorizedError. */
+    abstract parseJwt(token: string): AuthValues;
+
+    /** Verify a Google OIDC token from an allowed caller (kind:'oidc'); throw on failure. */
     abstract verifyOidc(token: string, callers: string[]): Promise<void>;
-
-    /** The expected shared secret for the given env var name (kind:'shared-secret'). */
-    abstract sharedSecret(secretEnv: string): string | undefined;
 }

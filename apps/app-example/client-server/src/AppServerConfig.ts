@@ -4,9 +4,10 @@ import { ApiFactory, WebpiecesRouter, FilterDefinition, WebpiecesConfig } from '
 import { LogApiFilter, RecordingFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { InversifyModule, AppHeaders } from './modules/InversifyModule';
-import { SaveApi, PublicApi } from '@webpieces/client-server-api';
+import { SaveApi, PublicApi, SecureApi } from '@webpieces/client-server-api';
 import { SaveController } from './controllers/save-controller';
 import { PublicController } from './controllers/public-controller';
+import { SecureController } from './controllers/secure-controller';
 
 /**
  * App DI modules beyond the standard company set. InversifyModule binds this app's
@@ -51,6 +52,7 @@ export async function buildClientServerApiFactory(
             apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
             apiFactory.addRoutes(SaveApi, SaveController);
             apiFactory.addRoutes(PublicApi, PublicController);
+            apiFactory.addRoutes(SecureApi, SecureController);
         },
     );
 }
