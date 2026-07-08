@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { injectable } from 'inversify';
-import { provideFrameworkSingleton, MethodMeta } from '@webpieces/http-routing';
+import { provideFrameworkSingleton, MethodMeta, fillContext } from '@webpieces/http-routing';
 import {
     ProtocolError,
     HttpError,
@@ -19,7 +19,7 @@ import {
 } from '@webpieces/core-util';
 import { Service, WpResponse } from '@webpieces/http-routing';
 import { toError } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
@@ -61,7 +61,7 @@ export class ExpressWrapper {
         }
     }
 
-    public async executeImpl(req: Request, res: Response, next: NextFunction) {
+    public async executeImpl(req: Request, res: Response, next: NextFunction): Promise<void> {
         // 1. Read HTTP headers from Express request
         const requestHeaders = this.readExpressHeaders(req);
 
@@ -74,8 +74,11 @@ export class ExpressWrapper {
             requestDto = bodyText ? JSON.parse(bodyText) : {};
         }
 
-        // 3. Create MethodMeta with headers and request DTO
-        const methodMeta = new MethodMeta(this.routeMeta, requestHeaders, requestDto);
+        // 3. Publish the transport-neutral HttpRequest + fill the context (platform-header
+        //    transfer + request id) ABOVE the boundary — the chain reads it, never express req.
+        RequestContext.setRequest(new HttpRequest(req.method, this.routeMeta.path, requestHeaders));
+        fillContext();
+        const methodMeta = new MethodMeta(this.routeMeta, requestDto);
 
         // 4. Invoke the service (filter chain + controller)
         const wpResponse = await this.service.invoke(methodMeta);

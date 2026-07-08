@@ -1,7 +1,7 @@
 import { ContainerModule } from 'inversify';
 import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
 import { ApiFactory, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
-import { ContextFilter, LogApiFilter, RecordingFilter } from '@webpieces/http-server';
+import { LogApiFilter, RecordingFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { Server2Api } from '@webpieces/server2-api';
 import { Server2Controller } from './controllers/server2-controller';
@@ -13,7 +13,9 @@ import { Server2Controller } from './controllers/server2-controller';
  * auto-scanned via @provideSingleton.
  */
 export function configureServer2Routes(apiFactory: ApiFactory): void {
-    apiFactory.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
+    // Only user filters here; the framework auto-installs ErrorLogFilter + AuthFilter above.
+    // server2 is public (@Authentication(false)), so AuthFilter is a no-op and no AuthConfig
+    // need be bound.
     apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
     apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
 

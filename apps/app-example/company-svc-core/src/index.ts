@@ -10,3 +10,4 @@
 export { bootstrapServer, createCompanyRouter, configureCompanyHeaders, setupCompanyRuntime } from './bootstrapServer';
 export { BootstrapOptions } from './BootstrapOptions';
 export { CompanySetupOptions } from './CompanySetupOptions';
+export { CompanyAuthConfig } from './CompanyAuthConfig';

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { ApiFactory } from '@webpieces/http-routing';
+import { ApiFactory, AuthConfig } from '@webpieces/http-routing';
+import { TestAuthConfig } from './TestAuthConfig';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
@@ -21,6 +22,9 @@ import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
 async function createApiFactoryWithMock(mock: MockedApi<Server2Api>): Promise<ApiFactory> {
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mock);
+        // The framework AuthFilter is AuthMode-driven; rebind AuthConfig to a stub so the test's
+        // token passes without minting a real JWT (a no-token call still 401s through the chain).
+        (await options.rebind(AuthConfig)).to(TestAuthConfig);
     });
     // ONE call — the SAME builder the real server uses (buildClientServerApiFactory), with the
     // default ConsoleLoggerFactory (no [AWAITING...] banner). Only the mock override differs.

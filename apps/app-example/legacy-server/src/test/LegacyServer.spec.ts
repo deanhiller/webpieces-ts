@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import type { Server as HttpServer } from 'http';
 import { AddressInfo } from 'net';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
-import { ApiFactory, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
+import { ApiFactory, AuthConfig, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
+import { TestAuthConfig } from '../../../client-server/src/test/TestAuthConfig';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { SaveResponse, PublicApi, PublicInfoResponse } from '@webpieces/client-server-api';
 import { Server2Api } from '@webpieces/server2-api';
@@ -74,6 +75,7 @@ async function bootLegacyServer(): Promise<void> {
 
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(new Server2Simulator());
+        (await options.rebind(AuthConfig)).to(TestAuthConfig);
         options.bind(GlobalOrderFilter).toConstantValue(new GlobalOrderFilter(recorder, 'global'));
         options.bind(ScopedOrderFilter).toConstantValue(new ScopedOrderFilter(recorder, 'scoped-save-only'));
     });

@@ -1,10 +1,8 @@
 // Express adapter (the only place express lifecycle lives) over the node-only ApiFactory
 export { WebpiecesExpressRouter } from './WebpiecesExpressRouter';
 export { WebpiecesMiddleware } from './WebpiecesMiddleware';
-export { ContextFilter } from './filters/ContextFilter';
 export { LogApiFilter } from './filters/LogApiFilter';
 export { RecordingFilter } from './filters/RecordingFilter';
-export { ServiceAuthFilter } from './filters/ServiceAuthFilter';
 
 // Test-case recording (contract lives in @webpieces/core-util)
 export { TestCaseRecorderImpl } from './recorder/TestCaseRecorderImpl';
@@ -24,6 +22,9 @@ export {
     FilterDefinition,
     ApiFactory,
     ApiClient,
+    HttpRequest,
+    AuthConfig,
+    Principal,
 } from '@webpieces/http-routing';
 // ExpressRouteHandler now lives in http-server (express adapter), not node-only http-routing
 export { ExpressRouteHandler } from './WebpiecesMiddleware';

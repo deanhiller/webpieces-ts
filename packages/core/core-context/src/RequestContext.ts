@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { ContextKey } from '@webpieces/core-util';
+import { HttpRequest } from './HttpRequest';
+
+/** Reserved context key under which the current HttpRequest is stored. */
+const HTTP_REQUEST_KEY = '__webpieces_http_request__';
 
 /**
  * Context management using AsyncLocalStorage.
@@ -50,6 +54,21 @@ class RequestContextImpl {
 
     hasHeader(key: ContextKey): boolean {
         return this.has(key.name);
+    }
+
+    /**
+     * Store the transport-neutral {@link HttpRequest} for this request. Called once, above the
+     * api boundary, by whichever transport is driving the router (the express adapter, or the
+     * in-process client). Filters/auth read it back via {@link getRequest} so they never touch
+     * express — the same chain then runs over HTTP and in-process.
+     */
+    setRequest(request: HttpRequest): void {
+        this.put(HTTP_REQUEST_KEY, request);
+    }
+
+    /** The current {@link HttpRequest}, or undefined if none was set for this context. */
+    getRequest(): HttpRequest | undefined {
+        return this.get<HttpRequest>(HTTP_REQUEST_KEY);
     }
 
     // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)

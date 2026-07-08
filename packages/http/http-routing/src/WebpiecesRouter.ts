@@ -9,6 +9,8 @@ import { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 import { InProcessApiClientFactory } from './InProcessApiClientFactory';
 import { ApiFactory } from './ApiFactory';
 import { ApiClient } from './ApiClient';
+import { ErrorLogFilter } from './filters/ErrorLogFilter';
+import { AuthFilter } from './filters/AuthFilter';
 
 /**
  * Options for {@link WebpiecesRouterFactory.create}.
@@ -43,10 +45,10 @@ export interface WebpiecesRouterOptions {
  *     appBindings: [WebpiecesModule, CompanyHeadersModule],
  * });
  * router.addRoutes(SaveApi, SaveController);
- * router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));                 // api tier
- * router.addFilter(new FilterDefinition(1950, ServiceAuthFilter, '*', 'express')); // express tier
+ * router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));  // your own filters
+ * // (ErrorLogFilter + AuthFilter are auto-installed above yours; auth is AuthMode-driven)
  *
- * // test (no express): runs the api-tier filter chain -> controller
+ * // test (no express): runs the SAME filter chain (incl. auth) -> controller
  * const api = router.createApiClient(SaveApi);
  * await api.save(new SaveRequest(...));
  * ```
@@ -79,6 +81,18 @@ export class WebpiecesRouter implements ApiFactory {
         this.routeBuilder.setContainer(this.appContainer);
 
         await this.loadDIModules(options);
+        this.installFixedFilters();
+    }
+
+    /**
+     * Auto-install the two fixed framework filters on every route (apps add only their own
+     * filters below these): ErrorLogFilter outermost (log + let the transport translate), then
+     * AuthFilter (enforces the endpoint's AuthMode off the HttpRequest). Both run over HTTP AND
+     * in-process — there is no transport tier.
+     */
+    private installFixedFilters(): void {
+        this.addFilter(new FilterDefinition(1_000_000, ErrorLogFilter, '*'));
+        this.addFilter(new FilterDefinition(900_000, AuthFilter, '*'));
     }
 
     private async loadDIModules(options: WebpiecesRouterOptions): Promise<void> {
@@ -113,8 +127,8 @@ export class WebpiecesRouter implements ApiFactory {
     }
 
     /**
-     * Register a filter. Defaults to the 'api' tier (runs in-process AND over HTTP);
-     * pass a 'express'-tier FilterDefinition for transport-boundary filters.
+     * Register a user filter (runs in-process AND over HTTP, below the auto-installed fixed
+     * ErrorLogFilter + AuthFilter).
      */
     addFilter(filter: FilterDefinition): this {
         this.routeBuilder.addFilter(filter);

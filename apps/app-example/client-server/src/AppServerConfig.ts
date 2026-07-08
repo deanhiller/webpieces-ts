@@ -1,10 +1,9 @@
 import { ContainerModule } from 'inversify';
 import { ContextKey, LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
 import { ApiFactory, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
-import { ContextFilter, LogApiFilter, RecordingFilter } from '@webpieces/http-server';
+import { LogApiFilter, RecordingFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { InversifyModule, AppHeaders } from './modules/InversifyModule';
-import { AuthFilter } from './filters/AuthFilter';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { SaveController } from './controllers/save-controller';
 import { PublicController } from './controllers/public-controller';
@@ -22,16 +21,14 @@ export const APP_MODULES: ContainerModule[] = [InversifyModule];
 export const APP_HEADERS: ContextKey[] = AppHeaders.getAllHeaders();
 
 /**
- * Declare the app's filters + routes on the {@link ApiFactory}. All filters here are api-tier
- * (run in-process AND over HTTP): AuthFilter reads the AUTHORIZATION value from RequestContext,
- * so it works for createApiClient too.
+ * Declare the app's USER filters + routes on the {@link ApiFactory}. The framework auto-installs
+ * the fixed ErrorLogFilter + AuthFilter above these (auth is AuthMode-driven off the endpoint's
+ * @Authentication decorator + the bound AuthConfig), so the app only adds its own filters, which
+ * run in-process AND over HTTP.
  *
- * Priority order (higher runs first): 2000 ContextFilter → 1900 AuthFilter →
- * 1850 RecordingFilter → 1800 LogApiFilter.
+ * Priority order (higher runs first): 1850 RecordingFilter → 1800 LogApiFilter.
  */
 export function configureRoutes(apiFactory: ApiFactory): void {
-    apiFactory.addFilter(new FilterDefinition(2000, ContextFilter, '*'));
-    apiFactory.addFilter(new FilterDefinition(1900, AuthFilter, '*'));
     apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
     apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
 

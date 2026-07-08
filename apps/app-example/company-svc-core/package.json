@@ -11,6 +11,7 @@
         "@webpieces/http-routing": "workspace:*",
         "@webpieces/http-server": "workspace:*",
         "express": "5.1.0",
-        "inversify": "7.10.4"
+        "inversify": "7.10.4",
+        "jsonwebtoken": "9.0.2"
     }
 }

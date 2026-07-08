@@ -209,7 +209,7 @@ export class RouteBuilderImpl implements RouteBuilder {
                 new ApiClient(
                     routeWithMeta.definition.apiClass as ClassType,
                     routeWithMeta.definition.routeMeta,
-                    this.createRouteHandler(routeWithMeta, /*includeExpressTier*/ true),
+                    this.createRouteHandler(routeWithMeta),
                 ),
         );
     }
@@ -258,19 +258,16 @@ export class RouteBuilderImpl implements RouteBuilder {
      */
     public createRouteHandler(
         routeWithMeta: RouteHandlerWithMeta,
-        includeExpressTier: boolean = true,
     ): Service<MethodMeta, WpResponse<unknown>> {
         const route = routeWithMeta.definition;
         const routeMeta = route.routeMeta;
 
         log.info(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
 
-        // Get cached filter definitions, then drop express-tier filters when composing an
-        // in-process (createApiClient) chain — those need the raw HTTP request (e.g. auth
-        // reading the Authorization header) and would wrongly reject a headerless in-process call.
-        const filterDefinitions = this.getFilterDefinitions().filter(
-            (def: FilterDefinition) => includeExpressTier || def.tier !== 'express',
-        );
+        // ONE chain for both HTTP and in-process — no transport tier. The fixed framework
+        // filters (ErrorLogFilter, AuthFilter) are auto-installed and read the transport-neutral
+        // HttpRequest, so they run identically in both.
+        const filterDefinitions = this.getFilterDefinitions();
 
         // Find matching filters for this route
         const matchingFilters = FilterMatcher.findMatchingFilters(
@@ -290,7 +287,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         };
 
         if (matchingFilters.length === 0) {
-            throw new Error("No filters found for route. Check filter definitions as you must have at least ContextFilter");
+            throw new Error("No filters found for route — the framework auto-installs ErrorLogFilter + AuthFilter, so this indicates a wiring problem.");
         }
 
         // Chain filters: highest priority (first in array) should run first (be outermost)
@@ -326,9 +323,8 @@ export class RouteBuilderImpl implements RouteBuilder {
             throw new Error(`Route not found: ${method} ${path}`);
         }
 
-        // Setup filter chain ONCE (not on every invocation!).
-        // In-process client → api-tier filters only (skip express-tier like ServiceAuthFilter).
-        return this.createRouteHandler(routeWithMeta, false);
+        // Setup filter chain ONCE (not on every invocation!). Same chain as HTTP — auth included.
+        return this.createRouteHandler(routeWithMeta);
     }
 
     /**

@@ -19,8 +19,8 @@ export { CloudTaskScheduler, ScheduleOptions } from './CloudTaskScheduler';
 // The two task transports (local HTTP-queue + remote GCP), both delivering over real HTTP.
 export { InMemoryTaskInvoker } from './InMemoryTaskInvoker';
 export { GcpTaskInvoker } from './GcpTaskInvoker';
-// NOTE: ServiceAuthFilter (server-side delivery-auth Filter) lives in @webpieces/http-server —
-// a client library has no server filters / routing machinery.
+// NOTE: server-side delivery-auth is enforced by the framework AuthFilter (AuthMode-driven)
+// in @webpieces/http-routing — a client library has no server filters / routing machinery.
 export {
     ScheduleFrame,
     setScheduleFrame,
