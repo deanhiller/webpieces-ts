@@ -9,6 +9,7 @@
 
 export { toError } from './lib/errorUtils';
 export { ContextKey } from './ContextKey';
+export { ContextTuple } from './ContextTuple';
 
 // @DocumentDesign — DI-design-root marker. Applies to ANY project kind (server
 // controllers AND library impl classes), so it lives here (browser + Node) rather
