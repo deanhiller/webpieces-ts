@@ -2,7 +2,7 @@
 import { execSync } from 'child_process';
 import { CliExitError, runMain } from '@webpieces/rules-config';
 import { getFeatureName } from './workflow/git-readAiBranchName';
-import { mergeDirFor, readMergeMarker } from './workflow/merge-state';
+import { mergeDirFor, readMergeMarker, findActiveMergeRunDir } from './workflow/merge-state';
 import { mergeEnd } from './workflow/merge-end';
 import { MergeContext } from './workflow/merge-start';
 
@@ -15,10 +15,12 @@ import { MergeContext } from './workflow/merge-start';
 
 export async function main(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-    const mergeDir = mergeDirFor(repoRoot, getFeatureName());
+    const home = mergeDirFor(repoRoot, getFeatureName());
 
-    const marker = readMergeMarker(mergeDir);
-    if (!marker) {
+    // The in-progress merge is the `merge-<n>/` run dir holding a marker.
+    const activeDir = findActiveMergeRunDir(home);
+    const marker = activeDir ? readMergeMarker(activeDir) : null;
+    if (!activeDir || !marker) {
         throw new CliExitError(1,
             '❌ No merge in progress (no marker) — nothing to finalize.\n' +
             'Start one with:  pnpm wp-update-start  (a clean update finalizes itself).',
@@ -29,7 +31,7 @@ export async function main(): Promise<void> {
     // validated => clean merge (or previously validated) => finalize only.
     const conflictedFiles = marker.validated ? null : marker.conflictedFiles;
     await mergeEnd(
-        repoRoot, 'wp-update-end', mergeDir,
+        repoRoot, 'wp-update-end', activeDir,
         new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
         conflictedFiles,
     );

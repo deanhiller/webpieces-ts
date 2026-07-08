@@ -44,9 +44,14 @@ by the `redirect-how-to-merge-main` guard.
 
 A sync does its work on a transient `<feature>Squash` branch and, when it finishes, force-pushes and
 **renames back to `<feature>`** — so your local branch, `origin/<feature>`, and the PR head are always
-the *same* name. There is no `wpN` generation suffix to reconcile. Each sync also leaves a numbered
-pre-merge snapshot — `<feature>PreMerge`, `<feature>PreMerge2`, … — a local trail you can diff against
-or delete (`git branch --list '<feature>PreMerge*'`); they are not auto-pruned.
+the *same* name. There is no `wpN` generation suffix to reconcile.
+
+Each sync takes a pre-merge snapshot `<feature>PreMerge<n>` (numbered from 1) paired 1:1 with a
+conflict-context folder `.webpieces/merge-info/<slug>/merge-<n>/` under the same number. A **clean**
+sync auto-removes its snapshot and leaves no folder (no undo point needed). A **conflict** sync KEEPS
+the matched pair — `<feature>PreMerge<n>` to diff/bail against, and `merge-<n>/` holding that merge's
+3-point context — so merge N never reuses merge N-1's files. List the trail with
+`git branch --list '<feature>PreMerge*'`; snapshots are not auto-pruned (only clean ones self-delete).
 
 ## Two possible outcomes of a squash-update
 
@@ -59,11 +64,12 @@ decides who does the work.
 ```
 you: pnpm wp-update-start
   tool: assertCleanTree            # you must have committed your own work first
-  tool: snapshot pre-merge state -> <feature>PreMerge[N] (numbered trail, never overwritten)
+  tool: snapshot pre-merge state -> <feature>PreMerge<n> (numbered from 1)
   tool: checkout main; pull; create transient <feature>Squash off main
   tool: git merge --squash <feature>          # SUCCEEDS — stages the combined result
   tool: git commit -m "Squash merge of <feature>"     # <-- the TOOL commits (mechanical)
   tool: force-push to origin/<feature>; rename <feature>Squash back to <feature>
+  tool: delete <feature>PreMerge<n>          # clean merge -> snapshot not needed
   done — you are on <feature> again (== origin/<feature> == PR head; names always match).
 ```
 
@@ -74,9 +80,9 @@ commits exactly that. The commit is a pure function of your already-committed wo
 
 ```
 you: pnpm wp-update-start
-  tool: assertCleanTree; snapshot -> <feature>PreMerge[N]; checkout main; pull; create <feature>Squash
+  tool: assertCleanTree; snapshot -> <feature>PreMerge<n>; checkout main; pull; create <feature>Squash
   tool: git merge --squash <feature>          # CONFLICTS — conflicted files left with markers
-  tool: writes .webpieces/merge-info/<feature>/ (A=fork / B=feature / C=main context + diffs)
+  tool: writes .webpieces/merge-info/<slug>/merge-<n>/ (A=fork / B=feature / C=main context + diffs; kept, paired with PreMerge<n>)
   tool: writes .webpieces/instruct-ai/webpieces.mergeprocess.md, then exits (code 2)
   ---- hand-off to the AI (you are on the transient <feature>Squash branch) ----
   AI:  read webpieces.mergeprocess.md

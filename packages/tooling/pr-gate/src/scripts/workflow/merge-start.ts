@@ -6,9 +6,9 @@ import {
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
 import { gatherInfo } from '../git-gatherInfo';
-import { baseBranchName, nextFreePreMergeSlot } from './branch-naming';
+import { baseBranchName, nextFreePreMergeNumber, preMergeBackupName } from './branch-naming';
 import { runGitChecked } from './git-exec';
-import { MergeMarker, perFileContextDir, writeMergeMarker } from './merge-state';
+import { MergeMarker, perFileContextDir, writeMergeMarker, mergeRunDirFor } from './merge-state';
 
 // merge-START: the first half of the 3-point squash-merge lifecycle. Brings origin/main into a fresh
 // `<branch>Squash`, and on conflict writes the 3-point context files + the unvalidated marker + the
@@ -47,10 +47,12 @@ export class MergeContext {
 export class MergeStartResult {
     status: 'clean' | 'conflict';
     context: MergeContext | null;
+    runDir: string; // this sync's numbered `merge-<n>/` dir — passed to merge-END so it reads THIS marker
 
-    constructor(status: 'clean' | 'conflict', context: MergeContext | null) {
+    constructor(status: 'clean' | 'conflict', context: MergeContext | null, runDir: string) {
         this.status = status;
         this.context = context;
+        this.runDir = runDir;
     }
 }
 
@@ -64,20 +66,40 @@ function detectPr(baseBranch: string): string {
     return result.status === 0 ? (result.stdout ?? '').trim() : '';
 }
 
-// Snapshot the pre-merge state into the next free NUMBERED slot — `<currentBranch>PreMerge`, then
-// `PreMerge2`, `PreMerge3`, … — never overwriting an existing one. The feature branch name is now
-// constant across syncs, so the numbered snapshot itself is the trail of "how many times I re-merged
-// main" that the old `wpN` branch name used to carry.
-function createBackup(currentBranch: string): string {
-    process.stdout.write('\n' + SEP + '💾 Creating Pre-Merge Backup\n' + SEP + '\n');
-    const backupBranch = nextFreePreMergeSlot(
+// The one number `n` for a sync and the two things it names: the pre-merge backup branch and its
+// paired conflict-context run dir.
+class SyncSlot {
+    backupBranch: string;
+    runDir: string;
+
+    constructor(backupBranch: string, runDir: string) {
+        this.backupBranch = backupBranch;
+        this.runDir = runDir;
+    }
+}
+
+// Pick the first free `<branch>PreMerge<n>` slot number, then WIPE the paired `<home>/merge-<n>/` run
+// dir — a fresh sync means no merge is in progress, so any leftover `merge-<n>` is stale (its own sync
+// ended, or its branch was deleted) and MUST NOT leak its old per-file merge-explanation.md into this
+// merge's validation. Returns the backup branch name + the (now-empty) run dir path, both keyed on `n`.
+function chooseSyncSlot(home: string, currentBranch: string): SyncSlot {
+    const n = nextFreePreMergeNumber(
         currentBranch,
         (name: string): boolean => spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0,
     );
+    const runDir = mergeRunDirFor(home, n);
+    fs.rmSync(runDir, { recursive: true, force: true });
+    return new SyncSlot(preMergeBackupName(currentBranch, n), runDir);
+}
+
+// Snapshot the pre-merge state onto the caller-chosen `backupBranch` (`<currentBranch>PreMerge<n>`),
+// never overwriting. The slot number `n` is picked once in mergeStart and shared with the paired
+// `merge-<n>/` context dir. A clean sync deletes this snapshot at finalize; only conflict syncs keep it.
+function createBackup(currentBranch: string, backupBranch: string): void {
+    process.stdout.write('\n' + SEP + '💾 Creating Pre-Merge Backup\n' + SEP + '\n');
     runGitChecked(['checkout', '-b', backupBranch], 'Failed to create backup branch');
     runGitChecked(['checkout', currentBranch], 'Failed to return to feature branch');
     process.stdout.write(`✅ Backup created: ${backupBranch}\n\n`);
-    return backupBranch;
 }
 
 function saveConflictContext(
@@ -180,7 +202,7 @@ pnpm {{FINISH_COMMAND}}
 
 ## If you need to bail out
 
-A backup branch was created (e.g. \`<feature>PreMerge\`). To abandon:
+A numbered backup branch was created (e.g. \`<feature>PreMerge1\`). To abandon:
 
 \`\`\`
 git merge --abort 2>/dev/null; git checkout <feature> ; git branch -D {{SQUASH_BRANCH}}
@@ -237,7 +259,11 @@ function handleConflictsHandback(
 ): void {
     const raw = execSync('git diff --name-only --diff-filter=U', { encoding: 'utf8' }).trim();
     const conflictedFiles = raw.split('\n').filter((f: string): boolean => f.trim() !== '');
+    fs.mkdirSync(mergeDir, { recursive: true }); // run dir was wiped at sync start — create it fresh
     fs.writeFileSync(path.join(mergeDir, 'updatemain-conflicted-files.txt'), raw + '\n');
+    // Copy the A/B/C hashes into THIS run dir so the merge-process doc's `MERGE_DIR/updatemain-hashes.json`
+    // pointer is accurate (gatherInfo writes the source copy into the feature home before the slot is known).
+    fs.writeFileSync(path.join(mergeDir, 'updatemain-hashes.json'), JSON.stringify(hashes, null, 2) + '\n');
     saveConflictContext(conflictedFiles, mergeDir, hashes.hashForkPoint, hashes.hashFeatureHead, hashes.hashMainHead);
 
     const marker = new MergeMarker(
@@ -272,11 +298,16 @@ function logConflict(repoRoot: string, verb: MutationVerb, mergeDir: string): vo
     logBranchMutation(repoRoot, event);
 }
 
-export async function mergeStart(repoRoot: string, verb: MutationVerb, mergeDir: string, finishCommand: string): Promise<MergeStartResult> {
+export async function mergeStart(repoRoot: string, verb: MutationVerb, home: string, finishCommand: string): Promise<MergeStartResult> {
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
     if (currentBranch.endsWith('Squash')) {
         throw new CliExitError(1, `❌ On a leftover ${currentBranch} branch with no merge marker. Clean up: git branch -D ${currentBranch}`);
     }
+
+    // One number `n` for this sync drives BOTH the backup branch and its `merge-<n>/` context dir.
+    const slot = chooseSyncSlot(home, currentBranch);
+    const backupBranch = slot.backupBranch;
+    const mergeDir = slot.runDir;
 
     process.stdout.write('\n' + SEP + '🔄 Squash-Merge Update from Main\n' + SEP + '\n');
     // gatherInfo RETURNS (never exits): an already-even-with-main branch is NOT special-cased here —
@@ -292,7 +323,7 @@ export async function mergeStart(repoRoot: string, verb: MutationVerb, mergeDir:
     const prNumber = detectPr(baseBranchName(currentBranch));
     process.stdout.write(prNumber ? `Existing PR #${prNumber} will be updated.\n` : 'No existing PR (one can be created later).\n');
 
-    const backupBranch = createBackup(currentBranch);
+    createBackup(currentBranch, backupBranch);
     const backupEvent = new BranchMutationEvent(verb, 'BACKUP');
     backupEvent.fromBranch = currentBranch;
     backupEvent.toBranch = backupBranch;
@@ -318,7 +349,7 @@ export async function mergeStart(repoRoot: string, verb: MutationVerb, mergeDir:
     if (merge.status !== 0) {
         handleConflictsHandback(repoRoot, mergeDir, currentBranch, squashBranch, backupBranch, prNumber, hashes, finishCommand);
         logConflict(repoRoot, verb, mergeDir);
-        return new MergeStartResult('conflict', null);
+        return new MergeStartResult('conflict', null, mergeDir);
     }
     logBranchMutation(repoRoot, new BranchMutationEvent(verb, 'SQUASH'));
 
@@ -328,5 +359,5 @@ export async function mergeStart(repoRoot: string, verb: MutationVerb, mergeDir:
     } else {
         runGitChecked(['commit', '-m', `Squash merge of ${currentBranch}`], 'Failed to commit squash merge');
     }
-    return new MergeStartResult('clean', new MergeContext(currentBranch, squashBranch, backupBranch, prNumber));
+    return new MergeStartResult('clean', new MergeContext(currentBranch, squashBranch, backupBranch, prNumber), mergeDir);
 }

@@ -56,8 +56,35 @@ export class MarkerScanResult {
 
 const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
 
+// The per-feature "home" dir `.webpieces/merge-info/<slug>/`. It no longer holds the marker/context
+// directly — each sync gets its own numbered `merge-<n>/` run dir underneath (mergeRunDirFor), paired
+// with the sync's `<feature>PreMerge<n>` backup branch. This keeps merge N from ever reusing merge
+// N-1's stale per-file context / merge-explanation.md.
 export function mergeDirFor(repoRoot: string, featureName: string): string {
     return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, featureName);
+}
+
+// The run dir for sync number `n`: `<home>/merge-<n>/`. Holds this sync's marker + per-file
+// `updatemain-<file>/` context. Numbered to match the sync's `<feature>PreMerge<n>` backup branch.
+export function mergeRunDirFor(home: string, n: number): string {
+    return path.join(home, `merge-${n}`);
+}
+
+// Locate the in-progress merge's run dir: the `<home>/merge-*/` subdir holding a marker. There is at
+// most one (a fresh sync can't start while a merge is in progress); if more than one somehow exists,
+// prefer an UNVALIDATED marker (the live conflict), else return the first found. Null when none.
+export function findActiveMergeRunDir(home: string): string | null {
+    if (!fs.existsSync(home)) return null;
+    let fallback: string | null = null;
+    for (const entry of fs.readdirSync(home)) {
+        if (!entry.startsWith('merge-')) continue;
+        const dir = path.join(home, entry);
+        const marker = readMergeMarker(dir);
+        if (marker === null) continue;
+        if (!marker.validated) return dir;
+        if (fallback === null) fallback = dir;
+    }
+    return fallback;
 }
 
 // Per-conflicted-file context dir holding A-forkpoint.txt / B-feature.txt / C-main.txt /

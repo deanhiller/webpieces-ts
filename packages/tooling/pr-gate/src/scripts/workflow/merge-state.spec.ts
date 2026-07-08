@@ -11,6 +11,8 @@ import {
     readMergeMarker,
     clearMergeMarker,
     mergeDirFor,
+    mergeRunDirFor,
+    findActiveMergeRunDir,
 } from './merge-state';
 import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 
@@ -76,5 +78,34 @@ describe('merge marker round-trip', () => {
 
         clearMergeMarker(dir);
         expect(readMergeMarker(dir)).toBeNull();
+    });
+});
+
+describe('numbered run dirs', () => {
+    function marker(n: number, validated: boolean): MergeMarker {
+        return new MergeMarker('feat', 'featSquash', `featPreMerge${n}`, '', ['a.ts'], 'A', 'B', 'C', validated);
+    }
+
+    it('mergeRunDirFor nests merge-<n> under the home', () => {
+        const home = mergeDirFor('/repo', 'feat');
+        expect(mergeRunDirFor(home, 2)).toBe(path.join(home, 'merge-2'));
+    });
+
+    it('findActiveMergeRunDir returns null when no run dir holds a marker', () => {
+        const home = tmp();
+        expect(findActiveMergeRunDir(home)).toBeNull();
+    });
+
+    it('finds the merge-<n> whose marker is present', () => {
+        const home = tmp();
+        writeMergeMarker(mergeRunDirFor(home, 2), marker(2, false));
+        expect(findActiveMergeRunDir(home)).toBe(path.join(home, 'merge-2'));
+    });
+
+    it('prefers the UNVALIDATED marker when more than one exists', () => {
+        const home = tmp();
+        writeMergeMarker(mergeRunDirFor(home, 1), marker(1, true)); // stale validated
+        writeMergeMarker(mergeRunDirFor(home, 2), marker(2, false)); // live conflict
+        expect(findActiveMergeRunDir(home)).toBe(path.join(home, 'merge-2'));
     });
 });

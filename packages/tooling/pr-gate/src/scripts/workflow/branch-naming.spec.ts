@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { baseBranchName, preMergeBackupName, nextFreePreMergeSlot } from './branch-naming';
+import { baseBranchName, preMergeBackupName, nextFreePreMergeNumber } from './branch-naming';
 
 describe('baseBranchName', () => {
     it('leaves a gen-1 branch unchanged', () => {
@@ -24,24 +24,20 @@ describe('baseBranchName', () => {
 });
 
 describe('preMergeBackupName', () => {
-    it('slot 1 (default) appends a bare PreMerge', () => {
-        expect(preMergeBackupName('feat/x-migration')).toBe('feat/x-migrationPreMerge');
-        expect(preMergeBackupName('feat/x-migration', 1)).toBe('feat/x-migrationPreMerge');
-    });
-
-    it('slot 2+ appends the numbered PreMerge<n>', () => {
+    it('always numbers from 1 (no bare PreMerge)', () => {
+        expect(preMergeBackupName('feat/x-migration', 1)).toBe('feat/x-migrationPreMerge1');
         expect(preMergeBackupName('feat/x-migration', 2)).toBe('feat/x-migrationPreMerge2');
         expect(preMergeBackupName('feat/x-migration', 3)).toBe('feat/x-migrationPreMerge3');
     });
 });
 
-describe('nextFreePreMergeSlot', () => {
-    it('returns the bare PreMerge when nothing exists yet', () => {
-        expect(nextFreePreMergeSlot('feat/x', () => false)).toBe('feat/xPreMerge');
+describe('nextFreePreMergeNumber', () => {
+    it('returns 1 when nothing exists yet', () => {
+        expect(nextFreePreMergeNumber('feat/x', () => false)).toBe(1);
     });
 
-    it('skips taken slots and returns the first free numbered one', () => {
-        const taken = new Set(['feat/xPreMerge', 'feat/xPreMerge2']);
-        expect(nextFreePreMergeSlot('feat/x', (name: string): boolean => taken.has(name))).toBe('feat/xPreMerge3');
+    it('skips taken slots and returns the first free number', () => {
+        const taken = new Set(['feat/xPreMerge1', 'feat/xPreMerge2']);
+        expect(nextFreePreMergeNumber('feat/x', (name: string): boolean => taken.has(name))).toBe(3);
     });
 });

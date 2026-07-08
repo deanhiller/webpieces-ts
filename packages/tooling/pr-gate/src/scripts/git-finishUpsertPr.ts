@@ -15,7 +15,7 @@ import { getFeatureName } from './workflow/git-readAiBranchName';
 import { baseBranchName } from './workflow/branch-naming';
 import { assertCleanTree, ensurePushed } from './workflow/git-exec';
 import { runBuildGate, BuildGateOptions } from './workflow/build-affected';
-import { mergeDirFor, readMergeMarker } from './workflow/merge-state';
+import { mergeDirFor, readMergeMarker, findActiveMergeRunDir } from './workflow/merge-state';
 import { mergeEnd } from './workflow/merge-end';
 import { MergeContext } from './workflow/merge-start';
 import {
@@ -97,14 +97,16 @@ export async function main(): Promise<void> {
     const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
     writeTemplate(repoRoot, 'webpieces.git-workflow.md');
-    const mergeDir = mergeDirFor(repoRoot, getFeatureName());
+    const home = mergeDirFor(repoRoot, getFeatureName());
 
     // 1. Finish any in-progress conflict resolution: validate + commit + finalize the branch swap.
-    //    No marker (or already validated) => no merge in progress => nothing to do (the common case).
-    const marker = readMergeMarker(mergeDir);
-    if (marker && !marker.validated) {
+    //    No active run dir (or its marker already validated) => no merge in progress => nothing to do
+    //    (the common case). The active merge is the `merge-<n>/` run dir holding a marker.
+    const activeDir = findActiveMergeRunDir(home);
+    const marker = activeDir ? readMergeMarker(activeDir) : null;
+    if (activeDir && marker && !marker.validated) {
         await mergeEnd(
-            repoRoot, 'wp-finish-upsert-pr', mergeDir,
+            repoRoot, 'wp-finish-upsert-pr', activeDir,
             new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
             marker.conflictedFiles,
         );
