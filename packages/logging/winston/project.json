@@ -1,0 +1,22 @@
+{
+    "name": "winston",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/logging/winston/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/logging/winston",
+                "main": "packages/logging/winston/src/index.ts",
+                "tsConfig": "packages/logging/winston/tsconfig.lib.json",
+                "assets": [
+                    "packages/logging/winston/package.json",
+                    "packages/logging/winston/README.md"
+                ]
+            }
+        }
+    },
+    "tags": ["framework:node", "role:lib"]
+}

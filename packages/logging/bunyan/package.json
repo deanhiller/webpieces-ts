@@ -1,0 +1,31 @@
+{
+    "name": "@webpieces/bunyan",
+    "version": "0.0.0-dev",
+    "description": "Node-only bunyan LoggerFactory backends for webpieces: Console (local pretty) + GCP (@google-cloud/logging-bunyan), auto-enriched with HeaderRegistry context keys",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/logging/bunyan"
+    },
+    "keywords": [
+        "webpieces",
+        "bunyan",
+        "logging",
+        "gcp",
+        "cloud-logging"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-util": "workspace:*",
+        "bunyan": "1.8.15",
+        "@google-cloud/logging-bunyan": "5.1.0",
+        "@types/bunyan": "1.8.11"
+    }
+}

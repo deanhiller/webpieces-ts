@@ -118,6 +118,9 @@ jobs:
                   # released package; the npm token can't create it, which 404'd and aborted the
                   # whole release before the tooling packages below could publish).
                   npm publish dist/packages/cloud/gcp-identity --access public --provenance
+                  # Logging backends (winston / bunyan) — depend only on core-util (already published above).
+                  npm publish dist/packages/logging/winston --access public --provenance
+                  npm publish dist/packages/logging/bunyan --access public --provenance
                   npm publish dist/packages/http/http-routing --access public --provenance
                   npm publish dist/packages/http/http-client --access public --provenance
                   npm publish dist/packages/cloud/cloudtasks-client --access public --provenance
@@ -151,6 +154,8 @@ jobs:
                       - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/gcp-identity@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/gcp-identity/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/winston@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/winston/v/${{ steps.version.outputs.full_version }})
+                      - [@webpieces/bunyan@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/bunyan/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-routing@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-routing/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/http-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/http-client/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/cloudtasks-client@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/cloudtasks-client/v/${{ steps.version.outputs.full_version }})
