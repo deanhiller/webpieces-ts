@@ -7,7 +7,7 @@ import { RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-import { Counter } from '../controllers/save-controller';
+import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
 import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
 
@@ -18,13 +18,20 @@ import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
  * this is the exact same container + filter chain production uses (see AppServerConfig.configureRoutes).
  */
 
-/** Build the app's ApiFactory with Server2Api rebound to a mock. */
-async function createApiFactoryWithMock(mock: MockedApi<Server2Api>): Promise<ApiFactory> {
+/**
+ * Build the app's ApiFactory with Server2Api rebound to a mock. Pass a `counter` to also rebind
+ * the controller's Counter to a test-held instance — so a test can observe it via the object it
+ * owns, WITHOUT reaching into the DI container (tests only need createApiClient).
+ */
+async function createApiFactoryWithMock(mock: MockedApi<Server2Api>, counter?: Counter): Promise<ApiFactory> {
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mock);
         // The framework AuthFilter is AuthMode-driven; rebind AuthConfig to a stub so the test's
         // token passes without minting a real JWT (a no-token call still 401s through the chain).
         (await options.rebind(AuthConfig)).to(TestAuthConfig);
+        if (counter) {
+            (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
+        }
     });
     // ONE call — the SAME builder the real server uses (buildClientServerApiFactory), with the
     // default ConsoleLoggerFactory (no [AWAITING...] banner). Only the mock override differs.
@@ -45,11 +52,10 @@ function createMockFetchResponse(value: string): FetchValueResponse {
 describe('SaveApi with mocked Server2Api', () => {
     let mockServer2Api: MockedApi<Server2Api>;
     let saveApi: SaveApi;
-    let router: ApiFactory;
 
     beforeEach(async () => {
         mockServer2Api = createMock<Server2Api>('Server2Api');
-        router = await createApiFactoryWithMock(mockServer2Api);
+        const router = await createApiFactoryWithMock(mockServer2Api);
         saveApi = router.createApiClient<SaveApi>(SaveApi);
     });
 
@@ -71,15 +77,18 @@ describe('SaveApi with mocked Server2Api', () => {
     });
 
     it('should increment counter through filter chain', async () => {
+        // Bind a test-held counter so we observe it via the object we own — no container access;
+        // the api client (createApiClient) is the only surface the test drives.
+        const counter = new SimpleCounter();
+        const counterApi = (await createApiFactoryWithMock(mockServer2Api, counter)).createApiClient<SaveApi>(SaveApi);
         mockServer2Api.mock.setDefaultReturnValue('fetchValue', createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE'));
 
         await RequestContext.run(async () => {
             RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
-            await saveApi.save({ query: 'test1' });
-            await saveApi.save({ query: 'test2' });
-            const counter = router.getContainer().get<Counter>(TYPES.Counter);
-            expect(counter.get()).toBe(2);
+            await counterApi.save({ query: 'test1' });
+            await counterApi.save({ query: 'test2' });
         });
+        expect(counter.get()).toBe(2);
     });
 
     it('should pass different mock values for different requests', async () => {
@@ -123,21 +132,5 @@ describe('PublicApi', () => {
     it('should return default greeting when no name provided', async () => {
         const response = await publicApi.getInfo({});
         expect(response.greeting).toBe('Hello, World!');
-    });
-});
-
-/**
- * Container access via the router.
- */
-describe('Container access', () => {
-    it('should provide access to DI container with the mock bound', async () => {
-        const mockServer2Api = createMock<Server2Api>('Server2Api');
-        const router = await createApiFactoryWithMock(mockServer2Api);
-
-        const container = router.getContainer();
-        expect(container).toBeDefined();
-
-        const remoteApi = container.get<Server2Api>(TYPES.Server2Api);
-        expect(remoteApi).toBe(mockServer2Api);
     });
 });

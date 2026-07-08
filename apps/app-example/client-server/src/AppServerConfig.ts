@@ -1,6 +1,6 @@
 import { ContainerModule } from 'inversify';
 import { ContextKey, LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
-import { ApiFactory, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
+import { ApiFactory, WebpiecesRouter, FilterDefinition, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogApiFilter, RecordingFilter } from '@webpieces/http-server';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { InversifyModule, AppHeaders } from './modules/InversifyModule';
@@ -21,14 +21,14 @@ export const APP_MODULES: ContainerModule[] = [InversifyModule];
 export const APP_HEADERS: ContextKey[] = AppHeaders.getAllHeaders();
 
 /**
- * Declare the app's USER filters + routes on the {@link ApiFactory}. The framework auto-installs
- * the fixed ErrorLogFilter + AuthFilter above these (auth is AuthMode-driven off the endpoint's
- * @Authentication decorator + the bound AuthConfig), so the app only adds its own filters, which
- * run in-process AND over HTTP.
+ * Declare the app's USER filters + routes on the router's BUILD surface (addRoutes/addFilter,
+ * on the concrete {@link WebpiecesRouter}). The framework auto-installs the fixed ErrorLogFilter
+ * + AuthFilter above these (auth is AuthMode-driven off the endpoint's @Authentication decorator
+ * + the bound AuthConfig), so the app only adds its own filters, which run in-process AND over HTTP.
  *
  * Priority order (higher runs first): 1850 RecordingFilter → 1800 LogApiFilter.
  */
-export function configureRoutes(apiFactory: ApiFactory): void {
+export function configureRoutes(apiFactory: WebpiecesRouter): void {
     apiFactory.addFilter(new FilterDefinition(1850, RecordingFilter, '*'));
     apiFactory.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
 

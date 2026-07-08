@@ -59,12 +59,14 @@ export async function createCompanyRouter(options: CompanyRouterOptions = {}): P
  *   2. LogManager.setFactory     (fails fast unless the registry is configured first)
  *   3. build the router + DI container
  *
- * The per-app `buildXxxApiFactory` helpers call this, then add their routes/filters and
- * return the ApiFactory — so the express server (via {@link bootstrapServer}), the
- * in-process createApiClient tests, and the legacy-server embed all share one path.
- * Tests pass their own {@link CompanySetupOptions.loggerFactory}; else identical to prod.
+ * Returns the concrete {@link WebpiecesRouter} (the BUILD surface): the per-app
+ * `buildXxxApiFactory` helpers call this, use addRoutes/addFilter to declare their routes +
+ * filters, then return it narrowed to the {@link ApiFactory} consumer surface — so the express
+ * server (via {@link bootstrapServer}), the in-process createApiClient tests, and the
+ * legacy-server embed all share one path. Tests pass their own
+ * {@link CompanySetupOptions.loggerFactory}; else identical to prod.
  */
-export async function setupCompanyRuntime(options: CompanySetupOptions): Promise<ApiFactory> {
+export async function setupCompanyRuntime(options: CompanySetupOptions): Promise<WebpiecesRouter> {
     // 1. Register the global HeaderRegistry FIRST.
     configureCompanyHeaders(options.svrHeaders);
 
