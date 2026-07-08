@@ -97,6 +97,7 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
                 methodName,
                 controllerName,
                 authMeta,
+                apiName,
             );
 
             routeBuilder.addRoute(

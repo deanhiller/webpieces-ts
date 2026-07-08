@@ -26,6 +26,8 @@ export class RouteMetadata {
     methodName: string;
     controllerClassName?: string;
     authMeta?: AuthMeta;
+    /** The API contract class name (e.g. 'SaveApi') — distinct from the controller name. */
+    apiName?: string;
 
     constructor(
         httpMethod: string,
@@ -33,12 +35,14 @@ export class RouteMetadata {
         methodName: string,
         controllerClassName?: string,
         authMeta?: AuthMeta,
+        apiName?: string,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
         this.methodName = methodName;
         this.controllerClassName = controllerClassName;
         this.authMeta = authMeta;
+        this.apiName = apiName;
     }
 }
 

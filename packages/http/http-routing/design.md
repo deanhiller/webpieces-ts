@@ -8,12 +8,15 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## WebpiecesRouter — api-impl, Level 0…1
+## WebpiecesRouter — api-impl, Level 0…2
 
 ```mermaid
 graph TD
+    ApiClientFactory["ApiClientFactory"]
     RouteBuilderImpl["RouteBuilderImpl"]
     WebpiecesRouter["WebpiecesRouter"]:::apiImpl
+    ApiClientFactory --> RouteBuilderImpl
+    WebpiecesRouter --> ApiClientFactory
     WebpiecesRouter --> RouteBuilderImpl
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e

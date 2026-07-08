@@ -1,5 +1,5 @@
 import { Express } from 'express';
-import { ApiFactory, ApiClient } from '@webpieces/http-routing';
+import { ApiFactory, ApiClient, getApiPath, getEndpoints } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 
@@ -42,11 +42,11 @@ export class WebpiecesExpressRouter {
      * routes must stay untouched. The caller owns app.listen() and any global middleware.
      */
     bindExpress(app: Express): void {
-        const apiClients = this.apiFactory.apiClients();
-        for (const apiClient of apiClients) {
-            this.mountApiClient(app, apiClient);
+        let count = 0;
+        for (const apiClient of this.apiFactory.apiClients()) {
+            count += this.mountApiClient(app, apiClient);
         }
-        log.info(`[WebpiecesExpressRouter] Mounted ${apiClients.length} webpieces route(s) onto express`);
+        log.info(`[WebpiecesExpressRouter] Mounted ${count} webpieces route(s) onto express`);
     }
 
     /**
@@ -78,17 +78,25 @@ export class WebpiecesExpressRouter {
     }
 
     /**
-     * Wrap one ApiClient's impl in an express handler (RequestContext.run, header read, manual
-     * JSON body parse, error→ProtocolError) and register it on the app for its method + path.
+     * Bind EACH method of one ApiClient. The api's @ApiPath/@Endpoint decorators give the paths;
+     * for each we wrap the matching client method (the proxy — RequestContext.run + header read +
+     * JSON body parse + error→ProtocolError all live in the wrapper/chain) and register the route.
+     * This is one-to-one with a test: an HTTP POST maps straight to `client[method](dto)`.
+     *
+     * @returns the number of routes mounted for this api.
      */
-    private mountApiClient(app: Express, apiClient: ApiClient): void {
-        const wrapper = this.middleware.createExpressWrapper(apiClient.impl, apiClient.routeMeta);
-        this.registerHandler(
-            app,
-            apiClient.routeMeta.httpMethod,
-            apiClient.routeMeta.path,
-            wrapper.execute.bind(wrapper),
-        );
+    private mountApiClient(app: Express, apiClient: ApiClient): number {
+        const basePath = getApiPath(apiClient.api) || '';
+        const endpoints = getEndpoints(apiClient.api) || {};
+        let count = 0;
+        for (const [methodName, endpointPath] of Object.entries(endpoints)) {
+            const path = basePath + endpointPath;
+            const wrapper = this.middleware.createExpressWrapper(apiClient.client[methodName], path);
+            // All webpieces routes are POST (the api-tier convention).
+            this.registerHandler(app, 'POST', path, wrapper.execute.bind(wrapper));
+            count++;
+        }
+        return count;
     }
 
     private registerHandler(

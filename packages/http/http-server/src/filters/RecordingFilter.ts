@@ -95,7 +95,7 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             ctxSnapshot[entry[0]] = entry[1];
         }
 
-        const apiName = meta.routeMeta.controllerClassName ?? 'UnknownController';
+        const apiName = meta.routeMeta.apiName ?? meta.routeMeta.controllerClassName ?? 'UnknownApi';
         return new RecordedEndpoint(apiName, meta.methodName, [meta.requestDto], ctxSnapshot);
     }
 }
