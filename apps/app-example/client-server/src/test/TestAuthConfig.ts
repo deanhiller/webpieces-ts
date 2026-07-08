@@ -1,5 +1,6 @@
 import { injectable } from 'inversify';
-import { AuthConfig, AuthValues, ContextValue, SharedSecrets } from '@webpieces/http-routing';
+import { AuthConfig, AuthValues, SharedSecrets } from '@webpieces/http-routing';
+import { ContextTuple } from '@webpieces/core-util';
 import { CompanyHeaders } from '@webpieces/company-core';
 
 /**
@@ -20,7 +21,7 @@ export class TestAuthConfig extends AuthConfig {
     };
 
     override parseJwt(_token: string): AuthValues {
-        return new AuthValues('test-user', ['admin'], [new ContextValue(CompanyHeaders.USER_ID, 'test-user')]);
+        return new AuthValues('test-user', ['admin'], [new ContextTuple(CompanyHeaders.USER_ID, 'test-user')]);
     }
 
     override verifyOidc(): Promise<void> {

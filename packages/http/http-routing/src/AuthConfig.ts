@@ -1,16 +1,4 @@
-import { ContextKey, JwtRequirement, HttpForbiddenError } from '@webpieces/core-util';
-
-/**
- * ContextValue - one (ContextKey, value) pair the JWT parse plugin wants stamped into the
- * RequestContext (e.g. USER_ID, ORG_ID). Data-only structure (a class, per the guidelines).
- */
-export class ContextValue {
-    constructor(
-        public readonly key: ContextKey,
-        // webpieces-disable no-any-unknown -- context values are arbitrary app-defined data
-        public readonly value: unknown,
-    ) {}
-}
+import { ContextTuple, JwtRequirement, HttpForbiddenError } from '@webpieces/core-util';
 
 /**
  * SharedSecrets - the accepted values for ONE `@AuthSharedSecret(name)`. BOTH secret1 AND secret2
@@ -39,7 +27,7 @@ export class AuthValues {
     constructor(
         public readonly userId: string,
         public readonly roles: string[] = [],
-        public readonly entries: ContextValue[] = [],
+        public readonly entries: ContextTuple[] = [],
         // webpieces-disable no-any-unknown -- raw JWT claims for app-defined authorization (inOrg, tenant, ...)
         public readonly claims: Record<string, unknown> = {},
     ) {}
@@ -54,14 +42,18 @@ export class AuthValues {
  *                       Prod fills it from env; a test binds `{ NAME: 'some-test-key' }` and can then
  *                       exercise the shared-secret path (and a negative test with a wrong key).
  *  - `parseJwt`       — PLUGIN: decode/verify a user JWT into {@link AuthValues} (userId, roles,
- *                       context entries). Minting a JWT is a controller concern (login), not here.
+ *                       context entries). The app owns the VERIFICATION — it picks the JWT library
+ *                       and strategy (a static HS256 secret, RS256 + JWKS with key rotation, or a
+ *                       provider SDK like Firebase/Auth0/Cognito). Minting a JWT is a controller
+ *                       concern (login), not here.
  *  - `verifyOidc`     — PLUGIN: verify a Google OIDC service-to-service token against the endpoint's
  *                       caller allow-list. Fully generic — the company base wires it to
  *                       @webpieces/gcp-identity once, so apps never customize OIDC.
  *
- * Keeping the plugins app-side means http-routing needs NO jsonwebtoken / gcp-identity. AuthFilter
- * injects this `@optional`: a public-only server binds none; a non-public route with no AuthConfig
- * (or no value/plugin for its mode) fails fast.
+ * The framework owns the SEAM + policy (AuthMode dispatch, {@link authorizeJwt} roles, 401/403
+ * translation), NOT the crypto — so http-routing needs NO jsonwebtoken / gcp-identity and never
+ * locks apps to one JWT library. AuthFilter injects this `@optional`: a public-only server binds
+ * none; a non-public route with no AuthConfig (or no value/plugin for its mode) fails fast.
  */
 export abstract class AuthConfig {
     /**
