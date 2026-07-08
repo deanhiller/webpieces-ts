@@ -347,13 +347,15 @@ export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
 // findForkPoint check present the SAME instructions. The human must redo the work on a fresh branch —
 // deliberately painful so the bad merge gets noticed and reported.
 export function squashRecoverySteps(currentBranch: string): string[] {
+    // Branch off origin/main directly (never `git checkout main`) so these steps are correct on the
+    // primary repo AND inside a linked worktree, where main is checked out elsewhere and cannot be
+    // checked out again.
     return [
-        '1. Switch to main:            git checkout main',
-        '2. Pull latest:               git pull',
-        `3. New branch (new name):     git checkout -b ${currentBranch}-v2`,
-        `4. Squash-merge old branch:   git merge --squash ${currentBranch}`,
-        `5. Commit the squash:         git add -A && git commit -m "Squashed from ${currentBranch}"`,
-        '6. If a PR exists:            open a NEW PR for the -v2 branch and close the old one.',
+        '1. Fetch latest main:            git fetch origin main',
+        `2. New branch off origin/main:   git checkout -b ${currentBranch}-v2 origin/main`,
+        `3. Squash-merge old branch:      git merge --squash ${currentBranch}`,
+        `4. Commit the squash:            git add -A && git commit -m "Squashed from ${currentBranch}"`,
+        '5. If a PR exists:               open a NEW PR for the -v2 branch and close the old one.',
     ];
 }
 

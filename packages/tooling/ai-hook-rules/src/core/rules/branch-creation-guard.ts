@@ -26,6 +26,12 @@ const BRANCH_PATTERNS: RegExp[] = [
 // repo mid-transition. Block it at creation time and steer the name back to the plain feature form.
 const RESERVED_GENERATION_SUFFIX = /wp\d+$/;
 
+// A branch-creation command that explicitly bases off origin/main (e.g. `git checkout -b feat
+// origin/main`). This is exactly the fresh-main base the guard wants, and it works from ANY current
+// branch or linked worktree — main need not (and in a worktree cannot) be checked out here. Allowed
+// unconditionally so the recovery messages can safely tell you to run it from a worktree.
+const ORIGIN_MAIN_BASE = /git\s+(?:checkout\s+-[bB]|switch\s+-[cC])\s+\S+\s+origin\/main(?:\s|$)/;
+
 function extractBranchName(command: string): string | null {
     for (const pattern of BRANCH_PATTERNS) {
         const m = pattern.exec(command);
@@ -81,7 +87,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     // hard-blocks it and points instead at the ignoreModifiedUntilEpoch escape hatch.
     get fixHint(): FixHint {
         const options = [
-            new Option("Run 'git checkout main && git pull origin main', then create your branch FROM main", true),
+            new Option("Create it off fresh main from anywhere (incl. a worktree): git fetch origin main && git checkout -b <name> origin/main", true),
             new Option(`Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`),
         ];
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
@@ -115,6 +121,11 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             )];
         }
 
+        // Explicitly basing off origin/main is always allowed — it creates the branch from fresh main
+        // regardless of the current branch, and is the ONLY way that also works inside a linked worktree
+        // (where `git checkout main` fatals). Reserved-name check above still applies.
+        if (ORIGIN_MAIN_BASE.test(ctx.command)) return [];
+
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,
             encoding: 'utf8',
@@ -129,9 +140,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             return [new V(
                 1,
                 truncate(ctx.command),
-                `You are on '${currentBranch}', not main. You need to run ` +
-                `git checkout main && git pull && git checkout -b ${requestedName} ` +
-                `instead of branching from this branch!!! ${this.branchFormat}. ` +
+                `You are on '${currentBranch}', not main. Create the branch OFF origin/main instead of ` +
+                `stacking it on this branch: git fetch origin main && git checkout -b ${requestedName} origin/main ` +
+                `(works here and inside a worktree). ${this.branchFormat}. ` +
                 `You can temporarily turn this off if you truly need a sub-branch by setting ` +
                 `branch-creation-guard.ignoreModifiedUntilEpoch (a future epoch) in webpieces.config.json.`,
             )];
@@ -140,8 +151,8 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         return [new V(
             1,
             truncate(ctx.command),
-            `You are on '${currentBranch}', not main. Branches must be created from main: ` +
-            `git checkout main && git pull && git checkout -b ${requestedName}. ${this.branchFormat}. ` +
+            `You are on '${currentBranch}', not main. Branches must be created from fresh main: ` +
+            `git fetch origin main && git checkout -b ${requestedName} origin/main. ${this.branchFormat}. ` +
             `If you truly need a stacked sub-branch (requires human approval), name it per ` +
             `branch-creation-guard.subBranchNaming ('${this.subBranchNaming}').`,
         )];

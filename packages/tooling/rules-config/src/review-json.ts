@@ -128,6 +128,13 @@ export function loadReviewJson(filePath: string): ReviewJson {
         errors.push(`"riskLevel" must be one of: ${RISK_LEVELS.join(', ')}.`);
     }
 
+    // Title is REQUIRED (hard-reject): the AI must author a real PR title. We no longer silently fall
+    // back to the feature name — an empty title means the AI skipped the field, which is a review gap.
+    const title = typeof raw['title'] === 'string' ? (raw['title'] as string).trim() : '';
+    if (title === '') {
+        errors.push('"title" must be a non-empty, imperative PR title describing the change (no branch names).');
+    }
+
     if (errors.length > 0) {
         throw new InformAiError(
             `review.json has ${errors.length} error(s) — fix ALL, then re-run pnpm wp-finish-upsert-pr:\n\n` +
@@ -141,9 +148,6 @@ export function loadReviewJson(filePath: string): ReviewJson {
         ? (raw['riskEmoji'] as string)
         : (EMOJI_FOR_LEVEL[level] ?? '🟡');
     const summary = typeof raw['summary'] === 'string' ? (raw['summary'] as string) : '';
-    // Title is lenient: absent/blank → '' and the finish command falls back to the feature name, so an
-    // older review.json (pre-title field) never hard-fails; the schema hint still asks the AI for it.
-    const title = typeof raw['title'] === 'string' ? (raw['title'] as string).trim() : '';
 
     return new ReviewJson(
         title,
