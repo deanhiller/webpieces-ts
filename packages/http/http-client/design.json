@@ -73,6 +73,22 @@
                     "level": 0
                 },
                 {
+                    "id": "Record<string, string | undefined>",
+                    "className": "Record<string, string | undefined>",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/core/core-util/src/http/Secrets.ts",
+                    "level": 3
+                },
+                {
+                    "id": "Secrets",
+                    "className": "Secrets",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/core/core-util/src/http/Secrets.ts",
+                    "level": 2
+                },
+                {
                     "id": "boolean",
                     "className": "boolean",
                     "kind": "unresolved",
@@ -107,6 +123,15 @@
                     "tokenKey": "type:IdTokenMinter",
                     "paramName": "idTokenMinter",
                     "paramType": "IdTokenMinter"
+                },
+                {
+                    "from": "ClientConfig",
+                    "to": "Secrets",
+                    "injection": "type",
+                    "token": "Secrets",
+                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
+                    "paramName": "secrets",
+                    "paramType": "Secrets"
                 },
                 {
                     "from": "ClientConfig",
@@ -170,12 +195,22 @@
                     "tokenKey": "class:packages/core/core-util/src/http/LogApiCall.ts#LogApiCall",
                     "paramName": "logApiCall",
                     "paramType": "LogApiCall"
+                },
+                {
+                    "from": "Secrets",
+                    "to": "Record<string, string | undefined>",
+                    "injection": "type",
+                    "token": "Record<string, string | undefined>",
+                    "tokenKey": "type:Record<string, string | undefined>",
+                    "paramName": "values",
+                    "paramType": "Record<string, string | undefined>"
                 }
             ],
             "unresolved": [
                 "ApiPrototype<object>",
                 "ContextReader",
                 "IdTokenMinter",
+                "Record<string, string | undefined>",
                 "boolean",
                 "string"
             ]

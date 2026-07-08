@@ -2,7 +2,7 @@ import { GoogleAuth, OAuth2Client } from 'google-auth-library';
 import { LogManager } from '@webpieces/core-util';
 import { toError } from '@webpieces/core-util';
 import { isOnGcp } from './metadata';
-import { getProjectId, getRuntimeServiceAccountEmail } from './urls';
+import { getProjectId, getRegion, getRuntimeServiceAccountEmail } from './urls';
 
 const log = LogManager.getLogger('gcp-identity-oidc');
 
@@ -63,6 +63,14 @@ export async function verifyOidcFromCallers(
     if (!email) {
         return new OidcVerifyResult(false, undefined, 'token invalid or missing email claim');
     }
+    // EMPTY allow-list = TRUST THE EDGE: accept any genuine Google-signed OIDC caller, because a
+    // PRIVATE Cloud Run service's edge already gated WHO via run.invoker IAM (managed in terraform,
+    // one source of truth). Warn loudly (once) if the service is actually PUBLIC — then the edge is
+    // NOT filtering callers and this is insecure. Non-empty list = explicit app-level allow-list.
+    if (callers.length === 0) {
+        await warnIfPublicOnce();
+        return new OidcVerifyResult(true, email);
+    }
     const allowed = await resolveCallers(callers);
     if (!allowed.includes(email)) {
         return new OidcVerifyResult(
@@ -74,6 +82,65 @@ export async function verifyOidcFromCallers(
     return new OidcVerifyResult(true, email);
 }
 
+let publicPostureChecked = false;
+
+/**
+ * @AuthOidc() (trust-the-edge) is only secure when the Cloud Run service is PRIVATE — the edge
+ * enforces run.invoker. If it is actually PUBLIC, warn LOUDLY (once): we still admit only
+ * Google-signed callers, but the edge is not filtering WHO. Never fails — this is advisory.
+ */
+async function warnIfPublicOnce(): Promise<void> {
+    if (publicPostureChecked) {
+        return;
+    }
+    publicPostureChecked = true; // attempt at most once, even if the check itself errors
+    if (!(await isOnGcp())) {
+        return; // off-GCP: there is no Cloud Run edge; public/private does not apply.
+    }
+    if (await isServicePublic()) {
+        log.error(
+            'This endpoint is currently public but marked @AuthOidc which requires the service to be ' +
+                'private. You are currently running in a very insecure mode; however, we are only allowing ' +
+                'google-signed callers in. The edge will validate callers are allowed in (make the Cloud Run ' +
+                'service private — remove the allUsers run.invoker binding) to reduce your attack surface.',
+        );
+    }
+}
+
+/**
+ * True when THIS Cloud Run service grants run.invoker to allUsers/allAuthenticatedUsers (public).
+ * Reads the service's OWN IAM policy via the Run Admin API (needs run.services.getIamPolicy on the
+ * runtime SA). On any failure we cannot tell → false (no false alarm).
+ */
+async function isServicePublic(): Promise<boolean> {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a failed self-IAM read just means "posture unknown" → no warning
+    try {
+        const [project, region] = await Promise.all([getProjectId(), getRegion()]);
+        const service = process.env['K_SERVICE'] ?? '';
+        const url = `https://run.googleapis.com/v2/projects/${project}/locations/${region}/services/${service}:getIamPolicy`;
+        const client = await reusableAuth.getClient();
+        const res = await client.request<IamPolicy>({ url: url });
+        return (res.data.bindings ?? []).some(
+            (binding: IamBinding) =>
+                binding.role === 'roles/run.invoker' &&
+                (binding.members ?? []).some((m: string) => m === 'allUsers' || m === 'allAuthenticatedUsers'),
+        );
+    } catch (err: unknown) {
+        const error = toError(err);
+        log.debug(`Could not read own Cloud Run IAM policy (need run.services.getIamPolicy): ${error.message}`);
+        return false;
+    }
+}
+
+/** Minimal shape of a Cloud Run getIamPolicy response. */
+interface IamBinding {
+    role: string;
+    members?: string[];
+}
+interface IamPolicy {
+    bindings?: IamBinding[];
+}
+
 function makeDevToken(email: string, audience: string): string {
     const payload = JSON.stringify({ email: email, aud: audience });
     return DEV_TOKEN_PREFIX + Buffer.from(payload, 'utf8').toString('base64url');
@@ -83,16 +150,38 @@ async function extractVerifiedEmail(idToken: string): Promise<string | undefined
     if (idToken.startsWith(DEV_TOKEN_PREFIX)) {
         return decodeDevTokenEmail(idToken);
     }
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- an unverifiable token is simply unauthenticated → undefined → 401 upstream
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a genuinely unverifiable token is unauthenticated (→ undefined → 401); infra failures are re-thrown below
     try {
         const ticket = await reusableVerifier.verifyIdToken({ idToken: idToken });
         const payload = ticket.getPayload();
         return payload?.email ?? undefined;
     } catch (err: unknown) {
         const error = toError(err);
-        log.debug(`OIDC token verify failed: ${error.message}`);
+        if (isInfrastructureError(error)) {
+            // A network/system failure fetching Google's certs (or a bug) is NOT an auth failure.
+            // Do NOT mask it as a 401 — re-throw so it surfaces as a 5xx (alertable / retryable)
+            // instead of looking like a caller sent a bad token.
+            throw error;
+        }
+        // Bad signature / expired / malformed token → genuinely unauthenticated → 401 upstream.
+        log.debug(`OIDC token rejected (unauthenticated): ${error.message}`);
         return undefined;
     }
+}
+
+/**
+ * True when an error thrown while verifying a token is INFRASTRUCTURE (network/system), not a bad
+ * token — e.g. the metadata/cert fetch failed. These must NOT be swallowed as a 401 (that would
+ * both mislead the caller and hide real outages/bugs behind a client-error status).
+ */
+function isInfrastructureError(error: Error): boolean {
+    const code = (error as ErrorWithCode).code;
+    const networkCodes = ['ENOTFOUND', 'ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN'];
+    return (
+        (code !== undefined && networkCodes.includes(code)) ||
+        error.name === 'GaxiosError' ||
+        error.name === 'FetchError'
+    );
 }
 
 function decodeDevTokenEmail(idToken: string): string | undefined {
@@ -128,4 +217,9 @@ async function resolveCaller(caller: string): Promise<string> {
 class DevTokenPayload {
     email!: string;
     aud!: string;
+}
+
+/** A thrown error carrying an optional Node/system error code (e.g. 'ETIMEDOUT'). */
+interface ErrorWithCode {
+    code?: string;
 }

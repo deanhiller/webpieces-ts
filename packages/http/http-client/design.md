@@ -20,10 +20,13 @@ graph TD
     IdTokenMinter{{"IdTokenMinter ?"}}:::unresolved
     LogApiCall["LogApiCall"]
     ProxyClient["ProxyClient"]:::apiImpl
+    Record_string__string___undefined_{{"Record<string, string | undefined> ?"}}:::unresolved
+    Secrets["Secrets"]
     boolean{{"boolean ?"}}:::unresolved
     string{{"string ?"}}:::unresolved
     ClientConfig --> ContextMgr
     ClientConfig --> IdTokenMinter
+    ClientConfig --> Secrets
     ClientConfig --> string
     ContextMgr --> ContextReader
     ContextMgr --> boolean
@@ -31,6 +34,7 @@ graph TD
     ProxyClient --> ClientConfig
     ProxyClient --> HeaderMethods
     ProxyClient --> LogApiCall
+    Secrets --> Record_string__string___undefined_
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

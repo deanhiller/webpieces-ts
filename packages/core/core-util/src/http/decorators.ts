@@ -54,13 +54,25 @@ export class RouteMetadata {
  * - `jwt`           → user-facing JWT (optionally role-gated), validated by the app AuthFilter
  * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
  *                     `callers` is the allow-list of caller service accounts ('self' = this service's SA)
- * - `shared-secret` → constant-time compare of a header against `process.env[secretEnv]`
+ * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
  */
+/**
+ * JwtRequirement - the endpoint's JWT authorization requirement, OPAQUE to the framework. The
+ * default AuthConfig.authorizeJwt enforces `roles` (any-of; empty = any authenticated user); apps
+ * add their OWN fields (inOrg, tenant, feature, ...) via @Auth({...}) and override authorizeJwt to
+ * enforce them. This is the pluggable seam: the framework authenticates, the app authorizes.
+ */
+export interface JwtRequirement {
+    roles?: string[];
+    // webpieces-disable no-any-unknown -- app-defined authorization fields (inOrg, tenant, ...)
+    [field: string]: unknown;
+}
+
 export type AuthMode =
     | { kind: 'public' }
-    | { kind: 'jwt'; roles: string[] }
+    | { kind: 'jwt'; requirement: JwtRequirement }
     | { kind: 'oidc'; callers: string[] }
-    | { kind: 'shared-secret'; secretEnv: string };
+    | { kind: 'shared-secret'; secretKey: string };
 
 /**
  * Auth metadata attached to a class or method via one of the auth decorators
@@ -82,9 +94,9 @@ export class AuthMeta {
         return this.mode.kind !== 'public';
     }
 
-    /** JWT roles, or empty for non-jwt modes. */
+    /** JWT roles, or empty for non-jwt modes (back-compat convenience over the requirement). */
     get roles(): string[] {
-        return this.mode.kind === 'jwt' ? this.mode.roles : [];
+        return this.mode.kind === 'jwt' ? (this.mode.requirement.roles ?? []) : [];
     }
 }
 
@@ -173,7 +185,7 @@ export function Authentication(config: AuthenticationConfig): ClassDecorator & M
     }
 
     const mode: AuthMode = config.authenticated
-        ? { kind: 'jwt', roles: config.roles ?? [] }
+        ? { kind: 'jwt', requirement: { roles: config.roles ?? [] } }
         : { kind: 'public' };
     return defineAuthMode(mode);
 }
@@ -213,24 +225,42 @@ export function Public(): ClassDecorator & MethodDecorator {
  * AuthFilter validates the token; roles=[] means "any authenticated user".
  */
 export function AuthJwt(...roles: string[]): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'jwt', roles });
+    return defineAuthMode({ kind: 'jwt', requirement: { roles } });
 }
 
 /**
- * @AuthOidc(...callers) - Google OIDC service-to-service auth (Cloud Tasks delivery
- * / cross-service RPC). `callers` is the allow-list of caller service accounts;
- * defaults to ['self'] (only this service's own runtime SA, e.g. self-enqueue).
+ * @Auth(requirement) - user-facing JWT auth with an APP-DEFINED authorization requirement beyond
+ * roles, e.g. `@Auth({ inOrg: true })` or `@Auth({ roles: ['admin'], tenantScoped: true })`. The
+ * framework authenticates the JWT (AuthConfig.parseJwt), then hands `requirement` + the parsed
+ * values to AuthConfig.authorizeJwt — which the app overrides to enforce its own policy. This is
+ * how clients plug in their own JWT security without touching the framework.
+ */
+export function Auth(requirement: JwtRequirement): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'jwt', requirement });
+}
+
+/**
+ * @AuthOidc(...callers) - Google OIDC service-to-service auth (Cloud Tasks delivery / cross-service
+ * RPC). `callers` is an OPTIONAL app-level allow-list of caller service accounts.
+ *
+ * NO args = TRUST THE EDGE: accept any genuine Google-signed OIDC caller, because a PRIVATE Cloud
+ * Run service's edge already gates WHO via `run.invoker` IAM (managed in terraform — one source of
+ * truth, no hand-synced list in code). If the service is actually PUBLIC, the verifier logs a loud
+ * warning (it can't be the gate then). Pass explicit SAs (`@AuthOidc('svc-a')`) only when you want
+ * an additional app-level allow-list as defense-in-depth.
  */
 export function AuthOidc(...callers: string[]): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'oidc', callers: callers.length > 0 ? callers : ['self'] });
+    return defineAuthMode({ kind: 'oidc', callers });
 }
 
 /**
- * @AuthSharedSecret(envVarName) - constant-time compare of an inbound header against
- * process.env[envVarName]. For internal callers that cannot mint OIDC tokens.
+ * @AuthSharedSecret(key) - constant-time compare of an inbound header against the secret bound for
+ * `key`. `key` is a LOOKUP KEY (not an env var): the server looks up its accepted {@link SharedSecrets}
+ * by this key, and each client looks up the value it sends by the SAME key (see {@link Secrets}).
+ * For internal callers that cannot mint OIDC tokens.
  */
-export function AuthSharedSecret(envVarName: string): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'shared-secret', secretEnv: envVarName });
+export function AuthSharedSecret(key: string): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'shared-secret', secretKey: key });
 }
 
 // ============================================================

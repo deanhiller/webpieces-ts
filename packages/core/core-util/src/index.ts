@@ -39,6 +39,7 @@ export {
     // Auth mode decorators (clean service-to-service + user JWT model)
     Public,
     AuthJwt,
+    Auth,
     AuthOidc,
     AuthSharedSecret,
     // API kind (RPC vs PubSub/Cloud Tasks) + queue naming
@@ -60,7 +61,9 @@ export {
     RouteMetadata,
     METADATA_KEYS,
 } from './http/decorators';
-export type { AuthMode, ApiKind } from './http/decorators';
+export type { AuthMode, ApiKind, JwtRequirement } from './http/decorators';
+// Client-side shared-secret store (the value THIS service sends per @AuthSharedSecret key).
+export { Secrets } from './http/Secrets';
 
 // Type validators
 export { ValidateImplementation } from './http/validators';

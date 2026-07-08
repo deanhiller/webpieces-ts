@@ -63,11 +63,11 @@ describe('API kind + queue naming', () => {
 });
 
 describe('auth modes', () => {
-    it('resolves class-level @AuthOidc with default self caller', () => {
+    it('resolves class-level @AuthOidc() to an empty (trust-the-edge) caller list', () => {
         const mode = getAuthMode(SampleTaskApi, 'sendEmail');
         expect(mode?.kind).toBe('oidc');
         if (mode?.kind === 'oidc') {
-            expect(mode.callers).toEqual(['self']);
+            expect(mode.callers).toEqual([]);
         }
     });
 
@@ -75,7 +75,7 @@ describe('auth modes', () => {
         const mode = getAuthMode(SampleRpcApi, 'ping');
         expect(mode?.kind).toBe('shared-secret');
         if (mode?.kind === 'shared-secret') {
-            expect(mode.secretEnv).toBe('MY_SECRET_ENV');
+            expect(mode.secretKey).toBe('MY_SECRET_ENV');
         }
     });
 
@@ -94,7 +94,7 @@ describe('auth modes', () => {
         const aMode = getAuthMode(JwtApi, 'a');
         expect(aMode?.kind).toBe('jwt');
         if (aMode?.kind === 'jwt') {
-            expect(aMode.roles).toEqual(['admin']);
+            expect(aMode.requirement.roles).toEqual(['admin']);
         }
         expect(getAuthMode(JwtApi, 'b')?.kind).toBe('public');
     });

@@ -53,6 +53,14 @@ describe('Authentication: shared-secret (bound state)', () => {
         expect(res.ok).toBe(true);
     });
 
+    it('accepts the rotating secret2 too (zero-downtime rotation window)', async () => {
+        const api = await secureClient(overrides);
+        const res = await withAuthHeader('x-webpieces-shared-secret', 'some-test-key-rotating', () =>
+            api.internalOp({}),
+        );
+        expect(res.ok).toBe(true);
+    });
+
     it('rejects a wrong shared secret (401)', async () => {
         const api = await secureClient(overrides);
         await expect(
@@ -88,6 +96,29 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
         const res = await withAuthHeader('authorization', `Bearer ${token}`, () => api.adminOp({}));
         expect(res.ok).toBe(true);
         expect(res.userId).toBe('user-42'); // proves parseJwt → USER_ID context entry landed
+    });
+
+    it('allows ANY logged-in user on a no-role endpoint (@AuthJwt() with no roles)', async () => {
+        const api = await secureClient(overrides);
+        const token = sign({ sub: 'user-99', roles: [] }); // authenticated, but zero roles
+        const res = await withAuthHeader('authorization', `Bearer ${token}`, () => api.userOp({}));
+        expect(res.ok).toBe(true);
+        expect(res.userId).toBe('user-99');
+    });
+
+    it('@Auth({inOrg:true}): a logged-in user WITH an org claim passes (pluggable authZ)', async () => {
+        const api = await secureClient(overrides);
+        const token = sign({ sub: 'user-11', orgId: 'org-1' });
+        const res = await withAuthHeader('authorization', `Bearer ${token}`, () => api.orgOp({}));
+        expect(res.ok).toBe(true);
+    });
+
+    it('@Auth({inOrg:true}): a logged-in user WITHOUT an org claim is denied (403)', async () => {
+        const api = await secureClient(overrides);
+        const token = sign({ sub: 'user-12' }); // authenticated, but no orgId claim
+        await expect(
+            withAuthHeader('authorization', `Bearer ${token}`, () => api.orgOp({})),
+        ).rejects.toThrow(HttpForbiddenError);
     });
 
     it('rejects a JWT missing the admin role (403)', async () => {
