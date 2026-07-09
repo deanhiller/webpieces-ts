@@ -24,7 +24,12 @@ export type DiNodeKind =
     | 'constant'
     | 'dynamic'
     | 'unresolved'
-    | 'external';
+    | 'external'
+    // A generated API-client proxy (`createApiClient(SomeApi, ...)` over an
+    // @ApiPath contract) — a service/network boundary. Rendered as a leaf; the
+    // walk stops here (the remote impl lives in another process, and the client's
+    // own transport config, e.g. ClientConfig, is not app architecture).
+    | 'api';
 
 export type DiInjectionKind = 'token' | 'type' | 'multiInject';
 
@@ -199,6 +204,14 @@ export class Binding {
      * MutableContextStore). Empty for every Inversify binding.
      */
     factoryDeps: TokenRef[];
+    /**
+     * True when the bound expression is a `createApiClient(SomeApi, ...)` proxy
+     * over an @ApiPath contract. The walker renders this as an `api` boundary
+     * leaf and STOPS — it does not expand the factory's `deps` (which are only
+     * the client's own transport config, e.g. ClientConfig), matching the way
+     * {@link isExternalClass} stops at a published-package boundary.
+     */
+    isApiBoundary: boolean;
 
     constructor(
         tokenKey: string,
@@ -209,6 +222,7 @@ export class Binding {
         valueText: string,
         file: string,
         factoryDeps: TokenRef[] = [],
+        isApiBoundary = false,
     ) {
         this.tokenKey = tokenKey;
         this.tokenDisplay = tokenDisplay;
@@ -218,5 +232,6 @@ export class Binding {
         this.valueText = valueText;
         this.file = file;
         this.factoryDeps = factoryDeps;
+        this.isApiBoundary = isApiBoundary;
     }
 }

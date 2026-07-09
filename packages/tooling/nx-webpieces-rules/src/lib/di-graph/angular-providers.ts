@@ -25,7 +25,14 @@
 
 import * as ts from 'typescript';
 import { Binding, DiScope, TokenRef } from './model';
-import { BindingTable, classDecorators, decoratorCall, decoratorName, resolveClassDeclaration } from './bindings';
+import {
+    BindingTable,
+    classDecorators,
+    decoratorCall,
+    decoratorName,
+    isApiClientBoundary,
+    resolveClassDeclaration,
+} from './bindings';
 import { classTokenKey, relativeFile, resolveTokenKey } from './token-resolver';
 
 // Angular injector-scoped providers are effectively singletons at their scope.
@@ -105,8 +112,9 @@ function collectProviderObject(
     }
     if (useFactory) {
         const deps = collectDeps(props.get('deps'), checker, workspaceRoot);
+        const isApiBoundary = isApiClientBoundary(useFactory, checker);
         table.add(
-            new Binding(token.key, token.display, 'toDynamicValue', ANGULAR_SCOPE, null, firstLine(useFactory.getText()), file, deps),
+            new Binding(token.key, token.display, 'toDynamicValue', ANGULAR_SCOPE, null, firstLine(useFactory.getText()), file, deps, isApiBoundary),
         );
         return;
     }

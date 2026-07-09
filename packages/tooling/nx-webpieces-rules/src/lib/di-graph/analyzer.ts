@@ -293,11 +293,18 @@ export abstract class DiDesignBuilder {
         const existing = this.leafIds.get(binding);
         if (existing) return existing;
 
-        const detail = kind === 'dynamic' ? `${binding.tokenDisplay} (dynamic)` : binding.valueText;
+        const detail =
+            kind === 'api'
+                ? `${binding.tokenDisplay} (api client)`
+                : kind === 'dynamic'
+                  ? `${binding.tokenDisplay} (dynamic)`
+                  : binding.valueText;
         const className = paramType !== '' ? paramType : detail !== '' ? detail : binding.tokenDisplay;
         const id = this.claimId(className, binding.file);
         this.leafIds.set(binding, id);
         this.design.nodes.push(new DiNode(id, className, kind, binding.scope, binding.file, 0, detail));
+        // An `api` boundary is a service/network edge — stop here, exactly like an
+        // external class. Only a plain dynamic leaf fans out to its factory deps.
         if (kind === 'dynamic') this.expandFactoryDeps(id, binding);
         return id;
     }
@@ -442,7 +449,8 @@ export abstract class DiDesignBuilder {
             return toId;
         }
         if (binding.kind === 'toConstantValue') return this.leafNode(binding, 'constant', paramType);
-        if (binding.kind === 'toDynamicValue') return this.leafNode(binding, 'dynamic', paramType);
+        if (binding.kind === 'toDynamicValue')
+            return this.leafNode(binding, binding.isApiBoundary ? 'api' : 'dynamic', paramType);
         // .to(X) where X did not resolve to a class declaration.
         const detail = binding.valueText !== '' ? binding.valueText : binding.tokenDisplay;
         const label = paramType !== '' ? paramType : detail;
