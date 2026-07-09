@@ -31,9 +31,8 @@ function dotEscape(text: string): string {
 
 /**
  * A transient node is 1-to-many: EVERY arrow into it resolves its own instance, unlike a
- * singleton whose arrows all share one. `box3d` is Graphviz's stacked-slab glyph, so the raw
- * .dot (and any external DOT viewer) reads "many" too. design.html additionally paints a real
- * 3-box offset stack over it — see design-visualizer.ts.
+ * singleton whose arrows all share one. design.html paints these as a real 3-box offset stack
+ * (flat overlapping cards) — see paintStacks() in design-visualizer.ts.
  *
  * Leaves (constant/dynamic) and unresolved boxes are never instances, so they never stack.
  */
@@ -62,9 +61,10 @@ function nodeStatement(node: DiNode): string {
     const isBoundary = node.kind === 'external' || node.kind === 'api';
     const penwidth = isRootKind || isBoundary ? ', penwidth=2' : '';
     const peripheries = isBoundary ? ', peripheries=2' : '';
-    // Transient => a fresh instance per injection. box3d reads as a stack of instances.
-    const shape = isStackedNode(node) ? ', shape=box3d' : '';
-    return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}${peripheries}${shape}];\n`;
+    // Transient => a fresh instance per injection. Kept as a plain box here; design.html paints
+    // a flat 3-card stack behind it (paintStacks). We deliberately avoid Graphviz's box3d glyph —
+    // its perspective slab clashed with the flat stack and read as an extra "3D box" on top.
+    return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}${peripheries}];\n`;
 }
 
 /**

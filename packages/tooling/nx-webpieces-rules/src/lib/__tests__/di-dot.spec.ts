@@ -158,8 +158,9 @@ describe('generateDesignHTML', () => {
 });
 
 /**
- * A transient class is 1-to-many: every arrow into it resolves its OWN instance. Both renderers
- * must say so — box3d in the DOT, and a real 3-box offset stack painted over the SVG.
+ * A transient class is 1-to-many: every arrow into it resolves its OWN instance. design.html says
+ * so with a real 3-box offset stack painted over the SVG. The DOT keeps a plain box — Graphviz's
+ * box3d perspective glyph clashed with that flat stack and read as an extra "3D box" on top.
  */
 describe('transient nodes render as a stack of instances', () => {
     function designWithScopes(): DiDesign {
@@ -179,14 +180,13 @@ describe('transient nodes render as a stack of instances', () => {
         return design;
     }
 
-    it('marks ONLY the transient class with shape=box3d in the DOT', () => {
+    it('never emits box3d — the DOT keeps plain boxes so the flat stack reads clean', () => {
         const dot = generateDesignDot(designWithScopes());
 
-        expect(dot).toMatch(/"NodeProxyClient" \[[^\]]*shape=box3d/);
-        // The singletons and the constant leaf keep the default box.
-        expect(dot).not.toMatch(/"ClientHttpFactory" \[[^\]]*shape=box3d/);
-        expect(dot).not.toMatch(/"ProxyClientProvider" \[[^\]]*shape=box3d/);
-        expect(dot).not.toMatch(/"SomeConst" \[[^\]]*shape=box3d/);
+        // Regression guard for the "3D box on top" bug: no node gets Graphviz's box3d glyph.
+        expect(dot).not.toContain('box3d');
+        // The transient class is a plain box, same as the singletons/leaf; the stack is the SVG's job.
+        expect(dot).not.toMatch(/"NodeProxyClient" \[[^\]]*shape=/);
     });
 
     it('passes only the transient class ids to the HTML stack painter', () => {
@@ -197,7 +197,8 @@ describe('transient nodes render as a stack of instances', () => {
 
         expect(html).toContain('paintStacks');
         expect(html).toContain('"stackedIds":["NodeProxyClient"]');
-        // Two ghost outlines behind the real one => a stack of three.
-        expect(html).toContain('[-10, -5]');
+        // Two ghost outlines behind the real one => a stack of three. Nearest (-5) inserted first
+        // so the farthest (-10) paints furthest back and all three cards stay visible.
+        expect(html).toContain('[-5, -10]');
     });
 });
