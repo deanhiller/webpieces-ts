@@ -284,15 +284,18 @@ export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
 // dead-end the DI graph can't reach. Inline callbacks, nested functions inside methods, and non-function
 // top-level consts (objects, zod schemas, primitives) are NOT flagged. Standard rollout knobs via the
 // base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch, branch,
-// and disableAllowed for the inline `// webpieces-disable` escape. Intentionally NO allowedPaths — the
-// only path-agnostic escapes are the inline disable and the epoch/branch off-switches.
+// and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole file
+// trees that legitimately live outside the class-per-behavior model (e.g. React component/hook files,
+// framework glue), matched with the shared glob/prefix/segment semantics of `isPathExcluded`.
 export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
+    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoFunctionOutsideClassConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
+        allowedPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };
 }

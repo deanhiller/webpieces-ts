@@ -19,21 +19,20 @@
  * - Non-function top-level consts: `const SCHEMA = z.object({})`, `const MAX = 5`, object/array literals.
  * - Ambient declarations (`declare function ...`) and whole `*.d.ts` files.
  * - Test files (*.test.ts, *.spec.ts, __tests__/**).
+ * - Files under a configured `allowedPaths` glob (e.g. React component/hook trees that legitimately use
+ *   module-scope functions). Matched with the shared `isPathExcluded` glob/prefix/segment semantics.
  * - Lines with `// webpieces-disable no-function-outside-class -- <reason>` (when disableAllowed).
  *
  * MODES (AST + LINE-SCOPED)
  * - OFF:                    Skip.
  * - NEW_AND_MODIFIED_CODE:  Flag only on changed lines (diff hunks).
  * - NEW_AND_MODIFIED_FILES: Flag every occurrence in any modified file.
- *
- * NOTE: intentionally NO allowedPaths — the only escapes are the inline `// webpieces-disable` comment
- * and the universal epoch/branch off-switches.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, NoFunctionOutsideClassConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoFunctionOutsideClassConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -142,20 +141,23 @@ export function findFunctionsOutsideClassInSource(content: string, filePath: str
     return violations;
 }
 
-function findFunctionsOutsideClassInFile(filePath: string, workspaceRoot: string, disableAllowed: boolean): FnViolationInfo[] {
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+export function findFunctionsOutsideClassInFile(filePath: string, workspaceRoot: string, disableAllowed: boolean, allowedPaths: string[]): FnViolationInfo[] {
     if (isTestFile(filePath)) return [];
+    if (isPathExcluded(filePath, allowedPaths)) return [];
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
     const content = fs.readFileSync(fullPath, 'utf-8');
     return findFunctionsOutsideClassInSource(content, filePath, disableAllowed);
 }
 
-function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: string[], base: string, head: string | undefined, disableAllowed: boolean): FnViolation[] {
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: string[], base: string, head: string | undefined, disableAllowed: boolean, allowedPaths: string[]): FnViolation[] {
     const violations: FnViolation[] = [];
     for (const file of changedFiles) {
         const changedLines = getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head));
         if (changedLines.size === 0) continue;
-        for (const v of findFunctionsOutsideClassInFile(file, workspaceRoot, disableAllowed)) {
+        for (const v of findFunctionsOutsideClassInFile(file, workspaceRoot, disableAllowed, allowedPaths)) {
             if (disableAllowed && v.hasDisableComment) continue;
             if (!changedLines.has(v.line)) continue;
             violations.push({ file, line: v.line, column: v.column, context: v.context });
@@ -164,10 +166,11 @@ function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: stri
     return violations;
 }
 
-function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): FnViolation[] {
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean, allowedPaths: string[]): FnViolation[] {
     const violations: FnViolation[] = [];
     for (const file of changedFiles) {
-        for (const v of findFunctionsOutsideClassInFile(file, workspaceRoot, disableAllowed)) {
+        for (const v of findFunctionsOutsideClassInFile(file, workspaceRoot, disableAllowed, allowedPaths)) {
             if (disableAllowed && v.hasDisableComment) continue;
             violations.push({ file, line: v.line, column: v.column, context: v.context });
         }
@@ -189,6 +192,7 @@ function reportViolations(violations: FnViolation[], mode: ModifiedCodeMode, dis
     console.error(disableAllowed
         ? '   Escape hatch (use sparingly): // webpieces-disable no-function-outside-class -- <reason>'
         : '   Escape hatch: DISABLED (disableAllowed: false)');
+    console.error('   Whole-tree exemption (e.g. React): add a glob to no-function-outside-class.allowedPaths in webpieces.config.json');
     console.error(`\n   Current mode: ${mode}\n`);
 }
 
@@ -205,6 +209,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 async function runValidatorImpl(options: NoFunctionOutsideClassConfig, workspaceRoot: string): Promise<ExecutorResult> {
     const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
     const disableAllowed = options.disableAllowed ?? true;
+    const allowedPaths = options.allowedPaths ?? [];
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping no-function-outside-class validation (mode: OFF)\n');
@@ -237,9 +242,9 @@ async function runValidatorImpl(options: NoFunctionOutsideClassConfig, workspace
 
     let violations: FnViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);
     }
 
     if (violations.length === 0) {
