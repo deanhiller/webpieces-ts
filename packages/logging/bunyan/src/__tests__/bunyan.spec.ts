@@ -5,6 +5,7 @@ import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { BunyanLogger } from '../BunyanLogger';
 import { BunyanConsoleFactory } from '../BunyanConsoleFactory';
+import { BunyanFactoryOptions } from '../BunyanFactoryOptions';
 import { logLevelToBunyanLevel } from '../levels';
 
 const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
@@ -83,15 +84,10 @@ describe('BunyanLogger context enrichment', () => {
 });
 
 describe('logging outside RequestContext.run', () => {
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
     // A log line with no active context = a missing request-wrapping server filter.
-    // We report it ONCE (ERROR, via LogManager) and never spin, even though that
-    // error is itself a log call that circles back through buildLogFields().
+    // BunyanLogger reports it ONCE (via the raw bunyan logger, so no re-entrancy)
+    // and never spins, even across many out-of-context lines.
     it('reports the missing filter exactly once and never infinite-loops', async () => {
-        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const h = new BunyanHarness();
         const log = new BunyanLogger(h.base);
 
@@ -101,13 +97,14 @@ describe('logging outside RequestContext.run', () => {
         log.info('no-ctx-3');
         await flush();
 
-        // the lines themselves still emit — logging keeps working, just without context
-        expect(h.lines.length).toBe(3);
+        // the three lines still emit (logging keeps working, just without context)...
+        const msgs = h.lines.map((l: string) => JSON.parse(l).msg as string);
+        expect(msgs).toContain('no-ctx-1');
+        expect(msgs).toContain('no-ctx-2');
+        expect(msgs).toContain('no-ctx-3');
 
-        // ...and the "missing context" ERROR is reported exactly ONCE across all three
-        const reports = errSpy.mock.calls.filter((c: unknown[]) =>
-            String(c[0]).includes('OUTSIDE RequestContext.run'),
-        );
+        // ...plus exactly ONE "missing filter" report across all three
+        const reports = msgs.filter((m: string) => m.includes('OUTSIDE RequestContext.run'));
         expect(reports.length).toBe(1);
     });
 });
@@ -119,7 +116,7 @@ describe('BunyanConsoleFactory', () => {
 
     it('writes a human-readable line with context tags', async () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-        const factory = new BunyanConsoleFactory();
+        const factory = new BunyanConsoleFactory(new BunyanFactoryOptions('test-svc'));
         withContext(() => factory.getLogger('MyLogger').info('hello world'));
         await flush();
 
@@ -131,7 +128,7 @@ describe('BunyanConsoleFactory', () => {
     });
 
     it('caches one Logger per name', () => {
-        const factory = new BunyanConsoleFactory();
+        const factory = new BunyanConsoleFactory(new BunyanFactoryOptions('test-svc'));
         expect(factory.getLogger('X')).toBe(factory.getLogger('X'));
         expect(factory.getLogger('X')).not.toBe(factory.getLogger('Y'));
     });

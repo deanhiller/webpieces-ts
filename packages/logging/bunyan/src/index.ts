@@ -5,17 +5,19 @@
  * startup via `LogManager.setFactory(...)`:
  *
  * ```ts
- * import { BunyanGcpFactory, BunyanConsoleFactory } from '@webpieces/bunyan';
+ * import { BunyanGcpFactory, BunyanConsoleFactory, BunyanFactoryOptions } from '@webpieces/bunyan';
  *
+ * const opts = new BunyanFactoryOptions('my-service'); // serviceName is required
  * const loggerFactory = process.env.K_SERVICE
- *   ? new BunyanGcpFactory()      // Cloud Logging via @google-cloud/logging-bunyan
- *   : new BunyanConsoleFactory(); // local → pretty console
+ *   ? new BunyanGcpFactory(opts)      // Cloud Logging via @google-cloud/logging-bunyan
+ *   : new BunyanConsoleFactory(opts); // local → pretty console
  * // hand to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...))
  * ```
  *
  * Both backends auto-enrich every line with the logged context keys, read
  * DIRECTLY from the active RequestContext (@webpieces/core-context) on each line —
- * no ContextReader is threaded in.
+ * no ContextReader is threaded in. There is no level knob: bunyan filters at its
+ * own default.
  *
  * @packageDocumentation
  */

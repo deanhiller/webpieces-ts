@@ -1,8 +1,6 @@
 import { Writable } from 'stream';
 import Logger from 'bunyan';
 import { LoggingBunyan } from '@google-cloud/logging-bunyan';
-import type { LogLevel } from '@webpieces/core-util';
-import { logLevelToBunyanLevel } from './levels';
 import { LoggedError } from './LoggedError';
 
 // A parsed bunyan JSON record: standard fields plus arbitrary injected context
@@ -78,14 +76,22 @@ function writeConsole(line: string): void {
  * severity, msg→message, trace/httpRequest fields, stripping name/hostname/pid)
  * to @google-cloud/logging-bunyan, exactly as the tested trytami service does.
  * Sends to the Cloud Logging API (needs ADC on the instance).
+ *
+ * We do NOT filter by level — that is bunyan's job. The stream is created at
+ * bunyan's default level ('info'); there is no webpieces level knob.
  */
-export function createGoogleCloudStream(level: LogLevel): Logger.Stream {
+// webpieces-disable no-function-outside-class -- bunyan Stream factory; whole file is bunyan stream/render factories
+export function createGoogleCloudStream(): Logger.Stream {
     const loggingBunyan = new LoggingBunyan();
-    return loggingBunyan.stream(logLevelToBunyanLevel(level));
+    return loggingBunyan.stream('info');
 }
 
-/** The local dev stream: human-readable text to stdout via {@link writeConsole}. */
-export function createConsoleStream(level: LogLevel): Logger.Stream {
+/**
+ * The local dev stream: human-readable text to stdout via {@link writeConsole}.
+ * No level is set — bunyan filters at its own default ('info').
+ */
+// webpieces-disable no-function-outside-class -- bunyan Stream factory; whole file is bunyan stream/render factories
+export function createConsoleStream(): Logger.Stream {
     const writable = new Writable({
         write(chunk: Buffer | string, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
             writeConsole(chunk.toString());
@@ -94,7 +100,6 @@ export function createConsoleStream(level: LogLevel): Logger.Stream {
     });
     return {
         name: 'console',
-        level: logLevelToBunyanLevel(level),
         stream: writable,
     };
 }

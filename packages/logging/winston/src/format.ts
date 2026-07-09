@@ -61,22 +61,41 @@ export function bigIntSafeFormat(): Format {
 }
 
 /**
- * Inject every logged context key present in the active RequestContext frame into
- * the record under its `name` (→ top-level jsonPayload.<name> in GCP, filterable
- * as jsonPayload.requestId, jsonPayload.tenantId, …). Values are read DIRECTLY
- * from RequestContext (secured keys masked by RequestContext.buildLogFields) —
- * no ContextReader. Caller-supplied fields on the record win on conflict. Runs on
- * EVERY winston call, including winston's own handleExceptions/handleRejections
- * lines that bypass the WinstonLogger wrapper.
+ * Inject every logged HeaderRegistry key present in the active RequestContext frame
+ * into the record under its `name` (→ top-level jsonPayload.<name> in GCP, filterable
+ * as jsonPayload.requestId, jsonPayload.tenantId, …). Values are read DIRECTLY from
+ * RequestContext, secured keys masked via {@link ContextKey.maskIfSecured} — no
+ * ContextReader. Caller-supplied fields on the record win on conflict. Runs on EVERY
+ * winston call, including winston's own handleExceptions/handleRejections lines that
+ * bypass the WinstonLogger wrapper.
+ *
+ * This mirrors the (duplicated, on purpose) inline logic in BunyanLogger: it must run
+ * ONLY when a winston backend is installed, never for the plain ConsoleLogger. A log
+ * line with no active RequestContext = a missing request-wrapping server filter; we
+ * report that once (closure latch, via console.error so there is no re-entrancy back
+ * into winston and no dependency on LogManager).
  */
 // webpieces-disable no-function-outside-class -- winston format(fn) factory; whole file is winston Format factories
 export function injectContextFormat(): Format {
+    let reportedMissingContext = false;
     return format((info: TransformableInfo) => {
-        RequestContext.buildLogFields().forEach((value: string, name: string) => {
-            if (info[name] === undefined) {
-                info[name] = value;
+        if (RequestContext.isActive()) {
+            // getLoggedKeys() already returns only isLogged keys (precomputed at configure()).
+            for (const key of HeaderRegistry.get().getLoggedKeys()) {
+                const value = RequestContext.getHeader<string>(key);
+                if (value !== undefined && info[key.name] === undefined) {
+                    info[key.name] = key.maskIfSecured(value);
+                }
             }
-        });
+        } else if (!reportedMissingContext) {
+            reportedMissingContext = true;
+            // This IS a logging backend; direct stderr for the framework-misconfig warning.
+            console.error(
+                'Log emitted OUTSIDE RequestContext.run(...) — every request must be wrapped in ' +
+                    'RequestContext.run() by a server filter. That filter appears to be missing: ' +
+                    'correlation fields (requestId, tenant, ...) will be absent from logs. Reported once.',
+            );
+        }
         return info;
     })();
 }
