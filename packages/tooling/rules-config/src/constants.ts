@@ -21,6 +21,7 @@ export const RULE_NAMES = {
     REQUIRE_RETURN_TYPE: 'require-return-type',
     NO_SYMBOL_DI_TOKENS: 'no-symbol-di-tokens',
     NO_PROCESS_EXIT_OUTSIDE_MAIN: 'no-process-exit-outside-main',
+    NO_FUNCTION_OUTSIDE_CLASS: 'no-function-outside-class',
     FRAMEWORK_TAG: 'framework-tag',
     ROLE_TAG: 'role-tag',
     NO_INLINE_TYPES: 'no-inline-types',

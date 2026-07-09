@@ -64,6 +64,7 @@ export {
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
     NoProcessExitOutsideMainConfig,
+    NoFunctionOutsideClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,

@@ -14,6 +14,7 @@ import {
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
     NoProcessExitOutsideMainConfig,
+    NoFunctionOutsideClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
@@ -46,6 +47,7 @@ export class WebpiecesRulesConfig {
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
     'no-process-exit-outside-main'?: NoProcessExitOutsideMainConfig;
+    'no-function-outside-class'?: NoFunctionOutsideClassConfig;
     'framework-tag'?: FrameworkTagConfig;
     'role-tag'?: RoleTagConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
