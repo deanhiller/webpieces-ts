@@ -1,15 +1,27 @@
 import { chromium } from '@playwright/test';
 
+// Must mirror ORDER in scripts/publish-packages.sh. A package must already EXIST on npm before a
+// trusted publisher can be configured for it, so bootstrap-publish a new one manually first
+// (see the header of publish-packages.sh), then re-run this.
+//
+// http-api and wp-logging were collapsed into core-util; http-client was split into the three
+// http-client-* packages. All three names are gone from npm's perspective — do not re-add them.
 const packages = [
     '@webpieces/core-context',
     '@webpieces/core-util',
-    '@webpieces/http-api',
+    '@webpieces/gcp-identity',
+    '@webpieces/winston',
+    '@webpieces/bunyan',
     '@webpieces/http-routing',
-    '@webpieces/http-client',
+    '@webpieces/http-client-core',
+    '@webpieces/http-client-browser',
+    '@webpieces/http-client-node',
+    '@webpieces/cloudtasks-client',
     '@webpieces/http-server',
     '@webpieces/rules-config',
-    '@webpieces/ai-hook-rules',
+    '@webpieces/pr-gate',
     '@webpieces/eslint-rules',
+    '@webpieces/ai-hook-rules',
     '@webpieces/code-rules',
     '@webpieces/nx-webpieces-rules',
 ];
