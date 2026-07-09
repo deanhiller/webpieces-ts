@@ -179,6 +179,7 @@ function collectBindCall(
  * the walk renders such a binding as an `api` leaf and stops, rather than
  * descending into the client's own transport config (ClientConfig → ...).
  */
+// webpieces-disable no-function-outside-class -- pure AST predicate, matching every sibling in this file
 export function isApiClientBoundary(expr: ts.Expression, checker: ts.TypeChecker): boolean {
     const call = findCreateApiClientCall(expr);
     if (!call || call.arguments.length === 0) return false;
@@ -187,6 +188,7 @@ export function isApiClientBoundary(expr: ts.Expression, checker: ts.TypeChecker
 }
 
 /** Find the first `createApiClient(...)` call anywhere inside `node`, else null. */
+// webpieces-disable no-function-outside-class -- pure AST walker, matching every sibling in this file
 function findCreateApiClientCall(node: ts.Node): ts.CallExpression | null {
     if (ts.isCallExpression(node)) {
         const callee = node.expression;
@@ -205,6 +207,7 @@ function findCreateApiClientCall(node: ts.Node): ts.CallExpression | null {
 }
 
 /** True when the class carries the `@ApiPath(...)` contract decorator. */
+// webpieces-disable no-function-outside-class -- pure AST predicate, matching every sibling in this file
 function hasApiPathDecorator(cls: ts.ClassDeclaration): boolean {
     return classDecorators(cls).some((d: ts.Decorator) => decoratorName(d) === 'ApiPath');
 }
