@@ -16,7 +16,7 @@ function makeDesign(): DiDesign {
         new DiNode('AgentController', 'AgentController', 'controller', 'singleton', 'src/controllers/AgentController.ts', 0),
         new DiNode('AgentHandler', 'AgentHandler', 'class', 'singleton', 'src/AgentHandler.ts', 1),
         new DiNode('FirestoreConfig', 'FirestoreConfig', 'constant', 'singleton', 'src/config.ts', 2),
-        new DiNode('MysteryToken', 'MysteryToken', 'unresolved', 'unknown', '', 2),
+        new DiNode('MysteryToken', 'MysteryToken', 'unresolved', 'transient', '', 2),
     ];
     design.edges = [
         new DiEdge('AgentController', 'AgentHandler', 'type', '', '', 'handler', 'AgentHandler'),
@@ -154,5 +154,50 @@ describe('generateDesignHTML', () => {
     it('renders an empty-state page when there are no designs', () => {
         const html = generateDesignHTML(new DiGraph('empty-lib'));
         expect(html).toContain('No DI-registered classes found in this project.');
+    });
+});
+
+/**
+ * A transient class is 1-to-many: every arrow into it resolves its OWN instance. Both renderers
+ * must say so — box3d in the DOT, and a real 3-box offset stack painted over the SVG.
+ */
+describe('transient nodes render as a stack of instances', () => {
+    function designWithScopes(): DiDesign {
+        const design = new DiDesign('ClientHttpFactory', 'apiImplementation', 'src/ClientHttpFactory.ts');
+        design.maxLevel = 2;
+        design.nodes = [
+            new DiNode('ClientHttpFactory', 'ClientHttpFactory', 'apiImplementation', 'singleton', 'src/ClientHttpFactory.ts', 0),
+            new DiNode('ProxyClientProvider', 'ProxyClientProvider', 'class', 'singleton', 'src/NodeProxyClient.ts', 1),
+            new DiNode('NodeProxyClient', 'NodeProxyClient', 'class', 'transient', 'src/NodeProxyClient.ts', 2),
+            // A transient-scoped LEAF is still a leaf: constants/dynamics are values, not instances.
+            new DiNode('SomeConst', 'SomeConst', 'constant', 'transient', 'src/config.ts', 2),
+        ];
+        design.edges = [
+            new DiEdge('ClientHttpFactory', 'ProxyClientProvider', 'token', 'ProxyClientProvider', 'ProxyClientProvider', 'provider', 'ProxyClientProvider'),
+            new DiEdge('ProxyClientProvider', 'NodeProxyClient', 'type', 'NodeProxyClient', 'NodeProxyClient', 'get()', 'NodeProxyClient'),
+        ];
+        return design;
+    }
+
+    it('marks ONLY the transient class with shape=box3d in the DOT', () => {
+        const dot = generateDesignDot(designWithScopes());
+
+        expect(dot).toMatch(/"NodeProxyClient" \[[^\]]*shape=box3d/);
+        // The singletons and the constant leaf keep the default box.
+        expect(dot).not.toMatch(/"ClientHttpFactory" \[[^\]]*shape=box3d/);
+        expect(dot).not.toMatch(/"ProxyClientProvider" \[[^\]]*shape=box3d/);
+        expect(dot).not.toMatch(/"SomeConst" \[[^\]]*shape=box3d/);
+    });
+
+    it('passes only the transient class ids to the HTML stack painter', () => {
+        const graph = new DiGraph('http-client-node');
+        graph.designs = [designWithScopes()];
+
+        const html = generateDesignHTML(graph);
+
+        expect(html).toContain('paintStacks');
+        expect(html).toContain('"stackedIds":["NodeProxyClient"]');
+        // Two ghost outlines behind the real one => a stack of three.
+        expect(html).toContain('[-10, -5]');
     });
 });

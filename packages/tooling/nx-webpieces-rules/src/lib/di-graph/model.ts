@@ -28,7 +28,14 @@ export type DiNodeKind =
 
 export type DiInjectionKind = 'token' | 'type' | 'multiInject';
 
-export type DiScope = 'singleton' | 'transient' | 'unknown';
+/**
+ * There is no 'unknown'. A class with no explicit `inSingletonScope()` IS transient at runtime:
+ * inversify's `DEFAULT_DEFAULT_SCOPE` is Transient and no `new Container(...)` in this workspace
+ * overrides `defaultScope`. Reporting 'unknown' hid that fact — and the difference matters,
+ * because two arrows into a singleton share one instance while two arrows into a transient do not.
+ * Renderers draw transient nodes as a STACK of boxes for exactly that reason.
+ */
+export type DiScope = 'singleton' | 'transient';
 
 export type BindingKind = 'to' | 'toSelf' | 'toConstantValue' | 'toDynamicValue' | 'decorator';
 

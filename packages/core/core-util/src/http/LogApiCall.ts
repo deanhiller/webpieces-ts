@@ -32,21 +32,20 @@ export class LogApiCall {
      * @param type - 'SVR' or 'CLIENT'
      * @param meta - Route metadata with controllerClassName and methodName
      * @param requestDto - The request DTO
-     * @param headers - Map of header name -> values
-     * @param splitHeaders - SplitHeaders with secureHeaders and publicHeaders for masking
      * @param method - The method to execute
+     *
+     * Context fields (requestId, tenantId, ...) are NOT stamped here. A logging BACKEND owns that:
+     * bunyan/winston read RequestContext.buildLogFields() on every record. The bootstrap
+     * ConsoleLogger deliberately carries no context.
      */
     public async execute(
         type: string,
         meta: RouteMetadata,
         requestDto: any,
-        headers: Map<string, any>,
         method: (dto: any) => Promise<any>
     ): Promise<any> {
-        // Log request - convert Map to Object for JSON serialization
-        const headersObj = Object.fromEntries(headers);
         log.info(
-            `[API-${type}-req] ${meta.controllerClassName}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)} headers=${JSON.stringify(headersObj)}`
+            `[API-${type}-req] ${meta.controllerClassName}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)}`
         );
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller

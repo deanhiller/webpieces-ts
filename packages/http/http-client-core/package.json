@@ -1,0 +1,26 @@
+{
+    "name": "@webpieces/http-client-core",
+    "version": "0.0.0-dev",
+    "description": "Isomorphic core of the webpieces HTTP client: the decorator-driven ProxyClient, error translation, and the Proxy trap shared by http-client-node and http-client-browser",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/http/http-client-core"
+    },
+    "keywords": [
+        "webpieces",
+        "http",
+        "client"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-util": "workspace:*"
+    }
+}

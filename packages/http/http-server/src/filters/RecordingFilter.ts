@@ -2,15 +2,12 @@ import { inject, injectable } from 'inversify';
 import {
     provideFrameworkSingleton,
     MethodMeta,
-    RequestContextReader,
     WebpiecesConfig,
     WEBPIECES_CONFIG_TOKEN,
 } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import {
-    HeaderMethods,
-    HeaderRegistry,
     RecordedEndpoint,
     RecordedError,
     RecorderKeys,
@@ -42,7 +39,6 @@ import { TestCaseRecorderImpl } from '../recorder/TestCaseRecorderImpl';
 @injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response type flexibility
 export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-    private headerMethods = new HeaderMethods();
 
     constructor(
         @inject(WEBPIECES_CONFIG_TOKEN) private config: WebpiecesConfig,
@@ -89,7 +85,7 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     private buildServerEndpoint(meta: MethodMeta): RecordedEndpoint {
         // Masked snapshot of the magic context (secured values masked, keyed by name)
-        const logMap = this.headerMethods.buildSecureMapForLogs(HeaderRegistry.get().getLoggedKeys(), new RequestContextReader());
+        const logMap = RequestContext.buildLogFields();
         const ctxSnapshot: Record<string, string> = {};
         for (const entry of logMap.entries()) {
             ctxSnapshot[entry[0]] = entry[1];

@@ -254,11 +254,41 @@ importers:
 
   packages/core/core-util: {}
 
-  packages/http/http-client:
+  packages/http/http-client-browser:
     dependencies:
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
+      '@webpieces/http-client-core':
+        specifier: workspace:*
+        version: link:../http-client-core
+
+  packages/http/http-client-core:
+    dependencies:
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../core/core-util
+
+  packages/http/http-client-node:
+    dependencies:
+      '@webpieces/core-context':
+        specifier: workspace:*
+        version: link:../../core/core-context
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../core/core-util
+      '@webpieces/gcp-identity':
+        specifier: workspace:*
+        version: link:../../cloud/gcp-identity
+      '@webpieces/http-client-core':
+        specifier: workspace:*
+        version: link:../http-client-core
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
 
   packages/http/http-routing:
     dependencies:

@@ -113,7 +113,8 @@ export class InMemoryTaskInvoker extends TaskInvoker {
         if (mode.kind === 'shared-secret') {
             const secret = this.secrets?.get(mode.secretKey);
             if (secret) {
-                headers['x-webpieces-shared-secret'] = secret;
+                // One credential header; the 'Webpieces' scheme says a shared secret follows, not a token.
+                headers['authorization'] = `Webpieces ${secret}`;
             }
         }
         // public / jwt → no service credential is synthesized.

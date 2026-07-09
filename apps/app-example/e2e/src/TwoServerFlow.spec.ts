@@ -68,15 +68,12 @@ describe('Full flow: caller -> client-server -> server2 with context logging', (
     beforeAll(bootBothServers);
     afterAll(stopBothServers);
 
-    it('transaction id (x-correlation-id) appears in BOTH servers logs; chain + masking verified', async () => {
-        const transactionId = 'txn-e2e-12345';
-
+    it('context reaches BOTH hops unchanged, and the credential never leaves hop 1', async () => {
         const res = await fetch(`http://localhost:${clientServerPort}/search/item`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'authorization': 'secret-token-abcdef',
-                'x-correlation-id': transactionId,
+                'authorization': 'Bearer secret-token-abcdef',
                 'x-tenant-id': 'tenant-99',
                 'x-request-id': 'caller-req-1',
             },
@@ -86,29 +83,24 @@ describe('Full flow: caller -> client-server -> server2 with context logging', (
         const body = (await res.json()) as SaveResponse;
         expect(body.success).toBe(true);
 
-        // --- Log validation: the transaction id flowed through BOTH hops ---
-        const hop1Log = logLines.find((l: string) =>
-            l.includes('[API-SVR-req] SaveController.save') && l.includes(`"correlationId":"${transactionId}"`));
-        expect(hop1Log).toBeDefined();
+        // --- Both hops actually ran (LogApiCall logs the request line on each server) ---
+        // These lines carry NO context fields: LogApiCall no longer stringifies a header map, and
+        // the bootstrap ConsoleLogger stamps none. A real backend (bunyan/winston) reads
+        // RequestContext.buildLogFields() per record. Context is therefore verified via the echo.
+        expect(logLines.some((l: string) => l.includes('[API-SVR-req] SaveController.save'))).toBe(true);
+        expect(logLines.some((l: string) => l.includes('[API-SVR-req] Server2Controller.fetchValue'))).toBe(true);
 
-        const hop2Log = logLines.find((l: string) =>
-            l.includes('[API-SVR-req] Server2Controller.fetchValue') && l.includes(`"correlationId":"${transactionId}"`));
-        expect(hop2Log).toBeDefined();
+        // The credential NEVER leaves hop 1. `authorization` is read off the inbound HttpRequest and
+        // is not a ContextKey, so it never enters the RequestContext, is never logged, and is never
+        // transferred to server2. (It used to travel, masked, into hop 2's log line.)
+        expect(logLines.filter((l: string) => l.includes('secret-token-abcdef'))).toEqual([]);
+        expect(logLines.filter((l: string) => l.includes('authorization'))).toEqual([]);
 
-        // hop 2 also logs tenant and the request-id CHAIN: previousId = hop 1's own id
-        expect(hop2Log).toContain('"tenantId":"tenant-99"');
-        const hop1RequestId = /"requestId":"([^"]+)"/.exec(hop1Log!)![1];
-        expect(hop2Log).toContain(`"previousId":"${hop1RequestId}"`);
-
-        // secured authorization is MASKED in every log line - raw token never appears
-        const leaked = logLines.filter((l: string) => l.includes('secret-token-abcdef'));
-        expect(leaked).toEqual([]);
-        expect(hop2Log).toContain('"authorization":"sec...def"');
-
-        // --- Response echo: proves the context ARRIVED at hop 2, not just logs ---
+        // --- Response echo from hop 2: proves the context ARRIVED, not merely that it was logged ---
         const echo = body.matches![0].description!;
-        expect(echo).toContain('tenant=tenant-99');
-        expect(echo).toContain(`previousId=${hop1RequestId}`);
-        expect(echo).not.toContain('requestId=caller-req-1;'); // hop 2 got its OWN id
+        expect(echo).toContain('tenant=tenant-99');            // company header crossed the hop
+        // ONE id for the whole call tree: the caller's x-request-id reached hop 2 UNCHANGED.
+        // Nobody rewrote it, nobody minted a second one.
+        expect(echo).toContain('requestId=caller-req-1');
     });
 });

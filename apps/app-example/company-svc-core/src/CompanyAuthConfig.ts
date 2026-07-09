@@ -1,8 +1,7 @@
 import { injectable } from 'inversify';
 import jwt from 'jsonwebtoken';
 import { AuthConfig, AuthValues, SharedSecrets } from '@webpieces/http-routing';
-import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement, toError } from '@webpieces/core-util';
-import { CompanyHeaders } from '@webpieces/company-core';
+import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement, toError, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
 
 /**
@@ -37,7 +36,7 @@ export class CompanyAuthConfig extends AuthConfig {
         }
         const userId = String(subject);
         const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
-        return new AuthValues(userId, roles, [new ContextTuple(CompanyHeaders.USER_ID, userId)], claims);
+        return new AuthValues(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
     }
 
     /**

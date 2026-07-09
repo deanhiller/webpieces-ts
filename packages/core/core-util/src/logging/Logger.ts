@@ -22,7 +22,7 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
  * There is deliberately no structured-fields / varargs argument — so nobody can
  * pass request ids, tenant ids, or other platform-header values into a log line.
  * Those are already emitted automatically by the framework (see
- * `HeaderMethods.buildSecureMapForLogs`); duplicating them here is impossible.
+ * `HeaderRegistry.buildLogFields`); duplicating them here is impossible.
  * See `.webpieces/instruct-ai/webpieces.logging.md`.
  */
 export interface Logger {

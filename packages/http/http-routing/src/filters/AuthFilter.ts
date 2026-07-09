@@ -1,12 +1,33 @@
 import { inject, injectable, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
-import { WebpiecesCoreHeaders, HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
+import { HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AuthValues, SharedSecrets } from '../AuthConfig';
 
 const log = LogManager.getLogger('AuthFilter');
+
+/**
+ * The ONE credential header, read straight off the inbound HttpRequest.
+ *
+ * Deliberately NOT a ContextKey: a ContextKey with an httpHeader is a TRANSFERRED key, which would
+ * put the caller's credential into RequestContext and hence onto every outbound call this service
+ * makes, and onto every Cloud Task it enqueues. A credential belongs to ONE request hop.
+ */
+const AUTHORIZATION_HEADER = 'authorization';
+
+/**
+ * The scheme (first word of the Authorization value) names WHICH credential follows, so a secret
+ * can never be mistaken for a token, nor accepted where the other was expected:
+ *
+ *   Authorization: Bearer <user JWT | service OIDC token>
+ *   Authorization: Webpieces <@AuthSharedSecret value>
+ *
+ * The scheme is REQUIRED. A bare value with no scheme is rejected.
+ */
+const BEARER_SCHEME = 'Bearer';
+const SHARED_SECRET_SCHEME = 'Webpieces';
 
 /** Reserved context key holding the authenticated {@link AuthValues} (stamped after a jwt parse). */
 const PRINCIPAL_KEY = '__webpieces_principal__';
@@ -44,7 +65,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
         const mode = meta.authMeta?.mode;
-        const authHeader = RequestContext.getRequest()?.getHeader(WebpiecesCoreHeaders.AUTHORIZATION);
+        const authHeader = RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
 
         if (!mode || mode.kind === 'public') {
             // Public: best-effort parse so a logged-out page can still know the logged-in user.
@@ -60,10 +81,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 await this.enforceOidc(authHeader, mode.callers);
                 break;
             case 'shared-secret':
-                this.enforceSharedSecret(
-                    RequestContext.getRequest()?.getHeader(WebpiecesCoreHeaders.SHARED_SECRET),
-                    mode.secretKey,
-                );
+                this.enforceSharedSecret(this.credential(authHeader, SHARED_SECRET_SCHEME), mode.secretKey);
                 break;
         }
         return nextFilter.invoke(meta);
@@ -77,7 +95,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     private enforceJwt(header: string | undefined, requirement: JwtRequirement): void {
-        const token = this.stripBearer(header);
+        const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
             throw new HttpUnauthorizedError('Authentication required');
         }
@@ -88,13 +106,14 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
-        const token = this.stripBearer(header);
+        const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
             throw new HttpUnauthorizedError('Missing OIDC bearer token for @AuthOidc endpoint');
         }
         await this.requireAuthConfig().verifyOidc(token, callers);
     }
 
+    /** `provided` is the Authorization bearer value — the secret itself, same header as a JWT. */
     private enforceSharedSecret(provided: string | undefined, secretKey: string): void {
         const accepted = this.requireAuthConfig().sharedSecrets[secretKey];
         if (!accepted || !provided || !this.matchesEither(provided, accepted)) {
@@ -112,7 +131,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     /** Parse a JWT if one is present, else do nothing — used on public routes; never throws. */
     private bestEffortJwt(header: string | undefined): void {
-        const token = this.stripBearer(header);
+        const token = this.credential(header, BEARER_SCHEME);
         if (!this.authConfig || !token) {
             return;
         }
@@ -133,12 +152,18 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         RequestContext.put(PRINCIPAL_KEY, values);
     }
 
-    private stripBearer(header: string | undefined): string | undefined {
+    /**
+     * The credential value IF the header carries the expected scheme, else undefined.
+     *
+     * Strict: a bare value with no scheme, or a value under the WRONG scheme (a shared secret sent
+     * where a JWT is expected), yields undefined and the caller 401s.
+     */
+    private credential(header: string | undefined, scheme: string): string | undefined {
         if (!header) {
             return undefined;
         }
-        const prefix = 'Bearer ';
-        return header.startsWith(prefix) ? header.substring(prefix.length) : header;
+        const prefix = `${scheme} `;
+        return header.startsWith(prefix) ? header.substring(prefix.length) : undefined;
     }
 
     private constantTimeEquals(a: string, b: string): boolean {

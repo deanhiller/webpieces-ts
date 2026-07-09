@@ -1,0 +1,32 @@
+{
+    "name": "@webpieces/http-client-node",
+    "version": "0.0.0-dev",
+    "description": "Server-side HTTP client for webpieces: inversify-wired, reads RequestContext directly, mints OIDC/shared-secret delivery auth, resolves Cloud Run URLs from a service name",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/http/http-client-node"
+    },
+    "keywords": [
+        "webpieces",
+        "http",
+        "client",
+        "node"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-context": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "@webpieces/gcp-identity": "workspace:*",
+        "@webpieces/http-client-core": "workspace:*",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2"
+    }
+}

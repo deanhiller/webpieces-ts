@@ -1,4 +1,5 @@
 import { ContextKey } from '../ContextKey';
+import { ContextRead } from './ContextReader';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 
 /**
@@ -105,6 +106,27 @@ export class HeaderRegistry {
     /** Keys that appear in logs. isLogged=true. */
     getLoggedKeys(): ContextKey[] {
         return this.loggedKeys;
+    }
+
+    /**
+     * The log/MDC field map: every logged key with a value, under its `name`, secured values masked.
+     *
+     * The ONE implementation, because the registry owns the keys and each {@link ContextKey} knows
+     * how to mask its own value. Callers differ only in WHERE a value is read from:
+     * `RequestContext.buildLogFields()` passes its own getHeader (server), and `ContextMgr` passes
+     * the app-held store's read (browser).
+     *
+     * getLoggedKeys() is precomputed at configure() time, so this is hot-path safe.
+     */
+    buildLogFields(read: ContextRead): Map<string, string> {
+        const fields = new Map<string, string>();
+        for (const key of this.getLoggedKeys()) {
+            const value = read(key);
+            if (value) {
+                fields.set(key.name, key.maskIfSecured(value));
+            }
+        }
+        return fields;
     }
 
     /** Look up a key by its HTTP header name (case-insensitive). O(1) via the precomputed map. */

@@ -73,6 +73,26 @@ export async function getCloudRunUrl(serviceName: string): Promise<string> {
     return `https://${serviceName}-${numericProjectId}.${region}.run.app`;
 }
 
+/**
+ * Resolve the base URL a client should call.
+ *
+ * We lookup your service in the same project, same region, and form the url from the container
+ * information unless you pass in a targetUrl, so you do not have to maintain targetUrls. This
+ * works across your demo, qa, prod environments as long as each environment is in its own
+ * projectId, which is typical.
+ *
+ * Supply `targetUrl` only to reach somewhere that lookup cannot describe — another region,
+ * another project, or a non-Cloud-Run host. It wins over `svcName`, which is then used purely
+ * as the logging name.
+ */
+// webpieces-disable no-function-outside-class -- pure GCP url helper; every sibling in this module is a free function
+export async function resolveTargetUrl(svcName: string, targetUrl?: string): Promise<string> {
+    if (targetUrl) {
+        return targetUrl;
+    }
+    return getCloudRunUrl(svcName);
+}
+
 function toEnvKey(serviceName: string): string {
     return serviceName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
 }

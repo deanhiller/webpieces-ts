@@ -1,12 +1,16 @@
 import { inject, injectable } from 'inversify';
-import { provideFrameworkSingleton, RequestContextReader, ContextMgr } from '@webpieces/core-context';
-import { TaskInvoker } from './TaskTypes';
-import { TaskProxyClient } from './TaskProxyClient';
+import { DocumentDesign } from '@webpieces/core-util';
+import { bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
+import { TaskProxyClient, TaskProxyClientProvider } from './TaskProxyClient';
 import { ApiPrototype, TaskClientConfig } from './TaskClientConfig';
+
+// Teach the container how to hand out fresh TaskProxyClients. TaskProxyClient is bound TRANSIENT
+// (@provideFrameworkTransient), so each provider.get() constructs a new one.
+bindFrameworkProvider(TaskProxyClientProvider, TaskProxyClient);
 
 /**
  * Properties DI frameworks / Promise checks / serializers probe on the proxy; return
- * undefined instead of treating them as endpoints. Mirrors http-client's ClientHttpFactory.
+ * undefined instead of treating them as endpoints. Mirrors http-client-core's buildClientProxy.
  */
 const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
     'constructor', 'prototype', '__proto__', 'name', 'then', 'catch', 'finally',
@@ -15,39 +19,37 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
 
 /**
  * ClientCloudTasksFactory - builds Cloud Tasks enqueue clients from a shared @PubSub API
- * contract. The fire-and-forget twin of http-client's ClientHttpFactory.
+ * contract. The fire-and-forget twin of http-client-node's ClientHttpFactory.
  *
- * Calling a method on the returned client ENQUEUES a task (it does not call remotely);
- * the task is later delivered to the same endpoint's controller through the full server
- * filter chain. A service just asks for a typed client:
+ * Calling a method on the returned client ENQUEUES a task (it does not call remotely); the task
+ * is later delivered to the same endpoint's controller through the full server filter chain.
  *
  * ```typescript
+ * // same project + region as this container; the URL is derived, you maintain nothing
  * const emailTasks = factory.createClient(EmailApi, new TaskClientConfig('email-svc'));
  * await scheduler.addToQueue(() => emailTasks.sendEmail(req), { dedupName });
  * ```
  *
- * The factory holds the COLLABORATORS every client shares (the bound TaskInvoker, and a
- * context-propagating ContextMgr); {@link TaskClientConfig} holds only that one client's
- * STATE (which Cloud Run service the task is delivered to).
+ * Every client it builds gets its OWN {@link TaskProxyClient} from the injected
+ * {@link TaskProxyClientProvider} (bound transient), which `createClient` then `init`s for one
+ * contract. Their collaborators (TaskInvoker, RequestContextHeaders) come from the container.
  *
- * Unlike http-client — which Angular bundles into a browser and which therefore must stay
- * DI-agnostic — this package is node-only, so the factory IS the inversify entry point and
- * the ContextMgr is a fixed field: RequestContextReader is the one and only right reader.
+ * Node-only, so the factory IS the inversify entry point. An enqueue outside
+ * `RequestContext.run(...)` throws rather than silently dropping the caller's trace.
  */
+@DocumentDesign()
 @provideFrameworkSingleton()
 @injectable()
 export class ClientCloudTasksFactory {
-    private readonly contextMgr = new ContextMgr(new RequestContextReader());
-
     constructor(
-        @inject(TaskInvoker) private readonly invoker: TaskInvoker,
+        @inject(TaskProxyClientProvider) private readonly taskProxyClientProvider: TaskProxyClientProvider,
     ) {}
 
-    /** Typed enqueue client for a @PubSub contract, delivered to `config.gcpCloudRunSvcName`. */
+    /** Typed enqueue client for a @PubSub contract, delivered to `config.svcName`. */
     createClient<T extends object>(apiClass: ApiPrototype<T>, config: TaskClientConfig): T {
-        // TaskProxyClient owns @PubSub validation + plan building from the contract's
-        // decorators. It is the @DocumentDesign design root for this package.
-        const proxyClient = new TaskProxyClient(apiClass, config, this.invoker, this.contextMgr);
+        // Fresh instance per contract — TaskProxyClient is transient.
+        const proxyClient = this.taskProxyClientProvider.get();
+        proxyClient.init(apiClass, config);
 
         return new Proxy({} as T, {
             // webpieces-disable no-any-unknown -- proxy get trap returns either an endpoint method or undefined

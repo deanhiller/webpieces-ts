@@ -1,10 +1,9 @@
 import { injectable } from 'inversify';
-import {provideFrameworkSingleton, MethodMeta, RequestContextReader} from '@webpieces/http-routing';
+import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import {
     ContextKey,
-    HeaderMethods,
     HeaderRegistry,
     LogApiCall,
 } from '@webpieces/core-util';
@@ -31,7 +30,6 @@ const log = LogManager.getLogger('LogApiFilter');
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private logApiCall: LogApiCall;
-    private headerMethods = new HeaderMethods();
     private loggedKeys: ContextKey[];
 
     constructor() {
@@ -50,17 +48,13 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        // Build log map from RequestContext (keys already transferred by ContextFilter)
-        const contextReader = new RequestContextReader();
-        const headers = this.headerMethods.buildSecureMapForLogs(this.loggedKeys, contextReader);
-
         // Wrap nextFilter.invoke in a method that returns the response
         const method = async (): Promise<unknown> => {
             const wpResponse = await nextFilter.invoke(meta);
             return wpResponse.response;
         };
 
-        const response = await this.logApiCall.execute("SVR", meta.routeMeta, meta.requestDto, headers, method);
+        const response = await this.logApiCall.execute("SVR", meta.routeMeta, meta.requestDto, method);
         return new WpResponse(response);
     }
 }

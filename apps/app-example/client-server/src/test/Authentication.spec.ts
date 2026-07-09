@@ -3,7 +3,7 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import jwt from 'jsonwebtoken';
 import { AuthConfig } from '@webpieces/http-routing';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
-import { HttpUnauthorizedError, HttpForbiddenError, WebpiecesCoreHeaders, ContextKey } from '@webpieces/core-util';
+import { HttpUnauthorizedError, HttpForbiddenError } from '@webpieces/core-util';
 import { mintIdToken } from '@webpieces/gcp-identity';
 import { SecureApi } from '@webpieces/client-server-api';
 import { TestAuthConfig, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
@@ -31,14 +31,17 @@ async function secureClient(overrides: ContainerModule): Promise<SecureApi> {
 }
 
 /**
- * Run a call with a single auth header published on the HttpRequest (as a transport would). Takes
- * the framework {@link ContextKey} so the wire header name comes from the SAME constant the server
- * (AuthFilter) reads — the test never hardcodes 'x-webpieces-shared-secret' / 'authorization'.
+ * Run a call with the Authorization header published on the HttpRequest, as a transport would.
+ *
+ * There is exactly ONE credential header, and its SCHEME says which credential follows:
+ *   Authorization: Bearer <user JWT | OIDC token>
+ *   Authorization: Webpieces <shared secret>
+ * It is read straight off the HttpRequest and is deliberately NOT a ContextKey, so it never enters
+ * the RequestContext and can never ride along on an outbound call or an enqueued Cloud Task.
  */
-async function withAuthHeader<T>(key: ContextKey, value: string, fn: () => Promise<T>): Promise<T> {
-    const headerName = key.httpHeader ?? key.name;
+async function withAuthHeader<T>(bearerValue: string, fn: () => Promise<T>): Promise<T> {
     return RequestContext.run(async () => {
-        const headers = new Map<string, string[]>([[headerName, [value]]]);
+        const headers = new Map<string, string[]>([['authorization', [bearerValue]]]);
         RequestContext.setRequest(new HttpRequest('POST', '/secure', headers));
         return fn();
     });
@@ -56,22 +59,18 @@ describe('Authentication: shared-secret (bound state)', () => {
     });
 
     it('accepts the correct shared secret', async () => {
-        const res = await withAuthHeader(WebpiecesCoreHeaders.SHARED_SECRET, TEST_SHARED_SECRET, () =>
-            api.internalOp({ note: 'hi' }),
-        );
+        const res = await withAuthHeader(`Webpieces ${TEST_SHARED_SECRET}`, () => api.internalOp({ note: 'hi' }));
         expect(res.ok).toBe(true);
     });
 
     it('accepts the rotating secret2 too (zero-downtime rotation window)', async () => {
-        const res = await withAuthHeader(WebpiecesCoreHeaders.SHARED_SECRET, TEST_SHARED_SECRET_ROTATING, () =>
-            api.internalOp({}),
-        );
+        const res = await withAuthHeader(`Webpieces ${TEST_SHARED_SECRET_ROTATING}`, () => api.internalOp({}));
         expect(res.ok).toBe(true);
     });
 
     it('rejects a wrong shared secret (401)', async () => {
         await expect(
-            withAuthHeader(WebpiecesCoreHeaders.SHARED_SECRET, 'WRONG-key', () => api.internalOp({})),
+            withAuthHeader('WRONG-key', () => api.internalOp({})),
         ).rejects.toThrow(HttpUnauthorizedError);
     });
 
@@ -103,35 +102,35 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
 
     it('accepts an admin JWT and stamps the userId into context', async () => {
         const token = sign({ sub: 'user-42', roles: ['admin'] });
-        const res = await withAuthHeader(WebpiecesCoreHeaders.AUTHORIZATION, `Bearer ${token}`, () => api.adminOp({}));
+        const res = await withAuthHeader(`Bearer ${token}`, () => api.adminOp({}));
         expect(res.ok).toBe(true);
         expect(res.userId).toBe('user-42'); // proves parseJwt → USER_ID context entry landed
     });
 
     it('allows ANY logged-in user on a no-role endpoint (@AuthJwt() with no roles)', async () => {
         const token = sign({ sub: 'user-99', roles: [] }); // authenticated, but zero roles
-        const res = await withAuthHeader(WebpiecesCoreHeaders.AUTHORIZATION, `Bearer ${token}`, () => api.userOp({}));
+        const res = await withAuthHeader(`Bearer ${token}`, () => api.userOp({}));
         expect(res.ok).toBe(true);
         expect(res.userId).toBe('user-99');
     });
 
     it('@Auth({inOrg:true}): a logged-in user WITH an org claim passes (pluggable authZ)', async () => {
         const token = sign({ sub: 'user-11', orgId: 'org-1' });
-        const res = await withAuthHeader(WebpiecesCoreHeaders.AUTHORIZATION, `Bearer ${token}`, () => api.orgOp({}));
+        const res = await withAuthHeader(`Bearer ${token}`, () => api.orgOp({}));
         expect(res.ok).toBe(true);
     });
 
     it('@Auth({inOrg:true}): a logged-in user WITHOUT an org claim is denied (403)', async () => {
         const token = sign({ sub: 'user-12' }); // authenticated, but no orgId claim
         await expect(
-            withAuthHeader(WebpiecesCoreHeaders.AUTHORIZATION, `Bearer ${token}`, () => api.orgOp({})),
+            withAuthHeader(`Bearer ${token}`, () => api.orgOp({})),
         ).rejects.toThrow(HttpForbiddenError);
     });
 
     it('rejects a JWT missing the admin role (403)', async () => {
         const token = sign({ sub: 'user-7', roles: ['viewer'] });
         await expect(
-            withAuthHeader(WebpiecesCoreHeaders.AUTHORIZATION, `Bearer ${token}`, () => api.adminOp({})),
+            withAuthHeader(`Bearer ${token}`, () => api.adminOp({})),
         ).rejects.toThrow(HttpForbiddenError);
     });
 
@@ -152,7 +151,7 @@ describe('Authentication: oidc (real dev token, caller = self)', () => {
         // Off-GCP, mintIdToken produces a dev token whose email is the runtime SA; @AuthOidc() = 'self'
         // resolves to that same SA, so verifyOidcFromCallers accepts it — real mint↔verify, no mocking.
         const token = await mintIdToken('http://localhost');
-        const res = await withAuthHeader(WebpiecesCoreHeaders.AUTHORIZATION, `Bearer ${token}`, () => api.serviceOp({}));
+        const res = await withAuthHeader(`Bearer ${token}`, () => api.serviceOp({}));
         expect(res.ok).toBe(true);
     });
 

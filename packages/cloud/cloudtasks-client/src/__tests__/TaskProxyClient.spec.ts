@@ -19,9 +19,11 @@ import {
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
+import { RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
 import { CloudTaskScheduler } from '../CloudTaskScheduler';
 import { TaskClientConfig } from '../TaskClientConfig';
+import { TaskProxyClient, TaskProxyClientProvider } from '../TaskProxyClient';
 import { TaskInvoker, TaskRequest, JobReference } from '../TaskTypes';
 
 class SendEmailRequest {
@@ -60,22 +62,31 @@ class CapturingTaskInvoker extends TaskInvoker {
 }
 
 const TENANT = new ContextKey('tenantId', 'x-tenant-id');
-const AUTH = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
-const SHARED_SECRET = new ContextKey('sharedSecret', 'x-webpieces-shared-secret', /*isSecured*/ true);
+
+let invoker: CapturingTaskInvoker;
+let emailTasks: EmailApi;
+let scheduler: CloudTaskScheduler;
+
+/**
+ * In prod the container supplies the provider (bindFrameworkProvider); here we hand it the
+ * resolve-lambda directly — the same seam, minus the container. Client construction is
+ * SYNCHRONOUS even though the URL resolve is async.
+ */
+function clientFor(config: TaskClientConfig): EmailApi {
+    const provider = new TaskProxyClientProvider(
+        () => new TaskProxyClient(invoker, new RequestContextHeaders()),
+    );
+    return new ClientCloudTasksFactory(provider).createClient(EmailApi, config);
+}
+
+beforeEach(() => {
+    HeaderRegistry.configure([TENANT], [], /*platformHeaders*/ true);
+    invoker = new CapturingTaskInvoker();
+    emailTasks = clientFor(new TaskClientConfig('email-svc'));
+    scheduler = new CloudTaskScheduler(invoker);
+});
 
 describe('TaskProxyClient enqueue', () => {
-    let invoker: CapturingTaskInvoker;
-    let emailTasks: EmailApi;
-    let scheduler: CloudTaskScheduler;
-
-    beforeEach(() => {
-        HeaderRegistry.configure([TENANT, AUTH, SHARED_SECRET], [], /*platformHeaders*/ true);
-        invoker = new CapturingTaskInvoker();
-        // Client construction is SYNCHRONOUS — no await, even though the URL resolve is async.
-        emailTasks = new ClientCloudTasksFactory(invoker)
-            .createClient(EmailApi, new TaskClientConfig('email-svc'));
-        scheduler = new CloudTaskScheduler(invoker);
-    });
 
     it('resolves the target URL from the service name and builds the task request', async () => {
         await RequestContext.run(async () => {
@@ -95,11 +106,9 @@ describe('TaskProxyClient enqueue', () => {
         expect((request.body as SendEmailRequest).to).toBe('a@b.com');
     });
 
-    it('propagates context headers but STRIPS the caller\'s auth credentials', async () => {
+    it("propagates context headers, and cannot leak the caller's credential", async () => {
         await RequestContext.run(async () => {
             RequestContext.putHeader(TENANT, 'tenant-42');
-            RequestContext.putHeader(AUTH, 'Bearer caller-user-jwt');
-            RequestContext.putHeader(SHARED_SECRET, 'caller-secret-value');
             RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID, 'req-abc');
 
             await scheduler.addToQueue(() => emailTasks.sendEmail(new SendEmailRequest('a@b.com')));
@@ -108,11 +117,12 @@ describe('TaskProxyClient enqueue', () => {
         const headers = invoker.captured!.contextHeaders;
         // Transferred context rides along...
         expect(headers.get('x-tenant-id')).toBe('tenant-42');
-        expect(headers.get('x-previous-request-id')).toBe('req-abc'); // request-id chaining applied
-        // ...but the caller's credentials must NEVER leak onto an enqueued task; the invoker
-        // mints fresh delivery auth per the endpoint's @AuthOidc mode.
+        expect(headers.get('x-request-id')).toBe('req-abc'); // propagated unchanged onto the task
+
+        // ...but `authorization` is NOT a ContextKey, so the inbound transfer never puts the caller's
+        // credential into the RequestContext and nothing here can transfer it. The invoker mints
+        // the task's own delivery auth per the endpoint's @AuthOidc / @AuthSharedSecret mode.
         expect(headers.has('authorization')).toBe(false);
-        expect(headers.has('x-webpieces-shared-secret')).toBe(false);
     });
 
     it('throws when an endpoint is called outside a CloudTaskScheduler lambda', async () => {
@@ -126,5 +136,27 @@ describe('TaskProxyClient enqueue', () => {
         // webpieces-disable no-any-unknown -- deliberately probing an undeclared method
         expect(() => (emailTasks as any).notAnEndpoint)
             .toThrow(/No @PubSub endpoint 'notAnEndpoint'/);
+    });
+
+});
+
+describe('TaskProxyClient target resolution + request scope', () => {
+    it('refuses to enqueue outside a RequestContext — a task with no trace is a bug', async () => {
+        // Inside a scheduler frame, but NO RequestContext.run: the scheduler catches it first.
+        await expect(scheduler.addToQueue(() => emailTasks.sendEmail(new SendEmailRequest('a@b.com'))))
+            .rejects.toThrow(/RequestContext/);
+        expect(invoker.captured).toBeUndefined();
+    });
+
+    it('an explicit targetUrl wins over svcName lookup; svcName remains the logging name', async () => {
+        // Cross-region / cross-project / non-Cloud-Run target: you supply the URL, we do not look it up.
+        const pinned = clientFor(new TaskClientConfig('email-svc', 'https://email.other-region.example'));
+
+        await RequestContext.run(async () => {
+            await scheduler.addToQueue(() => pinned.sendEmail(new SendEmailRequest('a@b.com')));
+        });
+
+        // NOT http://localhost:18299 (the CLOUD_RUN_URL_EMAIL_SVC override), and not a derived URL.
+        expect(invoker.captured!.targetUrl).toBe('https://email.other-region.example');
     });
 });

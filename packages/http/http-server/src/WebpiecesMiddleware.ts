@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { injectable } from 'inversify';
-import { provideFrameworkSingleton, fillContext } from '@webpieces/http-routing';
+import { provideFrameworkSingleton } from '@webpieces/http-routing';
 import {
     ProtocolError,
     HttpError,
@@ -17,7 +17,7 @@ import {
     HttpGatewayTimeoutError,
 } from '@webpieces/core-util';
 import { toError } from '@webpieces/core-util';
-import { RequestContext, HttpRequest } from '@webpieces/core-context';
+import { RequestContext, HttpRequest, RequestContextHeaders } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('WebpiecesMiddleware');
@@ -34,6 +34,9 @@ export type ExpressRouteHandler = (
 ) => Promise<void>;
 
 export class ExpressWrapper {
+    /** Stateless; the wire<->context transfer both directions of the framework share. */
+    private readonly headers = new RequestContextHeaders();
+
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         private clientMethod: (requestDto: unknown) => Promise<unknown>,
@@ -73,14 +76,14 @@ export class ExpressWrapper {
             requestDto = bodyText ? JSON.parse(bodyText) : {};
         }
 
-        // 3. Publish the transport-neutral HttpRequest + fill the context (platform-header
-        //    transfer + request id) ABOVE the boundary — the chain reads it, never express req.
-        RequestContext.setRequest(new HttpRequest(req.method, this.path, requestHeaders));
-        fillContext();
+        // 3. Publish the transport-neutral HttpRequest, then move its headers into the context and
+        //    mint a request id if the caller sent none. BOTH happen above the api boundary, because
+        //    http-routing requires an already-established, already-filled request scope — it never
+        //    builds one for you. This is the "translation layer" every transport must provide.
+        this.headers.fillFromRequest(new HttpRequest(req.method, this.path, requestHeaders));
 
         // 4. Invoke the api CLIENT method — the SAME proxy tests use. Its filter chain + controller
-        //    run here; because the request is already published above, the proxy uses it (it does
-        //    not re-synthesize one). So HTTP and in-process share one invocation path.
+        //    run here, reading the context filled above; the chain never touches express `req`.
         const result = await this.clientMethod(requestDto);
 
         // 5. Serialize the response DTO to JSON (SYMMETRIC with client's response.json())

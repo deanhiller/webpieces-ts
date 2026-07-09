@@ -88,7 +88,8 @@ export class GcpTaskInvoker extends TaskInvoker {
         if (mode.kind === 'shared-secret') {
             const secret = this.secrets?.get(mode.secretKey);
             if (secret) {
-                headers.set('x-webpieces-shared-secret', secret);
+                // One credential header; the 'Webpieces' scheme says a shared secret follows, not a token.
+                headers.set('authorization', `Webpieces ${secret}`);
                 httpRequest.headers = Object.fromEntries(headers);
             }
         }

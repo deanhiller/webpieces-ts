@@ -3,146 +3,41 @@
     "project": "cloudtasks-client",
     "designs": [
         {
-            "root": "TaskProxyClient",
+            "root": "ClientCloudTasksFactory",
             "rootKind": "apiImplementation",
-            "file": "packages/cloud/cloudtasks-client/src/TaskProxyClient.ts",
-            "maxLevel": 2,
+            "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
+            "maxLevel": 1,
             "nodes": [
                 {
-                    "id": "ApiPrototype<object>",
-                    "className": "ApiPrototype<object>",
-                    "kind": "unresolved",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskProxyClient.ts",
-                    "level": 1
-                },
-                {
-                    "id": "ContextMgr",
-                    "className": "ContextMgr",
-                    "kind": "class",
-                    "scope": "unknown",
-                    "file": "packages/core/core-util/src/http/ContextMgr.ts",
-                    "level": 1
-                },
-                {
-                    "id": "ContextReader",
-                    "className": "ContextReader",
-                    "kind": "unresolved",
-                    "scope": "unknown",
-                    "file": "packages/core/core-util/src/http/ContextMgr.ts",
-                    "level": 2
-                },
-                {
-                    "id": "TaskClientConfig",
-                    "className": "TaskClientConfig",
-                    "kind": "class",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskClientConfig.ts",
-                    "level": 1
-                },
-                {
-                    "id": "TaskInvoker",
-                    "className": "TaskInvoker",
-                    "kind": "class",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskTypes.ts",
-                    "level": 1
-                },
-                {
-                    "id": "TaskProxyClient",
-                    "className": "TaskProxyClient",
+                    "id": "ClientCloudTasksFactory",
+                    "className": "ClientCloudTasksFactory",
                     "kind": "apiImplementation",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskProxyClient.ts",
+                    "scope": "singleton",
+                    "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
                     "level": 0
                 },
                 {
-                    "id": "boolean",
-                    "className": "boolean",
+                    "id": "TaskProxyClientProvider",
+                    "className": "TaskProxyClientProvider",
                     "kind": "unresolved",
                     "scope": "unknown",
-                    "file": "packages/core/core-util/src/http/ContextMgr.ts",
-                    "level": 2
-                },
-                {
-                    "id": "string",
-                    "className": "string",
-                    "kind": "unresolved",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskClientConfig.ts",
-                    "level": 2
+                    "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
+                    "level": 1
                 }
             ],
             "edges": [
                 {
-                    "from": "ContextMgr",
-                    "to": "ContextReader",
-                    "injection": "type",
-                    "token": "ContextReader",
-                    "tokenKey": "type:ContextReader",
-                    "paramName": "contextReader",
-                    "paramType": "ContextReader"
-                },
-                {
-                    "from": "ContextMgr",
-                    "to": "boolean",
-                    "injection": "type",
-                    "token": "boolean",
-                    "tokenKey": "type:boolean",
-                    "paramName": "chainRequestIds",
-                    "paramType": "boolean"
-                },
-                {
-                    "from": "TaskClientConfig",
-                    "to": "string",
-                    "injection": "type",
-                    "token": "string",
-                    "tokenKey": "type:string",
-                    "paramName": "gcpCloudRunSvcName",
-                    "paramType": "string"
-                },
-                {
-                    "from": "TaskProxyClient",
-                    "to": "ApiPrototype<object>",
-                    "injection": "type",
-                    "token": "ApiPrototype<object>",
-                    "tokenKey": "type:ApiPrototype<object>",
-                    "paramName": "apiClass",
-                    "paramType": "ApiPrototype<object>"
-                },
-                {
-                    "from": "TaskProxyClient",
-                    "to": "ContextMgr",
-                    "injection": "type",
-                    "token": "ContextMgr",
-                    "tokenKey": "class:packages/core/core-util/src/http/ContextMgr.ts#ContextMgr",
-                    "paramName": "contextMgr",
-                    "paramType": "ContextMgr"
-                },
-                {
-                    "from": "TaskProxyClient",
-                    "to": "TaskClientConfig",
-                    "injection": "type",
-                    "token": "TaskClientConfig",
-                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskClientConfig.ts#TaskClientConfig",
-                    "paramName": "config",
-                    "paramType": "TaskClientConfig"
-                },
-                {
-                    "from": "TaskProxyClient",
-                    "to": "TaskInvoker",
-                    "injection": "type",
-                    "token": "TaskInvoker",
-                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskTypes.ts#TaskInvoker",
-                    "paramName": "invoker",
-                    "paramType": "TaskInvoker"
+                    "from": "ClientCloudTasksFactory",
+                    "to": "TaskProxyClientProvider",
+                    "injection": "token",
+                    "token": "TaskProxyClientProvider",
+                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskProxyClient.ts#TaskProxyClientProvider",
+                    "paramName": "taskProxyClientProvider",
+                    "paramType": "TaskProxyClientProvider"
                 }
             ],
             "unresolved": [
-                "ApiPrototype<object>",
-                "ContextReader",
-                "boolean",
-                "string"
+                "TaskProxyClientProvider"
             ]
         }
     ]

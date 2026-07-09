@@ -2,9 +2,9 @@ import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from '
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
 import { ContextKey, Secrets } from '@webpieces/core-util';
-import { RequestContextReader, AuthConfig } from '@webpieces/http-routing';
+import { AuthConfig } from '@webpieces/http-routing';
 import { CompanyAuthConfig } from '@webpieces/company-svc-core';
-import { ClientHttpFactory, ClientConfig, ContextMgr } from '@webpieces/http-client';
+import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
 
 /**
  * App-specific headers unique to this application.
@@ -61,21 +61,21 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     const secrets = new Secrets({ INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] });
     bind(Secrets).toConstantValue(secrets); // injected into the Cloud Tasks invokers
 
-    // The ONE factory every outbound RPC client is built from. Its ContextMgr reads this
-    // server's RequestContext, so the magic context (correlation id, tenant, request-id
-    // chain) transfers onto every outbound call automatically, and the SAME secrets back
-    // every client — an @AuthSharedSecret endpoint sends secrets.get(key). No idTokenMinter
-    // is bound here because no endpoint this service calls is @AuthOidc; ProxyClient would
-    // fail fast at construction if one were.
-    // ContextMgr reads the GLOBAL HeaderRegistry (configured at startup).
-    const clientFactory = new ClientHttpFactory(new ContextMgr(new RequestContextReader()), undefined, secrets);
-
     // PROD binding: Server2Api is a REAL HTTP client to the server2 service.
+    //
+    // ClientHttpFactory is a framework singleton, so we just resolve it. Every client it builds
+    // reads this server's RequestContext (magic context: correlation id, tenant, request-id
+    // chain) and is backed by the SAME Secrets bound above — an @AuthSharedSecret endpoint sends
+    // secrets.get(key). Nothing here calls an @AuthOidc endpoint; a client for one would mint
+    // tokens via gcp-identity automatically.
+    //
+    // 'server2' is the Cloud Run service name we'd resolve the URL from in a real deployment;
+    // this example pins an explicit targetUrl so it runs locally with no GCP.
     // Tests rebind this token to a mock/simulator.
     bind<Server2Api>(TYPES.Server2Api)
-        .toDynamicValue((_ctx: ResolutionContext) => {
+        .toDynamicValue((ctx: ResolutionContext) => {
             const server2Url = process.env['SERVER2_URL'] ?? 'http://localhost:8202';
-            return clientFactory.createClient(Server2Api, new ClientConfig(server2Url));
+            return ctx.get(ClientHttpFactory).createClient(Server2Api, new ClientConfig('server2', server2Url));
         })
         .inSingletonScope();
 });

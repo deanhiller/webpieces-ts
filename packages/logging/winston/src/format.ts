@@ -80,13 +80,12 @@ export function injectContextFormat(): Format {
     let reportedMissingContext = false;
     return format((info: TransformableInfo) => {
         if (RequestContext.isActive()) {
-            // getLoggedKeys() already returns only isLogged keys (precomputed at configure()).
-            for (const key of HeaderRegistry.get().getLoggedKeys()) {
-                const value = RequestContext.getHeader<string>(key);
-                if (value !== undefined && info[key.name] === undefined) {
-                    info[key.name] = key.maskIfSecured(value);
+            // ONE loop, in HeaderRegistry.buildLogFields. Caller-supplied fields win on conflict.
+            RequestContext.buildLogFields().forEach((value: string, name: string) => {
+                if (info[name] === undefined) {
+                    info[name] = value;
                 }
-            }
+            });
         } else if (!reportedMissingContext) {
             reportedMissingContext = true;
             // This IS a logging backend; direct stderr for the framework-misconfig warning.

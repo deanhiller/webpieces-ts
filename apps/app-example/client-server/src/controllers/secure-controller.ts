@@ -1,6 +1,6 @@
+import { WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { DocumentDesign, provideSingleton } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
-import { CompanyHeaders } from '@webpieces/company-core';
 import { SecureApi, SecureRequest, SecureResponse } from '@webpieces/client-server-api';
 
 /**
@@ -12,15 +12,15 @@ import { SecureApi, SecureRequest, SecureResponse } from '@webpieces/client-serv
 @DocumentDesign()
 export class SecureController extends SecureApi {
     override async userOp(_request: SecureRequest): Promise<SecureResponse> {
-        return { ok: true, userId: RequestContext.getHeader<string>(CompanyHeaders.USER_ID) };
+        return { ok: true, userId: RequestContext.getHeader<string>(WebpiecesCoreHeaders.USER_ID) };
     }
 
     override async adminOp(_request: SecureRequest): Promise<SecureResponse> {
-        return { ok: true, userId: RequestContext.getHeader<string>(CompanyHeaders.USER_ID) };
+        return { ok: true, userId: RequestContext.getHeader<string>(WebpiecesCoreHeaders.USER_ID) };
     }
 
     override async orgOp(_request: SecureRequest): Promise<SecureResponse> {
-        return { ok: true, userId: RequestContext.getHeader<string>(CompanyHeaders.USER_ID) };
+        return { ok: true, userId: RequestContext.getHeader<string>(WebpiecesCoreHeaders.USER_ID) };
     }
 
     override async internalOp(_request: SecureRequest): Promise<SecureResponse> {

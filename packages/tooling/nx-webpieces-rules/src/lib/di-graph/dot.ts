@@ -28,6 +28,20 @@ function dotEscape(text: string): string {
     return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+/**
+ * A transient node is 1-to-many: EVERY arrow into it resolves its own instance, unlike a
+ * singleton whose arrows all share one. `box3d` is Graphviz's stacked-slab glyph, so the raw
+ * .dot (and any external DOT viewer) reads "many" too. design.html additionally paints a real
+ * 3-box offset stack over it — see design-visualizer.ts.
+ *
+ * Leaves (constant/dynamic) and unresolved boxes are never instances, so they never stack.
+ */
+// webpieces-disable no-function-outside-class -- pure predicate over a DiNode, matching every sibling in this file
+export function isStackedNode(node: DiNode): boolean {
+    if (node.kind === 'constant' || node.kind === 'dynamic' || node.kind === 'unresolved') return false;
+    return node.scope === 'transient';
+}
+
 function nodeStatement(node: DiNode): string {
     const color = KIND_COLORS[node.kind] ?? '#F5F5F5';
     // Injected as an API → show the contract on top, the impl class in parens beneath.
@@ -45,7 +59,9 @@ function nodeStatement(node: DiNode): string {
         node.kind === 'controller' || node.kind === 'apiImplementation' || node.kind === 'component';
     const penwidth = isRootKind || node.kind === 'external' ? ', penwidth=2' : '';
     const peripheries = node.kind === 'external' ? ', peripheries=2' : '';
-    return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}${peripheries}];\n`;
+    // Transient => a fresh instance per injection. box3d reads as a stack of instances.
+    const shape = isStackedNode(node) ? ', shape=box3d' : '';
+    return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}${peripheries}${shape}];\n`;
 }
 
 /**

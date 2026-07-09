@@ -1,0 +1,27 @@
+{
+    "name": "http-client-browser",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/http/http-client-browser/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": [
+                "{options.outputPath}"
+            ],
+            "options": {
+                "outputPath": "dist/packages/http/http-client-browser",
+                "main": "packages/http/http-client-browser/src/index.ts",
+                "tsConfig": "packages/http/http-client-browser/tsconfig.lib.json",
+                "assets": [
+                    "packages/http/http-client-browser/package.json",
+                    "packages/http/http-client-browser/README.md"
+                ]
+            }
+        }
+    },
+    "tags": [
+        "framework:browser",
+        "role:designed-lib"
+    ]
+}
