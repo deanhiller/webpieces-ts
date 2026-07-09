@@ -37,14 +37,14 @@ describe('findMatchRuleViolations (no-fetch guard)', () => {
         expect(findMatchRuleViolations(linesOf(src), 'src/a.ts', NO_FETCH)).toHaveLength(0);
     });
 
-    it('does NOT flag the generated-client path (createApiClient)', () => {
-        const src = "const client = createApiClient(SaveApi, new ClientConfig('https://host'));";
+    it('does NOT flag the generated-client path (ClientHttpFactory.createClient)', () => {
+        const src = "const client = factory.createClient(SaveApi, new ClientConfig('https://host'));";
         expect(findMatchRuleViolations(linesOf(src), 'src/a.ts', NO_FETCH)).toHaveLength(0);
     });
 
     it('exempts allowlisted paths (the client factory) and test files', () => {
         const src = "const r = await fetch(input);";
-        expect(findMatchRuleViolations(linesOf(src), 'packages/http/http-client/src/ClientFactory.ts', NO_FETCH)).toHaveLength(0);
+        expect(findMatchRuleViolations(linesOf(src), 'packages/http/http-client/src/ProxyClient.ts', NO_FETCH)).toHaveLength(0);
         expect(findMatchRuleViolations(linesOf(src), 'libraries/apis-external/src/Impl.ts', NO_FETCH)).toHaveLength(0);
         expect(findMatchRuleViolations(linesOf(src), 'src/foo.spec.ts', NO_FETCH)).toHaveLength(0);
         expect(findMatchRuleViolations(linesOf(src), 'src/__tests__/foo.ts', NO_FETCH)).toHaveLength(0);

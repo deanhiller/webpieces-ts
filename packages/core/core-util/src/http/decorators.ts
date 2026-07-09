@@ -17,7 +17,7 @@ export const METADATA_KEYS = {
 /**
  * Route metadata stored per-method at runtime.
  * Used internally by http-routing and http-client as the runtime representation
- * of a route. Constructed from @ApiPath + @Endpoint metadata by createApiClient
+ * of a route. Constructed from @ApiPath + @Endpoint metadata by ProxyClient
  * and ApiRoutingFactory.
  */
 export class RouteMetadata {

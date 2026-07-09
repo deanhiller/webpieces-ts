@@ -5,7 +5,6 @@ import {
     getAuthMeta,
     RouteMetadata,
     ProtocolError,
-    HeaderMethods,
     LogApiCall,
     RecordedEndpoint,
     RecordedError,
@@ -16,187 +15,38 @@ import {
 } from '@webpieces/core-util';
 import { ContextMgr, Secrets } from '@webpieces/core-util';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
+import { ApiPrototype, ClientConfig, IdTokenMinter } from './ClientConfig';
 
 /**
- * Type representing a class constructor whose prototype is T.
- * Used as the apiPrototype parameter for createApiClient.
- */
-type ApiPrototype<T> = Function & { prototype: T };
-
-/**
- * Mints a Google OIDC ID token for an @AuthOidc endpoint (audience = callee
- * base URL). Server-side callers pass gcp-identity's `mintIdToken`; browsers
- * cannot mint service-to-service tokens and pass nothing (see the fail-fast in
- * ProxyClient's constructor). Keeping this a seam is what makes http-client a
- * browser-safe, isomorphic package (no static @webpieces/gcp-identity import).
- */
-export type IdTokenMinter = (audience: string) => Promise<string>;
-
-/**
- * Configuration options for HTTP client.
- */
-export class ClientConfig {
-    /** Base URL for all requests (e.g., 'http://localhost:3000') */
-    baseUrl: string;
-
-    /**
-     * Optional context manager for automatic header propagation.
-     * When provided, headers will be read from the ContextReader and added to requests.
-     */
-    contextMgr?: ContextMgr;
-
-    /**
-     * Optional OIDC ID-token minter for @AuthOidc endpoints (server-side only).
-     * Browsers leave this undefined; a client built for an API that has any
-     * @AuthOidc endpoint without a minter fails fast at construction.
-     */
-    idTokenMinter?: IdTokenMinter;
-
-    /**
-     * Optional shared-secret store. For an @AuthSharedSecret(key) endpoint, the client sends
-     * `secrets.get(key)` as the x-webpieces-shared-secret header. Bind ONE {@link Secrets} for all
-     * clients (see the app's DI module).
-     */
-    secrets?: Secrets;
-
-    constructor(baseUrl: string, contextMgr?: ContextMgr, idTokenMinter?: IdTokenMinter, secrets?: Secrets) {
-        this.baseUrl = baseUrl;
-        this.contextMgr = contextMgr;
-        this.idTokenMinter = idTokenMinter;
-        this.secrets = secrets;
-    }
-}
-
-/**
- * Return type for the Proxy get trap — either an async method or undefined for framework inspection.
- */
-// webpieces-disable no-any-unknown -- Proxy get trap returns generic response promises
-type ProxyGetResult = (...args: never[]) => Promise<unknown>;
-
-/**
- * Properties accessed by DI frameworks (Angular, Vue), debuggers, Promise checks, and serializers.
- * These should return undefined instead of throwing, allowing frameworks to inspect the proxy.
+ * ProxyClient - the HTTP call engine behind one API contract's client proxy.
  *
- * Why this exists:
- * - Angular's injector profiler accesses `constructor` after useFactory returns
- * - Promise.resolve() checks for `then` to detect thenables
- * - JSON.stringify checks for `toJSON`
- * - Debuggers access `prototype`, `__proto__`, etc.
- */
-const FRAMEWORK_INSPECTION_PROPERTIES = new Set([
-    'constructor',     // Angular DI profiler, class inspection
-    'prototype',       // Prototype chain inspection
-    '__proto__',       // Legacy prototype access
-    'name',            // Angular isNotFound() check, function/class name inspection
-    'then',            // Promise/thenable detection
-    'catch',           // Promise check
-    'finally',         // Promise check
-    'toJSON',          // JSON.stringify
-    'valueOf',         // Type coercion
-    'toString',        // String coercion
-    'nodeType',        // DOM element check
-    'tagName',         // DOM element check
-    '$$typeof',        // React element/component check
-    '$typeof',         // React internal
-    '_isVue',          // Vue internal
-    'ngOnInit',        // Angular lifecycle hook check
-    'ngOnDestroy',     // Angular lifecycle hook check
-    'ngOnChanges',     // Angular lifecycle hook check
-    'asymmetricMatch', // Jest matcher protocol
-]);
-
-/**
- * Creates a type-safe HTTP client from an API prototype with @ApiPath/@Endpoint decorators.
- *
- * This is the client-side equivalent of ApiRoutingFactory.
- * - Server: ApiRoutingFactory reads decorators -> routes HTTP requests to controllers
- * - Client: createApiClient reads decorators -> generates HTTP requests from method calls
- *
- * Usage:
- * ```typescript
- * const config = new ClientConfig('http://localhost:3000');
- * const client = createApiClient(SaveApi, config);
- * const response = await client.save({ query: 'test' }); // Type-safe!
- * ```
- *
- * BREAKING CHANGE (for library consumers): the positional 3rd `contextMgr`
- * parameter was removed - it silently shadowed `ClientConfig.contextMgr`,
- * which was ignored. Migration: pass it in the config instead:
- *   createApiClient(Api, new ClientConfig(baseUrl, contextMgr))
- *
- * @param apiPrototype - The API prototype class with @ApiPath/@Endpoint decorators
- * @param config - Client configuration with baseUrl and optional contextMgr
- * @returns A proxy object that implements the API interface
- */
-export function createApiClient<T extends object>(
-    apiPrototype: ApiPrototype<T>,
-    config: ClientConfig
-): T {
-    // ProxyClient owns @ApiPath validation + route building from the API's decorators
-    // (see its constructor). It is the @DocumentDesign design root for this package.
-    const proxyClient = new ProxyClient(apiPrototype, config);
-
-    // Create a proxy that intercepts method calls and makes HTTP requests
-    return new Proxy({} as T, {
-        get(target, prop: string | symbol): ProxyGetResult | undefined {
-            // Symbols (Symbol.toStringTag, Symbol.iterator, etc.) - throw for now to learn if this happens
-            if (typeof prop !== 'string') {
-                throw new Error(
-                    `Proxy accessed with non-string property: ${String(prop)} (type: ${typeof prop}). ` +
-                    `Please report this so we can add it to the whitelist.`
-                );
-            }
-
-            // Framework inspection properties - return undefined to allow inspection
-            // WITHOUT throwing. This is critical for Angular DI, Promise checks, etc.
-            if (FRAMEWORK_INSPECTION_PROPERTIES.has(prop)) {
-                return undefined;
-            }
-
-            // Check if this property is actually a route method
-            if (!proxyClient.hasRoute(prop)) {
-                // For unknown properties (likely typos), throw a helpful error
-                throw new Error(
-                    `No route found for method '${prop}'. ` +
-                    `Check for typos or ensure the method has @Endpoint() decorator.`
-                );
-            }
-
-            const route = proxyClient.getRoute(prop);
-
-            // Return a function that makes the HTTP request
-            return async (...args: any[]) => {
-                return proxyClient.makeRequest(route, args);
-            };
-        },
-    });
-}
-
-/**
- * ProxyClient - HTTP client implementation with logging.
- *
- * This class handles:
- * - Making HTTP requests based on route metadata
+ * Built by {@link ClientHttpFactory} (one per API contract), it owns:
+ * - @ApiPath validation + the route map built from the contract's decorators
+ * - Making HTTP requests based on that route metadata
  * - Header propagation via ContextMgr
- * - Logging via LogApiCall
+ * - Outbound delivery auth (@AuthOidc bearer / @AuthSharedSecret value)
+ * - Logging via LogApiCall, and test-case recording
  * - Error translation via ClientErrorTranslator
  *
- * LogApiCall is injected for consistent logging across the framework.
+ * It is the @DocumentDesign design root for this package: its constructor params ARE
+ * the client's dependency graph. Collaborators (contextMgr / idTokenMinter / secrets)
+ * are injected by the factory; {@link ClientConfig} carries only per-client STATE.
  */
 @DocumentDesign()
 export class ProxyClient {
     private routeMap: Map<string, RouteMetadata>;
-    private contextMgr?: ContextMgr;
     private apiName: string;
 
     // Our own little DI going on here as angular and nodejs are using 2 different DI systems;
-    // LogApiCall/HeaderMethods are typed params (with defaults) so this reads as the client's
-    // dependency graph in the generated design.
+    // LogApiCall is a typed param (with a default) so this reads as the client's dependency
+    // graph in the generated design.
     constructor(
         apiPrototype: ApiPrototype<object>,
         private config: ClientConfig,
+        private contextMgr?: ContextMgr,
+        private idTokenMinter?: IdTokenMinter,
+        private secrets?: Secrets,
         private logApiCall: LogApiCall = new LogApiCall(),
-        private headerMethods: HeaderMethods = new HeaderMethods(),
     ) {
         // Validate that the API prototype is marked with @ApiPath
         if (!isApiPath(apiPrototype)) {
@@ -209,7 +59,6 @@ export class ProxyClient {
 
         // apiName as the class name so client logs read "SaveApi.save", not "undefined.save"
         this.apiName = apiPrototype.name || 'UnknownApi';
-        this.contextMgr = config.contextMgr;
 
         // Build the map of method name -> route metadata from @ApiPath + @Endpoint metadata
         this.routeMap = new Map<string, RouteMetadata>();
@@ -228,11 +77,11 @@ export class ProxyClient {
         // Fail fast: an @AuthOidc endpoint needs a server-side OIDC minter. Browsers
         // cannot mint service-to-service tokens, so a client built for such an API
         // without a minter is a wiring bug — surface it here, not on first call.
-        if (hasOidcEndpoint && !config.idTokenMinter) {
+        if (hasOidcEndpoint && !this.idTokenMinter) {
             throw new Error(
-                `API ${this.apiName} has @AuthOidc endpoint(s) but ClientConfig has no idTokenMinter. ` +
+                `API ${this.apiName} has @AuthOidc endpoint(s) but ClientHttpFactory has no idTokenMinter. ` +
                 `Browsers cannot mint OIDC tokens; build this client server-side with ` +
-                `new ClientConfig(baseUrl, contextMgr, mintIdToken) from @webpieces/gcp-identity.`
+                `new ClientHttpFactory(contextMgr, mintIdToken) from @webpieces/gcp-identity.`
             );
         }
     }
@@ -266,13 +115,12 @@ export class ProxyClient {
     private async attachOutboundAuth(route: RouteMetadata, httpHeaders: Record<string, string>): Promise<void> {
         const mode = route.authMeta?.mode;
         if (mode?.kind === 'oidc') {
-            const idTokenMinter = this.config.idTokenMinter;
-            if (!idTokenMinter) {
+            if (!this.idTokenMinter) {
                 throw new Error(`No idTokenMinter configured for @AuthOidc endpoint ${route.methodName}`);
             }
-            httpHeaders['Authorization'] = `Bearer ${await idTokenMinter(this.config.baseUrl)}`;
+            httpHeaders['Authorization'] = `Bearer ${await this.idTokenMinter(this.config.baseUrl)}`;
         } else if (mode?.kind === 'shared-secret') {
-            const secret = this.config.secrets?.get(mode.secretKey);
+            const secret = this.secrets?.get(mode.secretKey);
             if (!secret) {
                 throw new Error(`No shared secret configured for @AuthSharedSecret('${mode.secretKey}') endpoint ${route.methodName}`);
             }
@@ -287,10 +135,8 @@ export class ProxyClient {
      */
     // webpieces-disable no-any-unknown -- proxy method: the request DTO (args) + response are erased at the client boundary
     async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
-        const { httpMethod, path } = route;
-
         // Build the full URL
-        const url = `${this.config.baseUrl}${path}`;
+        const url = `${this.config.baseUrl}${route.path}`;
 
         // Build base headers for the HTTP request
         const httpHeaders: Record<string, string> = {
@@ -311,16 +157,17 @@ export class ProxyClient {
 
         // Build masked headers map for logging (secured values masked, MDC keys)
         const headersForLogging = this.contextMgr
-            ? this.contextMgr.buildHeadersForLogging(this.headerMethods)
+            ? this.contextMgr.buildHeadersForLogging()
             : new Map<string, string>();
 
         // Build request options
         const options: RequestInit = {
-            method: httpMethod,
+            method: route.httpMethod,
             headers: httpHeaders,
         };
 
         // POST body is the first argument as JSON
+        // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
         let requestDto: unknown;
         if (args.length > 0) {
             requestDto = args[0];
@@ -328,6 +175,7 @@ export class ProxyClient {
         }
 
         // Wrap fetch in a method for LogApiCall.execute
+        // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
         const method = async (): Promise<unknown> => {
             return this.executeFetch(url, options);
         };
@@ -390,6 +238,7 @@ export class ProxyClient {
     /**
      * Execute the fetch request and handle response.
      */
+    // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
     private async executeFetch(url: string, options: RequestInit): Promise<unknown> {
         const response = await fetch(url, options);
 

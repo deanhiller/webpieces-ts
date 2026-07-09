@@ -17,4 +17,4 @@ Shared API contract for the client-server service: `SaveApi`/`PublicApi` abstrac
 
 ## Notes (optional)
 
-Contract-only library: no DI-registered classes. Decorators are read both server-side (route binding) and client-side (`createApiClient`). DTO fields are optional for protocol evolution.
+Contract-only library: no DI-registered classes. Decorators are read both server-side (route binding) and client-side (`ClientHttpFactory.createClient`). DTO fields are optional for protocol evolution.

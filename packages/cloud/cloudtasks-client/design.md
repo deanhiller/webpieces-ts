@@ -8,13 +8,25 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## TaskClientCreator — api-impl, Level 0…1
+## TaskProxyClient — api-impl, Level 0…2
 
 ```mermaid
 graph TD
-    TaskClientCreator["TaskClientCreator"]:::apiImpl
-    TaskInvoker{{"TaskInvoker ?"}}:::unresolved
-    TaskClientCreator --> TaskInvoker
+    ApiPrototype_object_{{"ApiPrototype<object> ?"}}:::unresolved
+    ContextMgr["ContextMgr"]
+    ContextReader{{"ContextReader ?"}}:::unresolved
+    TaskClientConfig["TaskClientConfig"]
+    TaskInvoker["TaskInvoker"]
+    TaskProxyClient["TaskProxyClient"]:::apiImpl
+    boolean{{"boolean ?"}}:::unresolved
+    string{{"string ?"}}:::unresolved
+    ContextMgr --> ContextReader
+    ContextMgr --> boolean
+    TaskClientConfig --> string
+    TaskProxyClient --> ApiPrototype_object_
+    TaskProxyClient --> ContextMgr
+    TaskProxyClient --> TaskClientConfig
+    TaskProxyClient --> TaskInvoker
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

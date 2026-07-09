@@ -3,9 +3,9 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import {
   ClientConfig,
+  ClientHttpFactory,
   ContextMgr,
   MutableContextStore,
-  createApiClient,
 } from '@webpieces/http-client';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
@@ -17,9 +17,11 @@ import { SaveApi, PublicApi } from '@webpieces/client-server-api';
  * 1. MutableContextStore - Browser-side magic context (no AsyncLocalStorage in
  *    browsers). Components/services set headers on it (login token, tenant, ...)
  *    and every outbound API call automatically transfers them.
- * 2. ClientConfig - Base URL + ContextMgr built from the SAME CompanyHeaders
- *    definitions the server registers (one source of truth in example-apis).
- * 3. SaveApi / PublicApi - HTTP client proxies.
+ * 2. ClientHttpFactory - holds the ContextMgr built from the SAME CompanyHeaders
+ *    definitions the server registers (one source of truth in example-apis). No
+ *    idTokenMinter and no Secrets: a browser cannot hold service credentials.
+ * 3. ClientConfig - per-client state, i.e. just the base URL.
+ * 4. SaveApi / PublicApi - HTTP client proxies.
  *
  * Example - set the tenant after login and every subsequent call carries it:
  * ```typescript
@@ -40,33 +42,41 @@ export const appConfig: ApplicationConfig = {
       useValue: new MutableContextStore(),
     },
 
-    // Provide ClientConfig with dynamic API URL + context transfer
+    // The ONE factory every client is built from - it carries the context transfer
+    {
+      provide: ClientHttpFactory,
+      useFactory: (store: MutableContextStore) => {
+        // ContextMgr reads the GLOBAL HeaderRegistry (configured in main.ts at startup).
+        return new ClientHttpFactory(new ContextMgr(store));
+      },
+      deps: [MutableContextStore]
+    },
+
+    // Provide ClientConfig with the dynamic API URL
     {
       provide: ClientConfig,
-      useFactory: (envConfig: EnvironmentConfig, store: MutableContextStore) => {
-        // ContextMgr reads the GLOBAL HeaderRegistry (configured in main.ts at startup).
-        const contextMgr = new ContextMgr(store);
-        return new ClientConfig(envConfig.apiBaseUrl(), contextMgr);
+      useFactory: (envConfig: EnvironmentConfig) => {
+        return new ClientConfig(envConfig.apiBaseUrl());
       },
-      deps: [EnvironmentConfig, MutableContextStore]
+      deps: [EnvironmentConfig]
     },
 
     // Provide SaveApi client
     {
       provide: SaveApi,
-      useFactory: (config: ClientConfig) => {
-        return createApiClient(SaveApi, config);
+      useFactory: (factory: ClientHttpFactory, config: ClientConfig) => {
+        return factory.createClient(SaveApi, config);
       },
-      deps: [ClientConfig]
+      deps: [ClientHttpFactory, ClientConfig]
     },
 
     // Provide PublicApi client
     {
       provide: PublicApi,
-      useFactory: (config: ClientConfig) => {
-        return createApiClient(PublicApi, config);
+      useFactory: (factory: ClientHttpFactory, config: ClientConfig) => {
+        return factory.createClient(PublicApi, config);
       },
-      deps: [ClientConfig]
+      deps: [ClientHttpFactory, ClientConfig]
     }
   ]
 };

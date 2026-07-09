@@ -26,6 +26,15 @@
                     "detail": "ClientConfig (dynamic)"
                 },
                 {
+                    "id": "ClientHttpFactory",
+                    "className": "ClientHttpFactory",
+                    "kind": "dynamic",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "level": 2,
+                    "detail": "ClientHttpFactory (dynamic)"
+                },
+                {
                     "id": "EnvironmentConfig",
                     "className": "EnvironmentConfig",
                     "kind": "class",
@@ -99,7 +108,7 @@
                     "paramType": "EnvironmentConfig"
                 },
                 {
-                    "from": "ClientConfig",
+                    "from": "ClientHttpFactory",
                     "to": "MutableContextStore",
                     "injection": "type",
                     "token": "MutableContextStore",
@@ -112,18 +121,36 @@
                     "to": "ClientConfig",
                     "injection": "type",
                     "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client/src/ClientFactory.ts#ClientConfig",
+                    "tokenKey": "class:packages/http/http-client/src/ClientConfig.ts#ClientConfig",
                     "paramName": "ClientConfig",
                     "paramType": "ClientConfig"
+                },
+                {
+                    "from": "PublicApi",
+                    "to": "ClientHttpFactory",
+                    "injection": "type",
+                    "token": "ClientHttpFactory",
+                    "tokenKey": "class:packages/http/http-client/src/ClientHttpFactory.ts#ClientHttpFactory",
+                    "paramName": "ClientHttpFactory",
+                    "paramType": "ClientHttpFactory"
                 },
                 {
                     "from": "SaveApi",
                     "to": "ClientConfig",
                     "injection": "type",
                     "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client/src/ClientFactory.ts#ClientConfig",
+                    "tokenKey": "class:packages/http/http-client/src/ClientConfig.ts#ClientConfig",
                     "paramName": "ClientConfig",
                     "paramType": "ClientConfig"
+                },
+                {
+                    "from": "SaveApi",
+                    "to": "ClientHttpFactory",
+                    "injection": "type",
+                    "token": "ClientHttpFactory",
+                    "tokenKey": "class:packages/http/http-client/src/ClientHttpFactory.ts#ClientHttpFactory",
+                    "paramName": "ClientHttpFactory",
+                    "paramType": "ClientHttpFactory"
                 }
             ],
             "unresolved": []

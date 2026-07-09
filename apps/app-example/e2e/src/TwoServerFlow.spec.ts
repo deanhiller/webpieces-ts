@@ -15,7 +15,7 @@ import { TestAuthConfig } from '../../client-server/src/test/TestAuthConfig';
  * servers' logs.
  *
  *   test --HTTP--> client-server :18200  (implements client-server-api)
- *                      |  Server2Api = createApiClient (ContextMgr reads the
+ *                      |  Server2Api = ClientHttpFactory (ContextMgr reads the
  *                      |  server's RequestContext -> outbound headers)
  *                      +--HTTP--> server2 :18202  (implements server2-api)
  *

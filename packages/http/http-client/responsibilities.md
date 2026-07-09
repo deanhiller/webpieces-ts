@@ -1,10 +1,10 @@
 # Responsibilities — http-client
 
-Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.
+Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`ClientHttpFactory`/`ProxyClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.
 
 ## In Scope
 
-- Proxy-based client generation from API decorators (`createApiClient`, `ClientConfig`)
+- Proxy-based client generation from API decorators (`ClientHttpFactory.createClient`, `ProxyClient`, `ClientConfig`)
 - Outbound header/context propagation (`ContextMgr`, `MutableContextStore`, `StaticContextReader`, `CompositeContextReader`)
 - Request-ID chaining across calls (`RequestIdChainProcessor`)
 - Translating HTTP responses/status codes into the typed `HttpError` hierarchy (`ClientErrorTranslator`)
