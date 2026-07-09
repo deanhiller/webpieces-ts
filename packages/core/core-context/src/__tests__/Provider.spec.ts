@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { Container, injectable } from 'inversify';
-import { ContainerProvider } from '../provide';
+import { HeaderRegistry } from '@webpieces/core-util';
+import { HttpRequest } from '../HttpRequest';
+import { RequestContext } from '../RequestContext';
+import { RequestContextHeaders } from '../RequestContextHeaders';
+import { Provider } from '../provide';
 import {
     bindFrameworkProvider,
     buildFrameworkModule,
@@ -34,11 +38,14 @@ class FreshThing {
     }
 }
 
-class SharedThingProvider extends ContainerProvider<SharedThing> {}
-class FreshThingProvider extends ContainerProvider<FreshThing> {}
+// Provider<T> is erased at runtime, so a Symbol names T. No per-T subclass exists.
+// webpieces-disable no-symbol-di-tokens -- Provider<T> is erased at runtime; the Symbol names T
+const SHARED_THING_PROVIDER = Symbol.for('Provider<SharedThing>');
+// webpieces-disable no-symbol-di-tokens -- Provider<T> is erased at runtime; the Symbol names T
+const FRESH_THING_PROVIDER = Symbol.for('Provider<FreshThing>');
 
-bindFrameworkProvider(SharedThingProvider, SharedThing);
-bindFrameworkProvider(FreshThingProvider, FreshThing);
+bindFrameworkProvider(SHARED_THING_PROVIDER, SharedThing);
+bindFrameworkProvider(FRESH_THING_PROVIDER, FreshThing);
 
 function newContainer(): Container {
     const container = new Container();
@@ -48,7 +55,7 @@ function newContainer(): Container {
 
 describe('Provider<T> — scope of T decides what get() returns', () => {
     it('@provideFrameworkSingleton T: every get() is the SAME instance (a lazy singleton)', () => {
-        const provider = newContainer().get(SharedThingProvider);
+        const provider = newContainer().get<Provider<SharedThing>>(SHARED_THING_PROVIDER);
 
         const first = provider.get();
         const second = provider.get();
@@ -57,7 +64,7 @@ describe('Provider<T> — scope of T decides what get() returns', () => {
     });
 
     it('@provideFrameworkTransient T: every get() is a NEW instance (1-to-many)', () => {
-        const provider = newContainer().get(FreshThingProvider);
+        const provider = newContainer().get<Provider<FreshThing>>(FRESH_THING_PROVIDER);
 
         const first = provider.get();
         const second = provider.get();
@@ -72,8 +79,8 @@ describe('Provider<T> — scope of T decides what get() returns', () => {
         transientBuilds = 0;
 
         const container = newContainer();
-        const shared = container.get(SharedThingProvider);
-        const fresh = container.get(FreshThingProvider);
+        const shared = container.get<Provider<SharedThing>>(SHARED_THING_PROVIDER);
+        const fresh = container.get<Provider<FreshThing>>(FRESH_THING_PROVIDER);
 
         // Providers resolved, nothing built yet.
         expect(singletonBuilds).toBe(0);
@@ -86,5 +93,35 @@ describe('Provider<T> — scope of T decides what get() returns', () => {
 
         expect(singletonBuilds).toBe(1); // cached by inversify's singleton scope
         expect(transientBuilds).toBe(2); // rebuilt every get()
+    });
+});
+
+/**
+ * The two halves of the request-scope contract, each failing loudly:
+ *   RequestContext.run()                     throws when a scope is ALREADY active
+ *   RequestContextHeaders.fillFromRequest()  throws when NO scope is active
+ * Together they make a correct setup the only setup.
+ */
+describe('RequestContext scope invariants', () => {
+    it('run() THROWS when nested — a second scope would shadow the first with an empty Map', () => {
+        RequestContext.run(() => {
+            expect(() => RequestContext.run(() => undefined)).toThrow(/already .*active|inside an active/i);
+        });
+    });
+
+    it('run() succeeds when no scope is active, and the scope closes on return', () => {
+        expect(RequestContext.isActive()).toBe(false);
+        RequestContext.run(() => {
+            expect(RequestContext.isActive()).toBe(true);
+        });
+        expect(RequestContext.isActive()).toBe(false);
+    });
+
+    it('fillFromRequest() THROWS outside a scope — the mirror image', () => {
+        HeaderRegistry.configure([], [], /*platformHeaders*/ true);
+        const headers = new RequestContextHeaders();
+
+        expect(() => headers.fillFromRequest(new HttpRequest('POST', '/x', new Map())))
+            .toThrow(/No active RequestContext/);
     });
 });

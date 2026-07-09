@@ -48,7 +48,7 @@
         <div id="graph-0" class="graph"></div>
     </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"ClientHttpFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientHttpFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientHttpFactory\\n(L0, singleton)\", penwidth=2];\n  \"ProxyClientProvider\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"ProxyClientProvider\\n(L1, unknown)\"];\n\n  { rank=same; \"ClientHttpFactory\"; }\n  { rank=same; \"ProxyClientProvider\"; }\n\n  \"ClientHttpFactory\" -> \"ProxyClientProvider\";\n\n  labelloc=\"t\";\n  label=\"ClientHttpFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n"}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"ClientHttpFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientHttpFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientHttpFactory\\n(L0, singleton)\", penwidth=2];\n  \"Provider<NodeProxyClient>\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"Provider<NodeProxyClient>\\n(L1, unknown)\"];\n\n  { rank=same; \"ClientHttpFactory\"; }\n  { rank=same; \"Provider<NodeProxyClient>\"; }\n\n  \"ClientHttpFactory\" -> \"Provider<NodeProxyClient>\";\n\n  labelloc=\"t\";\n  label=\"ClientHttpFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n"}];
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)

@@ -3,8 +3,6 @@ import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import {
-    ContextKey,
-    HeaderRegistry,
     LogApiCall,
 } from '@webpieces/core-util';
 
@@ -30,17 +28,11 @@ const log = LogManager.getLogger('LogApiFilter');
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private logApiCall: LogApiCall;
-    private loggedKeys: ContextKey[];
 
     constructor() {
         super();
-
-        // The global registry is the single source of truth (configured at startup,
-        // duplicate-validated). Log map keys off each key's `name`.
-        this.loggedKeys = HeaderRegistry.get().getLoggedKeys();
-
-        log.info(`[LogApiFilter] Using ${this.loggedKeys.length} logged context keys from HeaderRegistry`);
-
+        // Context fields are stamped onto each record by the logging BACKEND (bunyan/winston read
+        // RequestContext.buildLogFields()); this filter no longer collects them.
         this.logApiCall = new LogApiCall();
     }
 

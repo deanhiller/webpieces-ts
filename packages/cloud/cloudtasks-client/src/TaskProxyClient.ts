@@ -11,7 +11,6 @@ import {
     LogManager,
 } from '@webpieces/core-util';
 import {
-    ContainerProvider,
     RequestContextHeaders,
     provideFrameworkTransient,
 } from '@webpieces/core-context';
@@ -158,10 +157,12 @@ export class TaskProxyClient {
 }
 
 /**
- * Hands out {@link TaskProxyClient} instances — one per @PubSub contract.
+ * DI token for the `Provider<TaskProxyClient>` that hands out enqueue clients — one per @PubSub
+ * contract. `Provider<T>` is erased at runtime, so it cannot be its own token; this Symbol names T.
  *
  * Because TaskProxyClient is bound TRANSIENT, every `get()` constructs a new one. (Were it bound
- * `@provideFrameworkSingleton`, this same provider class would hand back one lazily-created
- * instance instead — the provider caches nothing, so the target's scope decides.)
+ * `@provideFrameworkSingleton`, the very same Provider would hand back one lazily-created instance
+ * instead — the provider caches nothing, so the target's scope decides.)
  */
-export class TaskProxyClientProvider extends ContainerProvider<TaskProxyClient> {}
+// webpieces-disable no-symbol-di-tokens -- Provider<T> is erased at runtime; the Symbol names T
+export const TASK_PROXY_CLIENT_PROVIDER = Symbol.for('Provider<TaskProxyClient>');
