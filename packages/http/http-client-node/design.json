@@ -17,27 +17,28 @@
                     "level": 0
                 },
                 {
-                    "id": "ProxyClientProvider",
-                    "className": "ProxyClientProvider",
+                    "id": "Provider<NodeProxyClient>",
+                    "className": "Provider<NodeProxyClient>",
                     "kind": "unresolved",
                     "scope": "unknown",
                     "file": "packages/http/http-client-node/src/ClientHttpFactory.ts",
-                    "level": 1
+                    "level": 1,
+                    "detail": "NODE_PROXY_CLIENT_PROVIDER"
                 }
             ],
             "edges": [
                 {
                     "from": "ClientHttpFactory",
-                    "to": "ProxyClientProvider",
+                    "to": "Provider<NodeProxyClient>",
                     "injection": "token",
-                    "token": "ProxyClientProvider",
-                    "tokenKey": "class:packages/http/http-client-node/src/NodeProxyClient.ts#ProxyClientProvider",
+                    "token": "NODE_PROXY_CLIENT_PROVIDER",
+                    "tokenKey": "symbol.for:Provider<NodeProxyClient>",
                     "paramName": "proxyClientProvider",
-                    "paramType": "ProxyClientProvider"
+                    "paramType": "Provider<NodeProxyClient>"
                 }
             ],
             "unresolved": [
-                "ProxyClientProvider"
+                "NODE_PROXY_CLIENT_PROVIDER"
             ]
         }
     ]

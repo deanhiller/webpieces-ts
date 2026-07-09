@@ -1,14 +1,14 @@
 import { inject, injectable } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
-import { bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
+import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
 import type { ApiPrototype } from '@webpieces/http-client-core';
 import { buildClientProxy } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
-import { NodeProxyClient, ProxyClientProvider } from './NodeProxyClient';
+import { NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient } from './NodeProxyClient';
 
 // Teach the container how to hand out fresh NodeProxyClients. NodeProxyClient is bound TRANSIENT
 // (@provideFrameworkTransient), so each provider.get() constructs a new one.
-bindFrameworkProvider(ProxyClientProvider, NodeProxyClient);
+bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
 
 /**
  * ClientHttpFactory - builds type-safe HTTP clients from API prototypes carrying
@@ -30,7 +30,7 @@ bindFrameworkProvider(ProxyClientProvider, NodeProxyClient);
  * ```
  *
  * Every client it builds shares one {@link NodeProxyClient} *shape* but never one instance: the
- * injected {@link ProxyClientProvider} hands out a fresh one per contract, which `createClient`
+ * injected `Provider<NodeProxyClient>` hands out a fresh one per contract, which `createClient`
  * then `init`s. Their collaborators (RequestContextHeaders, Secrets) come from the container, so
  * the whole dependency graph is visible in this package's design.html.
  *
@@ -43,7 +43,7 @@ bindFrameworkProvider(ProxyClientProvider, NodeProxyClient);
 @injectable()
 export class ClientHttpFactory {
     constructor(
-        @inject(ProxyClientProvider) private readonly proxyClientProvider: ProxyClientProvider,
+        @inject(NODE_PROXY_CLIENT_PROVIDER) private readonly proxyClientProvider: Provider<NodeProxyClient>,
     ) {}
 
     /**

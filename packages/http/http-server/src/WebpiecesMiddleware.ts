@@ -34,13 +34,12 @@ export type ExpressRouteHandler = (
 ) => Promise<void>;
 
 export class ExpressWrapper {
-    /** Stateless; the wire<->context transfer both directions of the framework share. */
-    private readonly headers = new RequestContextHeaders();
-
     constructor(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         private clientMethod: (requestDto: unknown) => Promise<unknown>,
-        private path: string
+        private path: string,
+        /** Owns the wire<->context transfer, both directions. Stateless framework singleton. */
+        private headers: RequestContextHeaders,
     ) {
     }
 
@@ -64,8 +63,8 @@ export class ExpressWrapper {
     }
 
     public async executeImpl(req: Request, res: Response, next: NextFunction): Promise<void> {
-        // 1. Read HTTP headers from Express request
-        const requestHeaders = this.readExpressHeaders(req);
+        // 1. Translate express's request into the transport-neutral HttpRequest webpieces speaks.
+        const httpRequest = this.toWebpiecesRequest(req);
 
         // 2. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
         let requestDto: unknown = {};
@@ -80,7 +79,7 @@ export class ExpressWrapper {
         //    mint a request id if the caller sent none. BOTH happen above the api boundary, because
         //    http-routing requires an already-established, already-filled request scope — it never
         //    builds one for you. This is the "translation layer" every transport must provide.
-        this.headers.fillFromRequest(new HttpRequest(req.method, this.path, requestHeaders));
+        this.headers.fillFromRequest(httpRequest);
 
         // 4. Invoke the api CLIENT method — the SAME proxy tests use. Its filter chain + controller
         //    run here, reading the context filled above; the chain never touches express `req`.
@@ -97,6 +96,15 @@ export class ExpressWrapper {
      *
      * HTTP spec allows multiple values for same header name.
      */
+    /**
+     * express Request -> webpieces {@link HttpRequest}. THE translation layer: below this line the
+     * filter chain and controllers never see express, which is what lets the same chain run
+     * in-process with no transport at all.
+     */
+    private toWebpiecesRequest(req: Request): HttpRequest {
+        return new HttpRequest(req.method, this.path, this.readExpressHeaders(req));
+    }
+
     private readExpressHeaders(req: Request): Map<string, string[]> {
         const headers = new Map<string, string[]>();
 
@@ -233,6 +241,9 @@ export class ExpressWrapper {
 @provideFrameworkSingleton()
 @injectable()
 export class WebpiecesMiddleware {
+    /** The ONE wire<->context transfer, handed to every route's ExpressWrapper. Stateless. */
+    private readonly headers = new RequestContextHeaders();
+
 
     /**
      * Global error handler middleware - catches ALL unhandled errors.
@@ -342,6 +353,6 @@ export class WebpiecesMiddleware {
         clientMethod: (requestDto: unknown) => Promise<unknown>,
         path: string,
     ): ExpressWrapper {
-        return new ExpressWrapper(clientMethod, path);
+        return new ExpressWrapper(clientMethod, path, this.headers);
     }
 }

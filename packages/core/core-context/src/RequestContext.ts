@@ -27,10 +27,27 @@ class RequestContextImpl {
     }
 
     /**
-     * Run a function with a new context.
-     * This is typically called at the beginning of a request.
+     * Open THE request scope. A transport calls this once, at the beginning of a request.
+     *
+     * Nesting is a bug, not a feature, so it throws. AsyncLocalStorage would happily let a second
+     * `run()` install a fresh empty Map that SHADOWS the outer one: every value the outer scope
+     * holds becomes invisible, `fillFromRequest` mints a second request id, and the two halves of a
+     * request end up in different traces. Nothing would tell you.
+     *
+     * With this guard the setup is right or it is loud. It mirrors
+     * `RequestContextHeaders.fillFromRequest()`, which throws when there is NO active scope.
+     *
+     * @throws Error when a RequestContext is already active.
      */
     run<T>(fn: () => T): T {
+        if (this.isActive()) {
+            throw new Error(
+                'RequestContext.run(...) called inside an active RequestContext. Nesting installs a ' +
+                'fresh empty context that shadows the outer one: its values go invisible and a second ' +
+                'request id is minted. Exactly ONE scope per request — the transport opens it.',
+            );
+        }
+        // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
         const store = new Map<string, any>();
         return this.storage.run(store, fn);
     }

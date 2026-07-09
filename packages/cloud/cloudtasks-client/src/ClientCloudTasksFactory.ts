@@ -1,12 +1,12 @@
 import { inject, injectable } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
-import { bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
-import { TaskProxyClient, TaskProxyClientProvider } from './TaskProxyClient';
+import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
+import { TASK_PROXY_CLIENT_PROVIDER, TaskProxyClient } from './TaskProxyClient';
 import { ApiPrototype, TaskClientConfig } from './TaskClientConfig';
 
 // Teach the container how to hand out fresh TaskProxyClients. TaskProxyClient is bound TRANSIENT
 // (@provideFrameworkTransient), so each provider.get() constructs a new one.
-bindFrameworkProvider(TaskProxyClientProvider, TaskProxyClient);
+bindFrameworkProvider(TASK_PROXY_CLIENT_PROVIDER, TaskProxyClient);
 
 /**
  * Properties DI frameworks / Promise checks / serializers probe on the proxy; return
@@ -31,7 +31,7 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
  * ```
  *
  * Every client it builds gets its OWN {@link TaskProxyClient} from the injected
- * {@link TaskProxyClientProvider} (bound transient), which `createClient` then `init`s for one
+ * `Provider<TaskProxyClient>` (bound transient), which `createClient` then `init`s for one
  * contract. Their collaborators (TaskInvoker, RequestContextHeaders) come from the container.
  *
  * Node-only, so the factory IS the inversify entry point. An enqueue outside
@@ -42,7 +42,7 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
 @injectable()
 export class ClientCloudTasksFactory {
     constructor(
-        @inject(TaskProxyClientProvider) private readonly taskProxyClientProvider: TaskProxyClientProvider,
+        @inject(TASK_PROXY_CLIENT_PROVIDER) private readonly taskProxyClientProvider: Provider<TaskProxyClient>,
     ) {}
 
     /** Typed enqueue client for a @PubSub contract, delivered to `config.svcName`. */

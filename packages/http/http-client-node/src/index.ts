@@ -20,7 +20,7 @@
  */
 
 export { ClientHttpFactory } from './ClientHttpFactory';
-export { NodeProxyClient, ProxyClientProvider } from './NodeProxyClient';
+export { NodeProxyClient, NODE_PROXY_CLIENT_PROVIDER } from './NodeProxyClient';
 export { ClientConfig } from './ClientConfig';
 
 // The isomorphic engine, re-exported so a server app needs one import.

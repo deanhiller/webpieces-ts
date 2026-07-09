@@ -19,11 +19,11 @@ import {
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
-import { RequestContextHeaders } from '@webpieces/core-context';
+import { Provider, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
 import { CloudTaskScheduler } from '../CloudTaskScheduler';
 import { TaskClientConfig } from '../TaskClientConfig';
-import { TaskProxyClient, TaskProxyClientProvider } from '../TaskProxyClient';
+import { TaskProxyClient } from '../TaskProxyClient';
 import { TaskInvoker, TaskRequest, JobReference } from '../TaskTypes';
 
 class SendEmailRequest {
@@ -73,7 +73,7 @@ let scheduler: CloudTaskScheduler;
  * SYNCHRONOUS even though the URL resolve is async.
  */
 function clientFor(config: TaskClientConfig): EmailApi {
-    const provider = new TaskProxyClientProvider(
+    const provider = new Provider(
         () => new TaskProxyClient(invoker, new RequestContextHeaders()),
     );
     return new ClientCloudTasksFactory(provider).createClient(EmailApi, config);

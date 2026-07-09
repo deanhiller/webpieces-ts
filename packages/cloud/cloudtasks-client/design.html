@@ -48,7 +48,7 @@
         <div id="graph-0" class="graph"></div>
     </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"ClientCloudTasksFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientCloudTasksFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientCloudTasksFactory\\n(L0, singleton)\", penwidth=2];\n  \"TaskProxyClientProvider\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"TaskProxyClientProvider\\n(L1, unknown)\"];\n\n  { rank=same; \"ClientCloudTasksFactory\"; }\n  { rank=same; \"TaskProxyClientProvider\"; }\n\n  \"ClientCloudTasksFactory\" -> \"TaskProxyClientProvider\";\n\n  labelloc=\"t\";\n  label=\"ClientCloudTasksFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n"}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"ClientCloudTasksFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientCloudTasksFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientCloudTasksFactory\\n(L0, singleton)\", penwidth=2];\n  \"Provider<TaskProxyClient>\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"Provider<TaskProxyClient>\\n(L1, unknown)\"];\n\n  { rank=same; \"ClientCloudTasksFactory\"; }\n  { rank=same; \"Provider<TaskProxyClient>\"; }\n\n  \"ClientCloudTasksFactory\" -> \"Provider<TaskProxyClient>\";\n\n  labelloc=\"t\";\n  label=\"ClientCloudTasksFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n"}];
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)

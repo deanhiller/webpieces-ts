@@ -17,27 +17,28 @@
                     "level": 0
                 },
                 {
-                    "id": "TaskProxyClientProvider",
-                    "className": "TaskProxyClientProvider",
+                    "id": "Provider<TaskProxyClient>",
+                    "className": "Provider<TaskProxyClient>",
                     "kind": "unresolved",
                     "scope": "unknown",
                     "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
-                    "level": 1
+                    "level": 1,
+                    "detail": "TASK_PROXY_CLIENT_PROVIDER"
                 }
             ],
             "edges": [
                 {
                     "from": "ClientCloudTasksFactory",
-                    "to": "TaskProxyClientProvider",
+                    "to": "Provider<TaskProxyClient>",
                     "injection": "token",
-                    "token": "TaskProxyClientProvider",
-                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskProxyClient.ts#TaskProxyClientProvider",
+                    "token": "TASK_PROXY_CLIENT_PROVIDER",
+                    "tokenKey": "symbol.for:Provider<TaskProxyClient>",
                     "paramName": "taskProxyClientProvider",
-                    "paramType": "TaskProxyClientProvider"
+                    "paramType": "Provider<TaskProxyClient>"
                 }
             ],
             "unresolved": [
-                "TaskProxyClientProvider"
+                "TASK_PROXY_CLIENT_PROVIDER"
             ]
         }
     ]

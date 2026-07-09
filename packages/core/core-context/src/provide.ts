@@ -76,38 +76,36 @@ export function provideTransient(): ClassDecorator {
  * `toProvider()` binding is deprecated ("Providers will be removed in v8"), so we model
  * Guice's seam ourselves.
  *
- * `get()` is SYNCHRONOUS, like Guice's. An async `get()` would force every consumer
- * (e.g. `ClientHttpFactory.createClient`) to become async, and neither Angular's
- * `useFactory` nor inversify's `toDynamicValue` can await.
+ * It caches NOTHING, because `ResolutionContext.get()` already applies the BOUND SCOPE of `T`:
  *
- * Inject a Provider when you need a dependency LATER or REPEATEDLY rather than at
- * construction time — a lazily-created singleton, or a fresh instance per call.
- */
-export abstract class Provider<T> {
-    abstract get(): T;
-}
-
-/**
- * The container-backed {@link Provider}. It deliberately caches NOTHING, because
- * `ResolutionContext.get()` already applies the BOUND SCOPE of `T`:
+ *   T bound @provideFrameworkSingleton -> every get() returns the SAME instance, built on the
+ *                                        first call. That is a LAZY SINGLETON.
+ *   T bound @provideFrameworkTransient -> every get() builds a NEW instance. That is 1-to-many.
  *
- *   T bound with @provideSingleton -> every get() returns the SAME instance, constructed on
- *                                    the first call. That is a LAZY SINGLETON.
- *   T bound transient             -> every get() constructs a NEW instance. That is 1-to-many.
+ * A provider that cached internally would break the transient case outright: the second get()
+ * would hand back the first instance.
  *
- * A provider that cached internally would break the transient case outright: the second
- * get() would hand back the first instance.
+ * `get()` is SYNCHRONOUS, like Guice's. An async `get()` would force every consumer (e.g.
+ * `ClientHttpFactory.createClient`) to become async, and neither Angular's `useFactory` nor
+ * inversify's `toDynamicValue` can await.
  *
- * Subclass it once per `T` so the subclass IS the DI token (no Symbol tokens), then register
- * the pair with {@link bindFrameworkProvider}:
+ * TypeScript erases generics, so `Provider<T>` has NO runtime identity and cannot itself be a DI
+ * token. Register it against a Symbol naming T, with {@link bindFrameworkProvider}, and inject it
+ * by that token — the declared type is what a reader needs, the Symbol is what inversify needs:
+ *
  * ```typescript
- * export class ProxyClientProvider extends ContainerProvider<NodeProxyClient> {}
+ * // webpieces-disable no-symbol-di-tokens -- Provider<T> is erased at runtime; T names the token
+ * export const TASK_PROXY_PROVIDER = Symbol.for('TaskProxyClientProvider');
+ * bindFrameworkProvider(TASK_PROXY_PROVIDER, TaskProxyClient);
+ *
+ * constructor(@inject(TASK_PROXY_PROVIDER) private readonly provider: Provider<TaskProxyClient>) {}
  * ```
+ *
+ * Inject a Provider when you need a dependency LATER or REPEATEDLY rather than at construction
+ * time — a lazily-created singleton, or a fresh instance per call.
  */
-export class ContainerProvider<T> extends Provider<T> {
-    constructor(private readonly resolve: () => T) {
-        super();
-    }
+export class Provider<T> {
+    constructor(private readonly resolve: () => T) {}
 
     get(): T {
         return this.resolve();

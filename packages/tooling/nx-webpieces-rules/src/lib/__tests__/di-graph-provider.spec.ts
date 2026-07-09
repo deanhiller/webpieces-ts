@@ -1,9 +1,10 @@
 /**
  * The Guice-style Provider<T> seam, as the DI-graph analyzer sees it.
  *
- * `bindFrameworkProvider(XProvider, X)` must render as `Root -> XProvider -> X`, and X's OWN
- * binding scope decides whether X is a shared instance or one-per-get(). Without this, XProvider
- * would dead-end as an opaque toDynamicValue leaf and the class it hands out would be invisible.
+ * `bindFrameworkProvider(TOKEN, X)` must render as `Root -> X` — NO provider box. A Provider is DI
+ * plumbing (it exists only because `Provider<T>` is erased at runtime and needs a token), not wiring
+ * anyone wants to read. X's OWN binding scope decides whether X is a shared instance or
+ * one-per-get(), which is what drives the stacked-box glyph.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
@@ -13,27 +14,27 @@ import { Fixture, edge, node } from './di-graph-testkit';
 const TRANSIENT_PROVIDER_FIXTURE: Record<string, string> = {
     'proxy.ts': `
 import { injectable } from 'inversify';
-import { provideFrameworkTransient, ContainerProvider } from '@webpieces/core-context';
+import { provideFrameworkTransient } from '@webpieces/core-context';
 
 @provideFrameworkTransient()
 @injectable()
 export class NodeProxyClient {}
 
-export class ProxyClientProvider extends ContainerProvider<NodeProxyClient> {}
+export const NODE_PROXY_CLIENT_PROVIDER = Symbol.for('Provider<NodeProxyClient>');
 `,
     'factory.ts': `
 import { inject, injectable } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
-import { bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
-import { NodeProxyClient, ProxyClientProvider } from './proxy';
+import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
+import { NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient } from './proxy';
 
-bindFrameworkProvider(ProxyClientProvider, NodeProxyClient);
+bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
 
 @DocumentDesign()
 @provideFrameworkSingleton()
 @injectable()
 export class ClientHttpFactory {
-    constructor(@inject(ProxyClientProvider) private readonly provider: ProxyClientProvider) {}
+    constructor(@inject(NODE_PROXY_CLIENT_PROVIDER) private readonly provider: Provider<NodeProxyClient>) {}
 }
 `,
 };
@@ -42,27 +43,27 @@ export class ClientHttpFactory {
 const SINGLETON_PROVIDER_FIXTURE: Record<string, string> = {
     'thing.ts': `
 import { injectable } from 'inversify';
-import { provideFrameworkSingleton, ContainerProvider } from '@webpieces/core-context';
+import { provideFrameworkSingleton } from '@webpieces/core-context';
 
 @provideFrameworkSingleton()
 @injectable()
 export class SharedThing {}
 
-export class SharedThingProvider extends ContainerProvider<SharedThing> {}
+export const SHARED_THING_PROVIDER = Symbol.for('Provider<SharedThing>');
 `,
     'factory.ts': `
 import { inject, injectable } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
-import { bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
-import { SharedThing, SharedThingProvider } from './thing';
+import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
+import { SHARED_THING_PROVIDER, SharedThing } from './thing';
 
-bindFrameworkProvider(SharedThingProvider, SharedThing);
+bindFrameworkProvider(SHARED_THING_PROVIDER, SharedThing);
 
 @DocumentDesign()
 @provideFrameworkSingleton()
 @injectable()
 export class LazyFactory {
-    constructor(@inject(SharedThingProvider) private readonly provider: SharedThingProvider) {}
+    constructor(@inject(SHARED_THING_PROVIDER) private readonly provider: Provider<SharedThing>) {}
 }
 `,
 };
@@ -75,30 +76,35 @@ afterAll(() => {
     singleton.cleanup();
 });
 
-describe('bindFrameworkProvider renders Root -> Provider -> target', () => {
-    it('walks through the provider to the class it hands out', () => {
+describe('bindFrameworkProvider renders Root -> target, with NO provider box', () => {
+    it('draws the consumer straight to the class the Provider hands out', () => {
         const graph = transient.build();
 
-        expect(edge(graph, 'ClientHttpFactory', 'ProxyClientProvider')).toBeDefined();
-        // Without expandProviderTarget this edge would not exist at all.
-        const providerEdge = edge(graph, 'ProxyClientProvider', 'NodeProxyClient');
+        const providerEdge = edge(graph, 'ClientHttpFactory', 'NodeProxyClient');
         expect(providerEdge).toBeDefined();
-        expect(providerEdge!.paramName).toBe('get()');
+        // The declared type survives on the edge for tooling, even though no box carries it.
+        expect(providerEdge!.paramType).toBe('Provider<NodeProxyClient>');
+    });
+
+    it('never creates a node for the Provider itself — it is DI plumbing, not wiring', () => {
+        const graph = transient.build();
+
+        expect(node(graph, 'Provider')).toBeUndefined();
+        expect(node(graph, 'ProxyClientProvider')).toBeUndefined();
+        expect(node(graph, 'NODE_PROXY_CLIENT_PROVIDER')).toBeUndefined();
     });
 
     it('a transient target is 1-to-many: each get() builds its own instance', () => {
         const graph = transient.build();
 
+        // Scope comes from the TARGET's own binding. transient => the stacked-box glyph.
         expect(node(graph, 'NodeProxyClient')!.scope).toBe('transient');
-        // The provider itself holds only a resolve-lambda, so it IS shared.
-        expect(node(graph, 'ProxyClientProvider')!.scope).toBe('singleton');
     });
 
-    it('the same provider over a @provideFrameworkSingleton target is a LAZY SINGLETON', () => {
+    it('the same Provider over a @provideFrameworkSingleton target is a LAZY SINGLETON', () => {
         const graph = singleton.build();
 
-        expect(edge(graph, 'SharedThingProvider', 'SharedThing')).toBeDefined();
-        // Scope comes from the TARGET's own binding, never from the provider's class name.
+        expect(edge(graph, 'LazyFactory', 'SharedThing')).toBeDefined();
         expect(node(graph, 'SharedThing')!.scope).toBe('singleton');
     });
 });

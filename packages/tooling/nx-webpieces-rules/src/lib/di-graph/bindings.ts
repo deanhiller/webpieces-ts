@@ -226,12 +226,13 @@ function collectDecoratorBindings(
 }
 
 /**
- * `bindFrameworkProvider(XProvider, X)` — the Guice-style Provider registration in
- * @webpieces/core-context. Binds XProvider as a singleton (it holds only a resolve-lambda) and
- * records that its `get()` yields X, so the walker can render `Factory -> XProvider -> X`.
+ * `bindFrameworkProvider(TOKEN, X)` — the Guice-style Provider registration in
+ * @webpieces/core-context. Records that a `Provider<X>` injected under TOKEN yields X.
  *
- * X's OWN binding decides X's scope, and therefore whether the design draws one box (a lazy
- * singleton) or a stack of boxes (a fresh instance per get()).
+ * The TOKEN is whatever names the provider (a Symbol, since `Provider<T>` is erased at runtime and
+ * cannot be its own token). We never draw a node for it: a Provider is DI plumbing, not wiring.
+ * The walker renders `Consumer -> X` directly, and X's OWN binding decides X's scope — and hence
+ * whether the design draws one box (a lazy singleton) or a stack (a fresh instance per get()).
  */
 // webpieces-disable no-function-outside-class -- ts AST visitor, matching every sibling collector in this file
 function collectProviderBinding(
@@ -243,13 +244,11 @@ function collectProviderBinding(
     if (!ts.isIdentifier(call.expression) || call.expression.text !== 'bindFrameworkProvider') return;
     if (call.arguments.length < 2) return;
 
-    const providerClass = resolveClassDeclaration(call.arguments[0], checker);
+    // The token may be a Symbol, a class, anything — resolveTokenKey canonicalizes all of them.
+    const token = resolveTokenKey(call.arguments[0], checker, workspaceRoot);
     const targetClass = resolveClassDeclaration(call.arguments[1], checker);
-    if (!providerClass || !targetClass) return;
+    if (!targetClass) return;
 
-    const token = classTokenKey(providerClass, workspaceRoot);
-    const file = relativeFile(workspaceRoot, providerClass.getSourceFile());
-    table.add(new Binding(token.key, token.display, 'to', 'singleton', providerClass, '', file));
     table.addProviderTarget(token.key, targetClass);
 }
 

@@ -13,8 +13,8 @@ appears in each root's tree.
 ```mermaid
 graph TD
     ClientCloudTasksFactory["ClientCloudTasksFactory"]:::apiImpl
-    TaskProxyClientProvider{{"TaskProxyClientProvider ?"}}:::unresolved
-    ClientCloudTasksFactory --> TaskProxyClientProvider
+    Provider_TaskProxyClient_{{"Provider<TaskProxyClient> ?"}}:::unresolved
+    ClientCloudTasksFactory --> Provider_TaskProxyClient_
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

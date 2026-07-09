@@ -8,7 +8,7 @@ import {
     TestCaseRecorder,
     toError,
 } from '@webpieces/core-util';
-import { ContainerProvider, RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
+import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
 import { mintIdToken, resolveTargetUrl } from '@webpieces/gcp-identity';
 import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
@@ -141,10 +141,12 @@ export class NodeProxyClient extends ProxyClient {
 }
 
 /**
- * Hands out {@link NodeProxyClient} instances — one per API contract.
+ * DI token for the `Provider<NodeProxyClient>` that hands out RPC clients — one per API contract.
+ * `Provider<T>` is erased at runtime, so it cannot be its own token; this Symbol names T.
  *
  * Because NodeProxyClient is bound TRANSIENT, every `get()` constructs a new one. (Were it bound
- * `@provideFrameworkSingleton`, the very same provider class would instead hand back one
- * lazily-created instance — the provider caches nothing, so the target's scope decides.)
+ * `@provideFrameworkSingleton`, the very same Provider would instead hand back one lazily-created
+ * instance — the provider caches nothing, so the target's scope decides.)
  */
-export class ProxyClientProvider extends ContainerProvider<NodeProxyClient> {}
+// webpieces-disable no-symbol-di-tokens -- Provider<T> is erased at runtime; the Symbol names T
+export const NODE_PROXY_CLIENT_PROVIDER = Symbol.for('Provider<NodeProxyClient>');

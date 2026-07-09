@@ -16,7 +16,7 @@
 
 import * as ts from 'typescript';
 import * as path from 'path';
-import { Binding, DiDesign, DiEdge, DiGraph, DiNode, DiNodeKind, DiScope } from './model';
+import { Binding, DiDesign, DiEdge, DiGraph, DiNode, DiNodeKind, DiScope, TokenRef } from './model';
 import {
     BindingTable,
     classDecorators,
@@ -349,26 +349,6 @@ export abstract class DiDesignBuilder {
         for (const injection of this.collectInjections(cls)) {
             this.processInjection(fromId, cls, injection);
         }
-        this.expandProviderTarget(fromId, cls);
-    }
-
-    /**
-     * A Provider subclass has no constructor injections of its own — it holds a resolve-lambda.
-     * Draw the class it hands out beneath it, so the design shows `Factory -> XProvider -> X`
-     * rather than stopping at the provider. X's own scope then decides the glyph: one box for a
-     * lazy singleton, a stack for a fresh-instance-per-get().
-     */
-    private expandProviderTarget(fromId: string, cls: ts.ClassDeclaration): void {
-        const token = classTokenKey(cls, this.workspaceRoot);
-        const target = this.table.providerTarget(token.key);
-        if (!target) return;
-
-        const targetToken = classTokenKey(target, this.workspaceRoot);
-        const toId = this.classNode(target);
-        this.walkClass(target);
-        this.design.edges.push(
-            new DiEdge(fromId, toId, 'type', targetToken.display, targetToken.key, 'get()', target.name?.text ?? ''),
-        );
     }
 
     /** Resolve one injection to a node and record the edge(s). Never throws. */
@@ -386,6 +366,11 @@ export abstract class DiDesignBuilder {
         if (!expr) return;
         const token = resolveTokenKey(expr, this.checker, this.workspaceRoot);
         const kind = injection.multi ? 'multiInject' : 'token';
+
+        if (this.processProviderInjection(fromId, token, injection)) {
+            return;
+        }
+
         const bindings = this.table.lookup(token.key);
 
         if (bindings.length > 0) {
@@ -422,6 +407,32 @@ export abstract class DiDesignBuilder {
         this.design.edges.push(
             new DiEdge(fromId, toId, kind, token.display, token.key, injection.paramName, injection.paramType),
         );
+    }
+
+    /**
+     * `@inject(TOKEN) p: Provider<X>` draws `Consumer -> X`, NOT `Consumer -> Provider -> X`.
+     *
+     * A Provider is DI plumbing: it exists because `Provider<T>` is erased at runtime and needs a
+     * token. Nobody reading the design wants a box for it. What they want to see is that the
+     * consumer gets Xs — and because X's own binding supplies the scope, a transient X renders as
+     * the stacked "one instance per get()" box.
+     *
+     * Returns true when the token was a registered provider and the edge has been drawn.
+     */
+    private processProviderInjection(fromId: string, token: TokenRef, injection: Injection): boolean {
+        const target = this.table.providerTarget(token.key);
+        if (!target) {
+            return false;
+        }
+
+        // apiType '' so the box reads `X`, not the declared `Provider<X>`.
+        const toId = this.classNode(target);
+        this.walkClass(target);
+        const targetToken = classTokenKey(target, this.workspaceRoot);
+        this.design.edges.push(
+            new DiEdge(fromId, toId, 'type', targetToken.display, targetToken.key, injection.paramName, injection.paramType),
+        );
+        return true;
     }
 
     private bindingTarget(binding: Binding, paramType: string): string {

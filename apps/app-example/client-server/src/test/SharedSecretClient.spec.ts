@@ -5,12 +5,11 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { AuthConfig } from '@webpieces/http-routing';
 import { Secrets } from '@webpieces/core-util';
-import { RequestContext, RequestContextHeaders } from '@webpieces/core-context';
+import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
     ClientConfig,
     ClientHttpFactory,
     NodeProxyClient,
-    ProxyClientProvider,
 } from '@webpieces/http-client-node';
 import { SecureApi } from '@webpieces/client-server-api';
 import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
@@ -51,7 +50,7 @@ function clientSending(value: string): SecureApi {
     const secrets = new Secrets({ INTERNAL_API_SECRET: value });
     // RequestContextHeaders reads HeaderRegistry in its constructor, so build it here (after the
     // server started and configured the registry), never at module scope.
-    const provider = new ProxyClientProvider(() => new NodeProxyClient(new RequestContextHeaders(), secrets));
+    const provider = new Provider(() => new NodeProxyClient(new RequestContextHeaders(), secrets));
     const factory = new ClientHttpFactory(provider);
     return factory.createClient(SecureApi, new ClientConfig('client-server', `http://localhost:${PORT}`));
 }
