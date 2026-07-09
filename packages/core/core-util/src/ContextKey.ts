@@ -53,4 +53,25 @@ export class ContextKey {
     isTransferred(): boolean {
         return this.httpHeader !== undefined;
     }
+
+    /**
+     * The value as it should appear in a log line: returned as-is for a normal
+     * key, partially masked when this key is secured. Masking is length-based:
+     * - Length > 15: first 3 + "..." + last 3
+     * - Length 8-15: first 2 + "..."
+     * - Length < 8: "<secure key too short to log>"
+     */
+    maskIfSecured(value: string): string {
+        if (!this.isSecured) {
+            return value;
+        }
+        const len = value.length;
+        if (len < 8) {
+            return '<secure key too short to log>';
+        } else if (len <= 15) {
+            return `${value.substring(0, 2)}...`;
+        } else {
+            return `${value.substring(0, 3)}...${value.substring(len - 3)}`;
+        }
+    }
 }

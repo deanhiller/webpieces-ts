@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry, LogManager } from '@webpieces/core-util';
 import { HttpRequest } from './HttpRequest';
 
 /** Reserved context key under which the current HttpRequest is stored. */
@@ -25,6 +25,13 @@ class RequestContextImpl {
     constructor() {
         this.storage = new AsyncLocalStorage<Map<string, any>>();
     }
+
+    // One-shot latch: the FIRST log emitted outside a RequestContext.run(...) block
+    // reports the missing request-wrapping filter, then this flips true so we never
+    // report again. Critically it also breaks the recursion — the error we log itself
+    // flows back through buildLogFields() with no context, and this latch stops it
+    // re-triggering (log.error -> buildLogFields -> log.error -> ... forever).
+    private reportedMissingContext = false;
 
     /**
      * Run a function with a new context.
@@ -54,6 +61,60 @@ class RequestContextImpl {
 
     hasHeader(key: ContextKey): boolean {
         return this.has(key.name);
+    }
+
+    /**
+     * Build the masked field map for LOGGING: every logged key in the global
+     * {@link HeaderRegistry} read straight from this context, secured values
+     * masked (via {@link ContextKey.maskIfSecured}), keyed by each key's `name`.
+     *
+     * This is what the @webpieces/winston and @webpieces/bunyan loggers call on
+     * every line — going DIRECT to the active RequestContext, with no
+     * ContextReader indirection.
+     *
+     * Logging OUTSIDE a `run(...)` block is a BUG — every request must be wrapped
+     * in RequestContext.run() by a server filter, so a log line with no active
+     * context means that filter is missing. We report it (via the logger, ERROR)
+     * exactly ONCE — see {@link reportedMissingContext} — then return empty fields
+     * so logging still works and never spins.
+     */
+    buildLogFields(): Map<string, string> {
+        const fields = new Map<string, string>();
+        if (!this.isActive()) {
+            this.reportMissingContextOnce();
+            return fields;
+        }
+        for (const key of HeaderRegistry.get().getLoggedKeys()) {
+            if (!key.isLogged) {
+                continue; // never logged (e.g. recorder, method-meta)
+            }
+            const value = this.getHeader<string>(key);
+            if (value) {
+                fields.set(key.name, key.maskIfSecured(value));
+            }
+        }
+        return fields;
+    }
+
+    /**
+     * Report — once per process — that a log line was emitted with no active
+     * RequestContext (a missing request-wrapping filter). The latch is set BEFORE
+     * we log so the error line's own trip back through buildLogFields() finds it
+     * already set and returns immediately, instead of recursing forever.
+     */
+    private reportMissingContextOnce(): void {
+        if (this.reportedMissingContext) {
+            return;
+        }
+        this.reportedMissingContext = true;
+        LogManager.getFactory()
+            .getLogger('RequestContext')
+            .error(
+                'Log emitted OUTSIDE RequestContext.run(...) — every request must be wrapped in ' +
+                    'RequestContext.run() by a server filter. That filter appears to be missing: ' +
+                    'correlation fields (requestId, tenant, ...) will be absent from logs until it is added. ' +
+                    'This is reported once per process.',
+            );
     }
 
     /**

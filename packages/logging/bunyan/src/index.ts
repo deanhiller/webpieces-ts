@@ -6,18 +6,16 @@
  *
  * ```ts
  * import { BunyanGcpFactory, BunyanConsoleFactory } from '@webpieces/bunyan';
- * import { RequestContextReader } from '@webpieces/core-context';
  *
- * const reader = new RequestContextReader();
  * const loggerFactory = process.env.K_SERVICE
- *   ? new BunyanGcpFactory(reader)      // Cloud Logging via @google-cloud/logging-bunyan
- *   : new BunyanConsoleFactory(reader); // local → pretty console
+ *   ? new BunyanGcpFactory()      // Cloud Logging via @google-cloud/logging-bunyan
+ *   : new BunyanConsoleFactory(); // local → pretty console
  * // hand to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...))
  * ```
  *
- * Both backends auto-enrich every line with the logged context keys from
- * HeaderRegistry. This package depends only on @webpieces/core-util (+ bunyan +
- * @google-cloud/logging-bunyan); the node RequestContextReader is passed in.
+ * Both backends auto-enrich every line with the logged context keys, read
+ * DIRECTLY from the active RequestContext (@webpieces/core-context) on each line —
+ * no ContextReader is threaded in.
  *
  * @packageDocumentation
  */
