@@ -26,25 +26,14 @@ export class CompanyHeaders {
     static readonly API_VERSION = new ContextKey('apiVersion', 'x-api-version');
 
     /**
-     * Authorization token for authentication. SECURED - masked in logs.
-     */
-    static readonly AUTHORIZATION = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
-
-    /**
-     * The authenticated user's id — STAMPED by the framework AuthFilter from a parsed JWT (see
-     * AuthConfig.parseJwt), then transferred to downstream services + logged under 'userId'.
-     */
-    static readonly USER_ID = new ContextKey('userId', 'x-webpieces-user-id');
-
-    /**
      * Get all company context keys as an array.
      */
     static getAllHeaders(): ContextKey[] {
         return [
             CompanyHeaders.TENANT_ID,
             CompanyHeaders.API_VERSION,
-            CompanyHeaders.AUTHORIZATION,
-            CompanyHeaders.USER_ID,
+            // userId/orgId/roles are FRAMEWORK keys (WebpiecesCoreHeaders), stamped by AuthFilter
+            // from the parsed JWT. Redefining them here clashes on the registry's duplicate check.
         ];
     }
 }

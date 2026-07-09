@@ -110,15 +110,13 @@ export {
 // Context keys + registry (the global magic-context header system)
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
-export { HeaderMethods } from './http/HeaderMethods';
 export { ContextReader } from './http/ContextReader';
+export type { ContextRead } from './http/ContextReader';
 
-// Outbound-header machinery (context reader + registry -> outbound HTTP headers).
-// Browser-safe — the server-side reader (RequestContextReader) and browser store
-// (MutableContextStore) both implement ContextReader, so this lives here rather
-// than in the Node-only @webpieces/core-context (which re-exports for back-compat).
+// BROWSER-ONLY outbound-header propagation (app-held store + registry -> outbound HTTP headers).
+// Only @webpieces/http-client-browser may name it; the server reads RequestContext directly via
+// RequestContextHeaders in the Node-only @webpieces/core-context.
 export { ContextMgr } from './http/ContextMgr';
-export { RequestIdChainProcessor } from './http/RequestIdChainProcessor';
 
 // API-call logging helper (uses LogManager above)
 export { LogApiCall } from './http/LogApiCall';

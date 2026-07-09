@@ -7,6 +7,7 @@
  */
 
 import { DiDesign, DiGraph, DiNode } from './model';
+import { isStackedNode } from './dot';
 import { sortGraph } from './serializer';
 
 /** Mermaid node ids must be simple identifiers — map graph ids to safe ids. */
@@ -30,6 +31,10 @@ function nodeStatement(node: DiNode): string {
     if (node.kind === 'unresolved') return `    ${id}{{"${text} ?"}}:::unresolved`;
     // External boundary — subroutine box (double vertical bars) + distinct class.
     if (node.kind === 'external') return `    ${id}[["${text}"]]:::external`;
+    // Transient (1-to-many). A plain box with a dashed accent, NOT mermaid's `@{ shape: procs }`
+    // stack: that needs mermaid >= 11.3 and design.md is rendered by whatever version the viewer
+    // ships (GitHub, an IDE preview) — this repo pins none. design.html draws the real stack.
+    if (isStackedNode(node)) return `    ${id}["${text}"]:::many`;
     return `    ${id}["${text}"]`;
 }
 
@@ -50,6 +55,8 @@ function graphBody(design: DiDesign): string[] {
     lines.push('    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37');
     lines.push('    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5');
     lines.push('    classDef external fill:#b39ddb,color:#000000,stroke:#5e35b1,stroke-width:3px');
+    // TRANSIENT: every arrow in resolves its own instance (a singleton's arrows share one).
+    lines.push('    classDef many fill:#eceff1,color:#000000,stroke:#546e7a,stroke-width:2px,stroke-dasharray: 4 2');
     return lines;
 }
 

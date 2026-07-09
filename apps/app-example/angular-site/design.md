@@ -14,7 +14,7 @@ appears in each root's tree.
 graph TD
     AppComponent["AppComponent"]:::component
     ClientConfig(["ClientConfig"])
-    ClientHttpFactory(["ClientHttpFactory"])
+    ClientHttpBrowserFactory(["ClientHttpBrowserFactory"])
     EnvironmentConfig["EnvironmentConfig"]
     MutableContextStore(["MutableContextStore"])
     PublicApi(["PublicApi"])
@@ -23,11 +23,11 @@ graph TD
     AppComponent --> PublicApi
     AppComponent --> SaveApi
     ClientConfig --> EnvironmentConfig
-    ClientHttpFactory --> MutableContextStore
+    ClientHttpBrowserFactory --> MutableContextStore
     PublicApi --> ClientConfig
-    PublicApi --> ClientHttpFactory
+    PublicApi --> ClientHttpBrowserFactory
     SaveApi --> ClientConfig
-    SaveApi --> ClientHttpFactory
+    SaveApi --> ClientHttpBrowserFactory
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

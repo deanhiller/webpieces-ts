@@ -1,6 +1,5 @@
 import type Logger from 'bunyan';
 import type { Logger as WpLogger } from '@webpieces/core-util';
-import { HeaderRegistry } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { LoggedError } from './LoggedError';
 
@@ -80,13 +79,11 @@ export class BunyanLogger implements WpLogger {
             return fields;
         }
 
-        // getLoggedKeys() already returns only isLogged keys (precomputed at configure()).
-        for (const key of HeaderRegistry.get().getLoggedKeys()) {
-            const value = RequestContext.getHeader<string>(key);
-            if (value) {
-                fields[key.name] = key.maskIfSecured(value);
-            }
-        }
+        // ONE loop, in HeaderRegistry.buildLogFields — the registry owns the keys and each
+        // ContextKey masks its own value.
+        RequestContext.buildLogFields().forEach((value: string, name: string) => {
+            fields[name] = value;
+        });
         if (err) {
             fields['err'] = normalizeError(err);
         }

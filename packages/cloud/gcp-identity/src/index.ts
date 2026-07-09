@@ -17,6 +17,7 @@ export {
     getRuntimeServiceAccountEmail,
     getSelfCloudRunUrl,
     getCloudRunUrl,
+    resolveTargetUrl,
     LOCAL_SERVICE_ACCOUNT_EMAIL,
 } from './urls';
 export { mintIdToken, verifyOidcFromCallers, OidcVerifyResult } from './oidc';

@@ -9,9 +9,7 @@ import { CompanyHeaders } from '@webpieces/company-core';
  *
  * Echoes the magic-context headers it received back into the response value so
  * callers (and the two-hop integration test) can SEE the context transfer:
- * - previousId proves the caller's x-request-id arrived as x-previous-request-id
- *   (per-hop request-id chaining)
- * - requestId proves this hop got its own fresh id
+ * - requestId proves the caller's x-request-id arrived UNCHANGED — one id per call tree
  * - tenant proves company headers transfer end-to-end
  */
 @provideSingleton()
@@ -19,11 +17,10 @@ import { CompanyHeaders } from '@webpieces/company-core';
 export class Server2Controller extends Server2Api {
     override async fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
         const requestId = RequestContext.getHeader(WebpiecesCoreHeaders.REQUEST_ID);
-        const previousId = RequestContext.getHeader(WebpiecesCoreHeaders.PREVIOUS_REQUEST_ID);
         const tenant = RequestContext.getHeader(CompanyHeaders.TENANT_ID);
 
         return {
-            value: `server2:name=${request.name};requestId=${requestId};previousId=${previousId};tenant=${tenant}`,
+            value: `server2:name=${request.name};requestId=${requestId};tenant=${tenant}`,
             timestamp: Date.now(),
         };
     }

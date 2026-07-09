@@ -19,7 +19,7 @@
             ]
         },
         "angular-site": {
-            "level": 2,
+            "level": 3,
             "framework": ["angular"],
             "role": "client",
             "shortDescription": "Angular single-page frontend demonstrating the webpieces browser client. It injects `SaveApi`/`PublicApi` as generated HTTP clients from `client-server-api` and calls the client-server service, wiring a HeaderRegistry from `company-core` for context header transfer.",
@@ -28,7 +28,7 @@
             "dependsOn": [
                 "client-server-api",
                 "company-core",
-                "http-client"
+                "http-client-browser"
             ]
         },
         "app-example-e2e": {
@@ -63,7 +63,7 @@
                 "client-server-api",
                 "company-svc-core",
                 "core-mock",
-                "http-client",
+                "http-client-node",
                 "server2-api"
             ]
         },
@@ -166,15 +166,38 @@
                 "core-util"
             ]
         },
-        "http-client": {
+        "http-client-browser": {
+            "level": 2,
+            "framework": ["browser"],
+            "role": "designed-lib",
+            "shortDescription": "The browser-side HTTP client: generates type-safe clients from the SAME API contract the server implements. Deliberately DI-free, because it may be bundled by React just as easily as by Angular, so it ships no `inversify` and no node-only `core-context`.",
+            "responsibilitiesFile": "packages/http/http-client-browser/responsibilities.md",
+            "designFile": "packages/http/http-client-browser/design.json",
+            "dependsOn": [
+                "http-client-core"
+            ]
+        },
+        "http-client-core": {
             "level": 1,
             "framework": ["browser","node"],
-            "role": "designed-lib",
-            "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`ClientHttpFactory`/`ProxyClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
-            "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
-            "designFile": "packages/http/http-client/design.json",
+            "role": "lib",
+            "shortDescription": "The isomorphic engine of the webpieces HTTP client: reads an API contract's decorators and turns each method call into an HTTP request. It takes no position on where the magic context comes from or whether a DI container exists, so `http-client-node` and `http-client-browser` both build on it.",
+            "responsibilitiesFile": "packages/http/http-client-core/responsibilities.md",
             "dependsOn": [
                 "core-util"
+            ]
+        },
+        "http-client-node": {
+            "level": 2,
+            "framework": ["node"],
+            "role": "designed-lib",
+            "shortDescription": "The server-side HTTP client: generates type-safe clients from the SAME API contract the callee's controller implements. Node-only, so it is fully inversify-wired, reads the magic context straight out of the `RequestContext`, and mints its own delivery auth.",
+            "responsibilitiesFile": "packages/http/http-client-node/responsibilities.md",
+            "designFile": "packages/http/http-client-node/design.json",
+            "dependsOn": [
+                "core-context",
+                "gcp-identity",
+                "http-client-core"
             ]
         },
         "http-routing": {

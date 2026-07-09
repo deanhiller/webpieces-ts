@@ -14,7 +14,7 @@ export {
     TaskInvoker,
 } from './TaskTypes';
 export { ClientCloudTasksFactory } from './ClientCloudTasksFactory';
-export { TaskProxyClient } from './TaskProxyClient';
+export { TaskProxyClient, TaskProxyClientProvider } from './TaskProxyClient';
 export { TaskClientConfig } from './TaskClientConfig';
 export type { ApiPrototype } from './TaskClientConfig';
 export { CloudTaskScheduler, ScheduleOptions } from './CloudTaskScheduler';

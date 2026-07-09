@@ -8,10 +8,9 @@ import { WebpiecesConfig, ApiFactory, AuthConfig } from '@webpieces/http-routing
 import { TestAuthConfig } from './TestAuthConfig';
 import { RecordedTestCase, RecordSerializer } from '@webpieces/core-util';
 import { createMock } from '@webpieces/core-mock';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { SaveApi } from '@webpieces/client-server-api';
 import { Server2Api, FetchValueResponse, FetchValueRequest } from '@webpieces/server2-api';
-import { CompanyHeaders } from '@webpieces/company-core';
 import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
@@ -60,7 +59,7 @@ describe('Test-case recording', () => {
         const saveApi = router.createApiClient<SaveApi>(SaveApi);
 
         await RequestContext.run(async () => {
-            RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
+            RequestContext.setRequest(new HttpRequest('POST', '/', new Map([['authorization', ['Bearer test-token-123']]])));
             const response = await saveApi.save({ query: 'record-me' });
             expect(response.success).toBe(true);
         });
@@ -83,7 +82,7 @@ describe('Test-case recording', () => {
         expect(fixture.serverEndpoint.args[0]).toEqual({ query: 'record-me' });
         const successResponse = fixture.serverEndpoint.successResponse as { success: boolean };
         expect(successResponse.success).toBe(true);
-        // AUTHORIZATION is secured -> snapshot must be masked, never the raw token
+        // The credential is not a ContextKey at all, so it can never reach the ctx snapshot
         expect(JSON.stringify(fixture.serverEndpoint.ctxSnapshot)).not.toContain('test-token-123');
 
         // Downstream in-process call captured via recordable()
@@ -124,7 +123,7 @@ describe('createMock replaces hand-rolled mocks', () => {
 
         const saveApi = router.createApiClient<SaveApi>(SaveApi);
         await RequestContext.run(async () => {
-            RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
+            RequestContext.setRequest(new HttpRequest('POST', '/', new Map([['authorization', ['Bearer test-token-123']]])));
             const response = await saveApi.save({ query: 'mock-query' });
             expect(response.matches![0].description).toBe('MOCKED: from createMock');
         });
@@ -137,7 +136,7 @@ describe('createMock replaces hand-rolled mocks', () => {
     it('throws the helpful not-enough-values error when unprimed', async () => {
         const saveApi = router.createApiClient<SaveApi>(SaveApi);
         await RequestContext.run(async () => {
-            RequestContext.putHeader(CompanyHeaders.AUTHORIZATION, 'test-token-123');
+            RequestContext.setRequest(new HttpRequest('POST', '/', new Map([['authorization', ['Bearer test-token-123']]])));
             await expect(saveApi.save({ query: 'unprimed' })).rejects.toThrow(/did not add enough return values/);
         });
     });

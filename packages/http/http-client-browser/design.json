@@ -1,0 +1,42 @@
+{
+    "schemaVersion": 2,
+    "project": "http-client-browser",
+    "designs": [
+        {
+            "root": "ClientHttpBrowserFactory",
+            "rootKind": "apiImplementation",
+            "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
+            "maxLevel": 1,
+            "nodes": [
+                {
+                    "id": "ClientHttpBrowserFactory",
+                    "className": "ClientHttpBrowserFactory",
+                    "kind": "apiImplementation",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
+                    "level": 0
+                },
+                {
+                    "id": "MutableContextStore",
+                    "className": "MutableContextStore",
+                    "kind": "class",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client-browser/src/MutableContextStore.ts",
+                    "level": 1
+                }
+            ],
+            "edges": [
+                {
+                    "from": "ClientHttpBrowserFactory",
+                    "to": "MutableContextStore",
+                    "injection": "type",
+                    "token": "MutableContextStore",
+                    "tokenKey": "class:packages/http/http-client-browser/src/MutableContextStore.ts#MutableContextStore",
+                    "paramName": "store",
+                    "paramType": "MutableContextStore"
+                }
+            ],
+            "unresolved": []
+        }
+    ]
+}

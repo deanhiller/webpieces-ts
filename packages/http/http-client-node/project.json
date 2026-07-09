@@ -1,0 +1,27 @@
+{
+    "name": "http-client-node",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/http/http-client-node/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": [
+                "{options.outputPath}"
+            ],
+            "options": {
+                "outputPath": "dist/packages/http/http-client-node",
+                "main": "packages/http/http-client-node/src/index.ts",
+                "tsConfig": "packages/http/http-client-node/tsconfig.lib.json",
+                "assets": [
+                    "packages/http/http-client-node/package.json",
+                    "packages/http/http-client-node/README.md"
+                ]
+            }
+        }
+    },
+    "tags": [
+        "framework:node",
+        "role:designed-lib"
+    ]
+}

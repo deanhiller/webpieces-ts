@@ -1,3 +1,4 @@
+import { inject, injectable } from 'inversify';
 import {
     isApiPath,
     getApiPath,
@@ -7,23 +8,18 @@ import {
     assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
     AuthMode,
-    DocumentDesign,
     LogManager,
 } from '@webpieces/core-util';
-import { ContextMgr } from '@webpieces/core-context';
-import { getCloudRunUrl } from '@webpieces/gcp-identity';
+import {
+    ContainerProvider,
+    RequestContextHeaders,
+    provideFrameworkTransient,
+} from '@webpieces/core-context';
 import { TaskInvoker, TaskRequest, ScheduleInfo } from './TaskTypes';
 import { currentScheduleFrame } from './ScheduleContext';
 import { ApiPrototype, TaskClientConfig } from './TaskClientConfig';
 
 const log = LogManager.getLogger('TaskProxyClient');
-
-/**
- * Auth headers are NEVER propagated from the caller's context onto an enqueued task:
- * the caller's inbound user JWT / secret must not leak to an internal service, and
- * the invoker mints fresh delivery auth (OIDC / shared-secret) per the endpoint's mode.
- */
-const AUTH_HEADER_NAMES = new Set<string>(['authorization', 'x-webpieces-shared-secret']);
 
 /** Per-endpoint routing plan resolved once from the contract's decorators. */
 class EndpointPlan {
@@ -41,34 +37,43 @@ class EndpointPlan {
 /**
  * TaskProxyClient - the enqueue engine behind one @PubSub API contract's client proxy.
  *
- * The fire-and-forget twin of http-client's ProxyClient, and the @DocumentDesign design
- * root for this package: its constructor params ARE the enqueue client's dependency graph.
- * Built by {@link ClientCloudTasksFactory} (one per API contract), it owns:
- * - @ApiPath / @PubSub convention validation + the endpoint plans from the contract's decorators
- * - Resolving the callee's Cloud Run base URL from the service name
- * - Context propagation onto the task headers (MINUS the caller's auth headers)
- * - Handing a fully-built TaskRequest to the bound {@link TaskInvoker}
+ * The fire-and-forget twin of http-client-core's ProxyClient, and TWO-PHASE for the same reason:
+ * its COLLABORATORS (invoker, headers) come from the container, while the PER-CLIENT state (which
+ * contract, which target) arrives on {@link init}. That is what lets {@link ClientCloudTasksFactory}
+ * hold a `Provider<TaskProxyClient>` and hand out a fresh, independently-configured client per
+ * contract.
  *
- * Calling an endpoint ENQUEUES a task (it does not call remotely); the task is later
- * delivered to the same endpoint's controller through the full server filter chain.
+ * Calling an endpoint ENQUEUES a task (it does not call remotely); the task is later delivered to
+ * the same endpoint's controller through the full server filter chain.
+ *
+ * It owns:
+ * - @ApiPath / @PubSub convention validation + the endpoint plans from the contract's decorators
+ * - Resolving the callee's base URL (from svcName, or the explicit targetUrl)
+ * - Context propagation onto the task headers (a credential is never a context key, so none can ride along)
+ * - Handing a fully-built TaskRequest to the bound {@link TaskInvoker}
  */
-@DocumentDesign()
+@provideFrameworkTransient()
+@injectable()
 export class TaskProxyClient {
-    private plans: Map<string, EndpointPlan>;
-    private apiName: string;
+    // Assigned by init(), which the factory calls immediately after construction.
+    private plans!: Map<string, EndpointPlan>;
+    private apiName!: string;
+    private config!: TaskClientConfig;
 
     constructor(
-        apiClass: ApiPrototype<object>,
-        private config: TaskClientConfig,
-        private invoker: TaskInvoker,
-        private contextMgr: ContextMgr,
-    ) {
+        @inject(TaskInvoker) private readonly invoker: TaskInvoker,
+        @inject(RequestContextHeaders) private readonly headers: RequestContextHeaders,
+    ) {}
+
+    /** Bind this client to one @PubSub contract + target. */
+    init(apiClass: ApiPrototype<object>, config: TaskClientConfig): void {
         if (!isApiPath(apiClass)) {
             throw new Error(`Class ${apiClass.name || 'Unknown'} must be decorated with @ApiPath()`);
         }
         assertPubSubConventions(apiClass);
         assertEveryEndpointHasAuthMode(apiClass);
 
+        this.config = config;
         this.apiName = apiClass.name || 'UnknownApi';
         this.plans = this.buildPlans(apiClass);
     }
@@ -99,9 +104,9 @@ export class TaskProxyClient {
         }
 
         // Resolved lazily (not at client construction) so building a client stays synchronous.
-        // Every metadata read beneath getCloudRunUrl is memoized process-wide, so only the
+        // Every metadata read beneath resolveTargetUrl is memoized process-wide, so only the
         // first enqueue in the process pays a lookup.
-        const targetUrl = await getCloudRunUrl(this.config.gcpCloudRunSvcName);
+        const targetUrl = await this.config.resolveTargetUrl();
 
         const request = new TaskRequest(
             targetUrl,
@@ -113,7 +118,8 @@ export class TaskProxyClient {
             frame.info ?? new ScheduleInfo(),
         );
 
-        log.debug(`enqueue task ${plan.queueName} -> ${targetUrl}${plan.path}`);
+        // svcName, not the URL, is the stable name across demo/qa/prod.
+        log.debug(`enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`);
         frame.jobRef = await this.invoker.enqueue(request);
     }
 
@@ -138,14 +144,24 @@ export class TaskProxyClient {
         return plans;
     }
 
-    /** Transferred context keys (txId/requestId/tenant…) MINUS the caller's auth credentials. */
+    /**
+     * Every transferred context key (txId/requestId/tenant…), request-id chained.
+     * Throws if there is no active RequestContext — an enqueue with no trace is a bug.
+     *
+     * No credential can appear here: `authorization` is read off the inbound HttpRequest and is not
+     * a ContextKey, so it never enters the RequestContext to be transferred. The invoker mints the
+     * task's own delivery auth per the endpoint's @AuthOidc / @AuthSharedSecret mode.
+     */
     private buildContextHeaders(): Map<string, string> {
-        const headers = new Map<string, string>();
-        for (const entry of this.contextMgr.buildOutboundHeaders().entries()) {
-            if (!AUTH_HEADER_NAMES.has(entry[0].toLowerCase())) {
-                headers.set(entry[0], entry[1]);
-            }
-        }
-        return headers;
+        return this.headers.buildOutboundHeaders();
     }
 }
+
+/**
+ * Hands out {@link TaskProxyClient} instances — one per @PubSub contract.
+ *
+ * Because TaskProxyClient is bound TRANSIENT, every `get()` constructs a new one. (Were it bound
+ * `@provideFrameworkSingleton`, this same provider class would hand back one lazily-created
+ * instance instead — the provider caches nothing, so the target's scope decides.)
+ */
+export class TaskProxyClientProvider extends ContainerProvider<TaskProxyClient> {}

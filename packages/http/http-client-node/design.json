@@ -1,0 +1,44 @@
+{
+    "schemaVersion": 2,
+    "project": "http-client-node",
+    "designs": [
+        {
+            "root": "ClientHttpFactory",
+            "rootKind": "apiImplementation",
+            "file": "packages/http/http-client-node/src/ClientHttpFactory.ts",
+            "maxLevel": 1,
+            "nodes": [
+                {
+                    "id": "ClientHttpFactory",
+                    "className": "ClientHttpFactory",
+                    "kind": "apiImplementation",
+                    "scope": "singleton",
+                    "file": "packages/http/http-client-node/src/ClientHttpFactory.ts",
+                    "level": 0
+                },
+                {
+                    "id": "ProxyClientProvider",
+                    "className": "ProxyClientProvider",
+                    "kind": "unresolved",
+                    "scope": "unknown",
+                    "file": "packages/http/http-client-node/src/ClientHttpFactory.ts",
+                    "level": 1
+                }
+            ],
+            "edges": [
+                {
+                    "from": "ClientHttpFactory",
+                    "to": "ProxyClientProvider",
+                    "injection": "token",
+                    "token": "ProxyClientProvider",
+                    "tokenKey": "class:packages/http/http-client-node/src/NodeProxyClient.ts#ProxyClientProvider",
+                    "paramName": "proxyClientProvider",
+                    "paramType": "ProxyClientProvider"
+                }
+            ],
+            "unresolved": [
+                "ProxyClientProvider"
+            ]
+        }
+    ]
+}

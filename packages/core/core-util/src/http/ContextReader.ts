@@ -1,16 +1,25 @@
 import { ContextKey } from '../ContextKey';
 
 /**
- * ContextReader - reads context-key values from the ambient magic context.
+ * Reads one context key's string value. The ONE seam between the two environments:
+ * the server passes `RequestContext.getHeader`, a browser passes its store's read.
  *
- * There are exactly TWO implementations, one per environment:
- * - Node/server: `RequestContextReader` (in @webpieces/core-context) — reads the
- *   AsyncLocalStorage-backed RequestContext.
- * - Browser: `MutableContextStore` (in @webpieces/http-client) — a mutable in-memory
- *   store the app sets as values become known (login token, tenant, ...).
+ * A lambda, not an object — nothing here needs an implementation to hold.
+ */
+export type ContextRead = (key: ContextKey) => string | undefined;
+
+/**
+ * ContextReader - reads context-key values from an app-held store.
  *
- * Defined in core-util (browser + Node safe, DI-independent) so both sides can use it
- * without a circular dependency.
+ * BROWSER-ONLY. Browsers have no AsyncLocalStorage and therefore no ambient request scope, so the
+ * app holds a `MutableContextStore` (in @webpieces/http-client-browser) and sets values as they
+ * become known (login token, tenant, ...).
+ *
+ * The server has no use for this: there is exactly one right answer there, so `RequestContextHeaders`
+ * (in @webpieces/core-context) reads `RequestContext` directly rather than through a reader object.
+ *
+ * Note this is only about where VALUES live. The key SCHEMA — which keys exist, which transfer, which
+ * are secured — is the global {@link HeaderRegistry}, and that is browser-safe and shared by both.
  *
  * This is a business-logic interface (per CLAUDE.md: behavior = interface).
  */

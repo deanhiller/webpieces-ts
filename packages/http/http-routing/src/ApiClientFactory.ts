@@ -3,15 +3,30 @@ import {
     getApiPath,
     getEndpoints,
     RouteMetadata,
-    ContextMgr,
 } from '@webpieces/core-util';
-import { provideFrameworkSingleton, RequestContext, HttpRequest, RequestContextReader } from '@webpieces/core-context';
+import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { MethodMeta } from './MethodMeta';
 import { Service, WpResponse } from './Filter';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
 import { ApiClient, ApiClientProxy } from './ApiClient';
 import { ClassType } from './ApiRoutingFactory';
-import { fillContext } from './fillContext';
+
+/**
+ * Every call through the proxy needs an ambient RequestContext, established ABOVE the api boundary.
+ * It is NOT auto-created here: manufacturing one silently would hide a missing top-level filter, and
+ * every log line, outbound call, and enqueued task under it would quietly lose its request id.
+ */
+// webpieces-disable no-function-outside-class -- a guard over ambient state; a class would own nothing
+function requireActiveContext(routeMeta: RouteMetadata): void {
+    if (RequestContext.isActive()) {
+        return;
+    }
+    throw new Error(
+        `${routeMeta.controllerClassName}.${routeMeta.methodName} was called with no active RequestContext. ` +
+        `A server transport must wrap each request in RequestContext.run(...) (WebpiecesMiddleware does). ` +
+        `In a test, wrap the call yourself: await RequestContext.run(async () => api.foo(req));`,
+    );
+}
 
 /**
  * ApiClientFactory - THE piece that wires api → Proxy → filters → controller.
@@ -20,18 +35,20 @@ import { fillContext } from './fillContext';
  * invoke the composed filter chain (via RouteBuilder.createRouteInvoker) — that proxy IS what
  * createApiClient() returns. {@link apiClients} reuses the SAME proxy per registered api, so the
  * express layer binds each method through it. There is no express dependency here, so the proxy
- * is the single invocation path for BOTH in-process (tests) and HTTP (the express adapter drives
- * the same proxy after publishing the request).
+ * is the single invocation path for BOTH in-process (tests) and HTTP.
+ *
+ * Establishing the request scope is a PRECONDITION of calling in here, never this class's job. The
+ * caller above the api boundary opens `RequestContext.run(...)`, publishes the inbound
+ * `HttpRequest`, and calls `RequestContextHeaders.fillFromRequest()` to move its headers into the
+ * context. `WebpiecesMiddleware` does all three for you; a non-webpieces transport (or a test
+ * driving `createApiClient` directly) must do the same. This proxy only CHECKS that it happened —
+ * manufacturing a context here would hide a missing filter and silently strip every request id.
  *
  * @provideFrameworkSingleton so WebpiecesRouter can inject it (it shares the one RouteBuilder).
  */
 @provideFrameworkSingleton()
 @injectable()
 export class ApiClientFactory {
-    // Builds request headers the SAME way the real HTTP client does — from the ambient
-    // RequestContext — so a credential a test put in context travels as a real request header.
-    private readonly contextMgr = new ContextMgr(new RequestContextReader());
-
     constructor(@inject(RouteBuilderImpl) private readonly routeBuilder: RouteBuilderImpl) {}
 
     /**
@@ -85,10 +102,7 @@ export class ApiClientFactory {
 
             // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
             proxy[methodName] = async (requestDto: unknown): Promise<unknown> => {
-                // Auto-activate a RequestContext if the caller (a pure in-process test) did not.
-                if (!RequestContext.isActive()) {
-                    return RequestContext.run(async () => this.runMethod(routeMeta, requestDto, service));
-                }
+                requireActiveContext(routeMeta);
                 return this.runMethod(routeMeta, requestDto, service);
             };
         }
@@ -98,18 +112,6 @@ export class ApiClientFactory {
 
     // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
     private async runMethod(routeMeta: RouteMetadata, requestDto: unknown, service: Service<MethodMeta, WpResponse<unknown>>): Promise<unknown> {
-        // Only synthesize the request when NONE was published by a transport. The express adapter
-        // publishes the HttpRequest from `req` before calling the proxy, so its request wins; a
-        // pure in-process call synthesizes one from the ambient context (client-like).
-        if (!RequestContext.getRequest()) {
-            const headers = new Map<string, string[]>();
-            this.contextMgr.buildOutboundHeaders().forEach((value: string, name: string) => {
-                headers.set(name.toLowerCase(), [value]);
-            });
-            RequestContext.setRequest(new HttpRequest(routeMeta.httpMethod, routeMeta.path, headers));
-            fillContext();
-        }
-
         const responseWrapper = await service.invoke(new MethodMeta(routeMeta, requestDto));
         return responseWrapper.response;
     }

@@ -12,15 +12,20 @@ abstract class EmailApi { @Endpoint('/send') sendEmail(r: SendEmailRequest): Pro
 
 // build the client once (sync); 'email-svc' is the callee's Cloud Run service name
 const emailTasks = factory.createClient(EmailApi, new TaskClientConfig('email-svc'));
+// ...or pin a URL lookup cannot describe (other region/project); svcName stays the log name
+const other = factory.createClient(EmailApi, new TaskClientConfig('email-svc', 'https://email.eu.example'));
 
 // producer (inside a request → RequestContext active)
 await scheduler.addToQueue(() => emailTasks.sendEmail(req), { dedupName: req.id });
 ```
 
-- `ClientCloudTasksFactory.createClient(Api, TaskClientConfig)` — builds the enqueue proxy,
-  backed by `TaskProxyClient`. The delivery URL is resolved from the service name at enqueue
-  time via `getCloudRunUrl`, which honours a `CLOUD_RUN_URL_<UPPER_SNAKE_NAME>` env override
-  for local multi-service runs and integration tests
+- `ClientCloudTasksFactory.createClient(Api, TaskClientConfig)` — builds the enqueue proxy. It
+  injects a `Provider<TaskProxyClient>` and calls `get()` per contract; `TaskProxyClient` is bound
+  TRANSIENT, so each client gets its own. The delivery URL is resolved at enqueue time from
+  `svcName` (same project + region as this container, so you maintain no URL table) unless you pass
+  an explicit `targetUrl`. `getCloudRunUrl` also honours a `CLOUD_RUN_URL_<UPPER_SNAKE_NAME>` env
+  override for local multi-service runs and integration tests
+- An enqueue outside `RequestContext.run(...)` **throws**: a task with no caller trace is a bug
 - `CloudTaskScheduler` — `addToQueue` / `schedule` / `cancelJob`; carries scheduling
   options out-of-band so the contract signature stays identical on both sides
 - `TaskInvoker` (abstract token) with two impls:

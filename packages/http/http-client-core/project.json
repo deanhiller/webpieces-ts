@@ -1,0 +1,28 @@
+{
+    "name": "http-client-core",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/http/http-client-core/src",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": [
+                "{options.outputPath}"
+            ],
+            "options": {
+                "outputPath": "dist/packages/http/http-client-core",
+                "main": "packages/http/http-client-core/src/index.ts",
+                "tsConfig": "packages/http/http-client-core/tsconfig.lib.json",
+                "assets": [
+                    "packages/http/http-client-core/package.json",
+                    "packages/http/http-client-core/README.md"
+                ]
+            }
+        }
+    },
+    "tags": [
+        "framework:browser",
+        "framework:node",
+        "role:lib"
+    ]
+}

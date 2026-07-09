@@ -10,7 +10,7 @@ const log = LogManager.getLogger('ErrorLogFilter');
  * ErrorLogFilter - the OUTERMOST fixed framework filter (auto-installed above the auth filter on
  * every route). It wraps the whole chain in a try/catch so EVERY failure — over HTTP or via
  * createApiClient — is logged once WITH the request context (correlation/request id, etc.) that
- * fillContext() established above the boundary.
+ * RequestContextHeaders.fillFromRequest() established above the boundary.
  *
  * It re-throws the error unchanged; the transport (express adapter, or another framework's
  * adapter) maps HttpError subclasses → HTTP status. Being a below-boundary filter means the

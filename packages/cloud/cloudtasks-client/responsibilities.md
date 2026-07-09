@@ -10,12 +10,12 @@ Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — th
 
 ## Out of Scope
 
-- GCP identity/metadata/OIDC primitives (that is gcp-identity)
+- GCP identity/metadata/OIDC primitives, and deriving a Cloud Run URL from `svcName` (that is gcp-identity's `resolveTargetUrl`)
 - Generic HTTP routing/server bootstrap (http-routing / http-server)
 - Server-side delivery pieces: the `ServiceAuthFilter` (@AuthOidc/@AuthSharedSecret enforcement) and any in-process route dispatch — a client library has NO server filters or routing machinery; those live in http-server
 - Synchronous RPC client generation (http-client)
 
 ## Notes
 
-- Node-only. Shares ONE abstract API class between the enqueue client and the controller, exactly like RPC.
+- Node-only. Shares ONE abstract API class between the enqueue client and the controller, exactly like RPC. Reads the magic context straight from `RequestContext` (via `RequestContextHeaders`) and refuses to enqueue outside `RequestContext.run(...)`.
 - API methods take ONLY the business request. Queue/scheduling knobs (dedupName, run-in-the-future, taskTimeoutSeconds, cancel) are per-enqueue transport concerns the delivered controller cannot use, so they live on `CloudTaskScheduler` / `ScheduleOptions`, never on a `@PubSub` method. Adding them to an API method is a design error.

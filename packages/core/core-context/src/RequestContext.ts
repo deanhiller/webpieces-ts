@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
 import { HttpRequest } from './HttpRequest';
 
 /** Reserved context key under which the current HttpRequest is stored. */
@@ -54,6 +54,29 @@ class RequestContextImpl {
 
     hasHeader(key: ContextKey): boolean {
         return this.has(key.name);
+    }
+
+    /**
+    /**
+     * Build the masked field map for LOGGING: every logged key in the global
+     * {@link HeaderRegistry} read straight from this context, secured values
+     * masked (via {@link ContextKey.maskIfSecured}), keyed by each key's `name`.
+     *
+     * Callers: RecordingFilter + NodeProxyClient.recordCall, which snapshot the context into a
+     * test FIXTURE. The @webpieces/winston and @webpieces/bunyan backends also stamp these fields
+     * onto every record, and they own the "log emitted outside RequestContext.run(...)" complaint —
+     * reporting it HERE would recurse (the error line itself re-enters buildLogFields).
+     *
+     * Returns an EMPTY map outside a `run(...)` block rather than throwing: a fixture snapshot or a
+     * log line is never worth crashing a request over.
+     */
+    buildLogFields(): Map<string, string> {
+        if (!this.isActive()) {
+            return new Map<string, string>();
+        }
+        // The registry owns the keys and each ContextKey masks its own value; we only supply
+        // WHERE to read from. The browser's ContextMgr calls the same method with its store's read.
+        return HeaderRegistry.get().buildLogFields((key: ContextKey) => this.getHeader<string>(key));
     }
 
     /**

@@ -1,0 +1,28 @@
+{
+    "name": "@webpieces/http-client-browser",
+    "version": "0.0.0-dev",
+    "description": "Browser HTTP client for webpieces: DI-free (React or Angular), app-managed context store, no AsyncLocalStorage",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/http/http-client-browser"
+    },
+    "keywords": [
+        "webpieces",
+        "http",
+        "client",
+        "browser"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@webpieces/core-util": "workspace:*",
+        "@webpieces/http-client-core": "workspace:*"
+    }
+}

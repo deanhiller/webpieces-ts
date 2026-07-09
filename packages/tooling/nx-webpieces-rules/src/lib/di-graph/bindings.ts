@@ -21,6 +21,8 @@ const BIND_METHOD_NAMES = new Set(['to', 'toSelf', 'toConstantValue', 'toDynamic
 
 export class BindingTable {
     private readonly byToken = new Map<string, Binding[]>();
+    /** providerTokenKey -> the class its get() resolves. See bindFrameworkProvider. */
+    private readonly providerTargets = new Map<string, ts.ClassDeclaration>();
 
     add(binding: Binding): void {
         const list = this.byToken.get(binding.tokenKey);
@@ -33,6 +35,20 @@ export class BindingTable {
 
     lookup(tokenKey: string): Binding[] {
         return this.byToken.get(tokenKey) ?? [];
+    }
+
+    /** Record `bindFrameworkProvider(ProviderClass, TargetClass)`. */
+    addProviderTarget(providerTokenKey: string, target: ts.ClassDeclaration): void {
+        this.providerTargets.set(providerTokenKey, target);
+    }
+
+    /**
+     * The class a Provider hands out, if this token is a registered Provider subclass.
+     * The walker follows this so `Factory -> XProvider -> X` is visible in the design,
+     * instead of the provider dead-ending as an opaque toDynamicValue leaf.
+     */
+    providerTarget(providerTokenKey: string): ts.ClassDeclaration | undefined {
+        return this.providerTargets.get(providerTokenKey);
     }
 }
 
@@ -56,7 +72,12 @@ export function isExternalClass(cls: ts.ClassDeclaration): boolean {
     return sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/');
 }
 
-/** Walk `.inSingletonScope()` / `.inTransientScope()` suffixes above a binding call. */
+/**
+ * Walk `.inSingletonScope()` / `.inTransientScope()` suffixes above a binding call.
+ *
+ * No scope call at all means TRANSIENT, not "unknown": that is inversify's
+ * `DEFAULT_DEFAULT_SCOPE`, and no `new Container(...)` in this workspace overrides `defaultScope`.
+ */
 function scopeFromChain(bindingCall: ts.CallExpression): DiScope {
     let node: ts.Node = bindingCall;
     while (
@@ -70,7 +91,7 @@ function scopeFromChain(bindingCall: ts.CallExpression): DiScope {
         if (methodName === 'inTransientScope') return 'transient';
         node = node.parent.parent;
     }
-    return 'unknown';
+    return 'transient';
 }
 
 /**
@@ -181,11 +202,18 @@ function collectDecoratorBindings(
     const file = relativeFile(workspaceRoot, cls.getSourceFile());
     for (const decorator of classDecorators(cls)) {
         const name = decoratorName(decorator);
-        // provideFrameworkSingleton(As) are the framework-registry twins of provideSingleton(As)
-        // (see @webpieces/core-context frameworkProvide.ts) — same self/token binding, singleton scope.
-        if (name === 'provideSingleton' || name === 'provideTransient' || name === 'provideFrameworkSingleton') {
+        // provideFrameworkSingleton(As)/Transient are the framework-registry twins of
+        // provideSingleton(As)/Transient (see @webpieces/core-context frameworkProvide.ts) —
+        // same self/token binding, same scopes.
+        if (
+            name === 'provideSingleton' ||
+            name === 'provideTransient' ||
+            name === 'provideFrameworkSingleton' ||
+            name === 'provideFrameworkTransient'
+        ) {
             const token = classTokenKey(cls, workspaceRoot);
-            const scope: DiScope = name === 'provideTransient' ? 'transient' : 'singleton';
+            const transient = name === 'provideTransient' || name === 'provideFrameworkTransient';
+            const scope: DiScope = transient ? 'transient' : 'singleton';
             table.add(new Binding(token.key, token.display, 'decorator', scope, cls, '', file));
         } else if (name === 'provideSingletonAs' || name === 'provideFrameworkSingletonAs') {
             const call = decoratorCall(decorator);
@@ -195,6 +223,34 @@ function collectDecoratorBindings(
             table.add(new Binding(token.key, token.display, 'decorator', 'singleton', cls, '', file));
         }
     }
+}
+
+/**
+ * `bindFrameworkProvider(XProvider, X)` — the Guice-style Provider registration in
+ * @webpieces/core-context. Binds XProvider as a singleton (it holds only a resolve-lambda) and
+ * records that its `get()` yields X, so the walker can render `Factory -> XProvider -> X`.
+ *
+ * X's OWN binding decides X's scope, and therefore whether the design draws one box (a lazy
+ * singleton) or a stack of boxes (a fresh instance per get()).
+ */
+// webpieces-disable no-function-outside-class -- ts AST visitor, matching every sibling collector in this file
+function collectProviderBinding(
+    call: ts.CallExpression,
+    checker: ts.TypeChecker,
+    workspaceRoot: string,
+    table: BindingTable,
+): void {
+    if (!ts.isIdentifier(call.expression) || call.expression.text !== 'bindFrameworkProvider') return;
+    if (call.arguments.length < 2) return;
+
+    const providerClass = resolveClassDeclaration(call.arguments[0], checker);
+    const targetClass = resolveClassDeclaration(call.arguments[1], checker);
+    if (!providerClass || !targetClass) return;
+
+    const token = classTokenKey(providerClass, workspaceRoot);
+    const file = relativeFile(workspaceRoot, providerClass.getSourceFile());
+    table.add(new Binding(token.key, token.display, 'to', 'singleton', providerClass, '', file));
+    table.addProviderTarget(token.key, targetClass);
 }
 
 /**
@@ -213,6 +269,7 @@ export function collectBindings(
         const visit = (node: ts.Node): void => {
             if (ts.isCallExpression(node)) {
                 collectBindCall(node, checker, workspaceRoot, table);
+                collectProviderBinding(node, checker, workspaceRoot, table);
             } else if (ts.isClassDeclaration(node)) {
                 collectDecoratorBindings(node, checker, workspaceRoot, table);
             }

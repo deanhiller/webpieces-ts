@@ -26,13 +26,13 @@
                     "detail": "ClientConfig (dynamic)"
                 },
                 {
-                    "id": "ClientHttpFactory",
-                    "className": "ClientHttpFactory",
+                    "id": "ClientHttpBrowserFactory",
+                    "className": "ClientHttpBrowserFactory",
                     "kind": "dynamic",
                     "scope": "singleton",
                     "file": "apps/app-example/angular-site/src/app/app.config.ts",
                     "level": 2,
-                    "detail": "ClientHttpFactory (dynamic)"
+                    "detail": "ClientHttpBrowserFactory (dynamic)"
                 },
                 {
                     "id": "EnvironmentConfig",
@@ -108,11 +108,11 @@
                     "paramType": "EnvironmentConfig"
                 },
                 {
-                    "from": "ClientHttpFactory",
+                    "from": "ClientHttpBrowserFactory",
                     "to": "MutableContextStore",
                     "injection": "type",
                     "token": "MutableContextStore",
-                    "tokenKey": "class:packages/http/http-client/src/MutableContextStore.ts#MutableContextStore",
+                    "tokenKey": "class:packages/http/http-client-browser/src/MutableContextStore.ts#MutableContextStore",
                     "paramName": "MutableContextStore",
                     "paramType": "MutableContextStore"
                 },
@@ -121,36 +121,36 @@
                     "to": "ClientConfig",
                     "injection": "type",
                     "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client/src/ClientConfig.ts#ClientConfig",
+                    "tokenKey": "class:packages/http/http-client-browser/src/ClientConfig.ts#ClientConfig",
                     "paramName": "ClientConfig",
                     "paramType": "ClientConfig"
                 },
                 {
                     "from": "PublicApi",
-                    "to": "ClientHttpFactory",
+                    "to": "ClientHttpBrowserFactory",
                     "injection": "type",
-                    "token": "ClientHttpFactory",
-                    "tokenKey": "class:packages/http/http-client/src/ClientHttpFactory.ts#ClientHttpFactory",
-                    "paramName": "ClientHttpFactory",
-                    "paramType": "ClientHttpFactory"
+                    "token": "ClientHttpBrowserFactory",
+                    "tokenKey": "class:packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts#ClientHttpBrowserFactory",
+                    "paramName": "ClientHttpBrowserFactory",
+                    "paramType": "ClientHttpBrowserFactory"
                 },
                 {
                     "from": "SaveApi",
                     "to": "ClientConfig",
                     "injection": "type",
                     "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client/src/ClientConfig.ts#ClientConfig",
+                    "tokenKey": "class:packages/http/http-client-browser/src/ClientConfig.ts#ClientConfig",
                     "paramName": "ClientConfig",
                     "paramType": "ClientConfig"
                 },
                 {
                     "from": "SaveApi",
-                    "to": "ClientHttpFactory",
+                    "to": "ClientHttpBrowserFactory",
                     "injection": "type",
-                    "token": "ClientHttpFactory",
-                    "tokenKey": "class:packages/http/http-client/src/ClientHttpFactory.ts#ClientHttpFactory",
-                    "paramName": "ClientHttpFactory",
-                    "paramType": "ClientHttpFactory"
+                    "token": "ClientHttpBrowserFactory",
+                    "tokenKey": "class:packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts#ClientHttpBrowserFactory",
+                    "paramName": "ClientHttpBrowserFactory",
+                    "paramType": "ClientHttpBrowserFactory"
                 }
             ],
             "unresolved": []

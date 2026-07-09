@@ -34,6 +34,7 @@ const DI_DECORATORS = new Set([
     'provideSingletonAs',
     'provideFrameworkSingleton',
     'provideFrameworkSingletonAs',
+    'provideFrameworkTransient',
     'injectable',
 ]);
 
@@ -230,7 +231,7 @@ export abstract class DiDesignBuilder {
      * differs from the impl class name it becomes the node's `api` (rendered as the
      * primary box label, with the impl class in parens). Set on first reach.
      */
-    protected classNode(cls: ts.ClassDeclaration, scopeHint: DiScope = 'unknown', apiType = ''): string {
+    protected classNode(cls: ts.ClassDeclaration, scopeHint: DiScope = 'transient', apiType = ''): string {
         const existing = this.classIds.get(cls);
         if (existing) return existing;
 
@@ -239,8 +240,9 @@ export abstract class DiDesignBuilder {
         const id = this.claimId(className, file);
         this.classIds.set(cls, id);
 
-        const declaredScope = this.classScope(cls);
-        const scope = declaredScope !== 'unknown' ? declaredScope : scopeHint;
+        // The class's OWN binding wins; otherwise the scope of the module binding it was reached
+        // through; otherwise transient (inversify's default scope).
+        const scope = this.classScope(cls) ?? scopeHint;
         // A class from a published package (resolved to a .d.ts under node_modules)
         // is a boundary leaf: shown so the dependency is visible, but never expanded
         // (walkClass stops there). Roots are always project classes, so this never
@@ -271,13 +273,13 @@ export abstract class DiDesignBuilder {
         return id;
     }
 
-    /** Scope from the class's own decorator/module binding, if any. */
-    private classScope(cls: ts.ClassDeclaration): DiScope {
+    /** Scope from the class's own decorator/module binding, or undefined if it has none. */
+    private classScope(cls: ts.ClassDeclaration): DiScope | undefined {
         const token = classTokenKey(cls, this.workspaceRoot);
         for (const binding of this.table.lookup(token.key)) {
-            if (binding.scope !== 'unknown') return binding.scope;
+            return binding.scope;
         }
-        return 'unknown';
+        return undefined;
     }
 
     /**
@@ -329,7 +331,7 @@ export abstract class DiDesignBuilder {
 
         const id = this.claimId(className, file);
         this.unresolvedIds.set(key, id);
-        this.design.nodes.push(new DiNode(id, className, 'unresolved', 'unknown', file, 0, detail !== className ? detail : ''));
+        this.design.nodes.push(new DiNode(id, className, 'unresolved', 'transient', file, 0, detail !== className ? detail : ''));
         this.design.unresolved.push(detail !== '' ? detail : className);
         return id;
     }
@@ -347,6 +349,26 @@ export abstract class DiDesignBuilder {
         for (const injection of this.collectInjections(cls)) {
             this.processInjection(fromId, cls, injection);
         }
+        this.expandProviderTarget(fromId, cls);
+    }
+
+    /**
+     * A Provider subclass has no constructor injections of its own — it holds a resolve-lambda.
+     * Draw the class it hands out beneath it, so the design shows `Factory -> XProvider -> X`
+     * rather than stopping at the provider. X's own scope then decides the glyph: one box for a
+     * lazy singleton, a stack for a fresh-instance-per-get().
+     */
+    private expandProviderTarget(fromId: string, cls: ts.ClassDeclaration): void {
+        const token = classTokenKey(cls, this.workspaceRoot);
+        const target = this.table.providerTarget(token.key);
+        if (!target) return;
+
+        const targetToken = classTokenKey(target, this.workspaceRoot);
+        const toId = this.classNode(target);
+        this.walkClass(target);
+        this.design.edges.push(
+            new DiEdge(fromId, toId, 'type', targetToken.display, targetToken.key, 'get()', target.name?.text ?? ''),
+        );
     }
 
     /** Resolve one injection to a node and record the edge(s). Never throws. */
@@ -385,7 +407,7 @@ export abstract class DiDesignBuilder {
             const target = resolveClassDeclaration(expr, this.checker);
             if (target) {
                 const classToken = classTokenKey(target, this.workspaceRoot);
-                const toId = this.classNode(target, 'unknown', injection.paramType);
+                const toId = this.classNode(target, 'transient', injection.paramType);
                 this.walkClass(target);
                 this.design.edges.push(
                     new DiEdge(fromId, toId, 'type', classToken.display, classToken.key, injection.paramName, injection.paramType),
