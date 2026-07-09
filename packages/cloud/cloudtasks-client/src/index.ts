@@ -13,8 +13,10 @@ export {
     TaskRequest,
     TaskInvoker,
 } from './TaskTypes';
-export { createTaskClient, TaskClientConfig } from './TaskClientFactory';
-export { TaskClientCreator } from './TaskClientCreator';
+export { ClientCloudTasksFactory } from './ClientCloudTasksFactory';
+export { TaskProxyClient } from './TaskProxyClient';
+export { TaskClientConfig } from './TaskClientConfig';
+export type { ApiPrototype } from './TaskClientConfig';
 export { CloudTaskScheduler, ScheduleOptions } from './CloudTaskScheduler';
 // The two task transports (local HTTP-queue + remote GCP), both delivering over real HTTP.
 export { InMemoryTaskInvoker } from './InMemoryTaskInvoker';

@@ -6,10 +6,10 @@ import { RequestIdChainProcessor } from './RequestIdChainProcessor';
 /**
  * ContextMgr - propagates the magic context onto outbound HTTP requests.
  *
- * Passed to createApiClient() via ClientConfig.contextMgr: every transferred key
- * (httpHeader set) in the GLOBAL {@link HeaderRegistry} is read from the ContextReader
- * and added to outbound requests. The registry is a process global (configured once at
- * startup, like LogManager), so ContextMgr no longer takes a registry argument.
+ * Passed to ClientHttpFactory's constructor: every transferred key (httpHeader set)
+ * in the GLOBAL {@link HeaderRegistry} is read from the ContextReader and added to
+ * outbound requests. The registry is a process global (configured once at startup,
+ * like LogManager), so ContextMgr no longer takes a registry argument.
  *
  * Browser-safe (no AsyncLocalStorage): the server-side reader (RequestContextReader,
  * in @webpieces/core-context) and the browser store (MutableContextStore, in
@@ -23,13 +23,14 @@ import { RequestIdChainProcessor } from './RequestIdChainProcessor';
  * // Browser client-side (app-managed store, no AsyncLocalStorage):
  * const contextMgr = new ContextMgr(new MutableContextStore());
  *
- * // Both cases:
- * const config = new ClientConfig('http://api.example.com', contextMgr);
- * const client = createApiClient(SaveApi, config);
+ * // Both cases — the ContextMgr is a factory dependency, the baseUrl is client state:
+ * const factory = new ClientHttpFactory(contextMgr);
+ * const client = factory.createClient(SaveApi, new ClientConfig('http://api.example.com'));
  * ```
  */
 export class ContextMgr {
     private chainProcessor: RequestIdChainProcessor;
+    private headerMethods: HeaderMethods = new HeaderMethods();
 
     constructor(
         /**
@@ -76,7 +77,7 @@ export class ContextMgr {
      * Build the header map for LOGGING: secured values masked, keyed by each key's
      * `name`, only for keys with isLogged=true.
      */
-    buildHeadersForLogging(headerMethods: HeaderMethods): Map<string, string> {
-        return headerMethods.buildSecureMapForLogs(HeaderRegistry.get().getLoggedKeys(), this.contextReader);
+    buildHeadersForLogging(): Map<string, string> {
+        return this.headerMethods.buildSecureMapForLogs(HeaderRegistry.get().getLoggedKeys(), this.contextReader);
     }
 }

@@ -20,18 +20,21 @@
  *
  * Usage:
  * ```typescript
- * import { createApiClient, ClientConfig } from '@webpieces/http-client';
+ * import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client';
  * import { SaveApi } from './api/SaveApi';
  *
- * const config = new ClientConfig('http://localhost:3000');
- * const client = createApiClient(SaveApi, config);
+ * // Collaborators go on the factory (build it once); baseUrl is per-client state.
+ * const factory = new ClientHttpFactory(contextMgr);
+ * const client = factory.createClient(SaveApi, new ClientConfig('http://localhost:3000'));
  *
  * const response = await client.save({ query: 'test' });
  * ```
  */
 
-export { createApiClient, ClientConfig } from './ClientFactory';
-export type { IdTokenMinter } from './ClientFactory';
+export { ClientHttpFactory } from './ClientHttpFactory';
+export { ProxyClient } from './ProxyClient';
+export { ClientConfig } from './ClientConfig';
+export type { ApiPrototype, IdTokenMinter } from './ClientConfig';
 export { ClientErrorTranslator } from './ClientErrorTranslator';
 
 // Context management for header propagation (browser reader)

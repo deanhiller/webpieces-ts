@@ -91,7 +91,7 @@ export interface SaveResponse {
  *
  * This class is the single source of truth for both the contract and routing metadata:
  * 1. Server-side: ApiRoutingFactory reads decorators to bind routes to controllers
- * 2. Client-side: createApiClient reads decorators to create HTTP client proxies
+ * 2. Client-side: ClientHttpFactory reads decorators to create HTTP client proxies
  * 3. Controllers implement this class to get compile-time enforcement
  *
  * Using abstract methods means TypeScript enforces implementation at compile time.

@@ -170,7 +170,7 @@
             "level": 1,
             "framework": ["browser","node"],
             "role": "designed-lib",
-            "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`createApiClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
+            "shortDescription": "Client-side counterpart to http-routing: reads http-api decorators to generate type-safe HTTP clients from an API interface (`ClientHttpFactory`/`ProxyClient`/`ClientConfig`), propagates request context/platform headers, chains request IDs, and translates HTTP error responses back into typed errors.",
             "responsibilitiesFile": "packages/http/http-client/responsibilities.md",
             "designFile": "packages/http/http-client/design.json",
             "dependsOn": [

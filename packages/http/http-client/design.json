@@ -5,15 +5,15 @@
         {
             "root": "ProxyClient",
             "rootKind": "apiImplementation",
-            "file": "packages/http/http-client/src/ClientFactory.ts",
-            "maxLevel": 3,
+            "file": "packages/http/http-client/src/ProxyClient.ts",
+            "maxLevel": 2,
             "nodes": [
                 {
                     "id": "ApiPrototype<object>",
                     "className": "ApiPrototype<object>",
                     "kind": "unresolved",
                     "scope": "unknown",
-                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "file": "packages/http/http-client/src/ProxyClient.ts",
                     "level": 1
                 },
                 {
@@ -21,7 +21,7 @@
                     "className": "ClientConfig",
                     "kind": "class",
                     "scope": "unknown",
-                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "file": "packages/http/http-client/src/ClientConfig.ts",
                     "level": 1
                 },
                 {
@@ -30,7 +30,7 @@
                     "kind": "class",
                     "scope": "unknown",
                     "file": "packages/core/core-util/src/http/ContextMgr.ts",
-                    "level": 2
+                    "level": 1
                 },
                 {
                     "id": "ContextReader",
@@ -38,23 +38,15 @@
                     "kind": "unresolved",
                     "scope": "unknown",
                     "file": "packages/core/core-util/src/http/ContextMgr.ts",
-                    "level": 3
-                },
-                {
-                    "id": "HeaderMethods",
-                    "className": "HeaderMethods",
-                    "kind": "class",
-                    "scope": "unknown",
-                    "file": "packages/core/core-util/src/http/HeaderMethods.ts",
-                    "level": 1
+                    "level": 2
                 },
                 {
                     "id": "IdTokenMinter",
                     "className": "IdTokenMinter",
                     "kind": "unresolved",
                     "scope": "unknown",
-                    "file": "packages/http/http-client/src/ClientFactory.ts",
-                    "level": 2
+                    "file": "packages/http/http-client/src/ProxyClient.ts",
+                    "level": 1
                 },
                 {
                     "id": "LogApiCall",
@@ -69,7 +61,7 @@
                     "className": "ProxyClient",
                     "kind": "apiImplementation",
                     "scope": "unknown",
-                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "file": "packages/http/http-client/src/ProxyClient.ts",
                     "level": 0
                 },
                 {
@@ -78,7 +70,7 @@
                     "kind": "unresolved",
                     "scope": "unknown",
                     "file": "packages/core/core-util/src/http/Secrets.ts",
-                    "level": 3
+                    "level": 2
                 },
                 {
                     "id": "Secrets",
@@ -86,7 +78,7 @@
                     "kind": "class",
                     "scope": "unknown",
                     "file": "packages/core/core-util/src/http/Secrets.ts",
-                    "level": 2
+                    "level": 1
                 },
                 {
                     "id": "boolean",
@@ -94,45 +86,18 @@
                     "kind": "unresolved",
                     "scope": "unknown",
                     "file": "packages/core/core-util/src/http/ContextMgr.ts",
-                    "level": 3
+                    "level": 2
                 },
                 {
                     "id": "string",
                     "className": "string",
                     "kind": "unresolved",
                     "scope": "unknown",
-                    "file": "packages/http/http-client/src/ClientFactory.ts",
+                    "file": "packages/http/http-client/src/ClientConfig.ts",
                     "level": 2
                 }
             ],
             "edges": [
-                {
-                    "from": "ClientConfig",
-                    "to": "ContextMgr",
-                    "injection": "type",
-                    "token": "ContextMgr",
-                    "tokenKey": "class:packages/core/core-util/src/http/ContextMgr.ts#ContextMgr",
-                    "paramName": "contextMgr",
-                    "paramType": "ContextMgr"
-                },
-                {
-                    "from": "ClientConfig",
-                    "to": "IdTokenMinter",
-                    "injection": "type",
-                    "token": "IdTokenMinter",
-                    "tokenKey": "type:IdTokenMinter",
-                    "paramName": "idTokenMinter",
-                    "paramType": "IdTokenMinter"
-                },
-                {
-                    "from": "ClientConfig",
-                    "to": "Secrets",
-                    "injection": "type",
-                    "token": "Secrets",
-                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
-                    "paramName": "secrets",
-                    "paramType": "Secrets"
-                },
                 {
                     "from": "ClientConfig",
                     "to": "string",
@@ -174,18 +139,27 @@
                     "to": "ClientConfig",
                     "injection": "type",
                     "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client/src/ClientFactory.ts#ClientConfig",
+                    "tokenKey": "class:packages/http/http-client/src/ClientConfig.ts#ClientConfig",
                     "paramName": "config",
                     "paramType": "ClientConfig"
                 },
                 {
                     "from": "ProxyClient",
-                    "to": "HeaderMethods",
+                    "to": "ContextMgr",
                     "injection": "type",
-                    "token": "HeaderMethods",
-                    "tokenKey": "class:packages/core/core-util/src/http/HeaderMethods.ts#HeaderMethods",
-                    "paramName": "headerMethods",
-                    "paramType": "HeaderMethods"
+                    "token": "ContextMgr",
+                    "tokenKey": "class:packages/core/core-util/src/http/ContextMgr.ts#ContextMgr",
+                    "paramName": "contextMgr",
+                    "paramType": "ContextMgr"
+                },
+                {
+                    "from": "ProxyClient",
+                    "to": "IdTokenMinter",
+                    "injection": "type",
+                    "token": "IdTokenMinter",
+                    "tokenKey": "type:IdTokenMinter",
+                    "paramName": "idTokenMinter",
+                    "paramType": "IdTokenMinter"
                 },
                 {
                     "from": "ProxyClient",
@@ -195,6 +169,15 @@
                     "tokenKey": "class:packages/core/core-util/src/http/LogApiCall.ts#LogApiCall",
                     "paramName": "logApiCall",
                     "paramType": "LogApiCall"
+                },
+                {
+                    "from": "ProxyClient",
+                    "to": "Secrets",
+                    "injection": "type",
+                    "token": "Secrets",
+                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
+                    "paramName": "secrets",
+                    "paramType": "Secrets"
                 },
                 {
                     "from": "Secrets",

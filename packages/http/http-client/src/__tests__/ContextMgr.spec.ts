@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ContextKey,
-    HeaderMethods,
     HeaderRegistry,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
@@ -65,7 +64,7 @@ describe('ContextMgr.buildHeadersForLogging', () => {
         store.set(AUTH, 'super-secret-token-value');
 
         const contextMgr = new ContextMgr(store);
-        const logMap = contextMgr.buildHeadersForLogging(new HeaderMethods());
+        const logMap = contextMgr.buildHeadersForLogging();
 
         // TENANT -> keyed by its name, raw value
         expect(logMap.get('tenantId')).toBe('tenant-42');

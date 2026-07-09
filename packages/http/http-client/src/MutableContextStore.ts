@@ -13,8 +13,8 @@ import { ContextKey, ContextReader } from '@webpieces/core-util';
  * const store = new MutableContextStore();
  * // startup:
  * HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeaders(), true);
- * const config = new ClientConfig(baseUrl, new ContextMgr(store));
- * const client = createApiClient(SaveApi, config);
+ * const factory = new ClientHttpFactory(new ContextMgr(store));
+ * const client = factory.createClient(SaveApi, new ClientConfig(baseUrl));
  *
  * // later, when the user logs in / picks a tenant:
  * store.set(WebpiecesCoreHeaders.AUTHORIZATION, token);
