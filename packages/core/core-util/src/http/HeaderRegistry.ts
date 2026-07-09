@@ -33,8 +33,26 @@ export class HeaderRegistry {
 
     private readonly keys: ContextKey[];
 
+    // Derived collections precomputed ONCE, here in the constructor (i.e. at
+    // configure() time). The hot path — every log line calls getLoggedKeys(), every
+    // outbound request calls getTransferredKeys() — then returns the cached array
+    // instead of re-filtering the full key list on each call. These are reachable
+    // only through HeaderRegistry.get(), which throws until configure() has run.
+    private readonly transferredKeys: ContextKey[];
+    private readonly securedNames: string[];
+    private readonly loggedKeys: ContextKey[];
+    private readonly byHttpHeader: Map<string, ContextKey>;
+
     private constructor(keys: ContextKey[]) {
         this.keys = this.checkForDuplicates(keys);
+        this.transferredKeys = this.keys.filter((k: ContextKey) => k.httpHeader !== undefined);
+        this.securedNames = this.keys
+            .filter((k: ContextKey) => k.isSecured)
+            .map((k: ContextKey) => k.name);
+        this.loggedKeys = this.keys.filter((k: ContextKey) => k.isLogged);
+        this.byHttpHeader = new Map(
+            this.transferredKeys.map((k: ContextKey): [string, ContextKey] => [k.httpHeader!.toLowerCase(), k]),
+        );
     }
 
     /**
@@ -76,25 +94,22 @@ export class HeaderRegistry {
      * outbound request): those with an httpHeader set.
      */
     getTransferredKeys(): ContextKey[] {
-        return this.keys.filter((k: ContextKey) => k.httpHeader !== undefined);
+        return this.transferredKeys;
     }
 
     /** Names (log keys) whose values must be masked in logs. isSecured=true. */
     getSecuredNames(): string[] {
-        return this.keys
-            .filter((k: ContextKey) => k.isSecured)
-            .map((k: ContextKey) => k.name);
+        return this.securedNames;
     }
 
     /** Keys that appear in logs. isLogged=true. */
     getLoggedKeys(): ContextKey[] {
-        return this.keys.filter((k: ContextKey) => k.isLogged);
+        return this.loggedKeys;
     }
 
-    /** Look up a key by its HTTP header name (case-insensitive). */
+    /** Look up a key by its HTTP header name (case-insensitive). O(1) via the precomputed map. */
     findByHttpHeader(httpHeader: string): ContextKey | undefined {
-        const lower = httpHeader.toLowerCase();
-        return this.keys.find((k: ContextKey) => k.httpHeader?.toLowerCase() === lower);
+        return this.byHttpHeader.get(httpHeader.toLowerCase());
     }
 
     /**

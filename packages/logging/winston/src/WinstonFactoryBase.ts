@@ -2,7 +2,7 @@ import { createLogger, transports } from 'winston';
 import type { Logger as WinstonBase } from 'winston';
 import type { Format } from 'logform';
 import type { Logger, LoggerFactory } from '@webpieces/core-util';
-import { LEVEL_TO_WINSTON, WinstonLogger } from './WinstonLogger';
+import { WinstonLogger } from './WinstonLogger';
 import { WinstonFactoryOptions } from './WinstonFactoryOptions';
 
 /**
@@ -17,8 +17,8 @@ export abstract class WinstonFactoryBase implements LoggerFactory {
     private readonly loggers = new Map<string, Logger>();
 
     protected constructor(finalFormat: Format, opts: WinstonFactoryOptions) {
+        // No level set — we do NOT filter; that is winston's job (defaults to 'info').
         this.base = createLogger({
-            level: LEVEL_TO_WINSTON[opts.level],
             format: finalFormat,
             defaultMeta: opts.svcGitHash ? { svcGitHash: opts.svcGitHash } : undefined,
             transports: [new transports.Console()],

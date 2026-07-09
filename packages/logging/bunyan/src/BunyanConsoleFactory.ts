@@ -9,7 +9,7 @@ import { createConsoleStream } from './streams';
  * the tested trytami local console stream.
  */
 export class BunyanConsoleFactory extends BunyanFactoryBase {
-    constructor(opts: BunyanFactoryOptions = new BunyanFactoryOptions()) {
-        super(opts.serviceName, [createConsoleStream(opts.level)]);
+    constructor(opts: BunyanFactoryOptions) {
+        super(opts.serviceName, [createConsoleStream()]);
     }
 }

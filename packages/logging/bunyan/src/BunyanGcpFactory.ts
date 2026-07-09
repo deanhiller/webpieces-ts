@@ -11,7 +11,7 @@ import { createGoogleCloudStream } from './streams';
  * Default Credentials on the instance.
  */
 export class BunyanGcpFactory extends BunyanFactoryBase {
-    constructor(opts: BunyanFactoryOptions = new BunyanFactoryOptions()) {
-        super(opts.serviceName, [createGoogleCloudStream(opts.level)]);
+    constructor(opts: BunyanFactoryOptions) {
+        super(opts.serviceName, [createGoogleCloudStream()]);
     }
 }
