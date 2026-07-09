@@ -8,18 +8,24 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## ClientCloudTasksFactory — api-impl, Level 0…1
+## ClientCloudTasksFactory — api-impl, Level 0…2
 
 ```mermaid
 graph TD
     ClientCloudTasksFactory["ClientCloudTasksFactory"]:::apiImpl
-    Provider_TaskProxyClient_{{"Provider<TaskProxyClient> ?"}}:::unresolved
-    ClientCloudTasksFactory --> Provider_TaskProxyClient_
+    RequestContextHeaders["RequestContextHeaders"]
+    TaskInvoker{{"TaskInvoker ?"}}:::unresolved
+    TaskProxyClient["TaskProxyClient"]:::many
+    ClientCloudTasksFactory --> TaskProxyClient
+    TaskProxyClient --> RequestContextHeaders
+    TaskProxyClient --> TaskInvoker
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
     classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
     classDef external fill:#b39ddb,color:#000000,stroke:#5e35b1,stroke-width:3px
+    classDef api fill:#4fc3f7,color:#000000,stroke:#0277bd,stroke-width:3px
+    classDef many fill:#eceff1,color:#000000,stroke:#546e7a,stroke-width:2px,stroke-dasharray: 4 2
 ```
 
 
@@ -27,5 +33,6 @@ Edges are constructor/`inject()` dependencies (the injected param/field
 name and token are in `design.json`). Rounded nodes are
 `toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed
 nodes are tokens the analyzer could not resolve; double-bordered nodes are
-classes from a published package outside this workspace — shown as a boundary
-but not expanded into their internals.
+boundaries shown but not expanded: violet = a class from a published package
+outside this workspace; cyan = a generated API-client proxy (`createApiClient`),
+i.e. a service/network boundary whose remote impl lives in another process.

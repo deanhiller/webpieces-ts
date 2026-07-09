@@ -12,7 +12,7 @@
                     "id": "AppComponent",
                     "className": "AppComponent",
                     "kind": "component",
-                    "scope": "unknown",
+                    "scope": "transient",
                     "file": "apps/app-example/angular-site/src/app/app.component.ts",
                     "level": 0
                 },

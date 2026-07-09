@@ -6,7 +6,7 @@
             "root": "ClientCloudTasksFactory",
             "rootKind": "apiImplementation",
             "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
-            "maxLevel": 1,
+            "maxLevel": 2,
             "nodes": [
                 {
                     "id": "ClientCloudTasksFactory",
@@ -17,28 +17,61 @@
                     "level": 0
                 },
                 {
-                    "id": "Provider<TaskProxyClient>",
-                    "className": "Provider<TaskProxyClient>",
+                    "id": "RequestContextHeaders",
+                    "className": "RequestContextHeaders",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/core/core-context/src/RequestContextHeaders.ts",
+                    "level": 2
+                },
+                {
+                    "id": "TaskInvoker",
+                    "className": "TaskInvoker",
                     "kind": "unresolved",
-                    "scope": "unknown",
-                    "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
-                    "level": 1,
-                    "detail": "TASK_PROXY_CLIENT_PROVIDER"
+                    "scope": "transient",
+                    "file": "packages/cloud/cloudtasks-client/src/TaskProxyClient.ts",
+                    "level": 2
+                },
+                {
+                    "id": "TaskProxyClient",
+                    "className": "TaskProxyClient",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/cloud/cloudtasks-client/src/TaskProxyClient.ts",
+                    "level": 1
                 }
             ],
             "edges": [
                 {
                     "from": "ClientCloudTasksFactory",
-                    "to": "Provider<TaskProxyClient>",
-                    "injection": "token",
-                    "token": "TASK_PROXY_CLIENT_PROVIDER",
-                    "tokenKey": "symbol.for:Provider<TaskProxyClient>",
+                    "to": "TaskProxyClient",
+                    "injection": "type",
+                    "token": "TaskProxyClient",
+                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskProxyClient.ts#TaskProxyClient",
                     "paramName": "taskProxyClientProvider",
                     "paramType": "Provider<TaskProxyClient>"
+                },
+                {
+                    "from": "TaskProxyClient",
+                    "to": "RequestContextHeaders",
+                    "injection": "token",
+                    "token": "RequestContextHeaders",
+                    "tokenKey": "class:packages/core/core-context/src/RequestContextHeaders.ts#RequestContextHeaders",
+                    "paramName": "headers",
+                    "paramType": "RequestContextHeaders"
+                },
+                {
+                    "from": "TaskProxyClient",
+                    "to": "TaskInvoker",
+                    "injection": "token",
+                    "token": "TaskInvoker",
+                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskTypes.ts#TaskInvoker",
+                    "paramName": "invoker",
+                    "paramType": "TaskInvoker"
                 }
             ],
             "unresolved": [
-                "TASK_PROXY_CLIENT_PROVIDER"
+                "TaskInvoker"
             ]
         }
     ]
