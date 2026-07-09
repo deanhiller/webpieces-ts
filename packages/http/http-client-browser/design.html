@@ -53,7 +53,7 @@
         <div id="graph-0" class="graph"></div>
     </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"ClientHttpBrowserFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientHttpBrowserFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientHttpBrowserFactory\\n(L0, transient)\", penwidth=2, shape=box3d];\n  \"MutableContextStore\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"MutableContextStore\\n(L1, transient)\", shape=box3d];\n\n  { rank=same; \"ClientHttpBrowserFactory\"; }\n  { rank=same; \"MutableContextStore\"; }\n\n  \"ClientHttpBrowserFactory\" -> \"MutableContextStore\";\n\n  labelloc=\"t\";\n  label=\"ClientHttpBrowserFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":["ClientHttpBrowserFactory","MutableContextStore"]}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"ClientHttpBrowserFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientHttpBrowserFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientHttpBrowserFactory\\n(L0, transient)\", penwidth=2];\n  \"MutableContextStore\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"MutableContextStore\\n(L1, transient)\"];\n\n  { rank=same; \"ClientHttpBrowserFactory\"; }\n  { rank=same; \"MutableContextStore\"; }\n\n  \"ClientHttpBrowserFactory\" -> \"MutableContextStore\";\n\n  labelloc=\"t\";\n  label=\"ClientHttpBrowserFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":["ClientHttpBrowserFactory","MutableContextStore"]}];
         
         function paintStacks(element, stackedIds) {
             const nodes = element.querySelectorAll('g.node');
@@ -67,8 +67,11 @@
                 if (!node) continue;
                 const outline = node.querySelector('polygon, polyline, path');
                 if (!outline) continue;
-                // Farthest copy first so the nearer one paints over it; both go behind the original.
-                for (const offset of [-10, -5]) {
+                // We insertBefore(firstChild), so the LAST inserted paints furthest back. Insert
+                // nearest (-5) first then farthest (-10): final paint order is -10, -5, original —
+                // a clean 3-card stack where all three cards are visible. (The reverse order hid
+                // the -5 card entirely behind the -10 one, so only 2 boxes showed.)
+                for (const offset of [-5, -10]) {
                     const ghost = outline.cloneNode(false);
                     ghost.setAttribute('transform', 'translate(' + offset + ',' + offset + ')');
                     ghost.setAttribute('fill', '#ffffff');
