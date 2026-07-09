@@ -24,6 +24,7 @@
     },
     "dependencies": {
         "@webpieces/core-util": "workspace:*",
+        "@webpieces/core-context": "workspace:*",
         "bunyan": "1.8.15",
         "@google-cloud/logging-bunyan": "5.1.0",
         "@types/bunyan": "1.8.11"

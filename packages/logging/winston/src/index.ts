@@ -6,18 +6,16 @@
  *
  * ```ts
  * import { WinstonGcpFactory, WinstonConsoleFactory } from '@webpieces/winston';
- * import { RequestContextReader } from '@webpieces/core-context';
  *
- * const reader = new RequestContextReader();
  * const loggerFactory = process.env.K_SERVICE
- *   ? new WinstonGcpFactory(reader)      // Cloud Run → stdout JSON
- *   : new WinstonConsoleFactory(reader); // local → pretty console
+ *   ? new WinstonGcpFactory()      // Cloud Run → stdout JSON
+ *   : new WinstonConsoleFactory(); // local → pretty console
  * // hand to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...))
  * ```
  *
- * Both backends auto-enrich every line with the logged context keys from
- * HeaderRegistry. This package depends only on @webpieces/core-util (+ winston);
- * the node RequestContextReader is passed in, not imported.
+ * Both backends auto-enrich every line with the logged context keys, read
+ * DIRECTLY from the active RequestContext (@webpieces/core-context) on each line —
+ * no ContextReader is threaded in.
  *
  * @packageDocumentation
  */

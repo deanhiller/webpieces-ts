@@ -43,13 +43,13 @@
             ]
         },
         "bunyan": {
-            "level": 1,
+            "level": 2,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Node-only bunyan backends for the webpieces logging seam: a `BunyanConsoleFactory` (local pretty text) and a `BunyanGcpFactory` (Cloud Logging via `@google-cloud/logging-bunyan`), both `LoggerFactory` impls that enrich every line with the logged `HeaderRegistry` keys.",
             "responsibilitiesFile": "packages/logging/bunyan/responsibilities.md",
             "dependsOn": [
-                "core-util"
+                "core-context"
             ]
         },
         "client-server": {
@@ -263,13 +263,13 @@
             ]
         },
         "winston": {
-            "level": 1,
+            "level": 2,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Node-only winston backends for the webpieces logging seam: a `WinstonConsoleFactory` (local pretty) and a `WinstonGcpFactory` (Cloud Run stdout JSON with a level→severity map), both `LoggerFactory` impls that enrich every line with the logged `HeaderRegistry` context keys.",
             "responsibilitiesFile": "packages/logging/winston/responsibilities.md",
             "dependsOn": [
-                "core-util"
+                "core-context"
             ]
         }
     }

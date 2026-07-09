@@ -14,8 +14,9 @@
 import { format } from 'winston';
 import type { Format, TransformableInfo } from 'logform';
 import { stringify as safeStringify } from 'safe-stable-stringify';
-import { HeaderMethods, HeaderRegistry } from '@webpieces/core-util';
-import type { ContextKey, ContextReader } from '@webpieces/core-util';
+import { HeaderRegistry } from '@webpieces/core-util';
+import type { ContextKey } from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 
 // JSON-shaped value (the widest thing a log field / replacer value can hold),
 // used instead of `any`/`unknown` which the code rules disallow.
@@ -60,25 +61,18 @@ export function bigIntSafeFormat(): Format {
 }
 
 /**
- * Inject every logged HeaderRegistry context key present in the current context
- * frame into the record under its `name` (→ top-level jsonPayload.<name> in GCP,
- * filterable as jsonPayload.requestId, jsonPayload.tenantId, …). Secured keys are
- * masked by HeaderMethods.buildSecureMapForLogs. Caller-supplied fields on the
- * record win on conflict. Runs on EVERY winston call, including winston's own
- * handleExceptions/handleRejections lines that bypass the WinstonLogger wrapper.
- *
- * The registry is read LAZILY (first log call) because a LoggerFactory is
- * constructed by the app BEFORE setupRuntime calls HeaderRegistry.configure.
+ * Inject every logged context key present in the active RequestContext frame into
+ * the record under its `name` (→ top-level jsonPayload.<name> in GCP, filterable
+ * as jsonPayload.requestId, jsonPayload.tenantId, …). Values are read DIRECTLY
+ * from RequestContext (secured keys masked by RequestContext.buildLogFields) —
+ * no ContextReader. Caller-supplied fields on the record win on conflict. Runs on
+ * EVERY winston call, including winston's own handleExceptions/handleRejections
+ * lines that bypass the WinstonLogger wrapper.
  */
-export function injectContextFormat(reader: ContextReader): Format {
-    const headerMethods = new HeaderMethods();
-    let loggedKeys: ContextKey[] | undefined;
+// webpieces-disable no-function-outside-class -- winston format(fn) factory; whole file is winston Format factories
+export function injectContextFormat(): Format {
     return format((info: TransformableInfo) => {
-        if (!loggedKeys) {
-            loggedKeys = HeaderRegistry.get().getLoggedKeys();
-        }
-        const logMap = headerMethods.buildSecureMapForLogs(loggedKeys, reader);
-        logMap.forEach((value: string, name: string) => {
+        RequestContext.buildLogFields().forEach((value: string, name: string) => {
             if (info[name] === undefined) {
                 info[name] = value;
             }

@@ -32,28 +32,10 @@ export class HeaderMethods {
             }
             const value = contextReader.read(key);
             if (value) {
-                logMap.set(key.name, key.isSecured ? this.maskSecureValue(value) : value);
+                logMap.set(key.name, key.maskIfSecured(value));
             }
         }
 
         return logMap;
-    }
-
-    /**
-     * Mask a secure value based on its length.
-     * - Length > 15: first 3 + "..." + last 3
-     * - Length 8-15: first 2 + "..."
-     * - Length < 8: "<secure key too short to log>"
-     */
-    private maskSecureValue(value: string): string {
-        const len = value.length;
-
-        if (len < 8) {
-            return '<secure key too short to log>';
-        } else if (len <= 15) {
-            return `${value.substring(0, 2)}...`;
-        } else {
-            return `${value.substring(0, 3)}...${value.substring(len - 3)}`;
-        }
     }
 }

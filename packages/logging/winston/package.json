@@ -24,6 +24,7 @@
     },
     "dependencies": {
         "@webpieces/core-util": "workspace:*",
+        "@webpieces/core-context": "workspace:*",
         "winston": "3.11.0",
         "logform": "2.7.0",
         "safe-stable-stringify": "2.5.0"

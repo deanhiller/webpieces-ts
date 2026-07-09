@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { Writable } from 'stream';
 import bunyan from 'bunyan';
 import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
-import type { ContextReader } from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 import { BunyanLogger } from '../BunyanLogger';
 import { BunyanConsoleFactory } from '../BunyanConsoleFactory';
 import { logLevelToBunyanLevel } from '../levels';
@@ -11,20 +11,16 @@ const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
 // secured → masked in logs
 const AUTH_TOKEN = new ContextKey('authToken', 'x-auth-token', true);
 
-class FakeReader implements ContextReader {
-    constructor(private readonly values: Map<string, string>) {}
-    read(key: ContextKey): string | undefined {
-        return this.values.get(key.name);
-    }
+// Run `fn` inside a RequestContext carrying the canned context values the loggers
+// read directly (requestId + a long secured authToken that masks to "sup...lue").
+function withContext(fn: () => void): void {
+    RequestContext.run(() => {
+        RequestContext.putHeader(REQUEST_ID, 'req-123');
+        // length 20 (> 15) → masked to first3 + "..." + last3 = "sup...lue"
+        RequestContext.putHeader(AUTH_TOKEN, 'supersecretlongvalue');
+        fn();
+    });
 }
-
-const reader = new FakeReader(
-    new Map([
-        ['requestId', 'req-123'],
-        // length 20 (> 15) → masked to "sup...lue"
-        ['authToken', 'supersecretlongvalue'],
-    ]),
-);
 
 // A bunyan logger whose stream records the raw JSON lines.
 class BunyanHarness {
@@ -61,8 +57,8 @@ describe('levels', () => {
 describe('BunyanLogger context enrichment', () => {
     it('merges masked context fields into every record', async () => {
         const h = new BunyanHarness();
-        const log = new BunyanLogger(h.base, reader);
-        log.info('hi');
+        const log = new BunyanLogger(h.base);
+        withContext(() => log.info('hi'));
         await flush();
 
         const rec = JSON.parse(h.lines[0]);
@@ -74,8 +70,8 @@ describe('BunyanLogger context enrichment', () => {
 
     it('normalizes an Error into err { name, message, stack }', async () => {
         const h = new BunyanHarness();
-        const log = new BunyanLogger(h.base, reader);
-        log.error('boom', new Error('bad'));
+        const log = new BunyanLogger(h.base);
+        withContext(() => log.error('boom', new Error('bad')));
         await flush();
 
         const rec = JSON.parse(h.lines[h.lines.length - 1]);
@@ -86,6 +82,36 @@ describe('BunyanLogger context enrichment', () => {
     });
 });
 
+describe('logging outside RequestContext.run', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    // A log line with no active context = a missing request-wrapping server filter.
+    // We report it ONCE (ERROR, via LogManager) and never spin, even though that
+    // error is itself a log call that circles back through buildLogFields().
+    it('reports the missing filter exactly once and never infinite-loops', async () => {
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const h = new BunyanHarness();
+        const log = new BunyanLogger(h.base);
+
+        // three lines, all OUTSIDE any RequestContext.run(...)
+        log.info('no-ctx-1');
+        log.error('no-ctx-2', new Error('boom'));
+        log.info('no-ctx-3');
+        await flush();
+
+        // the lines themselves still emit — logging keeps working, just without context
+        expect(h.lines.length).toBe(3);
+
+        // ...and the "missing context" ERROR is reported exactly ONCE across all three
+        const reports = errSpy.mock.calls.filter((c: unknown[]) =>
+            String(c[0]).includes('OUTSIDE RequestContext.run'),
+        );
+        expect(reports.length).toBe(1);
+    });
+});
+
 describe('BunyanConsoleFactory', () => {
     afterEach(() => {
         vi.restoreAllMocks();
@@ -93,8 +119,8 @@ describe('BunyanConsoleFactory', () => {
 
     it('writes a human-readable line with context tags', async () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-        const factory = new BunyanConsoleFactory(reader);
-        factory.getLogger('MyLogger').info('hello world');
+        const factory = new BunyanConsoleFactory();
+        withContext(() => factory.getLogger('MyLogger').info('hello world'));
         await flush();
 
         const line = String(spy.mock.calls[0][0]);
@@ -105,7 +131,7 @@ describe('BunyanConsoleFactory', () => {
     });
 
     it('caches one Logger per name', () => {
-        const factory = new BunyanConsoleFactory(reader);
+        const factory = new BunyanConsoleFactory();
         expect(factory.getLogger('X')).toBe(factory.getLogger('X'));
         expect(factory.getLogger('X')).not.toBe(factory.getLogger('Y'));
     });
