@@ -118,11 +118,11 @@ importers:
         specifier: 8.48.0
         version: 8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@webpieces/nx-webpieces-rules':
-        specifier: 0.3.300
-        version: 0.3.300(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+        specifier: 0.3.313
+        version: 0.3.313(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@webpieces/pr-gate':
-        specifier: 0.3.300
-        version: 0.3.300
+        specifier: 0.3.313
+        version: 0.3.313
       eslint:
         specifier: 9.39.1
         version: 9.39.1(jiti@1.21.7)
@@ -3356,34 +3356,34 @@ packages:
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
 
-  '@webpieces/ai-hook-rules@0.3.300':
-    resolution: {integrity: sha512-QWdzWs614xETcFoPOqueE3QrAiXnPxSkOe9nLUrtZnbKtBRQjQRNnUw7JL1krMJPQ09cp9J1y9zNXGYqNaZ+PQ==}
+  '@webpieces/ai-hook-rules@0.3.313':
+    resolution: {integrity: sha512-d269kd0r10h28apwPPsyYH4Mz44vnZfQ/2BiVZ3Xq2iwa2x6j/7NNBieBZKrp/Ir3nEwrjSbOxP0brGvYbLMVw==}
     hasBin: true
 
-  '@webpieces/code-rules@0.3.300':
-    resolution: {integrity: sha512-7aRc0c3tXaLVKoC7NgCn7bIimsVdUlJHrAsoB2GXiRSk8JSR9pbHFDjRgoOc3ZmoC1YZDcX0gtKAZfp9d05bDw==}
+  '@webpieces/code-rules@0.3.313':
+    resolution: {integrity: sha512-w9A8vQQXp6Bp5hX9iivaU0CSPLMOIWFZe3Py+b7K4wJzyciGaf2p82svN6ukCI0st3xLbRPq5PmUfhsOVXzb3A==}
     hasBin: true
 
   '@webpieces/core-util@0.2.104':
     resolution: {integrity: sha512-F9kWVtKNFAzVPl0r9cp6FttJpdTXH/+ybvDgZhAXHLuxkccOjokmRTuoNBDQggcNxKyspUX8RTGydJfiAJSdDw==}
 
-  '@webpieces/eslint-rules@0.3.300':
-    resolution: {integrity: sha512-Q9/y2ezmRomk6K1ik1Vf5xd3V6fCRYh5w34mrQ1mNyyI+N1sZKYx+UuodLdlfi6XTie+kKrPrzFgkzcB4mj8mw==}
+  '@webpieces/eslint-rules@0.3.313':
+    resolution: {integrity: sha512-KdLXi0JRSgd/viyGFEs/N9BHgT9/1scntBtLeOwLyHj0OvtJMnHvrcsxAz6lF4FbsQokiyH1ARRUwcqrBVfp7A==}
     peerDependencies:
       eslint: '>=8.0.0'
 
-  '@webpieces/nx-webpieces-rules@0.3.300':
-    resolution: {integrity: sha512-f6cbrr0S0Hd/n3u03ZWqISvy1iAuCRb3Xj7fw+4I800pwKgtRTuV5gyYIpiBoTtO/0EcTHaVUXRyEMZOT5fG2w==}
+  '@webpieces/nx-webpieces-rules@0.3.313':
+    resolution: {integrity: sha512-tx9CO7u3ti7Ru7tiMrMICVu1UJ1gMM//WARgW4HnMZrnfukVEKtezYYcpMkjkgKtnYn8ljV7E3KoyFp4U+4mVQ==}
     hasBin: true
     peerDependencies:
       '@nx/devkit': '>=18.0.0'
 
-  '@webpieces/pr-gate@0.3.300':
-    resolution: {integrity: sha512-mAkbfrWMpOwnOvc5fENWABTv9zF5QmHuDNasJi5x/ZA0rGMOaAM6FCo1a0gF1nDN/FHCCQ6n0txImY+ufR7NQA==}
+  '@webpieces/pr-gate@0.3.313':
+    resolution: {integrity: sha512-M+JzhksaaTiciJdXWywO19cIqYMZo5eirY2MDXLS5HMDw/WsPWwU5XKWcyGStPkxRRGy6Ky8kcdNgM/+m2spLg==}
     hasBin: true
 
-  '@webpieces/rules-config@0.3.300':
-    resolution: {integrity: sha512-3CdZoYIlikSDJYNuFgz+K5Vg70zQ29X9XpijiP+kXH6Ll/hOCmSQ8VGsrlS1ifPgKMqEmUX5ATMJ3Ib9eCKB5Q==}
+  '@webpieces/rules-config@0.3.313':
+    resolution: {integrity: sha512-8I2qf6fYlOE69uZMTY+ErX0M26yYJZSr5Gcs2w/1dymhqOaXZx4PP7M8cCuyiDOHxu+3R/YOKVvmPIClpJEpow==}
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -9395,7 +9395,7 @@ snapshots:
     dependencies:
       '@eslint/object-schema': 2.1.7
       debug: 4.4.3
-      minimatch: 3.1.2
+      minimatch: 3.1.5
     transitivePeerDependencies:
       - supports-color
 
@@ -9416,7 +9416,7 @@ snapshots:
       ignore: 5.3.2
       import-fresh: 3.3.1
       js-yaml: 4.1.1
-      minimatch: 3.1.2
+      minimatch: 3.1.5
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
       - supports-color
@@ -11391,40 +11391,40 @@ snapshots:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
 
-  '@webpieces/ai-hook-rules@0.3.300':
+  '@webpieces/ai-hook-rules@0.3.313':
     dependencies:
-      '@webpieces/rules-config': 0.3.300
+      '@webpieces/rules-config': 0.3.313
 
-  '@webpieces/code-rules@0.3.300':
+  '@webpieces/code-rules@0.3.313':
     dependencies:
-      '@webpieces/rules-config': 0.3.300
+      '@webpieces/rules-config': 0.3.313
 
   '@webpieces/core-util@0.2.104': {}
 
-  '@webpieces/eslint-rules@0.3.300(eslint@9.39.1(jiti@1.21.7))':
+  '@webpieces/eslint-rules@0.3.313(eslint@9.39.1(jiti@1.21.7))':
     dependencies:
-      '@webpieces/rules-config': 0.3.300
+      '@webpieces/rules-config': 0.3.313
       eslint: 9.39.1(jiti@1.21.7)
 
-  '@webpieces/nx-webpieces-rules@0.3.300(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
+  '@webpieces/nx-webpieces-rules@0.3.313(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
     dependencies:
       '@nx/devkit': 22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17)))
-      '@webpieces/ai-hook-rules': 0.3.300
-      '@webpieces/code-rules': 0.3.300
-      '@webpieces/eslint-rules': 0.3.300(eslint@9.39.1(jiti@1.21.7))
-      '@webpieces/pr-gate': 0.3.300
-      '@webpieces/rules-config': 0.3.300
+      '@webpieces/ai-hook-rules': 0.3.313
+      '@webpieces/code-rules': 0.3.313
+      '@webpieces/eslint-rules': 0.3.313(eslint@9.39.1(jiti@1.21.7))
+      '@webpieces/pr-gate': 0.3.313
+      '@webpieces/rules-config': 0.3.313
       madge: 8.0.0(typescript@5.9.3)
     transitivePeerDependencies:
       - eslint
       - supports-color
       - typescript
 
-  '@webpieces/pr-gate@0.3.300':
+  '@webpieces/pr-gate@0.3.313':
     dependencies:
-      '@webpieces/rules-config': 0.3.300
+      '@webpieces/rules-config': 0.3.313
 
-  '@webpieces/rules-config@0.3.300':
+  '@webpieces/rules-config@0.3.313':
     dependencies:
       minimatch: 10.0.1
 

@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
-import { findFunctionsOutsideClassInSource } from '../validate-no-function-outside-class';
+import { findFunctionsOutsideClassInSource, findFunctionsOutsideClassInFile } from '../validate-no-function-outside-class';
 
 // The AST detector is pure over (content, filePath, disableAllowed) — no git/disk needed. These tests
 // pin the module-scope predicate (parent === SourceFile) that keeps inline callbacks and nested
@@ -94,5 +97,48 @@ describe('findFunctionsOutsideClassInSource — disable comment', () => {
         const found = findFunctionsOutsideClassInSource(src, 'src/example.ts', false);
         expect(found).toHaveLength(1);
         expect(found[0]?.hasDisableComment).toBe(false);
+    });
+});
+
+describe('findFunctionsOutsideClassInFile — allowedPaths', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-fn-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    function writeFile(relativePath: string, content: string): string {
+        const fullPath = path.join(tmpDir, relativePath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content, 'utf-8');
+        return relativePath;
+    }
+
+    it('flags a module-scope function when the file is NOT in allowedPaths', () => {
+        const file = writeFile('src/util.ts', 'export function foo(): number { return 1; }\n');
+        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, []);
+        expect(found).toHaveLength(1);
+    });
+
+    it('ignores a file matched by an allowedPaths glob (React components)', () => {
+        const file = writeFile('src/react/Button.tsx', 'export function Button() { return null; }\n');
+        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, ['src/react/**']);
+        expect(found).toHaveLength(0);
+    });
+
+    it('ignores a file under an allowedPaths directory prefix', () => {
+        const file = writeFile('apps/web/hooks/useThing.ts', 'export const useThing = () => 1;\n');
+        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, ['apps/web']);
+        expect(found).toHaveLength(0);
+    });
+
+    it('still flags a file outside the allowedPaths glob', () => {
+        const file = writeFile('src/services/thing.ts', 'export const compute = () => 1;\n');
+        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, ['src/react/**']);
+        expect(found).toHaveLength(1);
     });
 });
