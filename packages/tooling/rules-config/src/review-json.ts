@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, PR_INFO_DIR } from './constants';
+import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 
@@ -42,11 +42,11 @@ export class ReviewJson {
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
-// The per-feature PR working dir: `.webpieces/pr-info/<feature>`. Holds pr-body.md (rendered
-// dashboard) and review.json (AI-authored review). Nested under pr-info/ to keep `.webpieces/`
+// The per-feature PR working dir: `.webpieces/pr-review/<feature>`. Holds pr-body.md (rendered
+// dashboard) and review.json (AI-authored review). Nested under pr-review/ to keep `.webpieces/`
 // top level quiet. Shared so the start/finish commands and the AI agree on one location.
 export function prDirFor(repoRoot: string, featureName: string): string {
-    return path.join(repoRoot, WEBPIECES_TMP_DIR, PR_INFO_DIR, featureName);
+    return path.join(repoRoot, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, featureName);
 }
 
 // Absolute path of the review.json for a feature — beside pr-body.md, keyed by branch name so the

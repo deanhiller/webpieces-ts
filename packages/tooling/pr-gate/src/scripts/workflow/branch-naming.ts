@@ -7,10 +7,11 @@
 // generation number survives a sync — the old scheme numbered the LOCAL branch up (base → basewp2 →
 // basewp3) while the remote/PR stayed on `base`, which read as "the PR moved" when it never did.
 //
-// The pre-merge safety snapshot is a NUMBERED trail from 1 — `<branch>PreMerge1`, `<branch>PreMerge2`,
-// `<branch>PreMerge3`, … Each snapshot is paired 1:1 with a conflict-context folder `merge-<n>/` under
-// the same number (see merge-state). A CLEAN sync deletes its snapshot at finalize (no undo point
-// needed); only CONFLICT syncs leave a snapshot + its `merge-<n>/` behind. See nextFreePreMergeNumber.
+// The pre-merge safety snapshot is a NUMBERED trail — `<branch>PreMerge1`, `<branch>PreMerge2`, … —
+// paired with a durable audit folder `merge-<n>/` of the SAME number (see merge-state). The number is
+// chosen MONOTONICALLY from the existing `merge-<n>/` dirs (merge-state.nextMergeSlotNumber), never
+// recycled. A CLEAN sync deletes its snapshot branch at finalize (no undo point needed) but KEEPS its
+// `merge-<n>/` audit record; a CONFLICT sync keeps both the snapshot branch and its `merge-<n>/`.
 //
 // `baseBranchName` still strips a trailing `Squash` (the transient temp-branch suffix) AND a trailing
 // `wp<digits>` — the latter only for BACKWARD COMPATIBILITY, so a consumer sitting on a leftover
@@ -52,13 +53,4 @@ export function baseBranchName(branch: string): string {
  *  share one number. Clean syncs delete their snapshot at finalize; only conflict syncs leave one. */
 export function preMergeBackupName(branch: string, n: number): string {
     return `${branch}PreMerge${n}`;
-}
-
-/** First free PreMerge slot NUMBER for `branch`, probing 1, 2, 3, … via the `exists` predicate. Pure
- *  (the branch-existence check is injected) so it unit-tests without touching git. This integer is the
- *  single source of truth for both the backup branch name and its paired `merge-<n>` context folder. */
-export function nextFreePreMergeNumber(branch: string, exists: (name: string) => boolean): number {
-    for (let n = 1; ; n++) {
-        if (!exists(preMergeBackupName(branch, n))) return n;
-    }
 }

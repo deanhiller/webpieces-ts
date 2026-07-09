@@ -43,7 +43,7 @@ export {
     hasDisable,
     WEBPIECES_TMP_DIR,
     MERGE_INFO_DIR,
-    PR_INFO_DIR,
+    PR_REVIEW_DIR,
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
 } from './constants';

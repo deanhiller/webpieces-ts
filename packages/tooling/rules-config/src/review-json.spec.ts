@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { loadReviewJson, prDirFor, reviewJsonPath } from './review-json';
-import { WEBPIECES_TMP_DIR, PR_INFO_DIR } from './constants';
+import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 
 function tmpFile(contents: string): string {
@@ -14,14 +14,14 @@ function tmpFile(contents: string): string {
 }
 
 describe('reviewJsonPath', () => {
-    it('places review.json under the per-feature pr-info dir', () => {
+    it('places review.json under the per-feature pr-review dir', () => {
         const p = reviewJsonPath('/repo', 'dean-feat');
-        expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_INFO_DIR, 'dean-feat', 'review.json'));
+        expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat', 'review.json'));
     });
 
-    it('prDirFor returns the pr-info home for a feature', () => {
+    it('prDirFor returns the pr-review home for a feature', () => {
         const p = prDirFor('/repo', 'dean-feat');
-        expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_INFO_DIR, 'dean-feat'));
+        expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat'));
     });
 });
 
