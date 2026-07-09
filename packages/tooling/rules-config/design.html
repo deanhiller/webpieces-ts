@@ -63,8 +63,11 @@
                 if (!node) continue;
                 const outline = node.querySelector('polygon, polyline, path');
                 if (!outline) continue;
-                // Farthest copy first so the nearer one paints over it; both go behind the original.
-                for (const offset of [-10, -5]) {
+                // We insertBefore(firstChild), so the LAST inserted paints furthest back. Insert
+                // nearest (-5) first then farthest (-10): final paint order is -10, -5, original —
+                // a clean 3-card stack where all three cards are visible. (The reverse order hid
+                // the -5 card entirely behind the -10 one, so only 2 boxes showed.)
+                for (const offset of [-5, -10]) {
                     const ghost = outline.cloneNode(false);
                     ghost.setAttribute('transform', 'translate(' + offset + ',' + offset + ')');
                     ghost.setAttribute('fill', '#ffffff');
