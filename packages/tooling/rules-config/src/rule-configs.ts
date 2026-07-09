@@ -278,6 +278,25 @@ export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
     };
 }
 
+// Flags a function CREATED OUTSIDE A CLASS at module scope: a top-level `function foo()` declaration
+// or a top-level `const foo = () => {}` / `= function(){}`. The point is that webpieces DI +
+// @DocumentDesign only work when behavior lives in injectable classes — a module-scope function is a
+// dead-end the DI graph can't reach. Inline callbacks, nested functions inside methods, and non-function
+// top-level consts (objects, zod schemas, primitives) are NOT flagged. Standard rollout knobs via the
+// base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch, branch,
+// and disableAllowed for the inline `// webpieces-disable` escape. Intentionally NO allowedPaths — the
+// only path-agnostic escapes are the inline disable and the epoch/branch off-switches.
+export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
+    declare mode?: ModifiedCodeMode;
+    disableAllowed?: boolean;
+
+    static readonly SCHEMA: SchemaShape<NoFunctionOutsideClassConfig> = {
+        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        disableAllowed: FieldDef.optional('boolean'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 // framework-tag — every project that a changed source file belongs to must carry >=1
 // `framework:<browser|react|angular|node|express>` nx tag in its project.json. Those tags are the
 // project's "libType" — the SET of runtime environments it runs in — and the source of truth for
