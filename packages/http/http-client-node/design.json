@@ -6,7 +6,7 @@
             "root": "ClientHttpFactory",
             "rootKind": "apiImplementation",
             "file": "packages/http/http-client-node/src/ClientHttpFactory.ts",
-            "maxLevel": 1,
+            "maxLevel": 2,
             "nodes": [
                 {
                     "id": "ClientHttpFactory",
@@ -17,28 +17,61 @@
                     "level": 0
                 },
                 {
-                    "id": "Provider<NodeProxyClient>",
-                    "className": "Provider<NodeProxyClient>",
+                    "id": "NodeProxyClient",
+                    "className": "NodeProxyClient",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
+                    "level": 1
+                },
+                {
+                    "id": "RequestContextHeaders",
+                    "className": "RequestContextHeaders",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/core/core-context/src/RequestContextHeaders.ts",
+                    "level": 2
+                },
+                {
+                    "id": "Secrets",
+                    "className": "Secrets",
                     "kind": "unresolved",
-                    "scope": "unknown",
-                    "file": "packages/http/http-client-node/src/ClientHttpFactory.ts",
-                    "level": 1,
-                    "detail": "NODE_PROXY_CLIENT_PROVIDER"
+                    "scope": "transient",
+                    "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
+                    "level": 2
                 }
             ],
             "edges": [
                 {
                     "from": "ClientHttpFactory",
-                    "to": "Provider<NodeProxyClient>",
-                    "injection": "token",
-                    "token": "NODE_PROXY_CLIENT_PROVIDER",
-                    "tokenKey": "symbol.for:Provider<NodeProxyClient>",
+                    "to": "NodeProxyClient",
+                    "injection": "type",
+                    "token": "NodeProxyClient",
+                    "tokenKey": "class:packages/http/http-client-node/src/NodeProxyClient.ts#NodeProxyClient",
                     "paramName": "proxyClientProvider",
                     "paramType": "Provider<NodeProxyClient>"
+                },
+                {
+                    "from": "NodeProxyClient",
+                    "to": "RequestContextHeaders",
+                    "injection": "token",
+                    "token": "RequestContextHeaders",
+                    "tokenKey": "class:packages/core/core-context/src/RequestContextHeaders.ts#RequestContextHeaders",
+                    "paramName": "headers",
+                    "paramType": "RequestContextHeaders"
+                },
+                {
+                    "from": "NodeProxyClient",
+                    "to": "Secrets",
+                    "injection": "token",
+                    "token": "Secrets",
+                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
+                    "paramName": "secrets",
+                    "paramType": "Secrets"
                 }
             ],
             "unresolved": [
-                "NODE_PROXY_CLIENT_PROVIDER"
+                "Secrets"
             ]
         }
     ]

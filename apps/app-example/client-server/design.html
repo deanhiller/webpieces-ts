@@ -38,6 +38,11 @@
             <strong>Unresolved</strong> — token the analyzer could not resolve</div>
         <div class="legend-item"><span class="legend-box" style="background: #EDE7F6; border: 3px double #5e35b1;"></span>
             <strong>External</strong> — class from a published package outside this workspace; shown as a boundary, not expanded</div>
+        <div class="legend-item"><span class="legend-box" style="background: #E1F5FE; border: 3px double #0277bd;"></span>
+            <strong>API client</strong> — generated <code>createApiClient</code> proxy (service/network boundary); shown as a boundary, not expanded</div>
+        <div class="legend-item"><span class="legend-box" style="background: #F5F5F5; margin-left: 12px; box-shadow: -5px -5px 0 -1px #fff, -5px -5px 0 0 #ccc, -10px -10px 0 -1px #fff, -10px -10px 0 0 #ccc;"></span>
+            <strong>Stack of boxes</strong> — a TRANSIENT class: every arrow into it resolves its OWN
+            instance. A single box is a singleton, whose arrows all share one instance.</div>
         <div class="legend-item" style="margin-top: 15px;">
             <em>One graph per controller/root; a shared dependency appears in each root's tree.
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
@@ -58,11 +63,37 @@
         <div id="graph-2" class="graph"></div>
     </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"PublicController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"PublicController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"PublicController\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"PublicController\"; }\n\n\n  labelloc=\"t\";\n  label=\"PublicController\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n"},{"id":"graph-1","dot":"digraph \"SaveController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"SaveController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"SaveController\\n(L0, singleton)\", penwidth=2];\n  \"Server2Api\" [fillcolor=\"#FFF3E0\", style=\"filled,rounded\", label=\"Server2Api\\n(L1, singleton)\"];\n  \"SimpleCounter\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"Counter\\n(SimpleCounter)\\n(L1, singleton)\"];\n\n  { rank=same; \"SaveController\"; }\n  { rank=same; \"Server2Api\"; \"SimpleCounter\"; }\n\n  \"SaveController\" -> \"Server2Api\";\n  \"SaveController\" -> \"SimpleCounter\";\n\n  labelloc=\"t\";\n  label=\"SaveController\\n(controller, Level 0-1)\";\n  fontsize=16;\n}\n"},{"id":"graph-2","dot":"digraph \"SecureController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"SecureController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"SecureController\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"SecureController\"; }\n\n\n  labelloc=\"t\";\n  label=\"SecureController\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n"}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"PublicController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"PublicController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"PublicController\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"PublicController\"; }\n\n\n  labelloc=\"t\";\n  label=\"PublicController\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n","stackedIds":[]},{"id":"graph-1","dot":"digraph \"SaveController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"SaveController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"SaveController\\n(L0, singleton)\", penwidth=2];\n  \"Server2Api\" [fillcolor=\"#FFF3E0\", style=\"filled,rounded\", label=\"Server2Api\\n(L1, singleton)\"];\n  \"SimpleCounter\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"Counter\\n(SimpleCounter)\\n(L1, singleton)\"];\n\n  { rank=same; \"SaveController\"; }\n  { rank=same; \"Server2Api\"; \"SimpleCounter\"; }\n\n  \"SaveController\" -> \"Server2Api\";\n  \"SaveController\" -> \"SimpleCounter\";\n\n  labelloc=\"t\";\n  label=\"SaveController\\n(controller, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":[]},{"id":"graph-2","dot":"digraph \"SecureController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"SecureController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"SecureController\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"SecureController\"; }\n\n\n  labelloc=\"t\";\n  label=\"SecureController\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n","stackedIds":[]}];
+        
+        function paintStacks(element, stackedIds) {
+            const nodes = element.querySelectorAll('g.node');
+            const byTitle = new Map();
+            nodes.forEach(n => {
+                const title = n.querySelector('title');
+                if (title) byTitle.set(title.textContent, n);
+            });
+            for (const id of stackedIds) {
+                const node = byTitle.get(id);
+                if (!node) continue;
+                const outline = node.querySelector('polygon, polyline, path');
+                if (!outline) continue;
+                // Farthest copy first so the nearer one paints over it; both go behind the original.
+                for (const offset of [-10, -5]) {
+                    const ghost = outline.cloneNode(false);
+                    ghost.setAttribute('transform', 'translate(' + offset + ',' + offset + ')');
+                    ghost.setAttribute('fill', '#ffffff');
+                    node.insertBefore(ghost, node.firstChild);
+                }
+            }
+        }
+    
         const viz = new Viz();
         for (const g of graphs) {
             viz.renderSVGElement(g.dot)
-                .then(element => { document.getElementById(g.id).appendChild(element); })
+                .then(element => {
+                    paintStacks(element, g.stackedIds);
+                    document.getElementById(g.id).appendChild(element);
+                })
                 .catch(err => {
                     console.error(err);
                     document.getElementById(g.id).innerHTML = '<pre>' + err + '</pre>';

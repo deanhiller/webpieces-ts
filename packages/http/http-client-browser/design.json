@@ -12,7 +12,7 @@
                     "id": "ClientHttpBrowserFactory",
                     "className": "ClientHttpBrowserFactory",
                     "kind": "apiImplementation",
-                    "scope": "unknown",
+                    "scope": "transient",
                     "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
                     "level": 0
                 },
@@ -20,7 +20,7 @@
                     "id": "MutableContextStore",
                     "className": "MutableContextStore",
                     "kind": "class",
-                    "scope": "unknown",
+                    "scope": "transient",
                     "file": "packages/http/http-client-browser/src/MutableContextStore.ts",
                     "level": 1
                 }
