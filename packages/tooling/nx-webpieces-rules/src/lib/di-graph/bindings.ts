@@ -166,7 +166,47 @@ function collectBindCall(
     const kind: BindingKind = methodName === 'toConstantValue' ? 'toConstantValue' : 'toDynamicValue';
     const valueExpr = call.arguments[0];
     const valueText = valueExpr ? firstLine(valueExpr.getText()) : '';
-    table.add(new Binding(token.key, token.display, kind, scope, null, valueText, file));
+    const isApiBoundary = kind === 'toDynamicValue' && valueExpr ? isApiClientBoundary(valueExpr, checker) : false;
+    table.add(new Binding(token.key, token.display, kind, scope, null, valueText, file, [], isApiBoundary));
+}
+
+/**
+ * True when `expr` (the argument to `.toDynamicValue(...)` / an Angular
+ * `useFactory`) builds an API-client proxy: it contains a `createApiClient(Api, ...)`
+ * call whose first argument resolves to an @ApiPath-decorated contract class.
+ *
+ * This is the DI-graph boundary marker for generated (and external) API clients:
+ * the walk renders such a binding as an `api` leaf and stops, rather than
+ * descending into the client's own transport config (ClientConfig → ...).
+ */
+export function isApiClientBoundary(expr: ts.Expression, checker: ts.TypeChecker): boolean {
+    const call = findCreateApiClientCall(expr);
+    if (!call || call.arguments.length === 0) return false;
+    const apiClass = resolveClassDeclaration(call.arguments[0], checker);
+    return apiClass ? hasApiPathDecorator(apiClass) : false;
+}
+
+/** Find the first `createApiClient(...)` call anywhere inside `node`, else null. */
+function findCreateApiClientCall(node: ts.Node): ts.CallExpression | null {
+    if (ts.isCallExpression(node)) {
+        const callee = node.expression;
+        const name = ts.isIdentifier(callee)
+            ? callee.text
+            : ts.isPropertyAccessExpression(callee)
+              ? callee.name.text
+              : null;
+        if (name === 'createApiClient') return node;
+    }
+    let found: ts.CallExpression | null = null;
+    ts.forEachChild(node, (child: ts.Node) => {
+        if (!found) found = findCreateApiClientCall(child);
+    });
+    return found;
+}
+
+/** True when the class carries the `@ApiPath(...)` contract decorator. */
+function hasApiPathDecorator(cls: ts.ClassDeclaration): boolean {
+    return classDecorators(cls).some((d: ts.Decorator) => decoratorName(d) === 'ApiPath');
 }
 
 function firstLine(text: string): string {

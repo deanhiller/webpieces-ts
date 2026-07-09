@@ -72,6 +72,8 @@ function pageLegend(): string {
             <strong>Unresolved</strong> — token the analyzer could not resolve</div>
         <div class="legend-item"><span class="legend-box" style="background: #EDE7F6; border: 3px double #5e35b1;"></span>
             <strong>External</strong> — class from a published package outside this workspace; shown as a boundary, not expanded</div>
+        <div class="legend-item"><span class="legend-box" style="background: #E1F5FE; border: 3px double #0277bd;"></span>
+            <strong>API client</strong> — generated <code>createApiClient</code> proxy (service/network boundary); shown as a boundary, not expanded</div>
         <div class="legend-item"><span class="legend-box" style="background: #F5F5F5; margin-left: 12px; box-shadow: -5px -5px 0 -1px #fff, -5px -5px 0 0 #ccc, -10px -10px 0 -1px #fff, -10px -10px 0 0 #ccc;"></span>
             <strong>Stack of boxes</strong> — a TRANSIENT class: every arrow into it resolves its OWN
             instance. A single box is a singleton, whose arrows all share one instance.</div>

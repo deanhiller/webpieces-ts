@@ -21,6 +21,7 @@ const KIND_COLORS: Record<string, string> = {
     dynamic: '#FFF3E0', // light orange — toDynamicValue leaf
     unresolved: '#FCE4EC', // light pink — token the analyzer could not resolve
     external: '#EDE7F6', // light violet — class from a published package; walk stops here
+    api: '#E1F5FE', // light cyan — generated API-client proxy; service boundary, walk stops here
 };
 
 /** Escape a string for use inside a double-quoted DOT identifier/label. */
@@ -52,13 +53,15 @@ function nodeStatement(node: DiNode): string {
     const styles: string[] = ['filled'];
     if (node.kind === 'constant' || node.kind === 'dynamic') styles.push('rounded');
     if (node.kind === 'unresolved') styles.push('dashed');
-    // External boundary: bold double border so it reads as "stops here, not expanded"
-    // and is not mistaken for the pink dashed `unresolved` boxes.
-    if (node.kind === 'external') styles.push('bold');
+    if (node.kind === 'api') styles.push('rounded');
+    // External/api boundary: bold double border so it reads as "stops here, not
+    // expanded" and is not mistaken for the pink dashed `unresolved` boxes.
+    if (node.kind === 'external' || node.kind === 'api') styles.push('bold');
     const isRootKind =
         node.kind === 'controller' || node.kind === 'apiImplementation' || node.kind === 'component';
-    const penwidth = isRootKind || node.kind === 'external' ? ', penwidth=2' : '';
-    const peripheries = node.kind === 'external' ? ', peripheries=2' : '';
+    const isBoundary = node.kind === 'external' || node.kind === 'api';
+    const penwidth = isRootKind || isBoundary ? ', penwidth=2' : '';
+    const peripheries = isBoundary ? ', peripheries=2' : '';
     // Transient => a fresh instance per injection. box3d reads as a stack of instances.
     const shape = isStackedNode(node) ? ', shape=box3d' : '';
     return `  "${dotEscape(node.id)}" [fillcolor="${color}", style="${styles.join(',')}", label="${label}"${penwidth}${peripheries}${shape}];\n`;
