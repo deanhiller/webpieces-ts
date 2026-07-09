@@ -39,12 +39,15 @@ export const RULE_NAMES = {
 // `.webpieces/` is the single working dir for all webpieces tooling: ai-hook-rules
 // bootstrap/cache, the instruct-ai docs, and the workflow state. To keep the top level
 // quiet, per-feature workflow dirs are nested one level down under `merge-info/<feature>`
-// and `pr-info/<feature>` rather than scattered as top-level `merge-<feature>`/`pr-<feature>`.
+// and `pr-review/<feature>` rather than scattered as top-level `merge-<feature>`/`pr-<feature>`.
 // `.webpieces/` is gitignored; only the per-feature subdirs under those two homes are subject
 // to 30-day cleanup (the homes themselves, like hooks/ and instruct-ai/, are permanent).
 export const WEBPIECES_TMP_DIR = '.webpieces';
 export const MERGE_INFO_DIR = 'merge-info';
-export const PR_INFO_DIR = 'pr-info';
+// The PR working home. Renamed from the legacy `pr-info` to `pr-review` for clarity (it holds the
+// AI's PR review + rendered body). Old `pr-info/` dirs are gitignored local state and self-clear via
+// cleanTmp's legacy `pr-` sweep.
+export const PR_REVIEW_DIR = 'pr-review';
 export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 
 // Proof-of-work the AI must produce for every conflicted file it resolves during a 3-point

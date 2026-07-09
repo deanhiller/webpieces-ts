@@ -6,9 +6,12 @@ import {
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
 import { gatherInfo } from '../git-gatherInfo';
-import { baseBranchName, nextFreePreMergeNumber, preMergeBackupName } from './branch-naming';
+import { baseBranchName, preMergeBackupName } from './branch-naming';
 import { runGitChecked } from './git-exec';
-import { MergeMarker, perFileContextDir, writeMergeMarker, mergeRunDirFor } from './merge-state';
+import {
+    MergeMarker, perFileContextDir, writeMergeMarker, mergeRunDirFor,
+    nextMergeSlotNumber, writeCleanMergeMarker,
+} from './merge-state';
 
 // merge-START: the first half of the 3-point squash-merge lifecycle. Brings origin/main into a fresh
 // `<branch>Squash`, and on conflict writes the 3-point context files + the unvalidated marker + the
@@ -78,18 +81,18 @@ class SyncSlot {
     }
 }
 
-// Pick the first free `<branch>PreMerge<n>` slot number, then WIPE the paired `<home>/merge-<n>/` run
-// dir — a fresh sync means no merge is in progress, so any leftover `merge-<n>` is stale (its own sync
-// ended, or its branch was deleted) and MUST NOT leak its old per-file merge-explanation.md into this
-// merge's validation. Returns the backup branch name + the (now-empty) run dir path, both keyed on `n`.
+// Pick this sync's slot number MONOTONICALLY from the durable audit dirs — one past the highest
+// existing `<home>/merge-<n>/`, then stepped past any existing `<branch>PreMerge<n>` branch so the
+// same `n` is also free for the paired backup branch. Unlike the old first-free-branch scheme, the
+// number is never recycled onto a prior merge's context, so we DO NOT (and must not) wipe the run
+// dir: earlier `merge-<k>/` dirs are the audit trail we now deliberately keep. Returns the backup
+// branch name + the (fresh, non-existent) run dir path, both keyed on `n`.
 function chooseSyncSlot(home: string, currentBranch: string): SyncSlot {
-    const n = nextFreePreMergeNumber(
-        currentBranch,
-        (name: string): boolean => spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0,
-    );
-    const runDir = mergeRunDirFor(home, n);
-    fs.rmSync(runDir, { recursive: true, force: true });
-    return new SyncSlot(preMergeBackupName(currentBranch, n), runDir);
+    const branchExists = (name: string): boolean =>
+        spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0;
+    let n = nextMergeSlotNumber(home);
+    while (branchExists(preMergeBackupName(currentBranch, n))) n += 1;
+    return new SyncSlot(preMergeBackupName(currentBranch, n), mergeRunDirFor(home, n));
 }
 
 // Snapshot the pre-merge state onto the caller-chosen `backupBranch` (`<currentBranch>PreMerge<n>`),
@@ -360,6 +363,9 @@ export async function mergeStart(repoRoot: string, verb: MutationVerb, home: str
         process.stdout.write('ℹ️  Already up-to-date with main (nothing to merge).\n');
     } else {
         runGitChecked(['commit', '-m', `Squash merge of ${currentBranch}`], 'Failed to commit squash merge');
+        // A real merge happened with no conflicts — leave a durable slot record so EVERY merge (not
+        // just conflicted ones) is accounted for under merge-info/<feature>/merge-<n>/.
+        writeCleanMergeMarker(mergeDir, hashes.hashForkPoint, hashes.hashFeatureHead, hashes.hashMainHead);
     }
     return new MergeStartResult('clean', new MergeContext(currentBranch, squashBranch, backupBranch, prNumber), mergeDir);
 }

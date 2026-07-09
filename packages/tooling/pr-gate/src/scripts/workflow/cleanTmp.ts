@@ -1,15 +1,16 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_INFO_DIR, runMain } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_REVIEW_DIR, runMain } from '@webpieces/rules-config';
 
 const CUTOFF_DAYS = 30;
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 // Per-feature workflow dirs now live under `.webpieces/merge-info/<feature>` and
-// `.webpieces/pr-info/<feature>`; those two homes are permanent (like hooks/ and instruct-ai/) and
+// `.webpieces/pr-review/<feature>`; those two homes are permanent (like hooks/ and instruct-ai/) and
 // only their stale subdirs are cleaned. `LEGACY_PREFIXES` sweeps the old flat top-level layout
-// (`merge-<feature>`/`review-<feature>`/`pr-<feature>`) so it self-clears after the move.
+// (`merge-<feature>`/`review-<feature>`/`pr-<feature>`) so it self-clears after the move — which also
+// reaps the retired `pr-info/` home (it matches the `pr-` prefix and is no longer the active PR home).
 const LEGACY_PREFIXES = ['merge-', 'review-', 'pr-'];
 
 export async function cleanTmp(): Promise<void> {
@@ -35,8 +36,8 @@ export async function cleanTmp(): Promise<void> {
 
     // Stale per-feature subdirs under each permanent home.
     deletedCount += cleanStaleSubdirs(path.join(tmpBase, MERGE_INFO_DIR), MERGE_INFO_DIR, now, cutoffMs);
-    deletedCount += cleanStaleSubdirs(path.join(tmpBase, PR_INFO_DIR), PR_INFO_DIR, now, cutoffMs);
-    // Legacy flat top-level dirs from before the merge-info/pr-info nesting.
+    deletedCount += cleanStaleSubdirs(path.join(tmpBase, PR_REVIEW_DIR), PR_REVIEW_DIR, now, cutoffMs);
+    // Legacy flat top-level dirs from before the merge-info/pr-review nesting (also reaps old pr-info/).
     deletedCount += cleanLegacyTopLevel(tmpBase, now, cutoffMs);
 
     if (deletedCount === 0) {
@@ -69,11 +70,12 @@ function cleanStaleSubdirs(parentDir: string, label: string, now: number, cutoff
 }
 
 // Sweep the pre-nesting flat layout (`merge-<feature>` etc.), skipping the current homes (whose
-// names also start with `merge-`/`pr-`) so this never deletes merge-info/ or pr-info/ themselves.
+// names also start with `merge-`/`pr-`) so this never deletes merge-info/ or pr-review/ themselves.
+// The retired `pr-info/` home is deliberately NOT skipped — it matches `pr-` and self-clears here.
 function cleanLegacyTopLevel(tmpBase: string, now: number, cutoffMs: number): number {
     let count = 0;
     for (const entry of fs.readdirSync(tmpBase)) {
-        if (entry === MERGE_INFO_DIR || entry === PR_INFO_DIR) continue;
+        if (entry === MERGE_INFO_DIR || entry === PR_REVIEW_DIR) continue;
         if (!LEGACY_PREFIXES.some((prefix: string): boolean => entry.startsWith(prefix))) continue;
         const fullPath = path.join(tmpBase, entry);
         const stat = fs.statSync(fullPath);

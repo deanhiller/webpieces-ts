@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { baseBranchName, preMergeBackupName, nextFreePreMergeNumber } from './branch-naming';
+import { baseBranchName, preMergeBackupName } from './branch-naming';
 
 describe('baseBranchName', () => {
     it('leaves a gen-1 branch unchanged', () => {
@@ -28,16 +28,5 @@ describe('preMergeBackupName', () => {
         expect(preMergeBackupName('feat/x-migration', 1)).toBe('feat/x-migrationPreMerge1');
         expect(preMergeBackupName('feat/x-migration', 2)).toBe('feat/x-migrationPreMerge2');
         expect(preMergeBackupName('feat/x-migration', 3)).toBe('feat/x-migrationPreMerge3');
-    });
-});
-
-describe('nextFreePreMergeNumber', () => {
-    it('returns 1 when nothing exists yet', () => {
-        expect(nextFreePreMergeNumber('feat/x', () => false)).toBe(1);
-    });
-
-    it('skips taken slots and returns the first free number', () => {
-        const taken = new Set(['feat/xPreMerge1', 'feat/xPreMerge2']);
-        expect(nextFreePreMergeNumber('feat/x', (name: string): boolean => taken.has(name))).toBe(3);
     });
 });

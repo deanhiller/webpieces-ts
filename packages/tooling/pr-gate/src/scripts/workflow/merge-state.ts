@@ -70,6 +70,64 @@ export function mergeRunDirFor(home: string, n: number): string {
     return path.join(home, `merge-${n}`);
 }
 
+// The next NEVER-REUSED merge slot number for a feature home: one past the highest existing
+// `merge-<n>/` dir (or 1 if none). This is the durable, monotonic source of truth for slot numbers —
+// derived from the audit dirs THEMSELVES, not from which transient `<feature>PreMerge<n>` branch
+// happens to exist. The old branch-existence scheme recycled a number the moment its snapshot was
+// pruned, and the next sync then wiped that slot's `merge-explanation.md`; numbering off the dirs
+// makes every merge keep its own `merge-<n>/` record permanently. Pure fs — unit-testable.
+export function nextMergeSlotNumber(home: string): number {
+    if (!fs.existsSync(home)) return 1;
+    let max = 0;
+    for (const entry of fs.readdirSync(home)) {
+        const match = entry.match(/^merge-(\d+)$/);
+        if (match === null) continue;
+        const n = parseInt(match[1], 10);
+        if (n > max) max = n;
+    }
+    return max + 1;
+}
+
+// Data-only: the three commit points of a 3-point merge as persisted in `updatemain-hashes.json`
+// (the exact key shape the conflict path already writes), plus when it was recorded.
+export class MergeHashRecord {
+    hashForkPoint: string;
+    hashFeatureHead: string;
+    hashMainHead: string;
+    timestamp: string;
+
+    constructor(hashForkPoint: string, hashFeatureHead: string, hashMainHead: string, timestamp: string) {
+        this.hashForkPoint = hashForkPoint;
+        this.hashFeatureHead = hashFeatureHead;
+        this.hashMainHead = hashMainHead;
+        this.timestamp = timestamp;
+    }
+}
+
+// Marker written for a CLEAN (no-conflict) sync so every merge — not just conflicted ones — leaves a
+// durable, self-describing record under `merge-info/<feature>/merge-<n>/`. A clean merge produces no
+// per-file `merge-explanation.md`; this file is the "yes, a merge happened here, and it needed no
+// 3-point resolution" proof, with the A/B/C shas kept so it stays auditable.
+export const NO_CONFLICT_MARKER_FILE = 'no-3point-merge.md';
+
+// Write the clean-merge marker + a per-slot `updatemain-hashes.json` copy into the slot's own dir.
+export function writeCleanMergeMarker(
+    mergeDir: string, forkPoint: string, featureHead: string, mainHead: string,
+): void {
+    fs.mkdirSync(mergeDir, { recursive: true });
+    const body =
+        '# Clean squash-merge — no 3-point conflict resolution needed\n\n' +
+        'This sync merged main into the feature with no conflicts, so the AI wrote no per-file\n' +
+        'merge-explanation.md. The 3-point shas below are kept so the merge is still auditable.\n\n' +
+        `3-point shas:  A(fork)=${forkPoint}  B(feature)=${featureHead}  C(main)=${mainHead}\n\n` +
+        'Reconstruct what each side changed:\n' +
+        `  feature (B−A):  git diff ${forkPoint} ${featureHead}\n` +
+        `  main    (C−A):  git diff ${forkPoint} ${mainHead}\n`;
+    fs.writeFileSync(path.join(mergeDir, NO_CONFLICT_MARKER_FILE), body);
+    const record = new MergeHashRecord(forkPoint, featureHead, mainHead, new Date().toISOString());
+    fs.writeFileSync(path.join(mergeDir, 'updatemain-hashes.json'), JSON.stringify(record, null, 2) + '\n');
+}
+
 // Locate the in-progress merge's run dir: the `<home>/merge-*/` subdir holding a marker. There is at
 // most one (a fresh sync can't start while a merge is in progress); if more than one somehow exists,
 // prefer an UNVALIDATED marker (the live conflict), else return the first found. Null when none.
