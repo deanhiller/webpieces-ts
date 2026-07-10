@@ -6,7 +6,7 @@
             "root": "ClientCloudTasksFactory",
             "rootKind": "apiImplementation",
             "file": "packages/cloud/cloudtasks-client/src/ClientCloudTasksFactory.ts",
-            "maxLevel": 2,
+            "maxLevel": 3,
             "nodes": [
                 {
                     "id": "ClientCloudTasksFactory",
@@ -17,6 +17,15 @@
                     "level": 0
                 },
                 {
+                    "id": "GcpTaskInvoker",
+                    "className": "GcpTaskInvoker",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/cloud/cloudtasks-client/src/GcpTaskInvoker.ts",
+                    "level": 2,
+                    "api": "TaskInvoker"
+                },
+                {
                     "id": "RequestContextHeaders",
                     "className": "RequestContextHeaders",
                     "kind": "class",
@@ -25,12 +34,12 @@
                     "level": 2
                 },
                 {
-                    "id": "TaskInvoker",
-                    "className": "TaskInvoker",
+                    "id": "Secrets",
+                    "className": "Secrets",
                     "kind": "unresolved",
                     "scope": "transient",
-                    "file": "packages/cloud/cloudtasks-client/src/TaskProxyClient.ts",
-                    "level": 2
+                    "file": "packages/cloud/cloudtasks-client/src/GcpTaskInvoker.ts",
+                    "level": 3
                 },
                 {
                     "id": "TaskProxyClient",
@@ -52,6 +61,24 @@
                     "paramType": "Provider<TaskProxyClient>"
                 },
                 {
+                    "from": "GcpTaskInvoker",
+                    "to": "Secrets",
+                    "injection": "token",
+                    "token": "Secrets",
+                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
+                    "paramName": "secrets",
+                    "paramType": "Secrets"
+                },
+                {
+                    "from": "TaskProxyClient",
+                    "to": "GcpTaskInvoker",
+                    "injection": "token",
+                    "token": "TaskInvoker",
+                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskTypes.ts#TaskInvoker",
+                    "paramName": "invoker",
+                    "paramType": "TaskInvoker"
+                },
+                {
                     "from": "TaskProxyClient",
                     "to": "RequestContextHeaders",
                     "injection": "token",
@@ -59,19 +86,10 @@
                     "tokenKey": "class:packages/core/core-context/src/RequestContextHeaders.ts#RequestContextHeaders",
                     "paramName": "headers",
                     "paramType": "RequestContextHeaders"
-                },
-                {
-                    "from": "TaskProxyClient",
-                    "to": "TaskInvoker",
-                    "injection": "token",
-                    "token": "TaskInvoker",
-                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskTypes.ts#TaskInvoker",
-                    "paramName": "invoker",
-                    "paramType": "TaskInvoker"
                 }
             ],
             "unresolved": [
-                "TaskInvoker"
+                "Secrets"
             ]
         }
     ]
