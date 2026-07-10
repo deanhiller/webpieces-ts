@@ -2,14 +2,16 @@
  * Workspace validation target factories
  *
  * The no-argument `architecture:*` validation target configurations, extracted
- * from plugin.ts (which is at its file-size limit). Each static method returns
+ * from plugin.ts (which is at its file-size limit). Each instance method returns
  * the nx TargetConfiguration that runs one @webpieces/nx-webpieces-rules validator.
+ * Instantiate once and inject the instance where the targets are assembled (no
+ * static methods — a static method can't be injected).
  */
 
 import { TargetConfiguration } from '@nx/devkit';
 
 export class ValidationTargets {
-    static noCycles(): TargetConfiguration {
+    noCycles(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-no-architecture-cycles',
             cache: true,
@@ -21,7 +23,7 @@ export class ValidationTargets {
         };
     }
 
-    static noSkipLevel(): TargetConfiguration {
+    noSkipLevel(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-no-skiplevel-deps',
             cache: true,
@@ -33,7 +35,7 @@ export class ValidationTargets {
         };
     }
 
-    static packageJson(): TargetConfiguration {
+    packageJson(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-packagejson',
             cache: true,
@@ -50,7 +52,7 @@ export class ValidationTargets {
      * workspace root (loaded by the executor via @webpieces/rules-config — the same
      * source of truth as @webpieces/ai-hook-rules).
      */
-    static code(): TargetConfiguration {
+    code(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-code',
             cache: false, // Don't cache - depends on git state
@@ -62,7 +64,7 @@ export class ValidationTargets {
         };
     }
 
-    static versionsLocked(): TargetConfiguration {
+    versionsLocked(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-versions-locked',
             cache: true,
@@ -75,7 +77,7 @@ export class ValidationTargets {
         };
     }
 
-    static tsInSrc(): TargetConfiguration {
+    tsInSrc(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-ts-in-src',
             cache: false,
@@ -87,7 +89,7 @@ export class ValidationTargets {
         };
     }
 
-    static nxWiring(): TargetConfiguration {
+    nxWiring(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-nx-wiring',
             cache: false, // Cheap; depends on nx.json + project graph, not worth caching
@@ -104,7 +106,7 @@ export class ValidationTargets {
      * source (addRoutes = implements, createRpcClient/createPubSubClient = uses), so
      * it depends on all source + project.json, not just the committed graph.
      */
-    static apiRelations(): TargetConfiguration {
+    apiRelations(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-api-relations',
             cache: false,
