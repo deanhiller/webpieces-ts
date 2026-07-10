@@ -59,10 +59,18 @@ export function provideFrameworkSingleton(): ClassDecorator {
 }
 
 /**
- * Framework equivalent of @provideSingletonAs: binds the impl to a token (Symbol or abstract
- * class) as a singleton, into the webpieces framework registry.
+ * Framework equivalent of @DefaultImplementationOn: marks this class as the DEFAULT (overridable)
+ * singleton implementation OF a contract token (Symbol or abstract class), into the webpieces
+ * framework registry. Binds `token -> thisClass` as a singleton.
+ *
+ * An app overrides it via appOverrides (loaded LAST), same idiom as AuthConfig:
+ * `(await options.rebind(TOKEN)).to(OtherImpl)`.
+ *
+ * The DI-graph designer reads this in pass 1, so `@inject(TOKEN)` renders as `TOKEN (thisClass)`
+ * and expands this class's own dependencies.
  */
-export function provideFrameworkSingletonAs<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
+// webpieces-disable no-function-outside-class -- a decorator factory cannot be a class method
+export function DefaultFrameworkImplementationOn<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
     // webpieces-disable no-any-unknown -- decorator target is any class constructor
     return (target: any) => {
         frameworkRegistry.push(new FrameworkBinding(serviceIdentifier, target));

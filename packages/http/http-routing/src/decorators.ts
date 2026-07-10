@@ -32,6 +32,6 @@ export function SourceFile(filepath: string): ClassDecorator {
     };
 }
 
-// NOTE: provideSingleton / provideSingletonAs / provideTransient moved to
+// NOTE: provideSingleton / DefaultImplementationOn / provideTransient moved to
 // @webpieces/core-context (the shared DI seam). http-routing re-exports them
 // from there in index.ts for back-compat.

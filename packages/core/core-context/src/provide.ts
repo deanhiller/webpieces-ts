@@ -31,18 +31,26 @@ export function provideSingleton(): ClassDecorator {
 }
 
 /**
- * Provides a singleton-scoped dependency bound to a specific token (Symbol or abstract class).
- * Use this in libraries/apis-external/** to bind an impl to the Symbol defined in libraries/apis/**.
+ * Marks this class as the DEFAULT (overridable) singleton implementation OF a contract token
+ * (a Symbol or an abstract class). Binds `token -> thisClass` as a singleton. Guice's
+ * `@ImplementedBy`, done impl-side so the api never imports the impl (no cycle).
+ *
+ * An app overrides the default via appOverrides, same idiom as AuthConfig:
+ * `(await options.rebind(TOKEN)).to(OtherImpl)`.
+ *
+ * The DI-graph designer reads this in pass 1, so `@inject(TOKEN)` renders as `TOKEN (thisClass)`
+ * and expands this class's own dependencies instead of dead-ending as unresolved.
  *
  * Usage:
  * ```typescript
  * import { SOME_API_TOKEN } from '@myorg/some-api';
  *
- * @provideSingletonAs(SOME_API_TOKEN)
+ * @DefaultImplementationOn(SOME_API_TOKEN)
  * export class SomeApiImpl { ... }
  * ```
  */
-export function provideSingletonAs<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
+// webpieces-disable no-function-outside-class -- a decorator factory cannot be a class method
+export function DefaultImplementationOn<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
     return provide(serviceIdentifier, (bind: BindInWhenOnFluentSyntax<T>) => bind.inSingletonScope());
 }
 

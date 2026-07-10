@@ -150,7 +150,7 @@ export class MyService {
 
 Choose the right pattern by use case:
 - **Own class** → `@provideSingleton()` + inject by type. No Symbol.
-- **`libraries/apis-external/**` impl** → import the Symbol from `libraries/apis/**` and annotate with `@provideSingletonAs(TOKEN)`. No new Symbol creation in `apis-external`.
+- **`libraries/apis-external/**` impl** → import the Symbol from `libraries/apis/**` and annotate with `@DefaultImplementationOn(TOKEN)`. No new Symbol creation in `apis-external`.
 - **External library class you cannot decorate** (DataSource, Anthropic SDK, etc.) → bind in a ContainerModule using the class itself as the token: `bind<Anthropic>(Anthropic).toDynamicValue(() => new Anthropic({...})).inSingletonScope()`. Inject by type — no Symbol, no `@inject`.
 - **Unavoidable** → add `// webpieces-disable no-symbol-di-tokens -- <reason>` to the line.
 
@@ -165,7 +165,7 @@ Choose the right pattern by use case:
 - `@Controller()` - Mark controller class
 - `@SourceFile('path/to/controller.ts')` - Explicit filepath for filter matching
 - `@provideSingleton()` - Register as singleton (binds class to itself)
-- `@provideSingletonAs(TOKEN)` - Register as singleton bound to TOKEN; use in `libraries/apis-external/**` with a Symbol imported from `libraries/apis/**`
+- `@DefaultImplementationOn(TOKEN)` - Register as the default (overridable) singleton implementation of TOKEN; use in `libraries/apis-external/**` with a Symbol imported from `libraries/apis/**`
 
 ### 7. Testing
 

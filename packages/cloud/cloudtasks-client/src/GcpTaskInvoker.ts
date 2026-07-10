@@ -1,6 +1,6 @@
 import { injectable, inject, optional } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
-import { provideFrameworkSingleton } from '@webpieces/core-context';
+import { DefaultFrameworkImplementationOn } from '@webpieces/core-context';
 import {
     getProjectId,
     getRegion,
@@ -20,7 +20,10 @@ type ITask = protos.google.cloud.tasks.v2.ITask;
  * shared-secret header). The task name is derived from the dedup name for idempotency
  * (a duplicate enqueue is rejected ALREADY_EXISTS = idempotent success upstream).
  */
-@provideFrameworkSingleton()
+// Default (overridable) impl of the TaskInvoker contract: binds `TaskInvoker -> GcpTaskInvoker`
+// as a framework singleton. Tests/local dev override it via appOverrides:
+// `(await options.rebind(TaskInvoker)).to(InMemoryTaskInvoker)` — same idiom as AuthConfig.
+@DefaultFrameworkImplementationOn(TaskInvoker)
 @injectable()
 export class GcpTaskInvoker extends TaskInvoker {
     private readonly client = new CloudTasksClient();
