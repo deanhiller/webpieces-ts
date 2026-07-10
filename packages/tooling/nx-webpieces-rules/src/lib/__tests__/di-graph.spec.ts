@@ -554,6 +554,33 @@ describe('di-graph analyzer - designed-lib @DocumentDesign roots', () => {
         fixture = new Fixture({ 'plain.ts': 'import { injectable } from "inversify";\n@injectable()\nexport class X {}\n' });
         expect(fixture.buildApiImpl().designs).toEqual([]);
     });
+
+    it('resolves an abstract @DocumentDesign API root through its DefaultForApi impl', () => {
+        fixture = new Fixture({
+            'api.ts':
+                "import { DocumentDesign } from '@webpieces/core-util';\n" +
+                '@DocumentDesign()\nexport abstract class Mailer {\n    abstract send(): Promise<void>;\n}\n',
+            'impl.ts':
+                "import { injectable } from 'inversify';\n" +
+                "import { provideFrameworkSingletonDefaultForApi } from '@webpieces/core-context';\n" +
+                "import { Mailer } from './api';\n" +
+                '@injectable()\nexport class Smtp {}\n' +
+                '@provideFrameworkSingletonDefaultForApi(Mailer)\n@injectable()\n' +
+                'export class SmtpMailer extends Mailer {\n' +
+                '    constructor(private readonly smtp: Smtp) { super(); }\n' +
+                '    async send(): Promise<void> {}\n}\n',
+        });
+        const graph = fixture.buildApiImpl();
+        // The @DocumentDesign is on the abstract Mailer, but the design roots on its default impl.
+        expect(rootNames(graph)).toEqual(['SmtpMailer']);
+        const root = node(graph, 'SmtpMailer');
+        expect(root?.kind).toBe('apiImplementation');
+        expect(root?.api).toBe('Mailer'); // box renders "Mailer (SmtpMailer)"
+        // The walk descends the IMPL's constructor, not the empty abstract contract's.
+        expect(edge(graph, 'SmtpMailer', 'Smtp')).toBeDefined();
+        // The abstract contract is not left as a separate dead-end node.
+        expect(node(graph, 'Mailer')).toBeUndefined();
+    });
 });
 
 describe('di-graph analyzer-strategy - selection', () => {
