@@ -80,4 +80,16 @@ describe('generateHTML', () => {
         expect(html).toContain('express');
         expect(html).toContain('designed-lib');
     });
+
+    it('wires up hover-highlight so connections bolden on box hover', () => {
+        const html = generateHTML(generateDot(GRAPH));
+        // The post-render hook and its mouse handlers must be present.
+        expect(html).toContain('wireHoverHighlight');
+        expect(html).toContain('mouseenter');
+        expect(html).toContain('mouseleave');
+        // The hover-highlight CSS classes the script toggles.
+        expect(html).toContain('wp-hl');
+        expect(html).toContain('wp-neighbor');
+        expect(html).toContain('wp-focus');
+    });
 });
