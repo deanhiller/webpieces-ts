@@ -269,13 +269,42 @@
             ]
         },
         "legacy-server": {
-            "level": 6,
+            "level": 5,
             "framework": ["express"],
             "role": "server",
             "shortDescription": "Example of INCREMENTAL webpieces adoption: a pre-existing express app (own routes, untouched) with the webpieces api → filters → controller pipeline bolted on via `WebpiecesRouteCreator`, using the SAME shared `setupCompanyRuntime` startup as the greenfield server. Proven by an integration test.",
             "responsibilitiesFile": "apps/app-example/legacy-server/responsibilities.md",
+            "apiRelations": {
+                "client-server-api": {
+                    "kind": "implements",
+                    "implements": [
+                        {
+                            "api": "PublicApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "SaveApi",
+                            "type": "rpc"
+                        }
+                    ],
+                    "uses": []
+                },
+                "server2-api": {
+                    "kind": "uses",
+                    "implements": [],
+                    "uses": [
+                        {
+                            "api": "Server2Api",
+                            "type": "rpc"
+                        }
+                    ]
+                }
+            },
             "dependsOn": [
-                "client-server"
+                "client-server-api",
+                "company-svc-core",
+                "http-client-node",
+                "server2-api"
             ]
         },
         "nx-webpieces-rules": {
