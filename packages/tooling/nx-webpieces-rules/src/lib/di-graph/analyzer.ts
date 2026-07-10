@@ -31,9 +31,9 @@ import { classTokenKey, relativeFile, resolveTokenKey } from './token-resolver';
 const DI_DECORATORS = new Set([
     'provideSingleton',
     'provideTransient',
-    'DefaultImplementationOn',
+    'provideSingletonDefaultForApi',
     'provideFrameworkSingleton',
-    'DefaultFrameworkImplementationOn',
+    'provideFrameworkSingletonDefaultForApi',
     'provideFrameworkTransient',
     'injectable',
 ]);

@@ -2,7 +2,7 @@
  * Token Resolver
  *
  * Canonicalizes a DI token expression (the argument of @inject(...), @multiInject(...),
- * @DefaultImplementationOn(...), or bind(...)) into a stable string key so that a token
+ * @provideSingletonDefaultForApi(...), or bind(...)) into a stable string key so that a token
  * DEFINITION (e.g. `TYPES.Counter` in one file) and its BIND SITE (e.g.
  * `bind(TYPES.Counter)` in another package) resolve to the same key.
  *

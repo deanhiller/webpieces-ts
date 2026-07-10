@@ -39,11 +39,11 @@ export {
 } from './decorators';
 
 // DI provider decorators moved to core-context; re-exported here for back-compat
-export { provideSingleton, DefaultImplementationOn, provideTransient } from '@webpieces/core-context';
+export { provideSingleton, provideSingletonDefaultForApi, provideTransient } from '@webpieces/core-context';
 // Framework-only DI registry (packages/** framework classes use these; see frameworkProvide.ts)
 export {
     provideFrameworkSingleton,
-    DefaultFrameworkImplementationOn,
+    provideFrameworkSingletonDefaultForApi,
     buildFrameworkModule,
 } from '@webpieces/core-context';
 

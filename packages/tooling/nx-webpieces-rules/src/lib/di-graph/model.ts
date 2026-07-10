@@ -184,7 +184,7 @@ export class TokenRef {
 
 /**
  * One binding discovered in pass 1 — either a ContainerModule bind() call or a
- * @provideSingleton/@DefaultImplementationOn/@provideTransient decorator.
+ * @provideSingleton/@provideSingletonDefaultForApi/@provideTransient decorator.
  */
 export class Binding {
     tokenKey: string;
