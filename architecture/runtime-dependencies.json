@@ -4,67 +4,87 @@
             "level": 2,
             "implements": [],
             "uses": [
-                "client-server-api"
+                "PublicApi",
+                "SaveApi"
             ],
             "dependsOn": [
-                "client-server"
+                "client-server",
+                "legacy-server"
             ]
-        },
-        "app-example-e2e": {
-            "level": 0,
-            "implements": [],
-            "uses": [],
-            "dependsOn": []
         },
         "client-server": {
             "level": 1,
             "implements": [
-                "client-server-api"
+                "PublicApi",
+                "SaveApi",
+                "SecureApi"
             ],
             "uses": [
-                "server2-api"
+                "Server2Api"
             ],
             "dependsOn": [
                 "server2"
             ]
         },
-        "company-core": {
-            "level": 0,
-            "implements": [],
-            "uses": [],
-            "dependsOn": []
-        },
-        "company-svc-core": {
-            "level": 0,
-            "implements": [],
-            "uses": [],
-            "dependsOn": []
+        "legacy-server": {
+            "level": 1,
+            "implements": [
+                "PublicApi",
+                "SaveApi"
+            ],
+            "uses": [
+                "Server2Api"
+            ],
+            "dependsOn": [
+                "server2"
+            ]
         },
         "server2": {
             "level": 0,
             "implements": [
-                "server2-api"
+                "Server2Api"
             ],
             "uses": [],
             "dependsOn": []
         }
     },
     "apis": {
-        "client-server-api": {
+        "PublicApi": {
             "implementedBy": [
-                "client-server"
+                "client-server",
+                "legacy-server"
             ],
             "usedBy": [
                 "angular-site"
-            ]
+            ],
+            "type": "rpc"
         },
-        "server2-api": {
+        "SaveApi": {
+            "implementedBy": [
+                "client-server",
+                "legacy-server"
+            ],
+            "usedBy": [
+                "angular-site"
+            ],
+            "type": "rpc"
+        },
+        "SecureApi": {
+            "implementedBy": [
+                "client-server"
+            ],
+            "usedBy": [],
+            "type": "rpc"
+        },
+        "Server2Api": {
             "implementedBy": [
                 "server2"
             ],
             "usedBy": [
-                "client-server"
-            ]
+                "client-server",
+                "legacy-server"
+            ],
+            "type": "rpc"
         }
     },
     "runtimeEdges": [
@@ -72,15 +92,35 @@
             "from": "angular-site",
             "to": "client-server",
             "via": [
-                "client-server-api"
-            ]
+                "PublicApi",
+                "SaveApi"
+            ],
+            "type": "rpc"
+        },
+        {
+            "from": "angular-site",
+            "to": "legacy-server",
+            "via": [
+                "PublicApi",
+                "SaveApi"
+            ],
+            "type": "rpc"
         },
         {
             "from": "client-server",
             "to": "server2",
             "via": [
-                "server2-api"
-            ]
+                "Server2Api"
+            ],
+            "type": "rpc"
+        },
+        {
+            "from": "legacy-server",
+            "to": "server2",
+            "via": [
+                "Server2Api"
+            ],
+            "type": "rpc"
         }
     ],
     "unresolvedUses": []
