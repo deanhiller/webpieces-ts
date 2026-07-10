@@ -10,7 +10,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { loadBlessedGraph } from '../../lib/graph-loader';
-import { writeVisualization, openVisualization } from '../../lib/graph-visualizer';
+import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { toError } from '../../toError';
 
 export interface VisualizeExecutorOptions {
@@ -45,12 +45,13 @@ export default async function runExecutor(
 
         // Generate visualization
         console.log('🎨 Generating visualization...');
-        const vizPaths = writeVisualization(graph, workspaceRoot);
+        const visualizer = new GraphVisualizer();
+        const vizPaths = visualizer.writeVisualization(graph, workspaceRoot);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 
         // Try to open in browser
         console.log('\n🌐 Opening visualization in browser...');
-        if (openVisualization(vizPaths.htmlPath)) {
+        if (visualizer.openVisualization(vizPaths.htmlPath)) {
             console.log('✅ Browser opened');
         } else {
             console.log(`⚠️  Could not auto-open. Open manually: ${vizPaths.htmlPath}`);

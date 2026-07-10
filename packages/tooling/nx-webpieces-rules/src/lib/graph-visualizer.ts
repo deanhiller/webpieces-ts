@@ -5,13 +5,17 @@
  * - DOT format (for Graphviz)
  * - Interactive HTML (using viz.js)
  *
- * Output files go to tmp/webpieces/ for easy viewing without committing.
+ * All behavior lives on the injectable GraphVisualizer class so webpieces DI +
+ * @DocumentDesign can wire it — module-scope functions are a dead end the DI
+ * graph can't reach.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
+import { GraphNames } from './graph-names';
+import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { toError } from '../toError';
 
 /**
@@ -30,137 +34,151 @@ const FRAMEWORK_COLORS: Record<string, string> = {
 const DEFAULT_FRAMEWORK_COLOR = '#F5F5F5'; // grey - unknown/empty env set
 
 /**
- * Fill color for an env set — the color of the first env in the set that has a
- * known color, else the default.
- */
-function frameworkColor(frameworks: string[]): string {
-    for (const env of frameworks) {
-        const color = FRAMEWORK_COLORS[env];
-        if (color !== undefined) return color;
-    }
-    return DEFAULT_FRAMEWORK_COLOR;
-}
-
-/**
- * Role border styling — fill stays keyed on framework; the border shows a
- * project's ROLE at a glance. Server and client are the top-level runnable
- * nodes, so they get bold, colored borders to stand out:
- *   server       → thick GREEN border (a runnable server app)
- *   client       → thick RED border   (a client app, e.g. angular)
- *   designed-lib → bold border        (a library with a generated @DocumentDesign design)
- *   lib / other  → plain thin border
- */
-function roleBorderAttrs(role: string): string {
-    if (role === 'server') return ', color="green", penwidth=3';
-    if (role === 'client') return ', color="red", penwidth=3';
-    if (role === 'designed-lib') return ', penwidth=2';
-    return '';
-}
-
-/**
- * Remove scope from name for display
- * '@scope/name' → 'name'
- * 'name' → 'name'
- */
-function getShortName(name: string): string {
-    return name.includes('/') ? name.split('/').pop()! : name;
-}
-
-/**
  * Directory (repo-relative) that the committed architecture HTML lives in.
  * Node click-through links are computed relative to this so they resolve when
  * the file is opened straight from the checkout.
  */
 const ARCH_OUTPUT_DIR = 'architecture';
 
-/**
- * Click-through href for a node: the project's committed design.html, made
- * relative to architecture/dependencies.html. Returns null when the project has
- * no generated DI design (no design.json → no clickable design page).
- *
- * designFile is repo-relative posix (e.g. 'packages/http/http-api/design.json');
- * we swap the extension and re-root it at architecture/ so the browser resolves
- * '../packages/http/http-api/design.html' from the checkout.
- */
-function designHtmlHref(designFile: string | undefined): string | null {
-    if (!designFile) return null;
-    const designHtml = designFile.replace(/design\.json$/, 'design.html');
-    return path.posix.relative(ARCH_OUTPUT_DIR, designHtml);
+export class VisualizationPaths {
+    htmlPath: string;
+
+    constructor(htmlPath: string) {
+        this.htmlPath = htmlPath;
+    }
 }
 
-/**
- * Generate Graphviz DOT format from the graph
- */
-export function generateDot(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): string {
-    let dot = 'digraph Architecture {\n';
-    dot += '  rankdir=TB;\n';
-    dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
-    dot += '  edge [fontname="Arial"];\n\n';
+export class GraphVisualizer {
+    private readonly names = new GraphNames();
+    private readonly responsibilities = new ResponsibilitiesRenderer();
 
-    // Group projects by level
-    const levels: Record<number, string[]> = {};
-    for (const [project, info] of Object.entries(graph)) {
-        if (!levels[info.level]) levels[info.level] = [];
-        levels[info.level].push(project);
-    }
-
-    // Nodes: fill colored by framework env set (libType), border shaped by role;
-    // the label shows the env set + role (e.g. [browser, node] · server).
-    // A node with a generated DI design also gets a URL so the rendered SVG box
-    // is clickable — it opens that project's committed design.html in a new tab.
-    for (const [project, info] of Object.entries(graph)) {
-        const shortName = getShortName(project);
-        const frameworks = info.framework ?? [];
-        const role = info.role ?? 'lib';
-        const color = frameworkColor(frameworks);
-        const border = roleBorderAttrs(role);
-        const href = designHtmlHref(info.designFile);
-        const link = href ? `, URL="${href}", target="_blank"` : '';
-        const envSet = `[${frameworks.join(', ')}]`;
-        const labelMeta = `L${info.level} · ${envSet} · ${role}`;
-        dot += `  "${shortName}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
-    }
-
-    dot += '\n';
-
-    // Create same-rank subgraphs for each level
-    for (const [level, projects] of Object.entries(levels)) {
-        dot += `  { rank=same; `;
-        projects.forEach((p) => {
-            const shortName = getShortName(p);
-            dot += `"${shortName}"; `;
-        });
-        dot += '}\n';
-    }
-
-    dot += '\n';
-
-    // Create edges (dependencies)
-    for (const [project, info] of Object.entries(graph)) {
-        const shortName = getShortName(project);
-        for (const dep of info.dependsOn || []) {
-            const depShortName = getShortName(dep);
-            dot += `  "${shortName}" -> "${depShortName}";\n`;
+    /**
+     * Fill color for an env set — the color of the first env in the set that has
+     * a known color, else the default.
+     */
+    private frameworkColor(frameworks: string[]): string {
+        for (const env of frameworks) {
+            const color = FRAMEWORK_COLORS[env];
+            if (color !== undefined) return color;
         }
+        return DEFAULT_FRAMEWORK_COLOR;
     }
 
-    dot += '\n  labelloc="t";\n';
-    dot += `  label="${title}\\n(from architecture/dependencies.json)";\n`;
-    dot += '  fontsize=20;\n';
-    dot += '}\n';
+    /**
+     * Role border styling — fill stays keyed on framework; the border shows a
+     * project's ROLE at a glance. Server and client are the top-level runnable
+     * nodes, so they get bold, colored borders to stand out:
+     *   server       → thick GREEN border (a runnable server app)
+     *   client       → thick RED border   (a client app, e.g. angular)
+     *   designed-lib → bold border        (a library with a generated @DocumentDesign design)
+     *   lib / other  → plain thin border
+     */
+    private roleBorderAttrs(role: string): string {
+        if (role === 'server') return ', color="green", penwidth=3';
+        if (role === 'client') return ', color="red", penwidth=3';
+        if (role === 'designed-lib') return ', penwidth=2';
+        return '';
+    }
 
-    return dot;
-}
+    /**
+     * Click-through href for a node: the project's committed design.html, made
+     * relative to architecture/dependencies.html. Returns null when the project
+     * has no generated DI design (no design.json → no clickable design page).
+     */
+    private designHtmlHref(designFile: string | undefined): string | null {
+        if (!designFile) return null;
+        const designHtml = designFile.replace(/design\.json$/, 'design.html');
+        return path.posix.relative(ARCH_OUTPUT_DIR, designHtml);
+    }
 
-/**
- * Generate interactive HTML with embedded SVG using viz.js
- */
-export function generateHTML(dot: string, title: string = 'Monorepo Dependency Architecture'): string {
-    const styles = generateHTMLStyles();
-    const legend = generateHTMLLegend();
-    const script = generateHTMLScript(dot);
+    /**
+     * Generate Graphviz DOT format from the graph
+     */
+    generateDot(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): string {
+        let dot = 'digraph Architecture {\n';
+        dot += '  rankdir=TB;\n';
+        dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
+        dot += '  edge [fontname="Arial"];\n\n';
 
-    return `<!DOCTYPE html>
+        // Group projects by level
+        const levels: Record<number, string[]> = {};
+        for (const project of Object.keys(graph)) {
+            const level = graph[project].level;
+            if (!levels[level]) levels[level] = [];
+            levels[level].push(project);
+        }
+
+        dot += this.dotNodes(graph);
+        dot += '\n';
+
+        // Create same-rank subgraphs for each level
+        for (const projects of Object.values(levels)) {
+            dot += `  { rank=same; `;
+            for (const p of projects) {
+                dot += `"${this.names.getShortName(p)}"; `;
+            }
+            dot += '}\n';
+        }
+
+        dot += '\n';
+        dot += this.dotEdges(graph);
+
+        dot += '\n  labelloc="t";\n';
+        dot += `  label="${title}\\n(from architecture/dependencies.json)";\n`;
+        dot += '  fontsize=20;\n';
+        dot += '}\n';
+
+        return dot;
+    }
+
+    // Node lines: fill colored by framework env set (libType), border shaped by
+    // role; the label shows the env set + role (e.g. [browser, node] · server). A
+    // node with a generated DI design also gets a URL so the rendered SVG box is
+    // clickable — it opens that project's committed design.html in a new tab.
+    private dotNodes(graph: EnhancedGraph): string {
+        let dot = '';
+        for (const project of Object.keys(graph)) {
+            const info = graph[project];
+            const shortName = this.names.getShortName(project);
+            const frameworks = info.framework ?? [];
+            const role = info.role ?? 'lib';
+            const color = this.frameworkColor(frameworks);
+            const border = this.roleBorderAttrs(role);
+            const href = this.designHtmlHref(info.designFile);
+            const link = href ? `, URL="${href}", target="_blank"` : '';
+            const envSet = `[${frameworks.join(', ')}]`;
+            const labelMeta = `L${info.level} · ${envSet} · ${role}`;
+            dot += `  "${shortName}" [fillcolor="${color}"${border}${link}, label="${shortName}\\n(${labelMeta})"];\n`;
+        }
+        return dot;
+    }
+
+    // Edge lines (dependencies).
+    private dotEdges(graph: EnhancedGraph): string {
+        let dot = '';
+        for (const project of Object.keys(graph)) {
+            const shortName = this.names.getShortName(project);
+            for (const dep of graph[project].dependsOn || []) {
+                dot += `  "${shortName}" -> "${this.names.getShortName(dep)}";\n`;
+            }
+        }
+        return dot;
+    }
+
+    /**
+     * Generate interactive HTML with embedded SVG using viz.js
+     */
+    generateHTML(
+        dot: string,
+        title: string = 'Monorepo Dependency Architecture',
+        lockControl: string = '',
+        responsibilitiesHtml: string = ''
+    ): string {
+        const styles = this.styles();
+        const legend = this.legend();
+        const script = this.script(dot);
+
+        return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -173,15 +191,45 @@ export function generateHTML(dot: string, title: string = 'Monorepo Dependency A
     <h1>${title}</h1>
     <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
+    ${lockControl}
     ${legend}
     <div id="graph"></div>
+    ${responsibilitiesHtml}
     <script>${script}</script>
 </body>
 </html>`;
-}
+    }
 
-function generateHTMLStyles(): string {
-    return `
+    /**
+     * The lock control (a single-select dropdown, rendered above the legend).
+     * Picking a module LOCKS the graph into that box's hover view — its full
+     * ancestor + descendant chain stays lit while everything else stays dimmed —
+     * and narrows the responsibilities list below the graph to just that chain.
+     * The first option, "All", is the default and clears the lock. Hover still
+     * works on top of a lock; leaving a box returns to the locked view.
+     *
+     * Options are ordered by level DESCENDING to match the responsibilities cards.
+     */
+    lockControl(graph: EnhancedGraph): string {
+        const projects = Object.keys(graph);
+        projects.sort((a: string, b: string): number => {
+            const levelDiff = graph[b].level - graph[a].level;
+            if (levelDiff !== 0) return levelDiff;
+            return a.localeCompare(b);
+        });
+        let options = '';
+        for (const project of projects) {
+            const shortName = this.names.getShortName(project);
+            options += `<option value="${shortName}">L${graph[project].level} · ${shortName}</option>`;
+        }
+        return `<div class="wp-lock-control">
+        <label for="wp-lock">🔒 Lock a box (dim the rest &amp; filter responsibilities):</label>
+        <select id="wp-lock"><option value="">All (no lock)</option>${options}</select>
+    </div>`;
+    }
+
+    private styles(): string {
+        return `
         body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
         h1 { text-align: center; color: #333; }
         .hint { text-align: center; color: #555; margin: 0 0 16px; }
@@ -200,13 +248,12 @@ function generateHTMLStyles(): string {
             stroke-width: 5;
             filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
         }
-        /* Hover-highlight (wired up in JS after viz.js renders — see
-         * wireHoverHighlight). Hovering a node adds .wp-dim to the <svg> and
-         * .wp-focus/.wp-neighbor/.wp-hl to the connected box, its neighbors, and
-         * its edges. We ONLY dim: the connected subgraph keeps its exact normal
-         * look (full opacity), the rest recedes. The un-dim rules repeat the
-         * "svg.wp-dim" ancestor so they out-specify the dim rule (which has an
-         * extra type selector) — else the highlighted subgraph stays dimmed. */
+        /* Hover-highlight (wired up in JS after viz.js renders). Hovering a node
+         * adds .wp-dim to the <svg> and .wp-focus/.wp-neighbor/.wp-hl to the
+         * connected box, its neighbors, and its edges. We ONLY dim: the connected
+         * subgraph keeps its exact normal look (full opacity), the rest recedes.
+         * The un-dim rules repeat "svg.wp-dim" so they out-specify the dim rule
+         * (which has an extra type selector) — else the subgraph stays dimmed. */
         #graph .node, #graph .edge { transition: opacity 0.12s ease; }
         #graph svg.wp-dim .node,
         #graph svg.wp-dim .edge { opacity: 0.15; }
@@ -228,12 +275,8 @@ function generateHTMLStyles(): string {
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .legend h2 {
-            margin-top: 0;
-        }
-        .legend-item {
-            margin: 8px 0;
-        }
+        .legend h2 { margin-top: 0; }
+        .legend-item { margin: 8px 0; }
         .legend-box {
             display: inline-block;
             width: 20px;
@@ -242,11 +285,58 @@ function generateHTMLStyles(): string {
             margin-right: 10px;
             vertical-align: middle;
         }
+        ${this.componentStyles()}
     `;
-}
+    }
 
-function generateHTMLLegend(): string {
-    return `<div class="legend">
+    // Styles for the lock dropdown and the responsibilities card list below the
+    // graph. Split out of styles() to keep each method within the line limit.
+    private componentStyles(): string {
+        return `
+        .wp-lock-control {
+            max-width: 600px;
+            margin: 0 auto 16px;
+            padding: 12px 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .wp-lock-control label { font-weight: bold; color: #333; margin-right: 8px; }
+        .wp-lock-control select { font-size: 14px; padding: 4px 8px; }
+        #wp-responsibilities { max-width: 900px; margin: 24px auto 0; }
+        #wp-responsibilities h2 { color: #333; }
+        .wp-resp-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 10px 0;
+            padding: 10px 15px;
+        }
+        .wp-resp-card > summary { cursor: pointer; color: #333; }
+        .wp-resp-level {
+            display: inline-block;
+            min-width: 26px;
+            padding: 1px 6px;
+            margin-right: 6px;
+            border-radius: 4px;
+            background: #eef;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .wp-resp-body { margin-top: 8px; color: #444; }
+        .wp-resp-body code {
+            background: #f2f2f2;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .wp-hidden { display: none; }`;
+    }
+
+    private legend(): string {
+        return `<div class="legend">
         <h2>Legend — fill = framework (libType), border = role</h2>
         <div class="legend-item">
             <span class="legend-box" style="background: #FCE4EC;"></span>
@@ -288,145 +378,73 @@ function generateHTMLLegend(): string {
             <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Rows are laid out by level (top = no dependencies), with the deepest libraries at the bottom. Transitive dependencies are allowed but not shown.</em>
         </div>
     </div>`;
-}
-
-/**
- * The page script (injected as a string). After viz.js renders the Graphviz
- * SVG, `wireHoverHighlight` indexes its nodes and edges so hovering a box
- * boldens every connection (incoming AND outgoing) and highlights the boxes on
- * the other end, dimming the rest. viz.js emits a predictable structure:
- *   <g class="node"><title>NAME</title> ... </g>
- *   <g class="edge"><title>FROM->TO</title> <path/> <polygon/> ... </g>
- * The edge <title> text (decoded by the DOM as "FROM->TO") gives both
- * endpoints, so adjacency is built without touching the DOT.
- */
-function generateHTMLScript(dot: string): string {
-    return `
-        const dot = ${JSON.stringify(dot)};
-        const viz = new Viz();
-        viz.renderSVGElement(dot)
-            .then(element => {
-                document.getElementById('graph').appendChild(element);
-                wireHoverHighlight(element);
-            })
-            .catch(err => {
-                console.error(err);
-                document.getElementById('graph').innerHTML = '<pre>' + err + '</pre>';
-            });
-        function wireHoverHighlight(svg) {
-            const nodeByName = new Map();
-            svg.querySelectorAll('g.node').forEach(g => {
-                const t = g.querySelector('title');
-                if (t) nodeByName.set(t.textContent.trim(), g);
-            });
-            // Directed adjacency: in* = entering (up/ancestors), out* = leaving (down/deps).
-            const inEdges = new Map(), outEdges = new Map(), inNodes = new Map(), outNodes = new Map();
-            const ensure = (map, key) => {
-                let v = map.get(key);
-                if (!v) { v = new Set(); map.set(key, v); }
-                return v;
-            };
-            svg.querySelectorAll('g.edge').forEach(edge => {
-                const t = edge.querySelector('title');
-                if (!t) return;
-                const idx = t.textContent.indexOf('->');
-                if (idx < 0) return;
-                const from = t.textContent.slice(0, idx).trim();
-                const to = t.textContent.slice(idx + 2).trim();
-                ensure(outEdges, from).add(edge);
-                ensure(inEdges, to).add(edge);
-                ensure(outNodes, from).add(to);
-                ensure(inNodes, to).add(from);
-            });
-            const clear = () => {
-                svg.classList.remove('wp-dim');
-                svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach(el => {
-                    el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
-                });
-            };
-            const highlight = (name, focusEl) => {
-                clear();
-                svg.classList.add('wp-dim');
-                focusEl.classList.add('wp-focus');
-                // Transitively light ancestors (up) then descendants (down): edges
-                // reached -> wp-hl, boxes -> wp-neighbor. visited guards cycles.
-                [[inNodes, inEdges], [outNodes, outEdges]].forEach(dir => {
-                    const visited = new Set(); const stack = [name];
-                    while (stack.length) {
-                        const cur = stack.pop();
-                        (dir[1].get(cur) || []).forEach(e => e.classList.add('wp-hl'));
-                        (dir[0].get(cur) || []).forEach(next => {
-                            if (visited.has(next)) return;
-                            visited.add(next); stack.push(next);
-                            const g = nodeByName.get(next); if (g) g.classList.add('wp-neighbor');
-                        });
-                    }
-                });
-            };
-            nodeByName.forEach((g, name) => {
-                g.addEventListener('mouseenter', () => highlight(name, g));
-                g.addEventListener('mouseleave', clear);
-            });
-        }
-    `;
-}
-
-interface VisualizationPaths {
-    htmlPath: string;
-}
-
-/**
- * Write the committed architecture visualization to architecture/dependencies.html,
- * next to dependencies.json.
- *
- * This is a checked-in artifact, regenerated deterministically by
- * architecture:generate so the boxes stay clickable into each project's
- * design.html. The DOT is embedded in the HTML (rendered client-side by
- * viz.js), so no separate .dot file is committed — same as design.html. Output
- * is deterministic (sorted graph in → same bytes out) so git only shows a diff
- * when the architecture actually changed.
- */
-export function writeVisualization(
-    graph: EnhancedGraph,
-    workspaceRoot: string,
-    title: string = 'Monorepo Dependency Architecture'
-): VisualizationPaths {
-    const outputDir = path.join(workspaceRoot, ARCH_OUTPUT_DIR);
-
-    // Ensure directory exists
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    const html = generateHTML(generateDot(graph, title), title);
-    const htmlPath = path.join(outputDir, 'dependencies.html');
-    fs.writeFileSync(htmlPath, html, 'utf-8');
+    /**
+     * The page script. The browser code lives in graph-visualizer.client.js (a
+     * plain .js asset, NOT a TS template literal) so its dim/highlight/lock
+     * functions can be ordinary browser functions — the TS lint rules that scan
+     * .ts template strings would otherwise forbid them, and browser JS cannot
+     * carry TS return annotations. We inline it and substitute the DOT.
+     */
+    private script(dot: string): string {
+        const clientJs = fs.readFileSync(path.join(__dirname, 'graph-visualizer.client.js'), 'utf-8');
+        return clientJs.split('__DOT__').join(JSON.stringify(dot));
+    }
 
-    return { htmlPath };
-}
+    /**
+     * Write the committed architecture visualization to
+     * architecture/dependencies.html, next to dependencies.json.
+     *
+     * This is a checked-in artifact, regenerated deterministically by
+     * architecture:generate so the boxes stay clickable into each project's
+     * design.html. The DOT is embedded in the HTML (rendered client-side by
+     * viz.js). Output is deterministic (sorted graph in → same bytes out) so git
+     * only shows a diff when the architecture actually changed.
+     */
+    writeVisualization(
+        graph: EnhancedGraph,
+        workspaceRoot: string,
+        title: string = 'Monorepo Dependency Architecture'
+    ): VisualizationPaths {
+        const outputDir = path.join(workspaceRoot, ARCH_OUTPUT_DIR);
 
-/**
- * Open the HTML visualization in the default browser
- */
-export function openVisualization(htmlPath: string): boolean {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const platform = process.platform;
-        let openCommand: string;
-
-        if (platform === 'darwin') {
-            openCommand = `open "${htmlPath}"`;
-        } else if (platform === 'win32') {
-            openCommand = `start "" "${htmlPath}"`;
-        } else {
-            openCommand = `xdg-open "${htmlPath}"`;
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        execSync(openCommand, { stdio: 'ignore' });
-        return true;
-    } catch (err: unknown) {
-        //const error = toError(err);
-        void err;
-        return false;
+        const lockControl = this.lockControl(graph);
+        const responsibilities = this.responsibilities.generateSection(graph, workspaceRoot);
+        const html = this.generateHTML(this.generateDot(graph, title), title, lockControl, responsibilities);
+        const htmlPath = path.join(outputDir, 'dependencies.html');
+        fs.writeFileSync(htmlPath, html, 'utf-8');
+
+        return new VisualizationPaths(htmlPath);
+    }
+
+    /**
+     * Open the HTML visualization in the default browser
+     */
+    openVisualization(htmlPath: string): boolean {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const platform = process.platform;
+            let openCommand: string;
+
+            if (platform === 'darwin') {
+                openCommand = `open "${htmlPath}"`;
+            } else if (platform === 'win32') {
+                openCommand = `start "" "${htmlPath}"`;
+            } else {
+                openCommand = `xdg-open "${htmlPath}"`;
+            }
+
+            execSync(openCommand, { stdio: 'ignore' });
+            return true;
+        } catch (err: unknown) {
+            const error = toError(err);
+            console.warn(`⚠️  Could not open browser: ${error.message}`);
+            return false;
+        }
     }
 }

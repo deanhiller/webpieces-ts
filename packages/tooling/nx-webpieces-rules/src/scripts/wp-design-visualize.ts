@@ -20,7 +20,7 @@ import * as readline from 'readline';
 import { CliExitError, runMain } from '@webpieces/rules-config';
 import { DesignFileRef, findDesignFiles, resolveSelections } from '../lib/di-graph/design-finder';
 import { writeDesignVisualization } from '../lib/di-graph/design-visualizer';
-import { openVisualization } from '../lib/graph-visualizer';
+import { GraphVisualizer } from '../lib/graph-visualizer';
 import { DiGraph } from '../lib/di-graph/model';
 
 /** Walk up from cwd to the workspace root (dir containing nx.json). */
@@ -70,7 +70,7 @@ function renderOne(file: DesignFileRef, workspaceRoot: string): void {
     const paths = writeDesignVisualization(graph, workspaceRoot);
     const designCount = graph.designs.length;
     console.log(`✅ ${file.project}: ${designCount} design(s) → ${paths.htmlPath}`);
-    if (!openVisualization(paths.htmlPath)) {
+    if (!new GraphVisualizer().openVisualization(paths.htmlPath)) {
         console.log(`⚠️  Could not auto-open. Open manually: ${paths.htmlPath}`);
     }
 }

@@ -10,7 +10,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { loadRuntimeGraph } from '../../lib/runtime-graph';
 import { writeRuntimeVisualization } from '../../lib/runtime-visualizer';
-import { openVisualization } from '../../lib/graph-visualizer';
+import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { toError } from '../../toError';
 
 export interface VisualizeRuntimeOptions {
@@ -43,7 +43,7 @@ export default async function runExecutor(
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 
         console.log('\n🌐 Opening visualization in browser...');
-        if (openVisualization(vizPaths.htmlPath)) {
+        if (new GraphVisualizer().openVisualization(vizPaths.htmlPath)) {
             console.log('✅ Browser opened');
         } else {
             console.log(`⚠️  Could not auto-open. Open manually: ${vizPaths.htmlPath}`);
