@@ -3,7 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/app-example/client-server-api/src",
   "projectType": "library",
-  "tags": ["framework:browser", "framework:node", "role:lib"],
+  "tags": ["framework:browser", "framework:node", "role:api-lib"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
