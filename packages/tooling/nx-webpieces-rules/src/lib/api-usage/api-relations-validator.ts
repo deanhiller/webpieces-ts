@@ -54,6 +54,10 @@ export function findUnclassifiedApiDeps(
         if (!info) continue;
         const role = resolveRole(info).role;
         if (role === null || !CHECKED_ROLES.includes(role)) continue;
+        // Only flag projects whose production source was actually scanned. An all-test project
+        // (e.g. an e2e harness whose only files are *.spec.ts) is never observed, so we can't
+        // conclude its api-lib dependency is unused.
+        if (!scan.scannedProjects.has(projectName)) continue;
 
         const entry = graph[projectName];
         for (const dep of entry.dependsOn) {

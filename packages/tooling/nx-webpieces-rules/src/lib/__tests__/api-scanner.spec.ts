@@ -22,6 +22,10 @@ function exampleProjects(): Map<string, ProjectInfo> {
     add('server2', 'apps/app-example/server2', ['framework:express', 'role:server']);
     add('server2-api', 'apps/app-example/server2-api', ['framework:browser', 'framework:node', 'role:lib']);
     add('angular-site', 'apps/app-example/angular-site', ['framework:angular', 'role:client']);
+    // legacy-server has only a solution-style tsconfig.json (no tsconfig.app/lib) — exercises the
+    // src-glob program fallback. app-example-e2e has only a *.spec.ts — exercises the "not scanned".
+    add('legacy-server', 'apps/app-example/legacy-server', ['framework:express', 'role:server']);
+    add('app-example-e2e', 'apps/app-example/e2e', ['framework:express', 'role:server']);
     return infos;
 }
 
@@ -74,5 +78,23 @@ describe('ApiUsageScanner over the example apps', () => {
         const impl = relations!['server2-api'] as ApiRelation;
         expect(impl.kind).toBe('implements');
         expect(apiNames(impl.implements)).toEqual(['Server2Api']);
+    });
+});
+
+describe('ApiUsageScanner — project-coverage edge cases', () => {
+    const result = new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan();
+
+    it('scans legacy-server via the src-glob fallback (solution-style tsconfig) and finds its implements', () => {
+        expect(result.scannedProjects.has('legacy-server')).toBe(true);
+        const relations = result.relationsByProject.get('legacy-server');
+        expect(relations).toBeDefined();
+        const impl = relations!['client-server-api'] as ApiRelation;
+        expect(impl.kind).toBe('implements');
+        expect(apiNames(impl.implements)).toEqual(['PublicApi', 'SaveApi']);
+    });
+
+    it('does NOT mark an all-test project (app-example-e2e) as scanned', () => {
+        expect(result.scannedProjects.has('app-example-e2e')).toBe(false);
+        expect(result.relationsByProject.has('app-example-e2e')).toBe(false);
     });
 });
