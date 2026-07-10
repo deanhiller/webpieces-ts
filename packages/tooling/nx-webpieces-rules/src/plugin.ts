@@ -30,6 +30,7 @@ import {
     createValidateRuntimeArchitectureTarget,
     createValidateRuntimeMarkersTarget,
 } from './runtime-targets';
+import { ValidationTargets } from './validation-targets';
 import {
     createDiGraphGenerateTarget,
     createValidateDiGraphUnchangedTarget,
@@ -59,6 +60,7 @@ export interface ValidationOptions {
     validateTsInSrc?: boolean;
     validateNxWiring?: boolean;
     runtimeArchitecture?: boolean;
+    validateApiRelations?: boolean;
     diGraph?: boolean;
     newMethodsMaxLines?: number;
     modifiedAndNewMethodsMaxLines?: number;
@@ -125,6 +127,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validateTsInSrc: true,
             validateNxWiring: true,
             runtimeArchitecture: true,
+            validateApiRelations: true,
             diGraph: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
@@ -354,6 +357,7 @@ function buildValidationTargetsList(
     if (validations!.validateTsInSrc) targets.push('validate-ts-in-src');
     if (validations!.validateNxWiring) targets.push('validate-nx-wiring');
     if (validations!.runtimeArchitecture) targets.push('validate-runtime-architecture');
+    if (validations!.validateApiRelations) targets.push('validate-api-relations');
     return targets;
 }
 
@@ -381,16 +385,16 @@ function createWorkspaceTargetsWithoutPrefix(
         targets['visualize-runtime'] = createVisualizeRuntimeTarget();
     }
     if (validations.noCycles) {
-        targets['validate-no-architecture-cycles'] = createValidateNoCyclesTarget();
+        targets['validate-no-architecture-cycles'] = ValidationTargets.noCycles();
     }
     if (validations.architectureUnchanged) {
         targets['validate-architecture-unchanged'] = createValidateUnchangedTarget(graphPath);
     }
     if (validations.noSkipLevelDeps) {
-        targets['validate-no-skiplevel-deps'] = createValidateNoSkipLevelTarget();
+        targets['validate-no-skiplevel-deps'] = ValidationTargets.noSkipLevel();
     }
     if (validations.validatePackageJson) {
-        targets['validate-packagejson'] = createValidatePackageJsonTarget();
+        targets['validate-packagejson'] = ValidationTargets.packageJson();
     }
     // Use combined validate-code instead of 3 separate targets
     // Options come from webpieces.config.json at the workspace root
@@ -400,19 +404,22 @@ function createWorkspaceTargetsWithoutPrefix(
         validations.validateModifiedMethods ||
         validations.validateModifiedFiles
     ) {
-        targets['validate-code'] = createValidateCodeTarget();
+        targets['validate-code'] = ValidationTargets.code();
     }
     if (validations.validateVersionsLocked) {
-        targets['validate-versions-locked'] = createValidateVersionsLockedTarget();
+        targets['validate-versions-locked'] = ValidationTargets.versionsLocked();
     }
     if (validations.validateTsInSrc) {
-        targets['validate-ts-in-src'] = createValidateTsInSrcTarget();
+        targets['validate-ts-in-src'] = ValidationTargets.tsInSrc();
     }
     if (validations.validateNxWiring) {
-        targets['validate-nx-wiring'] = createValidateNxWiringTarget();
+        targets['validate-nx-wiring'] = ValidationTargets.nxWiring();
     }
     if (validations.runtimeArchitecture) {
         targets['validate-runtime-architecture'] = createValidateRuntimeArchitectureTarget();
+    }
+    if (validations.validateApiRelations) {
+        targets['validate-api-relations'] = ValidationTargets.apiRelations();
     }
 
     // Add validate-complete target that runs all enabled validations
@@ -454,18 +461,6 @@ function createVisualizeTargetWithoutPrefix(graphPath: string): TargetConfigurat
     };
 }
 
-function createValidateNoCyclesTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-no-architecture-cycles',
-        cache: true,
-        inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json'],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Validate the architecture has no circular project dependencies',
-        },
-    };
-}
-
 function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:validate-architecture-unchanged',
@@ -475,30 +470,6 @@ function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
         metadata: {
             technologies: ['nx'],
             description: 'Validate the architecture matches the saved blessed graph',
-        },
-    };
-}
-
-function createValidateNoSkipLevelTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-no-skiplevel-deps',
-        cache: true,
-        inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json'],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Validate no project has redundant transitive dependencies',
-        },
-    };
-}
-
-function createValidatePackageJsonTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-packagejson',
-        cache: true,
-        inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/**/package.json'],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Validate package.json dependencies match project.json build dependencies',
         },
     };
 }
@@ -547,61 +518,6 @@ function createValidateModifiedFilesTarget(
         metadata: {
             technologies: ['nx'],
             description: `Validate modified files do not exceed ${maxLines} lines (encourages keeping files small)`,
-        },
-    };
-}
-
-/**
- * Create combined validate-code target
- * Options come from webpieces.config.json at the workspace root
- * (loaded by the executor via @webpieces/rules-config — same source of truth as @webpieces/ai-hook-rules)
- */
-function createValidateCodeTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-code',
-        cache: false, // Don't cache - depends on git state
-        inputs: ['default', '{workspaceRoot}/webpieces.config.json', {'runtime': 'node -e "process.stdout.write(String(Math.random()))"'}],
-        // No options here - they come from webpieces.config.json at runtime
-        metadata: {
-            technologies: ['nx'],
-            description: 'Combined validation for new methods, modified methods, and file sizes',
-        },
-    };
-}
-
-function createValidateVersionsLockedTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-versions-locked',
-        cache: true,
-        inputs: ['{workspaceRoot}/**/package.json'],
-        metadata: {
-            technologies: ['nx'],
-            description:
-                'Validate package.json versions are locked (no semver ranges) and consistent across projects',
-        },
-    };
-}
-
-function createValidateTsInSrcTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-ts-in-src',
-        cache: false,
-        inputs: ['default', '{workspaceRoot}/webpieces.config.json', {'runtime': 'node -e "process.stdout.write(String(Math.random()))"'}],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Validate all .ts files in projects are inside the src/ directory',
-        },
-    };
-}
-
-function createValidateNxWiringTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-nx-wiring',
-        cache: false, // Cheap; depends on nx.json + project graph, not worth caching
-        inputs: ['{workspaceRoot}/nx.json'],
-        metadata: {
-            technologies: ['nx'],
-            description: 'Validate the webpieces validators are wired into the build via nx.json dependsOn',
         },
     };
 }
