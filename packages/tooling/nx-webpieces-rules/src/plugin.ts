@@ -61,6 +61,7 @@ export interface ValidationOptions {
     validateNxWiring?: boolean;
     runtimeArchitecture?: boolean;
     validateApiRelations?: boolean;
+    validateApiLibTag?: boolean;
     diGraph?: boolean;
     newMethodsMaxLines?: number;
     modifiedAndNewMethodsMaxLines?: number;
@@ -128,6 +129,7 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
             validateNxWiring: true,
             runtimeArchitecture: true,
             validateApiRelations: true,
+            validateApiLibTag: true,
             diGraph: true,
             newMethodsMaxLines: 30,
             modifiedAndNewMethodsMaxLines: 80,
@@ -358,6 +360,7 @@ function buildValidationTargetsList(
     if (validations!.validateNxWiring) targets.push('validate-nx-wiring');
     if (validations!.runtimeArchitecture) targets.push('validate-runtime-architecture');
     if (validations!.validateApiRelations) targets.push('validate-api-relations');
+    if (validations!.validateApiLibTag) targets.push('validate-api-lib-tag');
     return targets;
 }
 
@@ -422,6 +425,9 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (validations.validateApiRelations) {
         targets['validate-api-relations'] = targetFactory.apiRelations();
+    }
+    if (validations.validateApiLibTag) {
+        targets['validate-api-lib-tag'] = targetFactory.apiLibTag();
     }
 
     // Add validate-complete target that runs all enabled validations
