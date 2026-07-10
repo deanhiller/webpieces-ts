@@ -172,6 +172,7 @@ export function generateHTML(dot: string, title: string = 'Monorepo Dependency A
 <body>
     <h1>${title}</h1>
     <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
+    <p class="hint">🔦 <strong>Hover any box</strong> to bolden all of its connections (incoming <em>and</em> outgoing) and highlight the boxes on the other end — the rest of the graph dims so you can trace one box at a glance.</p>
     ${legend}
     <div id="graph"></div>
     <script>${script}</script>
@@ -181,24 +182,37 @@ export function generateHTML(dot: string, title: string = 'Monorepo Dependency A
 
 function generateHTMLStyles(): string {
     return `
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        .hint {
-            text-align: center;
-            color: #555;
-            margin: 0 0 16px;
-        }
-        /* viz.js renders node URLs as <a> — show they are clickable. */
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
+        h1 { text-align: center; color: #333; }
+        .hint { text-align: center; color: #555; margin: 0 0 16px; }
+        /* viz.js renders node URLs as <a> — only boxes with a design.html get
+         * one, so a:hover is a clickable-only signal. Make it pop clearly: a
+         * thicker border PLUS a blue glow lift the box off the page, so it is
+         * obvious which boxes you can click into vs. which you cannot. (A plain
+         * stroke bump is invisible on server/client boxes, whose resting border
+         * is already thick.) */
         #graph a { cursor: pointer; }
-        #graph a:hover polygon { stroke-width: 2.5; }
+        #graph a polygon,
+        #graph a ellipse { transition: stroke-width 0.12s ease, filter 0.12s ease; }
+        #graph a:hover polygon,
+        #graph a:hover ellipse {
+            stroke: #1976d2;
+            stroke-width: 5;
+            filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
+        }
+        /* Hover-highlight (wired up in JS after viz.js renders — see
+         * wireHoverHighlight). Hovering a node adds .wp-dim to the <svg> and
+         * .wp-focus/.wp-neighbor/.wp-hl to the connected box, its neighbors, and
+         * its edges. We ONLY dim: the connected subgraph keeps its exact normal
+         * look (full opacity), the rest recedes. The un-dim rules repeat the
+         * "svg.wp-dim" ancestor so they out-specify the dim rule (which has an
+         * extra type selector) — else the highlighted subgraph stays dimmed. */
+        #graph .node, #graph .edge { transition: opacity 0.12s ease; }
+        #graph svg.wp-dim .node,
+        #graph svg.wp-dim .edge { opacity: 0.15; }
+        #graph svg.wp-dim .node.wp-focus,
+        #graph svg.wp-dim .node.wp-neighbor,
+        #graph svg.wp-dim .edge.wp-hl { opacity: 1; }
         #graph {
             text-align: center;
             background: white;
@@ -276,19 +290,75 @@ function generateHTMLLegend(): string {
     </div>`;
 }
 
+/**
+ * The page script (injected as a string). After viz.js renders the Graphviz
+ * SVG, `wireHoverHighlight` indexes its nodes and edges so hovering a box
+ * boldens every connection (incoming AND outgoing) and highlights the boxes on
+ * the other end, dimming the rest. viz.js emits a predictable structure:
+ *   <g class="node"><title>NAME</title> ... </g>
+ *   <g class="edge"><title>FROM->TO</title> <path/> <polygon/> ... </g>
+ * The edge <title> text (decoded by the DOM as "FROM->TO") gives both
+ * endpoints, so adjacency is built without touching the DOT.
+ */
 function generateHTMLScript(dot: string): string {
     return `
         const dot = ${JSON.stringify(dot)};
         const viz = new Viz();
-
         viz.renderSVGElement(dot)
             .then(element => {
                 document.getElementById('graph').appendChild(element);
+                wireHoverHighlight(element);
             })
             .catch(err => {
                 console.error(err);
                 document.getElementById('graph').innerHTML = '<pre>' + err + '</pre>';
             });
+        function wireHoverHighlight(svg) {
+            const nodeByName = new Map();
+            svg.querySelectorAll('g.node').forEach(g => {
+                const t = g.querySelector('title');
+                if (t) nodeByName.set(t.textContent.trim(), g);
+            });
+            const edgesOf = new Map();
+            const neighborsOf = new Map();
+            const ensure = (map, key) => {
+                let v = map.get(key);
+                if (!v) { v = new Set(); map.set(key, v); }
+                return v;
+            };
+            svg.querySelectorAll('g.edge').forEach(edge => {
+                const t = edge.querySelector('title');
+                if (!t) return;
+                const idx = t.textContent.indexOf('->');
+                if (idx < 0) return;
+                const from = t.textContent.slice(0, idx).trim();
+                const to = t.textContent.slice(idx + 2).trim();
+                ensure(edgesOf, from).add(edge);
+                ensure(edgesOf, to).add(edge);
+                ensure(neighborsOf, from).add(to);
+                ensure(neighborsOf, to).add(from);
+            });
+            const clear = () => {
+                svg.classList.remove('wp-dim');
+                svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach(el => {
+                    el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
+                });
+            };
+            const highlight = (name, focusEl) => {
+                clear();
+                svg.classList.add('wp-dim');
+                focusEl.classList.add('wp-focus');
+                (edgesOf.get(name) || []).forEach(e => e.classList.add('wp-hl'));
+                (neighborsOf.get(name) || []).forEach(n => {
+                    const g = nodeByName.get(n);
+                    if (g) g.classList.add('wp-neighbor');
+                });
+            };
+            nodeByName.forEach((g, name) => {
+                g.addEventListener('mouseenter', () => highlight(name, g));
+                g.addEventListener('mouseleave', clear);
+            });
+        }
     `;
 }
 
