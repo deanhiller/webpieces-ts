@@ -217,10 +217,16 @@ export abstract class DiDesignBuilder {
     }
 
     addRoot(cls: ts.ClassDeclaration): void {
-        this.rootClass = cls;
-        const id = this.classNode(cls);
-        this.design.root = id;
-        this.walkClass(cls);
+        // A @DocumentDesign root that is itself a bound token (an abstract API + a *DefaultForApi
+        // impl) resolves THROUGH its binding — the same token→impl table child @injects use — so the
+        // root box reads `Api (Impl)` and the walk descends the impl's ctor, not the empty abstract
+        // one. A self-binding (implClass === the root) is ignored, so concrete roots are unaffected.
+        const token = classTokenKey(cls, this.workspaceRoot);
+        const impl = this.table.lookup(token.key).find((b: Binding) => b.implClass && b.implClass !== cls)?.implClass;
+        const root = impl ?? cls;
+        this.rootClass = root;
+        this.design.root = impl ? this.classNode(root, 'singleton', cls.name?.text ?? '') : this.classNode(root);
+        this.walkClass(root);
     }
 
     /**
