@@ -25,6 +25,22 @@
             "shortDescription": "Angular single-page frontend demonstrating the webpieces browser client. It injects `SaveApi`/`PublicApi` as generated HTTP clients from `client-server-api` and calls the client-server service, wiring a HeaderRegistry from `company-core` for context header transfer.",
             "responsibilitiesFile": "apps/app-example/angular-site/responsibilities.md",
             "designFile": "apps/app-example/angular-site/design.json",
+            "apiRelations": {
+                "client-server-api": {
+                    "kind": "uses",
+                    "implements": [],
+                    "uses": [
+                        {
+                            "api": "PublicApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "SaveApi",
+                            "type": "rpc"
+                        }
+                    ]
+                }
+            },
             "dependsOn": [
                 "client-server-api",
                 "company-core",
@@ -59,6 +75,36 @@
             "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
             "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
             "designFile": "apps/app-example/client-server/design.json",
+            "apiRelations": {
+                "client-server-api": {
+                    "kind": "implements",
+                    "implements": [
+                        {
+                            "api": "PublicApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "SaveApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "SecureApi",
+                            "type": "rpc"
+                        }
+                    ],
+                    "uses": []
+                },
+                "server2-api": {
+                    "kind": "uses",
+                    "implements": [],
+                    "uses": [
+                        {
+                            "api": "Server2Api",
+                            "type": "rpc"
+                        }
+                    ]
+                }
+            },
             "dependsOn": [
                 "client-server-api",
                 "company-svc-core",
@@ -70,7 +116,7 @@
         "client-server-api": {
             "level": 1,
             "framework": ["browser","node"],
-            "role": "lib",
+            "role": "api-lib",
             "shortDescription": "Shared API contract for the client-server service: `SaveApi`/`PublicApi` abstract classes plus request/response DTOs, annotated with webpieces routing/auth decorators. Single source of truth implemented server-side and consumed by browser clients.",
             "responsibilitiesFile": "apps/app-example/client-server-api/responsibilities.md",
             "dependsOn": [
@@ -270,6 +316,18 @@
             "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
             "responsibilitiesFile": "apps/app-example/server2/responsibilities.md",
             "designFile": "apps/app-example/server2/design.json",
+            "apiRelations": {
+                "server2-api": {
+                    "kind": "implements",
+                    "implements": [
+                        {
+                            "api": "Server2Api",
+                            "type": "rpc"
+                        }
+                    ],
+                    "uses": []
+                }
+            },
             "dependsOn": [
                 "company-svc-core",
                 "server2-api"
@@ -278,7 +336,7 @@
         "server2-api": {
             "level": 1,
             "framework": ["browser","node"],
-            "role": "lib",
+            "role": "api-lib",
             "shortDescription": "Shared API contract for server2: the `Server2Api` abstract class (fetchValue) plus its request/response DTOs, annotated with webpieces routing/auth decorators. Implemented by `server2` and consumed by `client-server` as an HTTP client.",
             "responsibilitiesFile": "apps/app-example/server2-api/responsibilities.md",
             "dependsOn": [
