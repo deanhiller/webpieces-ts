@@ -118,9 +118,11 @@ describe('generateDot edge styling', () => {
 });
 
 describe('generateHTML', () => {
-    it('renders a framework + role legend', () => {
+    it('renders a framework + role legend in three columns', () => {
         const html = viz.generateHTML(viz.generateDot(GRAPH));
-        expect(html).toContain('fill = framework');
+        expect(html).toContain('legend-columns');
+        expect(html).toContain('Fill = framework');
+        expect(html).toContain('Border = role');
         expect(html).toContain('angular');
         expect(html).toContain('express');
         expect(html).toContain('designed-lib');
