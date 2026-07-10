@@ -213,8 +213,8 @@ export class GraphVisualizer {
     <h1>${title}</h1>
     <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
-    ${lockControl}
     ${legend}
+    ${lockControl}
     <div id="graph"></div>
     ${responsibilitiesHtml}
     <script>${script}</script>
@@ -223,7 +223,7 @@ export class GraphVisualizer {
     }
 
     /**
-     * The lock control (a single-select dropdown, rendered above the legend).
+     * The lock control (a single-select dropdown, rendered below the legend).
      * Picking a module LOCKS the graph into that box's hover view — its full
      * ancestor + descendant chain stays lit while everything else stays dimmed —
      * and narrows the responsibilities list below the graph to just that chain.
@@ -291,7 +291,7 @@ export class GraphVisualizer {
         }
         .legend {
             margin: 20px auto;
-            max-width: 600px;
+            max-width: 1100px;
             padding: 15px;
             background: white;
             border-radius: 8px;
@@ -315,6 +315,18 @@ export class GraphVisualizer {
     // graph. Split out of styles() to keep each method within the line limit.
     private componentStyles(): string {
         return `
+        /* The architecture graph is very wide, so lay the legend out as three
+         * side-by-side columns (fill / border / edge) instead of one tall
+         * column — it keeps the legend short next to the wide graph, and
+         * collapses back to a single column on narrow viewports. */
+        .legend-columns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px;
+            align-items: start;
+        }
+        .legend-col h3 { margin: 0 0 8px; color: #333; font-size: 15px; }
+        @media (max-width: 800px) { .legend-columns { grid-template-columns: 1fr; } }
         .wp-lock-control {
             max-width: 600px;
             margin: 0 auto 16px;
@@ -357,10 +369,36 @@ export class GraphVisualizer {
         .wp-hidden { display: none; }`;
     }
 
+    // The legend is laid out in three side-by-side columns (fill / border /
+    // edge) so it stays short next to the very wide architecture graph. Each
+    // column's rows come from a helper below to keep this method within the line
+    // limit; the footnote spans the full width beneath the columns.
     private legend(): string {
         return `<div class="legend">
-        <h2>Legend — fill = framework (libType), border = role</h2>
-        <div class="legend-item">
+        <h2>Legend</h2>
+        <div class="legend-columns">
+            <div class="legend-col">
+                <h3>Fill = framework (libType)</h3>
+                ${this.fillItems()}
+            </div>
+            <div class="legend-col">
+                <h3>Border = role</h3>
+                ${this.borderItems()}
+            </div>
+            <div class="legend-col">
+                <h3>Edge lines — <em>why</em> a project depends on an api-lib</h3>
+                ${this.edgeItems()}
+            </div>
+        </div>
+        <div class="legend-item" style="margin-top: 15px;">
+            <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Rows are laid out by level (top = no dependencies), with the deepest libraries at the bottom. Transitive dependencies are allowed but not shown.</em>
+        </div>
+    </div>`;
+    }
+
+    // Column 1 — fill color keyed on the project's framework (libType) env set.
+    private fillItems(): string {
+        return `<div class="legend-item">
             <span class="legend-box" style="background: #FCE4EC;"></span>
             <strong>angular:</strong> Angular front-end
         </div>
@@ -379,8 +417,12 @@ export class GraphVisualizer {
         <div class="legend-item">
             <span class="legend-box" style="background: #FFF9C4;"></span>
             <strong>node:</strong> node server base env
-        </div>
-        <div class="legend-item" style="margin-top: 12px;">
+        </div>`;
+    }
+
+    // Column 2 — border style keyed on the project's role.
+    private borderItems(): string {
+        return `<div class="legend-item">
             <span class="legend-box" style="border: 3px solid green;"></span>
             <strong>server:</strong> runnable server app (thick green border)
         </div>
@@ -399,11 +441,14 @@ export class GraphVisualizer {
         <div class="legend-item">
             <span class="legend-box" style="border: 2px solid #EF6C00;"></span>
             <strong>api-lib:</strong> API-contract library (defines <code>@ApiPath</code>/<code>@Rpc</code>/<code>@PubSub</code> <code>*Api</code> classes)
-        </div>
-        <h2 style="margin-top: 18px;">Edge lines — <em>why</em> a project depends on an api-lib</h2>
-        <div class="legend-item">
+        </div>`;
+    }
+
+    // Column 3 — edge line style keyed on WHY a project depends on an api-lib.
+    private edgeItems(): string {
+        return `<div class="legend-item">
             <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2" stroke-dasharray="5,3"/></svg>
-            <strong>implements:</strong> serves the API (a controller is registered via <code>addRoutes</code>)
+            <strong>implements:</strong> serves the API — NOTE: this is a build-dependency diagram, so a UML <em>implements</em> arrow can't be used; we use a dashed line to signal a build dep, because this server implements the api and the api is built first, then this server after.
         </div>
         <div class="legend-item">
             <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#1976d2" stroke-width="2"/></svg>
@@ -416,11 +461,7 @@ export class GraphVisualizer {
         <div class="legend-item">
             <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#999" stroke-width="1.5"/></svg>
             <strong>plain dependency:</strong> a normal library import (no API relationship)
-        </div>
-        <div class="legend-item" style="margin-top: 15px;">
-            <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Rows are laid out by level (top = no dependencies), with the deepest libraries at the bottom. Transitive dependencies are allowed but not shown.</em>
-        </div>
-    </div>`;
+        </div>`;
     }
 
     /**
