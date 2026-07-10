@@ -300,6 +300,29 @@ export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
     };
 }
 
+// inject-annotation-not-needed-for-concrete-class — flags a REDUNDANT `@inject(X)` whose token is
+// textually identical to the parameter's own declared type (`@inject(Foo) private readonly foo: Foo`).
+// In this inversify setup the decorator is pure noise there: reflect-metadata (emitDecoratorMetadata)
+// already resolves a constructor parameter by its class type, so `private readonly foo: Foo` binds on
+// its own (see CLAUDE.md, and the no-symbol-di-tokens rule that pushes the same way). Symbol/interface
+// tokens are NOT flagged because they never equal the type (`@inject(FOO_TOKEN) x: Provider<Foo>`).
+// AI keeps carpet-bombing `@inject`; this fails the build on the redundant form. Standard rollout knobs
+// via the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch,
+// branch, and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole
+// file trees, matched with the shared glob/prefix/segment semantics.
+export class InjectAnnotationNotNeededForConcreteClassConfig extends BaseRuleConfig {
+    declare mode?: ModifiedCodeMode;
+    disableAllowed?: boolean;
+    allowedPaths?: string[];
+
+    static readonly SCHEMA: SchemaShape<InjectAnnotationNotNeededForConcreteClassConfig> = {
+        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        disableAllowed: FieldDef.optional('boolean'),
+        allowedPaths: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 // framework-tag — every project that a changed source file belongs to must carry >=1
 // `framework:<browser|react|angular|node|express>` nx tag in its project.json. Those tags are the
 // project's "libType" — the SET of runtime environments it runs in — and the source of truth for

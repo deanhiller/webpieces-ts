@@ -17,6 +17,7 @@ import {
     NoSymbolDiTokensConfig,
     NoProcessExitOutsideMainConfig,
     NoFunctionOutsideClassConfig,
+    InjectAnnotationNotNeededForConcreteClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
 } from '@webpieces/rules-config';
@@ -37,6 +38,7 @@ import { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver'
 import { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
 import { NoProcessExitOutsideMainValidator } from './validate-no-process-exit-outside-main';
 import { NoFunctionOutsideClassValidator } from './validate-no-function-outside-class';
+import { InjectAnnotationNotNeededForConcreteClassValidator } from './validate-inject-annotation-not-needed-for-concrete-class';
 import { FrameworkTagValidator } from './validate-framework-tag';
 import { RoleTagValidator } from './validate-role-tag';
 import { MatchRulesValidator } from './validate-match-rules';
@@ -71,6 +73,7 @@ function buildValidators(
         new NoSymbolDiTokensValidator(config['no-symbol-di-tokens'] ?? new NoSymbolDiTokensConfig()),
         new NoProcessExitOutsideMainValidator(config['no-process-exit-outside-main'] ?? new NoProcessExitOutsideMainConfig()),
         new NoFunctionOutsideClassValidator(config['no-function-outside-class'] ?? new NoFunctionOutsideClassConfig()),
+        new InjectAnnotationNotNeededForConcreteClassValidator(config['inject-annotation-not-needed-for-concrete-class'] ?? new InjectAnnotationNotNeededForConcreteClassConfig()),
         new FrameworkTagValidator(config['framework-tag'] ?? new FrameworkTagConfig()),
         new RoleTagValidator(config['role-tag'] ?? new RoleTagConfig()),
         // One validator per client-authored match-rules entry (each with its own name/mode/epoch).

@@ -65,6 +65,7 @@ export {
     NoSymbolDiTokensConfig,
     NoProcessExitOutsideMainConfig,
     NoFunctionOutsideClassConfig,
+    InjectAnnotationNotNeededForConcreteClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,

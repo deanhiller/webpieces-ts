@@ -28,6 +28,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
     'no-process-exit-outside-main': {},
+    'inject-annotation-not-needed-for-concrete-class': {},
     'framework-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['browser', 'react', 'angular', 'node', 'express'] },
     'role-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['server', 'designed-lib', 'lib', 'client'] },
     'nx-wiring': { mode: 'RUN_EVERY_TIME' },
