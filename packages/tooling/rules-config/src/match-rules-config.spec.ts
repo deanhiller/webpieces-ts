@@ -37,8 +37,8 @@ describe('findMatchRuleViolations (no-fetch guard)', () => {
         expect(findMatchRuleViolations(linesOf(src), 'src/a.ts', NO_FETCH)).toHaveLength(0);
     });
 
-    it('does NOT flag the generated-client path (ClientHttpFactory.createClient)', () => {
-        const src = "const client = factory.createClient(SaveApi, new ClientConfig('https://host'));";
+    it('does NOT flag the generated-client path (ClientHttpFactory.createRpcClient)', () => {
+        const src = "const client = factory.createRpcClient(SaveApi, new ClientConfig('https://host'));";
         expect(findMatchRuleViolations(linesOf(src), 'src/a.ts', NO_FETCH)).toHaveLength(0);
     });
 

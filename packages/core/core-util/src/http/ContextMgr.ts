@@ -22,7 +22,7 @@ import { HeaderRegistry } from './HeaderRegistry';
  *
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
- * const client = factory.createClient(SaveApi, new ClientConfig('http://api.example.com'));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig('http://api.example.com'));
  * ```
  */
 export class ContextMgr {

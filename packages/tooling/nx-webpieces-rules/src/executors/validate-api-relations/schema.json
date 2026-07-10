@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate API Relations Executor",
+    "description": "Fail when a server/client depends on an api-lib it neither implements nor uses",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

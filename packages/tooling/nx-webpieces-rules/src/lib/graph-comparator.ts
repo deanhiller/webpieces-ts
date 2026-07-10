@@ -165,6 +165,14 @@ function findChangedFields(currentEntry: GraphEntry, savedEntry: GraphEntry): Fi
             changes.push({ field, from, to });
         }
     }
+    // apiRelations is a nested object — compare by canonical JSON. Both sides are
+    // built with sorted owners + refs (scanner) / preserved key order (loader), so
+    // string equality is a faithful deep-equality here.
+    const fromRelations = JSON.stringify(savedEntry.apiRelations ?? {});
+    const toRelations = JSON.stringify(currentEntry.apiRelations ?? {});
+    if (fromRelations !== toRelations) {
+        changes.push({ field: 'apiRelations', from: fromRelations, to: toRelations });
+    }
     return changes;
 }
 

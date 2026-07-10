@@ -86,6 +86,48 @@ describe('graph-loader wrapper format', () => {
 
 });
 
+describe('graph-loader apiRelations', () => {
+    it('round-trips apiRelations and omits it for plain-lib-only projects', () => {
+        const graph: EnhancedGraph = {
+            'client-server': {
+                level: 5,
+                dependsOn: ['client-server-api', 'server2-api'],
+                framework: ['express'],
+                role: 'server',
+                apiRelations: {
+                    'client-server-api': {
+                        kind: 'implements',
+                        implements: [
+                            { api: 'SaveApi', type: 'rpc' },
+                            { api: 'PublicApi', type: 'rpc' },
+                        ],
+                        uses: [],
+                    },
+                    'server2-api': {
+                        kind: 'uses',
+                        implements: [],
+                        uses: [{ api: 'Server2Api', type: 'rpc' }],
+                    },
+                },
+            },
+            'core-util': { level: 0, dependsOn: [], framework: ['node'] },
+        };
+
+        saveGraph(graph, tmpRoot, 'rel/dependencies.json');
+        const raw = JSON.parse(fs.readFileSync(path.join(tmpRoot, 'rel/dependencies.json'), 'utf-8'));
+        expect(raw.projects['client-server'].apiRelations['client-server-api'].kind).toBe('implements');
+        expect(raw.projects['client-server'].apiRelations['server2-api'].uses[0]).toEqual({
+            api: 'Server2Api',
+            type: 'rpc',
+        });
+        // no relations → field omitted entirely
+        expect('apiRelations' in raw.projects['core-util']).toBe(false);
+
+        const loaded = loadBlessedGraph(tmpRoot, 'rel/dependencies.json');
+        expect(loaded!.projects['client-server'].apiRelations).toEqual(graph['client-server'].apiRelations);
+    });
+});
+
 describe('graph-loader legacy format', () => {
     it('reads the legacy flat format with empty aiInstructions', () => {
         const legacy = {

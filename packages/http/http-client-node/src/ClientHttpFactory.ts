@@ -21,16 +21,16 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * Inject it and ask for a typed client per contract:
  * ```typescript
  * // same project + region as this container; the URL is derived, you maintain nothing
- * const server2 = factory.createClient(Server2Api, new ClientConfig('server2'));
+ * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
  *
  * // or point somewhere lookup cannot describe (other region/project, non-Cloud-Run)
- * const legacy = factory.createClient(LegacyApi, new ClientConfig('legacy', 'https://legacy.corp'));
+ * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy', 'https://legacy.corp'));
  *
  * const response = await server2.fetchValue(req);   // inside a RequestContext
  * ```
  *
  * Every client it builds shares one {@link NodeProxyClient} *shape* but never one instance: the
- * injected `Provider<NodeProxyClient>` hands out a fresh one per contract, which `createClient`
+ * injected `Provider<NodeProxyClient>` hands out a fresh one per contract, which `createRpcClient`
  * then `init`s. Their collaborators (RequestContextHeaders, Secrets) come from the container, so
  * the whole dependency graph is visible in this package's design.html.
  *
@@ -47,12 +47,12 @@ export class ClientHttpFactory {
     ) {}
 
     /**
-     * Create a type-safe HTTP client for one API contract.
+     * Create a type-safe RPC (HTTP) client for one API contract.
      *
      * @param apiPrototype - The API prototype class with @ApiPath/@Endpoint decorators
      * @param config - This client's state (its svcName, and optionally an explicit targetUrl)
      */
-    createClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
+    createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this
         // contract + target; the collaborators already came from the container.
         const proxyClient = this.proxyClientProvider.get();

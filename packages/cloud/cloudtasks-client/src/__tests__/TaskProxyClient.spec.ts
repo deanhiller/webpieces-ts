@@ -76,7 +76,7 @@ function clientFor(config: TaskClientConfig): EmailApi {
     const provider = new Provider(
         () => new TaskProxyClient(invoker, new RequestContextHeaders()),
     );
-    return new ClientCloudTasksFactory(provider).createClient(EmailApi, config);
+    return new ClientCloudTasksFactory(provider).createPubSubClient(EmailApi, config);
 }
 
 beforeEach(() => {

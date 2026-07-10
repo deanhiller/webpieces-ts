@@ -21,7 +21,7 @@ import { MutableContextStore } from './MutableContextStore';
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
  *
- * const saveApi = factory.createClient(SaveApi, new ClientConfig(env.apiBaseUrl));
+ * const saveApi = factory.createRpcClient(SaveApi, new ClientConfig(env.apiBaseUrl));
  * const response = await saveApi.save({ query: 'test' }); // type-safe
  *
  * // later, when the user logs in / picks a tenant — every subsequent call carries them:
@@ -30,7 +30,7 @@ import { MutableContextStore } from './MutableContextStore';
  * ```
  *
  * A browser cannot hold service credentials, so a contract with an @AuthOidc or @AuthSharedSecret
- * endpoint throws in `createClient`, not on the first call.
+ * endpoint throws in `createRpcClient`, not on the first call.
  */
 @DocumentDesign()
 export class ClientHttpBrowserFactory {
@@ -46,7 +46,7 @@ export class ClientHttpBrowserFactory {
      * @param apiPrototype - The API prototype class with @ApiPath/@Endpoint decorators
      * @param config - This client's state (its baseUrl)
      */
-    createClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
+    createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
         const proxyClient = new BrowserProxyClient(this.contextMgr);
         proxyClient.init(apiPrototype, config);
         return buildClientProxy(apiPrototype, proxyClient);

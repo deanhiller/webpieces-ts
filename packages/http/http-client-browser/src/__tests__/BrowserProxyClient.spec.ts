@@ -62,22 +62,22 @@ beforeEach(() => {
 
 /**
  * A browser holds no service credentials: it cannot mint an OIDC token as a runtime service
- * account, and it must never ship a shared secret. Both are rejected at createClient(), not on the
+ * account, and it must never ship a shared secret. Both are rejected at createRpcClient(), not on the
  * first call in production.
  */
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
     it('throws for an @AuthOidc contract', () => {
-        expect(() => factory.createClient(OidcApi, new ClientConfig('http://localhost:3000')))
+        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('http://localhost:3000')))
             .toThrow(/@AuthOidc — a browser cannot hold service credentials/);
     });
 
     it('throws for an @AuthSharedSecret contract', () => {
-        expect(() => factory.createClient(SharedSecretApi, new ClientConfig('http://localhost:3000')))
+        expect(() => factory.createRpcClient(SharedSecretApi, new ClientConfig('http://localhost:3000')))
             .toThrow(/@AuthSharedSecret — a browser cannot hold service credentials/);
     });
 
     it('accepts a @Public contract and binds its routes', () => {
-        const client = factory.createClient(PublicApi, new ClientConfig('http://localhost:3000'));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('http://localhost:3000'));
 
         // The Proxy resolves the declared endpoint...
         expect(typeof client.save).toBe('function');

@@ -17,7 +17,7 @@ import { ClientConfig } from './ClientConfig';
  * The server-side {@link ProxyClient}. Everything a browser cannot do lives here: reading the
  * ambient RequestContext, minting OIDC tokens, holding shared secrets, and recording test cases.
  *
- * TRANSIENT on purpose. Every `createClient(api, config)` needs its own instance, because `init()`
+ * TRANSIENT on purpose. Every `createRpcClient(api, config)` needs its own instance, because `init()`
  * binds one instance to exactly one API contract and one target. {@link ProxyClientProvider} hands
  * them out — see its doc.
  */

@@ -7,6 +7,8 @@
  * 3. Group projects into layers for deterministic ordering
  */
 
+import type { ProjectApiRelations } from './api-usage/api-relations';
+
 /**
  * Graph entry with level metadata plus AI-oriented metadata filled in by
  * enrichGraph() (lib/graph-metadata.ts) before the graph is saved:
@@ -18,6 +20,9 @@
  *  - responsibilitiesFile: repo-relative path to the FULL responsibilities doc
  *  - designFile: repo-relative path to the generated DI design.json (only for
  *    project.json projects)
+ *  - apiRelations: for each api-lib in `dependsOn`, WHY the edge exists — the
+ *    APIs this project implements (serves) and/or uses (calls), each with its
+ *    transport (rpc | pubsub). Derived by scanning source (see api-usage/).
  */
 export interface GraphEntry {
     level: number;
@@ -27,6 +32,7 @@ export interface GraphEntry {
     shortDescription?: string;
     responsibilitiesFile?: string;
     designFile?: string;
+    apiRelations?: ProjectApiRelations;
 }
 
 /**

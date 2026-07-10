@@ -30,7 +30,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},
     'framework-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['browser', 'react', 'angular', 'node', 'express'] },
-    'role-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['server', 'designed-lib', 'lib', 'client'] },
+    'role-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['server', 'designed-lib', 'lib', 'client', 'api-lib'] },
     'nx-wiring': { mode: 'RUN_EVERY_TIME' },
     'di-graph': { mode: 'RUN_EVERY_TIME' },
     'missing-design-annotation': { mode: 'RUN_EVERY_TIME' },

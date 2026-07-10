@@ -64,7 +64,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: SaveApi,
       useFactory: (factory: ClientHttpBrowserFactory, config: ClientConfig) => {
-        return factory.createClient(SaveApi, config);
+        return factory.createRpcClient(SaveApi, config);
       },
       deps: [ClientHttpBrowserFactory, ClientConfig]
     },
@@ -73,7 +73,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: PublicApi,
       useFactory: (factory: ClientHttpBrowserFactory, config: ClientConfig) => {
-        return factory.createClient(PublicApi, config);
+        return factory.createRpcClient(PublicApi, config);
       },
       deps: [ClientHttpBrowserFactory, ClientConfig]
     }

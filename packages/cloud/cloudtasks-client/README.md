@@ -11,15 +11,15 @@ where it runs through the full server filter chain.
 abstract class EmailApi { @Endpoint('/send') sendEmail(r: SendEmailRequest): Promise<void> {…} }
 
 // build the client once (sync); 'email-svc' is the callee's Cloud Run service name
-const emailTasks = factory.createClient(EmailApi, new TaskClientConfig('email-svc'));
+const emailTasks = factory.createPubSubClient(EmailApi, new TaskClientConfig('email-svc'));
 // ...or pin a URL lookup cannot describe (other region/project); svcName stays the log name
-const other = factory.createClient(EmailApi, new TaskClientConfig('email-svc', 'https://email.eu.example'));
+const other = factory.createPubSubClient(EmailApi, new TaskClientConfig('email-svc', 'https://email.eu.example'));
 
 // producer (inside a request → RequestContext active)
 await scheduler.addToQueue(() => emailTasks.sendEmail(req), { dedupName: req.id });
 ```
 
-- `ClientCloudTasksFactory.createClient(Api, TaskClientConfig)` — builds the enqueue proxy. It
+- `ClientCloudTasksFactory.createPubSubClient(Api, TaskClientConfig)` — builds the enqueue proxy. It
   injects a `Provider<TaskProxyClient>` and calls `get()` per contract; `TaskProxyClient` is bound
   TRANSIENT, so each client gets its own. The delivery URL is resolved at enqueue time from
   `svcName` (same project + region as this container, so you maintain no URL table) unless you pass
