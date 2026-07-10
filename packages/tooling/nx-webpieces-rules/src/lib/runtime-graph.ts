@@ -15,6 +15,9 @@ import * as path from 'path';
 import { sortGraphTopologically } from './graph-sorter';
 import { readServiceContract, resolvePackageNames } from './runtime-markers';
 import type { WorkspaceModel } from './runtime-markers';
+import type { ApiScanResult } from './api-usage/api-scanner';
+import type { ApiRef, ApiTransport } from './api-usage/api-relations';
+import { sortApiRefs } from './api-usage/api-relations';
 import { toError } from '../toError';
 
 export const DEFAULT_RUNTIME_GRAPH_PATH = 'architecture/runtime-dependencies.json';
@@ -29,12 +32,20 @@ export interface RuntimeService {
 export interface RuntimeApi {
     implementedBy: string[];
     usedBy: string[];
+    /** Transport of this API — 'rpc' (direct call) or 'pubsub' (delivered through a queue). */
+    type?: ApiTransport;
 }
 
 export interface RuntimeEdge {
     from: string;
     to: string;
     via: string[];
+    /**
+     * Transport of this edge. 'rpc' → a direct call arrow. 'pubsub' → the producer enqueues and the
+     * consumer is delivered later, so the runtime viz draws it as producer → QUEUE → consumer.
+     * Edges are split by transport, so every edge is a single kind.
+     */
+    type?: ApiTransport;
 }
 
 export interface RuntimeUnresolved {
@@ -192,6 +203,138 @@ export function assembleRuntimeGraph(model: WorkspaceModel, workspaceRoot: strin
         runtimeEdges: edgeResult.edges,
         unresolvedUses: edgeResult.unresolved,
     };
+}
+
+/** One project's implements/uses at api-CLASS granularity, from the source scan. */
+interface ScanDecl {
+    name: string;
+    implementsApis: ApiRef[];
+    usesApis: ApiRef[];
+}
+
+/**
+ * Assembles the runtime microservice graph from the SOURCE SCAN (apiRelations) instead of
+ * service-contract.json: implementers × users per API, split by transport. An rpc edge is a direct
+ * call; a pubsub edge flows through a queue (drawn producer → queue → consumer by the visualizer).
+ */
+class ScanRuntimeAssembler {
+    constructor(private readonly scan: ApiScanResult) {}
+
+    assemble(): RuntimeGraph {
+        const decls = this.collectDecls();
+        const apis = this.buildApis(decls);
+        const edgeResult = this.buildEdges(decls, apis);
+        const services = this.buildServices(decls, edgeResult.edges);
+        const apisObj: Record<string, RuntimeApi> = {};
+        for (const api of Array.from(apis.keys()).sort()) apisObj[api] = apis.get(api)!;
+        return { services, apis: apisObj, runtimeEdges: edgeResult.edges, unresolvedUses: edgeResult.unresolved };
+    }
+
+    /** Flatten each project's api-lib relations into implements/uses ApiRef lists. */
+    private collectDecls(): ScanDecl[] {
+        const decls: ScanDecl[] = [];
+        for (const name of Array.from(this.scan.relationsByProject.keys()).sort()) {
+            const relations = this.scan.relationsByProject.get(name)!;
+            const implementsApis: ApiRef[] = [];
+            const usesApis: ApiRef[] = [];
+            for (const owner of Object.keys(relations)) {
+                implementsApis.push(...relations[owner].implements);
+                usesApis.push(...relations[owner].uses);
+            }
+            if (implementsApis.length > 0 || usesApis.length > 0) {
+                decls.push({ name, implementsApis: sortApiRefs(implementsApis), usesApis: sortApiRefs(usesApis) });
+            }
+        }
+        return decls;
+    }
+
+    /** apiClassName -> { implementedBy, usedBy, type }. */
+    private buildApis(decls: ScanDecl[]): Map<string, RuntimeApi> {
+        const apis = new Map<string, RuntimeApi>();
+        const ensure = (api: string, type: ApiTransport): RuntimeApi => {
+            let entry = apis.get(api);
+            if (!entry) {
+                entry = { implementedBy: [], usedBy: [], type };
+                apis.set(api, entry);
+            }
+            return entry;
+        };
+        for (const decl of decls) {
+            for (const ref of decl.implementsApis) ensure(ref.api, ref.type).implementedBy.push(decl.name);
+            for (const ref of decl.usesApis) ensure(ref.api, ref.type).usedBy.push(decl.name);
+        }
+        for (const entry of apis.values()) {
+            entry.implementedBy.sort();
+            entry.usedBy.sort();
+        }
+        return apis;
+    }
+
+    /** Inferred edges U -> I via api A, split by transport; plus uses with no implementer. */
+    private buildEdges(decls: ScanDecl[], apis: Map<string, RuntimeApi>): EdgeResult {
+        const viaByKey = new Map<string, Set<string>>();
+        const unresolved: RuntimeUnresolved[] = [];
+        for (const decl of decls) {
+            for (const ref of decl.usesApis) {
+                const implementers = apis.get(ref.api)?.implementedBy ?? [];
+                if (implementers.length === 0) {
+                    unresolved.push({ service: decl.name, api: ref.api });
+                    continue;
+                }
+                for (const target of implementers) {
+                    if (target === decl.name) continue;
+                    const key = `${decl.name} ${target} ${ref.type}`;
+                    if (!viaByKey.has(key)) viaByKey.set(key, new Set());
+                    viaByKey.get(key)!.add(ref.api);
+                }
+            }
+        }
+        return { edges: this.edgesFromKeys(viaByKey), unresolved: sortUnresolved(unresolved) };
+    }
+
+    private edgesFromKeys(viaByKey: Map<string, Set<string>>): RuntimeEdge[] {
+        const edges: RuntimeEdge[] = [];
+        for (const key of viaByKey.keys()) {
+            const parts = key.split(' ');
+            edges.push({ from: parts[0], to: parts[1], via: Array.from(viaByKey.get(key)!).sort(), type: parts[2] as ApiTransport });
+        }
+        edges.sort(
+            (a: RuntimeEdge, b: RuntimeEdge) =>
+                a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || (a.type ?? '').localeCompare(b.type ?? ''),
+        );
+        return edges;
+    }
+
+    private buildServices(decls: ScanDecl[], edges: RuntimeEdge[]): Record<string, RuntimeService> {
+        const services: Record<string, RuntimeService> = {};
+        for (const decl of decls) {
+            const dependsOn = Array.from(
+                new Set(edges.filter((e: RuntimeEdge) => e.from === decl.name).map((e: RuntimeEdge) => e.to)),
+            ).sort();
+            services[decl.name] = {
+                level: 0,
+                implements: decl.implementsApis.map((r: ApiRef) => r.api),
+                uses: decl.usesApis.map((r: ApiRef) => r.api),
+                dependsOn,
+            };
+        }
+        const levels = assignLevels(adjacencyFromEdges(Object.keys(services), edges));
+        for (const name of Object.keys(services)) services[name].level = levels[name] ?? 0;
+        return services;
+    }
+}
+
+/** Assemble the runtime graph from the source scan (the derived apiRelations). */
+// webpieces-disable no-function-outside-class -- module entry point, mirrors assembleRuntimeGraph
+export function assembleRuntimeGraphFromScan(scan: ApiScanResult): RuntimeGraph {
+    return new ScanRuntimeAssembler(scan).assemble();
+}
+
+// webpieces-disable no-function-outside-class -- pure sort helper, matches the sibling helpers in this file
+function sortUnresolved(unresolved: RuntimeUnresolved[]): RuntimeUnresolved[] {
+    return [...unresolved].sort(
+        (a: RuntimeUnresolved, b: RuntimeUnresolved) => a.service.localeCompare(b.service) || a.api.localeCompare(b.api),
+    );
 }
 
 /** Deterministic JSON (sorted keys + arrays already sorted during assembly). */

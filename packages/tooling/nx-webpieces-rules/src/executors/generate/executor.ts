@@ -14,10 +14,9 @@ import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
+import type { ApiScanResult } from '../../lib/api-usage/api-scanner';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
-import { buildWorkspaceModel } from '../../lib/runtime-markers';
-import { assembleRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
-import { loadRuntimeConfig } from '../../lib/runtime-config';
+import { assembleRuntimeGraphFromScan, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
@@ -29,19 +28,14 @@ export interface ExecutorResult {
 }
 
 /**
- * Generate the runtime microservice graph alongside the compile-time graph, so
- * one regenerate produces both committed files. Skipped when the
- * runtime-architecture rule is OFF or no apiProjectPaths are configured.
+ * Generate the runtime microservice graph alongside the compile-time graph, from the SAME source
+ * scan (the derived apiRelations) — one regenerate produces both committed files. rpc APIs become
+ * direct runtime edges; pubsub APIs become edges the viz draws through a queue.
  */
-async function generateRuntimeGraph(workspaceRoot: string): Promise<void> {
-    const config = loadRuntimeConfig(workspaceRoot);
-    if (config.off || config.servicePaths.length === 0) {
-        console.log('⏭️  Runtime graph skipped (runtime-architecture OFF or no servicePaths)');
-        return;
-    }
-    console.log('📡 Generating runtime graph from service-contract.json files...');
-    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths, config.servicePaths);
-    const runtimeGraph = assembleRuntimeGraph(model, workspaceRoot);
+// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
+function generateRuntimeGraph(workspaceRoot: string, scan: ApiScanResult): void {
+    console.log('📡 Generating runtime graph from the source scan (implements × uses per API)...');
+    const runtimeGraph = assembleRuntimeGraphFromScan(scan);
     saveRuntimeGraph(runtimeGraph, workspaceRoot);
     const serviceCount = Object.keys(runtimeGraph.services).length;
     console.log(
@@ -79,7 +73,7 @@ export default async function runExecutor(
         // scanning source, so dependencies.json + the viz + the runtime graph all
         // read the same derived truth.
         console.log('🔎 Scanning source for implements/uses API relations...');
-        scanAndAttachApiRelations(workspaceRoot, enhancedGraph, projectInfos);
+        const scanResult = scanAndAttachApiRelations(workspaceRoot, enhancedGraph, projectInfos);
 
         // Step 4: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');
@@ -91,8 +85,8 @@ export default async function runExecutor(
         const vizPaths = new GraphVisualizer().writeVisualization(enhancedGraph, workspaceRoot);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
-        // Step 5: Generate the runtime microservice graph at the same time
-        await generateRuntimeGraph(workspaceRoot);
+        // Step 5: Generate the runtime microservice graph from the same scan
+        generateRuntimeGraph(workspaceRoot, scanResult);
 
         // Print summary
         const projectCount = Object.keys(enhancedGraph).length;
