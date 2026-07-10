@@ -117,4 +117,17 @@ export class ValidationTargets {
             },
         };
     }
+
+    /** Validate role:api-lib ⇔ the project exports an @ApiPath/@Rpc/@PubSub contract, both directions. */
+    apiLibTag(): TargetConfiguration {
+        return {
+            executor: '@webpieces/nx-webpieces-rules:validate-api-lib-tag',
+            cache: false,
+            inputs: ['default', '{workspaceRoot}/**/project.json'],
+            metadata: {
+                technologies: ['nx'],
+                description: 'Validate role:api-lib matches the code (exports an API contract)',
+            },
+        };
+    }
 }

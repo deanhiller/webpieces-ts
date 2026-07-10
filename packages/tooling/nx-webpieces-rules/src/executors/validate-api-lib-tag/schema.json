@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate API-lib Tag Executor",
+    "description": "Validate role:api-lib matches the code (exports an @ApiPath/@Rpc/@PubSub contract), both directions",
+    "type": "object",
+    "properties": {},
+    "required": []
+}
