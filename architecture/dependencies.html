@@ -6,21 +6,9 @@
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
     <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        .hint {
-            text-align: center;
-            color: #555;
-            margin: 0 0 16px;
-        }
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
+        h1 { text-align: center; color: #333; }
+        .hint { text-align: center; color: #555; margin: 0 0 16px; }
         /* viz.js renders node URLs as <a> — only boxes with a design.html get
          * one, so a:hover is a clickable-only signal. Make it pop clearly: a
          * thicker border PLUS a blue glow lift the box off the page, so it is
@@ -36,19 +24,19 @@
             stroke-width: 5;
             filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
         }
-        
+        /* Hover-highlight (wired up in JS after viz.js renders — see
+         * wireHoverHighlight). Hovering a node adds .wp-dim to the <svg> and
+         * .wp-focus/.wp-neighbor/.wp-hl to the connected box, its neighbors, and
+         * its edges. We ONLY dim: the connected subgraph keeps its exact normal
+         * look (full opacity), the rest recedes. The un-dim rules repeat the
+         * "svg.wp-dim" ancestor so they out-specify the dim rule (which has an
+         * extra type selector) — else the highlighted subgraph stays dimmed. */
         #graph .node, #graph .edge { transition: opacity 0.12s ease; }
-
-        /* Dim everything, then let the connected pieces come back to full opacity.
-         * The un-dim rules repeat the "svg.wp-dim" ancestor so they out-specify
-         * the dim rule above (which has an extra type selector) — otherwise the
-         * highlighted subgraph stays dimmed too. */
         #graph svg.wp-dim .node,
         #graph svg.wp-dim .edge { opacity: 0.15; }
         #graph svg.wp-dim .node.wp-focus,
         #graph svg.wp-dim .node.wp-neighbor,
         #graph svg.wp-dim .edge.wp-hl { opacity: 1; }
-    
         #graph {
             text-align: center;
             background: white;
