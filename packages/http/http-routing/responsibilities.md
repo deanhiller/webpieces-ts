@@ -4,7 +4,7 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 
 ## In Scope
 
-- Server routing decorators: `Controller`, `NotController`, and Inversify helpers `provideSingleton`/`provideSingletonAs`/`provideTransient`
+- Server routing decorators: `Controller`, `NotController`, and Inversify helpers `provideSingleton`/`DefaultImplementationOn`/`provideTransient`
 - Route/app metadata contracts: `WebAppMeta`, `Routes`, `RouteBuilder`, `RouteDefinition`, `FilterDefinition`, `RouteBuilderImpl`
 - Turning API decorators into invokable routes (`ApiRoutingFactory`, `RouteHandler`, `MethodMeta`)
 - Matching filters to routes by controller filepath glob (`FilterMatcher`, `minimatch`)

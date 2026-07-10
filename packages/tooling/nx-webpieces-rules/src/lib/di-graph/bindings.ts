@@ -7,7 +7,7 @@
  *   - ContainerModule bodies:  bind(TOKEN).to(Impl) / .toSelf() / .toConstantValue(x)
  *                              / .toDynamicValue(fn), with .inSingletonScope() etc.
  *   - Decorators:              @provideSingleton() / @provideTransient() (self-binding)
- *                              and @provideSingletonAs(TOKEN)
+ *                              and @DefaultImplementationOn(TOKEN)
  *
  * Arrays because multiInject tokens (e.g. HEADER_TYPES.PlatformHeadersExtension) are
  * bound once per ContainerModule across several packages.
@@ -258,7 +258,7 @@ function collectDecoratorBindings(
             const transient = name === 'provideTransient' || name === 'provideFrameworkTransient';
             const scope: DiScope = transient ? 'transient' : 'singleton';
             table.add(new Binding(token.key, token.display, 'decorator', scope, cls, '', file));
-        } else if (name === 'provideSingletonAs' || name === 'provideFrameworkSingletonAs') {
+        } else if (name === 'DefaultImplementationOn' || name === 'DefaultFrameworkImplementationOn') {
             const call = decoratorCall(decorator);
             const tokenExpr = call?.arguments[0];
             if (!tokenExpr) continue;

@@ -58,7 +58,7 @@ export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
             'Pick one:',
             [
                 new Option('Use @provideSingleton() on the class and inject by type — no Symbol needed.', true),
-                new Option('Implement an API interface — import the Symbol from the API definition and use @provideSingletonAs(TOKEN).'),
+                new Option('Implement an API interface — import the Symbol from the API definition and use @DefaultImplementationOn(TOKEN).'),
                 new Option('External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.'),
             ],
             new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-symbol-di-tokens -- <reason>'),
