@@ -119,6 +119,11 @@
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 0
         },
+        "inject-annotation-not-needed-for-concrete-class": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 0
+        },
         "validate-ts-in-src": {
             "mode": "NEW_AND_MODIFIED_FILES",
             "ignoreModifiedUntilEpoch": 1771931925,
