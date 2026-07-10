@@ -59,7 +59,7 @@ export function provideFrameworkSingleton(): ClassDecorator {
 }
 
 /**
- * Framework equivalent of @DefaultImplementationOn: marks this class as the DEFAULT (overridable)
+ * Framework equivalent of @provideSingletonDefaultForApi: marks this class as the DEFAULT (overridable)
  * singleton implementation OF a contract token (Symbol or abstract class), into the webpieces
  * framework registry. Binds `token -> thisClass` as a singleton.
  *
@@ -70,7 +70,7 @@ export function provideFrameworkSingleton(): ClassDecorator {
  * and expands this class's own dependencies.
  */
 // webpieces-disable no-function-outside-class -- a decorator factory cannot be a class method
-export function DefaultFrameworkImplementationOn<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
+export function provideFrameworkSingletonDefaultForApi<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
     // webpieces-disable no-any-unknown -- decorator target is any class constructor
     return (target: any) => {
         frameworkRegistry.push(new FrameworkBinding(serviceIdentifier, target));

@@ -47,7 +47,7 @@ const SHARED_MESSAGE = `Do not create a dependency-injection token with Symbol()
 Option 1: OWN class — annotate it with @provideSingleton() and inject by concrete class TYPE — no Symbol, no @inject.
        constructor(private readonly myService: MyService) {}
 Option 2: API IMPLEMENTATION — import the Symbol from the API definition file and use:
-       @DefaultImplementationOn(SOME_API_TOKEN)
+       @provideSingletonDefaultForApi(SOME_API_TOKEN)
        export class SomeApiImpl implements SomeApi { ... }
 Option 3: External lib class you cannot decorate (DataSource, Anthropic, etc.):
        bind in a ContainerModule using the class itself as token — no Symbol needed:

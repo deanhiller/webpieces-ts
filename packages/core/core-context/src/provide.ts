@@ -45,12 +45,12 @@ export function provideSingleton(): ClassDecorator {
  * ```typescript
  * import { SOME_API_TOKEN } from '@myorg/some-api';
  *
- * @DefaultImplementationOn(SOME_API_TOKEN)
+ * @provideSingletonDefaultForApi(SOME_API_TOKEN)
  * export class SomeApiImpl { ... }
  * ```
  */
 // webpieces-disable no-function-outside-class -- a decorator factory cannot be a class method
-export function DefaultImplementationOn<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
+export function provideSingletonDefaultForApi<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
     return provide(serviceIdentifier, (bind: BindInWhenOnFluentSyntax<T>) => bind.inSingletonScope());
 }
 
