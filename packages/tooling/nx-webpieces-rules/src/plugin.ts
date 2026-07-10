@@ -371,6 +371,8 @@ function createWorkspaceTargetsWithoutPrefix(
     const targets: Record<string, TargetConfiguration> = {};
     const graphPath = opts.workspace.graphPath!;
     const validations = opts.workspace.validations!;
+    // One ValidationTargets instance, injected below to build each target config.
+    const targetFactory = new ValidationTargets();
 
     // Add help target (always available)
     targets['help'] = createHelpTarget();
@@ -385,16 +387,16 @@ function createWorkspaceTargetsWithoutPrefix(
         targets['visualize-runtime'] = createVisualizeRuntimeTarget();
     }
     if (validations.noCycles) {
-        targets['validate-no-architecture-cycles'] = ValidationTargets.noCycles();
+        targets['validate-no-architecture-cycles'] = targetFactory.noCycles();
     }
     if (validations.architectureUnchanged) {
         targets['validate-architecture-unchanged'] = createValidateUnchangedTarget(graphPath);
     }
     if (validations.noSkipLevelDeps) {
-        targets['validate-no-skiplevel-deps'] = ValidationTargets.noSkipLevel();
+        targets['validate-no-skiplevel-deps'] = targetFactory.noSkipLevel();
     }
     if (validations.validatePackageJson) {
-        targets['validate-packagejson'] = ValidationTargets.packageJson();
+        targets['validate-packagejson'] = targetFactory.packageJson();
     }
     // Use combined validate-code instead of 3 separate targets
     // Options come from webpieces.config.json at the workspace root
@@ -404,22 +406,22 @@ function createWorkspaceTargetsWithoutPrefix(
         validations.validateModifiedMethods ||
         validations.validateModifiedFiles
     ) {
-        targets['validate-code'] = ValidationTargets.code();
+        targets['validate-code'] = targetFactory.code();
     }
     if (validations.validateVersionsLocked) {
-        targets['validate-versions-locked'] = ValidationTargets.versionsLocked();
+        targets['validate-versions-locked'] = targetFactory.versionsLocked();
     }
     if (validations.validateTsInSrc) {
-        targets['validate-ts-in-src'] = ValidationTargets.tsInSrc();
+        targets['validate-ts-in-src'] = targetFactory.tsInSrc();
     }
     if (validations.validateNxWiring) {
-        targets['validate-nx-wiring'] = ValidationTargets.nxWiring();
+        targets['validate-nx-wiring'] = targetFactory.nxWiring();
     }
     if (validations.runtimeArchitecture) {
         targets['validate-runtime-architecture'] = createValidateRuntimeArchitectureTarget();
     }
     if (validations.validateApiRelations) {
-        targets['validate-api-relations'] = ValidationTargets.apiRelations();
+        targets['validate-api-relations'] = targetFactory.apiRelations();
     }
 
     // Add validate-complete target that runs all enabled validations

@@ -40,6 +40,29 @@ describe('findFunctionsOutsideClassInSource — FLAGGED (module scope)', () => {
     });
 });
 
+describe('findFunctionsOutsideClassInSource — static members (FLAGGED)', () => {
+    it('flags a static method', () => {
+        const src = 'class C {\n  static make(): number { return 1; }\n}';
+        expect(lines(src)).toHaveLength(1);
+        expect(lines(src)[0]).toContain('static make');
+    });
+
+    it('flags a static field-function (arrow)', () => {
+        const src = 'class C {\n  static make = (): number => 1;\n}';
+        expect(lines(src)).toHaveLength(1);
+    });
+
+    it('does NOT flag an ordinary instance method', () => {
+        const src = 'class C {\n  make(): number { return 1; }\n}';
+        expect(lines(src)).toHaveLength(0);
+    });
+
+    it('does NOT flag a static NON-function field', () => {
+        const src = 'class C {\n  static MAX = 5;\n}';
+        expect(lines(src)).toHaveLength(0);
+    });
+});
+
 describe('findFunctionsOutsideClassInSource — ALLOWED', () => {
     it('allows methods and inline callbacks/nested functions inside a class', () => {
         const src = [

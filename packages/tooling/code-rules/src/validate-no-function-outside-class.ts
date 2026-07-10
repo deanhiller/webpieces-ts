@@ -1,9 +1,11 @@
 /**
  * Validate No Function Outside Class
  *
- * Flags a function CREATED OUTSIDE A CLASS at module scope:
- *   - a top-level `function foo()` / `export function foo()` declaration, and
- *   - a top-level `const foo = () => {}` / `const foo = function(){}`.
+ * Flags a function CREATED OUTSIDE A CLASS at module scope, or a STATIC class member:
+ *   - a top-level `function foo()` / `export function foo()` declaration,
+ *   - a top-level `const foo = () => {}` / `const foo = function(){}`, and
+ *   - a `static foo() {}` method or `static foo = () => {}` field-function (a static member
+ *     belongs to the class object, not an instance, so it can't be injected either).
  *
  * WHY: webpieces DI + @DocumentDesign only work when behavior lives in injectable classes that can be
  * wired into each other. A module-scope function is a dead-end the DI graph can't reach — move the
@@ -36,14 +38,16 @@ import { hasDisable, RULE_NAMES, NoFunctionOutsideClassConfig, ModifiedCodeMode,
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
-const SHARED_MESSAGE = `Functions must live inside a class — a function created at module scope can't be injected, so
-webpieces DI + @DocumentDesign can't wire it into anything.
+const SHARED_MESSAGE = `Functions must live inside a class as INSTANCE methods — a function created at module scope, OR a
+static method, can't be injected, so webpieces DI + @DocumentDesign can't wire it into anything. A
+static method is just a module-scope function wearing a class as a namespace.
   BAD:   export function computeTotal(cart: Cart): number { ... }
+  BAD:   export class CartMath { static computeTotal(cart: Cart): number { ... } }   // static = not injectable
   GOOD:  @provideSingleton()
          export class CartService { computeTotal(cart: Cart): number { ... } }
 Then inject CartService where you need it. Inline callbacks (arr.map(x => x)), promise handlers, and
-functions nested inside a method are fine — only MODULE-SCOPE function declarations and top-level
-const-assigned functions are flagged.`;
+functions nested inside a method are fine — only MODULE-SCOPE function declarations, top-level
+const-assigned functions, and STATIC methods/field-functions are flagged.`;
 
 interface FnViolation {
     file: string;
@@ -72,6 +76,33 @@ function hasDeclareModifier(node: ts.Node): boolean {
     if (!ts.canHaveModifiers(node)) return false;
     const mods = ts.getModifiers(node);
     return mods?.some((m: ts.Modifier): boolean => m.kind === ts.SyntaxKind.DeclareKeyword) ?? false;
+}
+
+// True for a class member carrying the `static` modifier. A static method/field-function belongs
+// to the class object, not an instance, so it can't be injected — it is procedural code wearing a
+// class as a namespace, and is flagged the same as a module-scope function.
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+function hasStaticModifier(node: ts.Node): boolean {
+    if (!ts.canHaveModifiers(node)) return false;
+    const mods = ts.getModifiers(node);
+    return mods?.some((m: ts.Modifier): boolean => m.kind === ts.SyntaxKind.StaticKeyword) ?? false;
+}
+
+// A `static` method, or a `static` field initialized to an arrow/function-expression, on a class.
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+function isStaticFunctionMember(node: ts.Node): boolean {
+    if (ts.isMethodDeclaration(node)) return hasStaticModifier(node);
+    if (ts.isPropertyDeclaration(node) && hasStaticModifier(node)) {
+        const init = node.initializer;
+        return init !== undefined && (ts.isArrowFunction(init) || ts.isFunctionExpression(init));
+    }
+    return false;
+}
+
+// Display name of a static member for the violation message.
+// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
+function staticMemberName(node: ts.MethodDeclaration | ts.PropertyDeclaration): string {
+    return ts.isIdentifier(node.name) ? node.name.text : '<static>';
 }
 
 // The violation line (or the line just above it) carries the disable comment.
@@ -133,6 +164,10 @@ export function findFunctionsOutsideClassInSource(content: string, filePath: str
         }
         if (ts.isVariableStatement(node) && ts.isSourceFile(node.parent) && !hasDeclareModifier(node)) {
             checkTopLevelConst(node, fileLines, sourceFile, violations, disableAllowed);
+        }
+        if (isStaticFunctionMember(node) && !hasDeclareModifier(node)) {
+            const name = staticMemberName(node as ts.MethodDeclaration | ts.PropertyDeclaration);
+            recordViolation(node, `static ${name}() — a static method can't be injected; make it an instance method and inject the class`, fileLines, sourceFile, violations, disableAllowed);
         }
         ts.forEachChild(node, visit);
     }
