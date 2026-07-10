@@ -8,7 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { RuntimeGraph } from './runtime-graph';
+import type { RuntimeGraph, RuntimeEdge } from './runtime-graph';
 
 const LEVEL_COLORS: Record<number, string> = {
     0: '#E8F5E9',
@@ -17,8 +17,31 @@ const LEVEL_COLORS: Record<number, string> = {
     3: '#FCE4EC',
 };
 
+const QUEUE_FILL = '#FFF3E0';
+
 function getShortName(name: string): string {
     return name.includes('/') ? name.split('/').pop()! : name;
+}
+
+/**
+ * DOT for ONE runtime edge. rpc → a direct labeled arrow (producer calls consumer). pubsub → the
+ * producer enqueues and the consumer is delivered later, so we draw producer → QUEUE → consumer
+ * with a cylinder queue node and dashed enqueue/deliver arrows.
+ */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function edgeDot(edge: RuntimeEdge): string {
+    const from = getShortName(edge.from);
+    const to = getShortName(edge.to);
+    const via = edge.via.map((v: string) => getShortName(v)).join(', ');
+    if (edge.type !== 'pubsub') {
+        return `  "${from}" -> "${to}" [label="${via}"];\n`;
+    }
+    const queueId = `queue__${from}__${to}`;
+    return (
+        `  "${queueId}" [shape=cylinder, style="filled", fillcolor="${QUEUE_FILL}", label="${via}\\nqueue"];\n` +
+        `  "${from}" -> "${queueId}" [label="enqueue", style=dashed];\n` +
+        `  "${queueId}" -> "${to}" [label="deliver", style=dashed];\n`
+    );
 }
 
 /** Build the Graphviz DOT for the runtime service graph. */
@@ -38,8 +61,7 @@ export function generateRuntimeDot(graph: RuntimeGraph, title: string = 'WebPiec
     dot += '\n';
 
     for (const edge of graph.runtimeEdges) {
-        const via = edge.via.map((v: string) => getShortName(v)).join(', ');
-        dot += `  "${getShortName(edge.from)}" -> "${getShortName(edge.to)}" [label="${via}"];\n`;
+        dot += edgeDot(edge);
     }
 
     dot += '\n  labelloc="t";\n';
@@ -72,7 +94,7 @@ function generateRuntimeHtml(dot: string, title: string): string {
 </head>
 <body>
     <h1>${title}</h1>
-    <div class="note">Edges are runtime calls (client &rarr; server), labeled with the api project they flow over.</div>
+    <div class="note">Runtime calls between services. <strong>rpc</strong> = a direct arrow (synchronous call, labeled with the api). <strong>pubsub</strong> = producer &rarr; <em>queue</em> (cylinder) &rarr; consumer: the producer enqueues a Cloud Task and the consumer is delivered it later.</div>
     <div id="graph"></div>
     <script>${script}</script>
 </body>
