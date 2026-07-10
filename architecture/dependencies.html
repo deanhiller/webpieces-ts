@@ -21,9 +21,34 @@
             color: #555;
             margin: 0 0 16px;
         }
-        /* viz.js renders node URLs as <a> — show they are clickable. */
+        /* viz.js renders node URLs as <a> — only boxes with a design.html get
+         * one, so a:hover is a clickable-only signal. Make it pop clearly: a
+         * thicker border PLUS a blue glow lift the box off the page, so it is
+         * obvious which boxes you can click into vs. which you cannot. (A plain
+         * stroke bump is invisible on server/client boxes, whose resting border
+         * is already thick.) */
         #graph a { cursor: pointer; }
-        #graph a:hover polygon { stroke-width: 2.5; }
+        #graph a polygon,
+        #graph a ellipse { transition: stroke-width 0.12s ease, filter 0.12s ease; }
+        #graph a:hover polygon,
+        #graph a:hover ellipse {
+            stroke: #1976d2;
+            stroke-width: 5;
+            filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
+        }
+        
+        #graph .node, #graph .edge { transition: opacity 0.12s ease; }
+
+        /* Dim everything, then let the connected pieces come back to full opacity.
+         * The un-dim rules repeat the "svg.wp-dim" ancestor so they out-specify
+         * the dim rule above (which has an extra type selector) — otherwise the
+         * highlighted subgraph stays dimmed too. */
+        #graph svg.wp-dim .node,
+        #graph svg.wp-dim .edge { opacity: 0.15; }
+        #graph svg.wp-dim .node.wp-focus,
+        #graph svg.wp-dim .node.wp-neighbor,
+        #graph svg.wp-dim .edge.wp-hl { opacity: 1; }
+    
         #graph {
             text-align: center;
             background: white;
@@ -58,6 +83,7 @@
 <body>
     <h1>Monorepo Dependency Architecture</h1>
     <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
+    <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     <div class="legend">
         <h2>Legend — fill = framework (libType), border = role</h2>
         <div class="legend-item">
@@ -104,15 +130,70 @@
     <script>
         const dot = "digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L1 · [node] · lib)\"];\n  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, URL=\"../apps/app-example/angular-site/design.html\", target=\"_blank\", label=\"angular-site\\n(L3 · [angular] · client)\"];\n  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L6 · [express] · server)\"];\n  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/client-server/design.html\", target=\"_blank\", label=\"client-server\\n(L5 · [express] · server)\"];\n  \"client-server-api\" [fillcolor=\"#EDE7F6\", label=\"client-server-api\\n(L1 · [browser, node] · lib)\"];\n  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/cloud/cloudtasks-client/design.html\", target=\"_blank\", label=\"cloudtasks-client\\n(L2 · [node] · designed-lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", label=\"code-rules\\n(L1 · [node] · lib)\"];\n  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L4 · [express] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L1 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L1 · [node] · lib)\"];\n  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, URL=\"../packages/http/http-client-browser/design.html\", target=\"_blank\", label=\"http-client-browser\\n(L2 · [browser] · designed-lib)\"];\n  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node] · lib)\"];\n  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-client-node/design.html\", target=\"_blank\", label=\"http-client-node\\n(L2 · [node] · designed-lib)\"];\n  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, URL=\"../packages/http/http-routing/design.html\", target=\"_blank\", label=\"http-routing\\n(L2 · [node] · designed-lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L3 · [express] · lib)\"];\n  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", label=\"nx-webpieces-rules\\n(L2 · [node] · lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", label=\"pr-gate\\n(L1 · [node] · lib)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", label=\"rules-config\\n(L0 · [node] · lib)\"];\n  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, URL=\"../apps/app-example/server2/design.html\", target=\"_blank\", label=\"server2\\n(L5 · [express] · server)\"];\n  \"server2-api\" [fillcolor=\"#EDE7F6\", label=\"server2-api\\n(L1 · [browser, node] · lib)\"];\n  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n\n  { rank=same; \"core-mock\"; \"core-util\"; \"rules-config\"; }\n  { rank=same; \"ai-hook-rules\"; \"client-server-api\"; \"code-rules\"; \"company-core\"; \"core-context\"; \"eslint-rules\"; \"gcp-identity\"; \"http-client-core\"; \"pr-gate\"; \"server2-api\"; }\n  { rank=same; \"bunyan\"; \"cloudtasks-client\"; \"http-client-browser\"; \"http-client-node\"; \"http-routing\"; \"nx-webpieces-rules\"; \"winston\"; }\n  { rank=same; \"angular-site\"; \"http-server\"; }\n  { rank=same; \"company-svc-core\"; }\n  { rank=same; \"client-server\"; \"server2\"; }\n  { rank=same; \"app-example-e2e\"; \"legacy-server\"; }\n\n  \"ai-hook-rules\" -> \"rules-config\";\n  \"angular-site\" -> \"client-server-api\";\n  \"angular-site\" -> \"company-core\";\n  \"angular-site\" -> \"http-client-browser\";\n  \"app-example-e2e\" -> \"client-server\";\n  \"app-example-e2e\" -> \"server2\";\n  \"bunyan\" -> \"core-context\";\n  \"client-server\" -> \"client-server-api\";\n  \"client-server\" -> \"company-svc-core\";\n  \"client-server\" -> \"core-mock\";\n  \"client-server\" -> \"http-client-node\";\n  \"client-server\" -> \"server2-api\";\n  \"client-server-api\" -> \"core-util\";\n  \"cloudtasks-client\" -> \"core-context\";\n  \"cloudtasks-client\" -> \"gcp-identity\";\n  \"code-rules\" -> \"rules-config\";\n  \"company-core\" -> \"core-util\";\n  \"company-svc-core\" -> \"company-core\";\n  \"company-svc-core\" -> \"http-server\";\n  \"core-context\" -> \"core-util\";\n  \"eslint-rules\" -> \"rules-config\";\n  \"gcp-identity\" -> \"core-util\";\n  \"http-client-browser\" -> \"http-client-core\";\n  \"http-client-core\" -> \"core-util\";\n  \"http-client-node\" -> \"core-context\";\n  \"http-client-node\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"http-client-core\";\n  \"http-routing\" -> \"core-context\";\n  \"http-server\" -> \"gcp-identity\";\n  \"http-server\" -> \"http-routing\";\n  \"legacy-server\" -> \"client-server\";\n  \"nx-webpieces-rules\" -> \"ai-hook-rules\";\n  \"nx-webpieces-rules\" -> \"code-rules\";\n  \"nx-webpieces-rules\" -> \"eslint-rules\";\n  \"nx-webpieces-rules\" -> \"pr-gate\";\n  \"pr-gate\" -> \"rules-config\";\n  \"server2\" -> \"company-svc-core\";\n  \"server2\" -> \"server2-api\";\n  \"server2-api\" -> \"core-util\";\n  \"winston\" -> \"core-context\";\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n";
         const viz = new Viz();
-
         viz.renderSVGElement(dot)
             .then(element => {
                 document.getElementById('graph').appendChild(element);
+                wireHoverHighlight(element);
             })
             .catch(err => {
                 console.error(err);
                 document.getElementById('graph').innerHTML = '<pre>' + err + '</pre>';
             });
+        function wireHoverHighlight(svg) {
+            const nodeByName = new Map();
+            svg.querySelectorAll('g.node').forEach(g => {
+                const t = g.querySelector('title');
+                if (t) nodeByName.set(t.textContent.trim(), g);
+            });
+            // Directed adjacency: in* = entering (up/ancestors), out* = leaving (down/deps).
+            const inEdges = new Map(), outEdges = new Map(), inNodes = new Map(), outNodes = new Map();
+            const ensure = (map, key) => {
+                let v = map.get(key);
+                if (!v) { v = new Set(); map.set(key, v); }
+                return v;
+            };
+            svg.querySelectorAll('g.edge').forEach(edge => {
+                const t = edge.querySelector('title');
+                if (!t) return;
+                const idx = t.textContent.indexOf('->');
+                if (idx < 0) return;
+                const from = t.textContent.slice(0, idx).trim();
+                const to = t.textContent.slice(idx + 2).trim();
+                ensure(outEdges, from).add(edge);
+                ensure(inEdges, to).add(edge);
+                ensure(outNodes, from).add(to);
+                ensure(inNodes, to).add(from);
+            });
+            const clear = () => {
+                svg.classList.remove('wp-dim');
+                svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach(el => {
+                    el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
+                });
+            };
+            const highlight = (name, focusEl) => {
+                clear();
+                svg.classList.add('wp-dim');
+                focusEl.classList.add('wp-focus');
+                // Transitively light ancestors (up) then descendants (down): edges
+                // reached -> wp-hl, boxes -> wp-neighbor. visited guards cycles.
+                [[inNodes, inEdges], [outNodes, outEdges]].forEach(dir => {
+                    const visited = new Set(); const stack = [name];
+                    while (stack.length) {
+                        const cur = stack.pop();
+                        (dir[1].get(cur) || []).forEach(e => e.classList.add('wp-hl'));
+                        (dir[0].get(cur) || []).forEach(next => {
+                            if (visited.has(next)) return;
+                            visited.add(next); stack.push(next);
+                            const g = nodeByName.get(next); if (g) g.classList.add('wp-neighbor');
+                        });
+                    }
+                });
+            };
+            nodeByName.forEach((g, name) => {
+                g.addEventListener('mouseenter', () => highlight(name, g));
+                g.addEventListener('mouseleave', clear);
+            });
+        }
     </script>
 </body>
 </html>

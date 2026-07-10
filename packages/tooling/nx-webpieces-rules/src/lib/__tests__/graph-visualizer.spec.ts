@@ -91,5 +91,14 @@ describe('generateHTML', () => {
         expect(html).toContain('wp-hl');
         expect(html).toContain('wp-neighbor');
         expect(html).toContain('wp-focus');
+        // Directed adjacency + a transitive walk that follows edges past the
+        // immediate neighbors, up through all ancestors and down through all
+        // descendants (not just one hop).
+        expect(html).toContain('inNodes');
+        expect(html).toContain('outNodes');
+        expect(html).toContain('inEdges');
+        expect(html).toContain('outEdges');
+        expect(html).toContain('visited');
+        expect(html).toContain('stack');
     });
 });
