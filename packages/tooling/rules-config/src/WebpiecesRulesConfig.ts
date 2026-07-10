@@ -15,6 +15,7 @@ import {
     NoSymbolDiTokensConfig,
     NoProcessExitOutsideMainConfig,
     NoFunctionOutsideClassConfig,
+    InjectAnnotationNotNeededForConcreteClassConfig,
     FrameworkTagConfig,
     RoleTagConfig,
     BranchCreationGuardConfig,
@@ -48,6 +49,7 @@ export class WebpiecesRulesConfig {
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
     'no-process-exit-outside-main'?: NoProcessExitOutsideMainConfig;
     'no-function-outside-class'?: NoFunctionOutsideClassConfig;
+    'inject-annotation-not-needed-for-concrete-class'?: InjectAnnotationNotNeededForConcreteClassConfig;
     'framework-tag'?: FrameworkTagConfig;
     'role-tag'?: RoleTagConfig;
     'branch-creation-guard'?: BranchCreationGuardConfig;
