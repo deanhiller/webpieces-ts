@@ -84,17 +84,17 @@ export class GraphVisualizer {
 
     /**
      * Edge styling by API-relation kind (why the edge exists):
-     *   implements       → DASHED (a controller serves this api-lib's contract)
-     *   uses             → SOLID blue, thicker (a generated client calls it)
-     *   uses-implements  → DASHED purple, thicker (does both — implements some
+     *   implements       → BLACK dashed (a controller serves this api-lib's contract)
+     *   uses             → BLACK solid (a generated client calls it) — same as a
+     *                      plain library import, since a plain dependency IS a use.
+     *   uses-implements  → BLUE dashed, thicker (does both — implements some
      *                      contracts of the api-lib, uses others)
-     *   plain lib (none) → the default thin solid arrow, unchanged.
+     *   plain lib (none) → the default thin black solid arrow, unchanged.
      * `kind` is undefined for every non-api-lib dependency edge.
      */
     private edgeAttrs(kind: ApiRelationKind | undefined): string {
         if (kind === 'implements') return ' [style=dashed]';
-        if (kind === 'uses') return ' [color="#1976d2", penwidth=2]';
-        if (kind === 'uses-implements') return ' [style=dashed, color="#8e24aa", penwidth=2]';
+        if (kind === 'uses-implements') return ' [style=dashed, color="#1976d2", penwidth=2]';
         return '';
     }
 
@@ -447,20 +447,16 @@ export class GraphVisualizer {
     // Column 3 — edge line style keyed on WHY a project depends on an api-lib.
     private edgeItems(): string {
         return `<div class="legend-item">
+            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2"/></svg>
+            <strong>uses:</strong> calls the API (generates an rpc/pubsub client via <code>createRpcClient</code>/<code>createPubSubClient</code>) — also covers a plain library import, since a plain dependency is just a use.
+        </div>
+        <div class="legend-item">
             <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2" stroke-dasharray="5,3"/></svg>
             <strong>implements:</strong> serves the API — NOTE: this is a build-dependency diagram, so a UML <em>implements</em> arrow can't be used; we use a dashed line to signal a build dep, because this server implements the api and the api is built first, then this server after.
         </div>
         <div class="legend-item">
-            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#1976d2" stroke-width="2"/></svg>
-            <strong>uses:</strong> calls the API (generates an rpc/pubsub client via <code>createRpcClient</code>/<code>createPubSubClient</code>)
-        </div>
-        <div class="legend-item">
-            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#8e24aa" stroke-width="2" stroke-dasharray="5,3"/></svg>
-            <strong>uses-implements:</strong> both — implements some of the api-lib's contracts, uses others
-        </div>
-        <div class="legend-item">
-            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#999" stroke-width="1.5"/></svg>
-            <strong>plain dependency:</strong> a normal library import (no API relationship)
+            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#1976d2" stroke-width="2" stroke-dasharray="5,3"/></svg>
+            <strong>uses/implements:</strong> both — implements some of the api-lib's contracts, uses others
         </div>`;
     }
 

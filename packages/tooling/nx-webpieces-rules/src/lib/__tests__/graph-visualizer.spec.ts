@@ -91,8 +91,8 @@ describe('generateDot edge styling', () => {
             'server2-api': { level: 1, dependsOn: [], framework: ['browser', 'node'], role: 'api-lib' },
             'core-util': { level: 0, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
         });
-        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed];'); // implements
-        expect(dot).toContain('"client-server" -> "server2-api" [color="#1976d2", penwidth=2];'); // uses
+        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed];'); // implements = black dashed
+        expect(dot).toContain('"client-server" -> "server2-api";'); // uses = plain black solid, same as a plain dep
         expect(dot).toContain('"client-server" -> "core-util";'); // plain dep, unstyled
         expect(dot).toContain('color="#EF6C00", penwidth=2'); // api-lib box border
     });
@@ -113,7 +113,7 @@ describe('generateDot edge styling', () => {
             },
             'shared-api': { level: 1, dependsOn: [], role: 'api-lib' },
         });
-        expect(dot).toContain('"svc" -> "shared-api" [style=dashed, color="#8e24aa", penwidth=2];');
+        expect(dot).toContain('"svc" -> "shared-api" [style=dashed, color="#1976d2", penwidth=2];');
     });
 });
 
