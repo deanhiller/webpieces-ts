@@ -3,11 +3,11 @@ import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversi
 import { ApiFactory, AuthConfig, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
-import { TestAuthConfig } from '../../../client-server/src/test/TestAuthConfig';
+import { TestAuthConfig } from './TestAuthConfig';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Server2Api } from '@webpieces/server2-api';
-import { TYPES } from '../../../client-server/src/remote/Server2Client';
-import { Server2Simulator } from '../../../client-server/src/remote/Server2Simulator';
+import { TYPES } from '../remote/Server2Client';
+import { Server2Simulator } from '../remote/Server2Simulator';
 import { buildLegacyApiFactory, LegacyApiFactoryOptions } from '../LegacyServer';
 
 /**

@@ -1,15 +1,20 @@
 import express, { Express, Request, Response } from 'express';
 import { ContainerModule } from 'inversify';
-import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
+import { LoggerFactory, ConsoleLoggerFactory, ContextKey } from '@webpieces/core-util';
 import { ApiFactory, WebpiecesRouter, FilterDefinition } from '@webpieces/http-routing';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-// Reuse the client-server app's real controllers/modules — this example is about the WIRING
-// difference (embed onto a pre-existing express app), not new business logic. Auth (framework
-// AuthFilter) + AuthConfig come from those reused modules automatically.
-import { SaveController } from '../../client-server/src/controllers/save-controller';
-import { PublicController } from '../../client-server/src/controllers/public-controller';
-import { APP_MODULES, APP_HEADERS } from '../../client-server/src/AppServerConfig';
+// The legacy app is SELF-CONTAINED — a legacy server must not depend on a greenfield sibling
+// server, so its controllers + DI module are its OWN copies here (sharing only the api CONTRACT).
+import { SaveController } from './controllers/save-controller';
+import { PublicController } from './controllers/public-controller';
+import { InversifyModule, AppHeaders } from './modules/InversifyModule';
+
+/** This app's DI modules (beyond the standard company set). */
+const APP_MODULES: ContainerModule[] = [InversifyModule];
+
+/** This app's own context keys, registered into the global HeaderRegistry at startup + in tests. */
+const APP_HEADERS: ContextKey[] = new AppHeaders().getAllHeaders();
 
 /**
  * The pre-existing LEGACY express app: it already has its own routes and webpieces never
