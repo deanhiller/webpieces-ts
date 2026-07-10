@@ -13,7 +13,7 @@ import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
-import { writeVisualization } from '../../lib/graph-visualizer';
+import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { buildWorkspaceModel } from '../../lib/runtime-markers';
 import { assembleRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
@@ -81,7 +81,7 @@ export default async function runExecutor(
 
         // Step 4b: Write the committed, clickable HTML view next to the JSON so
         // dependencies.html regenerates in lock-step with dependencies.json.
-        const vizPaths = writeVisualization(enhancedGraph, workspaceRoot);
+        const vizPaths = new GraphVisualizer().writeVisualization(enhancedGraph, workspaceRoot);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
         // Step 5: Generate the runtime microservice graph at the same time

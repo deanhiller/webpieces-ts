@@ -19,7 +19,9 @@ export default [
     // output committed alongside design.json/design.md) — never source, and the
     // Angular template linter would otherwise try to parse it as an ng template.
     {
-        ignores: ['scripts/**', '**/design.html'],
+        // *.client.js are browser assets inlined into generated HTML (read via
+        // readFileSync), not linted app source — same rationale as design.html.
+        ignores: ['scripts/**', '**/design.html', '**/*.client.js'],
     },
 
     // Workspace-specific TypeScript and general rules

@@ -30,6 +30,11 @@
                         "input": "packages/tooling/nx-webpieces-rules/src/executors",
                         "glob": "**/schema.json",
                         "output": "src/executors"
+                    },
+                    {
+                        "input": "packages/tooling/nx-webpieces-rules/src/lib",
+                        "glob": "**/*.client.js",
+                        "output": "src/lib"
                     }
                 ]
             }

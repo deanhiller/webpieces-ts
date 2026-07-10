@@ -111,7 +111,7 @@
         },
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
-            "allowedPaths": [],
+            "allowedPaths": ["packages/tooling/nx-webpieces-rules/src/lib/*.client.js"],
             "ignoreModifiedUntilEpoch": 0
         },
         "no-function-outside-class": {
