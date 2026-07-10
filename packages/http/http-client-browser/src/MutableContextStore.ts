@@ -14,7 +14,7 @@ import { ContextKey, ContextReader } from '@webpieces/core-util';
  * // startup:
  * HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeaders(), true);
  * const factory = new ClientHttpFactory(new ContextMgr(store));
- * const client = factory.createClient(SaveApi, new ClientConfig(baseUrl));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig(baseUrl));
  *
  * // later, when the user logs in / picks a tenant:
  * store.set(AppHeaders.AUTHORIZATION, token);   // an app-defined key, if it wants auto-attach

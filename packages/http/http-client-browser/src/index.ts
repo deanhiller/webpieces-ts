@@ -17,7 +17,7 @@
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
  *
- * const client = factory.createClient(SaveApi, new ClientConfig('http://localhost:3000'));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig('http://localhost:3000'));
  * const response = await client.save({ query: 'test' });
  * ```
  *

@@ -5,7 +5,7 @@ the Cloud Tasks twin — calling a method makes the HTTP request that contract d
 
 ```ts
 // inject the factory (a framework singleton), then one client per contract
-const server2 = factory.createClient(Server2Api, new ClientConfig('server2'));
+const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
 const res = await server2.fetchValue(req);          // inside a RequestContext
 ```
 

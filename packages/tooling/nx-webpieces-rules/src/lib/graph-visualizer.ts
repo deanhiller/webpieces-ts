@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
+import type { ApiRelationKind } from './api-usage/api-relations';
 import { GraphNames } from './graph-names';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { toError } from '../toError';
@@ -76,7 +77,24 @@ export class GraphVisualizer {
     private roleBorderAttrs(role: string): string {
         if (role === 'server') return ', color="green", penwidth=3';
         if (role === 'client') return ', color="red", penwidth=3';
+        if (role === 'api-lib') return ', color="#EF6C00", penwidth=2';
         if (role === 'designed-lib') return ', penwidth=2';
+        return '';
+    }
+
+    /**
+     * Edge styling by API-relation kind (why the edge exists):
+     *   implements       → DASHED (a controller serves this api-lib's contract)
+     *   uses             → SOLID blue, thicker (a generated client calls it)
+     *   uses-implements  → DASHED purple, thicker (does both — implements some
+     *                      contracts of the api-lib, uses others)
+     *   plain lib (none) → the default thin solid arrow, unchanged.
+     * `kind` is undefined for every non-api-lib dependency edge.
+     */
+    private edgeAttrs(kind: ApiRelationKind | undefined): string {
+        if (kind === 'implements') return ' [style=dashed]';
+        if (kind === 'uses') return ' [color="#1976d2", penwidth=2]';
+        if (kind === 'uses-implements') return ' [style=dashed, color="#8e24aa", penwidth=2]';
         return '';
     }
 
@@ -153,13 +171,17 @@ export class GraphVisualizer {
         return dot;
     }
 
-    // Edge lines (dependencies).
+    // Edge lines (dependencies). An edge to an api-lib is styled by WHY it exists
+    // (implements/uses/uses-implements, from apiRelations); every other dependency
+    // keeps the default plain arrow.
     private dotEdges(graph: EnhancedGraph): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const shortName = this.names.getShortName(project);
-            for (const dep of graph[project].dependsOn || []) {
-                dot += `  "${shortName}" -> "${this.names.getShortName(dep)}";\n`;
+            const info = graph[project];
+            for (const dep of info.dependsOn || []) {
+                const attrs = this.edgeAttrs(info.apiRelations?.[dep]?.kind);
+                dot += `  "${shortName}" -> "${this.names.getShortName(dep)}"${attrs};\n`;
             }
         }
         return dot;
@@ -373,6 +395,27 @@ export class GraphVisualizer {
         <div class="legend-item">
             <span class="legend-box" style="border: 1px solid #ccc;"></span>
             <strong>lib:</strong> plain library, no generated design (thin border)
+        </div>
+        <div class="legend-item">
+            <span class="legend-box" style="border: 2px solid #EF6C00;"></span>
+            <strong>api-lib:</strong> API-contract library (defines <code>@ApiPath</code>/<code>@Rpc</code>/<code>@PubSub</code> <code>*Api</code> classes)
+        </div>
+        <h2 style="margin-top: 18px;">Edge lines — <em>why</em> a project depends on an api-lib</h2>
+        <div class="legend-item">
+            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2" stroke-dasharray="5,3"/></svg>
+            <strong>implements:</strong> serves the API (a controller is registered via <code>addRoutes</code>)
+        </div>
+        <div class="legend-item">
+            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#1976d2" stroke-width="2"/></svg>
+            <strong>uses:</strong> calls the API (generates an rpc/pubsub client via <code>createRpcClient</code>/<code>createPubSubClient</code>)
+        </div>
+        <div class="legend-item">
+            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#8e24aa" stroke-width="2" stroke-dasharray="5,3"/></svg>
+            <strong>uses-implements:</strong> both — implements some of the api-lib's contracts, uses others
+        </div>
+        <div class="legend-item">
+            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#999" stroke-width="1.5"/></svg>
+            <strong>plain dependency:</strong> a normal library import (no API relationship)
         </div>
         <div class="legend-item" style="margin-top: 15px;">
             <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Rows are laid out by level (top = no dependencies), with the deepest libraries at the bottom. Transitive dependencies are allowed but not shown.</em>

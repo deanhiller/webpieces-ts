@@ -94,7 +94,7 @@ export function provideTransient(): ClassDecorator {
  * would hand back the first instance.
  *
  * `get()` is SYNCHRONOUS, like Guice's. An async `get()` would force every consumer (e.g.
- * `ClientHttpFactory.createClient`) to become async, and neither Angular's `useFactory` nor
+ * `ClientHttpFactory.createRpcClient`) to become async, and neither Angular's `useFactory` nor
  * inversify's `toDynamicValue` can await.
  *
  * TypeScript erases generics, so `Provider<T>` has NO runtime identity and cannot itself be a DI

@@ -26,12 +26,12 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
  *
  * ```typescript
  * // same project + region as this container; the URL is derived, you maintain nothing
- * const emailTasks = factory.createClient(EmailApi, new TaskClientConfig('email-svc'));
+ * const emailTasks = factory.createPubSubClient(EmailApi, new TaskClientConfig('email-svc'));
  * await scheduler.addToQueue(() => emailTasks.sendEmail(req), { dedupName });
  * ```
  *
  * Every client it builds gets its OWN {@link TaskProxyClient} from the injected
- * `Provider<TaskProxyClient>` (bound transient), which `createClient` then `init`s for one
+ * `Provider<TaskProxyClient>` (bound transient), which `createPubSubClient` then `init`s for one
  * contract. Their collaborators (TaskInvoker, RequestContextHeaders) come from the container.
  *
  * Node-only, so the factory IS the inversify entry point. An enqueue outside
@@ -46,7 +46,7 @@ export class ClientCloudTasksFactory {
     ) {}
 
     /** Typed enqueue client for a @PubSub contract, delivered to `config.svcName`. */
-    createClient<T extends object>(apiClass: ApiPrototype<T>, config: TaskClientConfig): T {
+    createPubSubClient<T extends object>(apiClass: ApiPrototype<T>, config: TaskClientConfig): T {
         // Fresh instance per contract — TaskProxyClient is transient.
         const proxyClient = this.taskProxyClientProvider.get();
         proxyClient.init(apiClass, config);

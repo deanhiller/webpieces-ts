@@ -11,6 +11,9 @@
  *   - `lib`          — a plain library; no DI design is generated.
  *   - `client`       — a client app (e.g. angular-site); angular apps keep their
  *                      component/route design, others get none.
+ *   - `api-lib`      — an API-contract library: exports `@ApiPath`/`@Rpc`/`@PubSub`
+ *                      abstract `*Api` classes that servers implement and clients
+ *                      generate typed clients from. No DI design of its own.
  *
  * Resolution order:
  * 1. Explicit nx tag `role:<value>` on the project (project.json tags) — the
@@ -25,7 +28,7 @@ import { ProjectInfo } from './project-info';
 export const ROLE_TAG_PREFIX = 'role:';
 
 /** The roles the `role-tag` rule and the DI-graph analyzer understand. */
-export const KNOWN_ROLES: ReadonlyArray<string> = ['server', 'designed-lib', 'lib', 'client'];
+export const KNOWN_ROLES: ReadonlyArray<string> = ['server', 'designed-lib', 'lib', 'client', 'api-lib'];
 
 /** Default role for a project with no explicit `role:` tag. */
 export const DEFAULT_ROLE = 'lib';

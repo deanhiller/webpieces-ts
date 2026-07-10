@@ -4,7 +4,7 @@ Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — th
 
 ## In Scope
 
-- Enqueue client generation from a `@PubSub` contract (`ClientCloudTasksFactory.createClient`, `TaskProxyClient`, `TaskClientConfig`)
+- Enqueue client generation from a `@PubSub` contract (`ClientCloudTasksFactory.createPubSubClient`, `TaskProxyClient`, `TaskClientConfig`)
 - `CloudTaskScheduler` (addToQueue / schedule / cancelJob) + the out-of-band schedule-frame bridge
 - `TaskInvoker` abstraction and impls: `GcpTaskInvoker` (real @google-cloud/tasks) and `InMemoryTaskInvoker` (in-process queue that delivers via a real HTTP `fetch` to `targetUrl + path`, e.g. `localhost:{port}`, for tests/local dev)
 

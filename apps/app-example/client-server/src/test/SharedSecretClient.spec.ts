@@ -52,7 +52,7 @@ function clientSending(value: string): SecureApi {
     // server started and configured the registry), never at module scope.
     const provider = new Provider(() => new NodeProxyClient(new RequestContextHeaders(), secrets));
     const factory = new ClientHttpFactory(provider);
-    return factory.createClient(SecureApi, new ClientConfig('client-server', `http://localhost:${PORT}`));
+    return factory.createRpcClient(SecureApi, new ClientConfig('client-server', `http://localhost:${PORT}`));
 }
 
 describe('shared-secret over HTTP: client sends from Secrets, server accepts either', () => {

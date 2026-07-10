@@ -14,7 +14,7 @@
  * import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
  *
  * // inject the factory, then one client per contract
- * const server2 = factory.createClient(Server2Api, new ClientConfig('server2'));
+ * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
  * const response = await server2.fetchValue(req);
  * ```
  */

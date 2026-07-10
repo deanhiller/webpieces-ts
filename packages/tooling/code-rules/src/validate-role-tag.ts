@@ -22,7 +22,7 @@ import { CodeValidator, ExecutorResult } from './code-validator';
 import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';
 
 const ROLE_TAG_PREFIX = 'role:';
-const DEFAULT_KNOWN_TYPES = ['server', 'designed-lib', 'lib', 'client'];
+const DEFAULT_KNOWN_TYPES = ['server', 'designed-lib', 'lib', 'client', 'api-lib'];
 
 /** The role-tag flavor of the shared missing-tag scan (exported for tests). */
 export function findRoleUntaggedProjects(workspaceRoot: string, changedFiles: string[]): MissingTagProject[] {

@@ -120,6 +120,7 @@ export function explicitRoleTag(tags: readonly string[]): string | null {
  *  - `designed-lib` → Inversify, roots on `@DocumentDesign` (apiImplementation kind)
  *  - `client`       → Angular design for angular apps; otherwise skip
  *  - `lib`          → skip (plain libraries get no design)
+ *  - `api-lib`      → skip (contract-only libraries get no design)
  *  - role absent    → legacy framework/marker selection
  */
 export function selectAnalyzer(
@@ -131,6 +132,7 @@ export function selectAnalyzer(
     if (role === 'designed-lib') return new InversifyAnalyzer('apiImplementation');
     if (role === 'client') return frameworks.includes('angular') ? new AngularAnalyzer() : new EmptyAnalyzer();
     if (role === 'lib') return new EmptyAnalyzer();
+    if (role === 'api-lib') return new EmptyAnalyzer();
 
     // Role tag absent — fall back to the legacy framework/marker selection so
     // designs stay identical until a project is retagged.

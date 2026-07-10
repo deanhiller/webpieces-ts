@@ -26,6 +26,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
+import type { ProjectApiRelations } from './api-usage/api-relations';
 import { toError } from '../toError';
 
 /**
@@ -164,6 +165,7 @@ function formatEntryLines(entry: GraphEntry): string[] {
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
     pushOptionalField(lines, 'designFile', entry.designFile);
+    pushApiRelationsField(lines, entry.apiRelations);
 
     if (entry.dependsOn.length === 0) {
         lines.push(`            "dependsOn": []`);
@@ -195,6 +197,23 @@ function pushOptionalArrayField(lines: string[], field: string, value: string[] 
     if (value !== undefined) {
         lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
     }
+}
+
+/**
+ * Emit the optional `apiRelations` object (pretty, multi-line, reindented under
+ * the 12-space entry block) with a trailing comma, since `dependsOn` always
+ * follows it. Skipped when absent/empty so plain-lib-only projects stay compact.
+ * The scanner already sorts owners + refs, so the JSON is deterministic.
+ */
+// webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling push*Field helpers here
+function pushApiRelationsField(lines: string[], value: ProjectApiRelations | undefined): void {
+    if (value === undefined || Object.keys(value).length === 0) return;
+    const pretty = JSON.stringify(value, null, 4).split('\n');
+    pretty.forEach((line: string, index: number) => {
+        const prefix = index === 0 ? '"apiRelations": ' : '';
+        const suffix = index === pretty.length - 1 ? ',' : '';
+        lines.push(`            ${prefix}${line}${suffix}`);
+    });
 }
 
 /**

@@ -5,7 +5,7 @@ The server-side HTTP client: generates type-safe clients from the SAME API contr
 ## In Scope
 
 - `ClientHttpFactory` — the `@DocumentDesign` design root and inversify entry point; one per service, injected wherever a typed client is needed
-- `NodeProxyClient` — the container-wired `ProxyClient` (bound TRANSIENT: each API contract needs its own), plus `ProxyClientProvider`, the Guice-style `Provider<T>` that hands out a fresh one per `createClient`
+- `NodeProxyClient` — the container-wired `ProxyClient` (bound TRANSIENT: each API contract needs its own), plus `ProxyClientProvider`, the Guice-style `Provider<T>` that hands out a fresh one per `createRpcClient`
 - `ClientConfig` — per-client state: the callee's `svcName` (typically its Cloud Run service name) and an optional `targetUrl` override for cross-region / cross-project / non-Cloud-Run targets
 - Failing fast when a call is made outside `RequestContext.run(...)` — an outbound call with no correlation id or request-id chain is a bug, not a default
 

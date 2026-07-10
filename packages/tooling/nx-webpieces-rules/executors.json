@@ -40,6 +40,11 @@
             "schema": "./src/executors/validate-no-skiplevel-deps/schema.json",
             "description": "Validate no project has redundant transitive dependencies"
         },
+        "validate-api-relations": {
+            "implementation": "./src/executors/validate-api-relations/executor",
+            "schema": "./src/executors/validate-api-relations/schema.json",
+            "description": "Validate every server/client api-lib dependency is implemented or used (no unexplained edges)"
+        },
         "validate-no-file-import-cycles": {
             "implementation": "./src/executors/validate-no-file-import-cycles/executor",
             "schema": "./src/executors/validate-no-file-import-cycles/schema.json",

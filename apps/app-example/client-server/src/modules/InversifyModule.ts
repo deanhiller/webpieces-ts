@@ -75,7 +75,7 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     bind<Server2Api>(TYPES.Server2Api)
         .toDynamicValue((ctx: ResolutionContext) => {
             const server2Url = process.env['SERVER2_URL'] ?? 'http://localhost:8202';
-            return ctx.get(ClientHttpFactory).createClient(Server2Api, new ClientConfig('server2', server2Url));
+            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2', server2Url));
         })
         .inSingletonScope();
 });

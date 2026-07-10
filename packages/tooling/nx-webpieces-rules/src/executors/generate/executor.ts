@@ -13,6 +13,7 @@ import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
+import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { buildWorkspaceModel } from '../../lib/runtime-markers';
 import { assembleRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
@@ -73,6 +74,12 @@ export default async function runExecutor(
         console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
         const projectInfos = await collectProjectInfo();
         enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
+
+        // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
+        // scanning source, so dependencies.json + the viz + the runtime graph all
+        // read the same derived truth.
+        console.log('🔎 Scanning source for implements/uses API relations...');
+        scanAndAttachApiRelations(workspaceRoot, enhancedGraph, projectInfos);
 
         // Step 4: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');

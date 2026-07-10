@@ -12,7 +12,7 @@ HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeader
 
 const store = new MutableContextStore();
 const factory = new ClientHttpBrowserFactory(store);
-const saveApi = factory.createClient(SaveApi, new ClientConfig(env.apiBaseUrl));
+const saveApi = factory.createRpcClient(SaveApi, new ClientConfig(env.apiBaseUrl));
 
 const res = await saveApi.save({ query: 'test' });   // type-safe
 
@@ -22,4 +22,4 @@ store.set(CompanyHeaders.TENANT_ID, tenantId);
 ```
 
 A browser cannot hold service credentials, so a contract with an `@AuthOidc` endpoint fails fast at
-`createClient`. The server twin is [@webpieces/http-client-node](../http-client-node).
+`createRpcClient`. The server twin is [@webpieces/http-client-node](../http-client-node).

@@ -292,7 +292,7 @@
             ],
             "mainMessage": "Raw HTTP (fetch/axios/XMLHttpRequest/…) bypasses contract-first development — the client and server stop sharing the same API contract/types. Generate a type-safe client from the contract instead:",
             "options": [
-                "PREFERRED: generate a client from the API you want to call — server-side, inject ClientHttpFactory from '@webpieces/http-client-node' and call factory.createClient(SomeApi, new ClientConfig('some-svc')); in a browser, use ClientHttpBrowserFactory from '@webpieces/http-client-browser'. Then: await client.someMethod(req);",
+                "PREFERRED: generate a client from the API you want to call — server-side, inject ClientHttpFactory from '@webpieces/http-client-node' and call factory.createRpcClient(SomeApi, new ClientConfig('some-svc')); in a browser, use ClientHttpBrowserFactory from '@webpieces/http-client-browser'. Then: await client.someMethod(req);",
                 "Reuse an existing API contract already defined in your repo (under libraries/apis/**) and generate its client the same way.",
                 "For a truly external service, create a NEW API contract (a decorated abstract class) AND a NEW implementation that calls fetch behind that contract, under an allowlisted dir (libraries/apis-external/**). The contract stays the shared surface; fetch is an impl detail."
             ],

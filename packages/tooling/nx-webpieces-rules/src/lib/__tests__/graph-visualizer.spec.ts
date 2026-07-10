@@ -74,6 +74,49 @@ describe('generateDot', () => {
     });
 });
 
+describe('generateDot edge styling', () => {
+    it('styles api-lib edges by relation kind and leaves plain deps unstyled', () => {
+        const dot = viz.generateDot({
+            'client-server': {
+                level: 5,
+                dependsOn: ['client-server-api', 'server2-api', 'core-util'],
+                framework: ['express'],
+                role: 'server',
+                apiRelations: {
+                    'client-server-api': { kind: 'implements', implements: [{ api: 'SaveApi', type: 'rpc' }], uses: [] },
+                    'server2-api': { kind: 'uses', implements: [], uses: [{ api: 'Server2Api', type: 'rpc' }] },
+                },
+            },
+            'client-server-api': { level: 1, dependsOn: [], framework: ['browser', 'node'], role: 'api-lib' },
+            'server2-api': { level: 1, dependsOn: [], framework: ['browser', 'node'], role: 'api-lib' },
+            'core-util': { level: 0, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
+        });
+        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed];'); // implements
+        expect(dot).toContain('"client-server" -> "server2-api" [color="#1976d2", penwidth=2];'); // uses
+        expect(dot).toContain('"client-server" -> "core-util";'); // plain dep, unstyled
+        expect(dot).toContain('color="#EF6C00", penwidth=2'); // api-lib box border
+    });
+
+    it('styles a uses-implements edge distinctly', () => {
+        const dot = viz.generateDot({
+            svc: {
+                level: 2,
+                dependsOn: ['shared-api'],
+                role: 'server',
+                apiRelations: {
+                    'shared-api': {
+                        kind: 'uses-implements',
+                        implements: [{ api: 'AApi', type: 'rpc' }],
+                        uses: [{ api: 'BApi', type: 'pubsub' }],
+                    },
+                },
+            },
+            'shared-api': { level: 1, dependsOn: [], role: 'api-lib' },
+        });
+        expect(dot).toContain('"svc" -> "shared-api" [style=dashed, color="#8e24aa", penwidth=2];');
+    });
+});
+
 describe('generateHTML', () => {
     it('renders a framework + role legend', () => {
         const html = viz.generateHTML(viz.generateDot(GRAPH));
