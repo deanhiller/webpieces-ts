@@ -172,7 +172,7 @@ export function generateHTML(dot: string, title: string = 'Monorepo Dependency A
 <body>
     <h1>${title}</h1>
     <p class="hint">💡 Click any box with a generated DI design to open its <strong>design.html</strong> (what the AI sees inside that project).</p>
-    <p class="hint">🔦 <strong>Hover any box</strong> to bolden all of its connections (incoming <em>and</em> outgoing) and highlight the boxes on the other end — the rest of the graph dims so you can trace one box at a glance.</p>
+    <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     ${legend}
     <div id="graph"></div>
     <script>${script}</script>
@@ -319,8 +319,8 @@ function generateHTMLScript(dot: string): string {
                 const t = g.querySelector('title');
                 if (t) nodeByName.set(t.textContent.trim(), g);
             });
-            const edgesOf = new Map();
-            const neighborsOf = new Map();
+            // Directed adjacency: in* = entering (up/ancestors), out* = leaving (down/deps).
+            const inEdges = new Map(), outEdges = new Map(), inNodes = new Map(), outNodes = new Map();
             const ensure = (map, key) => {
                 let v = map.get(key);
                 if (!v) { v = new Set(); map.set(key, v); }
@@ -333,10 +333,10 @@ function generateHTMLScript(dot: string): string {
                 if (idx < 0) return;
                 const from = t.textContent.slice(0, idx).trim();
                 const to = t.textContent.slice(idx + 2).trim();
-                ensure(edgesOf, from).add(edge);
-                ensure(edgesOf, to).add(edge);
-                ensure(neighborsOf, from).add(to);
-                ensure(neighborsOf, to).add(from);
+                ensure(outEdges, from).add(edge);
+                ensure(inEdges, to).add(edge);
+                ensure(outNodes, from).add(to);
+                ensure(inNodes, to).add(from);
             });
             const clear = () => {
                 svg.classList.remove('wp-dim');
@@ -348,10 +348,19 @@ function generateHTMLScript(dot: string): string {
                 clear();
                 svg.classList.add('wp-dim');
                 focusEl.classList.add('wp-focus');
-                (edgesOf.get(name) || []).forEach(e => e.classList.add('wp-hl'));
-                (neighborsOf.get(name) || []).forEach(n => {
-                    const g = nodeByName.get(n);
-                    if (g) g.classList.add('wp-neighbor');
+                // Transitively light ancestors (up) then descendants (down): edges
+                // reached -> wp-hl, boxes -> wp-neighbor. visited guards cycles.
+                [[inNodes, inEdges], [outNodes, outEdges]].forEach(dir => {
+                    const visited = new Set(); const stack = [name];
+                    while (stack.length) {
+                        const cur = stack.pop();
+                        (dir[1].get(cur) || []).forEach(e => e.classList.add('wp-hl'));
+                        (dir[0].get(cur) || []).forEach(next => {
+                            if (visited.has(next)) return;
+                            visited.add(next); stack.push(next);
+                            const g = nodeByName.get(next); if (g) g.classList.add('wp-neighbor');
+                        });
+                    }
                 });
             };
             nodeByName.forEach((g, name) => {
