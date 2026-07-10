@@ -19,10 +19,11 @@
  */
 
 import * as ts from 'typescript';
+import * as fs from 'fs';
 import * as path from 'path';
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
-import { createProjectProgram } from '../di-graph/program';
+import { findProjectTsconfig } from '../di-graph/program';
 import { resolveClassDeclaration, classDecorators, decoratorName } from '../di-graph/bindings';
 import {
     ApiClassInfo,
@@ -45,6 +46,12 @@ export interface ApiScanResult {
     apiLibProjects: Set<string>;
     /** apiClassName -> where it lives + its transport. */
     apiIndex: Map<string, ApiClassInfo>;
+    /**
+     * Projects whose production (non-test) source was actually scanned. A project with only test
+     * files (e.g. an e2e harness), or one the compiler couldn't load, is ABSENT — callers must not
+     * conclude "no implements/uses" for it, because its behavior was never observed.
+     */
+    scannedProjects: Set<string>;
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -128,6 +135,7 @@ export class ApiUsageScanner {
     private readonly apiLibProjects = new Set<string>();
     private readonly apiIndex = new Map<string, ApiClassInfo>();
     private readonly relationsByProject = new Map<string, ProjectApiRelations>();
+    private readonly scannedProjects = new Set<string>();
 
     constructor(
         private readonly workspaceRoot: string,
@@ -145,23 +153,29 @@ export class ApiUsageScanner {
             relationsByProject: this.relationsByProject,
             apiLibProjects: this.apiLibProjects,
             apiIndex: this.apiIndex,
+            scannedProjects: this.scannedProjects,
         };
     }
 
     private scanProject(info: ProjectInfo): void {
-        const program = createProjectProgram(path.resolve(this.workspaceRoot, info.root));
+        const program = createScanProgram(path.resolve(this.workspaceRoot, info.root));
         if (!program) return;
         const checker = program.getTypeChecker();
         const accumulator = new RelationAccumulator();
+        let scannedProductionFile = false;
 
         for (const sourceFile of program.getSourceFiles()) {
             if (sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/')) continue;
             if (isTestFile(sourceFile.fileName)) continue; // tests are not production topology
             // Only this project's OWN files — imported api-lib source is in the program too.
             if (this.locator.projectOf(sourceFile.fileName) !== info.name) continue;
+            scannedProductionFile = true;
             this.visit(sourceFile, checker, info.name, accumulator);
         }
 
+        // Record coverage only when we actually saw production source — an all-test project (e2e)
+        // stays absent so the validator won't wrongly flag its api-lib deps as unused.
+        if (scannedProductionFile) this.scannedProjects.add(info.name);
         if (!accumulator.isEmpty()) this.relationsByProject.set(info.name, accumulator.toRelations());
     }
 
@@ -235,6 +249,47 @@ export function scanAndAttachApiRelations(
         if (entry) entry.apiRelations = result.relationsByProject.get(projectName);
     }
     return result;
+}
+
+/**
+ * Build a program for scanning ONE project. Prefers the project's compile tsconfig; but when that
+ * is a solution-style tsconfig (only `references`, no `files`/`include` — e.g. legacy-server), it
+ * yields zero files, so we fall back to globbing the project's own `src/**` and reuse the resolved
+ * compiler options (which carry tsconfig.base `paths` for cross-package @webpieces resolution).
+ */
+// webpieces-disable no-function-outside-class -- ts Program factory, mirrors di-graph/program.ts
+function createScanProgram(projectRootAbs: string): ts.Program | null {
+    const configPath = findProjectTsconfig(projectRootAbs);
+    if (!configPath) return buildProgramFromSrc(projectRootAbs, {});
+    const host = Object.assign({}, ts.sys, {
+        onUnRecoverableConfigFileDiagnostic: (): void => undefined,
+    }) as ts.ParseConfigFileHost;
+    const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host);
+    if (!parsed) return null;
+    if (parsed.fileNames.length > 0) return ts.createProgram(parsed.fileNames, parsed.options);
+    return buildProgramFromSrc(projectRootAbs, parsed.options);
+}
+
+// webpieces-disable no-function-outside-class -- ts Program factory helper, mirrors di-graph/program.ts
+function buildProgramFromSrc(projectRootAbs: string, options: ts.CompilerOptions): ts.Program | null {
+    const srcDir = path.join(projectRootAbs, 'src');
+    if (!fs.existsSync(srcDir)) return null;
+    const files = collectTsFiles(srcDir);
+    return files.length > 0 ? ts.createProgram(files, options) : null;
+}
+
+// webpieces-disable no-function-outside-class -- recursive fs walker, matching the AST-helper style here
+function collectTsFiles(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            if (entry.name !== 'node_modules') out.push(...collectTsFiles(full));
+        } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+            out.push(full);
+        }
+    }
+    return out;
 }
 
 // webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts

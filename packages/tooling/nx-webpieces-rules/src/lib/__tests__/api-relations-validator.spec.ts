@@ -25,6 +25,8 @@ function scanResult(apiLibs: string[]): ApiScanResult {
         relationsByProject: new Map(),
         apiLibProjects: new Set(apiLibs),
         apiIndex,
+        // Every server/client in these tests has real production source.
+        scannedProjects: new Set(['client-server', 'some-lib']),
     };
 }
 
@@ -89,6 +91,25 @@ describe('findUnclassifiedApiDeps', () => {
             scanResult(['client-server-api']),
         );
         // some-lib is role:lib (not checked); client-server depends only on a plain lib.
+        expect(violations).toEqual([]);
+    });
+});
+
+describe('findUnclassifiedApiDeps — scan-coverage', () => {
+    it('skips a server whose production source was never scanned (all-test project)', () => {
+        const graph: EnhancedGraph = {
+            e2e: { level: 2, dependsOn: ['client-server-api'], role: 'server' },
+            'client-server-api': { level: 1, dependsOn: [], role: 'api-lib' },
+        };
+        // scanResult's scannedProjects does NOT include 'e2e' → it must not be flagged.
+        const violations = findUnclassifiedApiDeps(
+            graph,
+            infos([
+                ['e2e', ['role:server']],
+                ['client-server-api', ['role:api-lib']],
+            ]),
+            scanResult(['client-server-api']),
+        );
         expect(violations).toEqual([]);
     });
 });
