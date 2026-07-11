@@ -136,6 +136,7 @@ export {
 export {
     MainSyncStatus,
     MainSyncLock,
+    MainSyncStatusService,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     mainSyncStatusPath,
     mainSyncLockPath,

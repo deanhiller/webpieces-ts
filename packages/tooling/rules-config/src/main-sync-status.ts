@@ -1,19 +1,18 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
 
-// Shared "is my feature branch healthy relative to origin/main?" state. The SLOW signals (git fetch
-// + merge-base + same-file-overlap + a merged-PR lookup) are computed by the ai-hook-rules refresher
-// in a DETACHED background process so the PreToolUse hook never blocks on the network. The
-// feature-branch-guard then only READS this cached file (instant). pr-gate's merge flow also writes
-// it synchronously after a merge so the next edit is unblocked immediately. Lives here (the shared
-// dep of both packages) so neither depends on the other.
+// Shared "is my feature branch healthy relative to origin/main?" state. The SLOW signals (git fetch +
+// merge-base + same-file-overlap + a merged-PR lookup) are computed by the ai-hook-rules refresher in a
+// DETACHED background process; the feature-branch-guard only READS this cached file. pr-gate's merge
+// flow also writes it synchronously after a merge. Lives here (the shared dep of both).
 
-// How long an `inprocess` refresher lock may sit before a new refresher assumes the prior run hung
-// and proceeds anyway. Overridable per-rule via FeatureBranchGuardConfig.hangTimeoutMinutes.
+// How long an `inprocess` refresher lock may sit before a new refresher assumes the prior run hung.
 export const DEFAULT_HANG_TIMEOUT_MINUTES = 5;
 
 const MAIN_SYNC_STATUS_FILE = 'main-sync-status.json';
@@ -22,9 +21,7 @@ const MAIN_SYNC_LOCK_FILE = 'main-sync.lock.json';
 const LOCK_STATE_INPROCESS = 'inprocess';
 const LOCK_STATE_FINISHED = 'finished';
 
-// Data-only (per CLAUDE.md, classes for data). `forkPoint` is null exactly when `hasForkPoint` is
-// false (no merge-base with origin/main). `branchAlreadyMerged` flags that this feature branch was
-// already merged into main (a merged PR exists) — the "you're working on a finished branch" case.
+// Data-only (per CLAUDE.md, classes for data).
 export class MainSyncStatus {
     branch: string;
     branchAlreadyMerged: boolean;
@@ -36,10 +33,7 @@ export class MainSyncStatus {
     conflict: boolean;
     conflictFiles: string[];
     timestamp: string;
-    // An OPEN (not merged) PR tracking this branch, if any — '' = none or not-yet-known. Set by the
-    // refresher (best-effort) and read by the feature-branch-guard so a mid-work conflict block can
-    // steer straight to the PR flow instead of the update-only flow (which would just fail-fast when a
-    // PR exists). Advisory only — the authoritative gate is wp-start-update's own fail-fast check.
+    // An OPEN (not merged) PR tracking this branch, if any — '' = none or not-yet-known. Advisory.
     // Kept OUT of the positional constructor (a defaulted field) so existing call sites don't churn.
     openPr: string = '';
 
@@ -68,10 +62,8 @@ export class MainSyncStatus {
     }
 }
 
-// Concurrency state machine for the detached refresher. `started` is epoch milliseconds. `pid` is
-// the refresher process's pid (0 = unknown, e.g. a lock written by an older version) — used so a
-// refresher that was KILLED before writing its finished lock (SIGKILL skips the finally) doesn't
-// wedge `inprocess` for the whole hangTimeout: if its pid is gone, the lock is reclaimable now.
+// Concurrency state machine for the detached refresher. `started` is epoch ms. `pid` is the refresher
+// process's pid (0 = unknown) — used so a KILLED refresher doesn't wedge `inprocess` for the timeout.
 export class MainSyncLock {
     state: string;
     started: number;
@@ -84,8 +76,7 @@ export class MainSyncLock {
     }
 }
 
-// Raw JSON shapes for the cast at the parse boundary —
-// keeps `any`/`unknown` out of the cast so no-any-unknown stays clean.
+// Raw JSON shapes for the cast at the parse boundary.
 interface RawStatus {
     branch?: string;
     branchAlreadyMerged?: boolean;
@@ -112,269 +103,278 @@ interface CmdCapture {
     out: string;
 }
 
-export function mainSyncStatusPath(repoRoot: string): string {
-    return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_STATUS_FILE);
-}
-
-export function mainSyncLockPath(repoRoot: string): string {
-    return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_LOCK_FILE);
-}
-
-function ensureDir(filePath: string): void {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-
-// Pure read — any error (missing file, malformed JSON) returns null so the guard fails OPEN
-// (never block an edit because the cache is unreadable).
-export function readMainSyncStatus(repoRoot: string): MainSyncStatus | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const statusPath = mainSyncStatusPath(repoRoot);
-        if (!fs.existsSync(statusPath)) return null;
-        const raw = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as RawStatus;
-        const status = new MainSyncStatus(
-            raw.branch ?? '',
-            raw.branchAlreadyMerged ?? false,
-            raw.mergedPr ?? '',
-            raw.hasForkPoint ?? true,
-            raw.forkPoint ?? null,
-            raw.originMain ?? '',
-            raw.featureHead ?? '',
-            raw.conflict ?? false,
-            raw.conflictFiles ?? [],
-            raw.timestamp ?? '',
-        );
-        status.openPr = raw.openPr ?? '';
-        return status;
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
-        return null;
-    }
-}
-
-export function writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void {
-    const statusPath = mainSyncStatusPath(repoRoot);
-    ensureDir(statusPath);
-    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2) + '\n');
-}
-
-export function readMainSyncLock(repoRoot: string): MainSyncLock | null {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const lockPath = mainSyncLockPath(repoRoot);
-        if (!fs.existsSync(lockPath)) return null;
-        const raw = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as RawLock;
-        return new MainSyncLock(raw.state ?? LOCK_STATE_FINISHED, raw.started ?? 0, raw.pid ?? 0);
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
-        return null;
-    }
-}
-
-export function writeMainSyncLock(repoRoot: string, lock: MainSyncLock): void {
-    const lockPath = mainSyncLockPath(repoRoot);
-    ensureDir(lockPath);
-    fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
-}
-
-// A lock is stale (the prior refresher is assumed hung) once it has been `inprocess` longer than
-// hangTimeoutMinutes. `now` is injectable for tests; defaults to Date.now().
-export function isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
-    return now - lock.started > hangTimeoutMinutes * 60 * 1000;
-}
-
-// Liveness probe: is `pid` still a running process? `process.kill(pid, 0)` sends no signal, it only
-// tests existence — ESRCH means the process is gone, EPERM means it exists but isn't ours (alive).
-// pid <= 0 means "unknown" (an old lock with no pid) → assume alive and fall back to staleness only.
-function isProcessAlive(pid: number): boolean {
-    if (pid <= 0) return true;
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (err: unknown) {
-        const error = toError(err);
-        // ESRCH = no such process (dead); anything else (e.g. EPERM = exists, not ours) = alive.
-        return !error.message.includes('ESRCH');
-    }
-}
-
-// True when another refresher is actively running and we should NOT start a second one. A finished
-// lock, a missing lock, a stale (hung) inprocess lock, OR an inprocess lock whose refresher pid is
-// already dead (it was killed before writing its finished lock) all return false — so a killed
-// refresher never wedges refreshes for the full hangTimeout.
-export function isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
-    const lock = readMainSyncLock(repoRoot);
-    if (!lock) return false;
-    if (lock.state !== LOCK_STATE_INPROCESS) return false;
-    if (isLockStale(lock, hangTimeoutMinutes, now)) return false;
-    return isProcessAlive(lock.pid);
-}
-
-export function inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock {
-    return new MainSyncLock(LOCK_STATE_INPROCESS, now, pid);
-}
-
-export function finishedLock(started: number): MainSyncLock {
-    return new MainSyncLock(LOCK_STATE_FINISHED, started, 0);
-}
-
-// Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
-function capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
-    const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8' });
-    if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
-    return { ok: true, out: result.stdout.trim() };
-}
-
-// The actual checked-out branch in repoRoot — cwd-correct so the cache's `branch` label always
-// matches what the feature-branch-guard compares against (its own `git rev-parse` in the workspace).
-function gitBranch(repoRoot: string): string {
-    const result = capture(repoRoot, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-    return result.ok ? result.out : '';
-}
-
-function changedFiles(repoRoot: string, base: string, head: string): string[] {
-    const result = capture(repoRoot, 'git', ['diff', '--name-only', base, head]);
-    if (!result.ok || result.out === '') return [];
-    return result.out.split('\n').map((line: string): string => line.trim()).filter((line: string): boolean => line.length > 0);
-}
-
-// Every file this feature branch has touched since the fork point — committed AND still in the
-// working tree (staged / unstaged / untracked). The committed-only `git diff forkPoint..HEAD` was
-// BLIND to uncommitted edits: for most of an editing session the files you are actively changing are
-// not yet in HEAD, so the overlap with main's changes was empty and conflict=false even when
-// origin/main had already moved onto those same files. Unioning in the working-tree changes makes the
-// conflict visible WHILE editing, so the guard can force an early merge instead of a painful late one.
-function featureChangedFiles(repoRoot: string, forkPoint: string): string[] {
-    const out = new Set<string>();
-    const add = (args: string[]): void => {
-        const r = capture(repoRoot, 'git', args);
-        if (!r.ok || r.out === '') return;
-        for (const line of r.out.split('\n')) {
-            const f = line.trim();
-            if (f.length > 0) out.add(f);
-        }
-    };
-    add(['diff', '--name-only', forkPoint, 'HEAD']);      // committed since the fork point
-    add(['diff', '--name-only', 'HEAD']);                 // unstaged working-tree edits
-    add(['diff', '--name-only', '--cached', 'HEAD']);     // staged edits
-    add(['ls-files', '--others', '--exclude-standard']);  // untracked new files (respects .gitignore)
-    return [...out];
-}
-
-// Has this feature branch already been merged into main? Reliable signal: a MERGED PR exists for the
-// branch. Best-effort — if gh is missing/unauthenticated we just report not-merged (false).
-function detectMergedPr(repoRoot: string, branch: string): string {
-    if (!branch || branch === 'main') return '';
-    const result = capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number']);
-    return result.ok ? result.out : '';
-}
-
-// An OPEN PR tracking this branch, if any. Best-effort — this is ADVISORY (it only lets the guard's
-// conflict block steer to the PR flow early), so an unreachable gh degrades to '' here. The HARD gate
-// that must never guess is wp-start-update's own openPrForBranch, which fails fast instead.
-function detectOpenPr(repoRoot: string, branch: string): string {
-    if (!branch || branch === 'main') return '';
-    const result = capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '--jq', '.[0].number']);
-    return result.ok ? result.out : '';
-}
-
-// A benign status that never blocks — used when origin/main can't be resolved (no remote yet,
-// offline before first fetch). hasForkPoint=true + conflict=false so the guard allows the edit.
-function benignStatus(branch: string, featureHead: string): MainSyncStatus {
-    return new MainSyncStatus(branch, false, '', true, null, '', featureHead, false, [], new Date().toISOString());
-}
-
 /**
- * The SLOW path, run only inside the detached refresher. Computes every cached signal the
- * feature-branch-guard needs: whether the branch is already merged (merged PR), whether a fork point
- * with origin/main still exists, and whether origin/main and this branch touched the SAME file since
- * the fork point (the deliberately-simple conflict heuristic — it over-blocks rather than miss a real
- * conflict). Never run on the hook's blocking path.
+ * Reads/writes the main-sync cache + lock and computes the slow "is my branch healthy vs origin/main?"
+ * status. `@provideSingleton` so it's injectable and drawn in the rules-config DI design.
  */
-export function computeMainSyncStatus(repoRoot: string): MainSyncStatus {
-    const branch = gitBranch(repoRoot);
-    const mergedPr = detectMergedPr(repoRoot, branch);
-    // Advisory: lets the guard's conflict block steer to the PR flow early when a PR is already open.
-    const openPr = detectOpenPr(repoRoot, branch);
+@provideSingleton()
+@injectable()
+export class MainSyncStatusService {
+    mainSyncStatusPath(repoRoot: string): string {
+        return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_STATUS_FILE);
+    }
 
-    // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
-    spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+    mainSyncLockPath(repoRoot: string): string {
+        return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_LOCK_FILE);
+    }
 
-    const head = capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
-    const originMain = capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
-    const featureHead = head.ok ? head.out : '';
-    if (!head.ok || !originMain.ok) {
-        const status = benignStatus(branch, featureHead);
-        status.branchAlreadyMerged = mergedPr !== '';
-        status.mergedPr = mergedPr;
+    // Pure read — any error (missing file, malformed JSON) returns null so the guard fails OPEN.
+    readMainSyncStatus(repoRoot: string): MainSyncStatus | null {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const statusPath = this.mainSyncStatusPath(repoRoot);
+            if (!fs.existsSync(statusPath)) return null;
+            const raw = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as RawStatus;
+            const status = new MainSyncStatus(
+                raw.branch ?? '',
+                raw.branchAlreadyMerged ?? false,
+                raw.mergedPr ?? '',
+                raw.hasForkPoint ?? true,
+                raw.forkPoint ?? null,
+                raw.originMain ?? '',
+                raw.featureHead ?? '',
+                raw.conflict ?? false,
+                raw.conflictFiles ?? [],
+                raw.timestamp ?? '',
+            );
+            status.openPr = raw.openPr ?? '';
+            return status;
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
+    }
+
+    writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void {
+        const statusPath = this.mainSyncStatusPath(repoRoot);
+        this.ensureDir(statusPath);
+        fs.writeFileSync(statusPath, JSON.stringify(status, null, 2) + '\n');
+    }
+
+    readMainSyncLock(repoRoot: string): MainSyncLock | null {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const lockPath = this.mainSyncLockPath(repoRoot);
+            if (!fs.existsSync(lockPath)) return null;
+            const raw = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as RawLock;
+            return new MainSyncLock(raw.state ?? LOCK_STATE_FINISHED, raw.started ?? 0, raw.pid ?? 0);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
+    }
+
+    writeMainSyncLock(repoRoot: string, lock: MainSyncLock): void {
+        const lockPath = this.mainSyncLockPath(repoRoot);
+        this.ensureDir(lockPath);
+        fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+    }
+
+    // A lock is stale (prior refresher assumed hung) once `inprocess` longer than hangTimeoutMinutes.
+    isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
+        return now - lock.started > hangTimeoutMinutes * 60 * 1000;
+    }
+
+    // True when another refresher is actively running and we should NOT start a second one.
+    isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
+        const lock = this.readMainSyncLock(repoRoot);
+        if (!lock) return false;
+        if (lock.state !== LOCK_STATE_INPROCESS) return false;
+        if (this.isLockStale(lock, hangTimeoutMinutes, now)) return false;
+        return this.isProcessAlive(lock.pid);
+    }
+
+    inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock {
+        return new MainSyncLock(LOCK_STATE_INPROCESS, now, pid);
+    }
+
+    finishedLock(started: number): MainSyncLock {
+        return new MainSyncLock(LOCK_STATE_FINISHED, started, 0);
+    }
+
+    /**
+     * The SLOW path, run only inside the detached refresher. Computes every cached signal the
+     * feature-branch-guard needs. Never run on the hook's blocking path.
+     */
+    // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
+    computeMainSyncStatus(repoRoot: string): MainSyncStatus {
+        const branch = this.gitBranch(repoRoot);
+        const mergedPr = this.detectMergedPr(repoRoot, branch);
+        const openPr = this.detectOpenPr(repoRoot, branch);
+
+        // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
+        spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+
+        const head = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
+        const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
+        const featureHead = head.ok ? head.out : '';
+        if (!head.ok || !originMain.ok) {
+            const status = this.benignStatus(branch, featureHead);
+            status.branchAlreadyMerged = mergedPr !== '';
+            status.mergedPr = mergedPr;
+            status.openPr = openPr;
+            return status;
+        }
+
+        const forkPoint = this.capture(repoRoot, 'git', ['merge-base', 'origin/main', 'HEAD']);
+        if (!forkPoint.ok || forkPoint.out === '') {
+            const noFork = new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
+            noFork.openPr = openPr;
+            return noFork;
+        }
+
+        const featureFiles = new Set(this.featureChangedFiles(repoRoot, forkPoint.out));
+        const mainFiles = this.changedFiles(repoRoot, forkPoint.out, 'origin/main');
+        const conflictFiles = mainFiles.filter((file: string): boolean => featureFiles.has(file));
+
+        const status = new MainSyncStatus(
+            branch,
+            mergedPr !== '',
+            mergedPr,
+            true,
+            forkPoint.out,
+            originMain.out,
+            featureHead,
+            conflictFiles.length > 0,
+            conflictFiles,
+            new Date().toISOString(),
+        );
         status.openPr = openPr;
         return status;
     }
 
-    const forkPoint = capture(repoRoot, 'git', ['merge-base', 'origin/main', 'HEAD']);
-    if (!forkPoint.ok || forkPoint.out === '') {
-        // No common ancestor — main was merged into the branch. Force the human to squash.
-        const noFork = new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
-        noFork.openPr = openPr;
-        return noFork;
+    // The recovery steps when there is no fork point with origin/main (a bad merge of main into branch).
+    squashRecoverySteps(currentBranch: string): string[] {
+        return [
+            '1. Fetch latest main:            git fetch origin main',
+            `2. New branch off origin/main:   git checkout -b ${currentBranch}-v2 origin/main`,
+            `3. Squash-merge old branch:      git merge --squash ${currentBranch}`,
+            `4. Commit the squash:            git add -A && git commit -m "Squashed from ${currentBranch}"`,
+            '5. If a PR exists:               open a NEW PR for the -v2 branch and close the old one.',
+        ];
     }
 
-    const featureFiles = new Set(featureChangedFiles(repoRoot, forkPoint.out));
-    const mainFiles = changedFiles(repoRoot, forkPoint.out, 'origin/main');
-    const conflictFiles = mainFiles.filter((file: string): boolean => featureFiles.has(file));
+    // Synchronously stamp a clean "up to date with main" status — call right after a successful merge.
+    stampCleanMainSyncStatus(repoRoot: string): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const branch = this.gitBranch(repoRoot);
+            const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
+            const featureHead = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
+            if (!originMain.ok || !featureHead.ok) return;
+            const status = new MainSyncStatus(
+                branch, false, '', true, originMain.out, originMain.out, featureHead.out, false, [], new Date().toISOString(),
+            );
+            this.writeMainSyncStatus(repoRoot, status);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+        }
+    }
 
-    const status = new MainSyncStatus(
-        branch,
-        mergedPr !== '',
-        mergedPr,
-        true,
-        forkPoint.out,
-        originMain.out,
-        featureHead,
-        conflictFiles.length > 0,
-        conflictFiles,
-        new Date().toISOString(),
-    );
-    status.openPr = openPr;
-    return status;
-}
+    private ensureDir(filePath: string): void {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    }
 
-// The recovery steps when there is no fork point with origin/main (someone merged main into the
-// branch, so a clean squash-merge is impossible). Shared so the feature-branch-guard and pr-gate's
-// findForkPoint check present the SAME instructions. The human must redo the work on a fresh branch —
-// deliberately painful so the bad merge gets noticed and reported.
-export function squashRecoverySteps(currentBranch: string): string[] {
-    // Branch off origin/main directly (never `git checkout main`) so these steps are correct on the
-    // primary repo AND inside a linked worktree, where main is checked out elsewhere and cannot be
-    // checked out again.
-    return [
-        '1. Fetch latest main:            git fetch origin main',
-        `2. New branch off origin/main:   git checkout -b ${currentBranch}-v2 origin/main`,
-        `3. Squash-merge old branch:      git merge --squash ${currentBranch}`,
-        `4. Commit the squash:            git add -A && git commit -m "Squashed from ${currentBranch}"`,
-        '5. If a PR exists:               open a NEW PR for the -v2 branch and close the old one.',
-    ];
-}
+    // Liveness probe: is `pid` still a running process? pid <= 0 (unknown) → assume alive.
+    private isProcessAlive(pid: number): boolean {
+        if (pid <= 0) return true;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            process.kill(pid, 0);
+            return true;
+        } catch (err: unknown) {
+            const error = toError(err);
+            return !error.message.includes('ESRCH');
+        }
+    }
 
-// Synchronously stamp a clean "up to date with main" status — call right after a successful merge
-// (the branch now contains origin/main). Unblocks the next edit immediately without waiting for the
-// async refresher. Best-effort: a git failure is swallowed (the refresher will recompute later).
-export function stampCleanMainSyncStatus(repoRoot: string): void {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const branch = gitBranch(repoRoot);
-        const originMain = capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
-        const featureHead = capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
-        if (!originMain.ok || !featureHead.ok) return;
-        const status = new MainSyncStatus(
-            branch, false, '', true, originMain.out, originMain.out, featureHead.out, false, [], new Date().toISOString(),
-        );
-        writeMainSyncStatus(repoRoot, status);
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
+    // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
+    private capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
+        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8' });
+        if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
+        return { ok: true, out: result.stdout.trim() };
+    }
+
+    // The actual checked-out branch in repoRoot — cwd-correct so the cache's `branch` label matches.
+    private gitBranch(repoRoot: string): string {
+        const result = this.capture(repoRoot, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+        return result.ok ? result.out : '';
+    }
+
+    private changedFiles(repoRoot: string, base: string, head: string): string[] {
+        const result = this.capture(repoRoot, 'git', ['diff', '--name-only', base, head]);
+        if (!result.ok || result.out === '') return [];
+        return result.out.split('\n').map((line: string): string => line.trim()).filter((line: string): boolean => line.length > 0);
+    }
+
+    // Every file this feature branch has touched since the fork point — committed AND still in the
+    // working tree (staged / unstaged / untracked), so a conflict is visible WHILE editing.
+    private featureChangedFiles(repoRoot: string, forkPoint: string): string[] {
+        const out = new Set<string>();
+        const add = (args: string[]): void => {
+            const r = this.capture(repoRoot, 'git', args);
+            if (!r.ok || r.out === '') return;
+            for (const line of r.out.split('\n')) {
+                const f = line.trim();
+                if (f.length > 0) out.add(f);
+            }
+        };
+        add(['diff', '--name-only', forkPoint, 'HEAD']);      // committed since the fork point
+        add(['diff', '--name-only', 'HEAD']);                 // unstaged working-tree edits
+        add(['diff', '--name-only', '--cached', 'HEAD']);     // staged edits
+        add(['ls-files', '--others', '--exclude-standard']);  // untracked new files (respects .gitignore)
+        return [...out];
+    }
+
+    // Has this feature branch already been merged into main? Reliable signal: a MERGED PR exists.
+    private detectMergedPr(repoRoot: string, branch: string): string {
+        if (!branch || branch === 'main') return '';
+        const result = this.capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number']);
+        return result.ok ? result.out : '';
+    }
+
+    // An OPEN PR tracking this branch, if any. Best-effort/advisory.
+    private detectOpenPr(repoRoot: string, branch: string): string {
+        if (!branch || branch === 'main') return '';
+        const result = this.capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '--jq', '.[0].number']);
+        return result.ok ? result.out : '';
+    }
+
+    // A benign status that never blocks — used when origin/main can't be resolved.
+    private benignStatus(branch: string, featureHead: string): MainSyncStatus {
+        return new MainSyncStatus(branch, false, '', true, null, '', featureHead, false, [], new Date().toISOString());
     }
 }
+
+// Temporary migration delegators to MainSyncStatusService — removed once consumers inject it.
+const mainSyncSvc = new MainSyncStatusService();
+
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function mainSyncStatusPath(repoRoot: string): string { return mainSyncSvc.mainSyncStatusPath(repoRoot); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function mainSyncLockPath(repoRoot: string): string { return mainSyncSvc.mainSyncLockPath(repoRoot); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function readMainSyncStatus(repoRoot: string): MainSyncStatus | null { return mainSyncSvc.readMainSyncStatus(repoRoot); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void { mainSyncSvc.writeMainSyncStatus(repoRoot, status); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function readMainSyncLock(repoRoot: string): MainSyncLock | null { return mainSyncSvc.readMainSyncLock(repoRoot); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function writeMainSyncLock(repoRoot: string, lock: MainSyncLock): void { mainSyncSvc.writeMainSyncLock(repoRoot, lock); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now: number = Date.now()): boolean { return mainSyncSvc.isLockStale(lock, hangTimeoutMinutes, now); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean { return mainSyncSvc.isRefreshInProgress(repoRoot, hangTimeoutMinutes, now); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock { return mainSyncSvc.inProcessLock(now, pid); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function finishedLock(started: number): MainSyncLock { return mainSyncSvc.finishedLock(started); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function computeMainSyncStatus(repoRoot: string): MainSyncStatus { return mainSyncSvc.computeMainSyncStatus(repoRoot); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function squashRecoverySteps(currentBranch: string): string[] { return mainSyncSvc.squashRecoverySteps(currentBranch); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function stampCleanMainSyncStatus(repoRoot: string): void { mainSyncSvc.stampCleanMainSyncStatus(repoRoot); }

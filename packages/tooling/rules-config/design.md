@@ -16,6 +16,7 @@ graph TD
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
+    MainSyncStatusService["MainSyncStatusService"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
@@ -24,6 +25,7 @@ graph TD
     RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader
     RulesConfigDesign --> DiffScope
+    RulesConfigDesign --> MainSyncStatusService
     RulesConfigDesign --> RepoRootFinder
     RulesConfigDesign --> ReviewJsonService
     RulesConfigDesign --> TemplateWriter
