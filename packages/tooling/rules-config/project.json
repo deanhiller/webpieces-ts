@@ -29,5 +29,5 @@
             }
         }
     },
-    "tags": ["type:tooling", "framework:node", "role:lib"]
+    "tags": ["type:tooling", "framework:node", "role:designed-lib"]
 }

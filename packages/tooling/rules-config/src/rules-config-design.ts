@@ -1,0 +1,21 @@
+import { DocumentDesign } from '@webpieces/core-util';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
+
+import { RepoRootFinder } from './repo-root';
+
+/**
+ * DI-design root for @webpieces/rules-config (role:designed-lib).
+ *
+ * `@DocumentDesign` marks the top of the DAG the DI-design analyzer roots on, so the library's design
+ * (design.json / design.md / design.html) is generated. rules-config is the shared foundation whose
+ * utilities are being migrated from free functions to injected `@provideSingleton` service classes; as
+ * each service class lands (config loader, template writer, diff/git services, …) it is injected HERE
+ * so it appears in the drawn design. First injected service: {@link RepoRootFinder}.
+ */
+@DocumentDesign()
+@provideSingleton()
+@injectable()
+export class RulesConfigDesign {
+    constructor(private readonly repoRootFinder: RepoRootFinder) {}
+}
