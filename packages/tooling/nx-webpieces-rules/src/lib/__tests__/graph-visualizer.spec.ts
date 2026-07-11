@@ -117,6 +117,33 @@ describe('generateDot edge styling', () => {
     });
 });
 
+describe('generateDot drawOnGraph:false hiding', () => {
+    const HIDDEN_GRAPH: EnhancedGraph = {
+        visible: { level: 1, dependsOn: ['secret', 'core-util'], framework: ['node'], role: 'lib' },
+        secret: { level: 0, dependsOn: [], framework: ['node'], role: 'lib', drawOnGraph: false },
+        'core-util': { level: 0, dependsOn: [], framework: ['node'], role: 'lib' },
+    };
+
+    it('omits the hidden node, its rank placement, and its lock option', () => {
+        const dot = viz.generateDot(HIDDEN_GRAPH);
+        expect(dot).not.toContain('"secret" [');
+        expect(dot).not.toContain('rank=same; "secret"');
+        expect(viz.lockControl(HIDDEN_GRAPH)).not.toContain('>secret<');
+    });
+
+    it('drops every edge touching a hidden node but keeps edges between visible nodes', () => {
+        const dot = viz.generateDot(HIDDEN_GRAPH);
+        expect(dot).not.toContain('"visible" -> "secret"');
+        expect(dot).toContain('"visible" -> "core-util";');
+    });
+
+    it('still renders visible nodes normally', () => {
+        const dot = viz.generateDot(HIDDEN_GRAPH);
+        expect(dot).toContain('"visible" [');
+        expect(dot).toContain('"core-util" [');
+    });
+});
+
 describe('generateHTML', () => {
     it('renders a framework + role legend in three columns', () => {
         const html = viz.generateHTML(viz.generateDot(GRAPH));

@@ -29,6 +29,13 @@ export interface GraphEntry {
     dependsOn: string[];
     framework?: string[];
     role?: string;
+    /**
+     * When false, the project is hidden from the rendered architecture graphs
+     * (its box AND every edge touching it are omitted from dependencies.html and
+     * the runtime graph). It stays in this JSON so the data view is complete.
+     * Absent means drawn (the default). From the project's `drawOnGraph:` nx tag.
+     */
+    drawOnGraph?: boolean;
     shortDescription?: string;
     responsibilitiesFile?: string;
     designFile?: string;

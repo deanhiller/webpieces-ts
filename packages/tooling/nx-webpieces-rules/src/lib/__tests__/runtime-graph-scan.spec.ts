@@ -58,6 +58,24 @@ describe('assembleRuntimeGraphFromScan', () => {
     });
 });
 
+describe('drawOnGraph:false hides a service from the runtime render but keeps it in the JSON', () => {
+    const graph = assembleRuntimeGraphFromScan(scan(), new Set(['consumer']));
+
+    it('flags the hidden service in the graph data (kept, not dropped)', () => {
+        expect(graph.services['consumer'].drawOnGraph).toBe(false);
+        expect(graph.services['producer'].drawOnGraph).toBeUndefined();
+    });
+
+    it('omits the hidden node and every edge/queue touching it from the DOT', () => {
+        const dot = generateRuntimeDot(graph);
+        expect(dot).not.toContain('"consumer" [');
+        expect(dot).not.toContain('-> "consumer"');
+        expect(dot).not.toContain('queue__producer__consumer');
+        // the visible producer node still renders
+        expect(dot).toContain('"producer" [');
+    });
+});
+
 describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
     const dot = generateRuntimeDot(assembleRuntimeGraphFromScan(scan()));
 

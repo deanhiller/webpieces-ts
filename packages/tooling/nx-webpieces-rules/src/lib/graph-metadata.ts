@@ -20,6 +20,7 @@ import type { EnhancedGraph } from './graph-sorter';
 import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
+import { resolveDrawOnGraph } from './draw-on-graph-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
 import { toError } from '../toError';
 
@@ -83,6 +84,15 @@ export function enrichGraph(
             problems.push(roleResolution.problem);
         } else if (roleResolution.role !== null) {
             entry.role = roleResolution.role;
+        }
+
+        // Only persist the field when hidden (false); drawn projects (the
+        // default) stay clean in dependencies.json with no drawOnGraph line.
+        const drawResolution = resolveDrawOnGraph(info);
+        if (drawResolution.problem !== null) {
+            problems.push(drawResolution.problem);
+        } else if (drawResolution.drawOnGraph === false) {
+            entry.drawOnGraph = false;
         }
 
         enrichResponsibilities(entry, info, workspaceRoot, problems);
