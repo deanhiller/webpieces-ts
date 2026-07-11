@@ -35,8 +35,9 @@ export abstract class JwtHook {
  * by type; rebindable in tests) ONLY to customize the caller policy — e.g. an app that reads an
  * `ALLOWED_OIDC_CALLERS` env var at its composition root and enforces that allow-list. When NO
  * OidcHook is bound, the framework {@link AuthFilter} runs the built-in {@link DefaultOidcVerifier}
- * directly, so a server that wires nothing still verifies Google OIDC from its `@AuthOidc(...callers)`
- * (else `['self']`). `verifyOidc` verifies the token against `callers`; throw on failure.
+ * directly, so a server that wires nothing still verifies Google OIDC against its `@AuthOidc(...callers)`
+ * (else trusts the edge — any Google-signed caller). `verifyOidc` verifies the token against `callers`;
+ * throw on failure.
  */
 export abstract class OidcHook {
     abstract verifyOidc(token: string, callers: string[]): Promise<void>;

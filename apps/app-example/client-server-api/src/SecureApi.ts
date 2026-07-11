@@ -13,7 +13,7 @@ export interface SecureResponse {
  * SecureApi - endpoints exercising each non-public AuthMode, for Authentication.spec.ts:
  *  - adminOp    → @AuthJwt('admin')      (role-gated user JWT)
  *  - internalOp → @AuthSharedSecret(...)  (internal shared-secret)
- *  - serviceOp  → @AuthOidc()             (service-to-service OIDC, caller = 'self')
+ *  - serviceOp  → @AuthOidc()             (service-to-service OIDC, trust-the-edge)
  */
 @ApiPath('/secure')
 export abstract class SecureApi {
@@ -45,7 +45,7 @@ export abstract class SecureApi {
         throw new Error('Method internalOp() must be implemented by subclass');
     }
 
-    /** Requires a Google OIDC token from this service's own SA (@AuthOidc() = 'self'). */
+    /** Requires a genuine Google OIDC token; @AuthOidc() (no callers) trusts the edge for WHO (run.invoker IAM). */
     @Endpoint('/service')
     @AuthOidc()
     serviceOp(request: SecureRequest): Promise<SecureResponse> {

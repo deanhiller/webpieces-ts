@@ -139,7 +139,7 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
     });
 });
 
-describe('Authentication: oidc (real dev token, caller = self)', () => {
+describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
     const overrides = new ContainerModule(() => Promise.resolve()); // real CompanyAuthConfig → gcp-identity
 
     let api: SecureApi;
@@ -147,9 +147,10 @@ describe('Authentication: oidc (real dev token, caller = self)', () => {
         api = await secureClient(overrides);
     });
 
-    it('accepts a dev OIDC token minted for this service (self)', async () => {
-        // Off-GCP, mintIdToken produces a dev token whose email is the runtime SA; @AuthOidc() = 'self'
-        // resolves to that same SA, so verifyOidcFromCallers accepts it — real mint↔verify, no mocking.
+    it('accepts a genuine Google-signed OIDC token (@AuthOidc() trusts the edge)', async () => {
+        // Off-GCP, mintIdToken produces a real dev token. @AuthOidc() has no callers → TRUST THE EDGE:
+        // verifyOidcFromCallers verifies the signature and accepts any Google-signed caller (the edge's
+        // run.invoker IAM gates WHO). Real mint↔verify, no mocking.
         const token = await mintIdToken('http://localhost');
         const res = await withAuthHeader(`Bearer ${token}`, () => api.serviceOp({}));
         expect(res.ok).toBe(true);
