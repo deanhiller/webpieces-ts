@@ -33,9 +33,9 @@ export interface ExecutorResult {
  * direct runtime edges; pubsub APIs become edges the viz draws through a queue.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
-function generateRuntimeGraph(workspaceRoot: string, scan: ApiScanResult): void {
+function generateRuntimeGraph(workspaceRoot: string, scan: ApiScanResult, hiddenProjects: Set<string>): void {
     console.log('📡 Generating runtime graph from the source scan (implements × uses per API)...');
-    const runtimeGraph = assembleRuntimeGraphFromScan(scan);
+    const runtimeGraph = assembleRuntimeGraphFromScan(scan, hiddenProjects);
     saveRuntimeGraph(runtimeGraph, workspaceRoot);
     const serviceCount = Object.keys(runtimeGraph.services).length;
     console.log(
@@ -85,8 +85,14 @@ export default async function runExecutor(
         const vizPaths = new GraphVisualizer().writeVisualization(enhancedGraph, workspaceRoot);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
-        // Step 5: Generate the runtime microservice graph from the same scan
-        generateRuntimeGraph(workspaceRoot, scanResult);
+        // Step 5: Generate the runtime microservice graph from the same scan.
+        // Projects tagged drawOnGraph:false are threaded through so the runtime
+        // graph hides them too (they stay flagged in runtime-dependencies.json).
+        const hiddenProjects = new Set<string>();
+        for (const name of Object.keys(enhancedGraph)) {
+            if (enhancedGraph[name].drawOnGraph === false) hiddenProjects.add(name);
+        }
+        generateRuntimeGraph(workspaceRoot, scanResult, hiddenProjects);
 
         // Print summary
         const projectCount = Object.keys(enhancedGraph).length;

@@ -27,6 +27,14 @@ export interface RuntimeService {
     implements: string[];
     uses: string[];
     dependsOn: string[];
+    /**
+     * When false, this service is hidden from the rendered runtime graph (its
+     * node AND every edge touching it are omitted from the HTML/DOT). It stays
+     * in runtime-dependencies.json so the data view is complete. Absent means
+     * drawn (the default). Mirrors GraphEntry.drawOnGraph from the `drawOnGraph:`
+     * nx tag.
+     */
+    drawOnGraph?: boolean;
 }
 
 export interface RuntimeApi {
@@ -218,7 +226,11 @@ interface ScanDecl {
  * call; a pubsub edge flows through a queue (drawn producer → queue → consumer by the visualizer).
  */
 class ScanRuntimeAssembler {
-    constructor(private readonly scan: ApiScanResult) {}
+    constructor(
+        private readonly scan: ApiScanResult,
+        /** Project names tagged drawOnGraph:false — kept in the JSON but flagged so the viz omits them. */
+        private readonly hiddenProjects: Set<string>
+    ) {}
 
     assemble(): RuntimeGraph {
         const decls = this.collectDecls();
@@ -317,6 +329,7 @@ class ScanRuntimeAssembler {
                 uses: decl.usesApis.map((r: ApiRef) => r.api),
                 dependsOn,
             };
+            if (this.hiddenProjects.has(decl.name)) services[decl.name].drawOnGraph = false;
         }
         const levels = assignLevels(adjacencyFromEdges(Object.keys(services), edges));
         for (const name of Object.keys(services)) services[name].level = levels[name] ?? 0;
@@ -324,10 +337,17 @@ class ScanRuntimeAssembler {
     }
 }
 
-/** Assemble the runtime graph from the source scan (the derived apiRelations). */
+/**
+ * Assemble the runtime graph from the source scan (the derived apiRelations).
+ * `hiddenProjects` (drawOnGraph:false, defaults to none) are kept in the graph
+ * but flagged so the runtime visualizer omits their nodes + edges.
+ */
 // webpieces-disable no-function-outside-class -- module entry point, mirrors assembleRuntimeGraph
-export function assembleRuntimeGraphFromScan(scan: ApiScanResult): RuntimeGraph {
-    return new ScanRuntimeAssembler(scan).assemble();
+export function assembleRuntimeGraphFromScan(
+    scan: ApiScanResult,
+    hiddenProjects: Set<string> = new Set<string>()
+): RuntimeGraph {
+    return new ScanRuntimeAssembler(scan, hiddenProjects).assemble();
 }
 
 // webpieces-disable no-function-outside-class -- pure sort helper, matches the sibling helpers in this file

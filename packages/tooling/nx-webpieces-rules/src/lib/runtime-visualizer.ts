@@ -51,7 +51,14 @@ export function generateRuntimeDot(graph: RuntimeGraph, title: string = 'WebPiec
     dot += '  node [shape=box, style="filled,rounded", fontname="Arial"];\n';
     dot += '  edge [fontname="Arial", fontsize=10];\n\n';
 
+    // Services tagged drawOnGraph:false stay in the JSON but are omitted here —
+    // both their node and any edge touching them are dropped from the render.
+    const hidden = new Set(
+        Object.keys(graph.services).filter((name: string) => graph.services[name].drawOnGraph === false)
+    );
+
     for (const name of Object.keys(graph.services)) {
+        if (hidden.has(name)) continue;
         const svc = graph.services[name];
         const color = LEVEL_COLORS[svc.level] || '#F5F5F5';
         const role = svc.implements.length > 0 ? 'server' : 'client';
@@ -61,6 +68,7 @@ export function generateRuntimeDot(graph: RuntimeGraph, title: string = 'WebPiec
     dot += '\n';
 
     for (const edge of graph.runtimeEdges) {
+        if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
         dot += edgeDot(edge);
     }
 

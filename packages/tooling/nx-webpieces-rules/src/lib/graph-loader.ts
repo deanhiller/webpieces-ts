@@ -43,7 +43,10 @@ export const AI_INSTRUCTIONS =
     'read its responsibilitiesFile for the full responsibilities (what belongs in that ' +
     'project and what does not), and read its designFile to understand the DI design ' +
     'before reading the code. Use the entries in `commands` to regenerate these files ' +
-    'or display any of the graphs in a browser.';
+    'or display any of the graphs in a browser. To hide a project (its box AND every ' +
+    "edge touching it) from BOTH rendered architecture graphs, add the nx tag " +
+    "'drawOnGraph:false' to that project's project.json tags and regenerate; it stays " +
+    'in this file (marked "drawOnGraph": false) but is omitted from the HTML.';
 
 /**
  * Named command → "command — what it does" map embedded in dependencies.json.
@@ -162,6 +165,7 @@ function formatEntryLines(entry: GraphEntry): string[] {
 
     pushOptionalArrayField(lines, 'framework', entry.framework);
     pushOptionalField(lines, 'role', entry.role);
+    pushOptionalBooleanField(lines, 'drawOnGraph', entry.drawOnGraph);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
     pushOptionalField(lines, 'designFile', entry.designFile);
@@ -184,6 +188,17 @@ function formatEntryLines(entry: GraphEntry): string[] {
  * Emit one optional string field (12-space indent), skipped when undefined.
  */
 function pushOptionalField(lines: string[], field: string, value: string | undefined): void {
+    if (value !== undefined) {
+        lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
+    }
+}
+
+/**
+ * Emit one optional boolean field (12-space indent) as a raw JSON boolean
+ * (e.g. `"drawOnGraph": false,`), skipped when undefined.
+ */
+// webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling push*Field helpers here
+function pushOptionalBooleanField(lines: string[], field: string, value: boolean | undefined): void {
     if (value !== undefined) {
         lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
     }

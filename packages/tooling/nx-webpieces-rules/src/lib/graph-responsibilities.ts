@@ -44,6 +44,9 @@ export class ResponsibilitiesRenderer {
 
         const cards: string[] = [];
         for (const project of projects) {
+            // Hidden projects (drawOnGraph:false) are omitted from the graph, so
+            // they get no responsibilities card either.
+            if (graph[project].drawOnGraph === false) continue;
             cards.push(this.renderCard(project, graph[project], workspaceRoot));
         }
 

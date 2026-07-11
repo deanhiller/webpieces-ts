@@ -54,6 +54,15 @@ export class GraphVisualizer {
     private readonly responsibilities = new ResponsibilitiesRenderer();
 
     /**
+     * A project tagged `drawOnGraph:false` is hidden from the rendered graph —
+     * its node, its rank placement, its dropdown option, its responsibilities
+     * card, and every edge touching it are all omitted. It stays in the JSON.
+     */
+    private isHidden(entry: EnhancedGraph[string]): boolean {
+        return entry.drawOnGraph === false;
+    }
+
+    /**
      * Fill color for an env set — the color of the first env in the set that has
      * a known color, else the default.
      */
@@ -118,9 +127,11 @@ export class GraphVisualizer {
         dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
         dot += '  edge [fontname="Arial"];\n\n';
 
-        // Group projects by level
+        // Group projects by level (hidden projects are omitted from the ranks so
+        // no stray rank=same name is emitted for an absent node).
         const levels: Record<number, string[]> = {};
         for (const project of Object.keys(graph)) {
+            if (this.isHidden(graph[project])) continue;
             const level = graph[project].level;
             if (!levels[level]) levels[level] = [];
             levels[level].push(project);
@@ -157,6 +168,7 @@ export class GraphVisualizer {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
+            if (this.isHidden(info)) continue;
             const shortName = this.names.getShortName(project);
             const frameworks = info.framework ?? [];
             const role = info.role ?? 'lib';
@@ -177,9 +189,13 @@ export class GraphVisualizer {
     private dotEdges(graph: EnhancedGraph): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
-            const shortName = this.names.getShortName(project);
             const info = graph[project];
+            if (this.isHidden(info)) continue;
+            const shortName = this.names.getShortName(project);
             for (const dep of info.dependsOn || []) {
+                // Both endpoints must be visible — an edge to/from a hidden box
+                // is dropped so no connection dangles into empty space.
+                if (graph[dep] !== undefined && this.isHidden(graph[dep])) continue;
                 const attrs = this.edgeAttrs(info.apiRelations?.[dep]?.kind);
                 dot += `  "${shortName}" -> "${this.names.getShortName(dep)}"${attrs};\n`;
             }
@@ -241,6 +257,7 @@ export class GraphVisualizer {
         });
         let options = '';
         for (const project of projects) {
+            if (this.isHidden(graph[project])) continue;
             const shortName = this.names.getShortName(project);
             options += `<option value="${shortName}">L${graph[project].level} · ${shortName}</option>`;
         }

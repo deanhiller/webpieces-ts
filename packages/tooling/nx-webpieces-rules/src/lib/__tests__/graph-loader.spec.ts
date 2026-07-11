@@ -70,6 +70,21 @@ describe('graph-loader wrapper format', () => {
         expect(loaded!.projects).toEqual(raw.projects);
     });
 
+    it('persists drawOnGraph:false and round-trips it, omitting the field for drawn projects', () => {
+        const graph: EnhancedGraph = {
+            visible: { level: 1, dependsOn: [], framework: ['node'] },
+            hidden: { level: 0, dependsOn: [], framework: ['node'], drawOnGraph: false },
+        };
+        saveGraph(graph, tmpRoot, 'draw/dependencies.json');
+        const raw = JSON.parse(fs.readFileSync(path.join(tmpRoot, 'draw/dependencies.json'), 'utf-8'));
+        expect(raw.projects['hidden'].drawOnGraph).toBe(false);
+        // drawn (default) projects stay clean — no drawOnGraph line
+        expect('drawOnGraph' in raw.projects['visible']).toBe(false);
+
+        const loaded = loadBlessedGraph(tmpRoot, 'draw/dependencies.json');
+        expect(loaded!.projects['hidden'].drawOnGraph).toBe(false);
+    });
+
     it('is deterministic (same graph → byte-identical file)', () => {
         const graph: EnhancedGraph = {
             b: { level: 1, dependsOn: ['a'], framework: ['node'] },
