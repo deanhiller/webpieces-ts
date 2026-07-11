@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_REVIEW_DIR } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 const CUTOFF_DAYS = 30;

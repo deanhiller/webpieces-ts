@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process';
 import { loadAndValidate, CliExitError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 // Single source of truth for the build gate. The PR flow's advisory gate (`wp-start-upsert-pr`) and

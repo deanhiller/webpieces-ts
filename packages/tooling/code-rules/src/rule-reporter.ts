@@ -1,5 +1,5 @@
 import { RuleFailError, toError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 import { RuleRun, ExecutorResult } from './code-validator';

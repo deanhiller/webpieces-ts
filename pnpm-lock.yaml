@@ -398,12 +398,6 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/core-context':
-        specifier: workspace:*
-        version: link:../../core/core-context
-      '@webpieces/core-util':
-        specifier: workspace:*
-        version: link:../../core/core-util
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
@@ -452,12 +446,6 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/core-context':
-        specifier: workspace:*
-        version: link:../../core/core-context
-      '@webpieces/core-util':
-        specifier: workspace:*
-        version: link:../../core/core-util
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config

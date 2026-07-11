@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { CliExitError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { MergeState } from '../workflow/merge-state';

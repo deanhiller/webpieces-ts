@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CliExitError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from './workflow/git-readAiBranchName';
 import { ForkPoint } from './workflow/git-findForkPoint';

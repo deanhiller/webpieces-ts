@@ -20,7 +20,7 @@
 // names that naturally end in digits, e.g. `deanhiller/upgrade-webpieces-0.3.213`. The tool no longer
 // PRODUCES `wpN`; the branch-creation-guard still reserves the suffix during the transition.
 
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 const GENERATION_RE = /^(.*)wp(\d+)$/;

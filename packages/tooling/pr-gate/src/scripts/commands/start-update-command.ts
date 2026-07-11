@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { writeTemplate, CliExitError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { OpenPrCheck } from '../workflow/open-pr-check';
 import { RunUpdate } from '../workflow/run-update';
