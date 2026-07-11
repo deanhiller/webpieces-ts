@@ -82,6 +82,57 @@ describe('deriveRuntimeGraph', () => {
     });
 });
 
+/**
+ * A shared client-factory LIB (role:lib) calls createRpcClient(AuthApi); two apps embed it. The lib
+ * must NOT be a runtime node — its `uses` is attributed to the server + client that depend on it.
+ */
+function graphWithSharedLib(): EnhancedGraph {
+    return {
+        'auth-api': { level: 0, dependsOn: [], role: 'api-lib', framework: ['node'] },
+        'auth-server': {
+            level: 2,
+            dependsOn: ['auth-api'],
+            role: 'server',
+            framework: ['node'],
+            apiRelations: {
+                'auth-api': { kind: 'implements', implements: [{ api: 'AuthApi', type: 'rpc' }], uses: [] },
+            },
+        },
+        'auth-client-lib': {
+            level: 1,
+            dependsOn: ['auth-api'],
+            role: 'lib',
+            framework: ['browser', 'node'],
+            apiRelations: {
+                'auth-api': { kind: 'uses', implements: [], uses: [{ api: 'AuthApi', type: 'rpc' }] },
+            },
+        },
+        'app-web': { level: 2, dependsOn: ['auth-client-lib'], role: 'client', framework: ['browser'] },
+        'app-svr': { level: 2, dependsOn: ['auth-client-lib'], role: 'server', framework: ['node'] },
+    };
+}
+
+describe('a lib that calls createRpcClient is not a node — its use propagates to the embedding apps', () => {
+    const derived = deriveRuntimeGraph(graphWithSharedLib());
+
+    it('does not make the shared lib (or the api-lib) a runtime node', () => {
+        expect(derived.services['auth-client-lib']).toBeUndefined();
+        expect(derived.services['auth-api']).toBeUndefined();
+    });
+
+    it('attributes the lib’s AuthApi use to BOTH embedding apps (server + client)', () => {
+        expect(derived.services['app-web'].uses).toEqual(['AuthApi']);
+        expect(derived.services['app-svr'].uses).toEqual(['AuthApi']);
+        expect(derived.apis['AuthApi'].usedBy).toEqual(['app-svr', 'app-web']);
+        expect(derived.apis['AuthApi'].implementedBy).toEqual(['auth-server']);
+    });
+
+    it('draws the runtime edges from the apps to the implementing server (not from the lib)', () => {
+        const froms = derived.runtimeEdges.map((e: RuntimeEdge) => `${e.from}->${e.to}`).sort();
+        expect(froms).toEqual(['app-svr->auth-server', 'app-web->auth-server']);
+    });
+});
+
 describe('generate and validate derive the SAME graph from dependencies.json', () => {
     it('is byte-identical when derived from the graph vs a JSON round-trip of it (what validate loads)', () => {
         const fromMemory = deriveRuntimeGraph(graph());
