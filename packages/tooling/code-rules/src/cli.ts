@@ -1,14 +1,40 @@
 #!/usr/bin/env node
-import { InformAiError, RuleFailError, toError, RepoRootFinder } from '@webpieces/rules-config';
-import runValidateCode from './validate-code';
+import 'reflect-metadata';
+import { Container } from 'inversify';
+import { buildProviderModule } from '@inversifyjs/binding-decorators';
+import { InformAiError, RuleFailError, toError, loadAndValidate, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+
+import { CodeRulesApp } from './code-rules-app';
+import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
+import { CONFIG_BINDINGS } from './code-rules-config-table';
 
 async function main(): Promise<void> {
     // webpieces-disable no-unmanaged-exceptions -- global entry point for code-rules CLI
     try {
-        // Anchor at the repo root so `.webpieces/instruct-ai` docs are written there, not in whatever
-        // subdir this CLI happened to be invoked from.
+        // Anchor at the repo root so `.webpieces/instruct-ai` docs land there, not in whatever subdir
+        // this CLI ran from; load config from there.
         const workspaceRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
-        const result = await runValidateCode(workspaceRoot);
+        const loaded = loadAndValidate(workspaceRoot);
+        if (loaded.configPath === null) {
+            console.error('\n❌ No webpieces.config.json found at workspace root (or any ancestor).\n');
+            process.exit(1);
+        }
+        console.log(`\n📄 Loaded config: ${loaded.configPath}`);
+
+        // Composition root: bind the runtime values (workspace root, each rule's config), then let
+        // inversify build the ENTIRE validator DAG when we resolve the app.
+        const container = new Container();
+        container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
+        container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
+        for (const binding of CONFIG_BINDINGS) {
+            const ConfigClass = binding[0];
+            const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
+            container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
+        }
+        await container.load(buildProviderModule());
+
+        const app = container.get(CodeRulesApp);
+        const result = await app.run();
         process.exit(result.success ? 0 : 1);
     } catch (err: unknown) {
         const error = toError(err);

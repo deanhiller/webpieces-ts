@@ -17,6 +17,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { writeTemplate, hasDisable, RULE_NAMES, MaxFileLinesConfig, FileLimitMode, detectBase, getChangedFiles } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface FileViolation {
@@ -313,6 +315,8 @@ async function runValidatorImpl(
     }
 }
 
+@provideSingleton()
+@injectable()
 export class MaxFileLinesValidator extends CodeValidator<MaxFileLinesConfig> {
     constructor(config: MaxFileLinesConfig) {
         super(config, 'max-file-lines');

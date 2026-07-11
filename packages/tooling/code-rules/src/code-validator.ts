@@ -8,6 +8,18 @@ export interface ExecutorResult {
 }
 
 /**
+ * One named unit of work for {@link RuleReporter} — a validator (or a per-entry match-rule) paired
+ * with a thunk that runs it. A value object (not a DAG service), so the engine can build the run list
+ * from its injected validators + checker WITHOUT `new`-ing any DAG member.
+ */
+export class RuleRun {
+    constructor(
+        readonly name: string,
+        readonly run: () => Promise<ExecutorResult>,
+    ) {}
+}
+
+/**
  * Base class for every code-rules validator.
  *
  * Extends the shared {@link AbstractRule} (which owns `name` + the on/off + escape-hatch

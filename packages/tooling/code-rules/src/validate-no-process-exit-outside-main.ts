@@ -23,6 +23,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { hasDisable, RULE_NAMES, NoProcessExitOutsideMainConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 const INSTRUCT_FILE = 'webpieces.noexitinmain.md';
@@ -208,6 +210,8 @@ async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspa
     return { success: false };
 }
 
+@provideSingleton()
+@injectable()
 export class NoProcessExitOutsideMainValidator extends CodeValidator<NoProcessExitOutsideMainConfig> {
     constructor(config: NoProcessExitOutsideMainConfig) {
         super(config, 'no-process-exit-outside-main');

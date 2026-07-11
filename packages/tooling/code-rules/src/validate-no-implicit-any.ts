@@ -30,6 +30,8 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface ImplicitAnyViolation {
@@ -280,6 +282,8 @@ async function runValidatorImpl(
     }
 }
 
+@provideSingleton()
+@injectable()
 export class NoImplicitAnyValidator extends CodeValidator<NoImplicitAnyConfig> {
     constructor(config: NoImplicitAnyConfig) {
         super(config, 'no-implicit-any');

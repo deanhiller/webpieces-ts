@@ -34,6 +34,8 @@
 
 import { ProjectMode, FrameworkTagConfig } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import {
     InvalidTagProject,
     MissingTagProject,
@@ -112,6 +114,8 @@ const FRAMEWORK_TAG_SPEC = new TagRuleSpec(
     reportInvalidValues
 );
 
+@provideSingleton()
+@injectable()
 export class FrameworkTagValidator extends CodeValidator<FrameworkTagConfig> {
     constructor(config: FrameworkTagConfig) {
         super(config, 'framework-tag');

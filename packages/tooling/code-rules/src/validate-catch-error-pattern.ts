@@ -41,6 +41,8 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, CatchErrorPatternConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface CatchViolation {
@@ -475,6 +477,8 @@ async function runValidatorImpl(
     return { success: false };
 }
 
+@provideSingleton()
+@injectable()
 export class CatchErrorPatternValidator extends CodeValidator<CatchErrorPatternConfig> {
     constructor(config: CatchErrorPatternConfig) {
         super(config, 'catch-error-pattern');

@@ -45,6 +45,8 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, NoDestructureConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface DestructureViolation {
@@ -434,6 +436,8 @@ async function runValidatorImpl(
     return { success: false };
 }
 
+@provideSingleton()
+@injectable()
 export class NoDestructureValidator extends CodeValidator<NoDestructureConfig> {
     constructor(config: NoDestructureConfig) {
         super(config, 'no-destructure');
