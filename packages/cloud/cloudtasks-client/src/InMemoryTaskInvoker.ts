@@ -1,6 +1,6 @@
 import { injectable, inject, optional } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
-import { mintIdToken } from '@webpieces/gcp-identity';
+import { GcpOidc } from '@webpieces/gcp-identity';
 import { LogManager, toError, Secrets } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
@@ -29,8 +29,13 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     /** Scheduled (not-yet-delivered) jobs, so delete() can cancel them. */
     private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
 
-    // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
-    constructor(@optional() @inject(Secrets) private readonly secrets?: Secrets) {
+    constructor(
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
+        @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
+        // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
+        @optional() @inject(Secrets) private readonly secrets?: Secrets,
+    ) {
         super();
     }
 
@@ -107,7 +112,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     private async attachAuth(request: TaskRequest, headers: Record<string, string>): Promise<void> {
         const mode = request.authMode;
         if (mode.kind === 'oidc') {
-            headers['authorization'] = `Bearer ${await mintIdToken(request.targetUrl)}`;
+            headers['authorization'] = `Bearer ${await this.gcpOidc.mintIdToken(request.targetUrl)}`;
             return;
         }
         if (mode.kind === 'shared-secret') {

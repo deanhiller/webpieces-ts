@@ -13,10 +13,12 @@ appears in each root's tree.
 ```mermaid
 graph TD
     ClientHttpFactory["ClientHttpFactory"]:::apiImpl
+    GcpOidc["GcpOidc"]
     NodeProxyClient["NodeProxyClient"]:::many
     RequestContextHeaders["RequestContextHeaders"]
     Secrets{{"Secrets ?"}}:::unresolved
     ClientHttpFactory --> NodeProxyClient
+    NodeProxyClient --> GcpOidc
     NodeProxyClient --> RequestContextHeaders
     NodeProxyClient --> Secrets
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d

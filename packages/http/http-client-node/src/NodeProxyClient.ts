@@ -9,7 +9,7 @@ import {
     toError,
 } from '@webpieces/core-util';
 import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
-import { mintIdToken, resolveTargetUrl } from '@webpieces/gcp-identity';
+import { GcpOidc, resolveTargetUrl } from '@webpieces/gcp-identity';
 import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 
@@ -27,8 +27,12 @@ export class NodeProxyClient extends ProxyClient {
     private config!: ClientConfig;
 
     constructor(
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @inject(RequestContextHeaders) private readonly headers: RequestContextHeaders,
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
+        @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
         // @optional: only @AuthSharedSecret endpoints need it; the client sends its bound value.
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(Secrets) private readonly secrets?: Secrets,
     ) {
         super();
@@ -68,7 +72,7 @@ export class NodeProxyClient extends ProxyClient {
     ): Promise<void> {
         const mode = route.authMeta?.mode;
         if (mode?.kind === 'oidc') {
-            httpHeaders['Authorization'] = `Bearer ${await mintIdToken(baseUrl)}`;
+            httpHeaders['Authorization'] = `Bearer ${await this.gcpOidc.mintIdToken(baseUrl)}`;
         } else if (mode?.kind === 'shared-secret') {
             const secret = this.secrets?.get(mode.secretKey);
             if (!secret) {

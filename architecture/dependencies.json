@@ -48,7 +48,7 @@
             ]
         },
         "app-example-e2e": {
-            "level": 6,
+            "level": 7,
             "framework": ["express"],
             "role": "server",
             "shortDescription": "End-to-end test project for the two-service example. Boots both `client-server` and `server2` on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.",
@@ -69,7 +69,7 @@
             ]
         },
         "client-server": {
-            "level": 5,
+            "level": 6,
             "framework": ["express"],
             "role": "server",
             "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
@@ -124,14 +124,13 @@
             ]
         },
         "cloudtasks-client": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
             "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, and the TaskInvoker transports (GCP + in-memory), both of which deliver a task over real HTTP.",
             "responsibilitiesFile": "packages/cloud/cloudtasks-client/responsibilities.md",
             "designFile": "packages/cloud/cloudtasks-client/design.json",
             "dependsOn": [
-                "core-context",
                 "gcp-identity"
             ]
         },
@@ -157,7 +156,7 @@
             ]
         },
         "company-svc-core": {
-            "level": 4,
+            "level": 5,
             "framework": ["express"],
             "role": "lib",
             "shortDescription": "Company-wide shared SERVER core (node-only, `framework:express`). Holds the single shared server bootstrap and shared server DI so every express service starts the same way. It is the node-only counterpart to the browser-safe `company-core` and is NOT imported by Angular.",
@@ -204,13 +203,13 @@
             ]
         },
         "gcp-identity": {
-            "level": 1,
+            "level": 2,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.",
             "responsibilitiesFile": "packages/cloud/gcp-identity/responsibilities.md",
             "dependsOn": [
-                "core-util"
+                "core-context"
             ]
         },
         "http-client-browser": {
@@ -235,32 +234,30 @@
             ]
         },
         "http-client-node": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
             "shortDescription": "The server-side HTTP client: generates type-safe clients from the SAME API contract the callee's controller implements. Node-only, so it is fully inversify-wired, reads the magic context straight out of the `RequestContext`, and mints its own delivery auth.",
             "responsibilitiesFile": "packages/http/http-client-node/responsibilities.md",
             "designFile": "packages/http/http-client-node/design.json",
             "dependsOn": [
-                "core-context",
                 "gcp-identity",
                 "http-client-core"
             ]
         },
         "http-routing": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
             "shortDescription": "Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`RouteBuilder` wiring, `RouteDefinition`/`FilterDefinition`, `MethodMeta`, `FilterMatcher` (glob-based filter-to-route matching), and `ApiRoutingFactory` that maps http-api decorators to controller handlers.",
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",
             "designFile": "packages/http/http-routing/design.json",
             "dependsOn": [
-                "core-context",
                 "gcp-identity"
             ]
         },
         "http-server": {
-            "level": 3,
+            "level": 4,
             "framework": ["express"],
             "role": "lib",
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.",
@@ -270,7 +267,7 @@
             ]
         },
         "legacy-server": {
-            "level": 5,
+            "level": 6,
             "framework": ["express"],
             "role": "server",
             "shortDescription": "Example of INCREMENTAL webpieces adoption: a pre-existing express app (own routes, untouched) with the webpieces api → filters → controller pipeline bolted on via `WebpiecesRouteCreator`, using the SAME shared `setupCompanyRuntime` startup as the greenfield server. Proven by an integration test.",
@@ -340,7 +337,7 @@
             "dependsOn": []
         },
         "server2": {
-            "level": 5,
+            "level": 6,
             "framework": ["express"],
             "role": "server",
             "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
