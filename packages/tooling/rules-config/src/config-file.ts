@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from './di';
 import { injectable } from 'inversify';
 
 import { InformAiError } from './inform-ai-error';

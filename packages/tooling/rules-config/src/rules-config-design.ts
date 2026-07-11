@@ -1,5 +1,5 @@
-import { DocumentDesign } from '@webpieces/core-util';
-import { provideSingleton } from '@webpieces/core-context';
+import { DocumentDesign } from './di';
+import { provideSingleton } from './di';
 import { injectable } from 'inversify';
 
 import { RepoRootFinder } from './repo-root';

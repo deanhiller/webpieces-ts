@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from './di';
 import { injectable } from 'inversify';
 
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
