@@ -214,14 +214,16 @@ describe('validateLibraryTypesMatch (up-set lattice on env sets)', () => {
     });
 });
 
-describe('validateRoleDependencies', () => {
-    function graphOf(entries: Record<string, { role?: string; dependsOn: string[] }>): EnhancedGraph {
-        const graph: EnhancedGraph = {};
-        for (const [name, entry] of Object.entries(entries)) {
-            graph[name] = { level: 0, dependsOn: entry.dependsOn, role: entry.role };
-        }
-        return graph;
+function roleGraphOf(entries: Record<string, { role?: string; dependsOn: string[] }>): EnhancedGraph {
+    const graph: EnhancedGraph = {};
+    for (const [name, entry] of Object.entries(entries)) {
+        graph[name] = { level: 0, dependsOn: entry.dependsOn, role: entry.role };
     }
+    return graph;
+}
+
+describe('validateRoleDependencies', () => {
+    const graphOf = roleGraphOf;
 
     it('allows depending on lib and designed-lib', () => {
         const problems: string[] = [];
@@ -273,6 +275,32 @@ describe('validateRoleDependencies', () => {
         const problems: string[] = [];
         validateRoleDependencies(graphOf({ a: { role: 'lib', dependsOn: ['b'] }, b: { dependsOn: [] } }), problems);
         expect(problems).toEqual([]);
+    });
+});
+
+describe('validateRoleDependencies — bundle role', () => {
+    it('allows a bundle to depend on apps (it aggregates them)', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(
+            roleGraphOf({
+                plugin: { role: 'bundle', dependsOn: ['toolA', 'toolB', 'svr'] },
+                toolA: { role: 'app', dependsOn: [] },
+                toolB: { role: 'app', dependsOn: [] },
+                svr: { role: 'server', dependsOn: [] },
+            }),
+            problems
+        );
+        expect(problems).toEqual([]);
+    });
+
+    it('still flags a non-bundle lib depending on an app', () => {
+        const problems: string[] = [];
+        validateRoleDependencies(
+            roleGraphOf({ a: { role: 'lib', dependsOn: ['tool'] }, tool: { role: 'app', dependsOn: [] } }),
+            problems
+        );
+        expect(problems).toHaveLength(1);
+        expect(problems[0]).toContain("'a' (role:lib) must not depend on 'tool' (role:app)");
     });
 });
 
