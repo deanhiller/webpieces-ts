@@ -24,26 +24,13 @@ export function createValidateRuntimeArchitectureTarget(): TargetConfiguration {
         cache: false,
         inputs: [
             'default',
-            '{workspaceRoot}/**/service-contract.json',
+            '{workspaceRoot}/architecture/dependencies.json',
             '{workspaceRoot}/architecture/runtime-dependencies.json',
             '{workspaceRoot}/webpieces.config.json',
         ],
         metadata: {
             technologies: ['nx'],
             description: 'Validate the runtime microservice graph (no disallowed cycles, unchanged)',
-        },
-    };
-}
-
-/** Per-project: validate this project's service-contract.json matches its api-project deps. */
-export function createValidateRuntimeMarkersTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-runtime-markers',
-        cache: true,
-        inputs: ['default', '{workspaceRoot}/**/service-contract.json', '{workspaceRoot}/webpieces.config.json'],
-        metadata: {
-            technologies: ['nx'],
-            description: "Validate this service's service-contract.json matches its api-project dependencies",
         },
     };
 }

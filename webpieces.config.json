@@ -104,8 +104,6 @@
         },
         "runtime-architecture": {
             "mode": "RUN_EVERY_TIME",
-            "servicePaths": [],
-            "apiProjectPaths": [],
             "allowedCycles": [],
             "ignoreModifiedUntilEpoch": 0
         },

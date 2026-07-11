@@ -14,9 +14,9 @@ import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
-import type { ApiScanResult } from '../../lib/api-usage/api-scanner';
+import type { EnhancedGraph } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
-import { assembleRuntimeGraphFromScan, saveRuntimeGraph } from '../../lib/runtime-graph';
+import { deriveRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
@@ -28,14 +28,15 @@ export interface ExecutorResult {
 }
 
 /**
- * Generate the runtime microservice graph alongside the compile-time graph, from the SAME source
- * scan (the derived apiRelations) — one regenerate produces both committed files. rpc APIs become
- * direct runtime edges; pubsub APIs become edges the viz draws through a queue.
+ * Generate the runtime microservice graph alongside the compile-time graph, DERIVED from the same
+ * dependencies.json (its per-project apiRelations) — one regenerate produces both committed files, and
+ * validate derives from the SAME source so they can't diverge. rpc APIs become direct runtime edges;
+ * pubsub APIs become edges the viz draws through a queue.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
-function generateRuntimeGraph(workspaceRoot: string, scan: ApiScanResult, hiddenProjects: Set<string>): void {
-    console.log('📡 Generating runtime graph from the source scan (implements × uses per API)...');
-    const runtimeGraph = assembleRuntimeGraphFromScan(scan, hiddenProjects);
+function generateRuntimeGraph(workspaceRoot: string, graph: EnhancedGraph, hiddenProjects: Set<string>): void {
+    console.log('📡 Deriving runtime graph from dependencies.json (implements × uses per API)...');
+    const runtimeGraph = deriveRuntimeGraph(graph, hiddenProjects);
     saveRuntimeGraph(runtimeGraph, workspaceRoot);
     const serviceCount = Object.keys(runtimeGraph.services).length;
     console.log(
@@ -73,7 +74,7 @@ export default async function runExecutor(
         // scanning source, so dependencies.json + the viz + the runtime graph all
         // read the same derived truth.
         console.log('🔎 Scanning source for implements/uses API relations...');
-        const scanResult = scanAndAttachApiRelations(workspaceRoot, enhancedGraph, projectInfos);
+        scanAndAttachApiRelations(workspaceRoot, enhancedGraph, projectInfos);
 
         // Step 4: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');
@@ -92,7 +93,7 @@ export default async function runExecutor(
         for (const name of Object.keys(enhancedGraph)) {
             if (enhancedGraph[name].drawOnGraph === false) hiddenProjects.add(name);
         }
-        generateRuntimeGraph(workspaceRoot, scanResult, hiddenProjects);
+        generateRuntimeGraph(workspaceRoot, enhancedGraph, hiddenProjects);
 
         // Print summary
         const projectCount = Object.keys(enhancedGraph).length;

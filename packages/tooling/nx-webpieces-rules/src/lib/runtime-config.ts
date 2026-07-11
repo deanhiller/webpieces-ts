@@ -6,7 +6,6 @@
  *
  *   "runtime-architecture": {
  *     "mode": "ON",                          // "OFF" disables the whole feature
- *     "apiProjectPaths": ["libraries/apis/*"],
  *     "ignoreModifiedUntilEpoch": 0,         // whole-rule punt (epoch seconds)
  *     "allowedCycles": [ { "services": ["a","b"], "reason": "...", "until": 1771931925 } ]
  *   }
@@ -24,8 +23,6 @@ export interface AllowedCycle {
 
 export interface RuntimeRuleConfig {
     off: boolean;
-    apiProjectPaths: string[];
-    servicePaths: string[];
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
     allowedCycles: AllowedCycle[];
@@ -37,8 +34,6 @@ export interface RuntimeRuleConfig {
  * defensively narrow arrays/numbers rather than threading `unknown` everywhere.
  */
 interface RuntimeRuleRaw {
-    apiProjectPaths?: string[];
-    servicePaths?: string[];
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
     allowedCycles?: AllowedCycle[];
@@ -55,8 +50,6 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
     const raw = (rule?.options ?? {}) as RuntimeRuleRaw;
     return {
         off: rule?.isOff ?? false,
-        apiProjectPaths: Array.isArray(raw.apiProjectPaths) ? raw.apiProjectPaths : [],
-        servicePaths: Array.isArray(raw.servicePaths) ? raw.servicePaths : [],
         ignoreModifiedUntilEpoch:
             typeof raw.ignoreModifiedUntilEpoch === 'number' ? raw.ignoreModifiedUntilEpoch : undefined,
         ignoreRuleWhileOnBranch:
