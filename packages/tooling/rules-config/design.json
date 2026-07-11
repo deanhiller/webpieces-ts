@@ -6,8 +6,24 @@
             "root": "RulesConfigDesign",
             "rootKind": "apiImplementation",
             "file": "packages/tooling/rules-config/src/rules-config-design.ts",
-            "maxLevel": 1,
+            "maxLevel": 2,
             "nodes": [
+                {
+                    "id": "ConfigFile",
+                    "className": "ConfigFile",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/config-file.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ConfigLoader",
+                    "className": "ConfigLoader",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/load-config.ts",
+                    "level": 1
+                },
                 {
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
@@ -23,9 +39,35 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/rules-config-design.ts",
                     "level": 0
+                },
+                {
+                    "id": "TemplateWriter",
+                    "className": "TemplateWriter",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/load-template.ts",
+                    "level": 1
                 }
             ],
             "edges": [
+                {
+                    "from": "ConfigLoader",
+                    "to": "ConfigFile",
+                    "injection": "type",
+                    "token": "ConfigFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/config-file.ts#ConfigFile",
+                    "paramName": "configFile",
+                    "paramType": "ConfigFile"
+                },
+                {
+                    "from": "RulesConfigDesign",
+                    "to": "ConfigLoader",
+                    "injection": "type",
+                    "token": "ConfigLoader",
+                    "tokenKey": "class:packages/tooling/rules-config/src/load-config.ts#ConfigLoader",
+                    "paramName": "configLoader",
+                    "paramType": "ConfigLoader"
+                },
                 {
                     "from": "RulesConfigDesign",
                     "to": "RepoRootFinder",
@@ -34,6 +76,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "RulesConfigDesign",
+                    "to": "TemplateWriter",
+                    "injection": "type",
+                    "token": "TemplateWriter",
+                    "tokenKey": "class:packages/tooling/rules-config/src/load-template.ts#TemplateWriter",
+                    "paramName": "templateWriter",
+                    "paramType": "TemplateWriter"
                 }
             ],
             "unresolved": []

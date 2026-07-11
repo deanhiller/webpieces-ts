@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
@@ -35,33 +37,55 @@ export interface RawConfigFile {
 }
 
 /**
+ * Locates + reads webpieces.config.json. `@provideSingleton` so it can be injected into the config
+ * loader and appear in the rules-config DI design.
+ */
+@provideSingleton()
+@injectable()
+export class ConfigFile {
+    /** Walk up from `startDir` looking for webpieces.config.json. Returns its absolute path or null. */
+    findConfigFile(startDir: string): string | null {
+        let dir = startDir;
+        while (true) {
+            const primary = path.join(dir, CONFIG_FILENAME);
+            if (fs.existsSync(primary)) return primary;
+            const parent = path.dirname(dir);
+            if (parent === dir) return null;
+            dir = parent;
+        }
+    }
+
+    /** Read + JSON.parse webpieces.config.json, surfacing parse failures as a readable InformAiError. */
+    readRawConfig(configPath: string): RawConfigFile {
+        const raw = fs.readFileSync(configPath, 'utf8');
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return JSON.parse(raw) as RawConfigFile;
+        } catch (err: unknown) {
+            const error = toError(err);
+            throw new InformAiError(
+                `webpieces.config.json has invalid JSON — fix the file, then retry.\n` +
+                `Parse error: ${error.message}\n` +
+                `File: ${configPath}`,
+            );
+        }
+    }
+}
+
+// Temporary migration delegators — consumers migrate to injecting ConfigFile over follow-up PRs, then
+// these free functions are removed. Declarations kept identical to the originals (unchanged lines).
+const configFileSvc = new ConfigFile();
+
+/**
  * Walk up from `startDir` looking for webpieces.config.json. Returns its absolute path or null.
  */
 export function findConfigFile(startDir: string): string | null {
-    let dir = startDir;
-    while (true) {
-        const primary = path.join(dir, CONFIG_FILENAME);
-        if (fs.existsSync(primary)) return primary;
-        const parent = path.dirname(dir);
-        if (parent === dir) return null;
-        dir = parent;
-    }
+    return configFileSvc.findConfigFile(startDir);
 }
 
 /**
  * Read + JSON.parse webpieces.config.json, surfacing parse failures as a readable InformAiError.
  */
 export function readRawConfig(configPath: string): RawConfigFile {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return JSON.parse(raw) as RawConfigFile;
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new InformAiError(
-            `webpieces.config.json has invalid JSON — fix the file, then retry.\n` +
-            `Parse error: ${error.message}\n` +
-            `File: ${configPath}`,
-        );
-    }
+    return configFileSvc.readRawConfig(configPath);
 }

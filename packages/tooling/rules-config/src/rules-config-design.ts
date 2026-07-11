@@ -3,6 +3,8 @@ import { provideSingleton } from '@webpieces/core-context';
 import { injectable } from 'inversify';
 
 import { RepoRootFinder } from './repo-root';
+import { ConfigLoader } from './load-config';
+import { TemplateWriter } from './load-template';
 
 /**
  * DI-design root for @webpieces/rules-config (role:designed-lib).
@@ -11,11 +13,15 @@ import { RepoRootFinder } from './repo-root';
  * (design.json / design.md / design.html) is generated. rules-config is the shared foundation whose
  * utilities are being migrated from free functions to injected `@provideSingleton` service classes; as
  * each service class lands (config loader, template writer, diff/git services, …) it is injected HERE
- * so it appears in the drawn design. First injected service: {@link RepoRootFinder}.
+ * so it appears in the drawn design.
  */
 @DocumentDesign()
 @provideSingleton()
 @injectable()
 export class RulesConfigDesign {
-    constructor(private readonly repoRootFinder: RepoRootFinder) {}
+    constructor(
+        private readonly repoRootFinder: RepoRootFinder,
+        private readonly configLoader: ConfigLoader,
+        private readonly templateWriter: TemplateWriter,
+    ) {}
 }

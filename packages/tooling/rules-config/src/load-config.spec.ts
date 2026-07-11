@@ -209,7 +209,7 @@ describe('loadAndValidate — deprecated key aliasing', () => {
     it('accepts the deprecated pr-merge-cleanup key and normalizes it to pr-merge-guard', () => {
         const sections = allRulesOff();
         // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
-        const guards = sections.hookGuards as Record<string, unknown>;
+        const guards = sections['hookGuards'] as Record<string, unknown>;
         guards['pr-merge-cleanup'] = guards['pr-merge-guard'];
         delete guards['pr-merge-guard'];
         const dir = writeConfig(sections);
@@ -222,7 +222,7 @@ describe('loadAndValidate — deprecated key aliasing', () => {
     it('accepts the deprecated pr-creation-guard key and normalizes it to pr-creation-or-push-guard', () => {
         const sections = allRulesOff();
         // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
-        const guards = sections.hookGuards as Record<string, unknown>;
+        const guards = sections['hookGuards'] as Record<string, unknown>;
         guards['pr-creation-guard'] = guards['pr-creation-or-push-guard'];
         delete guards['pr-creation-or-push-guard'];
         const dir = writeConfig(sections);
