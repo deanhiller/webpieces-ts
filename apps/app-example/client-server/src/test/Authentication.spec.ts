@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { AuthConfig } from '@webpieces/http-routing';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { HttpUnauthorizedError, HttpForbiddenError } from '@webpieces/core-util';
-import { mintIdToken } from '@webpieces/gcp-identity';
+import { GcpOidc } from '@webpieces/gcp-identity';
 import { SecureApi } from '@webpieces/client-server-api';
 import { TestAuthConfig, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
 import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
@@ -151,7 +151,7 @@ describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
         // Off-GCP, mintIdToken produces a real dev token. @AuthOidc() has no callers → TRUST THE EDGE:
         // verifyOidcFromCallers verifies the signature and accepts any Google-signed caller (the edge's
         // run.invoker IAM gates WHO). Real mint↔verify, no mocking.
-        const token = await mintIdToken('http://localhost');
+        const token = await new GcpOidc().mintIdToken('http://localhost');
         const res = await withAuthHeader(`Bearer ${token}`, () => api.serviceOp({}));
         expect(res.ok).toBe(true);
     });

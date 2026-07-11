@@ -1,7 +1,7 @@
-import { injectable } from 'inversify';
+import { inject, injectable } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
-import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
+import { GcpOidc } from '@webpieces/gcp-identity';
 
 /**
  * DefaultOidcVerifier - the framework's built-in Google OIDC verifier, injected into
@@ -21,11 +21,16 @@ import { verifyOidcFromCallers } from '@webpieces/gcp-identity';
 @provideFrameworkSingleton()
 @injectable()
 export class DefaultOidcVerifier {
+    constructor(
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
+        @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
+    ) {}
+
     async verify(token: string, callers: string[]): Promise<void> {
         // callers pass straight through: EMPTY (@AuthOidc() with no callers) = TRUST THE EDGE, a
         // non-empty list enforces the explicit allow-list. Do NOT inject a ['self'] default — that
         // would reject a legitimate cross-SA caller the edge already admitted.
-        const result = await verifyOidcFromCallers(token, callers);
+        const result = await this.gcpOidc.verifyFromCallers(token, callers);
         if (!result.ok) {
             throw new HttpUnauthorizedError(`OIDC rejected: ${result.reason ?? 'not an allowed caller'}`);
         }

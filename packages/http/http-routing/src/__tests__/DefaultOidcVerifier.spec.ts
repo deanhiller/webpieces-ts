@@ -6,6 +6,7 @@ process.env['METADATA_SERVER_DETECTION'] = 'none';
 
 import { describe, it, expect } from 'vitest';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
+import { GcpOidc } from '@webpieces/gcp-identity';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 /**
@@ -20,7 +21,7 @@ function devTokenFor(email: string): string {
 }
 
 describe('DefaultOidcVerifier — @AuthOidc() trusts the edge (no ["self"] fallback)', () => {
-    const verifier = new DefaultOidcVerifier();
+    const verifier = new DefaultOidcVerifier(new GcpOidc());
     const OTHER_CALLER = 'app-sa@proj.iam.gserviceaccount.com'; // a DIFFERENT SA than this service's
 
     it('empty callers (@AuthOidc()) accepts a genuine token from ANOTHER caller — TRUST THE EDGE', async () => {

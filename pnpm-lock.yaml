@@ -222,6 +222,9 @@ importers:
 
   packages/cloud/gcp-identity:
     dependencies:
+      '@webpieces/core-context':
+        specifier: workspace:*
+        version: link:../../core/core-context
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
@@ -231,6 +234,12 @@ importers:
       google-auth-library:
         specifier: 9.15.1
         version: 9.15.1(encoding@0.1.13)
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
 
   packages/core/core-context:
     dependencies:

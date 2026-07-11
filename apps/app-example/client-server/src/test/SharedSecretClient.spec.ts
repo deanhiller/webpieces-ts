@@ -5,6 +5,7 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { AuthConfig } from '@webpieces/http-routing';
 import { Secrets } from '@webpieces/core-util';
+import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
     ClientConfig,
@@ -45,12 +46,12 @@ afterAll(async () => {
 function clientSending(value: string): SecureApi {
     // In prod the container supplies the provider (bindFrameworkProvider) and there is ONE factory
     // per service. Here each distinct secret needs its own NodeProxyClient, so we hand the provider
-    // the resolve-lambda directly — the same seam, minus the container. mintIdToken is no longer
-    // injected: NodeProxyClient calls gcp-identity directly.
+    // the resolve-lambda directly — the same seam, minus the container. GcpOidc (mint) is normally
+    // injected; here we construct one explicitly for the same reason.
     const secrets = new Secrets({ INTERNAL_API_SECRET: value });
     // RequestContextHeaders reads HeaderRegistry in its constructor, so build it here (after the
     // server started and configured the registry), never at module scope.
-    const provider = new Provider(() => new NodeProxyClient(new RequestContextHeaders(), secrets));
+    const provider = new Provider(() => new NodeProxyClient(new RequestContextHeaders(), new GcpOidc(), secrets));
     const factory = new ClientHttpFactory(provider);
     return factory.createRpcClient(SecureApi, new ClientConfig('client-server', `http://localhost:${PORT}`));
 }

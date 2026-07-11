@@ -20,4 +20,4 @@ export {
     resolveTargetUrl,
     LOCAL_SERVICE_ACCOUNT_EMAIL,
 } from './urls';
-export { mintIdToken, verifyOidcFromCallers, OidcVerifyResult } from './oidc';
+export { GcpOidc, OidcVerifyResult } from './oidc';

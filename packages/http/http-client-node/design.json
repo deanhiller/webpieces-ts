@@ -17,6 +17,14 @@
                     "level": 0
                 },
                 {
+                    "id": "GcpOidc",
+                    "className": "GcpOidc",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/cloud/gcp-identity/src/oidc.ts",
+                    "level": 2
+                },
+                {
                     "id": "NodeProxyClient",
                     "className": "NodeProxyClient",
                     "kind": "class",
@@ -50,6 +58,15 @@
                     "tokenKey": "class:packages/http/http-client-node/src/NodeProxyClient.ts#NodeProxyClient",
                     "paramName": "proxyClientProvider",
                     "paramType": "Provider<NodeProxyClient>"
+                },
+                {
+                    "from": "NodeProxyClient",
+                    "to": "GcpOidc",
+                    "injection": "token",
+                    "token": "GcpOidc",
+                    "tokenKey": "class:packages/cloud/gcp-identity/src/oidc.ts#GcpOidc",
+                    "paramName": "gcpOidc",
+                    "paramType": "GcpOidc"
                 },
                 {
                     "from": "NodeProxyClient",
