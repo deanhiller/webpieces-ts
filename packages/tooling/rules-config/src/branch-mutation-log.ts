@@ -1,18 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
 
-// The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches
-// (wp-start-update / wp-finish-update / wp-start-upsert-pr / wp-finish-upsert-pr and the merge-start /
-// merge-end primitives they compose). Before this, a branch could silently rename wpN → wpN+1 under
-// the agent (backup, checkout main, pull, squash-merge, rename) with ONLY `git reflog` as evidence —
-// nothing in `.webpieces/`. This log records START / each phase boundary / END-with-outcome so the
-// next agent (or a human) can reconstruct what the tooling did to the branches and where the merge/PR
-// artifacts landed. Kept SEPARATE from the read-only refresher log (guard-async-work.log) so that log
-// stays purely about the async cache. Writes to `.webpieces/hooks/branch-mutations.log`.
-//
+// The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches.
+// Records START / each phase boundary / END-with-outcome so the next agent (or a human) can
+// reconstruct what the tooling did to the branches. Writes to `.webpieces/hooks/branch-mutations.log`.
 // Lives in rules-config (the shared dep of pr-gate) so the pr-gate scripts can call it directly.
 
 const HOOKS_DIR = 'hooks';
@@ -30,10 +26,7 @@ export type MutationPhase =
     | 'START' | 'BACKUP' | 'CHECKOUT_MAIN' | 'PULL' | 'SQUASH' | 'RENAME'
     | 'FINALIZE' | 'CONFLICT' | 'INTERRUPTED' | 'END';
 
-// Data-only record of one branch-mutation event (per CLAUDE.md: classes for data, explicit
-// construction). `verb` + `phase` are always set; the rest describe the transition and default to
-// empty so a call site fills only what that phase knows (e.g. RENAME sets from/to, PULL sets
-// oldMain/newMain, CONFLICT sets conflictFiles + artifacts, END sets outcome).
+// Data-only record of one branch-mutation event (per CLAUDE.md: classes for data, explicit construction).
 export class BranchMutationEvent {
     verb: MutationVerb;
     phase: MutationPhase;
@@ -52,67 +45,84 @@ export class BranchMutationEvent {
     }
 }
 
-export function branchMutationLogPath(root: string): string {
-    return path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR, LOG_FILE);
-}
-
-/**
- * Append one tab-separated line per branch-mutation event to `.webpieces/hooks/branch-mutations.log`.
- * `root` is the workspace root holding `.webpieces`. Swallows all errors — logging must NEVER block or
- * fail the workflow it is observing (mirrors logSyncEvent's contract).
- */
-export function logBranchMutation(root: string, event: BranchMutationEvent): void {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const timestamp = new Date().toISOString();
-        const hooksDir = path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR);
-        fs.mkdirSync(hooksDir, { recursive: true });
-
-        const logPath = path.join(hooksDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(hooksDir, LOG_FILE_PREV));
-
-        const line = [
-            `[${timestamp}]`,
-            event.verb,
-            event.phase,
-            oneLine(formatDetail(event)),
-        ].join('\t') + '\n';
-        fs.appendFileSync(logPath, line);
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
+/** Appends branch-mutation audit lines. `@provideSingleton` so it's injectable + drawn in the design. */
+@provideSingleton()
+@injectable()
+export class BranchMutationLog {
+    branchMutationLogPath(root: string): string {
+        return path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR, LOG_FILE);
     }
-}
 
-// Render only the fields this event actually set, as `key=value` tokens — so a RENAME line reads
-// `from=… to=…` and a PULL line reads `oldMain=… newMain=…`, all greppable on one line.
-function formatDetail(event: BranchMutationEvent): string {
-    const parts: string[] = [];
-    if (event.fromBranch !== '' || event.toBranch !== '') parts.push(`from=${event.fromBranch || '?'} to=${event.toBranch || '?'}`);
-    if (event.oldMain !== '' || event.newMain !== '') parts.push(`oldMain=${event.oldMain || '?'} newMain=${event.newMain || '?'}`);
-    if (event.conflict) parts.push('conflict=true');
-    if (event.conflictFiles.length > 0) parts.push(`conflictFiles=${event.conflictFiles.length}(${event.conflictFiles.join(',')})`);
-    if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
-    for (const artifact of event.artifacts) parts.push(`artifact=${artifact}`);
-    return parts.join(' ');
-}
+    /**
+     * Append one tab-separated line per branch-mutation event to
+     * `.webpieces/hooks/branch-mutations.log`. Swallows all errors — logging must NEVER block or fail
+     * the workflow it is observing.
+     */
+    logBranchMutation(root: string, event: BranchMutationEvent): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const timestamp = new Date().toISOString();
+            const hooksDir = path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR);
+            fs.mkdirSync(hooksDir, { recursive: true });
 
-// Collapse newlines/tabs and cap length so one event is always exactly one log line.
-function oneLine(value: string): string {
-    const flat = value.replace(/[\t\r\n]+/g, ' ').trim();
-    return flat.length <= MAX_DETAIL_LEN ? flat : flat.slice(0, MAX_DETAIL_LEN) + '…';
-}
+            const logPath = path.join(hooksDir, LOG_FILE);
+            this.rotateLogFile(logPath, path.join(hooksDir, LOG_FILE_PREV));
 
-function rotateLogFile(logPath: string, prevPath: string): void {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const stat = fs.statSync(logPath);
-        if (stat.size > MAX_LOG_BYTES) {
-            if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath);
-            fs.renameSync(logPath, prevPath);
+            const line = [
+                `[${timestamp}]`,
+                event.verb,
+                event.phase,
+                this.oneLine(this.formatDetail(event)),
+            ].join('\t') + '\n';
+            fs.appendFileSync(logPath, line);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
         }
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
     }
+
+    // Render only the fields this event actually set, as `key=value` tokens — greppable on one line.
+    private formatDetail(event: BranchMutationEvent): string {
+        const parts: string[] = [];
+        if (event.fromBranch !== '' || event.toBranch !== '') parts.push(`from=${event.fromBranch || '?'} to=${event.toBranch || '?'}`);
+        if (event.oldMain !== '' || event.newMain !== '') parts.push(`oldMain=${event.oldMain || '?'} newMain=${event.newMain || '?'}`);
+        if (event.conflict) parts.push('conflict=true');
+        if (event.conflictFiles.length > 0) parts.push(`conflictFiles=${event.conflictFiles.length}(${event.conflictFiles.join(',')})`);
+        if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
+        for (const artifact of event.artifacts) parts.push(`artifact=${artifact}`);
+        return parts.join(' ');
+    }
+
+    // Collapse newlines/tabs and cap length so one event is always exactly one log line.
+    private oneLine(value: string): string {
+        const flat = value.replace(/[\t\r\n]+/g, ' ').trim();
+        return flat.length <= MAX_DETAIL_LEN ? flat : flat.slice(0, MAX_DETAIL_LEN) + '…';
+    }
+
+    private rotateLogFile(logPath: string, prevPath: string): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const stat = fs.statSync(logPath);
+            if (stat.size > MAX_LOG_BYTES) {
+                if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath);
+                fs.renameSync(logPath, prevPath);
+            }
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+        }
+    }
+}
+
+// Temporary migration delegators to BranchMutationLog — removed once consumers inject it.
+const branchMutationLogSvc = new BranchMutationLog();
+
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to BranchMutationLog; removed once consumers inject it
+export function branchMutationLogPath(root: string): string {
+    return branchMutationLogSvc.branchMutationLogPath(root);
+}
+
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to BranchMutationLog; removed once consumers inject it
+export function logBranchMutation(root: string, event: BranchMutationEvent): void {
+    branchMutationLogSvc.logBranchMutation(root, event);
 }

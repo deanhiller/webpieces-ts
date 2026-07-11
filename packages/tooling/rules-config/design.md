@@ -12,16 +12,20 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
+    BranchMutationLog["BranchMutationLog"]
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
     RepoRootFinder["RepoRootFinder"]
+    ReviewJsonService["ReviewJsonService"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
     TemplateWriter["TemplateWriter"]
     ConfigLoader --> ConfigFile
+    RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader
     RulesConfigDesign --> DiffScope
     RulesConfigDesign --> RepoRootFinder
+    RulesConfigDesign --> ReviewJsonService
     RulesConfigDesign --> TemplateWriter
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
