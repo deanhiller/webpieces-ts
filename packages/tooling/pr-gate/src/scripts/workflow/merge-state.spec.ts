@@ -2,22 +2,21 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-    MergeMarker,
-    scanConflictMarkers,
-    scanMergeExplanations,
-    perFileContextDir,
-    writeMergeMarker,
-    readMergeMarker,
-    clearMergeMarker,
-    mergeDirFor,
-    mergeRunDirFor,
-    findActiveMergeRunDir,
-    nextMergeSlotNumber,
-    writeCleanMergeMarker,
-    NO_CONFLICT_MARKER_FILE,
-} from './merge-state';
+import { MergeMarker, NO_CONFLICT_MARKER_FILE, MergeState } from './merge-state';
 import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
+
+const ms = new MergeState();
+const scanConflictMarkers = (r: string, f: string[]): ReturnType<MergeState['scanConflictMarkers']> => ms.scanConflictMarkers(r, f);
+const scanMergeExplanations = (d: string, f: string[]): ReturnType<MergeState['scanMergeExplanations']> => ms.scanMergeExplanations(d, f);
+const perFileContextDir = (d: string, f: string): string => ms.perFileContextDir(d, f);
+const writeMergeMarker = (d: string, m: MergeMarker): void => ms.writeMergeMarker(d, m);
+const readMergeMarker = (d: string): MergeMarker | null => ms.readMergeMarker(d);
+const clearMergeMarker = (d: string): void => ms.clearMergeMarker(d);
+const mergeDirFor = (r: string, f: string): string => ms.mergeDirFor(r, f);
+const mergeRunDirFor = (h: string, n: number): string => ms.mergeRunDirFor(h, n);
+const findActiveMergeRunDir = (h: string): string | null => ms.findActiveMergeRunDir(h);
+const nextMergeSlotNumber = (h: string): number => ms.nextMergeSlotNumber(h);
+const writeCleanMergeMarker = (d: string, a: string, b: string, c: string): void => ms.writeCleanMergeMarker(d, a, b, c);
 
 function tmp(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-'));

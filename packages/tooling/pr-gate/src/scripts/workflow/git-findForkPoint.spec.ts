@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { prDirFor } from '@webpieces/rules-config';
-import { forkPointOutputDir } from './git-findForkPoint';
-import { mergeDirFor } from './merge-state';
+import { ForkPoint } from './git-findForkPoint';
+import { AiBranchName } from './git-readAiBranchName';
+import { BranchNaming } from './branch-naming';
+import { MergeState } from './merge-state';
+
+const mergeStateSvc = new MergeState();
+const forkPoint = new ForkPoint(new AiBranchName(new BranchNaming()), mergeStateSvc);
+const forkPointOutputDir = (r: string, f: string, w: string): string => forkPoint.forkPointOutputDir(r, f, w);
+const mergeDirFor = (r: string, f: string): string => mergeStateSvc.mergeDirFor(r, f);
 
 // Regression guard for the fork-point dir mismatch: findForkPoint USED to write
 // updatemain-hashes.json to the legacy flat `.webpieces/<workflow>-<feature>/`, while every reader

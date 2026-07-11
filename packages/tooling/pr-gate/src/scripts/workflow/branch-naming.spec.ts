@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { baseBranchName, preMergeBackupName } from './branch-naming';
+import { BranchNaming } from './branch-naming';
+
+const bn = new BranchNaming();
+const baseBranchName = (b: string): string => bn.baseBranchName(b);
+const preMergeBackupName = (b: string, n: number): string => bn.preMergeBackupName(b, n);
 
 describe('baseBranchName', () => {
     it('leaves a gen-1 branch unchanged', () => {

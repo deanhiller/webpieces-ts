@@ -1,32 +1,6 @@
 import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson } from '@webpieces/rules-config';
-
-// Self-contained glob matcher (** , * , ?) so pr-gate needs no extra runtime dependency.
-function globToRegex(pattern: string): RegExp {
-    let re = '';
-    let i = 0;
-    while (i < pattern.length) {
-        const ch = pattern[i];
-        if (ch === '*' && pattern[i + 1] === '*') {
-            re += '.*';
-            i += 2;
-            if (pattern[i] === '/') i += 1;
-            continue;
-        }
-        if (ch === '*') { re += '[^/]*'; i += 1; continue; }
-        if (ch === '?') { re += '[^/]'; i += 1; continue; }
-        if ('.+^$(){}|[]\\'.includes(ch)) { re += '\\' + ch; i += 1; continue; }
-        re += ch;
-        i += 1;
-    }
-    return new RegExp('^' + re + '$');
-}
-
-function matchesAny(patterns: string[], file: string): boolean {
-    for (const pattern of patterns) {
-        if (globToRegex(pattern).test(file)) return true;
-    }
-    return false;
-}
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 
 export class GateResult {
     name: string;
@@ -40,16 +14,6 @@ export class GateResult {
     }
 }
 
-// Disabled gates are in-file examples (JSON has no comments) — skip them entirely.
-export function computeGateResults(gates: GateDefinition[], changedFiles: string[]): GateResult[] {
-    return gates
-        .filter((gate: GateDefinition): boolean => !gate.disabled)
-        .map((gate: GateDefinition): GateResult => {
-            const matched = changedFiles.filter((file: string): boolean => matchesAny(gate.patterns, file));
-            return new GateResult(gate.name, gate.warningColor, matched);
-        });
-}
-
 export class DisableCounts {
     webpiecesCount: number;
     eslintCount: number;
@@ -60,27 +24,6 @@ export class DisableCounts {
         this.eslintCount = eslintCount;
         this.webpiecesRules = webpiecesRules;
     }
-}
-
-// Count disables ADDED in this PR by scanning added (`+`) lines of the diff patch. Rule-aware:
-// reports which webpieces rules were disabled, using the canonical RULE_NAMES vocabulary.
-export function countAddedDisables(patch: string): DisableCounts {
-    let webpiecesCount = 0;
-    let eslintCount = 0;
-    const rules = new Set<string>();
-    const allRuleTokens = Object.keys(RULE_NAMES).map((key: string): string => (RULE_NAMES as Record<string, string>)[key]);
-
-    for (const line of patch.split('\n')) {
-        if (!line.startsWith('+') || line.startsWith('+++')) continue;
-        if (line.includes(WEBPIECES_DISABLE)) {
-            webpiecesCount += 1;
-            for (const token of allRuleTokens) {
-                if (line.includes(token)) rules.add(token);
-            }
-        }
-        if (line.includes('eslint-disable')) eslintCount += 1;
-    }
-    return new DisableCounts(webpiecesCount, eslintCount, Array.from(rules).sort());
 }
 
 export class DashboardInput {
@@ -108,59 +51,122 @@ export class DashboardInput {
     }
 }
 
-function gateLine(result: GateResult): string {
-    if (result.matchedFiles.length === 0) return `**${result.name}:** 🟢 No`;
-    const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
-    return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
-}
-
-// 10-cell risk bar colored by band (🟩 ≤25, 🟨 ≤50, 🟧 ≤75, 🟥 >75), at least one filled cell —
-// ported from trytami's github_risk_bar (git-display-utils.sh).
-function riskBar(score: number): string {
-    const clamped = Math.max(0, Math.min(100, score));
-    const cell = clamped <= 25 ? '🟩' : clamped <= 50 ? '🟨' : clamped <= 75 ? '🟧' : '🟥';
-    const filled = Math.max(1, Math.min(10, Math.round(clamped / 10)));
-    return cell.repeat(filled) + '⬜'.repeat(10 - filled);
-}
-
-// RISK section (trytami's AI half): Risk Score bar, Risk Level, Pattern Violations.
-function riskLines(review: ReviewJson): string[] {
-    const violations = review.violations.length;
-    const violationLine = violations === 0 ? '🟢 No' : `🟡 Yes (${violations} violation(s))`;
-    return [
-        `**Risk Score:** ${riskBar(review.riskScore)} **${review.riskScore}/100** ${review.riskEmoji}`,
-        `**Risk Level:** ${review.riskEmoji} **${review.riskLevel}**`,
-        `**Pattern Violations:** ${violationLine}`,
-    ];
-}
-
-function disableLine(disables: DisableCounts): string {
-    if (disables.webpiecesCount === 0) return '**Webpieces Disables Added:** 🟢 No';
-    const which = disables.webpiecesRules.length > 0 ? ` — ${disables.webpiecesRules.join(', ')}` : '';
-    return `**Webpieces Disables Added:** 🟡 ${disables.webpiecesCount} line(s)${which}`;
-}
-
-export function renderDashboard(input: DashboardInput): string {
-    const lines: string[] = [];
-    lines.push('## 🚦 PR Gate Dashboard');
-    lines.push('');
-    for (const line of riskLines(input.review)) lines.push(line);
-    lines.push(`**Build (nx affected):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
-    for (const result of input.gateResults) lines.push(gateLine(result));
-    lines.push(disableLine(input.disables));
-    const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
-    lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
-    lines.push('');
-    if (input.review.summary.trim() !== '') {
-        lines.push('### Summary');
-        lines.push(input.review.summary.trim());
-        lines.push('');
+/** Renders the PR-gate dashboard markdown (gates × changed files, disables, risk, 3-point hashes). */
+@provideSingleton()
+@injectable()
+export class Dashboard {
+    // Disabled gates are in-file examples (JSON has no comments) — skip them entirely.
+    computeGateResults(gates: GateDefinition[], changedFiles: string[]): GateResult[] {
+        return gates
+            .filter((gate: GateDefinition): boolean => !gate.disabled)
+            .map((gate: GateDefinition): GateResult => {
+                const matched = changedFiles.filter((file: string): boolean => this.matchesAny(gate.patterns, file));
+                return new GateResult(gate.name, gate.warningColor, matched);
+            });
     }
-    lines.push('### 🔍 3-Point Hash Points');
-    lines.push(`- Fork point (A): \`${input.forkPoint.slice(0, 12)}\``);
-    lines.push(`- Feature HEAD (B): \`${input.featureHead.slice(0, 12)}\``);
-    lines.push(`- Main HEAD (C): \`${input.mainHead.slice(0, 12)}\``);
-    lines.push('');
-    lines.push('<sub>🤖 Generated by `pnpm wp-finish-upsert-pr` (build ran via nx affected — not self-attested).</sub>');
-    return lines.join('\n');
+
+    // Count disables ADDED in this PR by scanning added (`+`) lines of the diff patch. Rule-aware:
+    // reports which webpieces rules were disabled, using the canonical RULE_NAMES vocabulary.
+    countAddedDisables(patch: string): DisableCounts {
+        let webpiecesCount = 0;
+        let eslintCount = 0;
+        const rules = new Set<string>();
+        const allRuleTokens = Object.keys(RULE_NAMES).map((key: string): string => (RULE_NAMES as Record<string, string>)[key]);
+
+        for (const line of patch.split('\n')) {
+            if (!line.startsWith('+') || line.startsWith('+++')) continue;
+            if (line.includes(WEBPIECES_DISABLE)) {
+                webpiecesCount += 1;
+                for (const token of allRuleTokens) {
+                    if (line.includes(token)) rules.add(token);
+                }
+            }
+            if (line.includes('eslint-disable')) eslintCount += 1;
+        }
+        return new DisableCounts(webpiecesCount, eslintCount, Array.from(rules).sort());
+    }
+
+    renderDashboard(input: DashboardInput): string {
+        const lines: string[] = [];
+        lines.push('## 🚦 PR Gate Dashboard');
+        lines.push('');
+        for (const line of this.riskLines(input.review)) lines.push(line);
+        lines.push(`**Build (nx affected):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
+        for (const result of input.gateResults) lines.push(this.gateLine(result));
+        lines.push(this.disableLine(input.disables));
+        const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
+        lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
+        lines.push('');
+        if (input.review.summary.trim() !== '') {
+            lines.push('### Summary');
+            lines.push(input.review.summary.trim());
+            lines.push('');
+        }
+        lines.push('### 🔍 3-Point Hash Points');
+        lines.push(`- Fork point (A): \`${input.forkPoint.slice(0, 12)}\``);
+        lines.push(`- Feature HEAD (B): \`${input.featureHead.slice(0, 12)}\``);
+        lines.push(`- Main HEAD (C): \`${input.mainHead.slice(0, 12)}\``);
+        lines.push('');
+        lines.push('<sub>🤖 Generated by `pnpm wp-finish-upsert-pr` (build ran via nx affected — not self-attested).</sub>');
+        return lines.join('\n');
+    }
+
+    // Self-contained glob matcher (** , * , ?) so pr-gate needs no extra runtime dependency.
+    private globToRegex(pattern: string): RegExp {
+        let re = '';
+        let i = 0;
+        while (i < pattern.length) {
+            const ch = pattern[i];
+            if (ch === '*' && pattern[i + 1] === '*') {
+                re += '.*';
+                i += 2;
+                if (pattern[i] === '/') i += 1;
+                continue;
+            }
+            if (ch === '*') { re += '[^/]*'; i += 1; continue; }
+            if (ch === '?') { re += '[^/]'; i += 1; continue; }
+            if ('.+^$(){}|[]\\'.includes(ch)) { re += '\\' + ch; i += 1; continue; }
+            re += ch;
+            i += 1;
+        }
+        return new RegExp('^' + re + '$');
+    }
+
+    private matchesAny(patterns: string[], file: string): boolean {
+        for (const pattern of patterns) {
+            if (this.globToRegex(pattern).test(file)) return true;
+        }
+        return false;
+    }
+
+    private gateLine(result: GateResult): string {
+        if (result.matchedFiles.length === 0) return `**${result.name}:** 🟢 No`;
+        const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
+        return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
+    }
+
+    // 10-cell risk bar colored by band (🟩 ≤25, 🟨 ≤50, 🟧 ≤75, 🟥 >75), at least one filled cell.
+    private riskBar(score: number): string {
+        const clamped = Math.max(0, Math.min(100, score));
+        const cell = clamped <= 25 ? '🟩' : clamped <= 50 ? '🟨' : clamped <= 75 ? '🟧' : '🟥';
+        const filled = Math.max(1, Math.min(10, Math.round(clamped / 10)));
+        return cell.repeat(filled) + '⬜'.repeat(10 - filled);
+    }
+
+    // RISK section (the AI half): Risk Score bar, Risk Level, Pattern Violations.
+    private riskLines(review: ReviewJson): string[] {
+        const violations = review.violations.length;
+        const violationLine = violations === 0 ? '🟢 No' : `🟡 Yes (${violations} violation(s))`;
+        return [
+            `**Risk Score:** ${this.riskBar(review.riskScore)} **${review.riskScore}/100** ${review.riskEmoji}`,
+            `**Risk Level:** ${review.riskEmoji} **${review.riskLevel}**`,
+            `**Pattern Violations:** ${violationLine}`,
+        ];
+    }
+
+    private disableLine(disables: DisableCounts): string {
+        if (disables.webpiecesCount === 0) return '**Webpieces Disables Added:** 🟢 No';
+        const which = disables.webpiecesRules.length > 0 ? ` — ${disables.webpiecesRules.join(', ')}` : '';
+        return `**Webpieces Disables Added:** 🟡 ${disables.webpiecesCount} line(s)${which}`;
+    }
 }

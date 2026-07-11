@@ -21,7 +21,12 @@
         "directory": "packages/tooling/pr-gate"
     },
     "dependencies": {
-        "@webpieces/rules-config": "workspace:*"
+        "@webpieces/rules-config": "workspace:*",
+        "@webpieces/core-context": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "@inversifyjs/binding-decorators": "1.1.5",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2"
     },
     "publishConfig": {
         "access": "public"

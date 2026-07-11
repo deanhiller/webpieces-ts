@@ -12,7 +12,13 @@ vi.mock('child_process', () => ({
         ({ status: state.ghStatus, stdout: `${state.openPrNumber}\n`, stderr: state.ghStderr }),
 }));
 
-import { assertNoOpenPr } from './wp-start-update';
+import { StartUpdateCommand } from './commands/start-update-command';
+import { OpenPrCheck } from './workflow/open-pr-check';
+import { BranchNaming } from './workflow/branch-naming';
+import type { RunUpdate } from './workflow/run-update';
+
+const cmd = new StartUpdateCommand(new OpenPrCheck(new BranchNaming()), {} as RunUpdate);
+const assertNoOpenPr = (repoRoot: string): void => cmd.assertNoOpenPr(repoRoot);
 
 describe('wp-start-update assertNoOpenPr (Bug #4: fail-fast when an open PR exists)', () => {
     beforeEach(() => {
