@@ -39,6 +39,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { hasDisable, RULE_NAMES, NoSymbolDiTokensConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
@@ -315,6 +317,8 @@ async function runValidatorImpl(
     return { success: false };
 }
 
+@provideSingleton()
+@injectable()
 export class NoSymbolDiTokensValidator extends CodeValidator<NoSymbolDiTokensConfig> {
     constructor(config: NoSymbolDiTokensConfig) {
         super(config, 'no-symbol-di-tokens');

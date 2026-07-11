@@ -1,11 +1,11 @@
 /**
- * Validate a single `match-rules` entry (a client-authored content guard) at build time.
+ * Validate `match-rules` entries (client-authored content guards) at build time.
  *
- * One MatchRulesValidator is constructed PER entry of the `match-rules` array (see validate-code.ts),
- * so `shouldRun()` / mode / epoch apply per entry and the report shows the entry name. The regex
- * matching + allowedPath/test-file exemption is shared with the ai-hook engine via
- * findMatchRuleViolations; this validator adds diff-scoping (mode), the `// webpieces-disable <name>`
- * filter, and the console report (renderMatchRuleMessage — the same text the ai-hook FixHint renders).
+ * A config-free, injected checker: the {@link CodeRulesEngine} injects ONE MatchRulesChecker and runs
+ * it once per `match-rules` entry (config passed to the method), so there is no `new` of a DAG member.
+ * `shouldRun` / mode / epoch apply per entry and the report shows the entry name. The regex matching +
+ * allowedPath/test-file exemption is shared with the ai-hook engine via findMatchRuleViolations; this
+ * adds diff-scoping (mode), the `// webpieces-disable <name>` filter, and the console report.
  */
 
 import * as fs from 'fs';
@@ -21,9 +21,11 @@ import {
     getChangedFiles,
     getFileDiff,
     getChangedLineNumbers,
+    shouldSkipRule,
 } from '@webpieces/rules-config';
-import { CodeValidator, ExecutorResult } from './code-validator';
-import { shouldSkipRule } from './resolve-mode';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
+import { ExecutorResult } from './code-validator';
 
 class MatchViolation {
     readonly file: string;
@@ -49,149 +51,138 @@ export class MatchViolationInfo {
     }
 }
 
-export function findViolationsInFile(
-    filePath: string,
-    workspaceRoot: string,
-    config: MatchRuleConfig,
-): MatchViolationInfo[] {
-    const fullPath = path.join(workspaceRoot, filePath);
-    if (!fs.existsSync(fullPath)) return [];
-
-    const content = fs.readFileSync(fullPath, 'utf-8');
-    const lines = content.split('\n');
-
-    // Shared engine applies allowedPaths + test-file exemption and regex matching.
-    const hits = findMatchRuleViolations(lines, filePath, config);
-    const disableAllowed = config.disableAllowed ?? true;
-
-    return hits.map((hit: MatchRuleViolation) => {
-        const line = lines[hit.line - 1] ?? '';
-        const prevLine = hit.line > 1 ? (lines[hit.line - 2] ?? '') : '';
-        const disabled = hasDisable(line, config.name) || hasDisable(prevLine, config.name);
-        return new MatchViolationInfo(hit.line, hit.context, disableAllowed && disabled);
-    });
-}
-
-function findViolationsForModifiedCode(
-    workspaceRoot: string,
-    changedFiles: string[],
-    base: string,
-    head: string | undefined,
-    config: MatchRuleConfig,
-): MatchViolation[] {
-    const violations: MatchViolation[] = [];
-    for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
-        const changedLines = getChangedLineNumbers(diff);
-        if (changedLines.size === 0) continue;
-
-        for (const v of findViolationsInFile(file, workspaceRoot, config)) {
-            if (v.hasDisableComment) continue;
-            if (!changedLines.has(v.line)) continue;
-            violations.push(new MatchViolation(file, v.line, v.context));
-        }
-    }
-    return violations;
-}
-
-function findViolationsForModifiedFiles(
-    workspaceRoot: string,
-    changedFiles: string[],
-    config: MatchRuleConfig,
-): MatchViolation[] {
-    const violations: MatchViolation[] = [];
-    for (const file of changedFiles) {
-        for (const v of findViolationsInFile(file, workspaceRoot, config)) {
-            if (v.hasDisableComment) continue;
-            violations.push(new MatchViolation(file, v.line, v.context));
-        }
-    }
-    return violations;
-}
-
-function reportViolations(config: MatchRuleConfig, violations: MatchViolation[], mode: ModifiedCodeMode): void {
-    console.error('');
-    console.error(`❌ [${config.name}] matched disallowed pattern(s)!`);
-    console.error('');
-    console.error(renderMatchRuleMessage(config));
-    console.error('');
-    for (const v of violations) {
-        console.error(`  ❌ ${v.file}:${v.line}`);
-        console.error(`     ${v.context}`);
-    }
-    console.error('');
-    console.error(`   Current mode: ${mode}`);
-    console.error('');
-}
-
-function resolveMode(config: MatchRuleConfig): ModifiedCodeMode {
-    const normalMode: ModifiedCodeMode = config.mode ?? 'OFF';
-    if (normalMode === 'OFF') return normalMode;
-    const skip = shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping ${config.name} validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
-async function runValidatorImpl(config: MatchRuleConfig, workspaceRoot: string): Promise<ExecutorResult> {
-    const mode = resolveMode(config);
-    if (mode === 'OFF') {
-        console.log(`\n⏭️  Skipping ${config.name} validation (mode: OFF)`);
-        console.log('');
-        return { success: true };
+@provideSingleton()
+@injectable()
+export class MatchRulesChecker {
+    /** True unless this entry is `mode: "OFF"` or skipped by a branch/epoch escape hatch. */
+    shouldRun(config: MatchRuleConfig): boolean {
+        if ((config.mode ?? 'OFF') === 'OFF') return false;
+        return !shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch).skip;
     }
 
-    console.log(`\n📏 Validating match-rule: ${config.name}\n`);
-    console.log(`   Mode: ${mode}`);
-
-    let base = process.env['NX_BASE'];
-    const head = process.env['NX_HEAD'];
-    if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
-        if (!base) {
-            console.log(`\n⏭️  Skipping ${config.name} validation (could not detect base branch)`);
-            console.log('');
+    /** Run one `match-rules` entry against the workspace (per-entry mode/diff-scoping/report). */
+    async runForConfig(config: MatchRuleConfig, workspaceRoot: string): Promise<ExecutorResult> {
+        const mode = this.resolveMode(config);
+        if (mode === 'OFF') {
+            console.log(`\n⏭️  Skipping ${config.name} validation (mode: OFF)\n`);
             return { success: true };
         }
+
+        console.log(`\n📏 Validating match-rule: ${config.name}\n`);
+        console.log(`   Mode: ${mode}`);
+
+        let base = process.env['NX_BASE'];
+        const head = process.env['NX_HEAD'];
+        if (!base) {
+            base = detectBase(workspaceRoot) ?? undefined;
+            if (!base) {
+                console.log(`\n⏭️  Skipping ${config.name} validation (could not detect base branch)\n`);
+                return { success: true };
+            }
+        }
+
+        console.log(`   Base: ${base}`);
+        console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
+
+        const changedFiles = getChangedFiles(workspaceRoot, base, head);
+        if (changedFiles.length === 0) {
+            console.log('✅ No TypeScript files changed');
+            return { success: true };
+        }
+
+        console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+        const violations = mode === 'NEW_AND_MODIFIED_CODE'
+            ? this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, config)
+            : this.findViolationsForModifiedFiles(workspaceRoot, changedFiles, config);
+
+        if (violations.length === 0) {
+            console.log(`✅ No ${config.name} violations found`);
+            return { success: true };
+        }
+
+        this.reportViolations(config, violations, mode);
+        return { success: false };
     }
 
-    console.log(`   Base: ${base}`);
-    console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
-    console.log('');
+    findViolationsInFile(filePath: string, workspaceRoot: string, config: MatchRuleConfig): MatchViolationInfo[] {
+        const fullPath = path.join(workspaceRoot, filePath);
+        if (!fs.existsSync(fullPath)) return [];
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
-    if (changedFiles.length === 0) {
-        console.log('✅ No TypeScript files changed');
-        return { success: true };
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        const lines = content.split('\n');
+
+        // Shared engine applies allowedPaths + test-file exemption and regex matching.
+        const hits = findMatchRuleViolations(lines, filePath, config);
+        const disableAllowed = config.disableAllowed ?? true;
+
+        return hits.map((hit: MatchRuleViolation) => {
+            const line = lines[hit.line - 1] ?? '';
+            const prevLine = hit.line > 1 ? (lines[hit.line - 2] ?? '') : '';
+            const disabled = hasDisable(line, config.name) || hasDisable(prevLine, config.name);
+            return new MatchViolationInfo(hit.line, hit.context, disableAllowed && disabled);
+        });
     }
 
-    console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
+    private findViolationsForModifiedCode(
+        workspaceRoot: string,
+        changedFiles: string[],
+        base: string,
+        head: string | undefined,
+        config: MatchRuleConfig,
+    ): MatchViolation[] {
+        const violations: MatchViolation[] = [];
+        for (const file of changedFiles) {
+            const diff = getFileDiff(workspaceRoot, file, base, head);
+            const changedLines = getChangedLineNumbers(diff);
+            if (changedLines.size === 0) continue;
 
-    let violations: MatchViolation[] = [];
-    if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, config);
-    } else if (mode === 'NEW_AND_MODIFIED_FILES') {
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, config);
+            for (const v of this.findViolationsInFile(file, workspaceRoot, config)) {
+                if (v.hasDisableComment) continue;
+                if (!changedLines.has(v.line)) continue;
+                violations.push(new MatchViolation(file, v.line, v.context));
+            }
+        }
+        return violations;
     }
 
-    if (violations.length === 0) {
-        console.log(`✅ No ${config.name} violations found`);
-        return { success: true };
+    private findViolationsForModifiedFiles(
+        workspaceRoot: string,
+        changedFiles: string[],
+        config: MatchRuleConfig,
+    ): MatchViolation[] {
+        const violations: MatchViolation[] = [];
+        for (const file of changedFiles) {
+            for (const v of this.findViolationsInFile(file, workspaceRoot, config)) {
+                if (v.hasDisableComment) continue;
+                violations.push(new MatchViolation(file, v.line, v.context));
+            }
+        }
+        return violations;
     }
 
-    reportViolations(config, violations, mode);
-    return { success: false };
-}
-
-export class MatchRulesValidator extends CodeValidator<MatchRuleConfig> {
-    constructor(config: MatchRuleConfig) {
-        super(config, config.name);
+    private reportViolations(config: MatchRuleConfig, violations: MatchViolation[], mode: ModifiedCodeMode): void {
+        console.error('');
+        console.error(`❌ [${config.name}] matched disallowed pattern(s)!`);
+        console.error('');
+        console.error(renderMatchRuleMessage(config));
+        console.error('');
+        for (const v of violations) {
+            console.error(`  ❌ ${v.file}:${v.line}`);
+            console.error(`     ${v.context}`);
+        }
+        console.error('');
+        console.error(`   Current mode: ${mode}`);
+        console.error('');
     }
 
-    async run(workspaceRoot: string): Promise<ExecutorResult> {
-        return runValidatorImpl(this.config, workspaceRoot);
+    private resolveMode(config: MatchRuleConfig): ModifiedCodeMode {
+        const normalMode: ModifiedCodeMode = config.mode ?? 'OFF';
+        if (normalMode === 'OFF') return normalMode;
+        const skip = shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch);
+        if (skip.skip) {
+            console.log(`\n⏭️  Skipping ${config.name} validation (${skip.reason})\n`);
+            return 'OFF';
+        }
+        return normalMode;
     }
 }

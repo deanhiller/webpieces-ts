@@ -94,6 +94,8 @@ import {
     findNewMethodSignaturesInDiff,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface InlineTypeViolation {
@@ -611,6 +613,8 @@ async function runValidatorImpl(
     return { success: false };
 }
 
+@provideSingleton()
+@injectable()
 export class NoInlineTypeLiteralsValidator extends CodeValidator<NoInlineTypeLiteralsConfig> {
     constructor(config: NoInlineTypeLiteralsConfig) {
         super(config, 'no-inline-type-literals');

@@ -36,6 +36,8 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, NoFunctionOutsideClassConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 const SHARED_MESSAGE = `Functions must live inside a class as INSTANCE methods — a function created at module scope, OR a
@@ -291,6 +293,8 @@ async function runValidatorImpl(options: NoFunctionOutsideClassConfig, workspace
     return { success: false };
 }
 
+@provideSingleton()
+@injectable()
 export class NoFunctionOutsideClassValidator extends CodeValidator<NoFunctionOutsideClassConfig> {
     constructor(config: NoFunctionOutsideClassConfig) {
         super(config, 'no-function-outside-class');

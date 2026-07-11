@@ -136,12 +136,13 @@
             ]
         },
         "code-rules": {
-            "level": 1,
+            "level": 2,
             "framework": ["node"],
-            "role": "lib",
+            "role": "app",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
             "dependsOn": [
+                "core-context",
                 "rules-config"
             ]
         },
@@ -308,7 +309,7 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",

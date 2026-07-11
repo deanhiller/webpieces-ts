@@ -50,6 +50,8 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, PrismaConverterConfig, PrismaConverterMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, isNewOrModified } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface PrismaConverterViolation {
@@ -736,6 +738,8 @@ async function runValidatorImpl(
     return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, enforcePaths, base, mode, disableAllowed);
 }
 
+@provideSingleton()
+@injectable()
 export class PrismaConverterValidator extends CodeValidator<PrismaConverterConfig> {
     constructor(config: PrismaConverterConfig) {
         super(config, 'prisma-converter');

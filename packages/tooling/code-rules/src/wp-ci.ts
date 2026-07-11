@@ -19,8 +19,13 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { loadAndValidate, InformAiError, RuleFailError, toError } from '@webpieces/rules-config';
-import runValidateCode from './validate-code';
+import 'reflect-metadata';
+import { Container } from 'inversify';
+import { buildProviderModule } from '@inversifyjs/binding-decorators';
+import { loadAndValidate, InformAiError, RuleFailError, toError, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { CodeRulesApp } from './code-rules-app';
+import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
+import { CONFIG_BINDINGS } from './code-rules-config-table';
 
 const NX_PLUGIN_NAME = '@webpieces/nx-webpieces-rules';
 
@@ -75,13 +80,27 @@ function runNx(root: string, args: string[]): number {
 }
 
 async function runStandalone(cwd: string): Promise<number> {
-    const loaded = loadAndValidate(cwd);
+    const workspaceRoot = new RepoRootFinder().resolveRepoRoot(cwd);
+    const loaded = loadAndValidate(workspaceRoot);
     if (loaded.configPath === null) {
         console.log('ℹ️  Not an Nx repo and no webpieces.config.json found — nothing to validate.');
         return 0;
     }
     console.log('ℹ️  Not an Nx repo — running standalone webpieces code validators.\n');
-    const result = await runValidateCode(cwd);
+
+    // Composition root: bind runtime values, then resolve the app so inversify builds the whole DAG.
+    const container = new Container();
+    container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
+    container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
+    for (const binding of CONFIG_BINDINGS) {
+        const ConfigClass = binding[0];
+        const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
+        container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
+    }
+    await container.load(buildProviderModule());
+
+    const app = container.get(CodeRulesApp);
+    const result = await app.run();
     return result.success ? 0 : 1;
 }
 
