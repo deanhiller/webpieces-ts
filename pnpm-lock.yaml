@@ -470,9 +470,24 @@ importers:
 
   packages/tooling/rules-config:
     dependencies:
+      '@inversifyjs/binding-decorators':
+        specifier: 1.1.5
+        version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
+      '@webpieces/core-context':
+        specifier: workspace:*
+        version: link:../../core/core-context
+      '@webpieces/core-util':
+        specifier: workspace:*
+        version: link:../../core/core-util
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
       minimatch:
         specifier: 10.0.1
         version: 10.0.1
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
 
 packages:
 

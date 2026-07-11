@@ -1,5 +1,42 @@
 {
     "schemaVersion": 2,
     "project": "rules-config",
-    "designs": []
+    "designs": [
+        {
+            "root": "RulesConfigDesign",
+            "rootKind": "apiImplementation",
+            "file": "packages/tooling/rules-config/src/rules-config-design.ts",
+            "maxLevel": 1,
+            "nodes": [
+                {
+                    "id": "RepoRootFinder",
+                    "className": "RepoRootFinder",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/repo-root.ts",
+                    "level": 1
+                },
+                {
+                    "id": "RulesConfigDesign",
+                    "className": "RulesConfigDesign",
+                    "kind": "apiImplementation",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/rules-config-design.ts",
+                    "level": 0
+                }
+            ],
+            "edges": [
+                {
+                    "from": "RulesConfigDesign",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                }
+            ],
+            "unresolved": []
+        }
+    ]
 }

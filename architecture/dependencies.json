@@ -9,7 +9,7 @@
     },
     "projects": {
         "ai-hook-rules": {
-            "level": 1,
+            "level": 3,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.",
@@ -135,13 +135,12 @@
             ]
         },
         "code-rules": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "app",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
             "dependsOn": [
-                "core-context",
                 "rules-config"
             ]
         },
@@ -193,7 +192,7 @@
             "dependsOn": []
         },
         "eslint-rules": {
-            "level": 1,
+            "level": 3,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Custom ESLint plugin exporting WebPieces lint rules — architecture dependency boundaries, exception/catch-error patterns, method/file size limits, no-JsonProperty-primitive, and Angular template rules — consumed by the shared eslint config and the nx-webpieces build validators.",
@@ -306,7 +305,7 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 3,
+            "level": 4,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
@@ -319,23 +318,25 @@
             ]
         },
         "pr-gate": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "app",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "dependsOn": [
-                "core-context",
                 "rules-config"
             ]
         },
         "rules-config": {
-            "level": 0,
+            "level": 2,
             "framework": ["node"],
-            "role": "lib",
+            "role": "designed-lib",
             "shortDescription": "Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate and main-sync state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
-            "dependsOn": []
+            "designFile": "packages/tooling/rules-config/design.json",
+            "dependsOn": [
+                "core-context"
+            ]
         },
         "server2": {
             "level": 6,

@@ -14,6 +14,11 @@
         "README.md"
     ],
     "dependencies": {
+        "@webpieces/core-context": "workspace:*",
+        "@webpieces/core-util": "workspace:*",
+        "@inversifyjs/binding-decorators": "1.1.5",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2",
         "minimatch": "10.0.1"
     },
     "author": "Dean Hiller",
