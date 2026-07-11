@@ -1,5 +1,5 @@
 {
-    "aiInstructions": "Each project's shortDescription is only a summary. BEFORE adding code to a project, read its responsibilitiesFile for the full responsibilities (what belongs in that project and what does not), and read its designFile to understand the DI design before reading the code. Use the entries in `commands` to regenerate these files or display any of the graphs in a browser.",
+    "aiInstructions": "Each project's shortDescription is only a summary. BEFORE adding code to a project, read its responsibilitiesFile for the full responsibilities (what belongs in that project and what does not), and read its designFile to understand the DI design before reading the code. Use the entries in `commands` to regenerate these files or display any of the graphs in a browser. To hide a project (its box AND every edge touching it) from BOTH rendered architecture graphs, add the nx tag 'drawOnGraph:false' to that project's project.json tags and regenerate; it stays in this file (marked \"drawOnGraph\": false) but is omitted from the HTML.",
     "commands": {
         "regenerateArchitecture": "pnpm nx run architecture:generate — rewrites architecture/dependencies.json and architecture/runtime-dependencies.json; run after adding/removing project dependencies",
         "visualizeArchitecture": "pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) as HTML in a browser",
@@ -140,6 +140,7 @@
             "role": "app",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
+            "designFile": "packages/tooling/code-rules/design.json",
             "dependsOn": [
                 "rules-config"
             ]
@@ -307,7 +308,7 @@
         "nx-webpieces-rules": {
             "level": 2,
             "framework": ["node"],
-            "role": "lib",
+            "role": "bundle",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "dependsOn": [
@@ -323,6 +324,7 @@
             "role": "app",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
+            "designFile": "packages/tooling/pr-gate/design.json",
             "dependsOn": [
                 "rules-config"
             ]

@@ -8,4 +8,111 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-No DI-registered classes found in this project.
+## CodeRulesApp — controller, Level 0…3
+
+```mermaid
+graph TD
+    AngularNoDirectApiInResolverConfig["AngularNoDirectApiInResolverConfig"]:::many
+    CatchErrorPatternConfig["CatchErrorPatternConfig"]:::many
+    CatchErrorPatternValidator["CatchErrorPatternValidator"]
+    CodeRulesApp["CodeRulesApp"]:::controller
+    CodeRulesEngine["CodeRulesEngine"]
+    FrameworkTagConfig["FrameworkTagConfig"]:::many
+    FrameworkTagValidator["FrameworkTagValidator"]
+    InjectAnnotationNotNeededForConcreteClassConfig["InjectAnnotationNotNeededForConcreteClassConfig"]:::many
+    InjectAnnotationNotNeededForConcreteClassValidator["InjectAnnotationNotNeededForConcreteClassValidator"]
+    MatchRulesChecker["MatchRulesChecker"]
+    MatchRulesHolder["MatchRulesHolder"]:::many
+    MaxFileLinesConfig["MaxFileLinesConfig"]:::many
+    MaxFileLinesValidator["MaxFileLinesValidator"]
+    MaxMethodLinesConfig["MaxMethodLinesConfig"]:::many
+    MaxMethodLinesValidator["MaxMethodLinesValidator"]
+    NoAnyUnknownConfig["NoAnyUnknownConfig"]:::many
+    NoAnyUnknownValidator["NoAnyUnknownValidator"]
+    NoDestructureConfig["NoDestructureConfig"]:::many
+    NoDestructureValidator["NoDestructureValidator"]
+    NoDirectApiResolverValidator["NoDirectApiResolverValidator"]
+    NoFunctionOutsideClassConfig["NoFunctionOutsideClassConfig"]:::many
+    NoFunctionOutsideClassValidator["NoFunctionOutsideClassValidator"]
+    NoImplicitAnyConfig["NoImplicitAnyConfig"]:::many
+    NoImplicitAnyValidator["NoImplicitAnyValidator"]
+    NoInlineTypeLiteralsConfig["NoInlineTypeLiteralsConfig"]:::many
+    NoInlineTypeLiteralsValidator["NoInlineTypeLiteralsValidator"]
+    NoProcessExitOutsideMainConfig["NoProcessExitOutsideMainConfig"]:::many
+    NoProcessExitOutsideMainValidator["NoProcessExitOutsideMainValidator"]
+    NoSymbolDiTokensConfig["NoSymbolDiTokensConfig"]:::many
+    NoSymbolDiTokensValidator["NoSymbolDiTokensValidator"]
+    NoUnmanagedExceptionsConfig["NoUnmanagedExceptionsConfig"]:::many
+    NoUnmanagedExceptionsValidator["NoUnmanagedExceptionsValidator"]
+    PrismaConverterConfig["PrismaConverterConfig"]:::many
+    PrismaConverterValidator["PrismaConverterValidator"]
+    PrismaValidateDtosConfig["PrismaValidateDtosConfig"]:::many
+    PrismaValidateDtosValidator["PrismaValidateDtosValidator"]
+    RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
+    RequireReturnTypeValidator["RequireReturnTypeValidator"]
+    RoleTagConfig["RoleTagConfig"]:::many
+    RoleTagValidator["RoleTagValidator"]
+    RuleReporter["RuleReporter"]
+    WorkspaceRoot["WorkspaceRoot"]:::many
+    readonly_MatchRuleConfig__{{"readonly MatchRuleConfig[] ?"}}:::unresolved
+    string{{"string ?"}}:::unresolved
+    CatchErrorPatternValidator --> CatchErrorPatternConfig
+    CodeRulesApp --> CodeRulesEngine
+    CodeRulesEngine --> CatchErrorPatternValidator
+    CodeRulesEngine --> FrameworkTagValidator
+    CodeRulesEngine --> InjectAnnotationNotNeededForConcreteClassValidator
+    CodeRulesEngine --> MatchRulesChecker
+    CodeRulesEngine --> MatchRulesHolder
+    CodeRulesEngine --> MaxFileLinesValidator
+    CodeRulesEngine --> MaxMethodLinesValidator
+    CodeRulesEngine --> NoAnyUnknownValidator
+    CodeRulesEngine --> NoDestructureValidator
+    CodeRulesEngine --> NoDirectApiResolverValidator
+    CodeRulesEngine --> NoFunctionOutsideClassValidator
+    CodeRulesEngine --> NoImplicitAnyValidator
+    CodeRulesEngine --> NoInlineTypeLiteralsValidator
+    CodeRulesEngine --> NoProcessExitOutsideMainValidator
+    CodeRulesEngine --> NoSymbolDiTokensValidator
+    CodeRulesEngine --> NoUnmanagedExceptionsValidator
+    CodeRulesEngine --> PrismaConverterValidator
+    CodeRulesEngine --> PrismaValidateDtosValidator
+    CodeRulesEngine --> RequireReturnTypeValidator
+    CodeRulesEngine --> RoleTagValidator
+    CodeRulesEngine --> RuleReporter
+    CodeRulesEngine --> WorkspaceRoot
+    FrameworkTagValidator --> FrameworkTagConfig
+    InjectAnnotationNotNeededForConcreteClassValidator --> InjectAnnotationNotNeededForConcreteClassConfig
+    MatchRulesHolder --> readonly_MatchRuleConfig__
+    MaxFileLinesValidator --> MaxFileLinesConfig
+    MaxMethodLinesValidator --> MaxMethodLinesConfig
+    NoAnyUnknownValidator --> NoAnyUnknownConfig
+    NoDestructureValidator --> NoDestructureConfig
+    NoDirectApiResolverValidator --> AngularNoDirectApiInResolverConfig
+    NoFunctionOutsideClassValidator --> NoFunctionOutsideClassConfig
+    NoImplicitAnyValidator --> NoImplicitAnyConfig
+    NoInlineTypeLiteralsValidator --> NoInlineTypeLiteralsConfig
+    NoProcessExitOutsideMainValidator --> NoProcessExitOutsideMainConfig
+    NoSymbolDiTokensValidator --> NoSymbolDiTokensConfig
+    NoUnmanagedExceptionsValidator --> NoUnmanagedExceptionsConfig
+    PrismaConverterValidator --> PrismaConverterConfig
+    PrismaValidateDtosValidator --> PrismaValidateDtosConfig
+    RequireReturnTypeValidator --> RequireReturnTypeConfig
+    RoleTagValidator --> RoleTagConfig
+    WorkspaceRoot --> string
+    classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
+    classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
+    classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
+    classDef unresolved fill:#f0ad4e,color:#000000,stroke:#b8860b,stroke-dasharray: 5 5
+    classDef external fill:#b39ddb,color:#000000,stroke:#5e35b1,stroke-width:3px
+    classDef api fill:#4fc3f7,color:#000000,stroke:#0277bd,stroke-width:3px
+    classDef many fill:#eceff1,color:#000000,stroke:#546e7a,stroke-width:2px,stroke-dasharray: 4 2
+```
+
+
+Edges are constructor/`inject()` dependencies (the injected param/field
+name and token are in `design.json`). Rounded nodes are
+`toConstantValue`/`useValue` and `toDynamicValue`/`useFactory` leaves; dashed
+nodes are tokens the analyzer could not resolve; double-bordered nodes are
+boundaries shown but not expanded: violet = a class from a published package
+outside this workspace; cyan = a generated API-client proxy (`createApiClient`),
+i.e. a service/network boundary whose remote impl lives in another process.

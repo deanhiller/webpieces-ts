@@ -1,5 +1,759 @@
 {
     "schemaVersion": 2,
     "project": "code-rules",
-    "designs": []
+    "designs": [
+        {
+            "root": "CodeRulesApp",
+            "rootKind": "controller",
+            "file": "packages/tooling/code-rules/src/code-rules-app.ts",
+            "maxLevel": 3,
+            "nodes": [
+                {
+                    "id": "AngularNoDirectApiInResolverConfig",
+                    "className": "AngularNoDirectApiInResolverConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "CatchErrorPatternConfig",
+                    "className": "CatchErrorPatternConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "CatchErrorPatternValidator",
+                    "className": "CatchErrorPatternValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-catch-error-pattern.ts",
+                    "level": 2
+                },
+                {
+                    "id": "CodeRulesApp",
+                    "className": "CodeRulesApp",
+                    "kind": "controller",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/code-rules-app.ts",
+                    "level": 0
+                },
+                {
+                    "id": "CodeRulesEngine",
+                    "className": "CodeRulesEngine",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/code-rules-engine.ts",
+                    "level": 1
+                },
+                {
+                    "id": "FrameworkTagConfig",
+                    "className": "FrameworkTagConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "FrameworkTagValidator",
+                    "className": "FrameworkTagValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-framework-tag.ts",
+                    "level": 2
+                },
+                {
+                    "id": "InjectAnnotationNotNeededForConcreteClassConfig",
+                    "className": "InjectAnnotationNotNeededForConcreteClassConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "InjectAnnotationNotNeededForConcreteClassValidator",
+                    "className": "InjectAnnotationNotNeededForConcreteClassValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-inject-annotation-not-needed-for-concrete-class.ts",
+                    "level": 2
+                },
+                {
+                    "id": "MatchRulesChecker",
+                    "className": "MatchRulesChecker",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-match-rules.ts",
+                    "level": 2
+                },
+                {
+                    "id": "MatchRulesHolder",
+                    "className": "MatchRulesHolder",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-context.ts",
+                    "level": 2
+                },
+                {
+                    "id": "MaxFileLinesConfig",
+                    "className": "MaxFileLinesConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "MaxFileLinesValidator",
+                    "className": "MaxFileLinesValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-modified-files.ts",
+                    "level": 2
+                },
+                {
+                    "id": "MaxMethodLinesConfig",
+                    "className": "MaxMethodLinesConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "MaxMethodLinesValidator",
+                    "className": "MaxMethodLinesValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-modified-methods.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoAnyUnknownConfig",
+                    "className": "NoAnyUnknownConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoAnyUnknownValidator",
+                    "className": "NoAnyUnknownValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-any-unknown.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoDestructureConfig",
+                    "className": "NoDestructureConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoDestructureValidator",
+                    "className": "NoDestructureValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-destructure.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoDirectApiResolverValidator",
+                    "className": "NoDirectApiResolverValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-direct-api-resolver.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoFunctionOutsideClassConfig",
+                    "className": "NoFunctionOutsideClassConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoFunctionOutsideClassValidator",
+                    "className": "NoFunctionOutsideClassValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-function-outside-class.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoImplicitAnyConfig",
+                    "className": "NoImplicitAnyConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoImplicitAnyValidator",
+                    "className": "NoImplicitAnyValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-implicit-any.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoInlineTypeLiteralsConfig",
+                    "className": "NoInlineTypeLiteralsConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoInlineTypeLiteralsValidator",
+                    "className": "NoInlineTypeLiteralsValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-inline-types.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoProcessExitOutsideMainConfig",
+                    "className": "NoProcessExitOutsideMainConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoProcessExitOutsideMainValidator",
+                    "className": "NoProcessExitOutsideMainValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-process-exit-outside-main.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoSymbolDiTokensConfig",
+                    "className": "NoSymbolDiTokensConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoSymbolDiTokensValidator",
+                    "className": "NoSymbolDiTokensValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-symbol-di-tokens.ts",
+                    "level": 2
+                },
+                {
+                    "id": "NoUnmanagedExceptionsConfig",
+                    "className": "NoUnmanagedExceptionsConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoUnmanagedExceptionsValidator",
+                    "className": "NoUnmanagedExceptionsValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-unmanaged-exceptions.ts",
+                    "level": 2
+                },
+                {
+                    "id": "PrismaConverterConfig",
+                    "className": "PrismaConverterConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "PrismaConverterValidator",
+                    "className": "PrismaConverterValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-prisma-converters.ts",
+                    "level": 2
+                },
+                {
+                    "id": "PrismaValidateDtosConfig",
+                    "className": "PrismaValidateDtosConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "PrismaValidateDtosValidator",
+                    "className": "PrismaValidateDtosValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-dtos.ts",
+                    "level": 2
+                },
+                {
+                    "id": "RequireReturnTypeConfig",
+                    "className": "RequireReturnTypeConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "RequireReturnTypeValidator",
+                    "className": "RequireReturnTypeValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-return-types.ts",
+                    "level": 2
+                },
+                {
+                    "id": "RoleTagConfig",
+                    "className": "RoleTagConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "RoleTagValidator",
+                    "className": "RoleTagValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-role-tag.ts",
+                    "level": 2
+                },
+                {
+                    "id": "RuleReporter",
+                    "className": "RuleReporter",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/rule-reporter.ts",
+                    "level": 2
+                },
+                {
+                    "id": "WorkspaceRoot",
+                    "className": "WorkspaceRoot",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-context.ts",
+                    "level": 2
+                },
+                {
+                    "id": "readonly MatchRuleConfig[]",
+                    "className": "readonly MatchRuleConfig[]",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-context.ts",
+                    "level": 3
+                },
+                {
+                    "id": "string",
+                    "className": "string",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/tooling/code-rules/src/code-rules-context.ts",
+                    "level": 3
+                }
+            ],
+            "edges": [
+                {
+                    "from": "CatchErrorPatternValidator",
+                    "to": "CatchErrorPatternConfig",
+                    "injection": "type",
+                    "token": "CatchErrorPatternConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#CatchErrorPatternConfig",
+                    "paramName": "config",
+                    "paramType": "CatchErrorPatternConfig"
+                },
+                {
+                    "from": "CodeRulesApp",
+                    "to": "CodeRulesEngine",
+                    "injection": "type",
+                    "token": "CodeRulesEngine",
+                    "tokenKey": "class:packages/tooling/code-rules/src/code-rules-engine.ts#CodeRulesEngine",
+                    "paramName": "engine",
+                    "paramType": "CodeRulesEngine"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "CatchErrorPatternValidator",
+                    "injection": "type",
+                    "token": "CatchErrorPatternValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-catch-error-pattern.ts#CatchErrorPatternValidator",
+                    "paramName": "catchErrorPattern",
+                    "paramType": "CatchErrorPatternValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "FrameworkTagValidator",
+                    "injection": "type",
+                    "token": "FrameworkTagValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-framework-tag.ts#FrameworkTagValidator",
+                    "paramName": "frameworkTag",
+                    "paramType": "FrameworkTagValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "InjectAnnotationNotNeededForConcreteClassValidator",
+                    "injection": "type",
+                    "token": "InjectAnnotationNotNeededForConcreteClassValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-inject-annotation-not-needed-for-concrete-class.ts#InjectAnnotationNotNeededForConcreteClassValidator",
+                    "paramName": "injectAnnotationNotNeeded",
+                    "paramType": "InjectAnnotationNotNeededForConcreteClassValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "MatchRulesChecker",
+                    "injection": "type",
+                    "token": "MatchRulesChecker",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-match-rules.ts#MatchRulesChecker",
+                    "paramName": "matchChecker",
+                    "paramType": "MatchRulesChecker"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "MatchRulesHolder",
+                    "injection": "type",
+                    "token": "MatchRulesHolder",
+                    "tokenKey": "class:packages/tooling/code-rules/src/code-rules-context.ts#MatchRulesHolder",
+                    "paramName": "matchRules",
+                    "paramType": "MatchRulesHolder"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "MaxFileLinesValidator",
+                    "injection": "type",
+                    "token": "MaxFileLinesValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-modified-files.ts#MaxFileLinesValidator",
+                    "paramName": "maxFileLines",
+                    "paramType": "MaxFileLinesValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "MaxMethodLinesValidator",
+                    "injection": "type",
+                    "token": "MaxMethodLinesValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-modified-methods.ts#MaxMethodLinesValidator",
+                    "paramName": "maxMethodLines",
+                    "paramType": "MaxMethodLinesValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoAnyUnknownValidator",
+                    "injection": "type",
+                    "token": "NoAnyUnknownValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-any-unknown.ts#NoAnyUnknownValidator",
+                    "paramName": "noAnyUnknown",
+                    "paramType": "NoAnyUnknownValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoDestructureValidator",
+                    "injection": "type",
+                    "token": "NoDestructureValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-destructure.ts#NoDestructureValidator",
+                    "paramName": "noDestructure",
+                    "paramType": "NoDestructureValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoDirectApiResolverValidator",
+                    "injection": "type",
+                    "token": "NoDirectApiResolverValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-direct-api-resolver.ts#NoDirectApiResolverValidator",
+                    "paramName": "noDirectApiResolver",
+                    "paramType": "NoDirectApiResolverValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoFunctionOutsideClassValidator",
+                    "injection": "type",
+                    "token": "NoFunctionOutsideClassValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-function-outside-class.ts#NoFunctionOutsideClassValidator",
+                    "paramName": "noFunctionOutsideClass",
+                    "paramType": "NoFunctionOutsideClassValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoImplicitAnyValidator",
+                    "injection": "type",
+                    "token": "NoImplicitAnyValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-implicit-any.ts#NoImplicitAnyValidator",
+                    "paramName": "noImplicitAny",
+                    "paramType": "NoImplicitAnyValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoInlineTypeLiteralsValidator",
+                    "injection": "type",
+                    "token": "NoInlineTypeLiteralsValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-inline-types.ts#NoInlineTypeLiteralsValidator",
+                    "paramName": "noInlineTypeLiterals",
+                    "paramType": "NoInlineTypeLiteralsValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoProcessExitOutsideMainValidator",
+                    "injection": "type",
+                    "token": "NoProcessExitOutsideMainValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-process-exit-outside-main.ts#NoProcessExitOutsideMainValidator",
+                    "paramName": "noProcessExitOutsideMain",
+                    "paramType": "NoProcessExitOutsideMainValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoSymbolDiTokensValidator",
+                    "injection": "type",
+                    "token": "NoSymbolDiTokensValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-symbol-di-tokens.ts#NoSymbolDiTokensValidator",
+                    "paramName": "noSymbolDiTokens",
+                    "paramType": "NoSymbolDiTokensValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoUnmanagedExceptionsValidator",
+                    "injection": "type",
+                    "token": "NoUnmanagedExceptionsValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-unmanaged-exceptions.ts#NoUnmanagedExceptionsValidator",
+                    "paramName": "noUnmanagedExceptions",
+                    "paramType": "NoUnmanagedExceptionsValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "PrismaConverterValidator",
+                    "injection": "type",
+                    "token": "PrismaConverterValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-prisma-converters.ts#PrismaConverterValidator",
+                    "paramName": "prismaConverter",
+                    "paramType": "PrismaConverterValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "PrismaValidateDtosValidator",
+                    "injection": "type",
+                    "token": "PrismaValidateDtosValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-dtos.ts#PrismaValidateDtosValidator",
+                    "paramName": "prismaValidateDtos",
+                    "paramType": "PrismaValidateDtosValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "RequireReturnTypeValidator",
+                    "injection": "type",
+                    "token": "RequireReturnTypeValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-return-types.ts#RequireReturnTypeValidator",
+                    "paramName": "requireReturnType",
+                    "paramType": "RequireReturnTypeValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "RoleTagValidator",
+                    "injection": "type",
+                    "token": "RoleTagValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-role-tag.ts#RoleTagValidator",
+                    "paramName": "roleTag",
+                    "paramType": "RoleTagValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "RuleReporter",
+                    "injection": "type",
+                    "token": "RuleReporter",
+                    "tokenKey": "class:packages/tooling/code-rules/src/rule-reporter.ts#RuleReporter",
+                    "paramName": "reporter",
+                    "paramType": "RuleReporter"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "WorkspaceRoot",
+                    "injection": "type",
+                    "token": "WorkspaceRoot",
+                    "tokenKey": "class:packages/tooling/code-rules/src/code-rules-context.ts#WorkspaceRoot",
+                    "paramName": "workspace",
+                    "paramType": "WorkspaceRoot"
+                },
+                {
+                    "from": "FrameworkTagValidator",
+                    "to": "FrameworkTagConfig",
+                    "injection": "type",
+                    "token": "FrameworkTagConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#FrameworkTagConfig",
+                    "paramName": "config",
+                    "paramType": "FrameworkTagConfig"
+                },
+                {
+                    "from": "InjectAnnotationNotNeededForConcreteClassValidator",
+                    "to": "InjectAnnotationNotNeededForConcreteClassConfig",
+                    "injection": "type",
+                    "token": "InjectAnnotationNotNeededForConcreteClassConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#InjectAnnotationNotNeededForConcreteClassConfig",
+                    "paramName": "config",
+                    "paramType": "InjectAnnotationNotNeededForConcreteClassConfig"
+                },
+                {
+                    "from": "MatchRulesHolder",
+                    "to": "readonly MatchRuleConfig[]",
+                    "injection": "type",
+                    "token": "readonly MatchRuleConfig[]",
+                    "tokenKey": "type:readonly MatchRuleConfig[]",
+                    "paramName": "rules",
+                    "paramType": "readonly MatchRuleConfig[]"
+                },
+                {
+                    "from": "MaxFileLinesValidator",
+                    "to": "MaxFileLinesConfig",
+                    "injection": "type",
+                    "token": "MaxFileLinesConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#MaxFileLinesConfig",
+                    "paramName": "config",
+                    "paramType": "MaxFileLinesConfig"
+                },
+                {
+                    "from": "MaxMethodLinesValidator",
+                    "to": "MaxMethodLinesConfig",
+                    "injection": "type",
+                    "token": "MaxMethodLinesConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#MaxMethodLinesConfig",
+                    "paramName": "config",
+                    "paramType": "MaxMethodLinesConfig"
+                },
+                {
+                    "from": "NoAnyUnknownValidator",
+                    "to": "NoAnyUnknownConfig",
+                    "injection": "type",
+                    "token": "NoAnyUnknownConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoAnyUnknownConfig",
+                    "paramName": "config",
+                    "paramType": "NoAnyUnknownConfig"
+                },
+                {
+                    "from": "NoDestructureValidator",
+                    "to": "NoDestructureConfig",
+                    "injection": "type",
+                    "token": "NoDestructureConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoDestructureConfig",
+                    "paramName": "config",
+                    "paramType": "NoDestructureConfig"
+                },
+                {
+                    "from": "NoDirectApiResolverValidator",
+                    "to": "AngularNoDirectApiInResolverConfig",
+                    "injection": "type",
+                    "token": "AngularNoDirectApiInResolverConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#AngularNoDirectApiInResolverConfig",
+                    "paramName": "config",
+                    "paramType": "AngularNoDirectApiInResolverConfig"
+                },
+                {
+                    "from": "NoFunctionOutsideClassValidator",
+                    "to": "NoFunctionOutsideClassConfig",
+                    "injection": "type",
+                    "token": "NoFunctionOutsideClassConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoFunctionOutsideClassConfig",
+                    "paramName": "config",
+                    "paramType": "NoFunctionOutsideClassConfig"
+                },
+                {
+                    "from": "NoImplicitAnyValidator",
+                    "to": "NoImplicitAnyConfig",
+                    "injection": "type",
+                    "token": "NoImplicitAnyConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoImplicitAnyConfig",
+                    "paramName": "config",
+                    "paramType": "NoImplicitAnyConfig"
+                },
+                {
+                    "from": "NoInlineTypeLiteralsValidator",
+                    "to": "NoInlineTypeLiteralsConfig",
+                    "injection": "type",
+                    "token": "NoInlineTypeLiteralsConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoInlineTypeLiteralsConfig",
+                    "paramName": "config",
+                    "paramType": "NoInlineTypeLiteralsConfig"
+                },
+                {
+                    "from": "NoProcessExitOutsideMainValidator",
+                    "to": "NoProcessExitOutsideMainConfig",
+                    "injection": "type",
+                    "token": "NoProcessExitOutsideMainConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoProcessExitOutsideMainConfig",
+                    "paramName": "config",
+                    "paramType": "NoProcessExitOutsideMainConfig"
+                },
+                {
+                    "from": "NoSymbolDiTokensValidator",
+                    "to": "NoSymbolDiTokensConfig",
+                    "injection": "type",
+                    "token": "NoSymbolDiTokensConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoSymbolDiTokensConfig",
+                    "paramName": "config",
+                    "paramType": "NoSymbolDiTokensConfig"
+                },
+                {
+                    "from": "NoUnmanagedExceptionsValidator",
+                    "to": "NoUnmanagedExceptionsConfig",
+                    "injection": "type",
+                    "token": "NoUnmanagedExceptionsConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoUnmanagedExceptionsConfig",
+                    "paramName": "config",
+                    "paramType": "NoUnmanagedExceptionsConfig"
+                },
+                {
+                    "from": "PrismaConverterValidator",
+                    "to": "PrismaConverterConfig",
+                    "injection": "type",
+                    "token": "PrismaConverterConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#PrismaConverterConfig",
+                    "paramName": "config",
+                    "paramType": "PrismaConverterConfig"
+                },
+                {
+                    "from": "PrismaValidateDtosValidator",
+                    "to": "PrismaValidateDtosConfig",
+                    "injection": "type",
+                    "token": "PrismaValidateDtosConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#PrismaValidateDtosConfig",
+                    "paramName": "config",
+                    "paramType": "PrismaValidateDtosConfig"
+                },
+                {
+                    "from": "RequireReturnTypeValidator",
+                    "to": "RequireReturnTypeConfig",
+                    "injection": "type",
+                    "token": "RequireReturnTypeConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#RequireReturnTypeConfig",
+                    "paramName": "config",
+                    "paramType": "RequireReturnTypeConfig"
+                },
+                {
+                    "from": "RoleTagValidator",
+                    "to": "RoleTagConfig",
+                    "injection": "type",
+                    "token": "RoleTagConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#RoleTagConfig",
+                    "paramName": "config",
+                    "paramType": "RoleTagConfig"
+                },
+                {
+                    "from": "WorkspaceRoot",
+                    "to": "string",
+                    "injection": "type",
+                    "token": "string",
+                    "tokenKey": "type:string",
+                    "paramName": "path",
+                    "paramType": "string"
+                }
+            ],
+            "unresolved": [
+                "readonly MatchRuleConfig[]",
+                "string"
+            ]
+        }
+    ]
 }

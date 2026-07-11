@@ -1,5 +1,547 @@
 {
     "schemaVersion": 2,
     "project": "pr-gate",
-    "designs": []
+    "designs": [
+        {
+            "root": "PrGateApp",
+            "rootKind": "controller",
+            "file": "packages/tooling/pr-gate/src/scripts/pr-gate-app.ts",
+            "maxLevel": 7,
+            "nodes": [
+                {
+                    "id": "AiBranchName",
+                    "className": "AiBranchName",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts",
+                    "level": 6
+                },
+                {
+                    "id": "BranchNaming",
+                    "className": "BranchNaming",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts",
+                    "level": 7
+                },
+                {
+                    "id": "BuildAffected",
+                    "className": "BuildAffected",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts",
+                    "level": 2
+                },
+                {
+                    "id": "CleanTmp",
+                    "className": "CleanTmp",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/cleanTmp.ts",
+                    "level": 4
+                },
+                {
+                    "id": "Dashboard",
+                    "className": "Dashboard",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/dashboard/dashboard.ts",
+                    "level": 2
+                },
+                {
+                    "id": "FinishUpdateCommand",
+                    "className": "FinishUpdateCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/finish-update-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "FinishUpsertPrCommand",
+                    "className": "FinishUpsertPrCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/finish-upsert-pr-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "ForkPoint",
+                    "className": "ForkPoint",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts",
+                    "level": 5
+                },
+                {
+                    "id": "GatherInfo",
+                    "className": "GatherInfo",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/git-gatherInfo.ts",
+                    "level": 4
+                },
+                {
+                    "id": "GitExec",
+                    "className": "GitExec",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts",
+                    "level": 5
+                },
+                {
+                    "id": "MergeEnd",
+                    "className": "MergeEnd",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts",
+                    "level": 3
+                },
+                {
+                    "id": "MergeStart",
+                    "className": "MergeStart",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-start.ts",
+                    "level": 3
+                },
+                {
+                    "id": "MergeState",
+                    "className": "MergeState",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts",
+                    "level": 6
+                },
+                {
+                    "id": "OpenPrCheck",
+                    "className": "OpenPrCheck",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/open-pr-check.ts",
+                    "level": 2
+                },
+                {
+                    "id": "PrGateApp",
+                    "className": "PrGateApp",
+                    "kind": "controller",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/pr-gate-app.ts",
+                    "level": 0
+                },
+                {
+                    "id": "RepoRootFinder",
+                    "className": "RepoRootFinder",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/repo-root.ts",
+                    "level": 6
+                },
+                {
+                    "id": "RunUpdate",
+                    "className": "RunUpdate",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/run-update.ts",
+                    "level": 2
+                },
+                {
+                    "id": "StartUpdateCommand",
+                    "className": "StartUpdateCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/start-update-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "StartUpsertPrCommand",
+                    "className": "StartUpsertPrCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts",
+                    "level": 1
+                }
+            ],
+            "edges": [
+                {
+                    "from": "AiBranchName",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "FinishUpdateCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "FinishUpdateCommand",
+                    "to": "MergeEnd",
+                    "injection": "type",
+                    "token": "MergeEnd",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts#MergeEnd",
+                    "paramName": "mergeEnd",
+                    "paramType": "MergeEnd"
+                },
+                {
+                    "from": "FinishUpdateCommand",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "Dashboard",
+                    "injection": "type",
+                    "token": "Dashboard",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/dashboard/dashboard.ts#Dashboard",
+                    "paramName": "dashboard",
+                    "paramType": "Dashboard"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "MergeEnd",
+                    "injection": "type",
+                    "token": "MergeEnd",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts#MergeEnd",
+                    "paramName": "mergeEnd",
+                    "paramType": "MergeEnd"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "ForkPoint",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "ForkPoint",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "GatherInfo",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "GatherInfo",
+                    "to": "ForkPoint",
+                    "injection": "type",
+                    "token": "ForkPoint",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts#ForkPoint",
+                    "paramName": "forkPoint",
+                    "paramType": "ForkPoint"
+                },
+                {
+                    "from": "GatherInfo",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "GatherInfo",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "GitExec",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "MergeEnd",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "MergeEnd",
+                    "to": "CleanTmp",
+                    "injection": "type",
+                    "token": "CleanTmp",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/cleanTmp.ts#CleanTmp",
+                    "paramName": "cleanTmpService",
+                    "paramType": "CleanTmp"
+                },
+                {
+                    "from": "MergeEnd",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "MergeEnd",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "MergeStart",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "MergeStart",
+                    "to": "GatherInfo",
+                    "injection": "type",
+                    "token": "GatherInfo",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/git-gatherInfo.ts#GatherInfo",
+                    "paramName": "gatherInfo",
+                    "paramType": "GatherInfo"
+                },
+                {
+                    "from": "MergeStart",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "MergeStart",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "OpenPrCheck",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "FinishUpdateCommand",
+                    "injection": "type",
+                    "token": "FinishUpdateCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/finish-update-command.ts#FinishUpdateCommand",
+                    "paramName": "finishUpdateCommand",
+                    "paramType": "FinishUpdateCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "FinishUpsertPrCommand",
+                    "injection": "type",
+                    "token": "FinishUpsertPrCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/finish-upsert-pr-command.ts#FinishUpsertPrCommand",
+                    "paramName": "finishUpsertPrCommand",
+                    "paramType": "FinishUpsertPrCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "StartUpdateCommand",
+                    "injection": "type",
+                    "token": "StartUpdateCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-update-command.ts#StartUpdateCommand",
+                    "paramName": "startUpdateCommand",
+                    "paramType": "StartUpdateCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "StartUpsertPrCommand",
+                    "injection": "type",
+                    "token": "StartUpsertPrCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
+                    "paramName": "startUpsertPrCommand",
+                    "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "RunUpdate",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "RunUpdate",
+                    "to": "MergeEnd",
+                    "injection": "type",
+                    "token": "MergeEnd",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts#MergeEnd",
+                    "paramName": "mergeEnd",
+                    "paramType": "MergeEnd"
+                },
+                {
+                    "from": "RunUpdate",
+                    "to": "MergeStart",
+                    "injection": "type",
+                    "token": "MergeStart",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-start.ts#MergeStart",
+                    "paramName": "mergeStart",
+                    "paramType": "MergeStart"
+                },
+                {
+                    "from": "RunUpdate",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "StartUpdateCommand",
+                    "to": "OpenPrCheck",
+                    "injection": "type",
+                    "token": "OpenPrCheck",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/open-pr-check.ts#OpenPrCheck",
+                    "paramName": "openPrCheck",
+                    "paramType": "OpenPrCheck"
+                },
+                {
+                    "from": "StartUpdateCommand",
+                    "to": "RunUpdate",
+                    "injection": "type",
+                    "token": "RunUpdate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/run-update.ts#RunUpdate",
+                    "paramName": "runUpdate",
+                    "paramType": "RunUpdate"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "RunUpdate",
+                    "injection": "type",
+                    "token": "RunUpdate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/run-update.ts#RunUpdate",
+                    "paramName": "runUpdate",
+                    "paramType": "RunUpdate"
+                }
+            ],
+            "unresolved": []
+        }
+    ]
 }
