@@ -5,6 +5,7 @@ import { injectable } from 'inversify';
 import { RepoRootFinder } from './repo-root';
 import { ConfigLoader } from './load-config';
 import { TemplateWriter } from './load-template';
+import { DiffScope } from './diff-scope';
 
 /**
  * DI-design root for @webpieces/rules-config (role:designed-lib).
@@ -23,5 +24,6 @@ export class RulesConfigDesign {
         private readonly repoRootFinder: RepoRootFinder,
         private readonly configLoader: ConfigLoader,
         private readonly templateWriter: TemplateWriter,
+        private readonly diffScope: DiffScope,
     ) {}
 }
