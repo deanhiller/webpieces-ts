@@ -41,6 +41,14 @@
                     "level": 1
                 },
                 {
+                    "id": "MainSyncStatusService",
+                    "className": "MainSyncStatusService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/main-sync-status.ts",
+                    "level": 1
+                },
+                {
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
@@ -109,6 +117,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
                     "paramName": "diffScope",
                     "paramType": "DiffScope"
+                },
+                {
+                    "from": "RulesConfigDesign",
+                    "to": "MainSyncStatusService",
+                    "injection": "type",
+                    "token": "MainSyncStatusService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/main-sync-status.ts#MainSyncStatusService",
+                    "paramName": "mainSyncStatus",
+                    "paramType": "MainSyncStatusService"
                 },
                 {
                     "from": "RulesConfigDesign",

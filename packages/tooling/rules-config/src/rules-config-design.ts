@@ -8,6 +8,7 @@ import { TemplateWriter } from './load-template';
 import { DiffScope } from './diff-scope';
 import { BranchMutationLog } from './branch-mutation-log';
 import { ReviewJsonService } from './review-json';
+import { MainSyncStatusService } from './main-sync-status';
 
 /**
  * DI-design root for @webpieces/rules-config (role:designed-lib).
@@ -29,5 +30,6 @@ export class RulesConfigDesign {
         private readonly diffScope: DiffScope,
         private readonly branchMutationLog: BranchMutationLog,
         private readonly reviewJson: ReviewJsonService,
+        private readonly mainSyncStatus: MainSyncStatusService,
     ) {}
 }
