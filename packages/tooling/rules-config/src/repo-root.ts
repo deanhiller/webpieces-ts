@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from './di';
 import { injectable } from 'inversify';
 
 import { findConfigFile } from './config-file';

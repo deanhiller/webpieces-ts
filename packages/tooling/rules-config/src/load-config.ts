@@ -1,4 +1,4 @@
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from './di';
 import { injectable } from 'inversify';
 
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
