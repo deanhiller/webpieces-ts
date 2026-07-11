@@ -1,4 +1,4 @@
-import { injectable, optional } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
@@ -58,13 +58,17 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
 export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     constructor(
         // Framework default, always available — verifies Google OIDC with zero app wiring.
-        private readonly oidcVerifier: DefaultOidcVerifier,
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- AuthFilter is DI-resolved via the esbuild/vitest path, which elides type-only imports (no design:paramtypes), so every param needs its explicit token
+        @inject(DefaultOidcVerifier) private readonly oidcVerifier: DefaultOidcVerifier,
         // @optional: only bind an AuthConfig to enable @AuthSharedSecret endpoints.
-        @optional() private readonly authConfig?: AuthConfig,
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
+        @optional() @inject(AuthConfig) private readonly authConfig?: AuthConfig,
         // @optional: only bind a JwtHook to enable @AuthJwt endpoints.
-        @optional() private readonly jwtHook?: JwtHook,
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
+        @optional() @inject(JwtHook) private readonly jwtHook?: JwtHook,
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
-        @optional() private readonly oidcHook?: OidcHook,
+        // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
+        @optional() @inject(OidcHook) private readonly oidcHook?: OidcHook,
     ) {
         super();
     }

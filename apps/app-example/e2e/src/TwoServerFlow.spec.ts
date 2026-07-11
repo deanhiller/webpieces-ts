@@ -3,11 +3,11 @@ import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import { AuthConfig } from '@webpieces/http-routing';
+import { AuthConfig, JwtHook } from '@webpieces/http-routing';
 import { SaveResponse } from '@webpieces/client-server-api';
 import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../../client-server/src/AppServerConfig';
 import { buildServer2ApiFactory } from '../../server2/src/Server2Config';
-import { TestAuthConfig } from '../../client-server/src/test/TestAuthConfig';
+import { TestAuthConfig, TestJwtHook } from '../../client-server/src/test/TestAuthConfig';
 
 /**
  * THE full-flow example test: two real microservices, real HTTP between them,
@@ -46,6 +46,7 @@ async function bootBothServers(): Promise<void> {
     // AuthFilter (this test is about context propagation, not real JWT verification).
     const authOverride = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind(AuthConfig)).to(TestAuthConfig);
+        (await options.rebind(JwtHook)).to(TestJwtHook);
     });
     const clientApiFactory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, authOverride));
     clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(express(), clientServerPort);

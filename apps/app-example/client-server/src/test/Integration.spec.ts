@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { AuthConfig } from '@webpieces/http-routing';
-import { TestAuthConfig } from './TestAuthConfig';
+import { AuthConfig, JwtHook } from '@webpieces/http-routing';
+import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
@@ -55,6 +55,7 @@ describe('SaveApi with mocked Server2Api', () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
             (await options.rebind(AuthConfig)).to(TestAuthConfig);
+            (await options.rebind(JwtHook)).to(TestJwtHook);
         });
         const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
         saveApi = factory.createApiClient<SaveApi>(SaveApi);
@@ -83,6 +84,7 @@ describe('SaveApi with mocked Server2Api', () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
             (await options.rebind(AuthConfig)).to(TestAuthConfig);
+            (await options.rebind(JwtHook)).to(TestJwtHook);
             (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
         });
         const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
@@ -124,6 +126,7 @@ describe('PublicApi', () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(createMock<Server2Api>('Server2Api'));
             (await options.rebind(AuthConfig)).to(TestAuthConfig);
+            (await options.rebind(JwtHook)).to(TestJwtHook);
         });
         const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
         publicApi = factory.createApiClient<PublicApi>(PublicApi);
