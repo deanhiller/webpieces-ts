@@ -32,7 +32,7 @@ export class DefaultJwtHook extends JwtHook {
 
     /** Verify HS256 signature + expiry; translate jsonwebtoken's raw error into a framework 401. */
     private verifyToken(token: string): JwtPayload {
-        // webpieces-disable no-unmanaged-exceptions -- AUTH TRANSLATION CHOKEPOINT: jsonwebtoken.verify throws on a bad/expired token; that must surface as a 401 Unauthorized, not bubble to the global handler as a 500. The original error is chained via cause.
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- AUTH TRANSLATION CHOKEPOINT: jsonwebtoken.verify throws on a bad/expired token; that must surface as a 401 Unauthorized, not bubble to the global handler as a 500. The original error is chained via cause.
         try {
             const decoded = verify(token, this.secret, { algorithms: ['HS256'] });
             if (typeof decoded === 'string') {
