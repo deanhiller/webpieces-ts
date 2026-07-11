@@ -24,7 +24,9 @@
         "@inversifyjs/binding-decorators": "1.1.5",
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
+        "@webpieces/gcp-identity": "workspace:*",
         "inversify": "7.10.4",
+        "jsonwebtoken": "9.0.2",
         "minimatch": "10.0.1"
     }
 }

@@ -1,4 +1,4 @@
-import { RouteMetadata, AuthMeta } from '@webpieces/core-util';
+import { RouteMetadata } from '@webpieces/core-util';
 
 /**
  * Metadata about the method being invoked.
@@ -14,10 +14,13 @@ import { RouteMetadata, AuthMeta } from '@webpieces/core-util';
  * in any express dependency.
  *
  * Fields:
- * - routeMeta: Static route information (httpMethod, path, methodName)
+ * - routeMeta: Static route information (httpMethod, path, methodName, authMeta)
  * - requestDto: The deserialized request body
- * - authMeta: Auth mode from @Authentication/@AuthOidc/... decorators
  * - metadata: Request-scoped data for filters to communicate
+ *
+ * Auth mode lives on {@link RouteMetadata.authMeta} (the one source of truth for fixed route
+ * metadata); read it via `methodMeta.routeMeta.authMeta`. MethodMeta itself carries only the
+ * static route reference + the request-scoped body/bag.
  */
 export class MethodMeta {
     /**
@@ -32,12 +35,6 @@ export class MethodMeta {
     requestDto?: unknown;
 
     /**
-     * Auth metadata from @Public/@Authenticated/@Roles decorators.
-     * Populated by ApiRoutingFactory so filters can read auth requirements.
-     */
-    authMeta?: AuthMeta;
-
-    /**
      * Additional metadata for storing request-scoped data.
      * Used by filters to pass data to other filters/controllers.
      */
@@ -50,12 +47,10 @@ export class MethodMeta {
         requestDto?: unknown,
         // webpieces-disable no-any-unknown -- request-scoped bag holds heterogeneous filter data
         metadata?: Map<string, unknown>,
-        authMeta?: AuthMeta,
     ) {
         this.routeMeta = routeMeta;
         this.requestDto = requestDto;
         this.metadata = metadata ?? new Map();
-        this.authMeta = authMeta ?? routeMeta.authMeta;
     }
 
     /**

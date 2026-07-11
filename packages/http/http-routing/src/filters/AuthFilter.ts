@@ -1,10 +1,12 @@
-import { inject, injectable, optional } from 'inversify';
+import { injectable, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AuthValues, SharedSecrets } from '../AuthConfig';
+import { JwtHook, OidcHook } from '../AuthHooks';
+import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
 
@@ -37,24 +39,32 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
  * route. It is TRANSPORT-NEUTRAL: it reads the raw credential from the {@link HttpRequest} in
  * RequestContext (never express), so the SAME check runs over HTTP and via createApiClient.
  *
- * It enforces the endpoint's AuthMode using the injected app-bound {@link AuthConfig}:
- *  - shared-secret → constant-time compare vs the bound secret VALUE (state).
- *  - jwt           → `parseJwt` → stamp the user's context values + enforce @AuthJwt(...roles).
- *  - oidc          → `verifyOidc` (delegates to gcp-identity in the company layer).
- *  - public        → BEST-EFFORT jwt parse: if a token is present, stamp the user's context so a
- *                    logged-out page still knows who is logged in; never fails.
+ * It enforces the endpoint's AuthMode from separately-bound pieces, each OPTIONAL except the OIDC
+ * default:
+ *  - shared-secret → constant-time compare vs the {@link AuthConfig} secret VALUE (state). No
+ *                    AuthConfig bound → no accepted secret → fail fast (401).
+ *  - jwt           → the bound {@link JwtHook} (`parseJwt` + `authorizeJwt`). No JwtHook bound →
+ *                    "not enabled" (401): JWT needs an app secret + payload shape.
+ *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
+ *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC.
+ *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
+ *                    a logged-out page still knows who is logged in; never fails.
  *
- * The verifiers/secrets are app-provided (rebindable in tests), so http-routing needs no
- * jsonwebtoken / gcp-identity.
+ * Zero wiring = OIDC just works; an app only binds the hooks it actually uses.
  */
 @provideFrameworkSingleton()
 @injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     constructor(
-        // @optional: a public-only server need not bind an AuthConfig; a non-public route then
-        // fails fast in requireAuthConfig().
-        @optional() @inject(AuthConfig) private readonly authConfig?: AuthConfig,
+        // Framework default, always available — verifies Google OIDC with zero app wiring.
+        private readonly oidcVerifier: DefaultOidcVerifier,
+        // @optional: only bind an AuthConfig to enable @AuthSharedSecret endpoints.
+        @optional() private readonly authConfig?: AuthConfig,
+        // @optional: only bind a JwtHook to enable @AuthJwt endpoints.
+        @optional() private readonly jwtHook?: JwtHook,
+        // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
+        @optional() private readonly oidcHook?: OidcHook,
     ) {
         super();
     }
@@ -64,7 +74,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        const mode = meta.authMeta?.mode;
+        const mode = meta.routeMeta.authMeta?.mode;
         const authHeader = RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
 
         if (!mode || mode.kind === 'public') {
@@ -87,22 +97,17 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         return nextFilter.invoke(meta);
     }
 
-    private requireAuthConfig(): AuthConfig {
-        if (!this.authConfig) {
-            throw new HttpUnauthorizedError('No AuthConfig bound — cannot enforce a non-public endpoint');
-        }
-        return this.authConfig;
-    }
-
     private enforceJwt(header: string | undefined, requirement: JwtRequirement): void {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
             throw new HttpUnauthorizedError('Authentication required');
         }
-        const config = this.requireAuthConfig();
-        const values = config.parseJwt(token); // AUTHENTICATE — throws HttpUnauthorizedError if invalid
+        if (!this.jwtHook) {
+            throw new HttpUnauthorizedError('User-JWT auth is not enabled on this server');
+        }
+        const values = this.jwtHook.parseJwt(token); // AUTHENTICATE — throws HttpUnauthorizedError if invalid
         this.applyAuthValues(values);
-        config.authorizeJwt(values, requirement); // AUTHORIZE — app policy; throws HttpForbiddenError to deny
+        this.jwtHook.authorizeJwt(values, requirement); // AUTHORIZE — app policy; throws HttpForbiddenError to deny
     }
 
     private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
@@ -110,12 +115,17 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         if (!token) {
             throw new HttpUnauthorizedError('Missing OIDC bearer token for @AuthOidc endpoint');
         }
-        await this.requireAuthConfig().verifyOidc(token, callers);
+        // App-bound OidcHook overrides the caller policy; otherwise the framework default runs directly.
+        if (this.oidcHook) {
+            await this.oidcHook.verifyOidc(token, callers);
+        } else {
+            await this.oidcVerifier.verify(token, callers);
+        }
     }
 
     /** `provided` is the Authorization bearer value — the secret itself, same header as a JWT. */
     private enforceSharedSecret(provided: string | undefined, secretKey: string): void {
-        const accepted = this.requireAuthConfig().sharedSecrets[secretKey];
+        const accepted = this.authConfig?.sharedSecrets[secretKey];
         if (!accepted || !provided || !this.matchesEither(provided, accepted)) {
             throw new HttpUnauthorizedError('Invalid shared secret for @AuthSharedSecret endpoint');
         }
@@ -132,12 +142,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     /** Parse a JWT if one is present, else do nothing — used on public routes; never throws. */
     private bestEffortJwt(header: string | undefined): void {
         const token = this.credential(header, BEARER_SCHEME);
-        if (!this.authConfig || !token) {
+        if (!this.jwtHook || !token) {
             return;
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort on a public route: a bad/absent token just means "not logged in", must not fail the request
         try {
-            this.applyAuthValues(this.authConfig.parseJwt(token));
+            this.applyAuthValues(this.jwtHook.parseJwt(token));
         } catch (err: unknown) {
             const error = toError(err);
             log.debug('Best-effort JWT parse on a public endpoint failed (treating as anonymous): ', error);

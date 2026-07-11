@@ -77,8 +77,15 @@ export { FilterMatcher, HttpFilter } from './FilterMatcher';
 export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';
 
-// Auth: the app-provided, container-bound AuthConfig the framework AuthFilter injects.
+// Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
+//  - AuthConfig: shared-secret STATE (@AuthSharedSecret values).
+//  - JwtHook / OidcHook: OPTIONAL verification mechanisms (bind only what you use).
+//  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
 export { AuthConfig, AuthValues, SharedSecrets } from './AuthConfig';
+export { JwtHook, OidcHook } from './AuthHooks';
+export { DefaultOidcVerifier } from './DefaultOidcVerifier';
+// DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
+export { DefaultJwtHook } from './DefaultJwtHook';
 
 // Above-boundary context setup shared by every transport adapter.
 
