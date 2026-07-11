@@ -23,7 +23,7 @@ import {
     getChangedLineNumbers,
     shouldSkipRule,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { ExecutorResult } from './code-validator';
 

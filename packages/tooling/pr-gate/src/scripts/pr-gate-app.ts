@@ -1,5 +1,5 @@
-import { DocumentDesign } from '@webpieces/core-util';
-import { provideSingleton } from '@webpieces/core-context';
+import { DocumentDesign } from '@webpieces/rules-config';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { StartUpdateCommand } from './commands/start-update-command';
 import { FinishUpdateCommand } from './commands/finish-update-command';

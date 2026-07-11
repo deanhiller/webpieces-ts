@@ -4,7 +4,7 @@ import * as path from 'path';
 import {
     loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, writeTemplate,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';

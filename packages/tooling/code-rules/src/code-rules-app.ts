@@ -1,5 +1,5 @@
-import { DocumentDesign } from '@webpieces/core-util';
-import { provideSingleton } from '@webpieces/core-context';
+import { DocumentDesign } from '@webpieces/rules-config';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 import { CodeRulesEngine } from './code-rules-engine';

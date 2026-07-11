@@ -32,7 +32,7 @@ import {
     findNewMethodSignaturesInDiff,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 

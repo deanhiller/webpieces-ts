@@ -135,13 +135,12 @@
             ]
         },
         "code-rules": {
-            "level": 2,
+            "level": 1,
             "framework": ["node"],
             "role": "app",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
             "dependsOn": [
-                "core-context",
                 "rules-config"
             ]
         },
@@ -306,7 +305,7 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 3,
+            "level": 2,
             "framework": ["node"],
             "role": "lib",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
@@ -319,13 +318,12 @@
             ]
         },
         "pr-gate": {
-            "level": 2,
+            "level": 1,
             "framework": ["node"],
             "role": "app",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "dependsOn": [
-                "core-context",
                 "rules-config"
             ]
         },

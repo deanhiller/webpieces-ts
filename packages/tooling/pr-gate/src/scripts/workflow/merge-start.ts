@@ -5,7 +5,7 @@ import {
     WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, CliExitError,
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { GatherInfo } from '../git-gatherInfo';
 import { BranchNaming } from './branch-naming';

@@ -1,5 +1,5 @@
 import { BaseRuleConfig } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 import { CodeValidator, ExecutorResult, RuleRun } from './code-validator';

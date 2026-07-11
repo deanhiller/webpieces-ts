@@ -1,5 +1,5 @@
 import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { MergeState } from './merge-state';

@@ -5,7 +5,7 @@ import {
     MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError,
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { BranchNaming } from './branch-naming';
 import { CleanTmp } from './cleanTmp';

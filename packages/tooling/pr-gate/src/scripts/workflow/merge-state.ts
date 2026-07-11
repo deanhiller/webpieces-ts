@@ -6,7 +6,7 @@ import {
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/core-context';
+import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
 // Proof-obligation marker written when a 3-point squash-merge hits conflicts. Its mere
