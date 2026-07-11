@@ -127,6 +127,7 @@ export {
 } from './pr-gate-config';
 export {
     ReviewJson,
+    ReviewJsonService,
     loadReviewJson,
     prDirFor,
     reviewJsonPath,
@@ -153,6 +154,7 @@ export {
 export type { MutationVerb, MutationPhase } from './branch-mutation-log';
 export {
     BranchMutationEvent,
+    BranchMutationLog,
     branchMutationLogPath,
     logBranchMutation,
 } from './branch-mutation-log';

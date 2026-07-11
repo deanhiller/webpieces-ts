@@ -9,6 +9,14 @@
             "maxLevel": 2,
             "nodes": [
                 {
+                    "id": "BranchMutationLog",
+                    "className": "BranchMutationLog",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
+                    "level": 1
+                },
+                {
                     "id": "ConfigFile",
                     "className": "ConfigFile",
                     "kind": "class",
@@ -41,6 +49,14 @@
                     "level": 1
                 },
                 {
+                    "id": "ReviewJsonService",
+                    "className": "ReviewJsonService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/review-json.ts",
+                    "level": 1
+                },
+                {
                     "id": "RulesConfigDesign",
                     "className": "RulesConfigDesign",
                     "kind": "apiImplementation",
@@ -69,6 +85,15 @@
                 },
                 {
                     "from": "RulesConfigDesign",
+                    "to": "BranchMutationLog",
+                    "injection": "type",
+                    "token": "BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "paramName": "branchMutationLog",
+                    "paramType": "BranchMutationLog"
+                },
+                {
+                    "from": "RulesConfigDesign",
                     "to": "ConfigLoader",
                     "injection": "type",
                     "token": "ConfigLoader",
@@ -93,6 +118,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "RulesConfigDesign",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJson",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "RulesConfigDesign",

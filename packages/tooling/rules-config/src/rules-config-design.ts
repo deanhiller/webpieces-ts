@@ -6,6 +6,8 @@ import { RepoRootFinder } from './repo-root';
 import { ConfigLoader } from './load-config';
 import { TemplateWriter } from './load-template';
 import { DiffScope } from './diff-scope';
+import { BranchMutationLog } from './branch-mutation-log';
+import { ReviewJsonService } from './review-json';
 
 /**
  * DI-design root for @webpieces/rules-config (role:designed-lib).
@@ -25,5 +27,7 @@ export class RulesConfigDesign {
         private readonly configLoader: ConfigLoader,
         private readonly templateWriter: TemplateWriter,
         private readonly diffScope: DiffScope,
+        private readonly branchMutationLog: BranchMutationLog,
+        private readonly reviewJson: ReviewJsonService,
     ) {}
 }
