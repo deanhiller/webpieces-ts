@@ -189,6 +189,9 @@ export function validateLibraryTypesMatch(graph: EnhancedGraph, problems: string
  *     legitimate case is a server-side orchestrator/e2e harness that boots
  *     other servers. A `lib`/`designed-lib`/`client` depending on a `server`
  *     inverts the dependency direction and is a violation.
+ *   - a `bundle` is the one role permitted to depend on ANY app: it aggregates
+ *     several apps into one distributable (e.g. an nx plugin re-exposing multiple
+ *     tooling apps), so a `bundle → app` edge is legitimate, not inverted.
  */
 export function validateRoleDependencies(graph: EnhancedGraph, problems: string[]): void {
     for (const [projectName, entry] of Object.entries(graph)) {
@@ -199,6 +202,8 @@ export function validateRoleDependencies(graph: EnhancedGraph, problems: string[
             if (!APP_ROLES.includes(toRole)) continue;
             // A server may orchestrate/boot other servers (e.g. an e2e harness).
             if (toRole === 'server' && fromRole === 'server') continue;
+            // A bundle aggregates apps — it may depend on any app role.
+            if (fromRole === 'bundle') continue;
 
             const why =
                 toRole === 'client'

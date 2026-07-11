@@ -78,13 +78,17 @@ export class GraphVisualizer {
      * Role border styling — fill stays keyed on framework; the border shows a
      * project's ROLE at a glance. Server and client are the top-level runnable
      * nodes, so they get bold, colored borders to stand out:
-     *   server       → thick GREEN border (a runnable server app)
-     *   client       → thick RED border   (a client app, e.g. angular)
-     *   designed-lib → bold border        (a library with a generated @DocumentDesign design)
+     *   server       → thick GREEN border  (a runnable server app)
+     *   app          → thick BLUE border   (a runnable non-HTTP app, e.g. a tooling app)
+     *   bundle       → thick PURPLE border (an aggregator that bundles several apps)
+     *   client       → thick RED border    (a client app, e.g. angular)
+     *   designed-lib → bold border         (a library with a generated @DocumentDesign design)
      *   lib / other  → plain thin border
      */
     private roleBorderAttrs(role: string): string {
         if (role === 'server') return ', color="green", penwidth=3';
+        if (role === 'app') return ', color="#1976d2", penwidth=3';
+        if (role === 'bundle') return ', color="#6A1B9A", penwidth=3';
         if (role === 'client') return ', color="red", penwidth=3';
         if (role === 'api-lib') return ', color="#EF6C00", penwidth=2';
         if (role === 'designed-lib') return ', penwidth=2';

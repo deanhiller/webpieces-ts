@@ -45,7 +45,7 @@ describe('findRoleUntaggedProjects', () => {
     });
 
     it('accepts each known role value', () => {
-        for (const role of ['server', 'designed-lib', 'lib', 'client']) {
+        for (const role of ['server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib']) {
             writeProjectJson('packages/p', { name: 'p', tags: [`role:${role}`] });
             expect(findRoleUntaggedProjects(root, ['packages/p/src/a.ts'])).toEqual([]);
         }

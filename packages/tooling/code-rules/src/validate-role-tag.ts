@@ -24,7 +24,7 @@ import { injectable } from 'inversify';
 import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';
 
 const ROLE_TAG_PREFIX = 'role:';
-const DEFAULT_KNOWN_TYPES = ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'];
+const DEFAULT_KNOWN_TYPES = ['server', 'app', 'bundle', 'designed-lib', 'lib', 'client', 'api-lib'];
 
 /** The role-tag flavor of the shared missing-tag scan (exported for tests). */
 export function findRoleUntaggedProjects(workspaceRoot: string, changedFiles: string[]): MissingTagProject[] {
