@@ -15,11 +15,6 @@
             "schema": "./src/executors/visualize-runtime/schema.json",
             "description": "Render the runtime microservice graph (runtime-dependencies.json)"
         },
-        "validate-runtime-markers": {
-            "implementation": "./src/executors/validate-runtime-markers/executor",
-            "schema": "./src/executors/validate-runtime-markers/schema.json",
-            "description": "Per-project: validate live.json matches the project's api-project dependencies"
-        },
         "validate-runtime-architecture": {
             "implementation": "./src/executors/validate-runtime-architecture/executor",
             "schema": "./src/executors/validate-runtime-architecture/schema.json",

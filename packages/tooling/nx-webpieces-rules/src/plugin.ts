@@ -28,7 +28,6 @@ import type {
 import {
     createVisualizeRuntimeTarget,
     createValidateRuntimeArchitectureTarget,
-    createValidateRuntimeMarkersTarget,
 } from './runtime-targets';
 import { ValidationTargets } from './validation-targets';
 import {
@@ -182,7 +181,7 @@ async function createNodesFunction(
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
 
-    // Add per-project targets (circular-deps, ci, runtime-markers)
+    // Add per-project targets (circular-deps, ci, di-graph)
     addPerProjectTargets(results, projectFiles, opts, context);
 
     return results;
@@ -303,12 +302,6 @@ function buildPerProjectTargets(
             const targetName = opts.circularDeps.targetName!;
             targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
         }
-    }
-
-    // Add per-project runtime-marker validation (validates this project's
-    // service-contract.json against its own api-project deps, independently).
-    if (isProjectJson && opts.workspace.validations!.runtimeArchitecture) {
-        targets['validate-runtime-markers'] = createValidateRuntimeMarkersTarget();
     }
 
     // Per-project DI design DAG: regenerate design.json/design.md on every build,

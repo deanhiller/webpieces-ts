@@ -14,9 +14,9 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { buildWorkspaceModel } from '../../lib/runtime-markers';
+import { loadBlessedGraph } from '../../lib/graph-loader';
 import {
-    assembleRuntimeGraph,
+    deriveRuntimeGraph,
     loadRuntimeGraph,
     runtimeAdjacency,
     runtimeGraphFileExists,
@@ -85,14 +85,22 @@ export default async function runExecutor(
         console.log(`\n⏭️  Skipping ${RUNTIME_RULE_NAME} (mode: OFF)\n`);
         return { success: true };
     }
-    if (config.servicePaths.length === 0) {
-        console.log(`\n⏭️  ${RUNTIME_RULE_NAME}: no servicePaths configured — nothing to validate\n`);
-        return { success: true };
-    }
 
     console.log('\n📡 Validating runtime microservice architecture\n');
-    const model = await buildWorkspaceModel(workspaceRoot, config.apiProjectPaths, config.servicePaths);
-    const graph = assembleRuntimeGraph(model, workspaceRoot);
+    // Derive the "current" runtime graph from the committed dependencies.json — the SAME source
+    // architecture:generate derives from — so the unchanged-check compares like-for-like and can
+    // never fail on a clean, freshly-generated tree. (validate-architecture-unchanged separately
+    // guarantees dependencies.json itself is fresh.)
+    const depsFile = loadBlessedGraph(workspaceRoot);
+    if (depsFile === null) {
+        console.error('❌ No architecture/dependencies.json — run: nx run architecture:generate');
+        return { success: false };
+    }
+    const hiddenProjects = new Set<string>();
+    for (const name of Object.keys(depsFile.projects)) {
+        if (depsFile.projects[name].drawOnGraph === false) hiddenProjects.add(name);
+    }
+    const graph = deriveRuntimeGraph(depsFile.projects, hiddenProjects);
 
     const problems: string[] = checkCycles(graph, config.allowedCycles);
     const unchanged = checkUnchanged(workspaceRoot, graph);
