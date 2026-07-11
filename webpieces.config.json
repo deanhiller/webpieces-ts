@@ -91,6 +91,7 @@
         },
         "role-tag": {
             "mode": "MODIFIED_PROJECTS",
+            "knownTypes": ["server", "app", "designed-lib", "lib", "client", "api-lib"],
             "ignoreModifiedUntilEpoch": 0
         },
         "di-graph": {

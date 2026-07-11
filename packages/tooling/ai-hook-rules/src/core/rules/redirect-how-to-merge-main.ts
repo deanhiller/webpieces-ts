@@ -1,15 +1,17 @@
 import { execSync } from 'child_process';
 
-import { RedirectHowToMergeMainConfig } from '@webpieces/rules-config';
+import { RedirectHowToMergeMainConfig, RepoRootFinder } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 
+const INSTRUCT_FILE = 'webpieces.git-workflow.md';
+
 const FIX_HINT = new FixHint(
     'Direct merge/rebase/pull from main on a feature branch is blocked.',
-    "To bring main's changes into your feature branch, run 'pnpm wp-start-update' to squash-update from main — never `git merge/rebase/pull main`. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. See .webpieces/instruct-ai/webpieces.git-workflow.md for the full flow (incl. worktrees).\n"
+    "To bring main's changes into your feature branch, run 'pnpm wp-start-update' to squash-update from main — never `git merge/rebase/pull main`. This preserves the 3-point fork-point system (fork-point=A, feature-HEAD=B, main-HEAD=C) needed for clean PR diffs. READ the instruct-ai git-workflow doc at the absolute path on the violation line above for the full flow (incl. worktrees).\n"
     + 'Add that info to memory so you remember next time.',
 );
 
@@ -48,10 +50,11 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
             return [];
         }
 
+        const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
         return [new V(
             1,
             truncate(ctx.command),
-            `Direct merge/rebase from main on branch '${currentBranch}' is blocked.`,
+            `Direct merge/rebase from main on branch '${currentBranch}' is blocked. Use 'pnpm wp-start-update'; full flow: READ ${docPath}.`,
         )];
     }
 }

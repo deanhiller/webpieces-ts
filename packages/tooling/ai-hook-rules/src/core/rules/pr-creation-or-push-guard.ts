@@ -1,4 +1,4 @@
-import { PrCreationOrPushGuardConfig } from '@webpieces/rules-config';
+import { PrCreationOrPushGuardConfig, RepoRootFinder } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -6,6 +6,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 
 const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-start-upsert-pr';
+const INSTRUCT_FILE = 'webpieces.git-workflow.md';
 
 function fixHintFor(upsertPrCommand: string): FixHint {
     return new FixHint(
@@ -20,7 +21,7 @@ function fixHintFor(upsertPrCommand: string): FixHint {
         + 'There is nothing to paste or attest to; the commands do the work.\n'
         + 'If a HUMAN genuinely needs an out-of-band push (no PR), do NOT do it yourself — ask them to run\n'
         + 'the push, since a manual push bypasses the build gate, review.json, and dashboard.\n'
-        + 'Full branch → update → PR flow: READ .webpieces/instruct-ai/webpieces.git-workflow.md.\n'
+        + 'Full branch → update → PR flow: READ the instruct-ai git-workflow doc at the absolute path on the violation line above.\n'
         + 'Add this to your memory so you don\'t forget next time and waste tokens.',
     );
 }
@@ -65,6 +66,8 @@ export class PrCreationOrPushGuardRule extends BashRuleBase<PrCreationOrPushGuar
 
     check(ctx: BashContext): readonly Violation[] {
         if (!isBlockedPrOrPush(ctx.command)) return [];
-        return [new V(1, truncate(ctx.command))];
+        const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
+        return [new V(1, truncate(ctx.command),
+            `Manual push / direct PR is blocked — use the gated flow (${this.upsertPrCommand}). Full flow: READ ${docPath}.`)];
     }
 }

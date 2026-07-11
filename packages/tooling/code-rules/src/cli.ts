@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { InformAiError, RuleFailError, toError } from '@webpieces/rules-config';
+import { InformAiError, RuleFailError, toError, RepoRootFinder } from '@webpieces/rules-config';
 import runValidateCode from './validate-code';
 
 async function main(): Promise<void> {
     // webpieces-disable no-unmanaged-exceptions -- global entry point for code-rules CLI
     try {
-        const workspaceRoot = process.cwd();
+        // Anchor at the repo root so `.webpieces/instruct-ai` docs are written there, not in whatever
+        // subdir this CLI happened to be invoked from.
+        const workspaceRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
         const result = await runValidateCode(workspaceRoot);
         process.exit(result.success ? 0 : 1);
     } catch (err: unknown) {

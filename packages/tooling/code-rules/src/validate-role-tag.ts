@@ -22,7 +22,7 @@ import { CodeValidator, ExecutorResult } from './code-validator';
 import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';
 
 const ROLE_TAG_PREFIX = 'role:';
-const DEFAULT_KNOWN_TYPES = ['server', 'designed-lib', 'lib', 'client', 'api-lib'];
+const DEFAULT_KNOWN_TYPES = ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'];
 
 /** The role-tag flavor of the shared missing-tag scan (exported for tests). */
 export function findRoleUntaggedProjects(workspaceRoot: string, changedFiles: string[]): MissingTagProject[] {
@@ -35,7 +35,8 @@ function reportViolations(untagged: MissingTagProject[], knownTypes: string[], m
     console.error('❌ Every modified project must declare its role (a role tag)!');
     console.error('');
     console.error(`   Add ONE of these to the project's project.json "tags" array: ${suggestion}`);
-    console.error('   (server = runnable app · designed-lib = library with a @DocumentDesign DI design ·');
+    console.error('   (server = runnable HTTP app · app = runnable non-HTTP app via container.get(XxxApp) ·');
+    console.error('    designed-lib = library with a @DocumentDesign DI design ·');
     console.error('    lib = plain library, no design · client = client app e.g. angular.)');
     console.error('   This role drives DI-design generation, the arch graph, and the role-dependency rule.');
     console.error('');

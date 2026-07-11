@@ -1,4 +1,4 @@
-import { NoUnmanagedExceptionsConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { NoUnmanagedExceptionsConfig, RULE_NAMES, RepoRootFinder } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -6,6 +6,7 @@ import { EditRuleBase } from '../rule-base';
 import { FixHint, Option, DisableEscape } from '../fix-hint';
 import { writeTemplateIfMissing } from '../instruct-ai-writer';
 
+const INSTRUCT_FILE = 'webpieces.exceptions.md';
 const TRY_PATTERN = /\btry\s*\{/;
 
 // Both webpieces-disable and the existing ESLint directive suppress this rule
@@ -24,7 +25,7 @@ export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedException
     override readonly files = ['**/*.ts', '**/*.tsx'];
     get fixHint(): FixHint {
         return new FixHint(
-            'try/catch is generally not allowed. READ .webpieces/instruct-ai/webpieces.exceptions.md. Only chokepoints (filter, globalErrorHandler) may catch exceptions.',
+            'try/catch is generally not allowed. READ the instruct-ai doc at the absolute path on the violation line above. Only chokepoints (filter, globalErrorHandler) may catch exceptions.',
             'Pick one (NOTE: for external calls — execSync, fs, network — the preferred option is almost always right; let it throw, the top-level runner reports it):',
             [
                 new Option('Remove the try/catch — let the exception bubble to the top-level chokepoint (filter, globalErrorHandler) where it is already logged and handled.', true),
@@ -49,9 +50,11 @@ export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedException
             const lineNum = i + 1;
             if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_UNMANAGED_EXCEPTIONS)) continue;
             if (disableAllowed && hasPrecedingDisable(ctx.lines, i)) continue;
-            violations.push(new V(lineNum, ctx.lines[i].trim()));
+            const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
+            violations.push(new V(lineNum, ctx.lines[i].trim(),
+                `try/catch is generally not allowed here. READ ${docPath} — only chokepoints (filter, globalErrorHandler) may catch exceptions.`));
         }
-        if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, 'webpieces.exceptions.md');
+        if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, INSTRUCT_FILE);
         return violations;
     }
 }

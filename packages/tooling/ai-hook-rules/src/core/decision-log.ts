@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { readMainSyncStatus, MainSyncStatus } from '@webpieces/rules-config';
+import { readMainSyncStatus, MainSyncStatus, RepoRootFinder } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
 
@@ -91,7 +91,7 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
 export function logGuardInvocation(cwd: string, tool: string, target: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const root = gitToplevelForLog(cwd);
+        const root = new RepoRootFinder().resolveRepoRoot(cwd);
         const branch = branchForLog(root);
         const sync = summarizeSyncStatus(readMainSyncStatus(root));
 
@@ -105,20 +105,6 @@ export function logGuardInvocation(cwd: string, tool: string, target: string): v
     } catch (err: unknown) {
         const error = toError(err);
         void error;
-    }
-}
-
-// The repo root that owns `.webpieces` (git toplevel of cwd), or cwd itself when git is unavailable /
-// cwd is not a repo. Best-effort; the invocation log is diagnostic, never a control decision.
-function gitToplevelForLog(cwd: string): string {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const root = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-        return root !== '' ? root : cwd;
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
-        return cwd;
     }
 }
 

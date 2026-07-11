@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RepoRootFinder } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -413,7 +413,9 @@ async function wireHook(hook: HookSpec, targets: InstallTarget[], projectRoot: s
 export async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const syncOnly = args.includes('--sync');
-    const projectRoot = process.cwd();
+    // Anchor the install at the repo root (git toplevel — webpieces.config.json may not exist yet on
+    // a first install), never a subdir cwd, so `.webpieces`/hooks/config all land at the root.
+    const projectRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
 
     seedOrSyncConfig(projectRoot, syncOnly);
     if (syncOnly) return;

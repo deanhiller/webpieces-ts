@@ -9,10 +9,12 @@
  */
 
 import type { Rule } from 'eslint';
-import * as fs from 'fs';
-import * as path from 'path';
 import { writeTemplateIfMissing } from '@webpieces/rules-config';
 import { toError } from '../toError';
+import { EslintWorkspaceRoot } from '../workspace-root';
+
+const INSTRUCT_FILE = 'webpieces.methods.md';
+const workspace = new EslintWorkspaceRoot();
 
 interface MethodLinesOptions {
     max: number;
@@ -49,35 +51,12 @@ interface CheckerContext {
 // Module-level flag to prevent redundant file creation
 let methodDocCreated = false;
 
-function getWorkspaceRoot(context: Rule.RuleContext): string {
-    const filename = context.filename || context.getFilename();
-    let dir = path.dirname(filename);
-
-    while (dir !== path.dirname(dir)) {
-        const pkgPath = path.join(dir, 'package.json');
-        if (fs.existsSync(pkgPath)) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-                if (pkg.workspaces || pkg.name === 'webpieces-ts') {
-                    return dir;
-                }
-            } catch (err: unknown) {
-                //const error = toError(err);
-                void err;
-            }
-        }
-        dir = path.dirname(dir);
-    }
-    return process.cwd();
-}
-
 function ensureMethodDoc(context: Rule.RuleContext): void {
     if (methodDocCreated) return;
-    const workspaceRoot = getWorkspaceRoot(context);
+    const workspaceRoot = workspace.workspaceRoot(context);
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        writeTemplateIfMissing(workspaceRoot, 'webpieces.methods.md');
+        writeTemplateIfMissing(workspaceRoot, INSTRUCT_FILE);
         methodDocCreated = true;
     } catch (err: unknown) {
         const error = toError(err);
@@ -153,7 +132,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             tooLong:
-                'AI Agent: READ .webpieces/instruct-ai/webpieces.methods.md for fix instructions. Method "{{name}}" has {{actual}} lines (max: {{max}})',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.methods.md (at the repo root) for fix instructions. Method "{{name}}" has {{actual}} lines (max: {{max}})',
         },
         fixable: undefined,
         schema: [

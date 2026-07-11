@@ -116,11 +116,11 @@ export function enrichGraph(
 }
 
 /**
- * Roles that are terminal APPS — nothing may depend on them. A server or a
- * client is a top-level runnable; being depended upon means it is really a
- * library and should be retagged `role:lib`/`role:designed-lib`.
+ * Roles that are terminal APPS — nothing may depend on them. A server, a
+ * non-HTTP `app`, or a client is a top-level runnable; being depended upon means
+ * it is really a library and should be retagged `role:lib`/`role:designed-lib`.
  */
-export const APP_ROLES: ReadonlyArray<string> = ['server', 'client'];
+export const APP_ROLES: ReadonlyArray<string> = ['server', 'app', 'client'];
 
 /**
  * Compatibility lattice — the "up-set" of each atomic env is the env itself

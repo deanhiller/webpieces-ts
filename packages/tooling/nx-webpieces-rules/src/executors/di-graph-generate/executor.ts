@@ -153,12 +153,12 @@ function chooseAnalyzer(tags: string[], srcDir: string): AnalyzerChoice {
  * `missing-design-annotation` rule.
  */
 function reportMissingDesignAnnotation(projectName: string, role: string): void {
-    if (role === 'server') {
+    if (role === 'server' || role === 'app') {
         console.error(
-            `❌ ${projectName} is tagged role:server but has no @DocumentDesign class.\n` +
-                `   All controllers should be annotated with @DocumentDesign() ` +
-                `(from @webpieces/http-routing) so their design.json / design.html get generated\n` +
-                `   and linked from architecture/dependencies.html.`,
+            `❌ ${projectName} is tagged role:${role} but has no @DocumentDesign class.\n` +
+                `   A role:${role} project must expose one @DocumentDesign() root class (the App the ` +
+                `container resolves via container.get(XxxApp)) so its design.json / design.html get\n` +
+                `   generated and linked from architecture/dependencies.html.`,
         );
         return;
     }
@@ -184,7 +184,7 @@ function failsMissingDesignAnnotation(
 ): boolean {
     const missingRule = shared.rules.get(MISSING_DESIGN_RULE_NAME);
     const enforce = !missingRule || !missingRule.isOff;
-    if (enforce && graph.designs.length === 0 && (role === 'server' || role === 'designed-lib')) {
+    if (enforce && graph.designs.length === 0 && (role === 'server' || role === 'app' || role === 'designed-lib')) {
         reportMissingDesignAnnotation(projectName, role);
         return true;
     }

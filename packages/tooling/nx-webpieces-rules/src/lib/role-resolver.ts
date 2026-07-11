@@ -6,6 +6,9 @@
  * `framework` (libType). Known values:
  *
  *   - `server`       — a runnable server app; DI design roots on `@DocumentDesign`.
+ *   - `app`          — a runnable non-HTTP application bootstrapped via
+ *                      `container.get(XxxApp)` (e.g. the tooling packages); DI design
+ *                      roots on `@DocumentDesign`, drawn exactly like a server.
  *   - `designed-lib` — a library whose DI design we generate; roots on
  *                      `@DocumentDesign` (required to have ≥1).
  *   - `lib`          — a plain library; no DI design is generated.
@@ -28,7 +31,7 @@ import { ProjectInfo } from './project-info';
 export const ROLE_TAG_PREFIX = 'role:';
 
 /** The roles the `role-tag` rule and the DI-graph analyzer understand. */
-export const KNOWN_ROLES: ReadonlyArray<string> = ['server', 'designed-lib', 'lib', 'client', 'api-lib'];
+export const KNOWN_ROLES: ReadonlyArray<string> = ['server', 'app', 'designed-lib', 'lib', 'client', 'api-lib'];
 
 /** Default role for a project with no explicit `role:` tag. */
 export const DEFAULT_ROLE = 'lib';
