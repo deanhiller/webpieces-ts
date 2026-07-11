@@ -20,6 +20,9 @@
 // names that naturally end in digits, e.g. `deanhiller/upgrade-webpieces-0.3.213`. The tool no longer
 // PRODUCES `wpN`; the branch-creation-guard still reserves the suffix during the transition.
 
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
+
 const GENERATION_RE = /^(.*)wp(\d+)$/;
 
 class Generation {
@@ -32,25 +35,29 @@ class Generation {
     }
 }
 
-function parseGeneration(branch: string): Generation {
-    const withoutSquash = branch.replace(/Squash$/, '');
-    const match = withoutSquash.match(GENERATION_RE);
-    if (match && match[1] !== '') {
-        return new Generation(match[1], parseInt(match[2], 10));
+@provideSingleton()
+@injectable()
+export class BranchNaming {
+    /** Stable base identity (remote / PR / feature-name slug source): trailing `Squash` and the
+     *  generation marker stripped. `base` → `base`, `basewp2` → `base`, `basewp2Squash` → `base`. */
+    baseBranchName(branch: string): string {
+        return this.parseGeneration(branch).base;
     }
-    return new Generation(withoutSquash, 1);
-}
 
-/** Stable base identity (remote / PR / feature-name slug source): trailing `Squash` and the
- *  generation marker stripped. `base` → `base`, `basewp2` → `base`, `basewp2Squash` → `base`. */
-export function baseBranchName(branch: string): string {
-    return parseGeneration(branch).base;
-}
+    /** Pre-merge snapshot name for slot `n`, ALWAYS numbered from 1: `<branch>PreMerge1`,
+     *  `<branch>PreMerge2`, … The same `n` also names the paired conflict-context folder
+     *  (`merge-info/<slug>/merge-<n>/`, see merge-state.mergeRunDirFor), so the branch and its context
+     *  share one number. Clean syncs delete their snapshot at finalize; only conflict syncs leave one. */
+    preMergeBackupName(branch: string, n: number): string {
+        return `${branch}PreMerge${n}`;
+    }
 
-/** Pre-merge snapshot name for slot `n`, ALWAYS numbered from 1: `<branch>PreMerge1`,
- *  `<branch>PreMerge2`, … The same `n` also names the paired conflict-context folder
- *  (`merge-info/<slug>/merge-<n>/`, see merge-state.mergeRunDirFor), so the branch and its context
- *  share one number. Clean syncs delete their snapshot at finalize; only conflict syncs leave one. */
-export function preMergeBackupName(branch: string, n: number): string {
-    return `${branch}PreMerge${n}`;
+    private parseGeneration(branch: string): Generation {
+        const withoutSquash = branch.replace(/Squash$/, '');
+        const match = withoutSquash.match(GENERATION_RE);
+        if (match && match[1] !== '') {
+            return new Generation(match[1], parseInt(match[2], 10));
+        }
+        return new Generation(withoutSquash, 1);
+    }
 }

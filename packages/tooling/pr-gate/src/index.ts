@@ -11,7 +11,6 @@ export {
     GateResult,
     DisableCounts,
     DashboardInput,
-    computeGateResults,
-    countAddedDisables,
-    renderDashboard,
+    Dashboard,
 } from './dashboard/dashboard';
+export { PrGateApp } from './scripts/pr-gate-app';

@@ -1,17 +1,19 @@
 import { execSync } from 'child_process';
-import { runMain } from '@webpieces/rules-config';
-import { baseBranchName } from './branch-naming';
+import { provideSingleton } from '@webpieces/core-context';
+import { injectable } from 'inversify';
+import { BranchNaming } from './branch-naming';
 
-// Stable feature identity used to key the merge-context dir and PR-body dir. It MUST stay constant
-// across a sync's transient `<feature>Squash` temp branch (and any leftover `…wpN` from the old
-// scheme), so derive it from baseBranchName (strips `Squash` + a legacy `wpN`) before slugifying.
-export function getFeatureName(): string {
-    const branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-    return baseBranchName(branch).replace(/\//g, '-');
+/** The stable feature identity used to key the merge-context + PR-body dirs. */
+@provideSingleton()
+@injectable()
+export class AiBranchName {
+    constructor(private readonly branchNaming: BranchNaming) {}
+
+    // Stable feature identity used to key the merge-context dir and PR-body dir. It MUST stay constant
+    // across a sync's transient `<feature>Squash` temp branch (and any leftover `…wpN` from the old
+    // scheme), so derive it from baseBranchName (strips `Squash` + a legacy `wpN`) before slugifying.
+    getFeatureName(): string {
+        const branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+        return this.branchNaming.baseBranchName(branch).replace(/\//g, '-');
+    }
 }
-
-export async function main(): Promise<void> {
-    process.stdout.write(getFeatureName() + '\n');
-}
-
-if (require.main === module) runMain(main);

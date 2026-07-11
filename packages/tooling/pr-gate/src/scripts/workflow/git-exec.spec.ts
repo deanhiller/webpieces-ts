@@ -3,7 +3,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
-import { uncommittedFiles, untrackedFiles, assertCleanTree, assertNoUntracked } from './git-exec';
+import { RepoRootFinder } from '@webpieces/rules-config';
+import { GitExec } from './git-exec';
+
+const git = new GitExec(new RepoRootFinder());
+const uncommittedFiles = (d: string): string => git.uncommittedFiles(d);
+const untrackedFiles = (d: string): string => git.untrackedFiles(d);
+const assertCleanTree = (d: string): void => git.assertCleanTree(d);
+const assertNoUntracked = (d: string): void => git.assertNoUntracked(d);
 
 // Build a throwaway git repo with one committed tracked file and a .gitignore. core.hooksPath=/dev/null
 // so the ambient webpieces hooks never fire on these scaffolding commits.

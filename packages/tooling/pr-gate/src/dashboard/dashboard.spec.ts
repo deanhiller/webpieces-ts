@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, ReviewJson } from '@webpieces/rules-config';
-import {
-    computeGateResults,
-    countAddedDisables,
-    renderDashboard,
-    DashboardInput,
-} from './dashboard';
+import { Dashboard, DashboardInput, GateResult, DisableCounts } from './dashboard';
+
+const dash = new Dashboard();
+const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
+const countAddedDisables = (p: string): DisableCounts => dash.countAddedDisables(p);
+const renderDashboard = (i: DashboardInput): string => dash.renderDashboard(i);
 
 function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
     const base = new ReviewJson('A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);

@@ -1,41 +1,14 @@
 #!/usr/bin/env node
-import { execSync } from 'child_process';
-import { CliExitError, runMain } from '@webpieces/rules-config';
-import { getFeatureName } from './workflow/git-readAiBranchName';
-import { mergeDirFor, readMergeMarker, findActiveMergeRunDir } from './workflow/merge-state';
-import { mergeEnd } from './workflow/merge-end';
-import { MergeContext } from './workflow/merge-start';
+import 'reflect-metadata';
+import { Container } from 'inversify';
+import { buildProviderModule } from '@inversifyjs/binding-decorators';
+import { runMain, RepoRootFinder } from '@webpieces/rules-config';
+import { PrGateApp } from './pr-gate-app';
 
-// wp-finish-update — finalize half of the 3-point squash-merge lifecycle. Run it AFTER `wp-start-update`
-// handed back conflicts and you resolved them. Given an in-progress merge marker it validates +
-// commits the AI's resolution (when the marker is not yet validated) and ALWAYS finalizes the branch
-// swap (squash→feature, push, stamp clean, clear marker). It does NOT run the build gate / dashboard
-// / PR — that is wp-finish-upsert-pr (the PR flow's finish). Refuses to run when there is no merge in
-// progress (a clean `wp-start-update` finalizes on its own — there is nothing left for this to do).
-
-export async function main(): Promise<void> {
-    const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-    const home = mergeDirFor(repoRoot, getFeatureName());
-
-    // The in-progress merge is the `merge-<n>/` run dir holding a marker.
-    const activeDir = findActiveMergeRunDir(home);
-    const marker = activeDir ? readMergeMarker(activeDir) : null;
-    if (!activeDir || !marker) {
-        throw new CliExitError(1,
-            '❌ No merge in progress (no marker) — nothing to finalize.\n' +
-            'Start one with:  pnpm wp-start-update  (a clean update finalizes itself).',
-        );
-    }
-
-    // Not yet validated => a conflict resolution the AI owns, so validate + commit it first; already
-    // validated => clean merge (or previously validated) => finalize only.
-    const conflictedFiles = marker.validated ? null : marker.conflictedFiles;
-    await mergeEnd(
-        repoRoot, 'wp-finish-update', activeDir,
-        new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
-        conflictedFiles,
-    );
-    process.stdout.write('\n✅ Merge finalized on ' + marker.currentBranch + '.\n');
-}
-
-if (require.main === module) runMain(main);
+// Composition root: build the container and resolve the app so inversify constructs the whole DAG.
+runMain(async (): Promise<void> => {
+    const container = new Container();
+    container.bind(RepoRootFinder).toConstantValue(new RepoRootFinder());
+    await container.load(buildProviderModule());
+    await container.get(PrGateApp).finishUpdate();
+});
