@@ -1,4 +1,4 @@
-import { NoProcessExitOutsideMainConfig, RULE_NAMES, writeTemplateIfMissing } from '@webpieces/rules-config';
+import { NoProcessExitOutsideMainConfig, RULE_NAMES, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -35,7 +35,7 @@ export class NoProcessExitOutsideMainRule extends EditRuleBase<NoProcessExitOuts
     get fixHint(): FixHint {
         return new FixHint(
             'process.exit() outside main()/runMain (or an import of another module\'s `main`) — a deep exit can crash a reused server or command far too early, and exit 0 masquerades as success.',
-            'READ .webpieces/instruct-ai/webpieces.noexitinmain.md, then:',
+            'READ the instruct-ai doc at the absolute path on the violation line above, then:',
             [
                 new Option('Throw a semantic error instead of exiting — RuleFailError for an expected failure, an ordinary Error for a bug/precondition — and let main()/runMain translate it to an exit code.', true),
                 new Option('A bin owns the single exit: `if (require.main === module) runMain(main)`. Need a specific code deep down? `throw new CliExitError(code, message)`.'),
@@ -56,7 +56,9 @@ export class NoProcessExitOutsideMainRule extends EditRuleBase<NoProcessExitOuts
             if (!isExit && !isImportMain) continue;
             const lineNum = i + 1;
             if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_PROCESS_EXIT_OUTSIDE_MAIN)) continue;
-            violations.push(new V(lineNum, ctx.lines[i]?.trim() ?? ''));
+            const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
+            violations.push(new V(lineNum, ctx.lines[i]?.trim() ?? '',
+                `A process exit outside main()/runMain. READ ${docPath} — throw a semantic error and let main pick the exit code.`));
         }
         if (violations.length > 0) writeTemplateIfMissing(ctx.workspaceRoot, INSTRUCT_FILE);
         return violations;

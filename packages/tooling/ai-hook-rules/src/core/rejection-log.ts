@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { RepoRootFinder } from '@webpieces/rules-config';
+
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 
 const HOOKS_DIR = '.webpieces/hooks';
@@ -19,16 +21,19 @@ export function logRejection(
 ): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
+        // `.webpieces/` lives at the repo root, NOT the AI's cwd — resolve it so a hook fired while
+        // the AI is in a subdirectory never scatters a stray `<subdir>/.webpieces/hooks` tree.
+        const root = new RepoRootFinder().resolveRepoRoot(cwd);
         const now = new Date();
         const timestamp = now.toISOString();
         const epochMs = String(now.getTime());
         const dateStr = timestamp.slice(0, 10);
 
-        const hooksDir = path.join(cwd, HOOKS_DIR);
+        const hooksDir = path.join(root, HOOKS_DIR);
         const dayDir = path.join(hooksDir, dateStr);
         fs.mkdirSync(dayDir, { recursive: true });
 
-        const relativePath = computeRelativePath(input.filePath, cwd);
+        const relativePath = computeRelativePath(input.filePath, root);
         const ruleNames = extractRuleNames(result.report);
         const detailFileName = `writeInfo-${epochMs}.md`;
         const detailRelPath = `${dateStr}/${detailFileName}`;

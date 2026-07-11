@@ -1,10 +1,10 @@
 import { spawnSync } from 'child_process';
-import { CliExitError } from '@webpieces/rules-config';
+import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-
-// The AI-facing doc the failure messages point at (generated under .webpieces/instruct-ai, gitignored).
-const GIT_WORKFLOW_DOC = '.webpieces/instruct-ai/webpieces.git-workflow.md';
+// The AI-facing doc the failure messages point at (generated under `.webpieces/instruct-ai`, at the
+// REPO ROOT — resolved absolute so the AI opens it regardless of the cwd it reads the message from).
+const GIT_WORKFLOW_DOC_NAME = 'webpieces.git-workflow.md';
 
 // Run a read-only git query from the repo root; abort if git itself errors. Kept `cwd`-explicit (not
 // process.cwd()) because `git ls-files --others` is scoped to the cwd subtree — running from a subdir
@@ -46,7 +46,7 @@ export function assertCleanTree(cwd: string): void {
         'changes, and either commit or delete any untracked files, then re-run.\n\n' +
         'Working tree (git status --porcelain):\n' +
         dirty + '\n\n' +
-        `See ${GIT_WORKFLOW_DOC} for the full merge + PR process.\n` +
+        `See ${new RepoRootFinder().docPathFrom(cwd, GIT_WORKFLOW_DOC_NAME)} for the full merge + PR process.\n` +
         SEP,
     );
 }
@@ -66,7 +66,7 @@ export function assertNoUntracked(cwd: string): void {
         'The tooling will not sweep untracked files into the squash commit. Commit\n' +
         'or delete these, then re-run:\n\n' +
         untracked + '\n\n' +
-        `See ${GIT_WORKFLOW_DOC} for the full merge + PR process.\n` +
+        `See ${new RepoRootFinder().docPathFrom(cwd, GIT_WORKFLOW_DOC_NAME)} for the full merge + PR process.\n` +
         SEP,
     );
 }

@@ -6,6 +6,7 @@ export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig } from './load-config';
 export { findConfigFile, CONFIG_FILENAME } from './config-file';
+export { RepoRootFinder, INSTRUCT_AI_DIR } from './repo-root';
 export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';

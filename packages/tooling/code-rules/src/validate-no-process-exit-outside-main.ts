@@ -21,7 +21,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES, NoProcessExitOutsideMainConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing } from '@webpieces/rules-config';
+import { hasDisable, RULE_NAMES, NoProcessExitOutsideMainConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 
@@ -41,7 +41,6 @@ Let the ONE top-level main()/runMain try-catch pick the exit code (non-zero on f
   if (require.main === module) runMain(main)
 Need a specific exit code deep down? throw new CliExitError(code, message) — runMain maps it.
 Also: do NOT import another module's main — call a named function; only a thin wrapper calls main.
-READ .webpieces/instruct-ai/webpieces.noexitinmain.md for the full pattern.
 Last resort: append // webpieces-disable no-process-exit-outside-main -- <reason> at a genuine terminal boundary.`;
 
 interface ExitViolation {
@@ -137,6 +136,7 @@ function reportViolations(workspaceRoot: string, violations: ExitViolation[], mo
     console.error('❌ process.exit() outside main()/runMain (or an import of another module\'s main)!');
     console.error('');
     console.error(SHARED_MESSAGE);
+    console.error(`READ ${new RepoRootFinder().instructAiDocPath(workspaceRoot, INSTRUCT_FILE)} for the full pattern.`);
     console.error('');
     for (const v of violations) {
         console.error(`  ❌ ${v.file}:${v.line}`);

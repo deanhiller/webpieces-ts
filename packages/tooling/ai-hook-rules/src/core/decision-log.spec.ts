@@ -13,8 +13,9 @@ function tmpRoot(): string {
 
 const LOG_REL = '.webpieces/hooks/guard-invocations.log';
 
-// The temp dirs are not git repos, so gitToplevelForLog falls back to cwd (the temp root) and
-// branchForLog returns 'unknown' — exactly the fail-open behavior we want to assert stays non-fatal.
+// The temp dirs are not git repos and have no webpieces.config.json, so resolveRepoRoot falls back to
+// the passed dir (the temp root) and branchForLog returns 'unknown' — exactly the fail-open behavior
+// we want to assert stays non-fatal.
 describe('logGuardInvocation', () => {
     it('appends one tab-separated line with tool, target, branch and sync=none when no cache exists', () => {
         const root = tmpRoot();

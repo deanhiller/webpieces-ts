@@ -9,10 +9,12 @@
  */
 
 import type { Rule } from 'eslint';
-import * as fs from 'fs';
-import * as path from 'path';
 import { writeTemplateIfMissing } from '@webpieces/rules-config';
 import { toError } from '../toError';
+import { EslintWorkspaceRoot } from '../workspace-root';
+
+const INSTRUCT_FILE = 'webpieces.filesize.md';
+const workspace = new EslintWorkspaceRoot();
 
 interface FileLinesOptions {
     max: number;
@@ -21,36 +23,12 @@ interface FileLinesOptions {
 // Module-level flag to prevent redundant file creation
 let fileDocCreated = false;
 
-function getWorkspaceRoot(context: Rule.RuleContext): string {
-    const filename = context.filename || context.getFilename();
-    let dir = path.dirname(filename);
-
-    // Walk up directory tree to find workspace root
-    while (dir !== path.dirname(dir)) {
-        const pkgPath = path.join(dir, 'package.json');
-        if (fs.existsSync(pkgPath)) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-                if (pkg.workspaces || pkg.name === 'webpieces-ts') {
-                    return dir;
-                }
-            } catch (err: unknown) {
-                //const error = toError(err);
-                void err; // Continue searching if JSON parse fails
-            }
-        }
-        dir = path.dirname(dir);
-    }
-    return process.cwd(); // Fallback
-}
-
 function ensureFileDoc(context: Rule.RuleContext): void {
     if (fileDocCreated) return;
-    const workspaceRoot = getWorkspaceRoot(context);
+    const workspaceRoot = workspace.workspaceRoot(context);
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        writeTemplateIfMissing(workspaceRoot, 'webpieces.filesize.md');
+        writeTemplateIfMissing(workspaceRoot, INSTRUCT_FILE);
         fileDocCreated = true;
     } catch (err: unknown) {
         const error = toError(err);
@@ -69,7 +47,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             tooLong:
-                'AI Agent: READ .webpieces/instruct-ai/webpieces.filesize.md for fix instructions. File has {{actual}} lines (max: {{max}})',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.filesize.md (at the repo root) for fix instructions. File has {{actual}} lines (max: {{max}})',
         },
         fixable: undefined,
         schema: [

@@ -5,6 +5,7 @@ import { logRejection } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog, logGuardInvocation } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
+import { RepoRootFinder } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
@@ -114,14 +115,18 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     // audit trail explains why a config edit on a bad branch was not blocked (see decision-log.ts).
     if (path.basename(input.filePath) === CONFIG_FILENAME) {
         if (mode !== 'rules') {
+            // `.webpieces/` (the decision log + sync cache these two calls write) lives at the repo
+            // root, not the AI's cwd — resolve it so a config edit from a subdir doesn't create a
+            // stray `<subdir>/.webpieces` tree.
+            const root = new RepoRootFinder().resolveRepoRoot(cwd);
             logGuardDecision(
-                cwd,
-                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(cwd), 'ALLOW', 'config-bypass (feature-branch-guard skipped)'),
+                root,
+                new GuardDecision('feature-branch-guard', toolKind, input.filePath, branchForLog(root), 'ALLOW', 'config-bypass (feature-branch-guard skipped)'),
             );
             // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
             // the cache directly, otherwise a session that only edits webpieces.config.json never
             // refreshes the sync status. Fire-and-forget; never blocks the edit.
-            triggerMainSyncRefresh(cwd);
+            triggerMainSyncRefresh(root);
         }
         emitAllow();
     }

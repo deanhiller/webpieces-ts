@@ -117,6 +117,9 @@ export function explicitRoleTag(tags: readonly string[]): string | null {
  * fallback keeps pre-retag designs identical).
  *
  *  - `server`       → Inversify, roots on `@DocumentDesign` (controller kind)
+ *  - `app`          → Inversify, roots on `@DocumentDesign` (controller kind) — a runnable
+ *                     (non-HTTP) application bootstrapped via `container.get(XxxApp)`, e.g. the
+ *                     tooling packages (AiRulesApp, RulesApp). Drawn exactly like a server.
  *  - `designed-lib` → Inversify, roots on `@DocumentDesign` (apiImplementation kind)
  *  - `client`       → Angular design for angular apps; otherwise skip
  *  - `lib`          → skip (plain libraries get no design)
@@ -129,6 +132,7 @@ export function selectAnalyzer(
     markers: FrameworkMarkers,
 ): DiAnalyzer {
     if (role === 'server') return new InversifyAnalyzer('controller');
+    if (role === 'app') return new InversifyAnalyzer('controller');
     if (role === 'designed-lib') return new InversifyAnalyzer('apiImplementation');
     if (role === 'client') return frameworks.includes('angular') ? new AngularAnalyzer() : new EmptyAnalyzer();
     if (role === 'lib') return new EmptyAnalyzer();

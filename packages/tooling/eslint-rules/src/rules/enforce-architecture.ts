@@ -14,8 +14,11 @@
 import type { Rule } from 'eslint';
 import * as fs from 'fs';
 import * as path from 'path';
-import { writeTemplateIfMissing } from '@webpieces/rules-config';
+import { writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
 import { toError } from '../toError';
+
+const INSTRUCT_FILE = 'webpieces.dependencies.md';
+const repoRootFinder = new RepoRootFinder();
 
 // Module-level flag to prevent redundant file creation
 let dependenciesDocCreated = false;
@@ -28,7 +31,7 @@ function ensureDependenciesDoc(workspaceRoot: string): void {
     if (dependenciesDocCreated) return;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        writeTemplateIfMissing(workspaceRoot, 'webpieces.dependencies.md');
+        writeTemplateIfMissing(workspaceRoot, INSTRUCT_FILE);
         dependenciesDocCreated = true;
     } catch (err: unknown) {
         void err;
@@ -62,32 +65,11 @@ let cachedGraphPath: string | null = null;
 let cachedProjectMappings: ProjectMapping[] | null = null;
 
 /**
- * Find workspace root by walking up from file location
+ * Repo root that owns `.webpieces/` AND `architecture/dependencies.json`, resolved from the file
+ * being linted. Anchored at the git/config root so a nested package resolves to the true root.
  */
 function findWorkspaceRoot(startPath: string): string {
-    let currentDir = path.dirname(startPath);
-
-    for (let i = 0; i < 20; i++) {
-        const packagePath = path.join(currentDir, 'package.json');
-        if (fs.existsSync(packagePath)) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
-                if (pkg.workspaces || pkg.name === 'webpieces-ts') {
-                    return currentDir;
-                }
-            } catch (err: unknown) {
-                //const error = toError(err);
-                void err;
-            }
-        }
-
-        const parent = path.dirname(currentDir);
-        if (parent === currentDir) break;
-        currentDir = parent;
-    }
-
-    return process.cwd();
+    return repoRootFinder.resolveRepoRoot(path.dirname(startPath));
 }
 
 /**
@@ -324,7 +306,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             illegalImport:
-                "⚠️ AI Agent: READ .webpieces/instruct-ai/webpieces.dependencies.md for resolution steps!\n\n" +
+                "⚠️ AI Agent: READ .webpieces/instruct-ai/webpieces.dependencies.md (at the repo root) for resolution steps!\n\n" +
                 "Import '{{imported}}' violates architecture boundaries.\n\n" +
                 "Project '{{project}}' (level {{level}}) can only import from:\n" +
                 '{{allowedList}}',
