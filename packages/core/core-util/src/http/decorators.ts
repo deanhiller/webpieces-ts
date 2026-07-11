@@ -58,7 +58,7 @@ export class RouteMetadata {
  */
 /**
  * JwtRequirement - the endpoint's JWT authorization requirement, OPAQUE to the framework. The
- * default AuthConfig.authorizeJwt enforces `roles` (any-of; empty = any authenticated user); apps
+ * default JwtHook.authorizeJwt enforces `roles` (any-of; empty = any authenticated user); apps
  * add their OWN fields (inOrg, tenant, feature, ...) via @Auth({...}) and override authorizeJwt to
  * enforce them. This is the pluggable seam: the framework authenticates, the app authorizes.
  */
@@ -231,8 +231,8 @@ export function AuthJwt(...roles: string[]): ClassDecorator & MethodDecorator {
 /**
  * @Auth(requirement) - user-facing JWT auth with an APP-DEFINED authorization requirement beyond
  * roles, e.g. `@Auth({ inOrg: true })` or `@Auth({ roles: ['admin'], tenantScoped: true })`. The
- * framework authenticates the JWT (AuthConfig.parseJwt), then hands `requirement` + the parsed
- * values to AuthConfig.authorizeJwt — which the app overrides to enforce its own policy. This is
+ * framework authenticates the JWT (JwtHook.parseJwt), then hands `requirement` + the parsed
+ * values to JwtHook.authorizeJwt — which the app overrides to enforce its own policy. This is
  * how clients plug in their own JWT security without touching the framework.
  */
 export function Auth(requirement: JwtRequirement): ClassDecorator & MethodDecorator {

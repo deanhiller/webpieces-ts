@@ -1,4 +1,4 @@
-import { ContextTuple, JwtRequirement, HttpForbiddenError } from '@webpieces/core-util';
+import { ContextTuple } from '@webpieces/core-util';
 
 /**
  * SharedSecrets - the accepted values for ONE `@AuthSharedSecret(name)`. BOTH secret1 AND secret2
@@ -18,7 +18,7 @@ export class SharedSecrets {
 }
 
 /**
- * AuthValues - what {@link AuthConfig.parseJwt} returns: the authenticated user's id + roles (used
+ * AuthValues - what {@link JwtHook.parseJwt} returns: the authenticated user's id + roles (used
  * by the framework to stamp a principal and enforce @AuthJwt(...roles)) plus any extra context
  * entries the app wants set (orgId, tenant, ...). The framework sets `entries` into RequestContext
  * via {@link RequestContext.putHeader}. Data-only structure (a class, per the guidelines).
@@ -34,52 +34,24 @@ export class AuthValues {
 }
 
 /**
- * AuthConfig - the ONE app-provided auth binding the framework {@link AuthFilter} injects to enforce
- * each endpoint's AuthMode. It is a single abstract class (injected by type, per no-symbol-di-tokens)
- * bound in the APP container and rebindable in tests. Each mechanism has its RIGHT shape:
+ * AuthConfig - the app-provided SHARED-SECRET state the framework {@link AuthFilter} reads to
+ * enforce `@AuthSharedSecret(name)` endpoints. It holds ONLY the accepted secret values (STATE) —
+ * there is no verification code here. The verification MECHANISMS are separate optional hooks the
+ * app binds when it needs them:
  *
- *  - `sharedSecrets`  — STATE: the expected secret VALUE per name (from `@AuthSharedSecret(name)`).
- *                       Prod fills it from env; a test binds `{ NAME: 'some-test-key' }` and can then
- *                       exercise the shared-secret path (and a negative test with a wrong key).
- *  - `parseJwt`       — PLUGIN: decode/verify a user JWT into {@link AuthValues} (userId, roles,
- *                       context entries). The app owns the VERIFICATION — it picks the JWT library
- *                       and strategy (a static HS256 secret, RS256 + JWKS with key rotation, or a
- *                       provider SDK like Firebase/Auth0/Cognito). Minting a JWT is a controller
- *                       concern (login), not here.
- *  - `verifyOidc`     — PLUGIN: verify a Google OIDC service-to-service token against the endpoint's
- *                       caller allow-list. Fully generic — the company base wires it to
- *                       @webpieces/gcp-identity once, so apps never customize OIDC.
+ *  - user JWT  → bind a {@link JwtHook} (parseJwt + authorizeJwt).
+ *  - OIDC      → bind an {@link OidcHook} to override the framework's default verifier; a server that
+ *                binds nothing still verifies Google OIDC via the built-in {@link DefaultOidcVerifier}.
  *
- * The framework owns the SEAM + policy (AuthMode dispatch, {@link authorizeJwt} roles, 401/403
- * translation), NOT the crypto — so http-routing needs NO jsonwebtoken / gcp-identity and never
- * locks apps to one JWT library. AuthFilter injects this `@optional`: a public-only server binds
- * none; a non-public route with no AuthConfig (or no value/plugin for its mode) fails fast.
+ * So a zero-wiring server accepts service-to-service OIDC out of the box, and an app only binds the
+ * pieces it actually uses. This class is injected `@optional` into AuthFilter (rebindable in tests);
+ * when unbound, shared-secret endpoints simply have no accepted secret and fail fast (401).
  */
-export abstract class AuthConfig {
-    /**
-     * Accepted shared-secret values keyed by the `@AuthSharedSecret(name)` name. STATE. Each entry
-     * is a {@link SharedSecrets} (secret1 + secret2, either accepted) so secrets can be ROTATED
-     * with zero dropped requests.
-     */
-    abstract readonly sharedSecrets: Record<string, SharedSecrets>;
+export class AuthConfig {
+    /** Accepted shared-secret values keyed by `@AuthSharedSecret(name)`. DEFAULT empty — pass to enable. */
+    readonly sharedSecrets: Record<string, SharedSecrets>;
 
-    /** Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw. */
-    abstract parseJwt(token: string): AuthValues;
-
-    /** Verify a Google OIDC token from an allowed caller (kind:'oidc'); throw on failure. */
-    abstract verifyOidc(token: string, callers: string[]): Promise<void>;
-
-    /**
-     * AUTHORIZATION: check the authenticated user against the endpoint's {@link JwtRequirement}.
-     * DEFAULT enforces `roles` (any-of; empty = any authenticated user). OVERRIDE to enforce
-     * app-defined requirements carried by `@Auth({...})` — e.g.
-     * `if (requirement['inOrg'] && !values.claims['orgId']) throw new HttpForbiddenError(...)`.
-     * Throw HttpForbiddenError to deny; return to allow. This is the pluggable seam.
-     */
-    authorizeJwt(values: AuthValues, requirement: JwtRequirement): void {
-        const roles = requirement.roles ?? [];
-        if (roles.length > 0 && !roles.some((role: string) => values.roles.includes(role))) {
-            throw new HttpForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
-        }
+    constructor(sharedSecrets: Record<string, SharedSecrets> = {}) {
+        this.sharedSecrets = sharedSecrets;
     }
 }
