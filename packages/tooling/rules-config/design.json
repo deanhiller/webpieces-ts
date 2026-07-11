@@ -25,6 +25,14 @@
                     "level": 1
                 },
                 {
+                    "id": "DiffScope",
+                    "className": "DiffScope",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/diff-scope.ts",
+                    "level": 1
+                },
+                {
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
@@ -67,6 +75,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/load-config.ts#ConfigLoader",
                     "paramName": "configLoader",
                     "paramType": "ConfigLoader"
+                },
+                {
+                    "from": "RulesConfigDesign",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
                 },
                 {
                     "from": "RulesConfigDesign",

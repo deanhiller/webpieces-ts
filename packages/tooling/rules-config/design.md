@@ -14,11 +14,13 @@ appears in each root's tree.
 graph TD
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
+    DiffScope["DiffScope"]
     RepoRootFinder["RepoRootFinder"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
     TemplateWriter["TemplateWriter"]
     ConfigLoader --> ConfigFile
     RulesConfigDesign --> ConfigLoader
+    RulesConfigDesign --> DiffScope
     RulesConfigDesign --> RepoRootFinder
     RulesConfigDesign --> TemplateWriter
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d

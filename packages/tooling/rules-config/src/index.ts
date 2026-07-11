@@ -37,6 +37,9 @@ export {
     findNewMethodSignaturesInDiff,
     hasChangesInRange,
     isNewOrModified,
+    DiffScope,
+    DiffRange,
+    ChangedFilesOptions,
 } from './diff-scope';
 export { AbstractRule } from './abstract-rule';
 export {
