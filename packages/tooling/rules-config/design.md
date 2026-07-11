@@ -8,13 +8,19 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## RulesConfigDesign — api-impl, Level 0…1
+## RulesConfigDesign — api-impl, Level 0…2
 
 ```mermaid
 graph TD
+    ConfigFile["ConfigFile"]
+    ConfigLoader["ConfigLoader"]
     RepoRootFinder["RepoRootFinder"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
+    TemplateWriter["TemplateWriter"]
+    ConfigLoader --> ConfigFile
+    RulesConfigDesign --> ConfigLoader
     RulesConfigDesign --> RepoRootFinder
+    RulesConfigDesign --> TemplateWriter
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37
