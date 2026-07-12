@@ -172,6 +172,15 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "CleanTmp",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
                     "from": "FinishUpdateCommand",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -197,6 +206,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "FinishUpdateCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -262,6 +280,15 @@
                     "paramType": "MergeState"
                 },
                 {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
                     "from": "ForkPoint",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -278,6 +305,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "ForkPoint",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "GatherInfo",
@@ -314,6 +350,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "GatherInfo",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "GitExec",
@@ -488,6 +533,15 @@
                 },
                 {
                     "from": "StartUpdateCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "StartUpdateCommand",
                     "to": "RunUpdate",
                     "injection": "type",
                     "token": "RunUpdate",
@@ -530,6 +584,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "StartUpsertPrCommand",

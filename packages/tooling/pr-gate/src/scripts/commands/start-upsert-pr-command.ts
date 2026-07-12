@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate, CliExitError } from '@webpieces/rules-config';
+import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -17,6 +17,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 @injectable()
 export class StartUpsertPrCommand {
     constructor(
+        private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly branchNaming: BranchNaming,
         private readonly buildAffected: BuildAffected,
@@ -25,7 +26,7 @@ export class StartUpsertPrCommand {
     ) {}
 
     async run(): Promise<void> {
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
 

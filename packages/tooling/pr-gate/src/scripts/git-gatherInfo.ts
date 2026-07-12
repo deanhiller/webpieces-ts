@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CliExitError } from '@webpieces/rules-config';
+import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from './workflow/git-readAiBranchName';
@@ -35,6 +35,7 @@ export class GatherInfoResult {
 @injectable()
 export class GatherInfo {
     constructor(
+        private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly forkPoint: ForkPoint,
         private readonly mergeState: MergeState,
@@ -46,7 +47,7 @@ export class GatherInfo {
     async gatherInfo(): Promise<GatherInfoResult> {
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
         const featureName = this.aiBranchName.getFeatureName();
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const mergeDir = this.mergeState.mergeDirFor(repoRoot, featureName);
         fs.mkdirSync(mergeDir, { recursive: true });
 

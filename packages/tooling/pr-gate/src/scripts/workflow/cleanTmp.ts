@@ -1,7 +1,6 @@
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_REVIEW_DIR } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_REVIEW_DIR, RepoRootFinder } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 
@@ -18,8 +17,10 @@ const LEGACY_PREFIXES = ['merge-', 'review-', 'pr-'];
 @provideSingleton()
 @injectable()
 export class CleanTmp {
+    constructor(private readonly repoRootFinder: RepoRootFinder) {}
+
     async cleanTmp(): Promise<void> {
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const tmpBase = path.join(repoRoot, WEBPIECES_TMP_DIR);
 
         if (!fs.existsSync(tmpBase)) {
