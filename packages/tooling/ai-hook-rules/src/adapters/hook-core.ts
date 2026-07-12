@@ -16,11 +16,18 @@ import { healShim } from '../bin/shim';
 // receive file AND bash payloads:
 //  - 'rules'  → code-style rules (file/edit scope). Bash payloads pass through (no code rules apply).
 //  - 'guards' → hookGuards section: bash git/PR guards on Bash AND file guards (feature-branch-guard)
-//               on Write/Edit. Matcher is Write|Edit|MultiEdit|Bash.
+//               on Write/Edit, PLUS a log-and-allow audit of Read. Matcher is Write|Edit|MultiEdit|Bash|Read.
 //  - 'all'    → both categories, used by the openclaw plugin adapter (a single before_tool_call hook).
 export type { HookMode };
 
 const HANDLED_FILE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
+
+// Read-only tools carry NO guard or code rule, but the guards hook owns the per-invocation audit log
+// (guard-invocations.log). When the guards matcher includes these (see setup.ts GUARDS_HOOK), a
+// log-and-allow fast path records every file the AI opens — so a human can later inspect whether it
+// read a project's design.json BEFORE editing the project. Never blocked. Scoped to Read for now;
+// widen (Grep/Glob/NotebookRead) later if desired.
+const READ_ONLY_TOOLS = new Set(['Read']);
 
 interface ClaudeCodePayload {
     tool_name: string;
@@ -98,6 +105,11 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     if (!command || command.trim() === '') { emitAllow(); }
     const result = runBash(command, cwd, mode);
     if (!result) { emitAllow(); }
+    // Persist the block + WHY. File-tool denies go to hook-rejection.log via logRejection, but a Bash
+    // deny had no audit trail — record it in guard-sync-decisions.log so "blocked and why" is complete
+    // for Bash too. `.webpieces` lives at the repo root, resolved from cwd. Best-effort; never blocks.
+    const root = new RepoRootFinder().resolveRepoRoot(cwd);
+    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', command ?? '', branchForLog(root), 'BLOCK', result.report));
     // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
     // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
     emitDeny(result.report, 'Bash');
@@ -163,6 +175,17 @@ export async function runMain(mode: HookMode): Promise<void> {
         // process.cwd(); they match today, but the payload is the authoritative signal and stays
         // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
         const cwd = payload.cwd ?? process.cwd();
+
+        // Read-only tools (Read): log-and-allow. Record the file the AI opened in guard-invocations.log
+        // (guards mode only — rules mode never writes the invocation log), then allow immediately,
+        // BEFORE healShim and the rule/guard engine. So a read is never blocked or slowed, yet the audit
+        // trail shows whether the AI read a project's design.json before editing it. See setup.ts.
+        if (READ_ONLY_TOOLS.has(payload.tool_name)) {
+            if (mode !== 'rules') {
+                logGuardInvocation(cwd, payload.tool_name, payload.tool_input.file_path ?? '');
+            }
+            emitAllow();
+        }
 
         // Keep the committed shim (.claude/webpieces/ai-hook.sh) identical to renderShim() so its
         // fail-closed escape hatch + installer allowlist never go stale — no human hand-edits it.

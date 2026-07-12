@@ -91,7 +91,7 @@ export async function runDevHookInstall(): Promise<void> {
                 hooks: [{ type: 'command', command: `node ${rulesHookPath}` }],
             },
             {
-                matcher: 'Write|Edit|MultiEdit|Bash',
+                matcher: 'Write|Edit|MultiEdit|Bash|Read',
                 hooks: [{ type: 'command', command: `node ${guardsHookPath}` }],
             },
         ],
