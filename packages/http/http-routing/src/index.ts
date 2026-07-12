@@ -73,6 +73,9 @@ export { RouteHandler } from './RouteHandler';
 // Filter matching
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
+// The app's server-surface declaration: DI binding modules + route groups + headers.
+export { AppModules, RouteModule } from './AppModules';
+
 // The public API-surface abstraction: declare routes/filters, get them back as ApiClient[].
 export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';

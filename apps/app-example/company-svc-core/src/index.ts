@@ -10,5 +10,7 @@
 export { bootstrapServer, setupCompanyRuntime } from './bootstrapServer';
 export { BootstrapOptions } from './BootstrapOptions';
 export { CompanySetupOptions } from './CompanySetupOptions';
+// Re-exported for app convenience: apps implement these to declare their server surface.
+export { AppModules, RouteModule } from '@webpieces/http-routing';
 export { CompanyAuthConfig } from './CompanyAuthConfig';
 export { CompanyJwtHook } from './CompanyJwtHook';

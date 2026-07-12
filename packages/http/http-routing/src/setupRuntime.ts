@@ -1,29 +1,28 @@
 import { ContainerModule } from 'inversify';
 import { ContextKey, HeaderRegistry, LoggerFactory, LogManager } from '@webpieces/core-util';
 import { WebpiecesConfig } from './WebpiecesConfig';
-import { WebpiecesRouter, WebpiecesRouterFactory } from './WebpiecesRouter';
+import { WebpiecesRouterFactory } from './WebpiecesRouter';
+import { AppModules } from './AppModules';
 import { ApiFactory } from './ApiFactory';
 
 /**
- * RuntimeSetupOptions - inputs to {@link setupRuntime}. Data-only structure (a class, per the
- * webpieces guidelines). A company/app layer supplies its own header tiers + logger + modules;
- * the framework runs the canonical startup sequence and hands back a transport-free ApiFactory.
+ * RuntimeSetupOptions - the environment/wiring inputs to {@link setupRuntime} (everything NOT
+ * declared by the app's {@link AppModules}): the logging backend, the company/platform header
+ * tiers, the test-override module, and config. Data-only structure (a class, per the webpieces
+ * guidelines). The app's own binding modules + route groups + headers come from the AppModules
+ * passed alongside.
  *
  * Header tiers mirror {@link HeaderRegistry.configure}: platform defaults + org/company keys +
- * this-service keys.
+ * this-service keys (the this-service keys are AppModules.getHeaders()).
  */
 export class RuntimeSetupOptions {
     constructor(
         /** Logging backend to install (LogManager.setFactory). */
         public readonly loggerFactory: LoggerFactory,
-        /** This service's own context keys. */
-        public readonly svrHeaders: ContextKey[] = [],
         /** Org/company-wide shared context keys (the company layer passes these in). */
         public readonly companyHeaders: ContextKey[] = [],
         /** Include the webpieces platform default headers. */
         public readonly platformHeaders: boolean = true,
-        /** App DI ContainerModules to load. */
-        public readonly modules: ContainerModule[] = [],
         /** A single DI module loaded LAST so tests can rebind bindings to mocks. */
         public readonly appOverrides?: ContainerModule,
         /** Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one. */
@@ -38,8 +37,8 @@ export class RuntimeSetupOptions {
  *
  *   1. HeaderRegistry.configure  (filters read it at construction; logging masks off it)
  *   2. LogManager.setFactory     (fails fast unless the registry is configured first)
- *   3. build the router + DI container
- *   4. run the caller's `configureRoutes(router)` block (addRoutes/addFilter)
+ *   3. build the router + DI container (from appModules.getBindingModules())
+ *   4. configure each appModules.getRoutingModules() onto the router (addRoutes/addFilter)
  *
  * and returns the built {@link ApiFactory} — `apiClients()` for a transport to bind, or
  * `createApiClient()` for in-process tests. There is NO express (or any transport) here; a
@@ -47,22 +46,24 @@ export class RuntimeSetupOptions {
  */
 export async function setupRuntime(
     options: RuntimeSetupOptions,
-    configureRoutes: (router: WebpiecesRouter) => void,
+    appModules: AppModules,
 ): Promise<ApiFactory> {
-    // 1. Register the global HeaderRegistry FIRST.
-    HeaderRegistry.configure(options.svrHeaders, options.companyHeaders, options.platformHeaders);
+    // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
+    HeaderRegistry.configure(appModules.getHeaders(), options.companyHeaders, options.platformHeaders);
 
     // 2. Install the logging backend ONCE, before anything else logs.
     LogManager.setFactory(options.loggerFactory);
 
     // 3. Build the node-only router + DI container.
     const router = await WebpiecesRouterFactory.create({
-        appBindings: [...options.modules],
+        appBindings: [...appModules.getBindingModules()],
         appOverrides: options.appOverrides,
         config: options.config ?? new WebpiecesConfig(),
     });
 
-    // 4. Let the caller declare its routes + filters, then hand back the consumer surface.
-    configureRoutes(router);
+    // 4. Let each route group declare its routes + filters, then hand back the consumer surface.
+    for (const routeModule of appModules.getRoutingModules()) {
+        routeModule.configure(router);
+    }
     return router;
 }
