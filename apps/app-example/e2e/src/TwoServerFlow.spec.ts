@@ -5,6 +5,7 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { AuthConfig, JwtHook } from '@webpieces/http-routing';
 import { SaveResponse } from '@webpieces/client-server-api';
+import { ClientRegistry } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
 import { Server2AppModules } from '../../server2/src/Server2AppModules';
@@ -35,8 +36,9 @@ let logLines: string[];
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 async function bootBothServers(): Promise<void> {
-    // client-server's InversifyModule reads SERVER2_URL for its outbound client
-    process.env['SERVER2_URL'] = `http://localhost:${server2Port}`;
+    // client-server's outbound Server2Api client resolves 'server2' via the local registry (off-GCP).
+    ClientRegistry.clear();
+    ClientRegistry.addUrlMapping('server2', `http://localhost:${server2Port}`);
 
     // One process, one global HeaderRegistry serving TWO servers. Build server2 FIRST (no
     // app-specific headers) and client-server LAST (it carries the header superset), so the
@@ -62,7 +64,7 @@ async function bootBothServers(): Promise<void> {
 
 async function stopBothServers(): Promise<void> {
     logSpy.mockRestore();
-    delete process.env['SERVER2_URL'];
+    ClientRegistry.clear();
     await new Promise<void>((resolve: () => void) => clientServerHttp.close(() => resolve()));
     await new Promise<void>((resolve: () => void) => server2Http.close(() => resolve()));
 }

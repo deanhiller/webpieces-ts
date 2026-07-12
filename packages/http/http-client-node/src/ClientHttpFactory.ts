@@ -23,8 +23,10 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * // same project + region as this container; the URL is derived, you maintain nothing
  * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
  *
- * // or point somewhere lookup cannot describe (other region/project, non-Cloud-Run)
- * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy', 'https://legacy.corp'));
+ * // to reach somewhere derivation cannot describe (other region/project, non-Cloud-Run, localhost),
+ * // register it once at startup — the client still carries only the svcName:
+ * //   ClientRegistry.addUrlMapping('legacy', 'https://legacy.corp');
+ * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy'));
  *
  * const response = await server2.fetchValue(req);   // inside a RequestContext
  * ```
@@ -50,7 +52,7 @@ export class ClientHttpFactory {
      * Create a type-safe RPC (HTTP) client for one API contract.
      *
      * @param apiPrototype - The API prototype class with @ApiPath/@Endpoint decorators
-     * @param config - This client's state (its svcName, and optionally an explicit targetUrl)
+     * @param config - This client's state (its svcName)
      */
     createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
         // Fresh instance per contract — NodeProxyClient is transient. init() binds it to this

@@ -3,9 +3,6 @@ import 'reflect-metadata';
 // Force gcp-metadata to report "not on GCP" instantly so these tests are hermetic
 // (no metadata-server probe / network). Must be set before the module is imported.
 process.env['METADATA_SERVER_DETECTION'] = 'none';
-// The callee's base URL is resolved from the service name via getCloudRunUrl, which
-// honours this override — this is exactly how a local multi-service run points at a port.
-process.env['CLOUD_RUN_URL_EMAIL_SVC'] = 'http://localhost:18299';
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
@@ -14,6 +11,7 @@ import {
     ContextKey,
     Endpoint,
     HeaderRegistry,
+    ClientRegistry,
     PubSub,
     Queue,
     WebpiecesCoreHeaders,
@@ -81,6 +79,10 @@ function clientFor(config: TaskClientConfig): EmailApi {
 
 beforeEach(() => {
     HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
+    // Off-GCP the callee's base URL is resolved from the service name via the local registry —
+    // this is exactly how a local multi-service run points a svcName at a port.
+    ClientRegistry.clear();
+    ClientRegistry.addUrlMapping('email-svc', 'http://localhost:18299');
     invoker = new CapturingTaskInvoker();
     emailTasks = clientFor(new TaskClientConfig('email-svc'));
     scheduler = new CloudTaskScheduler(invoker);
@@ -98,7 +100,7 @@ describe('TaskProxyClient enqueue', () => {
         });
 
         const request = invoker.captured!;
-        expect(request.targetUrl).toBe('http://localhost:18299'); // from CLOUD_RUN_URL_EMAIL_SVC
+        expect(request.targetUrl).toBe('http://localhost:18299'); // from ClientRegistry('email-svc')
         expect(request.path).toBe('/email/send');
         expect(request.queueName).toBe('email-send-queue'); // @Queue override, not EmailApi-sendEmail
         expect(request.authMode.kind).toBe('oidc');
@@ -148,15 +150,16 @@ describe('TaskProxyClient target resolution + request scope', () => {
         expect(invoker.captured).toBeUndefined();
     });
 
-    it('an explicit targetUrl wins over svcName lookup; svcName remains the logging name', async () => {
-        // Cross-region / cross-project / non-Cloud-Run target: you supply the URL, we do not look it up.
-        const pinned = clientFor(new TaskClientConfig('email-svc', 'https://email.other-region.example'));
+    it('a registered url mapping (cross-region / non-Cloud-Run) resolves the svcName', async () => {
+        // No per-client targetUrl anymore: an environment reaches a non-derivable host by registering
+        // the svcName's URL. Re-register 'email-svc' to a cross-region URL and it is used verbatim.
+        ClientRegistry.addUrlMapping('email-svc', 'https://email.other-region.example');
+        const pinned = clientFor(new TaskClientConfig('email-svc'));
 
         await RequestContext.run(async () => {
             await scheduler.addToQueue(() => pinned.sendEmail(new SendEmailRequest('a@b.com')));
         });
 
-        // NOT http://localhost:18299 (the CLOUD_RUN_URL_EMAIL_SVC override), and not a derived URL.
         expect(invoker.captured!.targetUrl).toBe('https://email.other-region.example');
     });
 });

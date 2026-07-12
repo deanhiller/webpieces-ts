@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { LogManager } from '@webpieces/core-util';
+import { LogManager, ClientRegistry } from '@webpieces/core-util';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { setupCompanyRuntime } from '@webpieces/company-svc-core';
 import { createLegacyExpressApp } from './LegacyServer';
@@ -16,6 +16,12 @@ import { LegacyAppModules } from './LegacyAppModules';
  */
 async function main(): Promise<void> {
     const log = LogManager.getLogger('LegacyServer');
+
+    // Local dev (no K_SERVICE): tell outbound clients where each peer service lives. On GCP the
+    // URL is derived from the Cloud Run service name, so no registration is needed there.
+    if (!process.env['K_SERVICE']) {
+        ClientRegistry.addMapping('server2', 8202);
+    }
 
     // 1. The pre-existing legacy app (its own routes) — webpieces never touches them.
     const app = createLegacyExpressApp();

@@ -16,8 +16,7 @@ export {
     getRegion,
     getRuntimeServiceAccountEmail,
     getSelfCloudRunUrl,
-    getCloudRunUrl,
-    resolveTargetUrl,
+    resolveServiceUrl,
     LOCAL_SERVICE_ACCOUNT_EMAIL,
 } from './urls';
 export { GcpOidc, OidcVerifyResult } from './oidc';

@@ -44,12 +44,12 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
 
     // PROD binding: Server2Api is a REAL HTTP client to the server2 service. Every client
     // ClientHttpFactory builds reads this server's RequestContext (magic context) and is backed
-    // by the Secrets above. 'server2' is the Cloud Run service name; this example pins an explicit
-    // targetUrl so it runs locally with no GCP. Tests rebind this token to the in-process simulator.
+    // by the Secrets above. 'server2' is the Cloud Run service name; on GCP the URL is derived from
+    // it, locally it is resolved via the ClientRegistry the server registers at startup
+    // (server.ts). Tests rebind this token to the in-process simulator.
     bind<Server2Api>(TYPES.Server2Api)
         .toDynamicValue((ctx: ResolutionContext) => {
-            const server2Url = process.env['SERVER2_URL'] ?? 'http://localhost:8202';
-            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2', server2Url));
+            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2'));
         })
         .inSingletonScope();
 });

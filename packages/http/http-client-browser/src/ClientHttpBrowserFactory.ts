@@ -21,7 +21,7 @@ import { MutableContextStore } from './MutableContextStore';
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
  *
- * const saveApi = factory.createRpcClient(SaveApi, new ClientConfig(env.apiBaseUrl));
+ * const saveApi = factory.createRpcClient(SaveApi, new ClientConfig('server'));
  * const response = await saveApi.save({ query: 'test' }); // type-safe
  *
  * // later, when the user logs in / picks a tenant — every subsequent call carries them:

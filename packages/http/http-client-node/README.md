@@ -9,12 +9,13 @@ const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'))
 const res = await server2.fetchValue(req);          // inside a RequestContext
 ```
 
-- `svcName` is TYPICALLY the GCP Cloud Run service name, and MUST be when you omit `targetUrl`:
-  we look your service up in the same project and region and form the URL from the container's own
-  metadata, so you maintain no URL table. That works across demo/qa/prod as long as each
-  environment has its own projectId, which is typical.
-- `targetUrl` overrides the lookup for another region, another project, or a non-Cloud-Run host.
-  `svcName` is then used only for logging.
+- `svcName` is TYPICALLY the GCP Cloud Run service name: on GCP we look your service up in the same
+  project and region and form the URL from the container's own metadata, so you maintain no URL
+  table. That works across demo/qa/prod as long as each environment has its own projectId.
+- Anything the derivation cannot describe — a localhost port, another region, another project, a
+  non-Cloud-Run host — is a `ClientRegistry` mapping registered at startup (per environment), NOT a
+  per-client URL: `ClientRegistry.addMapping(svcName, port)` or `addUrlMapping(svcName, url)`. A
+  registered mapping wins over the GCP derivation.
 
 `ClientHttpFactory` injects a `Provider<NodeProxyClient>` and calls `get()` per contract.
 `NodeProxyClient` is bound TRANSIENT, so each client gets its own — the provider caches nothing,

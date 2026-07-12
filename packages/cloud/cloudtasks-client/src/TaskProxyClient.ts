@@ -47,7 +47,7 @@ class EndpointPlan {
  *
  * It owns:
  * - @ApiPath / @PubSub convention validation + the endpoint plans from the contract's decorators
- * - Resolving the callee's base URL (from svcName, or the explicit targetUrl)
+ * - Resolving the callee's base URL from svcName (ClientRegistry override, else GCP derivation)
  * - Context propagation onto the task headers (a credential is never a context key, so none can ride along)
  * - Handing a fully-built TaskRequest to the bound {@link TaskInvoker}
  */
@@ -103,9 +103,9 @@ export class TaskProxyClient {
         }
 
         // Resolved lazily (not at client construction) so building a client stays synchronous.
-        // Every metadata read beneath resolveTargetUrl is memoized process-wide, so only the
+        // Every metadata read beneath resolveServiceUrl is memoized process-wide, so only the
         // first enqueue in the process pays a lookup.
-        const targetUrl = await this.config.resolveTargetUrl();
+        const targetUrl = await this.config.resolveUrl();
 
         const request = new TaskRequest(
             targetUrl,

@@ -9,7 +9,7 @@ import {
     toError,
 } from '@webpieces/core-util';
 import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
-import { GcpOidc, resolveTargetUrl } from '@webpieces/gcp-identity';
+import { GcpOidc, resolveServiceUrl } from '@webpieces/gcp-identity';
 import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 
@@ -46,10 +46,10 @@ export class NodeProxyClient extends ProxyClient {
 
     /**
      * Resolved per call, never at construction, so building a client stays synchronous. Every GCP
-     * metadata read beneath resolveTargetUrl is memoized process-wide, so only the first call pays.
+     * metadata read beneath resolveServiceUrl is memoized process-wide, so only the first call pays.
      */
     protected override resolveBaseUrl(): Promise<string> {
-        return resolveTargetUrl(this.config.svcName, this.config.targetUrl);
+        return resolveServiceUrl(this.config.svcName);
     }
 
     /** Straight from the RequestContext. Throws when there is no active request scope. */

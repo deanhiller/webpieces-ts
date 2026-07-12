@@ -10,7 +10,7 @@ Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — th
 
 ## Out of Scope
 
-- GCP identity/metadata/OIDC primitives, and deriving a Cloud Run URL from `svcName` (that is gcp-identity's `resolveTargetUrl`)
+- GCP identity/metadata/OIDC primitives, and resolving a service URL from `svcName` (that is gcp-identity's `resolveServiceUrl`)
 - Generic HTTP routing/server bootstrap (http-routing / http-server)
 - Server-side delivery pieces: the `ServiceAuthFilter` (@AuthOidc/@AuthSharedSecret enforcement) and any in-process route dispatch — a client library has NO server filters or routing machinery; those live in http-server
 - Synchronous RPC client generation (http-client)

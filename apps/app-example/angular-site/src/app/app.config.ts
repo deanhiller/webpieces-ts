@@ -4,6 +4,7 @@ import { routes } from './app.routes';
 import {
   ClientConfig,
   ClientHttpBrowserFactory,
+  ClientRegistry,
   MutableContextStore,
 } from '@webpieces/http-client-browser';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
@@ -19,7 +20,9 @@ import { SaveApi, PublicApi } from '@webpieces/client-server-api';
  * 2. ClientHttpBrowserFactory - reads the store through the SAME CompanyHeaders
  *    definitions the server registers (one source of truth in example-apis). No
  *    idTokenMinter and no Secrets: a browser cannot hold service credentials.
- * 3. ClientConfig - per-client state, i.e. just the base URL.
+ * 3. ClientConfig - per-client state: just the callee's svcName. A browser cannot read K_SERVICE to
+ *    derive a URL, so it resolves svcName through the ClientRegistry. We register the svcName -> URL
+ *    once (EnvironmentConfig.apiBaseUrl() already computes the right URL for localhost AND cloud).
  * 4. SaveApi / PublicApi - HTTP client proxies.
  *
  * Example - set the tenant after login and every subsequent call carries it:
@@ -51,11 +54,15 @@ export const appConfig: ApplicationConfig = {
       deps: [MutableContextStore]
     },
 
-    // Provide ClientConfig with the dynamic API URL
+    // Provide ClientConfig by svcName. A browser can't derive a GCP URL, so it resolves svcName via
+    // the ClientRegistry — register the svcName -> URL once (apiBaseUrl() already yields the right
+    // URL for localhost AND cloud).
     {
       provide: ClientConfig,
       useFactory: (envConfig: EnvironmentConfig) => {
-        return new ClientConfig(envConfig.apiBaseUrl());
+        const svcName = 'client-server';
+        ClientRegistry.addUrlMapping(svcName, envConfig.apiBaseUrl());
+        return new ClientConfig(svcName);
       },
       deps: [EnvironmentConfig]
     },

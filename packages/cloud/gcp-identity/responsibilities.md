@@ -5,7 +5,7 @@ GCP runtime identity for Node services: project/region/service-account metadata,
 ## In Scope
 
 - Metadata reads: project id, numeric project id, region, service name (`K_SERVICE`), runtime service-account email
-- Cloud Run URL derivation (`getSelfCloudRunUrl`, `getCloudRunUrl`)
+- Service URL resolution (`getSelfCloudRunUrl` for self; `resolveServiceUrl` — ClientRegistry override, else Cloud Run derivation)
 - OIDC mint/verify (`mintIdToken`, `verifyOidcFromCallers`), including `dev-oidc.*` tokens off-GCP
 - `isOnGcp()` detection with localhost/dev fallbacks for every value
 

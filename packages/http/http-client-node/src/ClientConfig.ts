@@ -5,28 +5,16 @@
  *
  * Collaborators (RequestContextHeaders, Secrets) are NOT config: they are dependencies of
  * {@link NodeProxyClient} and are shared by every client the factory builds. This is the RPC twin
- * of cloudtasks-client's TaskClientConfig, and takes the same two fields.
+ * of cloudtasks-client's TaskClientConfig, and takes the same single field.
  */
 export class ClientConfig {
     constructor(
         /**
-         * TYPICALLY the GCP Cloud Run service name — and it MUST be the Cloud Run service name
-         * when you do not supply a `targetUrl`, because we derive the URL from it.
-         *
-         * We lookup your service in the same project, same region, and form the url from the
-         * container information unless you pass in a targetUrl, so you do not have to maintain
-         * targetUrls. This works across your demo, qa, prod environments as long as each
-         * environment is in its own projectId, which is typical.
-         *
-         * When you DO supply a `targetUrl`, svcName is used only for logging, so any readable
-         * name works.
+         * The service name. On GCP the URL is DERIVED from it (same project, same region — the Cloud
+         * Run service name, so you maintain no URL table), which works across demo/qa/prod. Anything
+         * the derivation cannot describe — a localhost port, another region/project, a non-Cloud-Run
+         * host — is a `ClientRegistry` mapping registered at startup, NOT a per-client URL.
          */
         public readonly svcName: string,
-
-        /**
-         * Optional explicit base URL, for the cases lookup cannot describe: another region,
-         * another project, or a host that is not Cloud Run at all. It wins over `svcName`.
-         */
-        public readonly targetUrl?: string,
     ) {}
 }
