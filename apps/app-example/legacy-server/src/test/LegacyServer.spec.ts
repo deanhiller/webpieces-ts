@@ -8,12 +8,13 @@ import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Server2Api } from '@webpieces/server2-api';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
-import { buildLegacyApiFactory, LegacyApiFactoryOptions } from '../LegacyServer';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
+import { LegacyAppModules } from '../LegacyAppModules';
 
 /**
- * Contract-based integration test for the legacy-server example. It calls ONE method —
- * buildLegacyApiFactory (the SAME one the server main uses) — to get a node-only ApiFactory,
- * then drives the api CONTRACT through createApiClient. NO express, NO HTTP, NO ports: because
+ * Contract-based integration test for the legacy-server example. It builds the node-only
+ * ApiFactory from the SAME LegacyAppModules the server main uses (via setupCompanyRuntime), then
+ * drives the api CONTRACT through createApiClient. NO express, NO HTTP, NO ports: because
  * the tests speak the api contract, they are protocol-agnostic — the express embed is just one
  * binding (server.ts + the e2e HTTP test cover that). Proves the webpieces routes run the full
  * filter chain (priority + glob scoping + auth) off the legacy build path.
@@ -63,7 +64,7 @@ let apiFactory: ApiFactory;
 let recorder: FilterOrderRecorder;
 
 /**
- * Build the legacy webpieces API surface (the SAME buildLegacyApiFactory the server main calls),
+ * Build the legacy webpieces API surface from the SAME LegacyAppModules the server main uses,
  * rebinding Server2Api to the in-process simulator and adding two order-recording filters to
  * assert priority + glob scoping. Node-only — no express, no ports.
  */
@@ -78,11 +79,12 @@ async function bootLegacyApi(): Promise<void> {
         options.bind(ScopedOrderFilter).toConstantValue(new ScopedOrderFilter(recorder, 'scoped-save-only'));
     });
 
-    apiFactory = await buildLegacyApiFactory(
-        new LegacyApiFactoryOptions(undefined, appOverrides, [
+    apiFactory = await setupCompanyRuntime(
+        LegacyAppModules.create([
             new FilterDefinition(1500, GlobalOrderFilter, '*'),
             new FilterDefinition(1400, ScopedOrderFilter, '**/SaveController.ts'),
         ]),
+        new CompanySetupOptions(undefined, appOverrides),
     );
 }
 

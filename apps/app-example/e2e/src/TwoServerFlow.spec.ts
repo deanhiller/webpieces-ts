@@ -5,8 +5,9 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { AuthConfig, JwtHook } from '@webpieces/http-routing';
 import { SaveResponse } from '@webpieces/client-server-api';
-import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../../client-server/src/AppServerConfig';
-import { buildServer2ApiFactory } from '../../server2/src/Server2Config';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
+import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
+import { Server2AppModules } from '../../server2/src/Server2AppModules';
 import { TestAuthConfig, TestJwtHook } from '../../client-server/src/test/TestAuthConfig';
 
 /**
@@ -19,9 +20,10 @@ import { TestAuthConfig, TestJwtHook } from '../../client-server/src/test/TestAu
  *                      |  server's RequestContext -> outbound headers)
  *                      +--HTTP--> server2 :18202  (implements server2-api)
  *
- * Each server is built with its app-owned ApiFactory builder (buildXxxApiFactory — the SAME
- * one its own main + tests use) and served over an app-owned express via WebpiecesExpressRouter
- * (bindAndStartExpress) — the same production path, just with the test owning express.
+ * Each server is built from its app-owned AppModules (XxxAppModules.create() — the SAME
+ * declaration its own main + tests use) via setupCompanyRuntime, and served over an app-owned
+ * express via WebpiecesExpressRouter (bindAndStartExpress) — the same production path, just with
+ * the test owning express.
  *
  * Test ports 18200/18202 avoid clashing with dev servers on 8200/8202.
  */
@@ -39,7 +41,7 @@ async function bootBothServers(): Promise<void> {
     // One process, one global HeaderRegistry serving TWO servers. Build server2 FIRST (no
     // app-specific headers) and client-server LAST (it carries the header superset), so the
     // shared global registry ends configured as the UNION both servers need.
-    const server2ApiFactory = await buildServer2ApiFactory();
+    const server2ApiFactory = await setupCompanyRuntime(Server2AppModules.create());
     server2Http = await new WebpiecesExpressRouter(server2ApiFactory).bindAndStartExpress(express(), server2Port);
 
     // Rebind AuthConfig to the test stub so the request's bearer token passes the framework
@@ -48,7 +50,7 @@ async function bootBothServers(): Promise<void> {
         (await options.rebind(AuthConfig)).to(TestAuthConfig);
         (await options.rebind(JwtHook)).to(TestJwtHook);
     });
-    const clientApiFactory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, authOverride));
+    const clientApiFactory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
     clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(express(), clientServerPort);
 
     // Capture BOTH servers' log output (they share this test process)

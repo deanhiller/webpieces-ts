@@ -4,9 +4,10 @@
  * Data-only structure (a class, not an inline object literal, per the webpieces
  * guidelines) so each server constructs it explicitly: `new BootstrapOptions(8200, 'Server')`.
  *
- * The logging backend, DI modules, and context keys now live in the per-app
- * `buildXxxApiFactory` (via CompanySetupOptions), so the same declaration serves the
- * server and its tests; bootstrapServer only needs the transport-level port + log name.
+ * The DI modules, route groups, and context keys now live in the per-app `AppModules`
+ * (the same declaration the server and its tests build via `MyAppModules.create()`), and the
+ * logging backend / test overrides live in {@link CompanySetupOptions}; bootstrapServer only
+ * needs the transport-level port + log name.
  */
 export class BootstrapOptions {
     /**

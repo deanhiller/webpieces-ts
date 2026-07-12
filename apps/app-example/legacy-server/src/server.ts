@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 import { LogManager } from '@webpieces/core-util';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import { createLegacyExpressApp, buildLegacyApiFactory } from './LegacyServer';
+import { setupCompanyRuntime } from '@webpieces/company-svc-core';
+import { createLegacyExpressApp } from './LegacyServer';
+import { LegacyAppModules } from './LegacyAppModules';
 
 /**
  * Main entry point for the legacy-server example: a pre-existing express app (its own routes,
@@ -19,8 +21,8 @@ async function main(): Promise<void> {
     const app = createLegacyExpressApp();
 
     // 2. Build the webpieces API surface (headers → logging → routes/filters) — the SAME
-    //    method the integration test calls.
-    const apiFactory = await buildLegacyApiFactory();
+    //    AppModules + call the integration test uses.
+    const apiFactory = await setupCompanyRuntime(LegacyAppModules.create());
 
     // 3. Embed webpieces onto the legacy app (no app.use, no takeover); the legacy app owns listen.
     new WebpiecesExpressRouter(apiFactory).bindExpress(app);
