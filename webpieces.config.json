@@ -91,7 +91,15 @@
         },
         "role-tag": {
             "mode": "MODIFIED_PROJECTS",
-            "knownTypes": ["server", "app", "bundle", "designed-lib", "lib", "client", "api-lib"],
+            "knownTypes": [
+                "server",
+                "app",
+                "bundle",
+                "designed-lib",
+                "lib",
+                "client",
+                "api-lib"
+            ],
             "ignoreModifiedUntilEpoch": 0
         },
         "di-graph": {
@@ -110,7 +118,9 @@
         },
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
-            "allowedPaths": ["packages/tooling/nx-webpieces-rules/src/lib/*.client.js"],
+            "allowedPaths": [
+                "packages/tooling/nx-webpieces-rules/src/lib/*.client.js"
+            ],
             "ignoreModifiedUntilEpoch": 0
         },
         "no-function-outside-class": {
@@ -171,6 +181,14 @@
             "mode": "ON",
             "branchNamingConvention": "{whoami}/{featurename}",
             "hangTimeoutMinutes": 5,
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "pr-creation-or-push-guard": {
+            "mode": "OFF",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "pr-merge-guard": {
+            "mode": "OFF",
             "ignoreModifiedUntilEpoch": 0
         }
     },
