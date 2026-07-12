@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { prDirFor } from '@webpieces/rules-config';
+import { prDirFor, RepoRootFinder } from '@webpieces/rules-config';
 import { ForkPoint } from './git-findForkPoint';
 import { AiBranchName } from './git-readAiBranchName';
 import { BranchNaming } from './branch-naming';
 import { MergeState } from './merge-state';
 
 const mergeStateSvc = new MergeState();
-const forkPoint = new ForkPoint(new AiBranchName(new BranchNaming()), mergeStateSvc);
+const forkPoint = new ForkPoint(new RepoRootFinder(), new AiBranchName(new BranchNaming()), mergeStateSvc);
 const forkPointOutputDir = (r: string, f: string, w: string): string => forkPoint.forkPointOutputDir(r, f, w);
 const mergeDirFor = (r: string, f: string): string => mergeStateSvc.mergeDirFor(r, f);
 

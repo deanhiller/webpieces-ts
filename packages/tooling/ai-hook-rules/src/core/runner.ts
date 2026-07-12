@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 
-import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { loadRules, loadMatchRules, globMatches } from './load-rules';
@@ -138,7 +138,10 @@ function isInstallerCommand(command: string): boolean {
 
 function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
     if (isInstallerCommand(command)) {
-        const root = gitToplevel(cwd) ?? cwd;
+        // Anchor the audit-log write at the repo root that owns `.webpieces` (config-walk-up first,
+        // then git toplevel) so a bypass logged from a subdir/nested clone never scatters a stray
+        // `.webpieces` tree. This runs before loadAndValidate, so resolveRepoRoot (not workspaceRoot).
+        const root = new RepoRootFinder().resolveRepoRoot(cwd);
         logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'installer bypass (always allowed)'));
         return null;
     }

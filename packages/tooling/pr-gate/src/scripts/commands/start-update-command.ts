@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { writeTemplate, CliExitError } from '@webpieces/rules-config';
+import { writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { OpenPrCheck } from '../workflow/open-pr-check';
@@ -15,12 +15,13 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 @injectable()
 export class StartUpdateCommand {
     constructor(
+        private readonly repoRootFinder: RepoRootFinder,
         private readonly openPrCheck: OpenPrCheck,
         private readonly runUpdate: RunUpdate,
     ) {}
 
     async run(): Promise<void> {
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
 

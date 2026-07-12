@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { prDirFor, CliExitError } from '@webpieces/rules-config';
+import { prDirFor, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
@@ -14,6 +14,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 @injectable()
 export class ForkPoint {
     constructor(
+        private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly mergeState: MergeState,
     ) {}
@@ -37,7 +38,7 @@ export class ForkPoint {
 
         const featureName = this.aiBranchName.getFeatureName();
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
 
         const outputDir = this.forkPointOutputDir(repoRoot, featureName, workflow);
         const prefix = workflow === 'review' ? 'review-' : 'updatemain-';

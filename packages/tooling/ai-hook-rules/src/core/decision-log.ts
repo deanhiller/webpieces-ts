@@ -49,8 +49,10 @@ export class GuardDecision {
 
 /**
  * Append one tab-separated line per decision to `.webpieces/hooks/guard-sync-decisions.log`. `root` is
- * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or process.cwd() at
- * the pre-load config-bypass site). Swallows all errors — logging must never block or fail a hook.
+ * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or a
+ * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
+ * logged from a subdir never scatters a stray `.webpieces`). Swallows all errors — logging must never
+ * block or fail a hook.
  */
 export function logGuardDecision(root: string, decision: GuardDecision): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions

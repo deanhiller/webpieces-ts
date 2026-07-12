@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, writeTemplate,
+    loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, writeTemplate, RepoRootFinder,
 } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
@@ -25,6 +25,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 @injectable()
 export class FinishUpsertPrCommand {
     constructor(
+        private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly branchNaming: BranchNaming,
         private readonly gitExec: GitExec,
@@ -35,7 +36,7 @@ export class FinishUpsertPrCommand {
     ) {}
 
     async run(): Promise<void> {
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());

@@ -32,9 +32,11 @@ graph TD
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
     AiBranchName --> BranchNaming
+    CleanTmp --> RepoRootFinder
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
+    FinishUpdateCommand --> RepoRootFinder
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
@@ -42,12 +44,15 @@ graph TD
     FinishUpsertPrCommand --> GitExec
     FinishUpsertPrCommand --> MergeEnd
     FinishUpsertPrCommand --> MergeState
+    FinishUpsertPrCommand --> RepoRootFinder
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
+    ForkPoint --> RepoRootFinder
     GatherInfo --> AiBranchName
     GatherInfo --> ForkPoint
     GatherInfo --> GitExec
     GatherInfo --> MergeState
+    GatherInfo --> RepoRootFinder
     GitExec --> RepoRootFinder
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
@@ -67,11 +72,13 @@ graph TD
     RunUpdate --> MergeStart
     RunUpdate --> MergeState
     StartUpdateCommand --> OpenPrCheck
+    StartUpdateCommand --> RepoRootFinder
     StartUpdateCommand --> RunUpdate
     StartUpsertPrCommand --> AiBranchName
     StartUpsertPrCommand --> BranchNaming
     StartUpsertPrCommand --> BuildAffected
     StartUpsertPrCommand --> GitExec
+    StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e

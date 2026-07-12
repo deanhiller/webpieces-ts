@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CliExitError } from '@webpieces/rules-config';
+import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 
 // Mutable state the child_process mock reads. vi.hoisted so the factory can close over it. `ghStatus`
 // simulates gh's exit code (0 = answered; non-zero = couldn't reach GitHub → must fail fast).
@@ -17,7 +17,7 @@ import { OpenPrCheck } from './workflow/open-pr-check';
 import { BranchNaming } from './workflow/branch-naming';
 import type { RunUpdate } from './workflow/run-update';
 
-const cmd = new StartUpdateCommand(new OpenPrCheck(new BranchNaming()), {} as RunUpdate);
+const cmd = new StartUpdateCommand(new RepoRootFinder(), new OpenPrCheck(new BranchNaming()), {} as RunUpdate);
 const assertNoOpenPr = (repoRoot: string): void => cmd.assertNoOpenPr(repoRoot);
 
 describe('wp-start-update assertNoOpenPr (Bug #4: fail-fast when an open PR exists)', () => {

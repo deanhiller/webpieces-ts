@@ -1,5 +1,4 @@
-import { execSync } from 'child_process';
-import { CliExitError } from '@webpieces/rules-config';
+import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { provideSingleton } from '@webpieces/rules-config';
 import { injectable } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -15,13 +14,14 @@ import { MergeContext } from '../workflow/merge-start';
 @injectable()
 export class FinishUpdateCommand {
     constructor(
+        private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly mergeState: MergeState,
         private readonly mergeEnd: MergeEnd,
     ) {}
 
     async run(): Promise<void> {
-        const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
 
         // The in-progress merge is the `merge-<n>/` run dir holding a marker.

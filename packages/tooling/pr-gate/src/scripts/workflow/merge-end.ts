@@ -140,7 +140,7 @@ export class MergeEnd {
 
         // Branch now contains origin/main — stamp a clean main-sync status so the feature-branch-guard
         // unblocks edits immediately (no wait for the async refresher).
-        stampCleanMainSyncStatus(execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim());
+        stampCleanMainSyncStatus(repoRoot);
 
         // Clean sync → the pre-merge snapshot was never needed; delete it LAST. Conflict sync → keep it.
         const backupKept = hadConflict;
