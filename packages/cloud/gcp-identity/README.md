@@ -6,7 +6,8 @@ tests) every call falls back to a deterministic localhost value so no GCP is nee
 
 - `getProjectId()` / `getNumericProjectId()` / `getRegion()` — cached metadata lookups
 - `getServiceName()` — logical name from `K_SERVICE` (strips a `tf-` prefix), else `'local'`
-- `getSelfCloudRunUrl()` / `getCloudRunUrl(name)` — deterministic Cloud Run URLs
+- `getSelfCloudRunUrl()` — this service's own base URL
+- `resolveServiceUrl(svcName)` — the base URL to call svcName: a `ClientRegistry` override wins, else the Cloud Run URL is derived on GCP, else (off-GCP, unregistered) it throws
 - `getRuntimeServiceAccountEmail()` — the SA this process runs as
 - `mintIdToken(audience)` — Google-signed OIDC ID token (a `dev-oidc.*` token off-GCP)
 - `verifyOidcFromCallers(idToken, callers)` — verify + allow-list the caller SA

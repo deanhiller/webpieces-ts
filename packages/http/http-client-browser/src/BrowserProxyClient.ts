@@ -1,4 +1,4 @@
-import { AuthMeta, ContextMgr } from '@webpieces/core-util';
+import { AuthMeta, ContextMgr, ClientRegistry } from '@webpieces/core-util';
 import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 
@@ -26,7 +26,9 @@ export class BrowserProxyClient extends ProxyClient {
     }
 
     protected override resolveBaseUrl(): Promise<string> {
-        return Promise.resolve(this.config.baseUrl);
+        // A browser cannot derive a GCP URL, so it resolves purely via the registry, which the app
+        // populates at startup (per environment). lookup() throws if the svcName was not registered.
+        return Promise.resolve(ClientRegistry.lookup(this.config.svcName));
     }
 
     protected override outboundHeaders(): Map<string, string> {

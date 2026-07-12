@@ -73,13 +73,12 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // secrets.get(key). Nothing here calls an @AuthOidc endpoint; a client for one would mint
     // tokens via gcp-identity automatically.
     //
-    // 'server2' is the Cloud Run service name we'd resolve the URL from in a real deployment;
-    // this example pins an explicit targetUrl so it runs locally with no GCP.
+    // 'server2' is the Cloud Run service name. On GCP the URL is derived from it; locally it is
+    // resolved via the ClientRegistry, which the server registers at startup (server.ts).
     // Tests rebind this token to a mock/simulator.
     bind<Server2Api>(TYPES.Server2Api)
         .toDynamicValue((ctx: ResolutionContext) => {
-            const server2Url = process.env['SERVER2_URL'] ?? 'http://localhost:8202';
-            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2', server2Url));
+            return ctx.get(ClientHttpFactory).createRpcClient(Server2Api, new ClientConfig('server2'));
         })
         .inSingletonScope();
 });

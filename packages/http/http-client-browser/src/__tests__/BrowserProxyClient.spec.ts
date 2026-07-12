@@ -67,17 +67,17 @@ beforeEach(() => {
  */
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
     it('throws for an @AuthOidc contract', () => {
-        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('http://localhost:3000')))
+        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc')))
             .toThrow(/@AuthOidc — a browser cannot hold service credentials/);
     });
 
     it('throws for an @AuthSharedSecret contract', () => {
-        expect(() => factory.createRpcClient(SharedSecretApi, new ClientConfig('http://localhost:3000')))
+        expect(() => factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')))
             .toThrow(/@AuthSharedSecret — a browser cannot hold service credentials/);
     });
 
     it('accepts a @Public contract and binds its routes', () => {
-        const client = factory.createRpcClient(PublicApi, new ClientConfig('http://localhost:3000'));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
 
         // The Proxy resolves the declared endpoint...
         expect(typeof client.save).toBe('function');

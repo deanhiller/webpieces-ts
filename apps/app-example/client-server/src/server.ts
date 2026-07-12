@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ClientRegistry } from '@webpieces/core-util';
 import { bootstrapServer, BootstrapOptions } from '@webpieces/company-svc-core';
 import { ClientServerAppModules } from './ClientServerAppModules';
 
@@ -9,6 +10,11 @@ import { ClientServerAppModules } from './ClientServerAppModules';
  * server-surface declaration its integration tests build, so server and tests stay in sync.
  */
 async function main(): Promise<void> {
+    // Local dev (no K_SERVICE): tell outbound clients where each peer service lives. On GCP the
+    // URL is derived from the Cloud Run service name, so no registration is needed there.
+    if (!process.env['K_SERVICE']) {
+        ClientRegistry.addMapping('server2', 8202);
+    }
     await bootstrapServer(new BootstrapOptions(8200, 'Server'), ClientServerAppModules.create());
 }
 

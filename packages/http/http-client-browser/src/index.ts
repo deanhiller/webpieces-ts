@@ -17,7 +17,7 @@
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
  *
- * const client = factory.createRpcClient(SaveApi, new ClientConfig('http://localhost:3000'));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig('save-svc'));
  * const response = await client.save({ query: 'test' });
  * ```
  *
@@ -42,6 +42,7 @@ export {
     ContextReader,
     ContextKey,
     HeaderRegistry,
+    ClientRegistry,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 

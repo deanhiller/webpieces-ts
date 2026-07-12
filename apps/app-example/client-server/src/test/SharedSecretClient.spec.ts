@@ -4,7 +4,7 @@ import type { Server as HttpServer } from 'http';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { AuthConfig } from '@webpieces/http-routing';
-import { Secrets } from '@webpieces/core-util';
+import { Secrets, ClientRegistry } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
@@ -37,9 +37,13 @@ beforeAll(async () => {
     });
     const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
+    // The client resolves 'client-server' via the registry (off-GCP); point it at this test server.
+    ClientRegistry.clear();
+    ClientRegistry.addUrlMapping('client-server', `http://localhost:${PORT}`);
 });
 
 afterAll(async () => {
+    ClientRegistry.clear();
     await new Promise<void>((resolve: () => void) => httpServer.close(() => resolve()));
 });
 
@@ -54,7 +58,7 @@ function clientSending(value: string): SecureApi {
     // server started and configured the registry), never at module scope.
     const provider = new Provider(() => new NodeProxyClient(new RequestContextHeaders(), new GcpOidc(), secrets));
     const factory = new ClientHttpFactory(provider);
-    return factory.createRpcClient(SecureApi, new ClientConfig('client-server', `http://localhost:${PORT}`));
+    return factory.createRpcClient(SecureApi, new ClientConfig('client-server'));
 }
 
 describe('shared-secret over HTTP: client sends from Secrets, server accepts either', () => {

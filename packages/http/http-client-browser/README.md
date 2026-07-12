@@ -12,7 +12,7 @@ HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeader
 
 const store = new MutableContextStore();
 const factory = new ClientHttpBrowserFactory(store);
-const saveApi = factory.createRpcClient(SaveApi, new ClientConfig(env.apiBaseUrl));
+const saveApi = factory.createRpcClient(SaveApi, new ClientConfig('server'));
 
 const res = await saveApi.save({ query: 'test' });   // type-safe
 

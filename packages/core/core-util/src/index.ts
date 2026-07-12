@@ -109,6 +109,7 @@ export {
 
 // Context keys + registry (the global magic-context header system)
 export { HeaderRegistry } from './http/HeaderRegistry';
+export { ClientRegistry } from './http/ClientRegistry';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';
 export type { ContextRead } from './http/ContextReader';
