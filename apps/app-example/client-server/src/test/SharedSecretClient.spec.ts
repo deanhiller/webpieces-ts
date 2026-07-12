@@ -13,7 +13,8 @@ import {
     NodeProxyClient,
 } from '@webpieces/http-client-node';
 import { SecureApi } from '@webpieces/client-server-api';
-import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
+import { ClientServerAppModules } from '../ClientServerAppModules';
 import { TestAuthConfig } from './TestAuthConfig';
 
 /**
@@ -34,7 +35,7 @@ beforeAll(async () => {
     const authOverride = new ContainerModule(async (o: ContainerModuleLoadOptions) => {
         (await o.rebind(AuthConfig)).to(TestAuthConfig);
     });
-    const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, authOverride));
+    const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
 });
 

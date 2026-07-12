@@ -11,7 +11,8 @@ import { createMock } from '@webpieces/core-mock';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { SaveApi } from '@webpieces/client-server-api';
 import { Server2Api, FetchValueResponse, FetchValueRequest } from '@webpieces/server2-api';
-import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
+import { ClientServerAppModules } from '../ClientServerAppModules';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 
@@ -42,9 +43,10 @@ async function bootRecordingServer(): Promise<void> {
         (await options.rebind(AuthConfig)).to(TestAuthConfig);
         (await options.rebind(JwtHook)).to(TestJwtHook);
     });
-    // ONE call — the SAME builder the real server uses; only the recordable override + config differ.
-    router = await buildClientServerApiFactory(
-        new ClientServerApiFactoryOptions(undefined, appOverrides, config),
+    // ONE call — the SAME AppModules the real server uses; only the recordable override + config differ.
+    router = await setupCompanyRuntime(
+        ClientServerAppModules.create(),
+        new CompanySetupOptions(undefined, appOverrides, config),
     );
 }
 
@@ -117,7 +119,7 @@ describe('createMock replaces hand-rolled mocks', () => {
             (await options.rebind(AuthConfig)).to(TestAuthConfig);
             (await options.rebind(JwtHook)).to(TestJwtHook);
         });
-        router = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, appOverrides));
+        router = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
     });
 
     it('primes responses and asserts captured requests through the full filter chain', async () => {

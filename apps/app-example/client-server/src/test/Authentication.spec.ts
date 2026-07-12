@@ -7,7 +7,8 @@ import { HttpUnauthorizedError, HttpForbiddenError } from '@webpieces/core-util'
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { SecureApi } from '@webpieces/client-server-api';
 import { TestAuthConfig, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
-import { buildClientServerApiFactory, ClientServerApiFactoryOptions } from '../AppServerConfig';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
+import { ClientServerAppModules } from '../ClientServerAppModules';
 
 /**
  * Authentication.spec.ts — proves the framework AuthFilter enforces every non-public AuthMode
@@ -26,7 +27,7 @@ const TEST_JWT_SECRET = 'test-jwt-secret-for-authentication-spec';
 
 /** Build the app and return its SecureApi client, with the given container overrides. */
 async function secureClient(overrides: ContainerModule): Promise<SecureApi> {
-    const factory = await buildClientServerApiFactory(new ClientServerApiFactoryOptions(undefined, overrides));
+    const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, overrides));
     return factory.createApiClient<SecureApi>(SecureApi);
 }
 
