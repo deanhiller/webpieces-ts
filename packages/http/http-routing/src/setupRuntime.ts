@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { ContextKey, HeaderRegistry, LoggerFactory, LogManager } from '@webpieces/core-util';
+import { HeaderRegistry, LoggerFactory, LogManager } from '@webpieces/core-util';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
 import { AppModules } from './AppModules';
@@ -7,24 +7,20 @@ import { ApiFactory } from './ApiFactory';
 
 /**
  * RuntimeSetupOptions - the environment/wiring inputs to {@link setupRuntime} (everything NOT
- * declared by the app's {@link AppModules}): the logging backend, the company/platform header
- * tiers, the test-override module, and config. Data-only structure (a class, per the webpieces
- * guidelines). The app's own binding modules + route groups + headers come from the AppModules
- * passed alongside.
+ * declared by the app's {@link AppModules}): the logging backend, whether to include the platform
+ * default headers, and config. Data-only structure (a class, per the webpieces guidelines). The
+ * app's own binding modules + route groups + headers come from the AppModules passed alongside;
+ * the test-override module is the separate `appOverrides` param of {@link setupRuntime}.
  *
- * Header tiers mirror {@link HeaderRegistry.configure}: platform defaults + org/company keys +
- * this-service keys (the this-service keys are AppModules.getHeaders()).
+ * Headers: {@link HeaderRegistry.configure} registers the platform defaults (when
+ * `platformHeaders` is true) plus AppModules.getHeaders() (by convention the company-wide set).
  */
 export class RuntimeSetupOptions {
     constructor(
         /** Logging backend to install (LogManager.setFactory). */
         public readonly loggerFactory: LoggerFactory,
-        /** Org/company-wide shared context keys (the company layer passes these in). */
-        public readonly companyHeaders: ContextKey[] = [],
         /** Include the webpieces platform default headers. */
         public readonly platformHeaders: boolean = true,
-        /** A single DI module loaded LAST so tests can rebind bindings to mocks. */
-        public readonly appOverrides?: ContainerModule,
         /** Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one. */
         public readonly config?: WebpiecesConfig,
     ) {}
@@ -47,9 +43,12 @@ export class RuntimeSetupOptions {
 export async function setupRuntime(
     options: RuntimeSetupOptions,
     appModules: AppModules,
+    /** A single DI module loaded LAST so tests can rebind bindings to mocks.
+     * Or special case servers that want to override specific things */
+    appOverrides?: ContainerModule,
 ): Promise<ApiFactory> {
     // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
-    HeaderRegistry.configure(appModules.getHeaders(), options.companyHeaders, options.platformHeaders);
+    HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);
 
     // 2. Install the logging backend ONCE, before anything else logs.
     LogManager.setFactory(options.loggerFactory);
@@ -57,7 +56,7 @@ export async function setupRuntime(
     // 3. Build the node-only router + DI container.
     const router = await WebpiecesRouterFactory.create({
         appBindings: [...appModules.getBindingModules()],
-        appOverrides: options.appOverrides,
+        appOverrides: appOverrides,
         config: options.config ?? new WebpiecesConfig(),
     });
 

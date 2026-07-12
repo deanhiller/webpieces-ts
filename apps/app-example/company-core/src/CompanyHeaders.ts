@@ -4,13 +4,14 @@ import { ContextKey } from '@webpieces/core-util';
  * Company-wide context keys shared across all company applications.
  *
  * Lives in @webpieces/company-core (shared, browser-safe) - the company-wide
- * lib that ALL projects bring in. Passed to `HeaderRegistry.configure(...)` as the
- * `companyHeaders` argument on both server and browser.
+ * lib that ALL projects bring in. Each app returns these from its
+ * `AppModules.getHeaders()` (server) / passes them to `HeaderRegistry.configure(...)`
+ * (browser) — by convention the company-wide set every server registers.
  *
- * Second tier of the three-tier header system:
+ * Header layers:
  * 1. WebpiecesCoreHeaders (framework core keys, via platformHeaders=true)
  * 2. CompanyHeaders (company-wide keys) <- YOU ARE HERE
- * 3. AppHeaders (app-specific keys)
+ * 3. AppHeaders (app-specific keys, appended by the app to its getHeaders())
  */
 export class CompanyHeaders {
     /**

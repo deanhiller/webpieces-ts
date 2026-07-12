@@ -18,7 +18,7 @@ import { HeaderRegistry } from './HeaderRegistry';
  * Example usage:
  * ```typescript
  * // startup, before bootstrap:
- * HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeaders(), true);
+ * HeaderRegistry.configure(CompanyHeaders.getAllHeaders(), true);
  *
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);

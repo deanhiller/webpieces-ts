@@ -13,7 +13,7 @@ const LOCAL_ONLY = new ContextKey('localOnly'); // no httpHeader -> never transf
 
 /** Configure the global registry with the platform defaults + these test keys. */
 function configureRegistry(): void {
-    HeaderRegistry.configure([TENANT, AUTH, LOCAL_ONLY], [], /*platformHeaders*/ true);
+    HeaderRegistry.configure([TENANT, AUTH, LOCAL_ONLY], /*platformHeaders*/ true);
 }
 
 describe('ContextMgr.buildOutboundHeaders', () => {

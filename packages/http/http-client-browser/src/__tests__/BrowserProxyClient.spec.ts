@@ -56,7 +56,7 @@ const TENANT = new ContextKey('tenantId', 'x-tenant-id');
 let factory: ClientHttpBrowserFactory;
 
 beforeEach(() => {
-    HeaderRegistry.configure([TENANT], [], /*platformHeaders*/ true);
+    HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
     factory = new ClientHttpBrowserFactory(new MutableContextStore());
 });
 

@@ -2,32 +2,27 @@ import express from 'express';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { ApiFactory, AppModules, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
 import { toError, LogManager } from '@webpieces/core-util';
-import { CompanyHeaders } from '@webpieces/company-core';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
 
 /**
  * setupCompanyRuntime - the thin COMPANY wrapper over the framework {@link setupRuntime}. It
- * supplies the org-wide {@link CompanyHeaders} (the one company-specific input) and forwards the
- * app's {@link AppModules} (binding modules + route groups + headers) plus the environment options,
- * so the whole canonical sequence (headers → logging → router → the app's route groups →
- * {@link ApiFactory}) lives in the framework and is reused verbatim. Every company express service +
- * its tests call this with the app's `MyAppModules.create()`; tests pass their own
- * {@link CompanySetupOptions} (logger / appOverrides), else identical to prod.
+ * forwards the app's {@link AppModules} (binding modules + route groups + headers) plus the
+ * environment options, so the whole canonical sequence (headers → logging → router → the app's
+ * route groups → {@link ApiFactory}) lives in the framework and is reused verbatim. The app's
+ * `getHeaders()` returns the company-wide key set (there is no separate company-header tier
+ * anymore). Every company express service + its tests call this with the app's
+ * `MyAppModules.create()`; tests pass their own {@link CompanySetupOptions} (logger / appOverrides),
+ * else identical to prod.
  */
 export async function setupCompanyRuntime(
     appModules: AppModules,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
     return setupRuntime(
-        new RuntimeSetupOptions(
-            options.loggerFactory,
-            CompanyHeaders.getAllHeaders(),
-            /*platformHeaders*/ true,
-            options.appOverrides,
-            options.config,
-        ),
+        new RuntimeSetupOptions(options.loggerFactory, /*platformHeaders*/ true, options.config),
         appModules,
+        options.appOverrides,
     );
 }
 

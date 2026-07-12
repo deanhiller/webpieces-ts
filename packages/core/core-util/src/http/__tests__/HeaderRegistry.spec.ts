@@ -3,12 +3,11 @@ import { ContextKey } from '../../ContextKey';
 import { HeaderRegistry } from '../HeaderRegistry';
 
 /**
- * Configure the GLOBAL registry from a flat set of server keys (no company keys,
- * no platform defaults) and return it. Each test fully re-configures, so the global
- * singleton is deterministic per test.
+ * Configure the GLOBAL registry from a flat set of keys (no platform defaults) and return it.
+ * Each test fully re-configures, so the global singleton is deterministic per test.
  */
 function configureWith(...keys: ContextKey[]): HeaderRegistry {
-    HeaderRegistry.configure(keys, [], /*platformHeaders*/ false);
+    HeaderRegistry.configure(keys, /*platformHeaders*/ false);
     return HeaderRegistry.get();
 }
 
@@ -20,16 +19,15 @@ describe('HeaderRegistry.configure + queries', () => {
         }
     });
 
-    it('configure() merges platform defaults + company + server, in that order', () => {
+    it('configure() merges platform defaults + the provided keys', () => {
         HeaderRegistry.configure(
-            [new ContextKey('clientType', 'x-client-type')],
-            [new ContextKey('tenantId', 'x-tenant-id')],
+            [new ContextKey('clientType', 'x-client-type'), new ContextKey('tenantId', 'x-tenant-id')],
             /*platformHeaders*/ true,
         );
         const names = HeaderRegistry.get().getKeys().map(k => k.name);
         expect(names).toContain('requestId');   // from DEFAULT_HEADERS
-        expect(names).toContain('tenantId');    // company
-        expect(names).toContain('clientType');  // server
+        expect(names).toContain('tenantId');    // provided
+        expect(names).toContain('clientType');  // provided
         expect(HeaderRegistry.isConfigured()).toBe(true);
     });
 

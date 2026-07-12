@@ -55,6 +55,7 @@ export interface AppModules {
     getBindingModules(): ContainerModule[];
     /** The route groups to configure onto the router, in order. */
     getRoutingModules(): RouteModule[];
-    /** This app's own context keys, registered into the global HeaderRegistry at startup. */
+    /** This company's own context keys(usually all keys across all servers),
+     * registered into the global HeaderRegistry at startup. */
     getHeaders(): ContextKey[];
 }
