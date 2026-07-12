@@ -5,6 +5,11 @@ import * as gcpMetadata from 'gcp-metadata';
  * process (the metadata server is stable for the life of the instance). Off-GCP
  * `isOnGcp()` is false and the callers fall back to localhost values, so nothing
  * here is ever reached in local dev / tests.
+ *
+ * `isOnGcp()` is decided from the `K_SERVICE` env var (which Cloud Run always sets),
+ * NOT a metadata network probe — so local dev never blocks on the ~3s
+ * `gcpMetadata.isAvailable()` timeout. Every caller (project id, region, Cloud Run URL
+ * resolution, OIDC minting, Cloud Tasks) short-circuits through this one gate.
  */
 
 let cachedOnGcp: Promise<boolean> | undefined;
@@ -13,10 +18,17 @@ let cachedNumericProjectId: Promise<string> | undefined;
 let cachedRegion: Promise<string> | undefined;
 let cachedSaEmail: Promise<string> | undefined;
 
-/** True when running on GCP (Cloud Run / GCE) with a reachable metadata server. */
+/**
+ * True when running on GCP Cloud Run. Gated on `K_SERVICE` (set by Cloud Run) so local dev does NO
+ * metadata network probe. For non-Cloud-Run GCP (GCE / Cloud Functions, which don't set `K_SERVICE`),
+ * set `METADATA_SERVER_DETECTION=assume-present` to force on-GCP behavior.
+ */
 export function isOnGcp(): Promise<boolean> {
     if (!cachedOnGcp) {
-        cachedOnGcp = gcpMetadata.isAvailable();
+        const onGcp =
+            process.env['K_SERVICE'] !== undefined ||
+            process.env['METADATA_SERVER_DETECTION'] === 'assume-present';
+        cachedOnGcp = Promise.resolve(onGcp);
     }
     return cachedOnGcp;
 }
