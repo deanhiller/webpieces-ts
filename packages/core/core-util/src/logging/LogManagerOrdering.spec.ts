@@ -17,7 +17,7 @@ describe('LogManager ↔ HeaderRegistry ordering', () => {
     });
 
     it('setFactory succeeds once the registry is configured', () => {
-        HeaderRegistry.configure([], [], /*platformHeaders*/ true);
+        HeaderRegistry.configure([], /*platformHeaders*/ true);
         expect(() => LogManager.setFactory(new ConsoleLoggerFactory())).not.toThrow();
     });
 });

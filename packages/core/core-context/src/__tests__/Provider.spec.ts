@@ -118,7 +118,7 @@ describe('RequestContext scope invariants', () => {
     });
 
     it('fillFromRequest() THROWS outside a scope — the mirror image', () => {
-        HeaderRegistry.configure([], [], /*platformHeaders*/ true);
+        HeaderRegistry.configure([], /*platformHeaders*/ true);
         const headers = new RequestContextHeaders();
 
         expect(() => headers.fillFromRequest(new HttpRequest('POST', '/x', new Map())))

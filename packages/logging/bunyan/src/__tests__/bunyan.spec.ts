@@ -40,7 +40,7 @@ class BunyanHarness {
 }
 
 beforeAll(() => {
-    HeaderRegistry.configure([REQUEST_ID, AUTH_TOKEN], [], /*platformHeaders*/ false);
+    HeaderRegistry.configure([REQUEST_ID, AUTH_TOKEN], /*platformHeaders*/ false);
 });
 
 async function flush(): Promise<void> {

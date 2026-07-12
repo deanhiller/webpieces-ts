@@ -80,7 +80,7 @@ function clientFor(config: TaskClientConfig): EmailApi {
 }
 
 beforeEach(() => {
-    HeaderRegistry.configure([TENANT], [], /*platformHeaders*/ true);
+    HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
     invoker = new CapturingTaskInvoker();
     emailTasks = clientFor(new TaskClientConfig('email-svc'));
     scheduler = new CloudTaskScheduler(invoker);

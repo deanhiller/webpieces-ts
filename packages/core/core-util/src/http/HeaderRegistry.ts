@@ -12,11 +12,11 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  *
  * ```ts
  * // startup (server AND browser), BEFORE LogManager.setFactory(...):
- * HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeaders(), true);
+ * HeaderRegistry.configure(CompanyHeaders.getAllHeaders(), true);
  * ```
  *
- * - `svrHeaders`      this server's own keys.
- * - `companyHeaders`  keys from a shared company lib all services use.
+ * - `svrHeaders`      the context keys this process registers — by convention the whole
+ *                     company-wide set (all keys across all servers), e.g. CompanyHeaders.
  * - `platformHeaders` when true, also include {@link HeaderRegistry.DEFAULT_HEADERS}
  *                     (the webpieces common keys: request-id, correlation-id, ...).
  *
@@ -60,10 +60,10 @@ export class HeaderRegistry {
      * Install the process-wide registry. Call once at startup, BEFORE
      * LogManager.setFactory(...) (logging masks/keys off this registry).
      */
-    static configure(svrHeaders: ContextKey[], companyHeaders: ContextKey[], platformHeaders: boolean): void {
+    // webpieces-disable no-function-outside-class -- HeaderRegistry is a deliberately static global singleton (like LogManager); configured once at startup, never DI-injected
+    static configure(svrHeaders: ContextKey[], platformHeaders: boolean): void {
         const all: ContextKey[] = [
             ...(platformHeaders ? HeaderRegistry.DEFAULT_HEADERS : []),
-            ...companyHeaders,
             ...svrHeaders,
         ];
         HeaderRegistry.instance = new HeaderRegistry(all);
