@@ -37,9 +37,11 @@ openclaw plugins enable @webpieces/ai-hook-rules
 `settings.json`, each invoked via the project's `./node_modules/.bin/`:
 
 - `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit`. Runs the code-style rules.
-- `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash`. Runs the git/PR/branch guards
+- `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash|Read`. Runs the git/PR/branch guards
   (`hookGuards` section): bash git/PR guards on `Bash`, and file guards like
-  `feature-branch-guard` on `Write|Edit|MultiEdit`.
+  `feature-branch-guard` on `Write|Edit|MultiEdit`. `Read` carries no guard — it is a
+  log-and-allow fast path that records every file the AI opens in `.webpieces/hooks/guard-invocations.log`
+  (never blocked), so you can see whether the AI read a project's `design.json` before editing it.
 
 For each hook the setup command prompts for a target: project `.claude/settings.json`,
 personal `.claude/settings.local.json`, the global `~/.claude/settings.json` (this-repo-only),

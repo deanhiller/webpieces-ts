@@ -5,13 +5,14 @@ import * as path from 'path';
 
 import { writeMainSyncStatus, MainSyncStatus } from '@webpieces/rules-config';
 
-import { logGuardInvocation } from './decision-log';
+import { logGuardInvocation, logGuardDecision, GuardDecision } from './decision-log';
 
 function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guardinv-'));
 }
 
 const LOG_REL = '.webpieces/hooks/guard-invocations.log';
+const DECISION_LOG_REL = '.webpieces/hooks/guard-sync-decisions.log';
 
 // The temp dirs are not git repos and have no webpieces.config.json, so resolveRepoRoot falls back to
 // the passed dir (the temp root) and branchForLog returns 'unknown' — exactly the fail-open behavior
@@ -59,5 +60,33 @@ describe('logGuardInvocation', () => {
         logGuardInvocation(root, 'Bash', 'ls');
         expect(fs.existsSync(path.join(hooksDir, 'guard-invocations.1.log'))).toBe(true);
         expect(fs.readFileSync(path.join(hooksDir, 'guard-invocations.log'), 'utf8')).toContain('\tBash\t');
+    });
+
+    // The read-only fast path (hook-core.ts) logs a Read via this same function, so the file the AI
+    // opened lands in guard-invocations.log — this is the "did it read design.json first?" signal.
+    it('records a Read of a design.json so opened files are visible in the history', () => {
+        const root = tmpRoot();
+        logGuardInvocation(root, 'Read', 'packages/tooling/pr-gate/design.json');
+        const content = fs.readFileSync(path.join(root, LOG_REL), 'utf8');
+        expect(content).toContain('\tRead\t');
+        expect(content).toContain('packages/tooling/pr-gate/design.json');
+    });
+});
+
+// logGuardDecision backs the blocked-Bash audit (hook-core.ts handleBash) — previously a denied Bash
+// left no trail. A BLOCK line must carry the tool, the command, and the reason ("blocked and why").
+describe('logGuardDecision', () => {
+    it('records a Bash BLOCK with its command and reason', () => {
+        const root = tmpRoot();
+        logGuardDecision(
+            root,
+            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK', 'use pnpm wp-start-upsert-pr instead'),
+        );
+        const content = fs.readFileSync(path.join(root, DECISION_LOG_REL), 'utf8');
+        expect(content).toContain('\tBLOCK\t');
+        expect(content).toContain('\tBash\t');
+        expect(content).toContain('gh pr create');
+        expect(content).toContain('use pnpm wp-start-upsert-pr instead');
+        expect(content.trim().split('\n').length).toBe(1);
     });
 });
