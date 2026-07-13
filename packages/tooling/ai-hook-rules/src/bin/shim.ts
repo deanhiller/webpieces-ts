@@ -243,7 +243,12 @@ ${DENY_EMIT_SH}
 // Claude Code exports to hooks) only if the walk finds nothing. cwd-first keeps this correct for a
 // nested clone and testable (a temp root is honoured over the ambient project env). Returns null when
 // no committed shim exists (e.g. a global / absolute install, which has none to heal).
-function findShimRoot(cwd: string): string | null {
+//
+// Exported for install-entry.ts: on a CORRUPT node_modules, healShim is the only installer step that
+// can still run, so the installer must be able to tell the human whether a committed shim was actually
+// there to re-arm. Pure existsSync walk — never throws, so it needs no try/catch of its own.
+// webpieces-disable no-function-outside-class -- pure fs+path helper in the dependency-free shim module; it must not depend on DI (install-entry.ts relies on this loading on a corrupt tree).
+export function findShimRoot(cwd: string): string | null {
     let dir = cwd;
     for (;;) {
         if (fs.existsSync(shimPath(dir))) return dir;

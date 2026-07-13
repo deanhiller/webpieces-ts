@@ -119,7 +119,8 @@
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
             "allowedPaths": [
-                "packages/tooling/nx-webpieces-rules/src/lib/*.client.js"
+                "packages/tooling/nx-webpieces-rules/src/lib/*.client.js",
+                "packages/tooling/ai-hook-rules/bin/*.js"
             ],
             "ignoreModifiedUntilEpoch": 0
         },
