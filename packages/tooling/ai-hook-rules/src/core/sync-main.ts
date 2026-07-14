@@ -1,5 +1,6 @@
 import {
     DEFAULT_HANG_TIMEOUT_MINUTES,
+    MergedBranchesService,
     computeMainSyncStatus,
     writeMainSyncStatus,
     writeMainSyncLock,
@@ -46,10 +47,18 @@ export function main(): void {
         try {
             const status = computeMainSyncStatus(repoRoot);
             writeMainSyncStatus(repoRoot, status);
+
+            // Second slow signal, same lock, same detached run: which local branches are dead. One bulk
+            // `gh pr list --state merged` call. The branch-creation-guard reads the result to enforce its
+            // cap without ever touching the network itself. Deliberately allowed to go stale.
+            const mergedBranches = new MergedBranchesService();
+            const cache = mergedBranches.computeMergedBranches(repoRoot);
+            mergedBranches.writeMergedBranches(repoRoot, cache);
+
             // FINISH after a successful write — START-without-FINISH means we were killed mid-run.
             logSyncEvent(repoRoot, new SyncLogEvent(
                 'FINISH', process.pid, status.branch,
-                `merged=${String(status.branchAlreadyMerged)} mergedPr=${status.mergedPr} forkPoint=${String(status.hasForkPoint)} conflict=${String(status.conflict)} ms=${String(Date.now() - startedMs)}`,
+                `merged=${String(status.branchAlreadyMerged)} mergedPr=${status.mergedPr} forkPoint=${String(status.hasForkPoint)} conflict=${String(status.conflict)} deletableBranches=${String(cache.deletable.length)} ms=${String(Date.now() - startedMs)}`,
             ));
         } finally {
             // Always flip the lock off so a compute failure can't wedge the guard until the
