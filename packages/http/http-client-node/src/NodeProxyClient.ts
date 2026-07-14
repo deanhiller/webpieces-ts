@@ -1,6 +1,7 @@
 import { inject, injectable, optional } from 'inversify';
 import {
     AuthMeta,
+    ClientRegistry,
     RecordedEndpoint,
     RecordedError,
     RouteMetadata,
@@ -9,7 +10,7 @@ import {
     toError,
 } from '@webpieces/core-util';
 import { RequestContext, RequestContextHeaders, provideFrameworkTransient } from '@webpieces/core-context';
-import { GcpOidc, resolveServiceUrl } from '@webpieces/gcp-identity';
+import { GcpOidc } from '@webpieces/gcp-identity';
 import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 
@@ -45,11 +46,15 @@ export class NodeProxyClient extends ProxyClient {
     }
 
     /**
-     * Resolved per call, never at construction, so building a client stays synchronous. Every GCP
-     * metadata read beneath resolveServiceUrl is memoized process-wide, so only the first call pays.
+     * The same chain every client runs — a ClientRegistry mapping, else the installed deriver — but
+     * with NODE's fallback: THROW. A server has no "own origin" to fall back to the way a browser
+     * does, so an unresolvable peer is a setup bug and must fail loudly (the error names the fixes).
+     *
+     * Resolved per call, never at construction, so building a client stays synchronous. Any metadata
+     * read beneath a deriver is memoized process-wide, so only the first call pays.
      */
     protected override resolveBaseUrl(): Promise<string> {
-        return resolveServiceUrl(this.config.svcName);
+        return ClientRegistry.resolve(this.config.svcName);
     }
 
     /** Straight from the RequestContext. Throws when there is no active request scope. */

@@ -12,7 +12,7 @@ The server-side HTTP client: generates type-safe clients from the SAME API contr
 ## Out of Scope
 
 - The decorator-reading engine, the Proxy trap, and error translation → `http-client-core`
-- Deriving a Cloud Run URL from a service name, and minting OIDC tokens → `gcp-identity` (`resolveServiceUrl`, `mintIdToken`)
+- Resolving `svcName` → base URL → `ClientRegistry.resolve` in core-util (mapping, else the installed deriver, else throw). The GCP deriver and OIDC minting → `gcp-identity` (`gcpCloudRunDeriver`, `mintIdToken`)
 - Reading/propagating the magic context → `RequestContextHeaders` in `core-context`
 - Enqueuing fire-and-forget work → `cloudtasks-client`, its structural twin
 - Server-side routing to controllers → `http-routing`
