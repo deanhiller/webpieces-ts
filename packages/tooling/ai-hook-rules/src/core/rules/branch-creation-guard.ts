@@ -1,6 +1,11 @@
 import { execSync } from 'child_process';
 
-import { BranchCreationGuardConfig } from '@webpieces/rules-config';
+import {
+    BranchCreationGuardConfig,
+    DeletableBranch,
+    MergedBranchesCache,
+    MergedBranchesService,
+} from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -14,10 +19,19 @@ const DEFAULT_BRANCH_FORMAT =
     'Name it {whoami}/<short-feature-description> — lowercase, no version numbers, no sub/ prefix (e.g. dean/upgrade-webpieces)';
 const DEFAULT_SUB_BRANCH_NAMING = 'feature/<ticket>/<short-description>';
 
+// Hard cap on local feature branches. Enforced at CREATION because that is the one moment cleanup is
+// both cheap and obviously worth it — reaping happens over time, never "ASAP".
+const DEFAULT_MAX_LOCAL_BRANCHES = 5;
+
+// A plausible git ref name. Deliberately NOT `[^\s-]` — that class matches shell metacharacters, so
+// `git branch | wc -l` (a read-only LISTING, piped) was parsed as "create a branch named `|`" and
+// blocked. Cleanup work necessarily reads and deletes branches, so a listing must never trip this.
+const REF_NAME = String.raw`[A-Za-z0-9][A-Za-z0-9_./-]*`;
+
 const BRANCH_PATTERNS: RegExp[] = [
-    /git\s+checkout\s+-[bB]\s+([^\s]+)/,
-    /git\s+switch\s+-[cC]\s+([^\s]+)/,
-    /git\s+branch\s+(?!-[dDmMrRla])([^\s-][^\s]*)/,
+    new RegExp(String.raw`git\s+checkout\s+-[bB]\s+(${REF_NAME})`),
+    new RegExp(String.raw`git\s+switch\s+-[cC]\s+(${REF_NAME})`),
+    new RegExp(String.raw`git\s+branch\s+(?!-)(${REF_NAME})`),
 ];
 
 // A trailing `wp<number>` was the old squash-merge generation marker (base → basewp2 → basewp3).
@@ -30,7 +44,18 @@ const RESERVED_GENERATION_SUFFIX = /wp\d+$/;
 // origin/main`). This is exactly the fresh-main base the guard wants, and it works from ANY current
 // branch or linked worktree — main need not (and in a worktree cannot) be checked out here. Allowed
 // unconditionally so the recovery messages can safely tell you to run it from a worktree.
-const ORIGIN_MAIN_BASE = /git\s+(?:checkout\s+-[bB]|switch\s+-[cC])\s+\S+\s+origin\/main(?:\s|$)/;
+//
+// The trailing check is `\W|$`, not `\s|$`: the ALLOW pattern must not be stricter about delimiters
+// than the BLOCK pattern above, or a `git checkout -b x origin/main` that ends at a quote or backtick
+// is seen as a branch creation but NOT as an origin/main one — recognised, then wrongly blocked.
+const ORIGIN_MAIN_BASE = /git\s+(?:checkout\s+-[bB]|switch\s+-[cC])\s+\S+\s+origin\/main(?:\W|$)/;
+
+// Heredoc bodies: `<<EOF … \nEOF` / `<<-'EOF' … \nEOF`. Their content is DATA (a commit message, a
+// file being written), never a command.
+const HEREDOC_BODY = /<<-?\s*(['"]?)(\w+)\1[\s\S]*?^\t*\2\s*$/gm;
+
+// A single- or double-quoted span.
+const QUOTED_SPAN = /'([^']*)'|"([^"]*)"/g;
 
 function extractBranchName(command: string): string | null {
     for (const pattern of BRANCH_PATTERNS) {
@@ -68,11 +93,20 @@ function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly 
 export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardConfig> {
     constructor(config: BranchCreationGuardConfig) { super(config, 'branch-creation-guard'); }
 
-    readonly description = 'Block new-branch creation when main is stale, or when branching off a non-main branch.';
+    readonly description =
+        'Block new-branch creation when main is stale, when branching off a non-main branch, ' +
+        'or when the local branch count is at its cap (forces cleanup of already-merged branches).';
     override readonly defaultOptions = {
         subBranchNaming: DEFAULT_SUB_BRANCH_NAMING,
         branchFormat: DEFAULT_BRANCH_FORMAT,
+        maxLocalBranches: DEFAULT_MAX_LOCAL_BRANCHES,
     };
+
+    private readonly mergedBranches = new MergedBranchesService();
+
+    // Set by check() when (and only when) the cap is what blocked, so fixHint can render the reap
+    // instructions instead of the branch-naming ones. Same instance-field handoff pr-merge-guard uses.
+    private capCache: MergedBranchesCache | null = null;
 
     private get branchFormat(): string {
         return this.config.branchFormat ?? DEFAULT_BRANCH_FORMAT;
@@ -82,10 +116,16 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         return this.config.subBranchNaming ?? DEFAULT_SUB_BRANCH_NAMING;
     }
 
+    private get maxLocalBranches(): number {
+        return this.config.maxLocalBranches ?? DEFAULT_MAX_LOCAL_BRANCHES;
+    }
+
     // Mode-aware fix hints. Branches off main follow branchFormat — never the sub-branch
     // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
     // hard-blocks it and points instead at the ignoreModifiedUntilEpoch escape hatch.
     get fixHint(): FixHint {
+        if (this.capCache) return this.capFixHint(this.capCache);
+
         const options = [
             new Option("Create it off fresh main from anywhere (incl. a worktree): git fetch origin main && git checkout -b <name> origin/main", true),
             new Option(`Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`),
@@ -107,8 +147,35 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         );
     }
 
+    /**
+     * Strip the parts of a shell command that are DATA rather than executable commands, so the guard
+     * stops reading prose as instructions.
+     *
+     * This guard regex-scans the raw command string and has no notion of quoting, so
+     * `git commit -m "... git checkout -b foo ..."` — or any heredoc commit message that mentions a
+     * branch command — was parsed as an actual branch creation and blocked. That bit three separate
+     * times while building the branch cap, including on the cap's own commit. It matters far more now
+     * that the cap check runs BEFORE the origin/main allow: at the cap, a merely-MENTIONED branch
+     * command would block your commit.
+     *
+     * A quoted span whose content has no whitespace is kept verbatim (it is a single token — the name
+     * in `git checkout -b "dean/foo"`), so quoting a branch name cannot smuggle a creation past the
+     * guard. Anything with whitespace inside quotes is prose, and collapses to a space.
+     */
+    private stripNonCommandText(command: string): string {
+        const withoutHeredocs = command.replace(HEREDOC_BODY, ' ');
+        return withoutHeredocs.replace(QUOTED_SPAN, (match: string, single?: string, double?: string): string => {
+            const content = single ?? double ?? '';
+            return /\s/.test(content) ? ' ' : content;
+        });
+    }
+
     check(ctx: BashContext): readonly Violation[] {
-        const requestedName = extractBranchName(ctx.command);
+        this.capCache = null;
+        // Match against the command with heredoc bodies and prose-in-quotes removed. A commit message
+        // that merely MENTIONS a branch command is not a branch command.
+        const command = this.stripNonCommandText(ctx.command);
+        const requestedName = extractBranchName(command);
         if (!requestedName) return [];
 
         if (RESERVED_GENERATION_SUFFIX.test(requestedName)) {
@@ -121,10 +188,15 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             )];
         }
 
+        // The cap is checked BEFORE the origin/main allow below — `git checkout -b <name> origin/main`
+        // is the normal, always-permitted path, so a cap check placed after it would never once fire.
+        const capViolation = this.checkBranchCap(ctx);
+        if (capViolation) return [capViolation];
+
         // Explicitly basing off origin/main is always allowed — it creates the branch from fresh main
         // regardless of the current branch, and is the ONLY way that also works inside a linked worktree
         // (where `git checkout main` fatals). Reserved-name check above still applies.
-        if (ORIGIN_MAIN_BASE.test(ctx.command)) return [];
+        if (ORIGIN_MAIN_BASE.test(command)) return [];
 
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,
@@ -156,5 +228,77 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             `If you truly need a stacked sub-branch (requires human approval), name it per ` +
             `branch-creation-guard.subBranchNaming ('${this.subBranchNaming}').`,
         )];
+    }
+
+    /**
+     * The cap. Blocks branch #N+1 until already-merged branches are reaped, which is the ONLY thing
+     * keeping the local branch list bounded.
+     *
+     * Fails OPEN when the cache is absent (fresh clone, `gh` unavailable, refresher hasn't run yet):
+     * never block on data we don't have. The detached refresher regenerates it within one hook call,
+     * so the cap starts enforcing on its own.
+     */
+    private checkBranchCap(ctx: BashContext): Violation | null {
+        const count = this.mergedBranches.localBranches(ctx.workspaceRoot).length;
+        if (count < this.maxLocalBranches) return null;
+
+        const cache = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
+        if (!cache) return null;
+
+        this.capCache = cache;
+        const reapable = cache.deletable.length;
+        const detail = reapable > 0
+            ? `${String(reapable)} of them are dead (merged, or holding no commits) and can be deleted right now.`
+            : 'None of them are dead, so none can be auto-reaped — see the options below.';
+
+        return new V(
+            1,
+            truncate(ctx.command),
+            `You have ${String(count)} local branches; the cap (branch-creation-guard.maxLocalBranches) ` +
+            `is ${String(this.maxLocalBranches)}. ${detail} Clean up before creating another.`,
+        );
+    }
+
+    /**
+     * The reap instructions. `deletable` is PRECOMPUTED in the cache, and every entry earned its place
+     * by one of exactly two proofs: a MERGED PR (the work is in main), or zero commits of its own
+     * (there is no work). Deleting the list cannot lose anything — so just run the command.
+     *
+     * The wording must not overstate that: the list is NOT uniformly "merged PR" branches, and a
+     * message that tells an agent to run `git branch -D` has to be exactly true about why that's safe.
+     */
+    private capFixHint(cache: MergedBranchesCache): FixHint {
+        const options: Option[] = [];
+
+        if (cache.deletable.length > 0) {
+            const names = cache.deletable.map((entry: DeletableBranch): string => entry.branch);
+            options.push(new Option(
+                `Delete these ${String(names.length)} dead branches — each is either backed by a MERGED PR ` +
+                `or has no commits of its own, so no work can be lost (see merged-branches.json for the ` +
+                `per-branch reason): git branch -D ${names.join(' ')}`,
+                true,
+            ));
+        }
+
+        options.push(new Option(
+            'If you genuinely need more branches in flight, raise branch-creation-guard.maxLocalBranches ' +
+            'in webpieces.config.json.',
+        ));
+        options.push(new Option(
+            'To bypass this once, set branch-creation-guard.ignoreModifiedUntilEpoch (a future epoch) ' +
+            'in webpieces.config.json.',
+        ));
+
+        const kept = cache.keep.length > 0
+            ? ` ${String(cache.keep.length)} unmerged branch(es) with real commits were deliberately SPARED — ` +
+              'do not delete those; a human decides.'
+            : '';
+
+        return new FixHint(
+            'Too many local branches — reap the dead ones before creating another.',
+            'Full detail (deletable + spared, with per-branch reasons) is in .webpieces/merged-branches.json, ' +
+            `refreshed ${cache.timestamp || 'never'}.${kept} Pick one:`,
+            options,
+        );
     }
 }

@@ -365,11 +365,17 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     // Human-sentence instruction telling the AI how to name a NEW branch off main. Surfaced back
     // to the agent in the guard's fix hints. May mirror no-edit-on-main.branchNamingConvention.
     branchFormat?: string;
+    // Hard cap on local feature branches (excluding main). Creating one past the cap is BLOCKED until
+    // already-merged branches are reaped, which is what keeps the branch list from growing without
+    // bound. Branch creation is the gate because it is the only moment cleanup is both cheap and
+    // obviously worth it. See merged-branches.ts for how "already merged" is determined.
+    maxLocalBranches?: number;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
         mode: new FieldDef('string', BRANCH_GUARD_MODES),
         subBranchNaming: FieldDef.optional('string'),
         branchFormat: FieldDef.optional('string'),
+        maxLocalBranches: FieldDef.optional('number'),
         ...BASE_RULE_SCHEMA,
     };
 }

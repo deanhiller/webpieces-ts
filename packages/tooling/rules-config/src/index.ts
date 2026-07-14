@@ -153,6 +153,12 @@ export {
     stampCleanMainSyncStatus,
     squashRecoverySteps,
 } from './main-sync-status';
+export {
+    MergedBranch,
+    DeletableBranch,
+    MergedBranchesCache,
+    MergedBranchesService,
+} from './merged-branches';
 export type { MutationVerb, MutationPhase } from './branch-mutation-log';
 export {
     BranchMutationEvent,
