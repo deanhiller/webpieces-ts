@@ -1,5 +1,5 @@
 import { Express } from 'express';
-import { ApiFactory, ApiClient, getApiPath, getEndpoints } from '@webpieces/http-routing';
+import { ApiFactory, ApiClient, getApiPath, getEndpoints, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 
@@ -50,14 +50,21 @@ export class WebpiecesExpressRouter {
     }
 
     /**
-     * Add the webpieces global middleware (HTML error page, localhost CORS, request logging),
-     * bind the routes, then app.listen(port). Convenience for a non-legacy webpieces server
-     * where webpieces owns the whole express app. Resolves with the http.Server once listening.
+     * Add the webpieces global middleware (HTML error page, CORS, request logging), bind the routes,
+     * then app.listen(port). Convenience for a non-legacy webpieces server where webpieces owns the
+     * whole express app. Resolves with the http.Server once listening.
+     *
+     * Pass `config` to allow cross-origin browsers beyond the always-allowed set (the server's own
+     * origin + localhost:*) — see {@link WebpiecesMiddleware.corsMiddleware}.
      */
-    async bindAndStartExpress(app: Express, port: number = 8080): Promise<HttpServer> {
+    async bindAndStartExpress(
+        app: Express,
+        port: number = 8080,
+        config?: WebpiecesConfig,
+    ): Promise<HttpServer> {
         // Global middleware layers (outermost first) — only for a webpieces-owned app.
         app.use(this.middleware.globalErrorHandler.bind(this.middleware));
-        app.use(this.middleware.corsForLocalhost());
+        app.use(this.middleware.corsMiddleware(config));
         app.use(this.middleware.logNextLayer.bind(this.middleware));
 
         this.bindExpress(app);

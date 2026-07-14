@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
 import { injectable } from 'inversify';
-import { provideFrameworkSingleton } from '@webpieces/http-routing';
+import { provideFrameworkSingleton, WebpiecesConfig } from '@webpieces/http-routing';
 import {
     ProtocolError,
     HttpError,
@@ -303,39 +303,86 @@ export class WebpiecesMiddleware {
     }
 
     /**
-     * CORS middleware for localhost development.
-     * Only enables CORS when request origin is localhost:*.
+     * CORS middleware.
      *
-     * Wide open for all headers/methods in dev mode.
-     * Non-localhost origins are blocked.
+     * Allows, in order: a request with NO Origin (curl, server-to-server, a CLI); the server's OWN
+     * origin; any `localhost:*` / `127.0.0.1:*` origin (dev); and any origin listed in
+     * {@link WebpiecesConfig.corsOrigins}. Anything else gets a clean 403.
+     *
+     * SAME-ORIGIN IS THE SUBTLE ONE, and it is why this is not localhost-only. A browser attaches an
+     * `Origin` header to EVERY POST — including a same-origin POST — and every webpieces route is a
+     * POST. So a server that also serves its own UI (one container, one origin) receives its own
+     * origin on every api call it makes to itself. Rejecting it, as the old localhost-only rule did,
+     * broke every api call the moment a webpieces server served a browser app in production.
+     *
+     * The same-origin test compares HOST ONLY, deliberately. Behind a TLS-terminating proxy (Cloud
+     * Run, any load balancer) `req.protocol` is `http` while the browser's `Origin` says `https`, so
+     * comparing full origins would reject the server's own origin on every deploy.
      *
      * @returns Express middleware handler for CORS
      */
-    corsForLocalhost(): RequestHandler {
-        log.info('[WebpiecesMiddleware] CORS enabled for localhost:* origins');
+    corsMiddleware(config?: WebpiecesConfig): RequestHandler {
+        const extraOrigins = config?.corsOrigins ?? [];
+        log.info(
+            `[WebpiecesMiddleware] CORS: same-origin + localhost:* always allowed` +
+                (extraOrigins.length > 0 ? `, plus ${extraOrigins.join(', ')}` : ''),
+        );
 
-        return cors({
-            origin: function (origin, callback) {
-                // Allow requests with no origin (same-origin, Postman, curl)
-                if (!origin) {
-                    callback(null, true);
-                    return;
-                }
-
-                // Only allow localhost origins
-                if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
-                    callback(null, true);
-                } else {
-                    log.info(`[CORS] Blocked origin: ${origin} (only localhost:* allowed)`);
-                    callback(new Error(`CORS not allowed for origin: ${origin}`));
-                }
-            },
+        const handler = cors({
+            origin: true, // reflect the request origin — we have already vetted it below
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            allowedHeaders: '*', // Wide open for dev
-            exposedHeaders: '*', // Expose all response headers to browser JS
+            allowedHeaders: '*',
+            exposedHeaders: '*',
             maxAge: 3600,
         });
+
+        return (req: Request, res: Response, next: NextFunction): void => {
+            const origin = req.headers.origin;
+            if (!origin) {
+                // No Origin -> not a browser cross-origin request; nothing to negotiate.
+                next();
+                return;
+            }
+            if (this.isOriginAllowed(origin, req.get('host'), extraOrigins)) {
+                handler(req, res, next);
+                return;
+            }
+            log.info(`[CORS] Blocked origin: ${origin}`);
+            res.status(403).json({
+                name: 'CorsError',
+                message: `CORS not allowed for origin: ${origin}`,
+            });
+        };
+    }
+
+    /**
+     * @deprecated Use {@link corsMiddleware}. Kept so existing callers keep compiling; it now also
+     * allows the server's own origin, which the localhost-only rule wrongly rejected.
+     */
+    corsForLocalhost(): RequestHandler {
+        return this.corsMiddleware();
+    }
+
+    /** Host-only comparison — see corsMiddleware() on why the scheme is deliberately ignored. */
+    private isOriginAllowed(origin: string, host: string | undefined, extraOrigins: string[]): boolean {
+        if (extraOrigins.includes(origin)) {
+            return true;
+        }
+        let originHost: string;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a malformed Origin is untrusted browser input, not a server fault; it must become a 403 here, never bubble to the 500 chokepoint
+        try {
+            originHost = new URL(origin).host;
+        } catch (err: unknown) {
+            const error = toError(err);
+            log.info(`[CORS] Malformed Origin header '${origin}': ${error.message}`);
+            return false;
+        }
+        if (host !== undefined && originHost === host) {
+            return true; // same-origin: the server's own UI calling its own api
+        }
+        const hostname = originHost.split(':')[0];
+        return hostname === 'localhost' || hostname === '127.0.0.1';
     }
 
     /**

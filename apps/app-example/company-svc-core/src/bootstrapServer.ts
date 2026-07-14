@@ -58,7 +58,13 @@ export async function bootstrapServer(
         log.info(`[${options.logName}] Starting server...`);
 
         const port = parseInt(process.env['PORT'] || String(options.port), 10);
-        await new WebpiecesExpressRouter(apiFactory).bindAndStartExpress(express(), port);
+        // config carries corsOrigins — without it, a UI on a DIFFERENT host than the api could never
+        // be allowed through (same-origin + localhost:* still work with no config at all).
+        await new WebpiecesExpressRouter(apiFactory).bindAndStartExpress(
+            express(),
+            port,
+            setupOptions.config,
+        );
         log.info(`[${options.logName}] Listening on port ${port}`);
         // The listening socket keeps the process alive; SIGTERM/SIGINT fall through to Node's
         // default (clean, immediate terminate). No keep-alive loop is needed.
