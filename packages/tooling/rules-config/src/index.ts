@@ -156,9 +156,14 @@ export {
 export {
     MergedBranch,
     DeletableBranch,
+    DeletableWorktree,
     MergedBranchesCache,
     MergedBranchesService,
 } from './merged-branches';
+export {
+    Worktree,
+    WorktreeService,
+} from './worktrees';
 export type { MutationVerb, MutationPhase } from './branch-mutation-log';
 export {
     BranchMutationEvent,

@@ -47,6 +47,26 @@ git fetch origin main
 git worktree add ../my-feature -b dean/my-feature origin/main
 cd ../my-feature
 ```
+The explicit `origin/main` base is **required** — `branch-creation-guard` treats `git worktree add -b`
+as a branch creation, so it obeys the same rules as `git checkout -b` (no stacking on a feature branch,
+no reserved `wp<number>` suffix).
+
+### Two budgets: 5 branches, 5 worktrees
+
+`branch-creation-guard` caps **parked branches at 5** (`maxLocalBranches`) and **linked worktrees at 5**
+(`maxWorktrees`). They are separate budgets: a branch checked out in a worktree counts against the
+worktree cap, *not* the branch cap — so 5 worktrees plus 5 parked branches is fine, but a 6th of either
+is blocked at creation until you reap the dead ones.
+
+Creation is the gate because it is the only moment cleanup is both cheap and obviously worth it. When
+blocked, the guard names exactly what is dead and hands you the command; `.webpieces/merged-branches.json`
+carries the per-branch and per-worktree reason. Reaping a worktree is always prune → remove → delete, in
+that order — git refuses to delete a branch a worktree still holds:
+```bash
+git worktree prune && git worktree remove ../old-feature && git branch -D dean/old-feature
+```
+A branch is only ever proposed for deletion when it is backed by a **merged PR** or holds **no commits of
+its own**. Anything else is spared for a human to decide.
 
 ### Updating your feature branch from main
 

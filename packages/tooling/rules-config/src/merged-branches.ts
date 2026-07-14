@@ -6,6 +6,7 @@ import { injectable } from 'inversify';
 
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
+import { Worktree, WorktreeService } from './worktrees';
 
 /**
  * The "which local branches are dead?" cache.
@@ -58,19 +59,50 @@ export class DeletableBranch {
 }
 
 /**
+ * A worktree and the verdict on it. Carries `path` (what `git worktree remove` takes) AND `branch`
+ * (what `git branch -D` takes afterwards) because reaping a worktree is always those two steps, in
+ * that order — git refuses to delete a branch that is still checked out somewhere.
+ */
+export class DeletableWorktree {
+    path: string;
+    branch: string;
+    reason: string;
+    pr: number;
+    deletable: boolean;
+
+    constructor(path: string, branch: string, reason: string, pr: number, deletable: boolean) {
+        this.path = path;
+        this.branch = branch;
+        this.reason = reason;
+        this.pr = pr;
+        this.deletable = deletable;
+    }
+}
+
+/**
  * `deletable` is PRECOMPUTED so the consumer just deletes the list — no re-deriving, no judgement
  * call at block time. `keep` carries the branches we refuse to touch (no merged PR found), each with
  * its reason, so a human can see what was spared and why.
+ *
+ * `worktrees` is the parallel verdict list for the SECOND budget (see worktrees.ts): every linked
+ * worktree, each flagged deletable or not. Both budgets are reaped from this one cache file.
  */
 export class MergedBranchesCache {
     timestamp: string;
     deletable: DeletableBranch[];
     keep: DeletableBranch[];
+    worktrees: DeletableWorktree[];
 
-    constructor(timestamp: string, deletable: DeletableBranch[], keep: DeletableBranch[]) {
+    constructor(
+        timestamp: string,
+        deletable: DeletableBranch[],
+        keep: DeletableBranch[],
+        worktrees: DeletableWorktree[] = [],
+    ) {
         this.timestamp = timestamp;
         this.deletable = deletable;
         this.keep = keep;
+        this.worktrees = worktrees;
     }
 }
 
@@ -93,10 +125,21 @@ interface RawDeletable {
     pr?: number;
 }
 
+interface RawWorktree {
+    path?: string;
+    branch?: string;
+    reason?: string;
+    pr?: number;
+    deletable?: boolean;
+}
+
 interface RawCache {
     timestamp?: string;
     deletable?: RawDeletable[];
     keep?: RawDeletable[];
+    // Absent in caches written by releases before the worktree cap existed — revives to [], which
+    // makes the worktree cap fail OPEN on a stale file rather than hard-failing the guard.
+    worktrees?: RawWorktree[];
 }
 
 interface RawMergedPr {
@@ -113,6 +156,10 @@ interface CmdCapture {
 @provideSingleton()
 @injectable()
 export class MergedBranchesService {
+    // Defaulted so the non-DI call sites (`new MergedBranchesService()` in the guard and the detached
+    // refresher) keep working, while inversify still injects the singleton when resolved from a container.
+    constructor(private readonly worktrees: WorktreeService = new WorktreeService()) {}
+
     mergedBranchesPath(repoRoot: string): string {
         return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGED_BRANCHES_FILE);
     }
@@ -128,6 +175,7 @@ export class MergedBranchesService {
                 raw.timestamp ?? '',
                 this.reviveList(raw.deletable),
                 this.reviveList(raw.keep),
+                this.reviveWorktrees(raw.worktrees),
             );
         } catch (err: unknown) {
             const error = toError(err);
@@ -165,19 +213,88 @@ export class MergedBranchesService {
         const byBranch = new Map<string, number>();
         for (const entry of merged) byBranch.set(entry.branch, entry.pr);
 
-        const current = this.currentBranch(repoRoot);
+        const trees = this.worktrees.listWorktrees(repoRoot);
+        const holder = new Map<string, string>();
+        for (const tree of trees) {
+            if (tree.branch !== '') holder.set(tree.branch, tree.path);
+        }
+
         const deletable: DeletableBranch[] = [];
         const keep: DeletableBranch[] = [];
 
         for (const branch of this.localBranches(repoRoot)) {
-            // Never propose deleting the branch we are standing on — git would refuse anyway.
-            if (branch === current) continue;
             const verdict = this.classify(repoRoot, branch, byBranch);
+
+            // A branch checked out in ANY worktree (including the branch we are standing on right here)
+            // cannot be deleted — git refuses, and since the reap is ONE `git branch -D a b c`, a single
+            // such branch would fail the entire command and strand the branches that would have deleted
+            // fine. Spare it LOUDLY (into `keep`, with the reason) rather than dropping it silently: the
+            // worktree list below is what actually reaps it, and a human should see the connection.
+            const heldAt = holder.get(branch);
+            if (heldAt !== undefined) {
+                keep.push(new DeletableBranch(
+                    branch,
+                    `checked out in worktree '${heldAt}' — remove that worktree before deleting the branch`,
+                    verdict.entry.pr,
+                ));
+                continue;
+            }
+
             if (verdict.deletable) deletable.push(verdict.entry);
             else keep.push(verdict.entry);
         }
 
-        return new MergedBranchesCache(new Date().toISOString(), deletable, keep);
+        const worktrees = this.classifyWorktrees(repoRoot, trees, byBranch);
+        return new MergedBranchesCache(new Date().toISOString(), deletable, keep, worktrees);
+    }
+
+    /**
+     * Verdicts for the worktree budget. The main worktree is excluded outright — it is the primary
+     * clone and is not a thing you can remove.
+     *
+     * A worktree is deletable when its directory is already gone (`prunable`), or when its branch is
+     * dead by the very same proofs the branch cap uses (merged PR, backup-of-merged, or zero commits of
+     * its own). It is spared when it is LOCKED (a human said "do not touch"), when it is the worktree we
+     * are standing in right now (removing your own cwd is not a thing to suggest to an agent), or when
+     * its branch still holds unmerged work.
+     */
+    private classifyWorktrees(
+        repoRoot: string,
+        trees: Worktree[],
+        byBranch: Map<string, number>,
+    ): DeletableWorktree[] {
+        const out: DeletableWorktree[] = [];
+
+        for (const tree of trees) {
+            if (tree.isMain) continue;
+
+            if (tree.prunable) {
+                out.push(new DeletableWorktree(
+                    tree.path, tree.branch, 'its directory is gone — `git worktree prune` clears it', 0, true));
+                continue;
+            }
+            if (tree.locked) {
+                out.push(new DeletableWorktree(
+                    tree.path, tree.branch, 'locked by a human — do not touch', 0, false));
+                continue;
+            }
+            if (tree.path === repoRoot) {
+                out.push(new DeletableWorktree(
+                    tree.path, tree.branch, 'you are standing in it', 0, false));
+                continue;
+            }
+            if (tree.branch === '') {
+                out.push(new DeletableWorktree(
+                    tree.path, '', 'detached HEAD — no branch to check, so a human must decide', 0, false));
+                continue;
+            }
+
+            const verdict = this.classify(repoRoot, tree.branch, byBranch);
+            out.push(new DeletableWorktree(
+                tree.path, tree.branch, verdict.entry.reason, verdict.entry.pr, verdict.deletable));
+        }
+
+        return out;
     }
 
     // Verdict for one branch: its own merged PR, else the base it was backed up from, else empty.
@@ -258,9 +375,15 @@ export class MergedBranchesService {
             new DeletableBranch(entry.branch ?? '', entry.reason ?? '', entry.pr ?? 0));
     }
 
-    private currentBranch(repoRoot: string): string {
-        const result = this.capture(repoRoot, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-        return result.ok ? result.out : '';
+    private reviveWorktrees(raw: RawWorktree[] | undefined): DeletableWorktree[] {
+        if (!raw) return [];
+        return raw.map((entry: RawWorktree): DeletableWorktree => new DeletableWorktree(
+            entry.path ?? '',
+            entry.branch ?? '',
+            entry.reason ?? '',
+            entry.pr ?? 0,
+            entry.deletable ?? false,
+        ));
     }
 
     // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.

@@ -60,10 +60,29 @@ Two rules keep you out of trouble inside a linked worktree:
   cd ../<feature-dir>
   ```
   This creates the branch directly off `origin/main` — the same "branch off fresh main" the
-  `feature-branch-guard` requires, without touching the primary clone's checked-out `main`.
+  `feature-branch-guard` requires, without touching the primary clone's checked-out `main`. The explicit
+  `origin/main` base is **required**: `branch-creation-guard` treats `git worktree add -b` as a branch
+  creation, so it obeys the same rules as `git checkout -b`.
 
 Once you are on the branch, `pnpm wp-start-update` → `/wp-merge` (if conflicts) → `pnpm wp-finish-update`
 and the PR flow behave identically to the primary clone.
+
+### Two budgets: 5 branches, 5 worktrees
+
+`branch-creation-guard` caps **parked branches at 5** (`maxLocalBranches`) and **linked worktrees at 5**
+(`maxWorktrees`). These are separate budgets: a branch checked out in a worktree counts against the
+worktree cap, *not* the branch cap — so 5 worktrees plus 5 parked branches is fine, while a 6th of either
+is blocked at creation until the dead ones are reaped. Creation is the gate because it is the only moment
+cleanup is both cheap and obviously worth it.
+
+When blocked, the guard names exactly what is dead and hands you the command;
+`.webpieces/merged-branches.json` carries the per-branch and per-worktree reason. Reaping a worktree is
+always prune → remove → delete, in that order — git refuses to delete a branch a worktree still holds:
+```bash
+git worktree prune && git worktree remove ../<feature-dir> && git branch -D <branch>
+```
+A branch is only ever proposed for deletion when it is backed by a **merged PR** or holds **no commits of
+its own**. Anything else is spared for a human to decide.
 
 ## One branch name — local, remote, and PR are always identical
 
