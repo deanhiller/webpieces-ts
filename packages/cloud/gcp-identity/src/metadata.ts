@@ -74,3 +74,16 @@ export function readRuntimeServiceAccountEmail(): Promise<string> {
     }
     return cachedSaEmail;
 }
+
+/**
+ * Drop every memoized value. FOR TESTS ONLY — the caches above are module-scope and would otherwise
+ * pin the FIRST spec's `K_SERVICE` / metadata answers for the whole file.
+ */
+// webpieces-disable no-function-outside-class -- resets this module's own module-scope memo cells; every sibling here is a free function
+export function resetMetadataForTests(): void {
+    cachedOnGcp = undefined;
+    cachedProjectId = undefined;
+    cachedNumericProjectId = undefined;
+    cachedRegion = undefined;
+    cachedSaEmail = undefined;
+}

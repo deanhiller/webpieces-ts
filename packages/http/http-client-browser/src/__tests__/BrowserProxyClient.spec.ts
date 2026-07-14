@@ -1,9 +1,10 @@
 import 'reflect-metadata';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     ApiPath,
     AuthOidc,
     AuthSharedSecret,
+    ClientRegistry,
     ContextKey,
     Endpoint,
     HeaderRegistry,
@@ -57,7 +58,58 @@ let factory: ClientHttpBrowserFactory;
 
 beforeEach(() => {
     HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
+    ClientRegistry.clear();
     factory = new ClientHttpBrowserFactory(new MutableContextStore());
+});
+
+afterEach(() => {
+    ClientRegistry.clear();
+    vi.unstubAllGlobals();
+});
+
+/** Capture the URL the client actually fetches, without a network. */
+function stubFetch(): { url: () => string } {
+    const fetchMock = vi.fn(() =>
+        Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    return { url: (): string => String(fetchMock.mock.calls[0]?.[0]) };
+}
+
+/**
+ * A browser app almost always calls the backend that SERVED it, so an unregistered svcName must
+ * resolve to a relative URL (= same origin), never throw. It used to throw: a forgotten registration
+ * killed sign-in with the request never leaving the page — the server logged nothing at all.
+ */
+describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
+    it('an UNREGISTERED svcName yields a RELATIVE url (same origin)', async () => {
+        const fetched = stubFetch();
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('never-registered'));
+
+        await client.save(new SaveRequest('q'));
+
+        expect(fetched.url()).toBe('/public/save');
+    });
+
+    it('a registered mapping still WINS — the Angular dev server on :4201 reaching :8201', async () => {
+        const fetched = stubFetch();
+        ClientRegistry.addMapping('save-svc', 8201);
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+
+        await client.save(new SaveRequest('q'));
+
+        expect(fetched.url()).toBe('http://localhost:8201/public/save');
+    });
+
+    it('an installed deriver is honored in the browser too', async () => {
+        const fetched = stubFetch();
+        ClientRegistry.setDeriver((svc: string) => Promise.resolve(`https://${svc}.example.com`));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+
+        await client.save(new SaveRequest('q'));
+
+        expect(fetched.url()).toBe('https://save-svc.example.com/public/save');
+    });
 });
 
 /**

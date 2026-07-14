@@ -1,19 +1,19 @@
-import { ClientRegistry } from '@webpieces/core-util';
 import { isOnGcp, readNumericProjectId, readRegion, readProjectId, readRuntimeServiceAccountEmail } from './metadata';
 
 /** Local fallback SA email used off-GCP so 'self' caller checks are deterministic. */
 export const LOCAL_SERVICE_ACCOUNT_EMAIL = 'local@localhost.invalid';
 
 /**
- * Logical service name from K_SERVICE (Cloud Run sets this), stripping a leading
- * 'tf-' Terraform prefix. Off-GCP returns 'local'. Synchronous — env only.
+ * This service's name from K_SERVICE (Cloud Run sets this), VERBATIM. Off-GCP returns 'local'.
+ * Synchronous — env only.
+ *
+ * There is exactly ONE service name and no prefix rules: the Cloud Run service name is the svcName
+ * peers call you by, is what {@link getSelfCloudRunUrl} puts in your own URL, and is what
+ * `gcpCloudRunDeriver` puts in theirs. (This used to strip a leading `tf-`, which made a service
+ * deployed as `tf-server2` unreachable by the name it reported — the two never agreed.)
  */
 export function getServiceName(): string {
-    const kService = process.env['K_SERVICE'];
-    if (!kService) {
-        return 'local';
-    }
-    return kService.startsWith('tf-') ? kService.substring('tf-'.length) : kService;
+    return process.env['K_SERVICE'] ?? 'local';
 }
 
 /** GCP project id, or 'local-project' off-GCP. */
@@ -53,36 +53,4 @@ export async function getSelfCloudRunUrl(): Promise<string> {
     const numericProjectId = await readNumericProjectId();
     const region = await readRegion();
     return `https://${kService}-${numericProjectId}.${region}.run.app`;
-}
-
-/**
- * Resolve the base URL a client should call for `svcName`. The ONE resolver every RPC / Cloud Tasks
- * client uses. Precedence:
- *
- *   1. A {@link ClientRegistry} override wins — this is how you reach anything the derivation cannot
- *      describe: a localhost port, another region, another project, a non-Cloud-Run host. Each
- *      environment populates the registry from its own per-env config.
- *   2. Otherwise, on GCP the URL is DERIVED from the Cloud Run service name + project + region
- *      (via {@link isOnGcp}) — same project, same region, zero maintenance across demo/qa/prod.
- *   3. Otherwise (off-GCP and unregistered) it THROWS — a missing mapping is a setup bug, not a
- *      silent mis-route.
- *
- * So clients carry ONLY a `svcName`; there is no per-client `targetUrl` (a client is built once but a
- * URL is per-environment — that belongs in the registry, not on the client).
- */
-// webpieces-disable no-function-outside-class -- pure GCP url helper; every sibling in this module is a free function
-export async function resolveServiceUrl(svcName: string): Promise<string> {
-    const override = ClientRegistry.tryLookup(svcName);
-    if (override) {
-        return override;
-    }
-    if (!(await isOnGcp())) {
-        throw new Error(
-            `No URL for service "${svcName}". On GCP it is derived from the Cloud Run service name; ` +
-            `off-GCP register it: ClientRegistry.addMapping(svcName, port) or addUrlMapping(svcName, url).`,
-        );
-    }
-    const numericProjectId = await readNumericProjectId();
-    const region = await readRegion();
-    return `https://${svcName}-${numericProjectId}.${region}.run.app`;
 }

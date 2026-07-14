@@ -25,10 +25,19 @@ export class BrowserProxyClient extends ProxyClient {
         this.initRoutes(apiPrototype);
     }
 
-    protected override resolveBaseUrl(): Promise<string> {
-        // A browser cannot derive a GCP URL, so it resolves purely via the registry, which the app
-        // populates at startup (per environment). lookup() throws if the svcName was not registered.
-        return Promise.resolve(ClientRegistry.lookup(this.config.svcName));
+    /**
+     * The same chain every client runs — a ClientRegistry mapping, else the installed deriver — but
+     * with the BROWSER's fallback: `''`, which makes the URL RELATIVE (`/auth/oauth`) and therefore
+     * same-origin, by definition. A browser app almost always calls the backend that served it, so
+     * that is the default, and an unregistered svcName must NEVER throw the way it used to — a
+     * forgotten registration silently killed sign-in, the request never leaving the page.
+     *
+     * A mapping still wins, which is exactly how an Angular dev server on :4201 reaches its backend
+     * on :8201, while the same bundle served BY that backend in prod registers nothing and goes
+     * relative. No `window` access, so this stays SSR-safe and testable.
+     */
+    protected override async resolveBaseUrl(): Promise<string> {
+        return (await ClientRegistry.tryResolve(this.config.svcName)) ?? '';
     }
 
     protected override outboundHeaders(): Map<string, string> {

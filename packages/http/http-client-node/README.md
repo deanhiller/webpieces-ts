@@ -9,13 +9,18 @@ const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'))
 const res = await server2.fetchValue(req);          // inside a RequestContext
 ```
 
-- `svcName` is TYPICALLY the GCP Cloud Run service name: on GCP we look your service up in the same
-  project and region and form the URL from the container's own metadata, so you maintain no URL
-  table. That works across demo/qa/prod as long as each environment has its own projectId.
-- Anything the derivation cannot describe — a localhost port, another region, another project, a
-  non-Cloud-Run host — is a `ClientRegistry` mapping registered at startup (per environment), NOT a
-  per-client URL: `ClientRegistry.addMapping(svcName, port)` or `addUrlMapping(svcName, url)`. A
-  registered mapping wins over the GCP derivation.
+- `svcName` becomes a URL through `ClientRegistry.resolve` — ONE chain, the same one the browser
+  client and Cloud Tasks run:
+  1. a registered mapping wins: `ClientRegistry.addMapping(svcName, port)` (localhost) or
+     `addUrlMapping(svcName, url)` (anything else — AWS, another region/project, an external API)
+  2. else the installed deriver, if any: `ClientRegistry.setDeriver(gcpCloudRunDeriver())` on GCP
+     (`svcName` is the Cloud Run service name, so same-project/same-region peers need no mapping at
+     all), or `templateDeriver('https://{svc}.example.com')` for any predictable-DNS environment
+  3. else it THROWS, naming both fixes. A server has no "own origin" to fall back to, so an
+     unresolvable peer is a setup bug, not a silent mis-route. (The BROWSER client differs here and
+     only here: it goes relative — same origin.)
+- The deriver is optional. Registering every svcName is a first-class, sufficient setup — which is
+  what localhost and tests do, since per-service ports are inherently a table, not a formula.
 
 `ClientHttpFactory` injects a `Provider<NodeProxyClient>` and calls `get()` per contract.
 `NodeProxyClient` is bound TRANSIENT, so each client gets its own — the provider caches nothing,

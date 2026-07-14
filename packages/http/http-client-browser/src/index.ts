@@ -43,8 +43,10 @@ export {
     ContextKey,
     HeaderRegistry,
     ClientRegistry,
+    templateDeriver,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
+export type { ServiceUrlDeriver } from '@webpieces/core-util';
 
 // Re-export API decorators for convenience (same as http-routing does)
 export {

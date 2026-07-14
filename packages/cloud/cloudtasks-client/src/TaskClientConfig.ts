@@ -1,4 +1,4 @@
-import { resolveServiceUrl } from '@webpieces/gcp-identity';
+import { ClientRegistry } from '@webpieces/core-util';
 
 /** Constructor whose prototype is T (the abstract @PubSub API class). */
 export type ApiPrototype<T> = Function & { prototype: T };
@@ -21,8 +21,14 @@ export class TaskClientConfig {
         public readonly svcName: string,
     ) {}
 
-    /** Resolved per enqueue, not at construction — so building a client stays synchronous. */
+    /**
+     * Resolved per enqueue, not at construction — so building a client stays synchronous.
+     *
+     * This goes through {@link ClientRegistry.resolve}, the SAME chain (mapping, else deriver, else
+     * throw) the RPC client runs. Cloud Tasks does not go through `ProxyClient.resolveBaseUrl()`, so
+     * it has to reach the chain itself — otherwise enqueue targets drift from call targets.
+     */
     resolveUrl(): Promise<string> {
-        return resolveServiceUrl(this.svcName);
+        return ClientRegistry.resolve(this.svcName);
     }
 }

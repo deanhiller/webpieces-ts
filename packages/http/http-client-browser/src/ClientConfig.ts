@@ -2,10 +2,11 @@
  * Per-client STATE for a browser HTTP client — nothing else. A plain class; it extends nothing and
  * is unrelated to the server package's ClientConfig.
  *
- * A browser cannot read `K_SERVICE`, so it cannot derive a Cloud Run URL. It resolves its base URL
- * entirely through the global {@link ClientRegistry} by `svcName` — the Angular app registers each
- * svcName at startup (from its per-environment config; on localhost that URL points at a local port,
- * in the cloud at the deployed host). So this config is just the svcName.
+ * The base URL is resolved from `svcName` through the global {@link ClientRegistry}: a registered
+ * mapping, else the installed deriver, else RELATIVE — i.e. the origin that served the page, which
+ * is what a browser app calling its own backend wants and needs NO configuration. Register a mapping
+ * only when the backend is somewhere else (an Angular dev server on :4201 reaching :8201). So this
+ * config is just the svcName, and an unregistered one never throws.
  *
  * The context store is NOT config: it is a dependency of {@link ClientHttpBrowserFactory}, shared
  * by every client it builds.
