@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express, { Express, Request, Response } from 'express';
 import { AddressInfo } from 'net';
 import { Server } from 'http';
-import { WebpiecesConfig } from '@webpieces/http-routing';
-import { WebpiecesMiddleware } from '../WebpiecesMiddleware';
+import { ApiClient, ApiFactory, WebpiecesConfig } from '@webpieces/http-routing';
+import { WebpiecesExpressRouter } from '../WebpiecesExpressRouter';
 
 /** Narrow shape of what the assertions need off a fetch Response. */
 class CorsResponse {
@@ -13,21 +13,37 @@ class CorsResponse {
     ) {}
 }
 
-/** A real express server behind the real corsMiddleware — no mocks, so this pins actual browser behavior. */
+/** No webpieces routes — these tests exercise the GLOBAL middleware, not route dispatch. */
+class NoRoutesApiFactory implements ApiFactory {
+    public apiClients(): ApiClient[] {
+        return [];
+    }
+
+    // webpieces-disable no-any-unknown -- must match the ApiFactory signature verbatim
+    public createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T {
+        throw new Error(`No routes registered in this test: ${String(apiPrototype)}`);
+    }
+}
+
+/**
+ * Drives the REAL WebpiecesExpressRouter.bindAndStartExpress, so the cors MOUNT GATE itself is under
+ * test — not a copy of it. The /echo route is added AFTER bindAndStartExpress on purpose: express
+ * runs layers in registration order, so it lands behind the global middleware, exactly where a real
+ * webpieces route sits.
+ */
 class CorsTestServer {
     private server?: Server;
     public baseUrl = '';
 
     public async start(config: WebpiecesConfig): Promise<void> {
         const app: Express = express();
-        app.use(new WebpiecesMiddleware().corsMiddleware(config));
+        const router = new WebpiecesExpressRouter(new NoRoutesApiFactory());
+        this.server = await router.bindAndStartExpress(app, 0, config);
+
         app.post('/echo', (req: Request, res: Response): void => {
             res.status(200).json({ ok: true });
         });
 
-        this.server = await new Promise<Server>((resolve: (s: Server) => void) => {
-            const s: Server = app.listen(0, () => resolve(s));
-        });
         const port = (this.server.address() as AddressInfo).port;
         this.baseUrl = `http://127.0.0.1:${port}`;
     }
@@ -51,30 +67,55 @@ class CorsTestServer {
 }
 
 /**
- * CORS regression suite. The bug this pins: the old corsForLocalhost() allowed ONLY localhost:*
- * origins and rejected everything else with callback(new Error(...)) -> a 500. Browsers send an
- * Origin header on EVERY POST, even same-origin, and every webpieces route is a POST — so the moment
- * a webpieces server served its own browser app in production, every single api call 500'd.
+ * THE PRODUCTION SHAPE: no corsOrigins, so cors is never mounted. This is the safe default, and it
+ * still serves a browser app from the same origin — a browser applies no cors check to a same-origin
+ * request. Nothing cross-origin is granted read access, in particular NOT localhost, which the old
+ * unconditional corsForLocalhost() trusted even in production.
  */
-describe('WebpiecesMiddleware CORS', () => {
+describe('WebpiecesMiddleware CORS — not configured (production)', () => {
     const testServer = new CorsTestServer();
 
     beforeAll(async () => {
-        const config = new WebpiecesConfig();
-        config.corsOrigins = ['https://ui.example.com'];
-        await testServer.start(config);
+        await testServer.start(new WebpiecesConfig());
     });
-
     afterAll(async () => {
         await testServer.stop();
     });
 
-    it('allows a request with NO Origin (curl / server-to-server / CLI)', async () => {
+    it('serves a same-origin POST — the browser app works with NO cors at all', async () => {
+        // The bug this replaces: the old middleware turned this exact request into a 500 in prod.
+        expect((await testServer.post(testServer.baseUrl)).status).toBe(200);
+    });
+
+    it('serves a no-Origin request (curl / server-to-server / CLI)', async () => {
         expect((await testServer.post()).status).toBe(200);
     });
 
-    it('allows the SERVER OWN origin — the production bug', async () => {
-        // The browser posts to the same host it loaded the app from, so Origin === the server's host.
+    it('grants NO cross-origin read access to localhost — not trusted in prod', async () => {
+        // No Access-Control-Allow-Origin => the browser refuses to hand the response to the page, so
+        // a page on the victim's localhost cannot read a production api's responses.
+        expect((await testServer.post('http://localhost:4200')).allowOrigin).toBeNull();
+    });
+
+    it('grants NO cross-origin read access to a hostile origin', async () => {
+        expect((await testServer.post('https://evil.example.com')).allowOrigin).toBeNull();
+    });
+});
+
+/** CORS explicitly turned on: dev (`ng serve`), and/or a UI hosted on a different host. */
+describe('WebpiecesMiddleware CORS — configured', () => {
+    const testServer = new CorsTestServer();
+
+    beforeAll(async () => {
+        const config = new WebpiecesConfig();
+        config.corsOrigins = ['http://localhost:*', 'https://ui.example.com'];
+        await testServer.start(config);
+    });
+    afterAll(async () => {
+        await testServer.stop();
+    });
+
+    it('allows the SERVER OWN origin, so mounting cors never breaks the server own UI', async () => {
         const res = await testServer.post(testServer.baseUrl);
         expect(res.status).toBe(200);
         expect(res.allowOrigin).toBe(testServer.baseUrl);
@@ -87,17 +128,24 @@ describe('WebpiecesMiddleware CORS', () => {
         expect((await testServer.post(`https://${host}`)).status).toBe(200);
     });
 
-    it('allows localhost:* (dev)', async () => {
-        expect((await testServer.post('http://localhost:4201')).status).toBe(200);
+    it('allows any port on a :* entry — the angular dev-server port moves', async () => {
+        const res = await testServer.post('http://localhost:4201');
+        expect(res.status).toBe(200);
+        expect(res.allowOrigin).toBe('http://localhost:4201');
     });
 
-    it('allows an origin listed in config.corsOrigins', async () => {
+    it('allows an exactly-listed origin', async () => {
         const res = await testServer.post('https://ui.example.com');
         expect(res.status).toBe(200);
         expect(res.allowOrigin).toBe('https://ui.example.com');
     });
 
-    it('blocks an unknown origin with a clean 403, NOT a 500', async () => {
+    it('does NOT let the :* wildcard span a host', async () => {
+        // http://localhost:* must never match http://localhost.evil.com
+        expect((await testServer.post('http://localhost.evil.com')).status).toBe(403);
+    });
+
+    it('blocks an unlisted origin with a clean 403, NOT a 500', async () => {
         const res = await testServer.post('https://evil.example.com');
         expect(res.status).toBe(403);
         expect(res.allowOrigin).toBeNull();
