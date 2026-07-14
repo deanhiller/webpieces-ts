@@ -370,12 +370,18 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     // bound. Branch creation is the gate because it is the only moment cleanup is both cheap and
     // obviously worth it. See merged-branches.ts for how "already merged" is determined.
     maxLocalBranches?: number;
+    // Hard cap on LINKED worktrees (the primary clone is never counted). A separate budget from
+    // maxLocalBranches: every worktree holds a branch, so if worktree-held branches also spent the
+    // branch budget, five worktrees would leave room for zero branches. Held branches count here;
+    // parked branches count against maxLocalBranches. Enforced at `git worktree add`.
+    maxWorktrees?: number;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
         mode: new FieldDef('string', BRANCH_GUARD_MODES),
         subBranchNaming: FieldDef.optional('string'),
         branchFormat: FieldDef.optional('string'),
         maxLocalBranches: FieldDef.optional('number'),
+        maxWorktrees: FieldDef.optional('number'),
         ...BASE_RULE_SCHEMA,
     };
 }

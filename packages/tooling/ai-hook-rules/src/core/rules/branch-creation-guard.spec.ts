@@ -13,6 +13,9 @@ const git = vi.hoisted(() => ({
     behind: 0,
     localBranches: ['main'] as string[],
     cacheJson: null as string | null,
+    // Raw `git worktree list --porcelain` output. The first record is always the primary clone, which
+    // is never counted against the worktree cap.
+    worktreePorcelain: 'worktree /tmp/x\nHEAD abc\nbranch refs/heads/main\n',
 }));
 
 vi.mock('child_process', () => ({
@@ -24,6 +27,9 @@ vi.mock('child_process', () => ({
     spawnSync: (cmd: string, args: string[]): { status: number; stdout: string } => {
         if (cmd === 'git' && args[0] === 'for-each-ref') {
             return { status: 0, stdout: git.localBranches.join('\n') + '\n' };
+        }
+        if (cmd === 'git' && args[0] === 'worktree') {
+            return { status: 0, stdout: git.worktreePorcelain };
         }
         if (cmd === 'git' && args.includes('--abbrev-ref')) {
             return { status: 0, stdout: `${git.branch}\n` };
@@ -58,14 +64,29 @@ function ctx(command: string): BashContext {
 }
 
 // A merged-branches cache with `deletable` entries — the shape the detached refresher writes.
-function cacheWith(deletable: string[], keep: string[] = []): string {
+function cacheWith(deletable: string[], keep: string[] = [], worktrees: object[] = []): string {
     return JSON.stringify({
         timestamp: '2026-07-14T00:00:00.000Z',
         deletable: deletable.map((b: string, i: number): object =>
             ({ branch: b, reason: `PR #${String(100 + i)} merged`, pr: 100 + i })),
         keep: keep.map((b: string): object =>
             ({ branch: b, reason: 'no merged PR found — a human must decide', pr: 0 })),
+        worktrees,
     });
+}
+
+// One worktree verdict, as the refresher writes it into the cache's `worktrees` list.
+function tree(path: string, branch: string, deletable: boolean): object {
+    return { path, branch, reason: deletable ? 'PR #7 merged' : 'no merged PR found', pr: 0, deletable };
+}
+
+// `git worktree list --porcelain` for the primary clone plus N linked worktrees named wt1..wtN.
+function porcelain(linked: number): string {
+    let out = 'worktree /tmp/x\nHEAD abc\nbranch refs/heads/main\n';
+    for (let i = 1; i <= linked; i++) {
+        out += `\nworktree /tmp/wt${String(i)}\nHEAD abc${String(i)}\nbranch refs/heads/feat${String(i)}\n`;
+    }
+    return out;
 }
 
 function rule(mode: 'ON' | 'OFF' | 'ON_NO_SUBBRANCHES', extra: Partial<BranchCreationGuardConfig> = {}): BranchCreationGuardRule {
@@ -82,6 +103,7 @@ beforeEach(() => {
     git.behind = 0;
     git.localBranches = ['main'];
     git.cacheJson = null;
+    git.worktreePorcelain = porcelain(0);
 });
 
 describe('branch-creation-guard', () => {
@@ -227,7 +249,7 @@ describe('branch-creation-guard local-branch cap', () => {
         const violations = r.check(ctx('git checkout -b dean/next origin/main'));
 
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('5 local branches');
+        expect(violations[0].message).toContain('5 parked local branches');
         expect(violations[0].message).toContain('3 of them are dead');
 
         const hint = r.fixHint;
@@ -273,6 +295,94 @@ describe('branch-creation-guard local-branch cap', () => {
         git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
         git.cacheJson = cacheWith(['a']);
         expect(rule('ON').check(ctx('git checkout -b dean/next origin/main')).length).toBe(1);
+    });
+
+});
+
+describe('branch-creation-guard separate branch/worktree budgets', () => {
+    // The two budgets are SEPARATE. Worktree-held branches are the worktree cap's problem; if they also
+    // spent the branch budget, five worktrees would leave room for zero branches and no branch could
+    // ever be created again.
+    it('does not count worktree-held branches against the branch cap', () => {
+        git.localBranches = ['main', 'feat1', 'feat2', 'feat3', 'feat4', 'feat5', 'parked'];
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = cacheWith([]);
+
+        // 5 held + 1 parked. The branch cap sees ONE branch, so this is nowhere near it.
+        expect(rule('ON', { maxLocalBranches: 5 }).check(ctx('git checkout -b dean/next origin/main')).length).toBe(0);
+    });
+});
+
+describe('branch-creation-guard worktree cap', () => {
+    // `git worktree add ... -b <name> origin/main` is the command docs/git-workflow.md recommends. It
+    // creates a branch, so it must obey every branch rule — and it spends the worktree budget too.
+    it('allows a worktree add off origin/main when under both caps', () => {
+        git.branch = 'dean/existing';
+        git.worktreePorcelain = porcelain(2);
+        git.cacheJson = cacheWith([]);
+        expect(rule('ON_NO_SUBBRANCHES').check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(0);
+    });
+
+    it('blocks a worktree add at the cap, and emits prune → remove → branch -D in that order', () => {
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = cacheWith([], [], [
+            tree('/tmp/wt1', 'feat1', true),
+            tree('/tmp/wt2', 'feat2', true),
+            tree('/tmp/wt3', 'feat3', false),
+        ]);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
+        const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));
+
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('5 linked worktrees');
+        expect(violations[0].message).toContain('2 of them are dead');
+
+        const hint = r.fixHint;
+        const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        // The order is the whole point: git refuses to delete a branch a worktree still holds.
+        expect(flat).toContain(
+            'git worktree prune && git worktree remove /tmp/wt1 && git worktree remove /tmp/wt2 && git branch -D feat1 feat2');
+        expect(flat).toContain('maxWorktrees');
+        expect(flat).toContain('1 worktree(s) were deliberately SPARED');
+    });
+
+    it('defaults the worktree cap to 5, and fails OPEN with no cache on disk', () => {
+        git.worktreePorcelain = porcelain(6);
+        git.cacheJson = null;
+        expect(rule('ON').check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(0);
+
+        git.cacheJson = cacheWith([], [], [tree('/tmp/wt1', 'feat1', true)]);
+        expect(rule('ON').check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(1);
+    });
+});
+
+describe('branch-creation-guard worktree add obeys the branch rules', () => {
+    // No -b: creates no branch, but still spends the worktree budget.
+    it('caps a worktree add of an existing branch, which creates no branch at all', () => {
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = cacheWith([], [], [tree('/tmp/wt1', 'feat1', true)]);
+        const violations = rule('ON', { maxWorktrees: 5 }).check(ctx('git worktree add ../f existing-branch'));
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('linked worktrees');
+    });
+
+    it('applies the reserved wp<number> suffix rule to worktree branches', () => {
+        git.worktreePorcelain = porcelain(1);
+        const violations = rule('ON').check(ctx('git worktree add ../f -b dean/upgradewp2 origin/main'));
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('wp<number>');
+    });
+
+    // Off a feature branch with no explicit base, the worktree would fork the CURRENT head — a
+    // sub-branch. Blocked, and the recovery command must be a WORKTREE command, not `git checkout -b`
+    // (which fatals in a worktree).
+    it('blocks a worktree add that would fork the current feature branch, recovering with a worktree command', () => {
+        git.branch = 'dean/existing';
+        git.worktreePorcelain = porcelain(1);
+        const violations = rule('ON_NO_SUBBRANCHES').check(ctx('git worktree add ../f -b dean/next'));
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('git worktree add ../dean-next -b dean/next origin/main');
     });
 });
 
