@@ -50,12 +50,12 @@ export class WebpiecesExpressRouter {
     }
 
     /**
-     * Add the webpieces global middleware (HTML error page, CORS, request logging), bind the routes,
-     * then app.listen(port). Convenience for a non-legacy webpieces server where webpieces owns the
-     * whole express app. Resolves with the http.Server once listening.
+     * Add the webpieces global middleware (HTML error page, optional CORS, request logging), bind
+     * the routes, then app.listen(port). Convenience for a non-legacy webpieces server where
+     * webpieces owns the whole express app. Resolves with the http.Server once listening.
      *
-     * Pass `config` to allow cross-origin browsers beyond the always-allowed set (the server's own
-     * origin + localhost:*) — see {@link WebpiecesMiddleware.corsMiddleware}.
+     * CORS is mounted ONLY when `config.corsOrigins` is non-empty — see the note below and
+     * {@link WebpiecesMiddleware.corsMiddleware}.
      */
     async bindAndStartExpress(
         app: Express,
@@ -64,7 +64,17 @@ export class WebpiecesExpressRouter {
     ): Promise<HttpServer> {
         // Global middleware layers (outermost first) — only for a webpieces-owned app.
         app.use(this.middleware.globalErrorHandler.bind(this.middleware));
-        app.use(this.middleware.corsMiddleware(config));
+
+        // CORS is OPT-IN, and stays OFF in production. A server that serves its own browser app does
+        // not need it — a browser applies no cors check to a same-origin request — so mounting it
+        // would only hand credentialed cross-origin read access to whatever it allows, for nothing.
+        // It is needed solely when a browser on ANOTHER origin calls this api: `ng serve` in dev, or
+        // a UI hosted on a different host. Those say so via corsOrigins.
+        const corsOrigins = config?.corsOrigins ?? [];
+        if (corsOrigins.length > 0) {
+            app.use(this.middleware.corsMiddleware(config));
+        }
+
         app.use(this.middleware.logNextLayer.bind(this.middleware));
 
         this.bindExpress(app);

@@ -303,17 +303,26 @@ export class WebpiecesMiddleware {
     }
 
     /**
-     * CORS middleware.
+     * CORS middleware. DO NOT MOUNT UNCONDITIONALLY — {@link WebpiecesExpressRouter.bindAndStartExpress}
+     * mounts it ONLY when {@link WebpiecesConfig.corsOrigins} is non-empty, and that is the point.
      *
-     * Allows, in order: a request with NO Origin (curl, server-to-server, a CLI); the server's OWN
-     * origin; any `localhost:*` / `127.0.0.1:*` origin (dev); and any origin listed in
-     * {@link WebpiecesConfig.corsOrigins}. Anything else gets a clean 403.
+     * CORS exists solely to let a browser on a DIFFERENT origin call this api — in practice
+     * `ng serve` on :4200 hitting an api on :8080 during development, or a UI hosted on a different
+     * host than the api. A server that serves its own browser app needs NO cors at all, because a
+     * browser does not apply cors to a same-origin request. So in production this middleware is
+     * normally ABSENT, and absent is the safe state: every origin it allows gains the right to make
+     * CREDENTIALED cross-origin calls and READ the responses. Mounting it unconditionally (as the
+     * old corsForLocalhost did) handed that right to anything on the victim's localhost, in prod,
+     * for no benefit whatsoever.
      *
-     * SAME-ORIGIN IS THE SUBTLE ONE, and it is why this is not localhost-only. A browser attaches an
-     * `Origin` header to EVERY POST — including a same-origin POST — and every webpieces route is a
-     * POST. So a server that also serves its own UI (one container, one origin) receives its own
-     * origin on every api call it makes to itself. Rejecting it, as the old localhost-only rule did,
-     * broke every api call the moment a webpieces server served a browser app in production.
+     * When mounted, allows: a request with NO Origin (curl, server-to-server, a CLI); the server's
+     * OWN origin; and EXACTLY the origins in `corsOrigins` — nothing is implicit. Anything else gets
+     * a clean 403, never the HTML 500 the old `callback(new Error(...))` produced.
+     *
+     * SAME-ORIGIN MUST STAY ALLOWED even though a same-origin request needs no cors headers, because
+     * a browser attaches an `Origin` header to EVERY POST — including a same-origin POST — and every
+     * webpieces route is a POST. Once mounted, this middleware SEES that origin, so if it did not
+     * allow it, it would 403 the server's own UI. That was the production bug.
      *
      * The same-origin test compares HOST ONLY, deliberately. Behind a TLS-terminating proxy (Cloud
      * Run, any load balancer) `req.protocol` is `http` while the browser's `Origin` says `https`, so
@@ -322,10 +331,10 @@ export class WebpiecesMiddleware {
      * @returns Express middleware handler for CORS
      */
     corsMiddleware(config?: WebpiecesConfig): RequestHandler {
-        const extraOrigins = config?.corsOrigins ?? [];
+        const allowedOrigins = config?.corsOrigins ?? [];
         log.info(
-            `[WebpiecesMiddleware] CORS: same-origin + localhost:* always allowed` +
-                (extraOrigins.length > 0 ? `, plus ${extraOrigins.join(', ')}` : ''),
+            `[WebpiecesMiddleware] CORS MOUNTED. Allowing same-origin + [${allowedOrigins.join(', ')}]. ` +
+                `Every other browser origin gets a 403.`,
         );
 
         const handler = cors({
@@ -344,7 +353,7 @@ export class WebpiecesMiddleware {
                 next();
                 return;
             }
-            if (this.isOriginAllowed(origin, req.get('host'), extraOrigins)) {
+            if (this.isOriginAllowed(origin, req.get('host'), allowedOrigins)) {
                 handler(req, res, next);
                 return;
             }
@@ -357,18 +366,12 @@ export class WebpiecesMiddleware {
     }
 
     /**
-     * @deprecated Use {@link corsMiddleware}. Kept so existing callers keep compiling; it now also
-     * allows the server's own origin, which the localhost-only rule wrongly rejected.
+     * Same-origin (HOST ONLY — see corsMiddleware() on why the scheme is deliberately ignored), or an
+     * explicit entry in corsOrigins. NOTHING is implicit: localhost is allowed only if the config
+     * asked for it, so a production server that enables cors for a cross-host UI does not silently
+     * open the door to localhost as well.
      */
-    corsForLocalhost(): RequestHandler {
-        return this.corsMiddleware();
-    }
-
-    /** Host-only comparison — see corsMiddleware() on why the scheme is deliberately ignored. */
-    private isOriginAllowed(origin: string, host: string | undefined, extraOrigins: string[]): boolean {
-        if (extraOrigins.includes(origin)) {
-            return true;
-        }
+    private isOriginAllowed(origin: string, host: string | undefined, allowedOrigins: string[]): boolean {
         let originHost: string;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a malformed Origin is untrusted browser input, not a server fault; it must become a 403 here, never bubble to the 500 chokepoint
         try {
@@ -381,8 +384,31 @@ export class WebpiecesMiddleware {
         if (host !== undefined && originHost === host) {
             return true; // same-origin: the server's own UI calling its own api
         }
-        const hostname = originHost.split(':')[0];
-        return hostname === 'localhost' || hostname === '127.0.0.1';
+        return allowedOrigins.some((allowed: string): boolean => this.matchesOrigin(origin, allowed));
+    }
+
+    /**
+     * Exact origin match, except a `*` in the PORT position matches any port: `http://localhost:*`
+     * is what a developer writes, because the angular dev-server port moves around.
+     *
+     * The `*` is deliberately NOT a general wildcard — it never spans a host, and what follows the
+     * prefix must be a real (digits-only) port. So `http://localhost:*` cannot be tricked into
+     * matching `http://localhost.evil.com`, and a bare `*` matches nothing at all.
+     */
+    private matchesOrigin(origin: string, allowed: string): boolean {
+        if (allowed === origin) {
+            return true;
+        }
+        const wildcardSuffix = ':*';
+        if (!allowed.endsWith(wildcardSuffix)) {
+            return false;
+        }
+        const prefix = allowed.slice(0, -wildcardSuffix.length);
+        if (!origin.startsWith(`${prefix}:`)) {
+            return false;
+        }
+        const port = origin.slice(prefix.length + 1);
+        return /^\d+$/.test(port);
     }
 
     /**

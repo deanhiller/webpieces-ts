@@ -4,13 +4,26 @@
  */
 export class WebpiecesConfig {
     /**
-     * EXTRA cross-origin origins to allow, beyond the two that are always allowed: the server's OWN
-     * origin (same-origin — a browser sends `Origin` on every POST, even same-origin, so this is what
-     * lets a server that also serves its own UI answer its own api calls) and `localhost:*` (dev).
+     * The browser origins allowed to call this api CROSS-ORIGIN. Empty/unset (the default) means
+     * CORS middleware is NEVER MOUNTED — leave it that way in production.
      *
-     * Only needed when the browser origin differs from the api origin AND is not localhost — e.g. a
-     * UI on a CDN/custom domain calling an api on a different host. Exact origin match, e.g.
-     * `['https://app.example.com']`.
+     * You almost never want this in production. A server that also serves its own browser app does
+     * NOT need cors: a browser applies no cors check to a same-origin request. Turning cors on grants
+     * every origin listed here the right to make CREDENTIALED cross-origin calls and READ the
+     * responses, so an unnecessary entry here is pure attack surface.
+     *
+     * Set it in exactly two cases, where the browser really is on a different origin than the api:
+     * 1. LOCAL DEV — `ng serve` on :4200 calling an api on :8080. Use the wildcard port, because the
+     *    dev-server port moves: `config.corsOrigins = ['http://localhost:*'];`
+     * 2. A UI HOSTED ON A DIFFERENT HOST than the api (CDN / custom domain):
+     *    `config.corsOrigins = ['https://app.example.com'];`
+     *
+     * Matching is EXACT, with one exception: a `*` in the PORT position matches any port
+     * (`http://localhost:*`). It is not a general wildcard — it never spans a host, so
+     * `http://localhost:*` will not match `http://localhost.evil.com`, and a bare `*` matches
+     * nothing. The server's OWN origin is always allowed when cors is mounted (a browser sends
+     * `Origin` on every POST, even a same-origin one, so the middleware would otherwise 403 the
+     * server's own UI).
      */
     corsOrigins?: string[];
 
