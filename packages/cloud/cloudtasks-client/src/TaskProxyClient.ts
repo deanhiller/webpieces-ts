@@ -9,6 +9,8 @@ import {
     assertEveryEndpointHasAuthMode,
     AuthMode,
     LogManager,
+    LogApiCall,
+    RouteMetadata,
 } from '@webpieces/core-util';
 import {
     RequestContextHeaders,
@@ -102,24 +104,37 @@ export class TaskProxyClient {
             );
         }
 
-        // Resolved lazily (not at client construction) so building a client stays synchronous.
-        // Every metadata read beneath resolveServiceUrl is memoized process-wide, so only the
-        // first enqueue in the process pays a lookup.
-        const targetUrl = await this.config.resolveUrl();
+        // Route through LogApiCall exactly like ProxyClient does for http. TaskProxyClient.enqueue is
+        // the ONE seam above BOTH GcpTaskInvoker (prod) and InMemoryTaskInvoker (localhost) — whichever
+        // TaskInvoker is bound, this method sits above it — so the enqueue edge gets structured
+        // `jsonPayload.api.*` logging (and, once recording is unified at LogApiCall, is recorded)
+        // uniformly, without touching either invoker impl.
+        const routeMeta = new RouteMetadata('POST', plan.path, methodName, this.apiName);
+        await LogApiCall.execute('client', routeMeta, requestDto, async () => {
+            // Resolved lazily (not at client construction) so building a client stays synchronous.
+            // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
+            // enqueue in the process pays a lookup.
+            const targetUrl = await this.config.resolveUrl();
 
-        const request = new TaskRequest(
-            targetUrl,
-            plan.path,
-            plan.queueName,
-            requestDto,
-            this.buildContextHeaders(),
-            plan.authMode,
-            frame.info ?? new ScheduleInfo(),
-        );
+            const request = new TaskRequest(
+                targetUrl,
+                plan.path,
+                plan.queueName,
+                requestDto,
+                this.buildContextHeaders(),
+                plan.authMode,
+                frame.info ?? new ScheduleInfo(),
+            );
 
-        // svcName, not the URL, is the stable name across demo/qa/prod.
-        log.debug(`enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`);
-        frame.jobRef = await this.invoker.enqueue(request);
+            // svcName, not the URL, is the stable name across demo/qa/prod.
+            log.debug(`enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`);
+            frame.jobRef = await this.invoker.enqueue(request);
+
+            // Fire-and-forget: the enqueue ack is not a meaningful response. Return a non-null value so
+            // LogApiCall's null-response guard passes; a recorded test asserts the enqueued REQUEST
+            // (payload), never this ack.
+            return frame.jobRef ?? { enqueued: true };
+        });
     }
 
     /** Endpoint name -> its resolved path / queue / auth mode, read once from the decorators. */

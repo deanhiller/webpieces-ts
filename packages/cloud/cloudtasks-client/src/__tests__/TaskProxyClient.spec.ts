@@ -7,6 +7,7 @@ process.env['METADATA_SERVER_DETECTION'] = 'none';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ApiPath,
+    ApiCallContextHolder,
     AuthOidc,
     ContextKey,
     Endpoint,
@@ -16,7 +17,7 @@ import {
     Queue,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, RequestContextApiCallContext } from '@webpieces/core-context';
 import { Provider, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
 import { CloudTaskScheduler } from '../CloudTaskScheduler';
@@ -79,6 +80,9 @@ function clientFor(config: TaskClientConfig): EmailApi {
 
 beforeEach(() => {
     HeaderRegistry.configure([TENANT], /*platformHeaders*/ true);
+    // enqueue now routes through LogApiCall (like ProxyClient for http), which requires an installed
+    // ApiCallContext — setupRuntime does this on a real server; a unit test installs it directly.
+    ApiCallContextHolder.install(new RequestContextApiCallContext());
     // Off-GCP the callee's base URL is resolved from the service name via the local registry —
     // this is exactly how a local multi-service run points a svcName at a port.
     ClientRegistry.clear();
