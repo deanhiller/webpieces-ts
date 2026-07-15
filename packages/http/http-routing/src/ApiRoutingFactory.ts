@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
-import { isApiPath, getApiPath, getEndpoints, getAuthMeta, RouteMetadata, AuthMeta } from '@webpieces/core-util';
+import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, RouteMetadata, AuthMeta } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
 
@@ -98,6 +98,7 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
                 controllerName,
                 authMeta,
                 apiName,
+                isFormPost(this.apiMetaClass, methodName),
             );
 
             routeBuilder.addRoute(
