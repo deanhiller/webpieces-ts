@@ -1,4 +1,4 @@
-import { LoggerFactory, ConsoleLoggerFactory } from '@webpieces/core-util';
+import { LoggerFactory, ConsoleLoggerFactory, ErrorTranslation } from '@webpieces/core-util';
 import { ContainerModule } from 'inversify';
 import { WebpiecesConfig } from '@webpieces/http-routing';
 
@@ -22,10 +22,15 @@ export class CompanySetupOptions {
      * @param appOverrides - Single DI module loaded LAST, so tests can rebind bindings
      *   (e.g. a downstream Api) to a mock/simulator.
      * @param config - Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
+     * @param errorTranslations - App error translations installed on ClientRegistry at startup
+     *   (see {@link ErrorTranslation}). This binds them "only when express is used"; an app may
+     *   instead call ClientRegistry.addErrorTranslation(...) directly at its own startup site (and
+     *   MUST do the same on the browser/Angular side, since those translations run client-side).
      */
     constructor(
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
+        public readonly errorTranslations: ErrorTranslation[] = [],
     ) {}
 }

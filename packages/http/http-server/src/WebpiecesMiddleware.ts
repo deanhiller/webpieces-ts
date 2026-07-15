@@ -4,6 +4,7 @@ import { injectable } from 'inversify';
 import { provideFrameworkSingleton, WebpiecesConfig } from '@webpieces/http-routing';
 import {
     ProtocolError,
+    ClientRegistry,
     HttpError,
     HttpBadRequestError,
     HttpVendorError,
@@ -161,6 +162,20 @@ export class ExpressWrapper {
     public handleError(res: Response, error: unknown): void {
         if (res.headersSent) {
             return;
+        }
+
+        // App-registered translations win, so an app can serialize its OWN error types (e.g. a
+        // custom 460) AND override built-ins. `undefined` means "not mine" — fall through to the
+        // built-in instanceof-HttpError ladder below, which stays the generic default. Symmetric
+        // with the client's ClientErrorTranslator, which consults tryTranslateFromWire() first.
+        if (error instanceof Error) {
+            const wire = ClientRegistry.tryTranslateToWire(error);
+            if (wire !== undefined) {
+                res.status(wire.statusCode)
+                    .setHeader('Content-Type', 'application/json')
+                    .send(JSON.stringify(wire.protocolError));
+                return;
+            }
         }
 
         const protocolError = new ProtocolError();

@@ -1,3 +1,6 @@
+import { ErrorTranslation, ErrorWireForm } from './ErrorTranslation';
+import { ProtocolError } from './errors';
+
 /**
  * Derives a base URL for a service name that has NO registered mapping — the pluggable half of
  * {@link ClientRegistry} resolution. One per environment, installed once at startup:
@@ -46,6 +49,15 @@ export class ClientRegistry {
 
     /** The fallback for svcNames with no mapping. Undefined = no derivation in this environment. */
     private static deriver: ServiceUrlDeriver | undefined;
+
+    /**
+     * App-supplied error translations, consulted BEFORE webpieces' built-in error mapping (both
+     * directions). Process-global, populated once at startup on the SERVER and in the BROWSER — the
+     * same no-DI pattern as {@link ClientRegistry.mappings} above. Consulted in registration order,
+     * first match wins, so a later-registered app type AND an override of a built-in status both
+     * work. See {@link ErrorTranslation}.
+     */
+    private static readonly errorTranslations: ErrorTranslation[] = [];
 
     /** Map a service name to `http://localhost:<port>`. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
@@ -136,10 +148,53 @@ export class ClientRegistry {
         return url;
     }
 
-    /** Reset mappings AND the deriver. For tests, so the process-globals do not leak across specs. */
+    /**
+     * Register an app error translation. Consulted BEFORE webpieces' built-in mapping, in
+     * registration order (first match wins), so later app types AND overrides of built-ins both
+     * work. Call ONCE at startup — on the server AND in the browser — mirroring
+     * {@link ClientRegistry.addMapping}. See {@link ErrorTranslation}.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static addErrorTranslation(translation: ErrorTranslation): void {
+        ClientRegistry.errorTranslations.push(translation);
+    }
+
+    /**
+     * exception → wire (SERVER side). The first registered translation that claims `error` wins;
+     * `undefined` if none does — the caller then falls through to the generic webpieces mapping.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static tryTranslateToWire(error: Error): ErrorWireForm | undefined {
+        for (const translation of ClientRegistry.errorTranslations) {
+            const wire = translation.toWire(error);
+            if (wire !== undefined) {
+                return wire;
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * wire → exception (CLIENT side). The first registered translation that claims
+     * `(statusCode, protocolError)` wins; `undefined` if none does — the caller then falls through
+     * to the generic webpieces switch.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static tryTranslateFromWire(statusCode: number, protocolError: ProtocolError): Error | undefined {
+        for (const translation of ClientRegistry.errorTranslations) {
+            const err = translation.fromWire(statusCode, protocolError);
+            if (err !== undefined) {
+                return err;
+            }
+        }
+        return undefined;
+    }
+
+    /** Reset mappings, the deriver, AND error translations. For tests, so the process-globals do not leak across specs. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
     static clear(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
+        ClientRegistry.errorTranslations.length = 0;
     }
 }

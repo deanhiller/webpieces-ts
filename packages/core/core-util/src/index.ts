@@ -111,6 +111,10 @@ export {
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { ClientRegistry } from './http/ClientRegistry';
 export type { ServiceUrlDeriver } from './http/ClientRegistry';
+// Pluggable, bidirectional error translation (app exception <-> wire form). Registered on
+// ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
+export { ErrorWireForm } from './http/ErrorTranslation';
+export type { ErrorTranslation } from './http/ErrorTranslation';
 export { templateDeriver } from './http/templateDeriver';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';
