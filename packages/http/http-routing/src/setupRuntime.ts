@@ -1,5 +1,6 @@
 import { ContainerModule } from 'inversify';
-import { HeaderRegistry, LoggerFactory, LogManager } from '@webpieces/core-util';
+import { ApiCallContextHolder, HeaderRegistry, LoggerFactory, LogManager } from '@webpieces/core-util';
+import { RequestContextApiCallContext } from '@webpieces/core-context';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
 import { AppModules } from './AppModules';
@@ -52,6 +53,11 @@ export async function setupRuntime(
 
     // 2. Install the logging backend ONCE, before anything else logs.
     LogManager.setFactory(options.loggerFactory);
+
+    // 2b. Bind the SERVER ApiCallContext so LogApiCall (browser-safe core-util) stamps the structured
+    // `api` tag into the real RequestContext. Installed here — the one startup that runs on EVERY
+    // server — so both inbound (LogApiFilter) and outbound (clients) log lines carry jsonPayload.api.
+    ApiCallContextHolder.install(new RequestContextApiCallContext());
 
     // 3. Build the node-only router + DI container.
     const router = await WebpiecesRouterFactory.create({

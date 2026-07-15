@@ -69,6 +69,11 @@ class RequestContextImpl {
         this.put(key.name, value);
     }
 
+    /** Clear one context key. Used by the api-tag seam's set → log → remove span (see LogApiCall). */
+    removeHeader(key: ContextKey): void {
+        this.remove(key.name);
+    }
+
     hasHeader(key: ContextKey): boolean {
         return this.has(key.name);
     }
@@ -95,6 +100,23 @@ class RequestContextImpl {
         // WHERE to read from. The browser's ContextMgr calls the same method with its store's read.
         return HeaderRegistry.get().buildLogFields((key: ContextKey) => this.getHeader<string>(key));
     }
+
+    /**
+     * The STRUCTURED field map for the node logging backends: like {@link buildLogFields}, but values
+     * may be OBJECTS, so an object-valued logged key ({@link WebpiecesCoreHeaders.API_CALL_INFO} holding
+     * an {@link ApiCallInfo}) survives as an object and the winston/bunyan backends nest it into
+     * `jsonPayload.api`. Reads values UNTYPED (not `<string>`) so the object comes through intact.
+     *
+     * Returns an EMPTY map outside a `run(...)` block (a log line is never worth crashing over) — same
+     * as {@link buildLogFields}.
+     */
+    buildStructuredLogFields(): Map<string, string | object> {
+        if (!this.isActive()) {
+            return new Map<string, string | object>();
+        }
+        return HeaderRegistry.get().buildStructuredLogFields((key: ContextKey) => this.getHeader(key));
+    }
+
 
     /**
      * Store the transport-neutral {@link HttpRequest} for this request. Called once, above the

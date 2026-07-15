@@ -80,8 +80,11 @@ export function injectContextFormat(): Format {
     let reportedMissingContext = false;
     return format((info: TransformableInfo) => {
         if (RequestContext.isActive()) {
-            // ONE loop, in HeaderRegistry.buildLogFields. Caller-supplied fields win on conflict.
-            RequestContext.buildLogFields().forEach((value: string, name: string) => {
+            // ONE loop, in HeaderRegistry.buildStructuredLogFields. Values may be OBJECTS (the `api`
+            // tag), so an object-valued key nests into jsonPayload.<name> (winston JSON-serializes the
+            // whole record) rather than being dropped by the string-only buildLogFields. Caller-supplied
+            // fields win on conflict.
+            RequestContext.buildStructuredLogFields().forEach((value: string | object, name: string) => {
                 if (info[name] === undefined) {
                     info[name] = value;
                 }
@@ -126,11 +129,14 @@ export function localPrettyFormat(): Format {
         if (!contextNames) {
             contextNames = new Set(HeaderRegistry.get().getLoggedKeys().map((k: ContextKey) => k.name));
         }
+        // Only STRING context values render in the bracket prefix. An object-valued key (the `api`
+        // tag) would stringify to "[object Object]" here, so it is left out of the prefix and instead
+        // falls into the trailing JSON blob below (readable), while GCP still gets it nested.
         const prefixBits: string[] = [];
         for (const name of contextNames) {
             const value = info[name];
-            if (value != null) {
-                prefixBits.push(`${name}=${String(value)}`);
+            if (value != null && typeof value === 'string') {
+                prefixBits.push(`${name}=${value}`);
             }
         }
         const prefix = prefixBits.length ? `[${prefixBits.join(' ')}] ` : '';
@@ -138,7 +144,12 @@ export function localPrettyFormat(): Format {
 
         const rest: Record<string, JsonValue> = {};
         for (const key of Object.keys(info)) {
-            if (LOCAL_STRUCTURAL_KEYS.has(key) || contextNames.has(key)) {
+            if (LOCAL_STRUCTURAL_KEYS.has(key)) {
+                continue;
+            }
+            // A context key already shown in the bracket prefix (string value) is skipped; an
+            // object-valued context key (api) was NOT shown there, so let it render as trailing JSON.
+            if (contextNames.has(key) && typeof info[key] === 'string') {
                 continue;
             }
             rest[key] = info[key] as JsonValue;

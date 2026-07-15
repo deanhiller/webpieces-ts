@@ -1,5 +1,6 @@
-import { ContextMgr, DocumentDesign } from '@webpieces/core-util';
+import { ApiCallContextHolder, ContextMgr, DocumentDesign } from '@webpieces/core-util';
 import { ApiPrototype, buildClientProxy } from '@webpieces/http-client-core';
+import { BrowserApiCallContext } from './BrowserApiCallContext';
 import { BrowserProxyClient } from './BrowserProxyClient';
 import { ClientConfig } from './ClientConfig';
 import { MutableContextStore } from './MutableContextStore';
@@ -42,6 +43,10 @@ export class ClientHttpBrowserFactory {
         private readonly headersListener?: ResponseHeadersListener,
     ) {
         this.contextMgr = new ContextMgr(store);
+        // Bind the BROWSER ApiCallContext so LogApiCall (core-util) stamps the `api` tag into the
+        // module-global browser slot. Idempotent — building the factory more than once is harmless.
+        // Without this, the browser keeps NoopApiCallContext and `api` tagging is inert.
+        ApiCallContextHolder.install(new BrowserApiCallContext());
     }
 
     /**

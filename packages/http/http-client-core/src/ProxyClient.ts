@@ -7,6 +7,7 @@ import {
     RouteMetadata,
     ProtocolError,
     LogApiCall,
+    LogApiCallImpl,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
@@ -36,7 +37,7 @@ export abstract class ProxyClient {
     private routeMap!: Map<string, RouteMetadata>;
     private apiName!: string;
 
-    constructor(protected readonly logApiCall: LogApiCall = new LogApiCall()) {}
+    constructor(protected readonly logApiCall: LogApiCallImpl = LogApiCall) {}
 
     // ---------------------------------------------------------------- environment hooks
 
@@ -71,7 +72,7 @@ export abstract class ProxyClient {
         method: () => Promise<unknown>,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
     ): Promise<unknown> {
-        return this.logApiCall.execute('CLIENT', route, requestDto, method);
+        return this.logApiCall.execute('client', route, requestDto, method);
     }
 
     /**

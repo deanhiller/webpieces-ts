@@ -118,15 +118,22 @@ export type { ErrorTranslation } from './http/ErrorTranslation';
 export { templateDeriver } from './http/templateDeriver';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';
-export type { ContextRead } from './http/ContextReader';
+export type { ContextRead, StructuredContextRead } from './http/ContextReader';
 
 // BROWSER-ONLY outbound-header propagation (app-held store + registry -> outbound HTTP headers).
 // Only @webpieces/http-client-browser may name it; the server reads RequestContext directly via
 // RequestContextHeaders in the Node-only @webpieces/core-context.
 export { ContextMgr } from './http/ContextMgr';
 
-// API-call logging helper (uses LogManager above)
-export { LogApiCall } from './http/LogApiCall';
+// API-call logging helper (uses LogManager above). Singleton: use the LogApiCall constant, not `new`.
+export { LogApiCall, LogApiCallImpl } from './http/LogApiCall';
+
+// The structured `api` tag + the context-writer seam LogApiCall stamps through. The Node
+// RequestContext-backed impl is installed by @webpieces/core-context; the browser gets the no-op.
+export { ApiCallInfo } from './http/ApiCallInfo';
+export type { ApiSide, ApiType, ApiResult } from './http/ApiCallInfo';
+export { ApiCallContextHolder } from './http/ApiCallContext';
+export type { ApiCallContext } from './http/ApiCallContext';
 
 // Test-case recording contract (impl lives in http-server; hooks in http-client)
 export { TestCaseRecorder, RecorderKeys } from './http/recorder/TestCaseRecorder';

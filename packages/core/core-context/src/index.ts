@@ -1,5 +1,9 @@
 // Context management with AsyncLocalStorage
 export { RequestContext } from './RequestContext';
+// SERVER impl of the core-util ApiCallContext seam, bound to RequestContext. Importing it here runs
+// its install() side effect, so LogApiCall (core-util, browser-safe) stamps the real RequestContext on
+// a Node server without importing it. A browser never loads core-context → keeps the no-op.
+export { RequestContextApiCallContext } from './RequestContextApiCallContext';
 // Transport-neutral request stored in the context (http-routing's request type; re-exported there)
 export { HttpRequest } from './HttpRequest';
 

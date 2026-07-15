@@ -9,6 +9,15 @@ import { ContextKey } from '../ContextKey';
 export type ContextRead = (key: ContextKey) => string | undefined;
 
 /**
+ * Reads one context key's value WITHOUT narrowing to string — a key may hold an object
+ * (e.g. {@link ApiCallInfo} under API_CALL_INFO). Used only by
+ * {@link HeaderRegistry.buildStructuredLogFields} for the node logging backends, which can emit
+ * object values as nested `jsonPayload.<name>`. Server passes `RequestContext.getHeader`.
+ */
+// webpieces-disable no-any-unknown -- structured log values are heterogeneous (strings + api struct)
+export type StructuredContextRead = (key: ContextKey) => unknown;
+
+/**
  * ContextReader - reads context-key values from an app-held store.
  *
  * BROWSER-ONLY. Browsers have no AsyncLocalStorage and therefore no ambient request scope, so the

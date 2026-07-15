@@ -36,6 +36,20 @@ export class WebpiecesCoreHeaders {
     static readonly RECORDING = new ContextKey('recording', 'x-webpieces-recording');
 
     /**
+     * The structured API-call tag ({@link ApiCallInfo}) stamped by {@link LogApiCall} around every
+     * outbound (client) / inbound (server) call. It rides the magic context so EVERY log line emitted
+     * during the call inherits a filterable `api` object, surfacing in GCP as nested
+     * `jsonPayload.api.{side,type,result,path,method}`.
+     *
+     * - `httpHeader` UNDEFINED → NOT transferred over the wire. Per-hop only: each server/client hop
+     *   stamps its own tag, so a downstream server records `side:'server'`, never the caller's `side:'client'`.
+     * - `isLogged` TRUE → emitted by the logging backends. It carries an OBJECT value, so the backends
+     *   read it via {@link HeaderRegistry.buildStructuredLogFields} (object-aware); the flat
+     *   `buildLogFields()` string map deliberately skips it (typeof-string guard).
+     */
+    static readonly API_CALL_INFO = new ContextKey('api', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
+
+    /**
      * NO CREDENTIAL KEYS LIVE HERE.
      *
      * `authorization` and `x-webpieces-shared-secret` used to be ContextKeys. That made them
@@ -62,6 +76,7 @@ export class WebpiecesCoreHeaders {
             WebpiecesCoreHeaders.ORG_ID,
             WebpiecesCoreHeaders.USER_ROLES,
             WebpiecesCoreHeaders.RECORDING,
+            WebpiecesCoreHeaders.API_CALL_INFO,
         ];
     }
 }
