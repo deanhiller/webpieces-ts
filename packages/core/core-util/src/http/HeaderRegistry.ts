@@ -1,5 +1,5 @@
 import { ContextKey } from '../ContextKey';
-import { ContextRead } from './ContextReader';
+import { ContextRead, StructuredContextRead } from './ContextReader';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 
 /**
@@ -122,9 +122,44 @@ export class HeaderRegistry {
         const fields = new Map<string, string>();
         for (const key of this.getLoggedKeys()) {
             const value = read(key);
-            if (value) {
+            // typeof-string guard: an object-valued logged key (API_CALL_INFO) must NOT leak into the
+            // flat string map — this map feeds wire/MDC + recorder fixtures, which are string-only.
+            // `read` is typed string-returning, but a key like API_CALL_INFO actually holds an object at
+            // runtime; the guard keeps it out. Object-valued keys ride buildStructuredLogFields instead.
+            if (typeof value === 'string' && value) {
                 fields.set(key.name, key.maskIfSecured(value));
             }
+        }
+        return fields;
+    }
+
+    /**
+     * The STRUCTURED log-field map: like {@link buildLogFields}, but values may be objects, so an
+     * object-valued logged key (e.g. {@link ApiCallInfo} under API_CALL_INFO) survives as an object
+     * instead of being dropped. The node logging backends (winston/bunyan) call THIS — they
+     * JSON-serialize the whole record, so an object value nests into `jsonPayload.<name>` (→
+     * filterable `jsonPayload.api.side`, `.result`, ...). String values are still masked per key.
+     *
+     * The flat {@link buildLogFields} stays string-only for wire/MDC/recorder-fixture callers, which
+     * must not carry heterogeneous objects. This is the deliberate second builder (registry stays the
+     * single source of truth for WHICH keys log; the two builders differ only in value SHAPE).
+     */
+    buildStructuredLogFields(read: StructuredContextRead): Map<string, string | object> {
+        const fields = new Map<string, string | object>();
+        for (const key of this.getLoggedKeys()) {
+            const value = read(key);
+            if (value === undefined || value === null) {
+                continue;
+            }
+            if (typeof value === 'string') {
+                if (value) {
+                    fields.set(key.name, key.maskIfSecured(value));
+                }
+            } else if (typeof value === 'object') {
+                fields.set(key.name, value);
+            }
+            // Non-string primitives (number/boolean/bigint) are not expected for logged context keys;
+            // ignore them here rather than String()-flattening, keeping the shape honest.
         }
         return fields;
     }

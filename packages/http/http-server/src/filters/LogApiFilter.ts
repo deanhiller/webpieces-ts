@@ -2,19 +2,17 @@ import { injectable } from 'inversify';
 import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
-import {
-    LogApiCall,
-} from '@webpieces/core-util';
+import { LogApiCall } from '@webpieces/core-util';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.
  * Priority: 1800 (after ContextFilter at 2000, before custom filters)
  *
  * Logging patterns (via LogApiCall):
- * - [API-SVR-req] Class.method /url request={...} headers={...}
- * - [API-SVR-resp-SUCCESS] Class.method response={...}
- * - [API-SVR-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
- * - [API-SVR-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
+ * - [API-server-req] Class.method /url request={...}
+ * - [API-server-resp-SUCCESS] Class.method response={...}
+ * - [API-server-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
+ * - [API-server-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
  *
  * Headers are read from RequestContext (NOT from meta.requestHeaders which is undefined
  * after ContextFilter runs at priority 2000).
@@ -27,14 +25,6 @@ const log = LogManager.getLogger('LogApiFilter');
 @provideFrameworkSingleton()
 @injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
-    private logApiCall: LogApiCall;
-
-    constructor() {
-        super();
-        // Context fields are stamped onto each record by the logging BACKEND (bunyan/winston read
-        // RequestContext.buildLogFields()); this filter no longer collects them.
-        this.logApiCall = new LogApiCall();
-    }
 
     async filter(
         meta: MethodMeta,
@@ -46,7 +36,10 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             return wpResponse.response;
         };
 
-        const response = await this.logApiCall.execute("SVR", meta.routeMeta, meta.requestDto, method);
+        // LogApiCall is a singleton (use it directly, no `new`). It logs the text lines AND stamps the
+        // structured `api={side:'server',...}` tag into RequestContext, so every log line during the
+        // request carries jsonPayload.api. Correlation fields (requestId, ...) are added by the backend.
+        const response = await LogApiCall.execute('server', meta.routeMeta, meta.requestDto, method);
         return new WpResponse(response);
     }
 }

@@ -72,16 +72,18 @@ export class BunyanLogger implements WpLogger {
         this.bunyan.error(this.buildFields(err), message);
     }
 
-    private buildFields(err?: Error): Record<string, string | LoggedError> {
-        const fields: Record<string, string | LoggedError> = {};
+    private buildFields(err?: Error): Record<string, string | object | LoggedError> {
+        const fields: Record<string, string | object | LoggedError> = {};
         if (!RequestContext.isActive()) {
             this.reportMissingContextOnce();
             return fields;
         }
 
-        // ONE loop, in HeaderRegistry.buildLogFields — the registry owns the keys and each
-        // ContextKey masks its own value.
-        RequestContext.buildLogFields().forEach((value: string, name: string) => {
+        // ONE loop, in HeaderRegistry.buildStructuredLogFields — the registry owns the keys and each
+        // ContextKey masks its own value. Values may be OBJECTS (the `api` tag), so an object-valued key
+        // nests into the structured payload (bunyan's GCP stream serializes fields) rather than being
+        // dropped by the string-only buildLogFields.
+        RequestContext.buildStructuredLogFields().forEach((value: string | object, name: string) => {
             fields[name] = value;
         });
         if (err) {

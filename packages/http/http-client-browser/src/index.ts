@@ -26,6 +26,9 @@
 
 export { ClientHttpBrowserFactory } from './ClientHttpBrowserFactory';
 export { BrowserProxyClient } from './BrowserProxyClient';
+// Browser impl of the ApiCallContext seam (installed by the factory). Exported so a browser/Angular
+// logger can read the current tag via ApiCallContextHolder.get().peek() and fold it into log lines.
+export { BrowserApiCallContext } from './BrowserApiCallContext';
 export { ClientConfig } from './ClientConfig';
 export { MutableContextStore } from './MutableContextStore';
 export type { ResponseHeadersListener } from './ResponseHeadersListener';

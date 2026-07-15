@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ContextKey } from '../../ContextKey';
 import { HeaderRegistry } from '../HeaderRegistry';
+import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 
 /**
  * Configure the GLOBAL registry from a flat set of keys (no platform defaults) and return it.
@@ -86,5 +87,49 @@ describe('HeaderRegistry dedup validation', () => {
         const second = new ContextKey('reqIdAlt', 'x-request-id');
 
         expect(() => configureWith(first, second)).toThrow(/Duplicate ContextKey httpHeader 'x-request-id'/);
+    });
+});
+
+describe('HeaderRegistry.buildStructuredLogFields vs buildLogFields (object values)', () => {
+    const api = new ContextKey('api', undefined, false, /*isLogged*/ true); // object-valued
+    const reqId = new ContextKey('requestId', 'x-request-id');              // string-valued
+    const apiValue = { side: 'client', type: 'request' };
+
+    function read(key: ContextKey): unknown {
+        if (key.name === 'api') return apiValue;
+        if (key.name === 'requestId') return 'abc';
+        return undefined;
+    }
+
+    it('structured builder keeps the object value; string builder DROPS it', () => {
+        const registry = configureWith(api, reqId);
+
+        const structured = registry.buildStructuredLogFields(read);
+        expect(structured.get('api')).toBe(apiValue);   // object survives -> nests into jsonPayload.api
+        expect(structured.get('requestId')).toBe('abc');
+
+        const flat = registry.buildLogFields((k: ContextKey) => read(k) as string | undefined);
+        expect(flat.has('api')).toBe(false);            // object-valued key skipped from the string map
+        expect(flat.get('requestId')).toBe('abc');
+    });
+
+    it('structured builder still masks secured STRING values', () => {
+        const secret = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
+        const registry = configureWith(secret);
+        const structured = registry.buildStructuredLogFields(() => 'abcdefghijklmnop'); // len>15 -> abc...nop
+        expect(structured.get('authorization')).toBe('abc...nop');
+    });
+});
+
+describe('WebpiecesCoreHeaders.API_CALL_INFO', () => {
+    it('is logged but NOT transferred over the wire (per-hop only)', () => {
+        const key = WebpiecesCoreHeaders.API_CALL_INFO;
+        expect(key.name).toBe('api');
+        expect(key.isLogged).toBe(true);
+        expect(key.isTransferred()).toBe(false); // httpHeader undefined -> never propagates to a downstream hop
+
+        const registry = configureWith(...WebpiecesCoreHeaders.getAllHeaders());
+        expect(registry.getTransferredKeys()).not.toContain(key);
+        expect(registry.getLoggedKeys()).toContain(key);
     });
 });
