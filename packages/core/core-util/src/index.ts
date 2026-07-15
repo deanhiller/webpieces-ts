@@ -49,6 +49,8 @@ export {
     Queue,
     getApiPath,
     getEndpoints,
+    getEndpointOptions,
+    isFormPost,
     isApiPath,
     getAuthMeta,
     getAuthMode,
@@ -62,7 +64,7 @@ export {
     RouteMetadata,
     METADATA_KEYS,
 } from './http/decorators';
-export type { AuthMode, ApiKind, JwtRequirement } from './http/decorators';
+export type { AuthMode, ApiKind, JwtRequirement, EndpointOptions } from './http/decorators';
 // Client-side shared-secret store (the value THIS service sends per @AuthSharedSecret key).
 export { Secrets } from './http/Secrets';
 

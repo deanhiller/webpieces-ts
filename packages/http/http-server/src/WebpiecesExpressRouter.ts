@@ -1,5 +1,5 @@
 import { Express } from 'express';
-import { ApiFactory, ApiClient, getApiPath, getEndpoints, WebpiecesConfig } from '@webpieces/http-routing';
+import { ApiFactory, ApiClient, getApiPath, getEndpoints, isFormPost, WebpiecesConfig } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 
@@ -108,7 +108,12 @@ export class WebpiecesExpressRouter {
         let count = 0;
         for (const [methodName, endpointPath] of Object.entries(endpoints)) {
             const path = basePath + endpointPath;
-            const wrapper = this.middleware.createExpressWrapper(apiClient.client[methodName], path);
+            // The parser is chosen by the @Endpoint annotation, not the request Content-Type.
+            const wrapper = this.middleware.createExpressWrapper(
+                apiClient.client[methodName],
+                path,
+                isFormPost(apiClient.api, methodName),
+            );
             // All webpieces routes are POST (the api-tier convention).
             this.registerHandler(app, 'POST', path, wrapper.execute.bind(wrapper));
             count++;

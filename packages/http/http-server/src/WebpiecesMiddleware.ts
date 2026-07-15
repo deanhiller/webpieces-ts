@@ -41,6 +41,12 @@ export class ExpressWrapper {
         private path: string,
         /** Owns the wire<->context transfer, both directions. Stateless framework singleton. */
         private headers: RequestContextHeaders,
+        /**
+         * True for an @Endpoint(..., { formPost: true }) route: parse the body as
+         * application/x-www-form-urlencoded (flat) instead of JSON. Driven by the ANNOTATION, not
+         * the request Content-Type header — the annotation is the single source of truth.
+         */
+        private formPost: boolean = false,
     ) {
     }
 
@@ -67,13 +73,26 @@ export class ExpressWrapper {
         // 1. Translate express's request into the transport-neutral HttpRequest webpieces speaks.
         const httpRequest = this.toWebpiecesRequest(req);
 
-        // 2. Parse JSON request body manually (SYMMETRIC with client's JSON.stringify)
+        // 2. Parse the request body. The PARSER is chosen by the @Endpoint annotation (this.formPost),
+        //    NOT the request Content-Type header — the annotation is the single source of truth.
         let requestDto: unknown = {};
         if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-            // Read raw body as text
             const bodyText = await this.readRequestBody(req);
-            // Parse JSON
-            requestDto = bodyText ? JSON.parse(bodyText) : {};
+            if (this.formPost) {
+                // application/x-www-form-urlencoded → flat key→value. URLSearchParams is lenient
+                // (never throws) — right for EXTERNAL webhooks (e.g. Twilio) that post form-encoded.
+                requestDto = Object.fromEntries(new URLSearchParams(bodyText));
+            } else {
+                // JSON (default, SYMMETRIC with the client's JSON.stringify). A non-JSON body is a
+                // CLIENT error → 400, not the raw 500 an unguarded JSON.parse would throw.
+                // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- translate parse failure to a 400 HttpError
+                try {
+                    requestDto = bodyText ? JSON.parse(bodyText) : {};
+                } catch (err: unknown) {
+                    const error = toError(err);
+                    throw new HttpBadRequestError('Request body is not valid JSON', undefined, undefined, error);
+                }
+            }
         }
 
         // 3. Publish the transport-neutral HttpRequest, then move its headers into the context and
@@ -434,13 +453,16 @@ export class WebpiecesMiddleware {
      * @param clientMethod - The api client's method for this route (dto → response); the proxy
      *   runs the filter chain + controller.
      * @param path - The route path (used to build the HttpRequest).
+     * @param formPost - True for an @Endpoint(..., { formPost: true }) route (parse body as
+     *   urlencoded, not JSON). Default false = JSON.
      * @returns ExpressWrapper instance
      */
     createExpressWrapper(
         // webpieces-disable no-any-unknown -- request/response DTOs are erased at the routing boundary
         clientMethod: (requestDto: unknown) => Promise<unknown>,
         path: string,
+        formPost: boolean = false,
     ): ExpressWrapper {
-        return new ExpressWrapper(clientMethod, path, this.headers);
+        return new ExpressWrapper(clientMethod, path, this.headers, formPost);
     }
 }

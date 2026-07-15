@@ -12,7 +12,22 @@ export const METADATA_KEYS = {
     API_KIND: 'webpieces:api-kind',
     /** Per-method Cloud Tasks queue-name override (set via @Queue). */
     QUEUE_OVERRIDE: 'webpieces:queue-override',
+    /** Per-method @Endpoint options (e.g. formPost), parallel to ENDPOINTS. */
+    ENDPOINT_OPTIONS: 'webpieces:endpoint-options',
 };
+
+/**
+ * Options for a single @Endpoint. Kept in a metadata map PARALLEL to ENDPOINTS so the existing
+ * `Record<methodName, path>` shape every consumer iterates stays unchanged.
+ */
+export interface EndpointOptions {
+    /**
+     * Parse the request body as application/x-www-form-urlencoded (flat key→value) instead of JSON.
+     * For EXTERNAL webhooks (e.g. Twilio) that post form-encoded. The request DTO must be FLAT —
+     * urlencoded has no nesting (unlike JSON). Default false = JSON.
+     */
+    formPost?: boolean;
+}
 
 /**
  * Route metadata stored per-method at runtime.
@@ -28,6 +43,12 @@ export class RouteMetadata {
     authMeta?: AuthMeta;
     /** The API contract class name (e.g. 'SaveApi') — distinct from the controller name. */
     apiName?: string;
+    /**
+     * True when @Endpoint(..., { formPost: true }): the body is application/x-www-form-urlencoded
+     * (flat key→value), not JSON. Rides the route metadata so the per-route body parse can branch
+     * without knowing the apiClass/methodName. Default false = JSON.
+     */
+    readonly formPost: boolean;
 
     constructor(
         httpMethod: string,
@@ -36,6 +57,7 @@ export class RouteMetadata {
         controllerClassName?: string,
         authMeta?: AuthMeta,
         apiName?: string,
+        formPost: boolean = false,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -43,6 +65,7 @@ export class RouteMetadata {
         this.controllerClassName = controllerClassName;
         this.authMeta = authMeta;
         this.apiName = apiName;
+        this.formPost = formPost;
     }
 }
 
@@ -127,7 +150,7 @@ export function ApiPath(basePath: string): ClassDecorator {
 }
 
 /**
- * @Endpoint(path) - Method decorator that registers a POST endpoint at the given path.
+ * @Endpoint(path, options?) - Method decorator that registers a POST endpoint at the given path.
  *
  * All endpoints are POST-only (matching gRPC/thrift style).
  *
@@ -135,9 +158,17 @@ export function ApiPath(basePath: string): ClassDecorator {
  * ```typescript
  * @Endpoint('/item')
  * save(request: SaveRequest): Promise<SaveResponse> { ... }
+ *
+ * // EXTERNAL webhook posting application/x-www-form-urlencoded (e.g. Twilio):
+ * @Endpoint('/hook', { formPost: true })
+ * inbound(request: InboundRequest): Promise<InboundResponse> { ... }
  * ```
+ *
+ * The path write to ENDPOINTS is UNCHANGED (every consumer iterates `[methodName, path]`); options
+ * ride a PARALLEL ENDPOINT_OPTIONS map so nothing downstream changes shape.
  */
-export function Endpoint(path: string): MethodDecorator {
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function Endpoint(path: string, options: EndpointOptions = {}): MethodDecorator {
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
         const metadataTarget = typeof target === 'function' ? target : target.constructor;
@@ -148,6 +179,11 @@ export function Endpoint(path: string): MethodDecorator {
         endpoints[propertyKey as string] = path;
 
         Reflect.defineMetadata(METADATA_KEYS.ENDPOINTS, endpoints, metadataTarget);
+
+        const opts: Record<string, EndpointOptions> =
+            Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, metadataTarget) || {};
+        opts[propertyKey as string] = options;
+        Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, opts, metadataTarget);
     };
 }
 
@@ -280,6 +316,25 @@ export function getApiPath(apiClass: Function): string | undefined {
  */
 export function getEndpoints(apiClass: Function): Record<string, string> | undefined {
     return Reflect.getMetadata(METADATA_KEYS.ENDPOINTS, apiClass);
+}
+
+/**
+ * Get the @Endpoint options for one method (empty object if the method had no options).
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpoints
+export function getEndpointOptions(apiClass: Function, methodName: string): EndpointOptions {
+    const opts: Record<string, EndpointOptions> =
+        Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, apiClass) || {};
+    return opts[methodName] ?? {};
+}
+
+/**
+ * True when the method's @Endpoint declared `{ formPost: true }` — its body is
+ * application/x-www-form-urlencoded (flat), not JSON.
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpoints
+export function isFormPost(apiClass: Function, methodName: string): boolean {
+    return getEndpointOptions(apiClass, methodName).formPost === true;
 }
 
 /**

@@ -3,6 +3,7 @@ import {
     getApiPath,
     getEndpoints,
     getAuthMeta,
+    isFormPost,
     AuthMeta,
     RouteMetadata,
     ProtocolError,
@@ -120,7 +121,11 @@ export abstract class ProxyClient {
             // @AuthOidc / @AuthSharedSecret, exactly as the server verifies it.
             const authMeta = getAuthMeta(apiPrototype, methodName);
             this.assertEndpointSupported(authMeta, methodName);
-            this.routeMap.set(methodName, new RouteMetadata('POST', fullPath, methodName, this.apiName, authMeta));
+            const formPost = isFormPost(apiPrototype, methodName);
+            this.routeMap.set(
+                methodName,
+                new RouteMetadata('POST', fullPath, methodName, this.apiName, authMeta, undefined, formPost),
+            );
         }
     }
 
@@ -155,6 +160,19 @@ export abstract class ProxyClient {
      */
     // webpieces-disable no-any-unknown -- proxy method: the request DTO (args) + response are erased at the client boundary
     async makeRequest(route: RouteMetadata, args: any[]): Promise<any> {
+        // FAIL FAST: formPost endpoints exist ONLY for EXTERNAL inbound webhooks (e.g. Twilio is the
+        // caller — there is no webpieces client for them). This proxy JSON.stringifies the body, so
+        // calling one would silently send a wrong-encoded body. Refuse it here — PER METHOD, at call
+        // time — so an API mixing normal + formPost endpoints still gives a working client for the
+        // normal ones; only calling the formPost method throws.
+        if (route.formPost) {
+            throw new Error(
+                `${this.apiName}.${route.methodName} is @Endpoint(..., { formPost: true }) — the ` +
+                `webpieces client does not support calling form-encoded endpoints yet. formPost is ` +
+                `for EXTERNAL inbound webhooks (e.g. Twilio) only. If this endpoint needs a ` +
+                `service-to-service client, set formPost:false (or remove it) so it uses JSON.`,
+            );
+        }
         // Resolved per call (memoized underneath on a server), so building a client stayed synchronous.
         const baseUrl = await this.resolveBaseUrl();
         const url = `${baseUrl}${route.path}`;

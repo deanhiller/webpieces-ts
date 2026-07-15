@@ -13,6 +13,8 @@ export {
     Queue,
     getApiPath,
     getEndpoints,
+    getEndpointOptions,
+    isFormPost,
     isApiPath,
     getAuthMeta,
     getAuthMode,
@@ -30,7 +32,7 @@ export {
     DocumentDesign,
     isDocumentDesign,
 } from '@webpieces/core-util';
-export type { AuthMode, ApiKind } from '@webpieces/core-util';
+export type { AuthMode, ApiKind, EndpointOptions } from '@webpieces/core-util';
 
 // Server-side routing decorators and utilities
 export {
