@@ -14,6 +14,18 @@ import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
 
 const log = LogManager.getLogger('LogApiCall');
 
+/**
+ * Options for {@link LogApiCallImpl.execute}. `allowVoidResponse` opts OUT of the strict
+ * falsy-response guard for callers that legitimately return void/undefined (e.g. a local firestore
+ * wrapper). Defaults to strict so RPC callers keep the safety net.
+ */
+export class LogApiCallOptions {
+    allowVoidResponse?: boolean;
+
+    constructor(allowVoidResponse?: boolean) {
+        this.allowVoidResponse = allowVoidResponse;
+    }
+}
 
 /**
  * LogApiCall - Generic API call logging utility, used by BOTH server-side (LogApiFilter) and
@@ -49,6 +61,11 @@ export class LogApiCallImpl {
      * @param meta - Route metadata with controllerClassName and methodName
      * @param requestDto - The request DTO
      * @param method - The method to execute
+     * @param options - `allowVoidResponse: true` opts OUT of the strict falsy-response guard, for
+     *   callers that legitimately return void/undefined (e.g. a local firestore wrapper whose
+     *   `setDocument` returns void, or a `getDocById` miss returning undefined). Defaults to strict,
+     *   so RPC callers (LogApiFilter, ProxyClient) keep the safety net: an HTTP endpoint returning
+     *   nothing is almost always a bug.
      *
      * Correlation fields (requestId, tenantId, ...) are NOT stamped here — a logging BACKEND owns that,
      * reading RequestContext on every record. What IS stamped here is the per-call `api` tag, and only
@@ -63,7 +80,8 @@ export class LogApiCallImpl {
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary (matches ProxyClient)
         requestDto: any,
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
-        method: (dto: any) => Promise<any>
+        method: (dto: any) => Promise<any>,
+        options?: LogApiCallOptions
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
     ): Promise<any> {
         // Throws if no ApiCallContext was installed at startup, or there is no active scope to stamp
@@ -96,7 +114,7 @@ export class LogApiCallImpl {
 
             const response = await method(requestDto);
 
-            if(!response)
+            if(!options?.allowVoidResponse && !response)
                 throw new Error(`Response cannot be null and was from ${cls}.${meta.methodName}`);
 
             stamp(new ApiCallInfo(side, 'response', 'success', meta.path, meta.methodName, cls), () =>

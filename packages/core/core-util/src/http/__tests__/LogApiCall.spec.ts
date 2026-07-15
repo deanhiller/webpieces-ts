@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LogApiCall } from '../LogApiCall';
+import { LogApiCall, LogApiCallOptions } from '../LogApiCall';
 import { RouteMetadata } from '../decorators';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiCallContext, ApiCallContextHolder } from '../ApiCallContext';
@@ -55,6 +55,27 @@ describe('LogApiCall.execute — success + active guard', () => {
         expect(ctx.values()[1]).toEqual(new ApiCallInfo('client', 'response', 'success', '/save', 'save', 'SaveController'));
         // set → log → remove: every stamp is cleared, so nothing is ever held across the await.
         expect(ctx.removes).toEqual([API, API]);
+    });
+
+    it('default (no options): a falsy/void response still throws Response cannot be null', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        await expect(
+            LogApiCall.execute('client', meta, { q: 'x' }, async () => undefined),
+        ).rejects.toThrow(/Response cannot be null/);
+    });
+
+    it('allowVoidResponse: an undefined return resolves and stamps response:success', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        const res = await LogApiCall.execute(
+            'client', meta, { q: 'x' }, async () => undefined, new LogApiCallOptions(true),
+        );
+
+        expect(res).toBeUndefined();
+        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo('client', 'response', 'success', '/save', 'save', 'SaveController'));
     });
 
     it('throws when the ApiCallContext is not active (no request scope / factory not built)', async () => {
