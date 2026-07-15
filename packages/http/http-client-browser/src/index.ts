@@ -28,6 +28,7 @@ export { ClientHttpBrowserFactory } from './ClientHttpBrowserFactory';
 export { BrowserProxyClient } from './BrowserProxyClient';
 export { ClientConfig } from './ClientConfig';
 export { MutableContextStore } from './MutableContextStore';
+export type { ResponseHeadersListener } from './ResponseHeadersListener';
 
 // The isomorphic engine, re-exported so a browser app needs one import.
 export { ProxyClient, ClientErrorTranslator } from '@webpieces/http-client-core';

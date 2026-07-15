@@ -14,7 +14,9 @@ appears in each root's tree.
 graph TD
     ClientHttpBrowserFactory["ClientHttpBrowserFactory"]:::apiImpl
     MutableContextStore["MutableContextStore"]:::many
+    ResponseHeadersListener{{"ResponseHeadersListener ?"}}:::unresolved
     ClientHttpBrowserFactory --> MutableContextStore
+    ClientHttpBrowserFactory --> ResponseHeadersListener
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

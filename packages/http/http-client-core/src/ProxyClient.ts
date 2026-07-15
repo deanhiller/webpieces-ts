@@ -81,6 +81,15 @@ export abstract class ProxyClient {
      */
     protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
 
+    /**
+     * Observe the response headers after each call, before the body is consumed. Symmetric with the
+     * outbound {@link outboundHeaders} hook: this is the ONLY place the `fetch` Response — and thus
+     * its `Headers` — exists, so an app that needs to read a response header (e.g. a server-version
+     * stamp for client↔server version matching) overrides this in its subclass. The default ignores
+     * them, so every existing subclass is unaffected.
+     */
+    protected onResponseHeaders(_route: RouteMetadata, _headers: Headers): void {}
+
     // ---------------------------------------------------------------- contract binding
 
     /**
@@ -178,7 +187,7 @@ export abstract class ProxyClient {
         // Wrap fetch in a method for LogApiCall.execute
         // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
         const method = async (): Promise<unknown> => {
-            return this.executeFetch(url, options);
+            return this.executeFetch(url, options, route);
         };
 
         return await this.execute(route, requestDto, method);
@@ -188,9 +197,13 @@ export abstract class ProxyClient {
      * Execute the fetch request and handle response.
      */
     // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
-    private async executeFetch(url: string, options: RequestInit): Promise<unknown> {
+    private async executeFetch(url: string, options: RequestInit, route: RouteMetadata): Promise<unknown> {
         // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
         const response = await fetch(url, options);
+
+        // Inbound seam — invoked before the body is consumed, on BOTH the ok and error paths, so
+        // version (and any future) headers are observed even on error responses.
+        this.onResponseHeaders(route, response.headers);
 
         if (response.ok) {
             return await response.json();

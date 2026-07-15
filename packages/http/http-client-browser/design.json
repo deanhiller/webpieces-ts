@@ -23,6 +23,14 @@
                     "scope": "transient",
                     "file": "packages/http/http-client-browser/src/MutableContextStore.ts",
                     "level": 1
+                },
+                {
+                    "id": "ResponseHeadersListener",
+                    "className": "ResponseHeadersListener",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
+                    "level": 1
                 }
             ],
             "edges": [
@@ -34,9 +42,20 @@
                     "tokenKey": "class:packages/http/http-client-browser/src/MutableContextStore.ts#MutableContextStore",
                     "paramName": "store",
                     "paramType": "MutableContextStore"
+                },
+                {
+                    "from": "ClientHttpBrowserFactory",
+                    "to": "ResponseHeadersListener",
+                    "injection": "type",
+                    "token": "ResponseHeadersListener",
+                    "tokenKey": "type:ResponseHeadersListener",
+                    "paramName": "headersListener",
+                    "paramType": "ResponseHeadersListener"
                 }
             ],
-            "unresolved": []
+            "unresolved": [
+                "ResponseHeadersListener"
+            ]
         }
     ]
 }
