@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ClientRegistry } from '../ClientRegistry';
+import { ErrorTranslation, ErrorWireForm } from '../ErrorTranslation';
+import { ProtocolError, HttpError } from '../errors';
 
 describe('ClientRegistry', () => {
     beforeEach(() => {
@@ -97,5 +99,117 @@ describe('ClientRegistry resolution chain', () => {
         ClientRegistry.clear();
 
         expect(await ClientRegistry.tryResolve('helper-fsdb')).toBeUndefined();
+    });
+});
+
+/** A custom app error at HTTP 460 — the concrete driver (mirrors Mealco's HttpAiBadRequestError). */
+class AiBadRequestError extends HttpError {
+    constructor(message: string) {
+        super(message, 460);
+        this.name = 'AiBadRequest';
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/** Bidirectional translation for {@link AiBadRequestError}: exception <-> wire (statusCode 460). */
+class AiErrorTranslation implements ErrorTranslation {
+    toWire(error: Error): ErrorWireForm | undefined {
+        if (!(error instanceof AiBadRequestError)) {
+            return undefined;
+        }
+        const pe = new ProtocolError();
+        pe.message = error.message;
+        pe.name = error.name;
+        return new ErrorWireForm(460, pe);
+    }
+    fromWire(statusCode: number, pe: ProtocolError): Error | undefined {
+        if (statusCode !== 460) {
+            return undefined;
+        }
+        return new AiBadRequestError(pe.message ?? 'AI bad request');
+    }
+}
+
+/**
+ * Pluggable error translations: additive (new types) AND override-capable (built-in statuses), both
+ * consulted BEFORE the generic webpieces mapping, both falling through on `undefined`.
+ */
+describe('ClientRegistry error translations', () => {
+    beforeEach(() => {
+        ClientRegistry.clear();
+    });
+
+    it('an unregistered status falls through — both directions return undefined', () => {
+        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeUndefined();
+        expect(ClientRegistry.tryTranslateToWire(new AiBadRequestError('nope'))).toBeUndefined();
+    });
+
+    it('round-trips a custom type: toWire then fromWire reproduces the typed error', () => {
+        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+
+        const wire = ClientRegistry.tryTranslateToWire(new AiBadRequestError('bad ai input'));
+        expect(wire).toBeDefined();
+        expect(wire?.statusCode).toBe(460);
+
+        const rebuilt = ClientRegistry.tryTranslateFromWire(wire!.statusCode, wire!.protocolError);
+        expect(rebuilt).toBeInstanceOf(AiBadRequestError);
+        expect((rebuilt as HttpError).code).toBe(460);
+        expect(rebuilt?.message).toBe('bad ai input');
+    });
+
+    it('a translation that does not claim the error/status falls through to the next one', () => {
+        // First translation never claims anything; the AI translation (registered second) does.
+        const noop: ErrorTranslation = {
+            toWire: () => undefined,
+            fromWire: () => undefined,
+        };
+        ClientRegistry.addErrorTranslation(noop);
+        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+
+        expect(ClientRegistry.tryTranslateToWire(new AiBadRequestError('x'))?.statusCode).toBe(460);
+        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeInstanceOf(
+            AiBadRequestError,
+        );
+    });
+
+    it('clear() empties error translations too, so they cannot leak into the next spec', () => {
+        ClientRegistry.addErrorTranslation(new AiErrorTranslation());
+        ClientRegistry.clear();
+
+        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeUndefined();
+    });
+});
+
+/** First-match-wins ordering + overriding a built-in status. */
+describe('ClientRegistry error translations — precedence', () => {
+    beforeEach(() => {
+        ClientRegistry.clear();
+    });
+
+    it('first match wins — an earlier translation shadows a later one for the same status', () => {
+        const first = new AiErrorTranslation();
+        const second: ErrorTranslation = {
+            toWire: () => undefined,
+            fromWire: (statusCode: number) =>
+                statusCode === 460 ? new Error('SECOND should be shadowed') : undefined,
+        };
+        ClientRegistry.addErrorTranslation(first);
+        ClientRegistry.addErrorTranslation(second);
+
+        expect(ClientRegistry.tryTranslateFromWire(460, new ProtocolError())).toBeInstanceOf(
+            AiBadRequestError,
+        );
+    });
+
+    it('can OVERRIDE a built-in status (400) — the registry is consulted before webpieces', () => {
+        const override: ErrorTranslation = {
+            toWire: () => undefined,
+            fromWire: (statusCode: number, pe: ProtocolError) =>
+                statusCode === 400 ? new AiBadRequestError(pe.message ?? 'overridden 400') : undefined,
+        };
+        ClientRegistry.addErrorTranslation(override);
+
+        const rebuilt = ClientRegistry.tryTranslateFromWire(400, new ProtocolError());
+        expect(rebuilt).toBeInstanceOf(AiBadRequestError);
     });
 });

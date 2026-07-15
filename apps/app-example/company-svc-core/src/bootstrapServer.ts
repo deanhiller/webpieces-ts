@@ -1,7 +1,7 @@
 import express from 'express';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { ApiFactory, AppModules, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
-import { toError, LogManager } from '@webpieces/core-util';
+import { toError, LogManager, ClientRegistry, ErrorTranslation } from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
 
@@ -19,6 +19,10 @@ export async function setupCompanyRuntime(
     appModules: AppModules,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
+    // Install the app's error translations at the same point we install the logger/registry config,
+    // so exception<->wire translation is part of the express-server wiring "only when express is
+    // used." Consulted before the built-in webpieces mapping on BOTH sides (see ErrorTranslation).
+    options.errorTranslations.forEach((t: ErrorTranslation) => ClientRegistry.addErrorTranslation(t));
     return setupRuntime(
         new RuntimeSetupOptions(options.loggerFactory, /*platformHeaders*/ true, options.config),
         appModules,

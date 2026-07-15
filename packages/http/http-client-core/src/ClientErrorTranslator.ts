@@ -1,5 +1,6 @@
 import {
     ProtocolError,
+    ClientRegistry,
     HttpError,
     HttpBadRequestError,
     HttpUserError,
@@ -52,6 +53,15 @@ export class ClientErrorTranslator {
         const message = protocolError.message || response.statusText || 'Unknown error';
         const subType = protocolError.subType;
 
+        // App-registered translations win, so an app can reconstruct its OWN error types (e.g. a
+        // custom 460) AND override built-ins. `undefined` means "not mine" — fall through to the
+        // built-in switch below, which stays the generic default. Symmetric with the server's
+        // ExpressWrapper.handleError(), which consults ClientRegistry.tryTranslateToWire() first.
+        const custom = ClientRegistry.tryTranslateFromWire(statusCode, protocolError);
+        if (custom !== undefined) {
+            return custom;
+        }
+
         // Map status codes to error types (symmetric with server's ExpressWrapper.handleError())
         switch (statusCode) {
             case 400:
@@ -89,8 +99,13 @@ export class ClientErrorTranslator {
                 return new HttpVendorError(message, protocolError.waitSeconds);
 
             default:
-                // Unknown status code - return generic HttpError
-                return new Error(` could not translate statusCode=${statusCode}`);
+                // Unknown status code and no app translation claimed it: still a real HttpError (so
+                // `err instanceof HttpError` holds after the RPC hop), carrying the status code.
+                return new HttpError(
+                    message || `could not translate statusCode=${statusCode}`,
+                    statusCode,
+                    subType,
+                );
         }
     }
 }
