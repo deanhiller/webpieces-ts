@@ -3,6 +3,7 @@ import { ApiPrototype, buildClientProxy } from '@webpieces/http-client-core';
 import { BrowserProxyClient } from './BrowserProxyClient';
 import { ClientConfig } from './ClientConfig';
 import { MutableContextStore } from './MutableContextStore';
+import { ResponseHeadersListener } from './ResponseHeadersListener';
 
 /**
  * ClientHttpBrowserFactory - builds type-safe HTTP clients for a BROWSER from API prototypes
@@ -36,7 +37,10 @@ import { MutableContextStore } from './MutableContextStore';
 export class ClientHttpBrowserFactory {
     private readonly contextMgr: ContextMgr;
 
-    constructor(store: MutableContextStore) {
+    constructor(
+        store: MutableContextStore,
+        private readonly headersListener?: ResponseHeadersListener,
+    ) {
         this.contextMgr = new ContextMgr(store);
     }
 
@@ -47,7 +51,7 @@ export class ClientHttpBrowserFactory {
      * @param config - This client's state (its baseUrl)
      */
     createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
-        const proxyClient = new BrowserProxyClient(this.contextMgr);
+        const proxyClient = new BrowserProxyClient(this.contextMgr, this.headersListener);
         proxyClient.init(apiPrototype, config);
         return buildClientProxy(apiPrototype, proxyClient);
     }

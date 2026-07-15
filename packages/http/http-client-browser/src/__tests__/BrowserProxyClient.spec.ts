@@ -11,9 +11,11 @@ import {
     Public,
     Rpc,
 } from '@webpieces/core-util';
+import { RouteMetadata } from '@webpieces/core-util';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
 import { MutableContextStore } from '../MutableContextStore';
+import { ResponseHeadersListener } from '../ResponseHeadersListener';
 
 class SaveRequest {
     constructor(public readonly query: string) {}
@@ -76,6 +78,24 @@ function stubFetch(): { url: () => string } {
     return { url: (): string => String(fetchMock.mock.calls[0]?.[0]) };
 }
 
+/** Stub fetch with a chosen status + response headers, so the inbound seam can be observed. */
+function stubFetchWithHeaders(status: number, headers: Record<string, string>): void {
+    const body = status < 400 ? '{}' : JSON.stringify({ code: 'ERR', message: 'boom' });
+    const fetchMock = vi.fn(() =>
+        Promise.resolve(new Response(body, { status, headers: { 'Content-Type': 'application/json', ...headers } })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+}
+
+/** A recording ResponseHeadersListener — captures every call for assertion. */
+class RecordingListener implements ResponseHeadersListener {
+    readonly calls: Array<{ route: RouteMetadata; version: string | null }> = [];
+
+    onResponseHeaders(route: RouteMetadata, headers: Headers): void {
+        this.calls.push({ route, version: headers.get('x-myorg-server-version') });
+    }
+}
+
 /**
  * A browser app almost always calls the backend that SERVED it, so an unregistered svcName must
  * resolve to a relative URL (= same origin), never throw. It used to throw: a forgotten registration
@@ -136,5 +156,50 @@ describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => 
         // ...and rejects one the contract never declared.
         // webpieces-disable no-any-unknown -- deliberately probing an undeclared method
         expect(() => (client as any).notAnEndpoint).toThrow(/No route found for method 'notAnEndpoint'/);
+    });
+});
+
+/**
+ * The inbound seam symmetric with outbound header propagation: an app registers ONE listener on the
+ * factory and reads response headers off every RPC call. The driver is client↔server version
+ * matching (the server stamps x-<org>-server-version). Optional + non-breaking: a factory built
+ * without a listener behaves exactly as before.
+ */
+describe('BrowserProxyClient reports response headers to a registered listener', () => {
+    it('with NO listener the client still works — the seam is a no-op', async () => {
+        const fetched = stubFetch();
+        const bareFactory = new ClientHttpBrowserFactory(new MutableContextStore());
+        const client = bareFactory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+
+        await client.save(new SaveRequest('q'));
+
+        expect(fetched.url()).toBe('/public/save');
+    });
+
+    it('a 2xx response invokes the listener once with the right route + headers', async () => {
+        stubFetchWithHeaders(200, { 'x-myorg-server-version': '1.2.3' });
+        const listener = new RecordingListener();
+        const withListener = new ClientHttpBrowserFactory(new MutableContextStore(), listener);
+        const client = withListener.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+
+        await client.save(new SaveRequest('q'));
+
+        expect(listener.calls).toHaveLength(1);
+        expect(listener.calls[0].version).toBe('1.2.3');
+        expect(listener.calls[0].route.methodName).toBe('save');
+    });
+
+    it('an error response ALSO invokes the listener — version headers arrive on errors too', async () => {
+        stubFetchWithHeaders(503, { 'x-myorg-server-version': '9.9.9' });
+        const listener = new RecordingListener();
+        const withListener = new ClientHttpBrowserFactory(new MutableContextStore(), listener);
+        const client = withListener.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+
+        // webpieces-disable no-unmanaged-exceptions -- the 503 rethrows after the seam fires; we only assert the seam
+        await expect(client.save(new SaveRequest('q'))).rejects.toBeDefined();
+
+        expect(listener.calls).toHaveLength(1);
+        expect(listener.calls[0].version).toBe('9.9.9');
+        expect(listener.calls[0].route.methodName).toBe('save');
     });
 });

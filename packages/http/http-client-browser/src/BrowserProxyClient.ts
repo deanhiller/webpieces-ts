@@ -1,6 +1,7 @@
-import { AuthMeta, ContextMgr, ClientRegistry } from '@webpieces/core-util';
+import { AuthMeta, ContextMgr, ClientRegistry, RouteMetadata } from '@webpieces/core-util';
 import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
+import { ResponseHeadersListener } from './ResponseHeadersListener';
 
 /**
  * The browser {@link ProxyClient}. Reads context from the app-held store (via {@link ContextMgr}),
@@ -15,7 +16,10 @@ import { ClientConfig } from './ClientConfig';
 export class BrowserProxyClient extends ProxyClient {
     private config!: ClientConfig;
 
-    constructor(private readonly contextMgr: ContextMgr) {
+    constructor(
+        private readonly contextMgr: ContextMgr,
+        private readonly headersListener?: ResponseHeadersListener,
+    ) {
         super();
     }
 
@@ -42,6 +46,14 @@ export class BrowserProxyClient extends ProxyClient {
 
     protected override outboundHeaders(): Map<string, string> {
         return this.contextMgr.buildOutboundHeaders();
+    }
+
+    /**
+     * Forward the response headers to the app's listener, if one was registered on the factory.
+     * The optional chain makes this a no-op when no listener is present — the default browser case.
+     */
+    protected override onResponseHeaders(route: RouteMetadata, headers: Headers): void {
+        this.headersListener?.onResponseHeaders(route, headers);
     }
 
     /**

@@ -324,7 +324,7 @@
 </ul>
 <h5>Out of Scope</h5>
 <ul>
-<li>GCP identity/metadata/OIDC primitives, and deriving a Cloud Run URL from <code>svcName</code> (that is gcp-identity's <code>resolveTargetUrl</code>)</li>
+<li>GCP identity/metadata/OIDC primitives (gcp-identity), and the <code>svcName</code> → URL chain itself (core-util's <code>ClientRegistry.resolve</code>, which <code>TaskClientConfig</code> calls — it does NOT go through <code>ProxyClient.resolveBaseUrl()</code>, so it reaches the shared chain directly rather than growing its own)</li>
 <li>Generic HTTP routing/server bootstrap (http-routing / http-server)</li>
 <li>Server-side delivery pieces: the <code>ServiceAuthFilter</code> (@AuthOidc/@AuthSharedSecret enforcement) and any in-process route dispatch — a client library has NO server filters or routing machinery; those live in http-server</li>
 <li>Synchronous RPC client generation (http-client)</li>
@@ -340,13 +340,13 @@
 <ul>
 <li><code>ClientHttpFactory</code> — the <code>@DocumentDesign</code> design root and inversify entry point; one per service, injected wherever a typed client is needed</li>
 <li><code>NodeProxyClient</code> — the container-wired <code>ProxyClient</code> (bound TRANSIENT: each API contract needs its own), plus <code>ProxyClientProvider</code>, the Guice-style <code>Provider&lt;T&gt;</code> that hands out a fresh one per <code>createRpcClient</code></li>
-<li><code>ClientConfig</code> — per-client state: the callee's <code>svcName</code> (typically its Cloud Run service name) and an optional <code>targetUrl</code> override for cross-region / cross-project / non-Cloud-Run targets</li>
+<li><code>ClientConfig</code> — per-client state: the callee's <code>svcName</code> (typically its Cloud Run service name). Non-derivable URLs (localhost, cross-region/project, non-Cloud-Run) come from a <code>ClientRegistry</code> mapping, not a per-client override</li>
 <li>Failing fast when a call is made outside <code>RequestContext.run(...)</code> — an outbound call with no correlation id or request-id chain is a bug, not a default</li>
 </ul>
 <h5>Out of Scope</h5>
 <ul>
 <li>The decorator-reading engine, the Proxy trap, and error translation → <code>http-client-core</code></li>
-<li>Deriving a Cloud Run URL from a service name, and minting OIDC tokens → <code>gcp-identity</code> (<code>resolveTargetUrl</code>, <code>mintIdToken</code>)</li>
+<li>Resolving <code>svcName</code> → base URL → <code>ClientRegistry.resolve</code> in core-util (mapping, else the installed deriver, else throw). The GCP deriver and OIDC minting → <code>gcp-identity</code> (<code>gcpCloudRunDeriver</code>, <code>mintIdToken</code>)</li>
 <li>Reading/propagating the magic context → <code>RequestContextHeaders</code> in <code>core-context</code></li>
 <li>Enqueuing fire-and-forget work → <code>cloudtasks-client</code>, its structural twin</li>
 <li>Server-side routing to controllers → <code>http-routing</code></li>
@@ -404,13 +404,15 @@
 <p>GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.</p>
 <h5>In Scope</h5>
 <ul>
-<li>Metadata reads: project id, numeric project id, region, service name (<code>K_SERVICE</code>), runtime service-account email</li>
-<li>Cloud Run URL derivation (<code>getSelfCloudRunUrl</code>, <code>getCloudRunUrl</code>)</li>
+<li>Metadata reads: project id, numeric project id, region, service name (<code>K_SERVICE</code>, verbatim — no prefix rules), runtime service-account email</li>
+<li>This service's own URL (<code>getSelfCloudRunUrl</code>)</li>
+<li>The GCP <code>ServiceUrlDeriver</code> (<code>gcpCloudRunDeriver</code>) — the Cloud Run formula, from the metadata server ON GCP or from a supplied <code>GcpCloudRunTarget</code> off it</li>
 <li>OIDC mint/verify (<code>mintIdToken</code>, <code>verifyOidcFromCallers</code>), including <code>dev-oidc.*</code> tokens off-GCP</li>
 <li><code>isOnGcp()</code> detection with localhost/dev fallbacks for every value</li>
 </ul>
 <h5>Out of Scope</h5>
 <ul>
+<li>The URL-resolution CHAIN itself (mapping → deriver → fallback) — that is <code>ClientRegistry</code> in core-util, which is browser-safe and knows nothing of GCP. This package only contributes one deriver an app opts into</li>
 <li>HTTP routing, filters, Express/server concerns</li>
 <li>Cloud Tasks enqueue/transport logic (that is cloudtasks-client)</li>
 <li>Knowledge of API contracts or decorators</li>
