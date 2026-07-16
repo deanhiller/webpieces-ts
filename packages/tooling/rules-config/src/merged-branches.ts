@@ -1,8 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
@@ -153,8 +152,7 @@ interface CmdCapture {
     out: string;
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MergedBranchesService {
     // Defaulted so the non-DI call sites (`new MergedBranchesService()` in the guard and the detached
     // refresher) keep working, while inversify still injects the singleton when resolved from a container.

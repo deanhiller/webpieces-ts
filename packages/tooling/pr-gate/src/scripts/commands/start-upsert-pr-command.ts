@@ -1,7 +1,6 @@
 import { execSync } from 'child_process';
 import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
@@ -13,8 +12,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // START of the AI-first PR flow: the deterministic setup — update from main, push, run the advisory
 // build gate — then hand the AI instructions to WRITE review.json and run `wp-finish-upsert-pr` (which
 // reads it and posts the PR). This command NEVER creates/updates a PR; all `gh` posting lives in finish.
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class StartUpsertPrCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

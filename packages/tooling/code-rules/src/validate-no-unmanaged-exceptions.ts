@@ -36,8 +36,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { hasDisable, RULE_NAMES, NoUnmanagedExceptionsConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface TryCatchViolation {
@@ -269,8 +268,7 @@ async function runValidatorImpl(
     return { success: false };
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class NoUnmanagedExceptionsValidator extends CodeValidator<NoUnmanagedExceptionsConfig> {
     constructor(config: NoUnmanagedExceptionsConfig) {
         super(config, 'no-unmanaged-exceptions');

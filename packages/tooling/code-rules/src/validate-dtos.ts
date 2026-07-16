@@ -33,8 +33,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { PrismaValidateDtosConfig, PrismaValidateDtosMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface DtoFieldInfo {
@@ -543,8 +542,7 @@ async function runValidatorImpl(
     return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class PrismaValidateDtosValidator extends CodeValidator<PrismaValidateDtosConfig> {
     constructor(config: PrismaValidateDtosConfig) {
         super(config, 'prisma-validate-dtos');

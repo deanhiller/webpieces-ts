@@ -1,6 +1,5 @@
 import { DocumentDesign } from './di';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { RepoRootFinder } from './repo-root';
 import { ConfigLoader } from './load-config';
@@ -15,13 +14,12 @@ import { MainSyncStatusService } from './main-sync-status';
  *
  * `@DocumentDesign` marks the top of the DAG the DI-design analyzer roots on, so the library's design
  * (design.json / design.md / design.html) is generated. rules-config is the shared foundation whose
- * utilities are being migrated from free functions to injected `@provideSingleton` service classes; as
+ * utilities are being migrated from free functions to injected `@injectable(bindingScopeValues.Singleton)` service classes; as
  * each service class lands (config loader, template writer, diff/git services, …) it is injected HERE
  * so it appears in the drawn design.
  */
 @DocumentDesign()
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class RulesConfigDesign {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

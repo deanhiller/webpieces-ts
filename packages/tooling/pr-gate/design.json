@@ -12,7 +12,7 @@
                     "id": "AiBranchName",
                     "className": "AiBranchName",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts",
                     "level": 6
                 },
@@ -20,7 +20,7 @@
                     "id": "BranchNaming",
                     "className": "BranchNaming",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts",
                     "level": 7
                 },
@@ -28,7 +28,7 @@
                     "id": "BuildAffected",
                     "className": "BuildAffected",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts",
                     "level": 2
                 },
@@ -36,7 +36,7 @@
                     "id": "CleanTmp",
                     "className": "CleanTmp",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/cleanTmp.ts",
                     "level": 4
                 },
@@ -44,7 +44,7 @@
                     "id": "Dashboard",
                     "className": "Dashboard",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/dashboard/dashboard.ts",
                     "level": 2
                 },
@@ -52,7 +52,7 @@
                     "id": "FinishUpdateCommand",
                     "className": "FinishUpdateCommand",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/finish-update-command.ts",
                     "level": 1
                 },
@@ -60,7 +60,7 @@
                     "id": "FinishUpsertPrCommand",
                     "className": "FinishUpsertPrCommand",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/finish-upsert-pr-command.ts",
                     "level": 1
                 },
@@ -68,7 +68,7 @@
                     "id": "ForkPoint",
                     "className": "ForkPoint",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts",
                     "level": 5
                 },
@@ -76,7 +76,7 @@
                     "id": "GatherInfo",
                     "className": "GatherInfo",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/git-gatherInfo.ts",
                     "level": 4
                 },
@@ -84,7 +84,7 @@
                     "id": "GitExec",
                     "className": "GitExec",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts",
                     "level": 5
                 },
@@ -92,7 +92,7 @@
                     "id": "MergeEnd",
                     "className": "MergeEnd",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts",
                     "level": 3
                 },
@@ -100,7 +100,7 @@
                     "id": "MergeStart",
                     "className": "MergeStart",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-start.ts",
                     "level": 3
                 },
@@ -108,7 +108,7 @@
                     "id": "MergeState",
                     "className": "MergeState",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts",
                     "level": 6
                 },
@@ -116,7 +116,7 @@
                     "id": "OpenPrCheck",
                     "className": "OpenPrCheck",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/open-pr-check.ts",
                     "level": 2
                 },
@@ -124,7 +124,7 @@
                     "id": "PrGateApp",
                     "className": "PrGateApp",
                     "kind": "controller",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/pr-gate-app.ts",
                     "level": 0
                 },
@@ -132,7 +132,7 @@
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/rules-config/src/repo-root.ts",
                     "level": 6
                 },
@@ -140,7 +140,7 @@
                     "id": "RunUpdate",
                     "className": "RunUpdate",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/run-update.ts",
                     "level": 2
                 },
@@ -148,7 +148,7 @@
                     "id": "StartUpdateCommand",
                     "className": "StartUpdateCommand",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/start-update-command.ts",
                     "level": 1
                 },
@@ -156,7 +156,7 @@
                     "id": "StartUpsertPrCommand",
                     "className": "StartUpsertPrCommand",
                     "kind": "class",
-                    "scope": "singleton",
+                    "scope": "transient",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts",
                     "level": 1
                 }

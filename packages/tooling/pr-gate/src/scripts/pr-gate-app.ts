@@ -1,6 +1,5 @@
 import { DocumentDesign } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { StartUpdateCommand } from './commands/start-update-command';
 import { FinishUpdateCommand } from './commands/finish-update-command';
 import { StartUpsertPrCommand } from './commands/start-upsert-pr-command';
@@ -13,8 +12,7 @@ import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
  * entry resolves THIS and calls the matching command method.
  */
 @DocumentDesign()
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class PrGateApp {
     constructor(
         private readonly startUpdateCommand: StartUpdateCommand,

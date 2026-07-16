@@ -5,8 +5,7 @@ import {
     MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError,
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { BranchNaming } from './branch-naming';
 import { CleanTmp } from './cleanTmp';
 import { GitExec } from './git-exec';
@@ -21,8 +20,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // same feature name (local == remote == PR head), stamps a clean main-sync status, clears the marker,
 // and sweeps stale tmp. RunUpdate (clean path / validated resume), wp-finish-update, and
 // wp-finish-upsert-pr (conflict resolution) all call THIS, so finalization happens in exactly one place.
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MergeEnd {
     constructor(
         private readonly branchNaming: BranchNaming,

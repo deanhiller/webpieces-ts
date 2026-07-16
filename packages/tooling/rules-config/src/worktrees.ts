@@ -1,6 +1,5 @@
 import { spawnSync } from 'child_process';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 /**
  * Reading the git worktree list.
@@ -48,8 +47,7 @@ interface CmdCapture {
     out: string;
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class WorktreeService {
     /**
      * Every worktree, main one first. Fails SOFT to [] — a repo with no worktree support, or a git

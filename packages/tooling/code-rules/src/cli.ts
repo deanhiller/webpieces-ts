@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { InformAiError, RuleFailError, toError, loadAndValidate, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
 
 import { CodeRulesApp } from './code-rules-app';
@@ -23,7 +22,8 @@ async function main(): Promise<void> {
 
         // Composition root: bind the runtime values (workspace root, each rule's config), then let
         // inversify build the ENTIRE validator DAG when we resolve the app.
-        const container = new Container();
+        // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
+        const container = new Container({ autobind: true });
         container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
         container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
         for (const binding of CONFIG_BINDINGS) {
@@ -31,7 +31,6 @@ async function main(): Promise<void> {
             const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
             container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
         }
-        await container.load(buildProviderModule());
 
         const app = container.get(CodeRulesApp);
         const result = await app.run();

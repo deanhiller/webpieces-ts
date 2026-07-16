@@ -1,6 +1,5 @@
 import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { MergeState } from './merge-state';
 import { MergeStart, MergeContext } from './merge-start';
@@ -12,8 +11,7 @@ export type UpdateOutcome = 'finalized' | 'conflict' | 'unvalidatedResume';
 // primitives (merge-START brings main in, merge-END finalizes). INTERNAL, not a bin: `wp-start-update`
 // (standalone) and `wp-start-upsert-pr` (PR flow) both call it. It NEVER creates a PR and NEVER
 // process.exits; it RETURNS an outcome so each caller prints the handoff that fits its context.
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class RunUpdate {
     constructor(
         private readonly aiBranchName: AiBranchName,

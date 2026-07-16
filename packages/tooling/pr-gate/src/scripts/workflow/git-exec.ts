@@ -1,7 +1,6 @@
 import { spawnSync } from 'child_process';
 import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 // The AI-facing doc the failure messages point at (generated under `.webpieces/instruct-ai`, at the
@@ -9,8 +8,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 const GIT_WORKFLOW_DOC_NAME = 'webpieces.git-workflow.md';
 
 /** Shared git precondition checks + push logic for the PR/merge workflow. */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class GitExec {
     constructor(private readonly repoRootFinder: RepoRootFinder) {}
 

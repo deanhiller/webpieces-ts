@@ -5,8 +5,7 @@ import {
     WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, CliExitError,
     MutationVerb, BranchMutationEvent, logBranchMutation,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { GatherInfo } from '../git-gatherInfo';
 import { BranchNaming } from './branch-naming';
 import { GitExec } from './git-exec';
@@ -151,8 +150,7 @@ Then delete \`{{MERGE_DIR}}/\` for a clean slate.
 // `<branch>Squash`, and on conflict writes the 3-point context + unvalidated marker + process doc,
 // then hands control back to the AI. On a clean merge it commits the squash and returns the branch
 // context so the caller (RunUpdate) can run merge-END to finalize. NEVER finalizes or posts a PR.
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MergeStart {
     constructor(
         private readonly gatherInfo: GatherInfo,

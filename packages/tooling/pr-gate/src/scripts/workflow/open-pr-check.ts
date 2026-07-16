@@ -1,14 +1,12 @@
 import { spawnSync } from 'child_process';
 import { CliExitError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { BranchNaming } from './branch-naming';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /** Hard gate: whether an OPEN PR already tracks a feature branch (by its stable base name). */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class OpenPrCheck {
     constructor(private readonly branchNaming: BranchNaming) {}
 

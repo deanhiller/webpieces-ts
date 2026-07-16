@@ -1,17 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
 const DEFAULT_INSTRUCT_DIR = '.webpieces/instruct-ai';
 
 /**
  * Writes the AI-facing instruct-ai template docs under `<workspaceRoot>/.webpieces/instruct-ai/`.
- * `@provideSingleton` so it can be injected and appear in the rules-config DI design.
+ * `@injectable(bindingScopeValues.Singleton)` so it can be injected and appear in the rules-config DI design.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class TemplateWriter {
     loadTemplate(name: string): string {
         return fs.readFileSync(path.join(TEMPLATES_DIR, name), 'utf-8');

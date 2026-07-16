@@ -1,8 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { WEBPIECES_TMP_DIR, MERGE_INFO_DIR, PR_REVIEW_DIR, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 const CUTOFF_DAYS = 30;
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -14,8 +13,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 const LEGACY_PREFIXES = ['merge-', 'review-', 'pr-'];
 
 /** 30-day cleanup of stale per-feature merge/pr-review dirs (and the legacy flat layout). */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class CleanTmp {
     constructor(private readonly repoRootFinder: RepoRootFinder) {}
 

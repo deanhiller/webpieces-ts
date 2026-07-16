@@ -2,16 +2,14 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { prDirFor, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { MergeState } from './merge-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /** Computes the 3-point fork point and guards against improper merges-from-main. */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class ForkPoint {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

@@ -21,7 +21,6 @@ import * as path from 'path';
 
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { loadAndValidate, InformAiError, RuleFailError, toError, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
 import { CodeRulesApp } from './code-rules-app';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
@@ -89,7 +88,8 @@ async function runStandalone(cwd: string): Promise<number> {
     console.log('ℹ️  Not an Nx repo — running standalone webpieces code validators.\n');
 
     // Composition root: bind runtime values, then resolve the app so inversify builds the whole DAG.
-    const container = new Container();
+    // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
+    const container = new Container({ autobind: true });
     container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
     container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
     for (const binding of CONFIG_BINDINGS) {
@@ -97,7 +97,6 @@ async function runStandalone(cwd: string): Promise<number> {
         const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
         container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
     }
-    await container.load(buildProviderModule());
 
     const app = container.get(CodeRulesApp);
     const result = await app.run();

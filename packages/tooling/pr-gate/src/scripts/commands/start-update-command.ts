@@ -1,7 +1,6 @@
 import { execSync } from 'child_process';
 import { writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { OpenPrCheck } from '../workflow/open-pr-check';
 import { RunUpdate } from '../workflow/run-update';
 
@@ -11,8 +10,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // redirect-how-to-merge-main guard). Runs the FULL 3-point squash-update via RunUpdate: a CLEAN merge
 // finalizes everything; CONFLICT writes the 3-point context + merge process doc and hands back. NEVER
 // creates a PR (that is the wp-*-upsert-pr flow).
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class StartUpdateCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

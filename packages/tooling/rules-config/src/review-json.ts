@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
@@ -42,9 +41,8 @@ export class ReviewJson {
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
-/** Locates + loads/validates the AI-authored review.json. `@provideSingleton` so it's drawn in the design. */
-@provideSingleton()
-@injectable()
+/** Locates + loads/validates the AI-authored review.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
+@injectable(bindingScopeValues.Singleton)
 export class ReviewJsonService {
     // The per-feature PR working dir: `.webpieces/pr-review/<feature>`.
     prDirFor(repoRoot: string, featureName: string): string {

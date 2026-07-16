@@ -12,25 +12,25 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
-    AiBranchName["AiBranchName"]
-    BranchNaming["BranchNaming"]
-    BuildAffected["BuildAffected"]
-    CleanTmp["CleanTmp"]
-    Dashboard["Dashboard"]
-    FinishUpdateCommand["FinishUpdateCommand"]
-    FinishUpsertPrCommand["FinishUpsertPrCommand"]
-    ForkPoint["ForkPoint"]
-    GatherInfo["GatherInfo"]
-    GitExec["GitExec"]
-    MergeEnd["MergeEnd"]
-    MergeStart["MergeStart"]
-    MergeState["MergeState"]
-    OpenPrCheck["OpenPrCheck"]
+    AiBranchName["AiBranchName"]:::many
+    BranchNaming["BranchNaming"]:::many
+    BuildAffected["BuildAffected"]:::many
+    CleanTmp["CleanTmp"]:::many
+    Dashboard["Dashboard"]:::many
+    FinishUpdateCommand["FinishUpdateCommand"]:::many
+    FinishUpsertPrCommand["FinishUpsertPrCommand"]:::many
+    ForkPoint["ForkPoint"]:::many
+    GatherInfo["GatherInfo"]:::many
+    GitExec["GitExec"]:::many
+    MergeEnd["MergeEnd"]:::many
+    MergeStart["MergeStart"]:::many
+    MergeState["MergeState"]:::many
+    OpenPrCheck["OpenPrCheck"]:::many
     PrGateApp["PrGateApp"]:::controller
-    RepoRootFinder["RepoRootFinder"]
-    RunUpdate["RunUpdate"]
-    StartUpdateCommand["StartUpdateCommand"]
-    StartUpsertPrCommand["StartUpsertPrCommand"]
+    RepoRootFinder["RepoRootFinder"]:::many
+    RunUpdate["RunUpdate"]:::many
+    StartUpdateCommand["StartUpdateCommand"]:::many
+    StartUpsertPrCommand["StartUpsertPrCommand"]:::many
     AiBranchName --> BranchNaming
     CleanTmp --> RepoRootFinder
     FinishUpdateCommand --> AiBranchName

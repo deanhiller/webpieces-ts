@@ -1,7 +1,6 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { findConfigFile } from './config-file';
 import { WEBPIECES_TMP_DIR } from './constants';
@@ -20,8 +19,7 @@ export const INSTRUCT_AI_DIR = `${WEBPIECES_TMP_DIR}/instruct-ai`;
  * writer of `.webpieces/...` (logs, instruct-ai docs, sync cache, merge/pr state) MUST anchor its
  * path here rather than at `process.cwd()`.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class RepoRootFinder {
     /**
      * The repo root for `startDir`. Resolution order (first hit wins):

@@ -1,6 +1,5 @@
 import { DocumentDesign } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeRulesEngine } from './code-rules-engine';
 import { ExecutorResult } from './code-validator';
@@ -11,8 +10,7 @@ import { ExecutorResult } from './code-validator';
  * it the top-of-DAG the DI-design analyzer roots on, so `role:app` code-rules draws its design.
  */
 @DocumentDesign()
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class CodeRulesApp {
     constructor(private readonly engine: CodeRulesEngine) {}
 

@@ -1,11 +1,9 @@
 import { execSync } from 'child_process';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { BranchNaming } from './branch-naming';
 
 /** The stable feature identity used to key the merge-context + PR-body dirs. */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class AiBranchName {
     constructor(private readonly branchNaming: BranchNaming) {}
 

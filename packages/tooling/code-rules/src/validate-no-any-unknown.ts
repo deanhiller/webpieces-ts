@@ -35,8 +35,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, NoAnyUnknownConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface AnyUnknownViolation {
@@ -400,8 +399,7 @@ async function runValidatorImpl(
     return { success: false };
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class NoAnyUnknownValidator extends CodeValidator<NoAnyUnknownConfig> {
     constructor(config: NoAnyUnknownConfig) {
         super(config, 'no-any-unknown');

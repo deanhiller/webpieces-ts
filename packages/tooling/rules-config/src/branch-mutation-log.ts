@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
@@ -45,9 +44,8 @@ export class BranchMutationEvent {
     }
 }
 
-/** Appends branch-mutation audit lines. `@provideSingleton` so it's injectable + drawn in the design. */
-@provideSingleton()
-@injectable()
+/** Appends branch-mutation audit lines. `@injectable(bindingScopeValues.Singleton)` so it's injectable + drawn in the design. */
+@injectable(bindingScopeValues.Singleton)
 export class BranchMutationLog {
     branchMutationLogPath(root: string): string {
         return path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR, LOG_FILE);

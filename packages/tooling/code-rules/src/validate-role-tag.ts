@@ -19,8 +19,7 @@
 
 import { ProjectMode, RoleTagConfig } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';
 
 const ROLE_TAG_PREFIX = 'role:';
@@ -54,8 +53,7 @@ function reportViolations(untagged: MissingTagProject[], knownTypes: string[], m
 
 const ROLE_TAG_SPEC = new TagRuleSpec(ROLE_TAG_PREFIX, 'role-tag', 'Role Tag', DEFAULT_KNOWN_TYPES, reportViolations);
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class RoleTagValidator extends CodeValidator<RoleTagConfig> {
     constructor(config: RoleTagConfig) {
         super(config, 'role-tag');

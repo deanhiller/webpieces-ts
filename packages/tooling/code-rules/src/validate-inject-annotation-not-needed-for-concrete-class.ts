@@ -45,8 +45,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, InjectAnnotationNotNeededForConcreteClassConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 const RULE_NAME = RULE_NAMES.INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS;
@@ -286,8 +285,7 @@ async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteCla
     return { success: false };
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class InjectAnnotationNotNeededForConcreteClassValidator extends CodeValidator<InjectAnnotationNotNeededForConcreteClassConfig> {
     constructor(config: InjectAnnotationNotNeededForConcreteClassConfig) {
         super(config, RULE_NAME);

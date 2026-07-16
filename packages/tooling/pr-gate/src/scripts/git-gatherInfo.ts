@@ -2,8 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './workflow/git-readAiBranchName';
 import { ForkPoint } from './workflow/git-findForkPoint';
 import { MergeState } from './workflow/merge-state';
@@ -31,8 +30,7 @@ export class GatherInfoResult {
 }
 
 /** Gathers the 3-point merge context (fetch main, find fork point, write hashes) for merge-start. */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class GatherInfo {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

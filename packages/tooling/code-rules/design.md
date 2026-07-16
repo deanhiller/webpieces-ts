@@ -14,45 +14,45 @@ appears in each root's tree.
 graph TD
     AngularNoDirectApiInResolverConfig["AngularNoDirectApiInResolverConfig"]:::many
     CatchErrorPatternConfig["CatchErrorPatternConfig"]:::many
-    CatchErrorPatternValidator["CatchErrorPatternValidator"]
+    CatchErrorPatternValidator["CatchErrorPatternValidator"]:::many
     CodeRulesApp["CodeRulesApp"]:::controller
-    CodeRulesEngine["CodeRulesEngine"]
+    CodeRulesEngine["CodeRulesEngine"]:::many
     FrameworkTagConfig["FrameworkTagConfig"]:::many
-    FrameworkTagValidator["FrameworkTagValidator"]
+    FrameworkTagValidator["FrameworkTagValidator"]:::many
     InjectAnnotationNotNeededForConcreteClassConfig["InjectAnnotationNotNeededForConcreteClassConfig"]:::many
-    InjectAnnotationNotNeededForConcreteClassValidator["InjectAnnotationNotNeededForConcreteClassValidator"]
-    MatchRulesChecker["MatchRulesChecker"]
+    InjectAnnotationNotNeededForConcreteClassValidator["InjectAnnotationNotNeededForConcreteClassValidator"]:::many
+    MatchRulesChecker["MatchRulesChecker"]:::many
     MatchRulesHolder["MatchRulesHolder"]:::many
     MaxFileLinesConfig["MaxFileLinesConfig"]:::many
-    MaxFileLinesValidator["MaxFileLinesValidator"]
+    MaxFileLinesValidator["MaxFileLinesValidator"]:::many
     MaxMethodLinesConfig["MaxMethodLinesConfig"]:::many
-    MaxMethodLinesValidator["MaxMethodLinesValidator"]
+    MaxMethodLinesValidator["MaxMethodLinesValidator"]:::many
     NoAnyUnknownConfig["NoAnyUnknownConfig"]:::many
-    NoAnyUnknownValidator["NoAnyUnknownValidator"]
+    NoAnyUnknownValidator["NoAnyUnknownValidator"]:::many
     NoDestructureConfig["NoDestructureConfig"]:::many
-    NoDestructureValidator["NoDestructureValidator"]
-    NoDirectApiResolverValidator["NoDirectApiResolverValidator"]
+    NoDestructureValidator["NoDestructureValidator"]:::many
+    NoDirectApiResolverValidator["NoDirectApiResolverValidator"]:::many
     NoFunctionOutsideClassConfig["NoFunctionOutsideClassConfig"]:::many
-    NoFunctionOutsideClassValidator["NoFunctionOutsideClassValidator"]
+    NoFunctionOutsideClassValidator["NoFunctionOutsideClassValidator"]:::many
     NoImplicitAnyConfig["NoImplicitAnyConfig"]:::many
-    NoImplicitAnyValidator["NoImplicitAnyValidator"]
+    NoImplicitAnyValidator["NoImplicitAnyValidator"]:::many
     NoInlineTypeLiteralsConfig["NoInlineTypeLiteralsConfig"]:::many
-    NoInlineTypeLiteralsValidator["NoInlineTypeLiteralsValidator"]
+    NoInlineTypeLiteralsValidator["NoInlineTypeLiteralsValidator"]:::many
     NoProcessExitOutsideMainConfig["NoProcessExitOutsideMainConfig"]:::many
-    NoProcessExitOutsideMainValidator["NoProcessExitOutsideMainValidator"]
+    NoProcessExitOutsideMainValidator["NoProcessExitOutsideMainValidator"]:::many
     NoSymbolDiTokensConfig["NoSymbolDiTokensConfig"]:::many
-    NoSymbolDiTokensValidator["NoSymbolDiTokensValidator"]
+    NoSymbolDiTokensValidator["NoSymbolDiTokensValidator"]:::many
     NoUnmanagedExceptionsConfig["NoUnmanagedExceptionsConfig"]:::many
-    NoUnmanagedExceptionsValidator["NoUnmanagedExceptionsValidator"]
+    NoUnmanagedExceptionsValidator["NoUnmanagedExceptionsValidator"]:::many
     PrismaConverterConfig["PrismaConverterConfig"]:::many
-    PrismaConverterValidator["PrismaConverterValidator"]
+    PrismaConverterValidator["PrismaConverterValidator"]:::many
     PrismaValidateDtosConfig["PrismaValidateDtosConfig"]:::many
-    PrismaValidateDtosValidator["PrismaValidateDtosValidator"]
+    PrismaValidateDtosValidator["PrismaValidateDtosValidator"]:::many
     RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
-    RequireReturnTypeValidator["RequireReturnTypeValidator"]
+    RequireReturnTypeValidator["RequireReturnTypeValidator"]:::many
     RoleTagConfig["RoleTagConfig"]:::many
-    RoleTagValidator["RoleTagValidator"]
-    RuleReporter["RuleReporter"]
+    RoleTagValidator["RoleTagValidator"]:::many
+    RuleReporter["RuleReporter"]:::many
     WorkspaceRoot["WorkspaceRoot"]:::many
     readonly_MatchRuleConfig__{{"readonly MatchRuleConfig[] ?"}}:::unresolved
     string{{"string ?"}}:::unresolved
