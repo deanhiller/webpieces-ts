@@ -36,8 +36,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { hasDisable, RULE_NAMES, NoFunctionOutsideClassConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 const SHARED_MESSAGE = `Functions must live inside a class as INSTANCE methods — a function created at module scope, OR a
@@ -45,7 +44,7 @@ static method, can't be injected, so webpieces DI + @DocumentDesign can't wire i
 static method is just a module-scope function wearing a class as a namespace.
   BAD:   export function computeTotal(cart: Cart): number { ... }
   BAD:   export class CartMath { static computeTotal(cart: Cart): number { ... } }   // static = not injectable
-  GOOD:  @provideSingleton()
+  GOOD:  @injectable(bindingScopeValues.Singleton)
          export class CartService { computeTotal(cart: Cart): number { ... } }
 Then inject CartService where you need it. Inline callbacks (arr.map(x => x)), promise handlers, and
 functions nested inside a method are fine — only MODULE-SCOPE function declarations, top-level
@@ -293,8 +292,7 @@ async function runValidatorImpl(options: NoFunctionOutsideClassConfig, workspace
     return { success: false };
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class NoFunctionOutsideClassValidator extends CodeValidator<NoFunctionOutsideClassConfig> {
     constructor(config: NoFunctionOutsideClassConfig) {
         super(config, 'no-function-outside-class');

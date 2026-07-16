@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
@@ -37,11 +36,10 @@ export interface RawConfigFile {
 }
 
 /**
- * Locates + reads webpieces.config.json. `@provideSingleton` so it can be injected into the config
+ * Locates + reads webpieces.config.json. `@injectable(bindingScopeValues.Singleton)` so it can be injected into the config
  * loader and appear in the rules-config DI design.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class ConfigFile {
     /** Walk up from `startDir` looking for webpieces.config.json. Returns its absolute path or null. */
     findConfigFile(startDir: string): string | null {

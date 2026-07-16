@@ -39,14 +39,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { hasDisable, RULE_NAMES, NoSymbolDiTokensConfig, ModifiedCodeMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
 const SHARED_MESSAGE = `Do not create a dependency-injection token with Symbol(). Choose the right pattern:
-Option 1: OWN class — annotate it with @provideSingleton() and inject by concrete class TYPE — no Symbol, no @inject.
+Option 1: OWN class — annotate it with @injectable(bindingScopeValues.Singleton) and inject by concrete class TYPE — no Symbol, no @inject.
        constructor(private readonly myService: MyService) {}
 Option 2: API IMPLEMENTATION — import the Symbol from the API definition file and use:
        @provideSingletonDefaultForApi(SOME_API_TOKEN)
@@ -317,8 +316,7 @@ async function runValidatorImpl(
     return { success: false };
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class NoSymbolDiTokensValidator extends CodeValidator<NoSymbolDiTokensConfig> {
     constructor(config: NoSymbolDiTokensConfig) {
         super(config, 'no-symbol-di-tokens');

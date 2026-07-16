@@ -35,8 +35,7 @@ import {
     findNewMethodSignaturesInDiff,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 import { runNewMethods } from './validate-new-methods';
 
@@ -497,8 +496,7 @@ export async function runModifiedMethods(
  *   - NEW_AND_MODIFIED_METHODS   -> new-methods + modified-methods
  *   - NEW_AND_MODIFIED_FILES             -> modified-methods only
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MaxMethodLinesValidator extends CodeValidator<MaxMethodLinesConfig> {
     constructor(config: MaxMethodLinesConfig) {
         super(config, 'max-method-lines');

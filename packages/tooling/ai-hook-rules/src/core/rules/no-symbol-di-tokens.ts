@@ -49,7 +49,7 @@ function isAllowedPath(relativePath: string, allowedPaths: readonly string[]): b
 export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
     constructor(config: NoSymbolDiTokensConfig) { super(config, 'no-symbol-di-tokens'); }
 
-    readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @provideSingleton() + inject-by-type instead.';
+    readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @injectable(bindingScopeValues.Singleton) + inject-by-type instead.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
     override readonly defaultOptions = { allowedPaths: [] };
     get fixHint(): FixHint {
@@ -57,7 +57,7 @@ export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
             'Symbol() used as a DI token — we avoid Symbol DI tokens where we can.',
             'Pick one:',
             [
-                new Option('Use @provideSingleton() on the class and inject by type — no Symbol needed.', true),
+                new Option('Use @injectable(bindingScopeValues.Singleton) on the class and inject by type — no Symbol needed.', true),
                 new Option('Implement an API interface — import the Symbol from the API definition and use @provideSingletonDefaultForApi(TOKEN).'),
                 new Option('External lib class (DataSource, Anthropic, etc.) — bind<Cls>(Cls).toDynamicValue(...).inSingletonScope() — no Symbol.'),
             ],

@@ -32,8 +32,7 @@ import {
     findNewMethodSignaturesInDiff,
 } from '@webpieces/rules-config';
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 
 interface MethodViolation {
@@ -358,8 +357,7 @@ async function runValidatorImpl(
     return { success: false };
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class RequireReturnTypeValidator extends CodeValidator<RequireReturnTypeConfig> {
     constructor(config: RequireReturnTypeConfig) {
         super(config, 'require-return-type');

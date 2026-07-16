@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { loadAndValidate, BaseRuleConfig } from '@webpieces/rules-config';
 
 import { ExecutorResult } from './code-validator';
@@ -28,7 +27,8 @@ export default async function runValidator(workspaceRoot: string): Promise<Execu
     }
     console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
-    const container = new Container();
+    // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
+    const container = new Container({ autobind: true });
     container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
     container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
     for (const binding of CONFIG_BINDINGS) {
@@ -36,7 +36,6 @@ export default async function runValidator(workspaceRoot: string): Promise<Execu
         const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
         container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
     }
-    await container.load(buildProviderModule());
 
     return container.get(CodeRulesApp).run();
 }

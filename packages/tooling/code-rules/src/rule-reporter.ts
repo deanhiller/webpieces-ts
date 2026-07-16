@@ -1,14 +1,12 @@
 import { RuleFailError, toError } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { RuleRun, ExecutorResult } from './code-validator';
 
 /**
  * Runs the active validators with per-validator isolation and prints failures for humans/CI.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class RuleReporter {
     /**
      * Run every {@link RuleRun} with per-run isolation: a run that throws — a `RuleFailError` (an

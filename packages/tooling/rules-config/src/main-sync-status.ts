@@ -1,8 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
@@ -105,10 +104,9 @@ interface CmdCapture {
 
 /**
  * Reads/writes the main-sync cache + lock and computes the slow "is my branch healthy vs origin/main?"
- * status. `@provideSingleton` so it's injectable and drawn in the rules-config DI design.
+ * status. `@injectable(bindingScopeValues.Singleton)` so it's injectable and drawn in the rules-config DI design.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MainSyncStatusService {
     mainSyncStatusPath(repoRoot: string): string {
         return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_STATUS_FILE);

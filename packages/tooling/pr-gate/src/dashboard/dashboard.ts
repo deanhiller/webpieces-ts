@@ -1,6 +1,5 @@
 import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 export class GateResult {
     name: string;
@@ -52,8 +51,7 @@ export class DashboardInput {
 }
 
 /** Renders the PR-gate dashboard markdown (gates × changed files, disables, risk, 3-point hashes). */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class Dashboard {
     // Disabled gates are in-file examples (JSON has no comments) — skip them entirely.
     computeGateResults(gates: GateDefinition[], changedFiles: string[]): GateResult[] {

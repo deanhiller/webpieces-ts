@@ -136,3 +136,52 @@ export class Root {
         fixture.cleanup();
     });
 });
+
+describe('@injectable(bindingScopeValues.Singleton) self-binds by type (autobind)', () => {
+    it('reads the scope ARGUMENT: a Singleton-scoped @injectable dep is a singleton node', () => {
+        const fixture = new Fixture({
+            'svc.ts': `
+import { injectable, bindingScopeValues } from 'inversify';
+import { DocumentDesign } from '@webpieces/core-util';
+
+// Inject-by-type: one decorator, no @provideSingleton. Scope is the decorator ARGUMENT.
+@injectable(bindingScopeValues.Singleton)
+export class GreetingService {}
+
+@DocumentDesign()
+@injectable(bindingScopeValues.Singleton)
+export class Controller {
+    constructor(private readonly greeting: GreetingService) {}
+}
+`,
+        });
+
+        const graph = fixture.build();
+        expect(edge(graph, 'Controller', 'GreetingService')).toBeDefined();
+        expect(node(graph, 'Controller')!.scope).toBe('singleton');
+        expect(node(graph, 'GreetingService')!.scope).toBe('singleton');
+        fixture.cleanup();
+    });
+
+    it('a Transient-scoped @injectable is a transient node', () => {
+        const fixture = new Fixture({
+            'svc.ts': `
+import { injectable, bindingScopeValues } from 'inversify';
+import { DocumentDesign } from '@webpieces/core-util';
+
+@injectable(bindingScopeValues.Transient)
+export class Fresh {}
+
+@DocumentDesign()
+@injectable(bindingScopeValues.Singleton)
+export class Root {
+    constructor(private readonly dep: Fresh) {}
+}
+`,
+        });
+
+        const graph = fixture.build();
+        expect(node(graph, 'Fresh')!.scope).toBe('transient');
+        fixture.cleanup();
+    });
+});

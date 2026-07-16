@@ -1,6 +1,5 @@
 import { BaseRuleConfig } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeValidator, ExecutorResult, RuleRun } from './code-validator';
 import { RuleReporter } from './rule-reporter';
@@ -31,8 +30,7 @@ import { RoleTagValidator } from './validate-role-tag';
  * draws. The per-entry match-rules validators are the one exception — they are config-per-instance,
  * so they are built from the injected {@link MatchRulesHolder}.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class CodeRulesEngine {
     // webpieces-disable max-lines-new-methods -- the built-in validator set is flat; each is one injected field
     constructor(

@@ -1,5 +1,4 @@
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
 import { ConfigFile } from './config-file';
@@ -42,11 +41,10 @@ type RuleSectionMap = Record<string, Record<string, unknown>>;
 
 /**
  * The single load+validate entry point for ALL consumers (ai-hook-rules, code-rules,
- * nx-webpieces-rules, pr-gate scripts). `@provideSingleton` + injects {@link ConfigFile} so it appears
+ * nx-webpieces-rules, pr-gate scripts). `@injectable(bindingScopeValues.Singleton)` + injects {@link ConfigFile} so it appears
  * in the rules-config DI design.
  */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class ConfigLoader {
     constructor(private readonly configFile: ConfigFile) {}
 

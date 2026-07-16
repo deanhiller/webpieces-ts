@@ -4,8 +4,7 @@ import * as path from 'path';
 import {
     loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, writeTemplate, RepoRootFinder,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { GitExec } from '../workflow/git-exec';
@@ -21,8 +20,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // was in progress, validate + commit + FINALIZE via merge-END; (2) REQUIRE review.json; (3) run the
 // authoritative build gate; (4) render the dashboard; (5) create/update the PR via `gh`. The ONLY
 // command that posts PRs.
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class FinishUpsertPrCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

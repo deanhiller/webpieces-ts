@@ -8,7 +8,7 @@ export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
 export { findConfigFile, CONFIG_FILENAME, ConfigFile } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR } from './repo-root';
 export { RulesConfigDesign } from './rules-config-design';
-export { provideSingleton, DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
+export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
 export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';

@@ -6,8 +6,7 @@ import {
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 // Proof-obligation marker written when a 3-point squash-merge hits conflicts. Its mere
 // presence (with validated=false) is what the merge-in-progress-guard hook uses to block
@@ -81,8 +80,7 @@ const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
 export const NO_CONFLICT_MARKER_FILE = 'no-3point-merge.md';
 
 /** Filesystem layout + read/write of the per-feature merge run dirs and their conflict markers. */
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MergeState {
     // The per-feature "home" dir `.webpieces/merge-info/<slug>/`. It no longer holds the marker/context
     // directly — each sync gets its own numbered `merge-<n>/` run dir underneath (mergeRunDirFor),

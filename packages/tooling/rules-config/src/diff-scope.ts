@@ -2,7 +2,7 @@
  * Shared git-diff + diff-scoping service for ALL rule validators (code-rules) and nx executors
  * (nx-webpieces-rules). Centralized here in rules-config because it is the one package both depend on.
  *
- * `@provideSingleton` so it can be injected and appear in the rules-config DI design. Free-function
+ * `@injectable(bindingScopeValues.Singleton)` so it can be injected and appear in the rules-config DI design. Free-function
  * delegators are kept temporarily so the many existing consumers stay green; they migrate to injecting
  * {@link DiffScope} over follow-up PRs, then the delegators are removed.
  */
@@ -10,8 +10,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { provideSingleton } from './di';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 
 import { toError } from './to-error';
 
@@ -26,8 +25,7 @@ export class ChangedFilesOptions {
     tsOnly?: boolean;
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class DiffScope {
     /** Auto-detect the diff base: merge-base of HEAD with origin/main, falling back to local main. */
     detectBase(workspaceRoot: string): string | null {

@@ -1,6 +1,5 @@
 import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { MergeState } from '../workflow/merge-state';
 import { MergeEnd } from '../workflow/merge-end';
@@ -10,8 +9,7 @@ import { MergeContext } from '../workflow/merge-start';
 // handed back conflicts and you resolved them. Given an in-progress marker it validates + commits the
 // AI's resolution (when not yet validated) and ALWAYS finalizes the branch swap. It does NOT run the
 // build gate / dashboard / PR — that is wp-finish-upsert-pr. Refuses when no merge is in progress.
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class FinishUpdateCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,

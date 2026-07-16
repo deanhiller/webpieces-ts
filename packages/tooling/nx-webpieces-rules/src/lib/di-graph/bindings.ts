@@ -236,6 +236,31 @@ export function classDecorators(cls: ts.ClassDeclaration): ts.Decorator[] {
     return decorators ? [...decorators] : [];
 }
 
+/**
+ * Scope of an `@injectable(bindingScopeValues.Singleton|Transient)` SELF-binding, read from the
+ * decorator ARGUMENT (either `bindingScopeValues.Singleton` or the raw 'Singleton'/'Transient'
+ * string), NOT the decorator name like `@provideSingleton`.
+ *
+ * Returns null for a BARE `@injectable()` (no scope argument): that is NOT a self-binding — it just
+ * marks a class injectable for an explicit `bind(TOKEN).to(ThatClass)` elsewhere (e.g. SimpleCounter
+ * bound to a Counter token). Only `@injectable(<scope>)` with an argument opts a concrete class into
+ * autobind self-binding, the inject-by-type replacement for @provideSingleton.
+ */
+// webpieces-disable no-function-outside-class -- pure AST predicate, matching every sibling in this file
+function injectableScope(decorator: ts.Decorator): DiScope | null {
+    const call = decoratorCall(decorator);
+    const arg = call?.arguments[0];
+    if (!arg) return null;
+    const scopeName = ts.isPropertyAccessExpression(arg)
+        ? arg.name.text
+        : ts.isStringLiteral(arg)
+          ? arg.text
+          : '';
+    if (scopeName === 'Singleton') return 'singleton';
+    if (scopeName === 'Transient') return 'transient';
+    return null;
+}
+
 function collectDecoratorBindings(
     cls: ts.ClassDeclaration,
     checker: ts.TypeChecker,
@@ -243,6 +268,21 @@ function collectDecoratorBindings(
     table: BindingTable,
 ): void {
     const file = relativeFile(workspaceRoot, cls.getSourceFile());
+    // A provide* decorator is the explicit binding; when present it wins over a plain @injectable on
+    // the same class (a transitional state where both appear). Only a class with @injectable and NO
+    // provide* decorator self-binds via autobind.
+    const PROVIDE_BINDERS = new Set([
+        'provideSingleton',
+        'provideTransient',
+        'provideFrameworkSingleton',
+        'provideFrameworkTransient',
+        'provideSingletonDefaultForApi',
+        'provideFrameworkSingletonDefaultForApi',
+    ]);
+    const hasProvideBinding = classDecorators(cls).some((d: ts.Decorator) => {
+        const n = decoratorName(d);
+        return n !== null && PROVIDE_BINDERS.has(n);
+    });
     for (const decorator of classDecorators(cls)) {
         const name = decoratorName(decorator);
         // provideFrameworkSingleton(As)/Transient are the framework-registry twins of
@@ -264,6 +304,15 @@ function collectDecoratorBindings(
             if (!tokenExpr) continue;
             const token = resolveTokenKey(tokenExpr, checker, workspaceRoot);
             table.add(new Binding(token.key, token.display, 'decorator', 'singleton', cls, '', file));
+        } else if (name === 'injectable' && !hasProvideBinding) {
+            // @injectable(bindingScopeValues.Singleton|Transient) self-binds the concrete class under
+            // the app container's autobind (the inject-by-type replacement for @provideSingleton).
+            // A bare @injectable() (scope null) is skipped — it is bound via an explicit .to(token).
+            const scope = injectableScope(decorator);
+            if (scope !== null) {
+                const token = classTokenKey(cls, workspaceRoot);
+                table.add(new Binding(token.key, token.display, 'decorator', scope, cls, '', file));
+            }
         }
     }
 }

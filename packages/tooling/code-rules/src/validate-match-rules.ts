@@ -23,8 +23,7 @@ import {
     getChangedLineNumbers,
     shouldSkipRule,
 } from '@webpieces/rules-config';
-import { provideSingleton } from '@webpieces/rules-config';
-import { injectable } from 'inversify';
+import { injectable, bindingScopeValues } from 'inversify';
 import { ExecutorResult } from './code-validator';
 
 class MatchViolation {
@@ -51,8 +50,7 @@ export class MatchViolationInfo {
     }
 }
 
-@provideSingleton()
-@injectable()
+@injectable(bindingScopeValues.Singleton)
 export class MatchRulesChecker {
     /** True unless this entry is `mode: "OFF"` or skipped by a branch/epoch escape hatch. */
     shouldRun(config: MatchRuleConfig): boolean {
