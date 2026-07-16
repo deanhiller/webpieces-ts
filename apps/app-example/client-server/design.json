@@ -12,7 +12,7 @@
                     "id": "PublicController",
                     "className": "PublicController",
                     "kind": "controller",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "apps/app-example/client-server/src/controllers/public-controller.ts",
                     "level": 0
                 }
@@ -30,7 +30,7 @@
                     "id": "SaveController",
                     "className": "SaveController",
                     "kind": "controller",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "apps/app-example/client-server/src/controllers/save-controller.ts",
                     "level": 0
                 },
@@ -85,7 +85,7 @@
                     "id": "SecureController",
                     "className": "SecureController",
                     "kind": "controller",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "apps/app-example/client-server/src/controllers/secure-controller.ts",
                     "level": 0
                 }

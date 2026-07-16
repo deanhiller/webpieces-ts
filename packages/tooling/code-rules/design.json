@@ -28,7 +28,7 @@
                     "id": "CatchErrorPatternValidator",
                     "className": "CatchErrorPatternValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-catch-error-pattern.ts",
                     "level": 2
                 },
@@ -36,7 +36,7 @@
                     "id": "CodeRulesApp",
                     "className": "CodeRulesApp",
                     "kind": "controller",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/code-rules-app.ts",
                     "level": 0
                 },
@@ -44,7 +44,7 @@
                     "id": "CodeRulesEngine",
                     "className": "CodeRulesEngine",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/code-rules-engine.ts",
                     "level": 1
                 },
@@ -60,7 +60,7 @@
                     "id": "FrameworkTagValidator",
                     "className": "FrameworkTagValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-framework-tag.ts",
                     "level": 2
                 },
@@ -76,7 +76,7 @@
                     "id": "InjectAnnotationNotNeededForConcreteClassValidator",
                     "className": "InjectAnnotationNotNeededForConcreteClassValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-inject-annotation-not-needed-for-concrete-class.ts",
                     "level": 2
                 },
@@ -84,7 +84,7 @@
                     "id": "MatchRulesChecker",
                     "className": "MatchRulesChecker",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-match-rules.ts",
                     "level": 2
                 },
@@ -108,7 +108,7 @@
                     "id": "MaxFileLinesValidator",
                     "className": "MaxFileLinesValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-modified-files.ts",
                     "level": 2
                 },
@@ -124,7 +124,7 @@
                     "id": "MaxMethodLinesValidator",
                     "className": "MaxMethodLinesValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-modified-methods.ts",
                     "level": 2
                 },
@@ -140,7 +140,7 @@
                     "id": "NoAnyUnknownValidator",
                     "className": "NoAnyUnknownValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-any-unknown.ts",
                     "level": 2
                 },
@@ -156,7 +156,7 @@
                     "id": "NoDestructureValidator",
                     "className": "NoDestructureValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-destructure.ts",
                     "level": 2
                 },
@@ -164,7 +164,7 @@
                     "id": "NoDirectApiResolverValidator",
                     "className": "NoDirectApiResolverValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-direct-api-resolver.ts",
                     "level": 2
                 },
@@ -180,7 +180,7 @@
                     "id": "NoFunctionOutsideClassValidator",
                     "className": "NoFunctionOutsideClassValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-function-outside-class.ts",
                     "level": 2
                 },
@@ -196,7 +196,7 @@
                     "id": "NoImplicitAnyValidator",
                     "className": "NoImplicitAnyValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-implicit-any.ts",
                     "level": 2
                 },
@@ -212,7 +212,7 @@
                     "id": "NoInlineTypeLiteralsValidator",
                     "className": "NoInlineTypeLiteralsValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-inline-types.ts",
                     "level": 2
                 },
@@ -228,7 +228,7 @@
                     "id": "NoProcessExitOutsideMainValidator",
                     "className": "NoProcessExitOutsideMainValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-process-exit-outside-main.ts",
                     "level": 2
                 },
@@ -244,7 +244,7 @@
                     "id": "NoSymbolDiTokensValidator",
                     "className": "NoSymbolDiTokensValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-symbol-di-tokens.ts",
                     "level": 2
                 },
@@ -260,7 +260,7 @@
                     "id": "NoUnmanagedExceptionsValidator",
                     "className": "NoUnmanagedExceptionsValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-no-unmanaged-exceptions.ts",
                     "level": 2
                 },
@@ -276,7 +276,7 @@
                     "id": "PrismaConverterValidator",
                     "className": "PrismaConverterValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-prisma-converters.ts",
                     "level": 2
                 },
@@ -292,7 +292,7 @@
                     "id": "PrismaValidateDtosValidator",
                     "className": "PrismaValidateDtosValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-dtos.ts",
                     "level": 2
                 },
@@ -308,7 +308,7 @@
                     "id": "RequireReturnTypeValidator",
                     "className": "RequireReturnTypeValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-return-types.ts",
                     "level": 2
                 },
@@ -324,7 +324,7 @@
                     "id": "RoleTagValidator",
                     "className": "RoleTagValidator",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/validate-role-tag.ts",
                     "level": 2
                 },
@@ -332,7 +332,7 @@
                     "id": "RuleReporter",
                     "className": "RuleReporter",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/code-rules/src/rule-reporter.ts",
                     "level": 2
                 },

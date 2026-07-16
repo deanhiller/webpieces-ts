@@ -12,7 +12,7 @@
                     "id": "BranchMutationLog",
                     "className": "BranchMutationLog",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
                     "level": 1
                 },
@@ -20,7 +20,7 @@
                     "id": "ConfigFile",
                     "className": "ConfigFile",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/config-file.ts",
                     "level": 2
                 },
@@ -28,7 +28,7 @@
                     "id": "ConfigLoader",
                     "className": "ConfigLoader",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/load-config.ts",
                     "level": 1
                 },
@@ -36,7 +36,7 @@
                     "id": "DiffScope",
                     "className": "DiffScope",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/diff-scope.ts",
                     "level": 1
                 },
@@ -44,7 +44,7 @@
                     "id": "MainSyncStatusService",
                     "className": "MainSyncStatusService",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/main-sync-status.ts",
                     "level": 1
                 },
@@ -52,7 +52,7 @@
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/repo-root.ts",
                     "level": 1
                 },
@@ -60,7 +60,7 @@
                     "id": "ReviewJsonService",
                     "className": "ReviewJsonService",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-json.ts",
                     "level": 1
                 },
@@ -68,7 +68,7 @@
                     "id": "RulesConfigDesign",
                     "className": "RulesConfigDesign",
                     "kind": "apiImplementation",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/rules-config-design.ts",
                     "level": 0
                 },
@@ -76,7 +76,7 @@
                     "id": "TemplateWriter",
                     "className": "TemplateWriter",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/load-template.ts",
                     "level": 1
                 }

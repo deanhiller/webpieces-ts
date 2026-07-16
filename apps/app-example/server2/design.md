@@ -12,7 +12,7 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
-    GreetingService["GreetingService"]:::many
+    GreetingService["GreetingService"]
     Server2Controller["Server2Controller"]:::controller
     Server2Controller --> GreetingService
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d

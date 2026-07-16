@@ -12,15 +12,15 @@ appears in each root's tree.
 
 ```mermaid
 graph TD
-    BranchMutationLog["BranchMutationLog"]:::many
-    ConfigFile["ConfigFile"]:::many
-    ConfigLoader["ConfigLoader"]:::many
-    DiffScope["DiffScope"]:::many
-    MainSyncStatusService["MainSyncStatusService"]:::many
-    RepoRootFinder["RepoRootFinder"]:::many
-    ReviewJsonService["ReviewJsonService"]:::many
+    BranchMutationLog["BranchMutationLog"]
+    ConfigFile["ConfigFile"]
+    ConfigLoader["ConfigLoader"]
+    DiffScope["DiffScope"]
+    MainSyncStatusService["MainSyncStatusService"]
+    RepoRootFinder["RepoRootFinder"]
+    ReviewJsonService["ReviewJsonService"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
-    TemplateWriter["TemplateWriter"]:::many
+    TemplateWriter["TemplateWriter"]
     ConfigLoader --> ConfigFile
     RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader

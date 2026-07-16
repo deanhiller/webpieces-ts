@@ -12,7 +12,7 @@
                     "id": "GreetingService",
                     "className": "GreetingService",
                     "kind": "class",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "apps/app-example/server2/src/services/GreetingService.ts",
                     "level": 1
                 },
@@ -20,7 +20,7 @@
                     "id": "Server2Controller",
                     "className": "Server2Controller",
                     "kind": "controller",
-                    "scope": "transient",
+                    "scope": "singleton",
                     "file": "apps/app-example/server2/src/controllers/server2-controller.ts",
                     "level": 0
                 }
