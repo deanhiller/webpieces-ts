@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LogApiCall, LogApiCallOptions } from '../LogApiCall';
-import { RouteMetadata } from '../decorators';
+import { LogApiCall } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
+import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
 import { ApiCallContext, ApiCallContextHolder } from '../ApiCallContext';
 import { ContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
@@ -30,7 +30,8 @@ class RecordingApiCallContext implements ApiCallContext {
     }
 }
 
-const meta = new RouteMetadata('POST', '/save', 'save', 'SaveController');
+/** The call identity per side: apiClass 'SaveApi' matches client+server; controllerName is server impl. */
+const info = (side: ApiSide): ApiMethodInfo => new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
 const API = WebpiecesCoreHeaders.API_CALL_INFO;
 
 describe('ApiCallContextHolder.get', () => {
@@ -47,35 +48,36 @@ describe('LogApiCall.execute — success + active guard', () => {
         const ctx = new RecordingApiCallContext();
         ApiCallContextHolder.install(ctx);
 
-        const res = await LogApiCall.execute('client', meta, { q: 'x' }, async () => ({ ok: true }));
+        const res = await LogApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true }));
 
         expect(res).toEqual({ ok: true });
         expect(ctx.sets.map(s => s.key)).toEqual([API, API]); // both stamps target API_CALL_INFO
-        expect(ctx.values()[0]).toEqual(new ApiCallInfo('client', 'request', undefined, '/save', 'save', 'SaveController'));
-        expect(ctx.values()[1]).toEqual(new ApiCallInfo('client', 'response', 'success', '/save', 'save', 'SaveController'));
+        expect(ctx.values()[0]).toEqual(new ApiCallInfo(info('client'), 'request', undefined));
+        expect(ctx.values()[1]).toEqual(new ApiCallInfo(info('client'), 'response', 'success'));
         // set → log → remove: every stamp is cleared, so nothing is ever held across the await.
         expect(ctx.removes).toEqual([API, API]);
     });
 
-    it('default (no options): a falsy/void response still throws Response cannot be null', async () => {
+    it('nests the ApiMethodInfo under ApiCallInfo.method (jsonPayload.api.method.apiClass matches both sides)', async () => {
         const ctx = new RecordingApiCallContext();
         ApiCallContextHolder.install(ctx);
 
-        await expect(
-            LogApiCall.execute('client', meta, { q: 'x' }, async () => undefined),
-        ).rejects.toThrow(/Response cannot be null/);
+        await LogApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
+
+        const tag = ctx.values()[0];
+        expect(tag.method).toEqual(new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'));
+        expect(tag.method.apiClass).toBe('SaveApi');
+        expect(tag.type).toBe('request');
     });
 
-    it('allowVoidResponse: an undefined return resolves and stamps response:success', async () => {
+    it('a void/undefined return resolves and stamps response:success (Promise<void> methods are normal)', async () => {
         const ctx = new RecordingApiCallContext();
         ApiCallContextHolder.install(ctx);
 
-        const res = await LogApiCall.execute(
-            'client', meta, { q: 'x' }, async () => undefined, new LogApiCallOptions(true),
-        );
+        const res = await LogApiCall.execute(info('client'), { q: 'x' }, async () => undefined);
 
         expect(res).toBeUndefined();
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo('client', 'response', 'success', '/save', 'save', 'SaveController'));
+        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('client'), 'response', 'success'));
     });
 
     it('throws when the ApiCallContext is not active (no request scope / factory not built)', async () => {
@@ -84,7 +86,7 @@ describe('LogApiCall.execute — success + active guard', () => {
         ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute('client', meta, { q: 'x' }, async () => ({ ok: true })),
+            LogApiCall.execute(info('client'), { q: 'x' }, async () => ({ ok: true })),
         ).rejects.toThrow(/ACTIVE ApiCallContext/);
     });
 });
@@ -95,12 +97,12 @@ describe('LogApiCall.execute — error result mapping', () => {
         ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute('server', meta, { q: 'x' }, async () => {
+            LogApiCall.execute(info('server'), { q: 'x' }, async () => {
                 throw new HttpBadRequestError('bad input');
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
 
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo('server', 'response', 'success', '/save', 'save', 'SaveController'));
+        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('server'), 'response', 'success'));
     });
 
     it('CLIENT receiving a 4xx → response:failure — the outbound call failed', async () => {
@@ -108,12 +110,12 @@ describe('LogApiCall.execute — error result mapping', () => {
         ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute('client', meta, { q: 'x' }, async () => {
+            LogApiCall.execute(info('client'), { q: 'x' }, async () => {
                 throw new HttpBadRequestError('server said no');
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
 
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo('client', 'response', 'failure', '/save', 'save', 'SaveController'));
+        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('client'), 'response', 'failure'));
     });
 
     it('HttpUserError (266) → response:success on BOTH sides', async () => {
@@ -121,7 +123,7 @@ describe('LogApiCall.execute — error result mapping', () => {
             const ctx = new RecordingApiCallContext();
             ApiCallContextHolder.install(ctx);
             await expect(
-                LogApiCall.execute(side, meta, { q: 'x' }, async () => {
+                LogApiCall.execute(info(side), { q: 'x' }, async () => {
                     throw new HttpUserError('special');
                 }),
             ).rejects.toBeInstanceOf(HttpUserError);
@@ -134,12 +136,12 @@ describe('LogApiCall.execute — error result mapping', () => {
         ApiCallContextHolder.install(ctx);
 
         await expect(
-            LogApiCall.execute('server', meta, { q: 'x' }, async () => {
+            LogApiCall.execute(info('server'), { q: 'x' }, async () => {
                 throw new Error('boom');
             }),
         ).rejects.toThrow('boom');
 
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo('server', 'response', 'failure', '/save', 'save', 'SaveController'));
+        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('server'), 'response', 'failure'));
     });
 });
 

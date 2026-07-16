@@ -2,7 +2,7 @@ import { injectable } from 'inversify';
 import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
-import { LogApiCall } from '@webpieces/core-util';
+import { LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.
@@ -37,9 +37,18 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         };
 
         // LogApiCall is a singleton (use it directly, no `new`). It logs the text lines AND stamps the
-        // structured `api={side:'server',...}` tag into RequestContext, so every log line during the
-        // request carries jsonPayload.api. Correlation fields (requestId, ...) are added by the backend.
-        const response = await LogApiCall.execute('server', meta.routeMeta, meta.requestDto, method);
+        // structured `api={method:{side:'server',...},...}` tag into RequestContext, so every log line
+        // during the request carries jsonPayload.api. Correlation fields (requestId, ...) are added by
+        // the backend. apiClass is the CONTRACT name (routeMeta.apiName, e.g. 'SaveApi') so a server log
+        // line MATCHES the client's for the same call; controllerName keeps the impl (e.g. 'SaveController').
+        const rm = meta.routeMeta;
+        const info = new ApiMethodInfo(
+            'server',
+            rm.apiName ?? rm.controllerClassName ?? 'Unknown',
+            rm.methodName,
+            rm.controllerClassName,
+        );
+        const response = await LogApiCall.execute(info, meta.requestDto, method);
         return new WpResponse(response);
     }
 }

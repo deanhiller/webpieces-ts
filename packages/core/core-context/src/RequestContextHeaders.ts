@@ -77,6 +77,12 @@ export class RequestContextHeaders {
 
         RequestContext.setRequest(request);
 
+        // Stamp the inbound method+path as top-level logged keys (jsonPayload.httpMethod / requestPath)
+        // so EVERY log line of this request carries them. Sourced from the just-published HttpRequest;
+        // NOT transferred over the wire, so a downstream hop stamps its own inbound values.
+        RequestContext.putHeader(WebpiecesCoreHeaders.HTTP_METHOD, request.method);
+        RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_PATH, request.path);
+
         // getTransferredKeys() is precomputed at configure() time.
         for (const key of HeaderRegistry.get().getTransferredKeys()) {
             const values = request.getHeaderValues(key);

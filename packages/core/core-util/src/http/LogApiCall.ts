@@ -1,4 +1,3 @@
-import {RouteMetadata} from "./decorators";
 import {
     HttpBadRequestError,
     HttpUnauthorizedError,
@@ -8,24 +7,12 @@ import {
 } from './errors';
 import {toError} from "../lib/errorUtils";
 import {LogManager} from "../logging/LogManager";
-import {ApiCallInfo, ApiSide} from "./ApiCallInfo";
+import {ApiCallInfo} from "./ApiCallInfo";
+import {ApiMethodInfo} from "./ApiMethodInfo";
 import {ApiCallContextHolder} from "./ApiCallContext";
 import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
 
 const log = LogManager.getLogger('LogApiCall');
-
-/**
- * Options for {@link LogApiCallImpl.execute}. `allowVoidResponse` opts OUT of the strict
- * falsy-response guard for callers that legitimately return void/undefined (e.g. a local firestore
- * wrapper). Defaults to strict so RPC callers keep the safety net.
- */
-export class LogApiCallOptions {
-    allowVoidResponse?: boolean;
-
-    constructor(allowVoidResponse?: boolean) {
-        this.allowVoidResponse = allowVoidResponse;
-    }
-}
 
 /**
  * LogApiCall - Generic API call logging utility, used by BOTH server-side (LogApiFilter) and
@@ -36,7 +23,7 @@ export class LogApiCallOptions {
  * 2. A structured {@link ApiCallInfo} tag is stamped into the ambient request context via the
  *    {@link ApiCallContextHolder} seam, so EVERY log line emitted during the call (not just the
  *    req/resp lines) inherits a filterable `api` object — surfacing in GCP as
- *    `jsonPayload.api.{side,type,result,path,method}`.
+ *    `jsonPayload.api.{method.{side,apiClass,methodName,controllerName},type,result}`.
  *
  * BROWSER-SAFE: this lives in core-util and runs in the browser bundle (via ProxyClient →
  * BrowserProxyClient), so it MUST NOT import `RequestContext` (Node async_hooks, and a circular dep).
@@ -57,15 +44,10 @@ export class LogApiCallImpl {
     /**
      * Execute an API call with logging + `api` context-tagging around it.
      *
-     * @param side - 'client' (outbound call this process made) or 'server' (inbound call it handled)
-     * @param meta - Route metadata with controllerClassName and methodName
-     * @param requestDto - The request DTO
+     * @param methodInfo - The transport-neutral call identity (side, apiClass, methodName,
+     *   controllerName?). `apiClass` is what matches a client call to its server handler in the logs.
+     * @param requestDto - The request DTO (external multi-param callers synthesize a small object)
      * @param method - The method to execute
-     * @param options - `allowVoidResponse: true` opts OUT of the strict falsy-response guard, for
-     *   callers that legitimately return void/undefined (e.g. a local firestore wrapper whose
-     *   `setDocument` returns void, or a `getDocById` miss returning undefined). Defaults to strict,
-     *   so RPC callers (LogApiFilter, ProxyClient) keep the safety net: an HTTP endpoint returning
-     *   nothing is almost always a bug.
      *
      * Correlation fields (requestId, tenantId, ...) are NOT stamped here — a logging BACKEND owns that,
      * reading RequestContext on every record. What IS stamped here is the per-call `api` tag, and only
@@ -75,13 +57,11 @@ export class LogApiCallImpl {
      * exactly what the GCP filters (`jsonPayload.api.*`) want.
      */
     public async execute(
-        side: ApiSide,
-        meta: RouteMetadata,
+        methodInfo: ApiMethodInfo,
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary (matches ProxyClient)
         requestDto: any,
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
         method: (dto: any) => Promise<any>,
-        options?: LogApiCallOptions
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
     ): Promise<any> {
         // Throws if no ApiCallContext was installed at startup, or there is no active scope to stamp
@@ -94,8 +74,9 @@ export class LogApiCallImpl {
             );
         }
         const key = WebpiecesCoreHeaders.API_CALL_INFO;
+        const side = methodInfo.side;
         const server = side === 'server';
-        const cls = meta.controllerClassName;
+        const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
         // set → emit → remove, as ONE synchronous span: the tag is live only while the logger reads it,
         // never across an await, so a single browser global slot can never be clobbered by a concurrent call.
         const stamp = (info: ApiCallInfo, emit: () => void): void => {
@@ -106,19 +87,16 @@ export class LogApiCallImpl {
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller
         try {
-            stamp(new ApiCallInfo(side, 'request', undefined, meta.path, meta.methodName, cls), () =>
-                log.info(`[API-${side}-req] ${cls}.${meta.methodName} ${meta.path} request=${JSON.stringify(requestDto)}`));
+            stamp(new ApiCallInfo(methodInfo, 'request', undefined), () =>
+                log.info(`[API-${side}-req] ${id} request=${JSON.stringify(requestDto)}`));
 
             if(!requestDto)
-                throw new Error(`Request cannot be null and was from ${cls}.${meta.methodName}`);
+                throw new Error(`Request cannot be null and was from ${id}`);
 
             const response = await method(requestDto);
 
-            if(!options?.allowVoidResponse && !response)
-                throw new Error(`Response cannot be null and was from ${cls}.${meta.methodName}`);
-
-            stamp(new ApiCallInfo(side, 'response', 'success', meta.path, meta.methodName, cls), () =>
-                log.info(`[API-${side}-resp-SUCCESS] ${cls}.${meta.methodName} response=${JSON.stringify(response)}`));
+            stamp(new ApiCallInfo(methodInfo, 'response', 'success'), () =>
+                log.info(`[API-${side}-resp-SUCCESS] ${id} response=${JSON.stringify(response)}`));
 
             return response;
         } catch (err: unknown) {
@@ -129,10 +107,10 @@ export class LogApiCallImpl {
             // CLIENT receives means its call FAILED. HttpUserError (266) is never a failure, either side.
             const isUser = this.isUserError(error, server);
 
-            stamp(new ApiCallInfo(side, 'response', isUser ? 'success' : 'failure', meta.path, meta.methodName, cls), () =>
+            stamp(new ApiCallInfo(methodInfo, 'response', isUser ? 'success' : 'failure'), () =>
                 isUser
-                    ? log.warn(`[API-${side}-resp-OTHER] ${cls}.${meta.methodName} errorType=${errorType}`)
-                    : log.error(`[API-${side}-resp-FAIL] ${cls}.${meta.methodName} errorType=${errorType} error=${errorMessage}`));
+                    ? log.warn(`[API-${side}-resp-OTHER] ${id} errorType=${errorType}`)
+                    : log.error(`[API-${side}-resp-FAIL] ${id} errorType=${errorType} error=${errorMessage}`));
             throw error;
         }
     }

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { Container, injectable } from 'inversify';
-import { HeaderRegistry } from '@webpieces/core-util';
+import { HeaderRegistry, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { HttpRequest } from '../HttpRequest';
 import { RequestContext } from '../RequestContext';
 import { RequestContextHeaders } from '../RequestContextHeaders';
@@ -123,5 +123,21 @@ describe('RequestContext scope invariants', () => {
 
         expect(() => headers.fillFromRequest(new HttpRequest('POST', '/x', new Map())))
             .toThrow(/No active RequestContext/);
+    });
+
+    it('fillFromRequest() stamps httpMethod + requestPath as logged fields from the HttpRequest', () => {
+        HeaderRegistry.configure([], /*platformHeaders*/ true);
+        const headers = new RequestContextHeaders();
+
+        RequestContext.run(() => {
+            headers.fillFromRequest(new HttpRequest('POST', '/save', new Map()));
+
+            expect(RequestContext.getHeader<string>(WebpiecesCoreHeaders.HTTP_METHOD)).toBe('POST');
+            expect(RequestContext.getHeader<string>(WebpiecesCoreHeaders.REQUEST_PATH)).toBe('/save');
+            // isLogged=true → they surface in the flat log-field map every record inherits.
+            const fields = RequestContext.buildLogFields();
+            expect(fields.get('httpMethod')).toBe('POST');
+            expect(fields.get('requestPath')).toBe('/save');
+        });
     });
 });
