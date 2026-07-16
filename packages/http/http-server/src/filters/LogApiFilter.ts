@@ -1,4 +1,3 @@
-import { injectable } from 'inversify';
 import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
 import { LogManager } from '@webpieces/core-util';
@@ -23,7 +22,6 @@ import { LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
 const log = LogManager.getLogger('LogApiFilter');
 
 @provideFrameworkSingleton()
-@injectable()
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     async filter(

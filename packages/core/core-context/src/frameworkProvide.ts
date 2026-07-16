@@ -1,4 +1,4 @@
-import { ContainerModule } from 'inversify';
+import { ContainerModule, injectable } from 'inversify';
 import type { ContainerModuleLoadOptions, ResolutionContext, ServiceIdentifier } from 'inversify';
 import { Provider } from './provide';
 
@@ -53,6 +53,10 @@ const frameworkProviderRegistry: FrameworkProviderBinding[] = [];
 export function provideFrameworkSingleton(): ClassDecorator {
     // webpieces-disable no-any-unknown -- decorator target is any class constructor
     return (target: any) => {
+        // Mark @injectable so Inversify v7 reads the ctor design:paramtypes (inject-by-type). The
+        // class no longer needs a separate @injectable. Scope comes from buildFrameworkModule's
+        // .inSingletonScope(), not from here.
+        injectable()(target);
         frameworkRegistry.push(new FrameworkBinding(target, target));
         return target;
     };
@@ -73,6 +77,8 @@ export function provideFrameworkSingleton(): ClassDecorator {
 export function provideFrameworkSingletonDefaultForApi<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
     // webpieces-disable no-any-unknown -- decorator target is any class constructor
     return (target: any) => {
+        // Mark @injectable so the impl's ctor design:paramtypes are read when bound via .to(target).
+        injectable()(target);
         frameworkRegistry.push(new FrameworkBinding(serviceIdentifier, target));
         return target;
     };
@@ -86,6 +92,9 @@ export function provideFrameworkSingletonDefaultForApi<T>(serviceIdentifier: Ser
 export function provideFrameworkTransient(): ClassDecorator {
     // webpieces-disable no-any-unknown -- decorator target is any class constructor
     return (target: any) => {
+        // Mark @injectable so Inversify v7 reads the ctor design:paramtypes (inject-by-type). Scope
+        // (transient) comes from buildFrameworkModule's .inTransientScope(), not from here.
+        injectable()(target);
         frameworkRegistry.push(new FrameworkBinding(target, target, 'transient'));
         return target;
     };

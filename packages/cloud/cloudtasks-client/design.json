@@ -39,7 +39,8 @@
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/cloud/cloudtasks-client/src/GcpTaskInvoker.ts",
-                    "level": 3
+                    "level": 3,
+                    "detail": "SECRETS"
                 },
                 {
                     "id": "TaskProxyClient",
@@ -64,8 +65,8 @@
                     "from": "GcpTaskInvoker",
                     "to": "Secrets",
                     "injection": "token",
-                    "token": "Secrets",
-                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
+                    "token": "SECRETS",
+                    "tokenKey": "symbol.for:Secrets",
                     "paramName": "secrets",
                     "paramType": "Secrets"
                 },
@@ -89,7 +90,7 @@
                 }
             ],
             "unresolved": [
-                "Secrets"
+                "SECRETS"
             ]
         }
     ]

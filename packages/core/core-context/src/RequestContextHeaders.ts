@@ -1,4 +1,3 @@
-import { injectable } from 'inversify';
 import {
     HeaderRegistry,
     RecorderKeys,
@@ -27,7 +26,6 @@ import { RequestContext } from './RequestContext';
  * Stateless once built, so it binds as a framework singleton every server-side client shares.
  */
 @provideFrameworkSingleton()
-@injectable()
 export class RequestContextHeaders {
     /**
      * EVERY transferred key with a non-empty value, under its wire name. Nothing is rewritten.

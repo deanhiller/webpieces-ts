@@ -1,4 +1,4 @@
-import { injectable, inject, optional } from 'inversify';
+import { inject, optional } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
 import { provideFrameworkSingletonDefaultForApi } from '@webpieces/core-context';
 import {
@@ -6,7 +6,7 @@ import {
     getRegion,
     getRuntimeServiceAccountEmail,
 } from '@webpieces/gcp-identity';
-import { LogManager, Secrets } from '@webpieces/core-util';
+import { LogManager, Secrets, SECRETS } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('GcpTaskInvoker');
@@ -24,12 +24,11 @@ type ITask = protos.google.cloud.tasks.v2.ITask;
 // as a framework singleton. Tests/local dev override it via appOverrides:
 // `(await options.rebind(TaskInvoker)).to(InMemoryTaskInvoker)` — same idiom as AuthConfig.
 @provideFrameworkSingletonDefaultForApi(TaskInvoker)
-@injectable()
 export class GcpTaskInvoker extends TaskInvoker {
     private readonly client = new CloudTasksClient();
 
     // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
-    constructor(@optional() @inject(Secrets) private readonly secrets?: Secrets) {
+    constructor(@optional() @inject(SECRETS) private readonly secrets?: Secrets) {
         super();
     }
 

@@ -2,8 +2,9 @@ import { JwtRequirement, HttpForbiddenError } from '@webpieces/core-util';
 import { AuthValues } from './AuthConfig';
 
 /**
- * JwtHook - the OPTIONAL user-JWT mechanism. Bind one (inject by type, per no-symbol-di-tokens;
- * rebindable in tests) to turn on `@AuthJwt(...)` endpoints. When NO JwtHook is bound, the framework
+ * JwtHook - the OPTIONAL user-JWT mechanism. Its DI token is the {@link JWT_HOOK} Symbol injected via
+ * `@inject(JWT_HOOK)` (a Symbol, because the app container uses autobind; rebindable in tests). Bind one
+ * to turn on `@AuthJwt(...)` endpoints. When NO JwtHook is bound, the framework
  * {@link AuthFilter} treats every jwt endpoint as "not enabled" and fails fast (401) — there is no
  * default JWT verification because it needs an app secret + payload shape the framework can't guess.
  *
@@ -31,8 +32,17 @@ export abstract class JwtHook {
 }
 
 /**
- * OidcHook - the OPTIONAL override for Google OIDC service-to-service verification. Bind one (inject
- * by type; rebindable in tests) ONLY to customize the caller policy — e.g. an app that reads an
+ * DI identifier for the optional {@link JwtHook} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(JWT_HOOK)`
+ * correct — undefined when unbound. The JwtHook class stays the TYPE and the impl base.
+ */
+// webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
+export const JWT_HOOK = Symbol.for('JwtHook');
+
+/**
+ * OidcHook - the OPTIONAL override for Google OIDC service-to-service verification. Its DI token is the
+ * {@link OIDC_HOOK} Symbol injected via `@inject(OIDC_HOOK)` (a Symbol, because the app container uses
+ * autobind; rebindable in tests). Bind one ONLY to customize the caller policy — e.g. an app that reads an
  * `ALLOWED_OIDC_CALLERS` env var at its composition root and enforces that allow-list. When NO
  * OidcHook is bound, the framework {@link AuthFilter} runs the built-in {@link DefaultOidcVerifier}
  * directly, so a server that wires nothing still verifies Google OIDC against its `@AuthOidc(...callers)`
@@ -42,3 +52,11 @@ export abstract class JwtHook {
 export abstract class OidcHook {
     abstract verifyOidc(token: string, callers: string[]): Promise<void>;
 }
+
+/**
+ * DI identifier for the optional {@link OidcHook} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(OIDC_HOOK)`
+ * correct — undefined when unbound. The OidcHook class stays the TYPE and the impl base.
+ */
+// webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
+export const OIDC_HOOK = Symbol.for('OidcHook');

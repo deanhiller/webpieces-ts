@@ -18,3 +18,10 @@ export class Secrets {
         return this.values[key];
     }
 }
+
+/**
+ * DI identifier for the optional {@link Secrets} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(SECRETS)`
+ * correct — undefined when unbound. The Secrets class stays the TYPE.
+ */
+export const SECRETS = Symbol.for('Secrets');

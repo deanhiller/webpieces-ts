@@ -46,7 +46,8 @@
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
-                    "level": 2
+                    "level": 2,
+                    "detail": "SECRETS"
                 }
             ],
             "edges": [
@@ -81,14 +82,14 @@
                     "from": "NodeProxyClient",
                     "to": "Secrets",
                     "injection": "token",
-                    "token": "Secrets",
-                    "tokenKey": "class:packages/core/core-util/src/http/Secrets.ts#Secrets",
+                    "token": "SECRETS",
+                    "tokenKey": "symbol.for:Secrets",
                     "paramName": "secrets",
                     "paramType": "Secrets"
                 }
             ],
             "unresolved": [
-                "Secrets"
+                "SECRETS"
             ]
         }
     ]

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { AuthConfig, JwtHook } from '@webpieces/http-routing';
+import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
 import { createMock, MockedApi } from '@webpieces/core-mock';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
@@ -55,8 +55,8 @@ describe('SaveApi with mocked Server2Api', () => {
         mockServer2Api = createMock<Server2Api>('Server2Api');
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
-            (await options.rebind(AuthConfig)).to(TestAuthConfig);
-            (await options.rebind(JwtHook)).to(TestJwtHook);
+            (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+            (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
         const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
         saveApi = factory.createApiClient<SaveApi>(SaveApi);
@@ -84,8 +84,8 @@ describe('SaveApi with mocked Server2Api', () => {
         mockServer2Api.mock.setDefaultReturnValue('fetchValue', createMockFetchResponse('MOCKED: DEFAULT_MOCK_VALUE'));
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(mockServer2Api);
-            (await options.rebind(AuthConfig)).to(TestAuthConfig);
-            (await options.rebind(JwtHook)).to(TestJwtHook);
+            (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+            (await options.rebind(JWT_HOOK)).to(TestJwtHook);
             (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
         });
         const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
@@ -126,8 +126,8 @@ describe('PublicApi', () => {
     beforeEach(async () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(createMock<Server2Api>('Server2Api'));
-            (await options.rebind(AuthConfig)).to(TestAuthConfig);
-            (await options.rebind(JwtHook)).to(TestJwtHook);
+            (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+            (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
         const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
         publicApi = factory.createApiClient<PublicApi>(PublicApi);

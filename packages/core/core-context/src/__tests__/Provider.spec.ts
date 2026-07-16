@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
-import { Container, injectable } from 'inversify';
+import { Container } from 'inversify';
 import { HeaderRegistry, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { HttpRequest } from '../HttpRequest';
 import { RequestContext } from '../RequestContext';
@@ -23,7 +23,6 @@ let singletonBuilds = 0;
 let transientBuilds = 0;
 
 @provideFrameworkSingleton()
-@injectable()
 class SharedThing {
     constructor() {
         singletonBuilds += 1;
@@ -31,7 +30,6 @@ class SharedThing {
 }
 
 @provideFrameworkTransient()
-@injectable()
 class FreshThing {
     constructor() {
         transientBuilds += 1;

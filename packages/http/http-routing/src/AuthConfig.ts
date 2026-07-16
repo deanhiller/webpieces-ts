@@ -55,3 +55,11 @@ export class AuthConfig {
         this.sharedSecrets = sharedSecrets;
     }
 }
+
+/**
+ * DI identifier for the optional {@link AuthConfig} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(AUTH_CONFIG)`
+ * correct — undefined when unbound. The AuthConfig class stays the TYPE and the impl base.
+ */
+// webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
+export const AUTH_CONFIG = Symbol.for('AuthConfig');

@@ -1,4 +1,4 @@
-import { inject, injectable, optional } from 'inversify';
+import { inject, optional } from 'inversify';
 import {
     AuthMeta,
     ClientRegistry,
@@ -6,6 +6,7 @@ import {
     RecordedError,
     RouteMetadata,
     Secrets,
+    SECRETS,
     TestCaseRecorder,
     toError,
 } from '@webpieces/core-util';
@@ -23,7 +24,6 @@ import { ClientConfig } from './ClientConfig';
  * them out — see its doc.
  */
 @provideFrameworkTransient()
-@injectable()
 export class NodeProxyClient extends ProxyClient {
     private config!: ClientConfig;
 
@@ -34,7 +34,7 @@ export class NodeProxyClient extends ProxyClient {
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
         // @optional: only @AuthSharedSecret endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
-        @optional() @inject(Secrets) private readonly secrets?: Secrets,
+        @optional() @inject(SECRETS) private readonly secrets?: Secrets,
     ) {
         super();
     }

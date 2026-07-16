@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import {
     isApiPath,
     getApiPath,
@@ -54,7 +54,6 @@ class EndpointPlan {
  * - Handing a fully-built TaskRequest to the bound {@link TaskInvoker}
  */
 @provideFrameworkTransient()
-@injectable()
 export class TaskProxyClient {
     // Assigned by init(), which the factory calls immediately after construction.
     private plans!: Map<string, EndpointPlan>;

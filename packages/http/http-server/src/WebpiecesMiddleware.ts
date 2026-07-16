@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import cors from 'cors';
-import { injectable } from 'inversify';
 import { provideFrameworkSingleton, WebpiecesConfig } from '@webpieces/http-routing';
 import {
     ProtocolError,
@@ -273,7 +272,6 @@ export class ExpressWrapper {
  * - Plugins (App-level): Provide complete features with modules + routes (Hibernate, Jackson, etc.)
  */
 @provideFrameworkSingleton()
-@injectable()
 export class WebpiecesMiddleware {
     /** The ONE wire<->context transfer, handed to every route's ExpressWrapper. Stateless. */
     private readonly headers = new RequestContextHeaders();

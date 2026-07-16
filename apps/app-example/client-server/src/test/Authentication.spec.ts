@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import jwt from 'jsonwebtoken';
-import { AuthConfig } from '@webpieces/http-routing';
+import { AUTH_CONFIG } from '@webpieces/http-routing';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { HttpUnauthorizedError, HttpForbiddenError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
@@ -51,7 +51,7 @@ async function withAuthHeader<T>(bearerValue: string, fn: () => Promise<T>): Pro
 describe('Authentication: shared-secret (bound state)', () => {
     // Bind a known secret VALUE — the whole point: a test passes the string in and validates it.
     const overrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
-        (await options.rebind(AuthConfig)).to(TestAuthConfig); // sharedSecrets: { INTERNAL_API_SECRET: TEST_SHARED_SECRET }
+        (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig); // sharedSecrets: { INTERNAL_API_SECRET: TEST_SHARED_SECRET }
     });
 
     let api: SecureApi;

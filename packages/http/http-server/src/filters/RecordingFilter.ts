@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import {
     provideFrameworkSingleton,
     MethodMeta,
@@ -36,7 +36,6 @@ import { TestCaseRecorderImpl } from '../recorder/TestCaseRecorderImpl';
  * caught and logged.
  */
 @provideFrameworkSingleton()
-@injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response type flexibility
 export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 

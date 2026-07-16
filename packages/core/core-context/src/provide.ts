@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { provide } from '@inversifyjs/binding-decorators';
+import { injectable } from 'inversify';
 import type { BindInWhenOnFluentSyntax, ServiceIdentifier } from 'inversify';
 
 /**
@@ -7,28 +8,14 @@ import type { BindInWhenOnFluentSyntax, ServiceIdentifier } from 'inversify';
  *
  * These live in @webpieces/core-context — the lowest package that already owns
  * request-scoped context — so libraries (cloudtasks-client, http-client, …) can
- * register singletons WITHOUT depending on the server-side @webpieces/http-routing
- * package. http-routing re-exports them for back-compat.
- */
-
-/**
- * Provides a singleton-scoped dependency.
- * When called without arguments, the decorated class binds to itself.
+ * register bindings WITHOUT depending on the server-side @webpieces/http-routing package.
  *
- * Usage:
- * ```typescript
- * @provideSingleton()
- * export class SaveController {
- *   // ...
- * }
- * ```
+ * A plain concrete singleton no longer needs a decorator here: annotate it
+ * `@injectable(bindingScopeValues.Singleton)` (from `inversify`) and let the app container's
+ * autobind self-bind it on first resolve (inject-by-type). The decorators BELOW cover the two
+ * cases autobind cannot: binding an interface/Symbol TOKEN to a default impl, and the
+ * framework-registry variants (see frameworkProvide.ts).
  */
-export function provideSingleton(): ClassDecorator {
-    // webpieces-disable no-any-unknown -- decorator target is any class constructor
-    return (target: any) => {
-        return provide(target, (bind: BindInWhenOnFluentSyntax<unknown>) => bind.inSingletonScope())(target);
-    };
-}
 
 /**
  * Marks this class as the DEFAULT (overridable) singleton implementation OF a contract token
@@ -51,29 +38,11 @@ export function provideSingleton(): ClassDecorator {
  */
 // webpieces-disable no-function-outside-class -- a decorator factory cannot be a class method
 export function provideSingletonDefaultForApi<T>(serviceIdentifier: ServiceIdentifier<T>): ClassDecorator {
-    return provide(serviceIdentifier, (bind: BindInWhenOnFluentSyntax<T>) => bind.inSingletonScope());
-}
-
-/**
- * Provides a transient-scoped dependency (new instance every time).
- * When called without arguments, the decorated class binds to itself.
- *
- * Usage:
- * ```typescript
- * @provideTransient()
- * export class TransientController {
- *   // ...
- * }
- * ```
- */
-export function provideTransient(): ClassDecorator {
     // webpieces-disable no-any-unknown -- decorator target is any class constructor
     return (target: any) => {
-        // Call inTransientScope() EXPLICITLY. Omitting the scope call inherits the container's
-        // defaultScope which, while Transient by default in inversify 7, would silently flip
-        // meaning if anyone ever passed `new Container({ defaultScope: ... })`.
-        // webpieces-disable no-any-unknown -- inversify's own fluent-syntax generic for a self-binding
-        return provide(target, (bind: BindInWhenOnFluentSyntax<unknown>) => bind.inTransientScope())(target);
+        // Mark @injectable so the impl's ctor design:paramtypes are read when bound via .to(target).
+        injectable()(target);
+        return provide(serviceIdentifier, (bind: BindInWhenOnFluentSyntax<T>) => bind.inSingletonScope())(target);
     };
 }
 
