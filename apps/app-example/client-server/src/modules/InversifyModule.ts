@@ -1,8 +1,8 @@
 import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
-import { ContextKey, Secrets } from '@webpieces/core-util';
-import { AuthConfig, JwtHook } from '@webpieces/http-routing';
+import { ContextKey, Secrets, SECRETS } from '@webpieces/core-util';
+import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
 import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
 
@@ -53,17 +53,17 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
 
     // Shared-secret state: the framework AuthFilter injects AuthConfig for @AuthSharedSecret.
     // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
-    bind(AuthConfig).to(CompanyAuthConfig).inSingletonScope();
+    bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
 
     // User JWT mechanism: the framework AuthFilter injects JwtHook for @AuthJwt / @Auth endpoints.
     // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
-    bind(JwtHook).to(CompanyJwtHook).inSingletonScope();
+    bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
 
     // The ONE shared-secret store for ALL of this service's outbound clients (RPC + Cloud Tasks).
     // The VALUE it sends per @AuthSharedSecret(key); read from config ONCE here, never in the send
     // path (so tests stay parallel-safe). Rotate a client by changing its value here.
     const secrets = new Secrets({ INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] });
-    bind(Secrets).toConstantValue(secrets); // injected into the Cloud Tasks invokers
+    bind(SECRETS).toConstantValue(secrets); // injected into the Cloud Tasks invokers
 
     // PROD binding: Server2Api is a REAL HTTP client to the server2 service.
     //

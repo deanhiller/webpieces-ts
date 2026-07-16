@@ -48,12 +48,12 @@
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>
     <div class="section">
-        <h2>Server2Controller — controller, Level 0…0</h2>
+        <h2>Server2Controller — controller, Level 0…1</h2>
         <div class="meta">apps/app-example/server2/src/controllers/server2-controller.ts</div>
         <div id="graph-0" class="graph"></div>
     </div>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"Server2Controller\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"Server2Controller\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"Server2Controller\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"Server2Controller\"; }\n\n\n  labelloc=\"t\";\n  label=\"Server2Controller\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n","stackedIds":[]}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"Server2Controller\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"GreetingService\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"GreetingService\\n(L1, transient)\"];\n  \"Server2Controller\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"Server2Controller\\n(L0, transient)\", penwidth=2];\n\n  { rank=same; \"Server2Controller\"; }\n  { rank=same; \"GreetingService\"; }\n\n  \"Server2Controller\" -> \"GreetingService\";\n\n  labelloc=\"t\";\n  label=\"Server2Controller\\n(controller, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":["GreetingService","Server2Controller"]}];
         
         function paintStacks(element, stackedIds) {
             const nodes = element.querySelectorAll('g.node');

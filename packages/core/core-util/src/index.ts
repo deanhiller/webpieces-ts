@@ -66,7 +66,7 @@ export {
 } from './http/decorators';
 export type { AuthMode, ApiKind, JwtRequirement, EndpointOptions } from './http/decorators';
 // Client-side shared-secret store (the value THIS service sends per @AuthSharedSecret key).
-export { Secrets } from './http/Secrets';
+export { Secrets, SECRETS } from './http/Secrets';
 
 // Type validators
 export { ValidateImplementation } from './http/validators';

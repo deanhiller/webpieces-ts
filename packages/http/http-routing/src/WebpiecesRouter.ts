@@ -77,7 +77,10 @@ export class WebpiecesRouter implements ApiFactory {
         this.webpiecesContainer = webpiecesContainer;
 
         // App container is a child so app bindings see framework bindings while staying separate.
-        this.appContainer = new Container({ parent: webpiecesContainer });
+        // autobind:true lets a concrete @injectable(Singleton) app class self-bind on first resolve
+        // (inject-by-type, no @provideSingleton). Framework singletons stay explicit in the parent
+        // (provideFrameworkSingleton -> buildFrameworkModule), found before child-autobind kicks in.
+        this.appContainer = new Container({ parent: webpiecesContainer, autobind: true });
         this.routeBuilder.setContainer(this.appContainer);
 
         await this.loadDIModules(options);

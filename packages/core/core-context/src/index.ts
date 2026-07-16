@@ -8,7 +8,7 @@ export { RequestContextApiCallContext } from './RequestContextApiCallContext';
 export { HttpRequest } from './HttpRequest';
 
 // DI provider decorators (shared DI seam; http-routing re-exports for back-compat)
-export { provideSingleton, provideSingletonDefaultForApi, provideTransient } from './provide';
+export { provideSingletonDefaultForApi } from './provide';
 // Guice-style Provider<T> — lazy singleton OR fresh-per-get, decided by T's binding scope.
 export { Provider } from './provide';
 // Framework-only DI registry (packages/** use these; keeps framework classes out of a

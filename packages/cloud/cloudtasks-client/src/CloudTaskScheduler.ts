@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
@@ -61,7 +61,6 @@ export class ScheduleOptions {
  * ScheduleOptions here, never on the API.
  */
 @provideFrameworkSingleton()
-@injectable()
 export class CloudTaskScheduler {
     constructor(
         @inject(TaskInvoker) private readonly invoker: TaskInvoker,

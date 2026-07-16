@@ -1,4 +1,3 @@
-import { injectable } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { toError, LogManager } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
@@ -17,7 +16,6 @@ const log = LogManager.getLogger('ErrorLogFilter');
  * in-process path gets the same consistent logging the HTTP path always had.
  */
 @provideFrameworkSingleton()
-@injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class ErrorLogFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility

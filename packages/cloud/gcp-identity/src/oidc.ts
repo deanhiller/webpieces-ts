@@ -1,4 +1,3 @@
-import { injectable } from 'inversify';
 import { GoogleAuth, OAuth2Client } from 'google-auth-library';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { LogManager } from '@webpieces/core-util';
@@ -41,7 +40,6 @@ export class OidcVerifyResult {
  * framework singleton) plus the "warned about public posture once" flag.
  */
 @provideFrameworkSingleton()
-@injectable()
 export class GcpOidc {
     private readonly auth = new GoogleAuth();
     private readonly verifier = new OAuth2Client();

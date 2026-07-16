@@ -41,7 +41,7 @@ export {
 } from './decorators';
 
 // DI provider decorators moved to core-context; re-exported here for back-compat
-export { provideSingleton, provideSingletonDefaultForApi, provideTransient } from '@webpieces/core-context';
+export { provideSingletonDefaultForApi } from '@webpieces/core-context';
 // Framework-only DI registry (packages/** framework classes use these; see frameworkProvide.ts)
 export {
     provideFrameworkSingleton,
@@ -86,8 +86,8 @@ export { ApiClient, ApiClientProxy } from './ApiClient';
 //  - AuthConfig: shared-secret STATE (@AuthSharedSecret values).
 //  - JwtHook / OidcHook: OPTIONAL verification mechanisms (bind only what you use).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
-export { AuthConfig, AuthValues, SharedSecrets } from './AuthConfig';
-export { JwtHook, OidcHook } from './AuthHooks';
+export { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from './AuthConfig';
+export { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK } from './AuthHooks';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
 export { DefaultJwtHook } from './DefaultJwtHook';

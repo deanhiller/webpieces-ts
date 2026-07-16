@@ -1,5 +1,5 @@
-import { injectable, inject } from 'inversify';
-import { DocumentDesign, provideSingleton } from '@webpieces/http-routing';
+import { injectable, inject, bindingScopeValues } from 'inversify';
+import { DocumentDesign } from '@webpieces/http-routing';
 import {
     SaveApi,
     SaveRequest,
@@ -38,7 +38,7 @@ export class SimpleCounter implements Counter {
  * client) to fetch a value. Copied into legacy-server so the legacy app is
  * self-contained and does not depend on the greenfield client-server app.
  */
-@provideSingleton()
+@injectable(bindingScopeValues.Singleton)
 @DocumentDesign()
 export class SaveController extends SaveApi {
     private counter: Counter;

@@ -1,4 +1,4 @@
-import { Container, injectable } from 'inversify';
+import { Container } from 'inversify';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { RouteHandler } from './RouteHandler';
@@ -69,7 +69,6 @@ export class RouteHandlerWithMeta {
  * setContainer() after appContainer is created (late binding pattern).
  */
 @provideFrameworkSingleton()
-@injectable()
 export class RouteBuilderImpl implements RouteBuilder {
     private routes: RouteHandlerWithMeta[] = [];
     private filterRegistry: Array<FilterWithMeta> = [];

@@ -1,5 +1,6 @@
+import { injectable, bindingScopeValues } from 'inversify';
 import { WebpiecesCoreHeaders } from '@webpieces/core-util';
-import { DocumentDesign, provideSingleton } from '@webpieces/http-routing';
+import { DocumentDesign } from '@webpieces/http-routing';
 import { RequestContext } from '@webpieces/core-context';
 import { SecureApi, SecureRequest, SecureResponse } from '@webpieces/client-server-api';
 
@@ -8,7 +9,7 @@ import { SecureApi, SecureRequest, SecureResponse } from '@webpieces/client-serv
  * framework stamped from the JWT for the admin op), so Authentication.spec.ts can assert the
  * AuthMode was enforced and the parsed context landed.
  */
-@provideSingleton()
+@injectable(bindingScopeValues.Singleton)
 @DocumentDesign()
 export class SecureController extends SecureApi {
     override async userOp(_request: SecureRequest): Promise<SecureResponse> {

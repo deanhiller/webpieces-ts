@@ -1,4 +1,5 @@
-import { DocumentDesign, provideSingleton } from '@webpieces/http-routing';
+import { injectable, bindingScopeValues } from 'inversify';
+import { DocumentDesign } from '@webpieces/http-routing';
 import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '@webpieces/client-server-api';
 
 /**
@@ -7,7 +8,7 @@ import { PublicApi, PublicInfoRequest, PublicInfoResponse } from '@webpieces/cli
  * A simple controller for public endpoints that don't require authentication.
  * Used to demonstrate a second API endpoint for testing.
  */
-@provideSingleton()
+@injectable(bindingScopeValues.Singleton)
 @DocumentDesign()
 export class PublicController extends PublicApi {
 

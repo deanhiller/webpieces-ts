@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
@@ -19,7 +19,6 @@ import { GcpOidc } from '@webpieces/gcp-identity';
  * parallel-safe.
  */
 @provideFrameworkSingleton()
-@injectable()
 export class DefaultOidcVerifier {
     constructor(
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required

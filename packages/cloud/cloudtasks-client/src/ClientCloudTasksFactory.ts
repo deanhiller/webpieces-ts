@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
 import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
 import { TASK_PROXY_CLIENT_PROVIDER, TaskProxyClient } from './TaskProxyClient';
@@ -39,7 +39,6 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
  */
 @DocumentDesign()
 @provideFrameworkSingleton()
-@injectable()
 export class ClientCloudTasksFactory {
     constructor(
         @inject(TASK_PROXY_CLIENT_PROVIDER) private readonly taskProxyClientProvider: Provider<TaskProxyClient>,

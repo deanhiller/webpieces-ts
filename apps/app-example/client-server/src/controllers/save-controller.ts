@@ -1,5 +1,5 @@
-import { injectable, inject } from 'inversify';
-import { DocumentDesign, provideSingleton } from '@webpieces/http-routing';
+import { injectable, inject, bindingScopeValues } from 'inversify';
+import { DocumentDesign } from '@webpieces/http-routing';
 import {
     SaveApi,
     SaveRequest,
@@ -44,7 +44,7 @@ export class SimpleCounter implements Counter {
  * 3. Transform response into SaveResponse
  * 4. Return response (will be serialized by JsonFilter)
  */
-@provideSingleton()
+@injectable(bindingScopeValues.Singleton)
 @DocumentDesign()
 export class SaveController extends SaveApi {
     private counter: Counter;

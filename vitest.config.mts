@@ -1,7 +1,42 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, type Plugin } from 'vitest/config';
+import { transform } from '@swc/core';
 import * as path from 'path';
 
+/**
+ * Vitest transforms TS with esbuild, which deliberately does NOT emit
+ * `emitDecoratorMetadata` (`design:paramtypes`). Inversify inject-by-type (a bare
+ * `@injectable` class with a concrete-typed constructor param, no `@inject`) NEEDS that
+ * metadata, so without this plugin those classes resolve as "0 constructor args" under
+ * vitest even though tsc builds them fine. Re-transform every non-node_modules TS file with
+ * SWC (already a devDependency) so decorator metadata is emitted — matching the tsc build.
+ */
+function swcDecoratorMetadata(): Plugin {
+    return {
+        name: 'swc-decorator-metadata',
+        enforce: 'pre',
+        async transform(code: string, id: string) {
+            if (id.includes('/node_modules/') || !/\.tsx?($|\?)/.test(id)) return null;
+            const result = await transform(code, {
+                filename: id,
+                sourceMaps: true,
+                jsc: {
+                    parser: { syntax: 'typescript', decorators: true },
+                    transform: { legacyDecorator: true, decoratorMetadata: true },
+                    target: 'es2022',
+                    keepClassNames: true,
+                },
+            });
+            return { code: result.code, map: result.map };
+        },
+    };
+}
+
 export default defineConfig({
+    plugins: [swcDecoratorMetadata()],
+    // SWC (above) is the sole TS transformer. Leaving vite's esbuild pass on would DOUBLE-transform
+    // and rename shadowed class expressions (`let X = class X {}` -> inner becomes `X2`), corrupting
+    // `class.name` (breaks name-derived logic like getQueueName).
+    esbuild: false,
     resolve: {
         alias: {
             '@webpieces/core-context': path.resolve(__dirname, 'packages/core/core-context/src/index.ts'),

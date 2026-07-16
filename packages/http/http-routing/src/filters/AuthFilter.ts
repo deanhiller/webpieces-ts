@@ -1,11 +1,11 @@
-import { inject, injectable, optional } from 'inversify';
+import { inject, optional } from 'inversify';
 import { timingSafeEqual } from 'crypto';
 import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
 import { HttpUnauthorizedError, JwtRequirement, LogManager, toError } from '@webpieces/core-util';
 import { Filter, WpResponse, Service } from '../Filter';
 import { MethodMeta } from '../MethodMeta';
-import { AuthConfig, AuthValues, SharedSecrets } from '../AuthConfig';
-import { JwtHook, OidcHook } from '../AuthHooks';
+import { AuthConfig, AUTH_CONFIG, AuthValues, SharedSecrets } from '../AuthConfig';
+import { JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK } from '../AuthHooks';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -53,7 +53,6 @@ const PRINCIPAL_KEY = '__webpieces_principal__';
  * Zero wiring = OIDC just works; an app only binds the hooks it actually uses.
  */
 @provideFrameworkSingleton()
-@injectable()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     constructor(
@@ -62,13 +61,13 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         @inject(DefaultOidcVerifier) private readonly oidcVerifier: DefaultOidcVerifier,
         // @optional: only bind an AuthConfig to enable @AuthSharedSecret endpoints.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
-        @optional() @inject(AuthConfig) private readonly authConfig?: AuthConfig,
+        @optional() @inject(AUTH_CONFIG) private readonly authConfig?: AuthConfig,
         // @optional: only bind a JwtHook to enable @AuthJwt endpoints.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
-        @optional() @inject(JwtHook) private readonly jwtHook?: JwtHook,
+        @optional() @inject(JWT_HOOK) private readonly jwtHook?: JwtHook,
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
-        @optional() @inject(OidcHook) private readonly oidcHook?: OidcHook,
+        @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
     ) {
         super();
     }

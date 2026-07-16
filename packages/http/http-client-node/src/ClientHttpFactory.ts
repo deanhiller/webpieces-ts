@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import { DocumentDesign } from '@webpieces/core-util';
 import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
 import type { ApiPrototype } from '@webpieces/http-client-core';
@@ -42,7 +42,6 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  */
 @DocumentDesign()
 @provideFrameworkSingleton()
-@injectable()
 export class ClientHttpFactory {
     constructor(
         @inject(NODE_PROXY_CLIENT_PROVIDER) private readonly proxyClientProvider: Provider<NodeProxyClient>,

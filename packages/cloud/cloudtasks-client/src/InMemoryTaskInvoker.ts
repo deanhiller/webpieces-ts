@@ -1,7 +1,7 @@
-import { injectable, inject, optional } from 'inversify';
+import { inject, optional } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { LogManager, toError, Secrets } from '@webpieces/core-util';
+import { LogManager, toError, Secrets, SECRETS } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('InMemoryTaskInvoker');
@@ -23,7 +23,6 @@ const log = LogManager.getLogger('InMemoryTaskInvoker');
  *   bind(TaskInvoker).to(InMemoryTaskInvoker)
  */
 @provideFrameworkSingleton()
-@injectable()
 export class InMemoryTaskInvoker extends TaskInvoker {
     private counter = 0;
     /** Scheduled (not-yet-delivered) jobs, so delete() can cancel them. */
@@ -34,7 +33,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
         // @optional: only @AuthSharedSecret task endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
-        @optional() @inject(Secrets) private readonly secrets?: Secrets,
+        @optional() @inject(SECRETS) private readonly secrets?: Secrets,
     ) {
         super();
     }

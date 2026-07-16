@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
-import { ApiFactory, AuthConfig, JwtHook, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
+import { ApiFactory, AUTH_CONFIG, JWT_HOOK, Filter, FilterDefinition, MethodMeta, Service, WpResponse } from '@webpieces/http-routing';
 import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { HttpUnauthorizedError } from '@webpieces/core-util';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
@@ -73,8 +73,8 @@ async function bootLegacyApi(): Promise<void> {
 
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind<Server2Api>(TYPES.Server2Api)).toConstantValue(new Server2Simulator());
-        (await options.rebind(AuthConfig)).to(TestAuthConfig);
-        (await options.rebind(JwtHook)).to(TestJwtHook);
+        (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+        (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         options.bind(GlobalOrderFilter).toConstantValue(new GlobalOrderFilter(recorder, 'global'));
         options.bind(ScopedOrderFilter).toConstantValue(new ScopedOrderFilter(recorder, 'scoped-save-only'));
     });

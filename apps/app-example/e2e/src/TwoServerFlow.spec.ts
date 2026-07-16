@@ -3,7 +3,7 @@ import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import { AuthConfig, JwtHook } from '@webpieces/http-routing';
+import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { SaveResponse } from '@webpieces/client-server-api';
 import { ClientRegistry } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
@@ -49,8 +49,8 @@ async function bootBothServers(): Promise<void> {
     // Rebind AuthConfig to the test stub so the request's bearer token passes the framework
     // AuthFilter (this test is about context propagation, not real JWT verification).
     const authOverride = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
-        (await options.rebind(AuthConfig)).to(TestAuthConfig);
-        (await options.rebind(JwtHook)).to(TestJwtHook);
+        (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+        (await options.rebind(JWT_HOOK)).to(TestJwtHook);
     });
     const clientApiFactory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
     clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(express(), clientServerPort);

@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject } from 'inversify';
 import {
     getApiPath,
     getEndpoints,
@@ -47,7 +47,6 @@ function requireActiveContext(routeMeta: RouteMetadata): void {
  * @provideFrameworkSingleton so WebpiecesRouter can inject it (it shares the one RouteBuilder).
  */
 @provideFrameworkSingleton()
-@injectable()
 export class ApiClientFactory {
     constructor(@inject(RouteBuilderImpl) private readonly routeBuilder: RouteBuilderImpl) {}
 

@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { recordable } from '@webpieces/http-server';
-import { WebpiecesConfig, ApiFactory, AuthConfig, JwtHook } from '@webpieces/http-routing';
+import { WebpiecesConfig, ApiFactory, AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { TestAuthConfig, TestJwtHook } from './TestAuthConfig';
 import { RecordedTestCase, RecordSerializer } from '@webpieces/core-util';
 import { createMock } from '@webpieces/core-mock';
@@ -40,8 +40,8 @@ async function bootRecordingServer(): Promise<void> {
     const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
         rebindResult.toConstantValue(recordable('Server2Api', new Server2Simulator()));
-        (await options.rebind(AuthConfig)).to(TestAuthConfig);
-        (await options.rebind(JwtHook)).to(TestJwtHook);
+        (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+        (await options.rebind(JWT_HOOK)).to(TestJwtHook);
     });
     // ONE call — the SAME AppModules the real server uses; only the recordable override + config differ.
     router = await setupCompanyRuntime(
@@ -116,8 +116,8 @@ describe('createMock replaces hand-rolled mocks', () => {
         const appOverrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
             const rebindResult = await options.rebind<Server2Api>(TYPES.Server2Api);
             rebindResult.toConstantValue(mockServer2Api);
-            (await options.rebind(AuthConfig)).to(TestAuthConfig);
-            (await options.rebind(JwtHook)).to(TestJwtHook);
+            (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
+            (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
         router = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
     });

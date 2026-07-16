@@ -3,7 +3,7 @@ import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import { AuthConfig } from '@webpieces/http-routing';
+import { AUTH_CONFIG } from '@webpieces/http-routing';
 import { Secrets, ClientRegistry } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
@@ -33,7 +33,7 @@ let httpServer: HttpServer;
 
 beforeAll(async () => {
     const authOverride = new ContainerModule(async (o: ContainerModuleLoadOptions) => {
-        (await o.rebind(AuthConfig)).to(TestAuthConfig);
+        (await o.rebind(AUTH_CONFIG)).to(TestAuthConfig);
     });
     const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
