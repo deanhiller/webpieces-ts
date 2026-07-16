@@ -10,7 +10,7 @@ import {
     AuthMode,
     LogManager,
     LogApiCall,
-    RouteMetadata,
+    ApiMethodInfo,
 } from '@webpieces/core-util';
 import {
     RequestContextHeaders,
@@ -109,8 +109,8 @@ export class TaskProxyClient {
         // TaskInvoker is bound, this method sits above it — so the enqueue edge gets structured
         // `jsonPayload.api.*` logging (and, once recording is unified at LogApiCall, is recorded)
         // uniformly, without touching either invoker impl.
-        const routeMeta = new RouteMetadata('POST', plan.path, methodName, this.apiName);
-        await LogApiCall.execute('client', routeMeta, requestDto, async () => {
+        const info = new ApiMethodInfo('client', this.apiName, methodName);
+        await LogApiCall.execute(info, requestDto, async () => {
             // Resolved lazily (not at client construction) so building a client stays synchronous.
             // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
             // enqueue in the process pays a lookup.

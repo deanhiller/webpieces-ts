@@ -92,8 +92,10 @@ describe('Full flow: caller -> client-server -> server2 with context logging', (
         // These lines carry NO context fields: LogApiCall no longer stringifies a header map, and
         // the bootstrap ConsoleLogger stamps none. A real backend (bunyan/winston) reads
         // RequestContext.buildLogFields() per record. Context is therefore verified via the echo.
-        expect(logLines.some((l: string) => l.includes('[API-server-req] SaveController.save'))).toBe(true);
-        expect(logLines.some((l: string) => l.includes('[API-server-req] Server2Controller.fetchValue'))).toBe(true);
+        // The identity is the API CONTRACT class (SaveApi / Server2Api), NOT the controller impl —
+        // so a server log line MATCHES the client's for the same call (jsonPayload.api.method.apiClass).
+        expect(logLines.some((l: string) => l.includes('[API-server-req] SaveApi.save'))).toBe(true);
+        expect(logLines.some((l: string) => l.includes('[API-server-req] Server2Api.fetchValue'))).toBe(true);
 
         // The credential NEVER leaves hop 1. `authorization` is read off the inbound HttpRequest and
         // is not a ContextKey, so it never enters the RequestContext, is never logged, and is never

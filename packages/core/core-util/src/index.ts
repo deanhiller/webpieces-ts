@@ -128,12 +128,14 @@ export type { ContextRead, StructuredContextRead } from './http/ContextReader';
 export { ContextMgr } from './http/ContextMgr';
 
 // API-call logging helper (uses LogManager above). Singleton: use the LogApiCall constant, not `new`.
-export { LogApiCall, LogApiCallImpl, LogApiCallOptions } from './http/LogApiCall';
+export { LogApiCall, LogApiCallImpl } from './http/LogApiCall';
 
 // The structured `api` tag + the context-writer seam LogApiCall stamps through. The Node
 // RequestContext-backed impl is installed by @webpieces/core-context; the browser gets the no-op.
 export { ApiCallInfo } from './http/ApiCallInfo';
-export type { ApiSide, ApiType, ApiResult } from './http/ApiCallInfo';
+export type { ApiType, ApiResult } from './http/ApiCallInfo';
+export { ApiMethodInfo } from './http/ApiMethodInfo';
+export type { ApiSide } from './http/ApiMethodInfo';
 export { ApiCallContextHolder } from './http/ApiCallContext';
 export type { ApiCallContext } from './http/ApiCallContext';
 

@@ -50,6 +50,21 @@ export class WebpiecesCoreHeaders {
     static readonly API_CALL_INFO = new ContextKey('api', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
 
     /**
+     * The inbound request's HTTP method and path, stamped ONCE from the {@link HttpRequest} by
+     * `RequestContextHeaders.fillFromRequest` (the atomic inbound choke point every transport funnels
+     * through). They surface as top-level `jsonPayload.httpMethod` / `jsonPayload.requestPath` so every
+     * log line of the request carries them — they used to ride inside {@link ApiCallInfo} (`api.path` /
+     * `api.method`) but that coupled a per-CALL logger to the per-REQUEST transport shape.
+     *
+     * - `httpHeader` UNDEFINED → NOT transferred over the wire: a downstream hop stamps its OWN inbound
+     *   method/path, never the caller's. Outbound client calls never set these (no inbound path).
+     * - `isLogged` TRUE → emitted by the logging backends as plain strings.
+     */
+    static readonly HTTP_METHOD = new ContextKey('httpMethod', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
+
+    static readonly REQUEST_PATH = new ContextKey('requestPath', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
+
+    /**
      * NO CREDENTIAL KEYS LIVE HERE.
      *
      * `authorization` and `x-webpieces-shared-secret` used to be ContextKeys. That made them
@@ -77,6 +92,8 @@ export class WebpiecesCoreHeaders {
             WebpiecesCoreHeaders.USER_ROLES,
             WebpiecesCoreHeaders.RECORDING,
             WebpiecesCoreHeaders.API_CALL_INFO,
+            WebpiecesCoreHeaders.HTTP_METHOD,
+            WebpiecesCoreHeaders.REQUEST_PATH,
         ];
     }
 }

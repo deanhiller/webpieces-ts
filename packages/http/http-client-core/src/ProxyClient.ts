@@ -9,6 +9,7 @@ import {
     ProtocolError,
     LogApiCall,
     LogApiCallImpl,
+    ApiMethodInfo,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
@@ -73,7 +74,10 @@ export abstract class ProxyClient {
         method: () => Promise<unknown>,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
     ): Promise<unknown> {
-        return this.logApiCall.execute('client', route, requestDto, method);
+        // apiClass = the CONTRACT name (this.apiName, e.g. 'SaveApi') so this client log line MATCHES
+        // the server's for the same call. A client has no impl class, so controllerName is omitted.
+        const info = new ApiMethodInfo('client', this.apiName, route.methodName);
+        return this.logApiCall.execute(info, requestDto, method);
     }
 
     /**
