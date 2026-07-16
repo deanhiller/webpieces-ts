@@ -156,7 +156,21 @@ export class HeaderRegistry {
                     fields.set(key.name, key.maskIfSecured(value));
                 }
             } else if (typeof value === 'object') {
-                fields.set(key.name, value);
+                if (key.spread) {
+                    // Flatten the struct's entries into top-level fields (jsonPayload.<entryKey>), so
+                    // each is individually filterable / EXTRACT-able (GCP log-based metrics). The
+                    // winston/bunyan formats loop this map doing info[name] = value per entry, so
+                    // spread entries land flat automatically; their `if (info[name] === undefined)`
+                    // guard keeps caller/earlier fields winning. Skip null/undefined entries. A spread
+                    // struct should not reuse reserved field names (level, message, severity, ...).
+                    for (const [field, v] of Object.entries(value)) {
+                        if (v !== undefined && v !== null) {
+                            fields.set(field, v as string | object);
+                        }
+                    }
+                } else {
+                    fields.set(key.name, value);
+                }
             }
             // Non-string primitives (number/boolean/bigint) are not expected for logged context keys;
             // ignore them here rather than String()-flattening, keeping the shape honest.
@@ -204,7 +218,7 @@ export class HeaderRegistry {
     }
 
     /**
-     * Two keys sharing a `name` must agree on httpHeader/isSecured/isLogged,
+     * Two keys sharing a `name` must agree on httpHeader/isSecured/isLogged/spread,
      * otherwise the platform would behave differently depending on which module's
      * definition happened to load first.
      */
@@ -218,6 +232,9 @@ export class HeaderRegistry {
         }
         if (existing.isLogged !== duplicate.isLogged) {
             conflicts.push(`isLogged (${existing.isLogged} vs ${duplicate.isLogged})`);
+        }
+        if (existing.spread !== duplicate.spread) {
+            conflicts.push(`spread (${existing.spread} vs ${duplicate.spread})`);
         }
         if (conflicts.length > 0) {
             throw new Error(

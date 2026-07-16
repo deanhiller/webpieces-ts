@@ -121,6 +121,43 @@ describe('HeaderRegistry.buildStructuredLogFields vs buildLogFields (object valu
     });
 });
 
+describe('HeaderRegistry.buildStructuredLogFields spread keys', () => {
+    it('spread=true flattens object entries into top-level fields (not nested under name)', () => {
+        const metricStruct = new ContextKey('metricStruct', undefined, false, /*isLogged*/ true, /*spread*/ true);
+        const reqId = new ContextKey('requestId', 'x-request-id');
+        const struct = { inputTokens: 5, outputTokens: 7, estimatedCostUsd: 0.02, empty: null, missing: undefined };
+
+        const registry = configureWith(metricStruct, reqId);
+        const structured = registry.buildStructuredLogFields((key: ContextKey) => {
+            if (key.name === 'metricStruct') return struct;
+            if (key.name === 'requestId') return 'abc';
+            return undefined;
+        });
+
+        // Entries land flat at the top level, individually EXTRACT-able.
+        expect(structured.get('inputTokens')).toBe(5);
+        expect(structured.get('outputTokens')).toBe(7);
+        expect(structured.get('estimatedCostUsd')).toBe(0.02);
+        // The wrapping struct name is NOT present (no nesting).
+        expect(structured.has('metricStruct')).toBe(false);
+        // null/undefined entries are skipped.
+        expect(structured.has('empty')).toBe(false);
+        expect(structured.has('missing')).toBe(false);
+        // String context keys still emit as before.
+        expect(structured.get('requestId')).toBe('abc');
+    });
+
+    it('spread=false (default) still nests an object under its name', () => {
+        const api = new ContextKey('api', undefined, false, true); // spread defaults to false
+        const apiValue = { side: 'client' };
+        const registry = configureWith(api);
+        const structured = registry.buildStructuredLogFields((key: ContextKey) =>
+            key.name === 'api' ? apiValue : undefined,
+        );
+        expect(structured.get('api')).toBe(apiValue); // nested, unchanged
+    });
+});
+
 describe('WebpiecesCoreHeaders.API_CALL_INFO', () => {
     it('is logged but NOT transferred over the wire (per-hop only)', () => {
         const key = WebpiecesCoreHeaders.API_CALL_INFO;

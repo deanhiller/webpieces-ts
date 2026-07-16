@@ -18,6 +18,9 @@
  * - `isLogged`   Defaults to true. When false, the value is NEVER logged (used for
  *                object-valued/internal keys like the recorder or method-meta that
  *                must not be serialized into log lines).
+ * - `spread`     Defaults to false. When true AND the value is an object, its entries
+ *                are emitted as FLAT top-level log fields (jsonPayload.<entryKey>)
+ *                instead of nested under this key's name (jsonPayload.<name>.<entryKey>).
  *
  * Per CLAUDE.md: data-only structures are classes, not interfaces.
  */
@@ -37,16 +40,26 @@ export class ContextKey {
     /** Whether this key is logged at all. Default true; false = never logged. */
     readonly isLogged: boolean;
 
+    /**
+     * When true AND the value is an object, its entries are emitted as FLAT top-level
+     * log fields (jsonPayload.<entryKey>) instead of nested under this key's name. For
+     * metric-style structs whose fields must be individually extractable (GCP
+     * EXTRACT(jsonPayload.inputTokens)). No effect on string values or on wire transfer.
+     */
+    readonly spread: boolean;
+
     constructor(
         name: string,
         httpHeader?: string,
         isSecured = false,
         isLogged = true,
+        spread = false,
     ) {
         this.name = name;
         this.httpHeader = httpHeader;
         this.isSecured = isSecured;
         this.isLogged = isLogged;
+        this.spread = spread;
     }
 
     /** True when this key is transferred over HTTP (has an httpHeader). */
