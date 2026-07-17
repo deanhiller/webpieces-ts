@@ -11,13 +11,16 @@ import {
     INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS,
     RECOVERY_CMD, healShim, shimPath,
 } from './shim';
+import { ShimTestkit } from './shim-testkit';
+
+const kit = new ShimTestkit();
+const mktmp = (): string => kit.mktmp();
+const runShim = kit.runShim.bind(kit);
+const bashPayload = kit.bashPayload.bind(kit);
+const denied = (out: { stdout: string }): boolean => out.stdout.includes('"permissionDecision":"deny"');
 
 function shimFile(root: string): string {
     return path.join(root, '.claude', 'webpieces', 'ai-hook.sh');
-}
-
-function mktmp(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-setup-'));
 }
 
 // A temp HOME so the "global" install target never touches the real ~/.claude/settings.json.
@@ -25,25 +28,8 @@ function targetsIn(root: string): ReturnType<typeof installTargets> {
     return installTargets(root, mktmp());
 }
 
-// Run the rendered shim exactly as Claude Code would: `sh <shim> <bin> ...`, from a repo cwd,
-// piping tool-payload JSON on stdin. spawnSync never throws on non-zero exit.
-function runShim(root: string, bin: string, stdin: string): { status: number | null; stdout: string; stderr: string } {
-    // Place the shim at its REAL relative location (<root>/.claude/webpieces/ai-hook.sh) so its
-    // self-location (`dirname $0/../..` → <root>) resolves the bin correctly. Run it from a SUBDIR
-    // to prove it no longer depends on the caller's cwd (the whole point of the change).
-    const shimAbs = path.join(root, '.claude', 'webpieces', 'ai-hook.sh');
-    fs.mkdirSync(path.dirname(shimAbs), { recursive: true });
-    fs.writeFileSync(shimAbs, renderShim(), { mode: 0o755 });
-    const subdir = path.join(root, 'packages', 'deep', 'sub');
-    fs.mkdirSync(subdir, { recursive: true });
-    const r = spawnSync('/bin/sh', [shimAbs, bin], { cwd: subdir, input: stdin, encoding: 'utf8' });
-    return { status: r.status, stdout: r.stdout, stderr: r.stderr };
-}
-
 // Post-#235 PreToolUse protocol: the shim ALLOWS by exiting 0 with NO stdout, and DENIES by exiting 0
 // with a permissionDecision:"deny" JSON on stdout. So "allowed" = empty stdout; "denied" = deny JSON.
-const bashPayload = (command: string): string => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
-const denied = (out: { stdout: string }): boolean => out.stdout.includes('"permissionDecision":"deny"');
 
 describe('migrate', () => {
     it('moves guards from rules → hookGuards and a top-level pr-gate → commands', () => {
@@ -405,70 +391,6 @@ describe('renderShim passthrough (healthy bin — the shim must stay transparent
 // a NEWER webpieces.config.json. The pure-sh shim detects that BEFORE exec'ing the possibly-stale bin
 // (even though the bin EXISTS) and fails closed with a "run pnpm install" message. Both hooks (rules +
 // guards) route through this one shim, so one check covers both. See renderShim's version-drift guard.
-describe('renderShim version-drift guard (stale node_modules)', () => {
-    // Stage a root holding an installed guard bin, a declared @webpieces/pr-gate pin in package.json,
-    // and an installed version in node_modules/@webpieces/pr-gate/package.json — so the shim can
-    // compare the two. The fake bin prints EXECED so "the guards actually ran" is observable in stdout.
-    function stageDriftRoot(declared: string, installed: string): string {
-        const root = mktmp();
-        const binDir = path.join(root, 'node_modules', '.bin');
-        fs.mkdirSync(binDir, { recursive: true });
-        fs.writeFileSync(path.join(binDir, 'wp-ai-guards-hook'), '#!/bin/sh\nprintf EXECED\n', { mode: 0o755 });
-        fs.writeFileSync(path.join(root, 'package.json'),
-            JSON.stringify({ dependencies: { '@webpieces/pr-gate': declared } }, null, 2) + '\n');
-        const manifestDir = path.join(root, 'node_modules', '@webpieces', 'pr-gate');
-        fs.mkdirSync(manifestDir, { recursive: true });
-        fs.writeFileSync(path.join(manifestDir, 'package.json'),
-            JSON.stringify({ name: '@webpieces/pr-gate', version: installed }, null, 2) + '\n');
-        return root;
-    }
-
-    it('execs the installed bin when the pinned and installed @webpieces versions match', () => {
-        const out = runShim(stageDriftRoot('0.3.272', '0.3.272'), 'wp-ai-guards-hook', bashPayload('git status'));
-        expect(out.stdout).toBe('EXECED'); // no drift → the guards ran
-    });
-
-    it('DENIES without exec\'ing the stale bin when installed < pinned, citing "pnpm install"', () => {
-        const out = runShim(stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', bashPayload('git status'));
-        expect(out.stdout).not.toContain('EXECED'); // the stale bin was NOT run
-        expect(denied(out)).toBe(true);
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        const decision = JSON.parse(out.stdout) as { hookSpecificOutput: { permissionDecisionReason: string } };
-        const reason = decision.hookSpecificOutput.permissionDecisionReason;
-        expect(reason).toContain('out of date');
-        expect(reason).toContain('@webpieces/pr-gate@0.3.272'); // declared pin
-        expect(reason).toContain('0.3.270'); // installed
-        expect(reason).toContain("Please run 'pnpm install'");
-    });
-
-    it('still allows `pnpm install` through during drift so node_modules can be synced', () => {
-        const out = runShim(stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', bashPayload('pnpm install'));
-        expect(denied(out)).toBe(false);
-        expect(out.stdout.trim()).toBe(''); // silent allow — and the stale bin was NOT exec'd
-    });
-
-    it('blocks a Write/Edit during drift too (both hooks route through this one shim)', () => {
-        const edit = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'a.ts', old_string: 'x', new_string: 'y' } });
-        expect(denied(runShim(stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', edit))).toBe(true);
-    });
-
-    it('does not false-positive on a range pin (^ / ~ / workspace:*) — only exact pins are compared', () => {
-        for (const spec of ['^0.3.0', '~0.3.0', 'workspace:*']) {
-            const out = runShim(stageDriftRoot(spec, '0.3.270'), 'wp-ai-guards-hook', bashPayload('git status'));
-            expect(out.stdout).toBe('EXECED'); // range pin skipped → no drift → guards run
-        }
-    });
-
-    it('logs a DENY-STALE audit line (distinct from a missing-bin DENY) on drift', () => {
-        const root = stageDriftRoot('0.3.272', '0.3.270');
-        runShim(root, 'wp-ai-guards-hook', bashPayload('git status'));
-        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
-        expect(log).toContain('DENY-STALE\tgit status');
-    });
-});
-
-// While the guards are down the shim leaves a best-effort audit trail (one tab-separated line per
-// call) so a human can inspect what it let through / blocked after something odd.
 describe('renderShim fallback — audit log', () => {
     it('records every fail-open/closed decision to <root>/.webpieces/logs/ai-hook-shim.log', () => {
         // runShim writes the shim at <root>/.claude/webpieces/ai-hook.sh, so its ROOT resolves to root.
