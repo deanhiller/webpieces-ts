@@ -16,26 +16,37 @@ Two factories, both auto-enriching every line with the logged context keys regis
 ## Usage
 
 ```ts
-import { LogManager, HeaderRegistry } from '@webpieces/core-util';
+import { ServiceInfo } from '@webpieces/core-util';
 import { WinstonGcpFactory, WinstonConsoleFactory } from '@webpieces/winston';
-import { RequestContextReader } from '@webpieces/core-context';
 
-const reader = new RequestContextReader();
+// FIRST: identify this service. Both factories read name+version in their CONSTRUCTOR, so this
+// must come before you build one — a forgotten call throws at startup rather than shipping logs
+// that cannot say which build emitted them.
+ServiceInfo.setInfo('my-service', '2.1.0');
+
 const loggerFactory = process.env.K_SERVICE
-    ? new WinstonGcpFactory(reader)
-    : new WinstonConsoleFactory(reader);
+    ? new WinstonGcpFactory()
+    : new WinstonConsoleFactory();
 
 // Typically you pass loggerFactory to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...)),
 // which calls HeaderRegistry.configure(...) then LogManager.setFactory(loggerFactory) for you.
 ```
 
-The `ContextReader` is a **constructor argument** (the node `RequestContextReader` lives in
-`@webpieces/core-context`) so this package depends only on `@webpieces/core-util` — not on
-any node context package.
+Both factories read the magic context **directly** from `RequestContext` on each line, so
+nothing is threaded in: there is no `ContextReader` constructor argument.
 
 ## Options
 
-`new WinstonGcpFactory(reader, new WinstonFactoryOptions(level, svcGitHash))`:
+There are none — both factories take no arguments.
 
-- `level` — minimum webpieces level to emit (default `'info'`). `trace` maps to winston `silly`.
-- `svcGitHash` — when set, every line carries `jsonPayload.svcGitHash` (deployment filter).
+- **Service name + version** — from `ServiceInfo.setInfo(...)` (see above), NOT factory options.
+  Every line carries `svcName` and `version`. They live in `@webpieces/core-util` because they
+  are facts about the SERVICE, not about winston: the bunyan backend reads the same values, and
+  `requestIdSource` reads the name (it records which service minted a request-id).
+- **`version` is opaque** — a git SHA, a semver tag, a CI build number, whatever identifies your
+  build. webpieces neither parses nor derives it; your app decides where it comes from.
+- **Local rendering** — neither `svcName` nor `version` renders in `WinstonConsoleFactory` output.
+  They earn their keep in GCP (filtering across many services and deploys); locally each service
+  logs to its own place and you can check git yourself, so on every line they are just noise.
+- **Level** — there is deliberately no knob. webpieces does not filter by level; winston filters
+  at its own default.

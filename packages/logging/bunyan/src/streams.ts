@@ -10,10 +10,17 @@ type BunyanRecord = Record<string, JsonValue>;
 
 // bunyan record fields that are structural / rendered specially, so they are not
 // shown as context tags in the local console line.
+//
+// `name` (the service) and `version` (the build) are ServiceInfo base fields riding on EVERY
+// record. They earn their keep in GCP, where you filter across many services and deploys, but
+// locally each service logs to its own place and you can check git yourself — so as a tag on every
+// single line they are pure noise. Listing them here is the bunyan twin of winston's
+// LOCAL_STRUCTURAL_KEYS; GCP still gets both (that stream does its own formatting).
 const BUNYAN_STD_FIELDS = new Set<string>([
     'v',
     'level',
     'name',
+    'version',
     'hostname',
     'pid',
     'time',

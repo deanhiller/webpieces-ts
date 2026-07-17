@@ -9,7 +9,7 @@ import { createGoogleCloudStream } from './streams';
  * matches the tested-in-GCP trytami service exactly. Requires GCP Application
  * Default Credentials on the instance.
  *
- * The service name comes from {@link ServiceInfo}, which startup must have named
+ * The service name + version come from {@link ServiceInfo}, which startup must have populated
  * BEFORE constructing this.
  */
 export class BunyanGcpFactory extends BunyanFactoryBase {

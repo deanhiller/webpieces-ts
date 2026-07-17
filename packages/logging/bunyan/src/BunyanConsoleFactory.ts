@@ -7,7 +7,7 @@ import { createConsoleStream } from './streams';
  * keys as tags — same enrichment as the GCP backend, different rendering. Mirrors
  * the tested trytami local console stream.
  *
- * The service name comes from {@link ServiceInfo}, which startup must have named
+ * The service name + version come from {@link ServiceInfo}, which startup must have populated
  * BEFORE constructing this.
  */
 export class BunyanConsoleFactory extends BunyanFactoryBase {
