@@ -12,6 +12,8 @@ import { ApiMethodInfo } from './ApiMethodInfo';
  * - `jsonPayload.api.method.side="server"`      — every inbound call it handled
  * - `jsonPayload.api.method.apiClass="SaveApi"` — one logical method, BOTH sides (client + server)
  * - `jsonPayload.api.result="failure"`          — failed exchanges only
+ * - `jsonPayload.api.durationMs>1000`           — slow calls, either side
+ * - `jsonPayload.api.responseSize>100000`       — the fat responses (the ones that get chunked)
  * - `jsonPayload.api:*`                          — "API traffic only" (tracing + the recorder)
  *
  * IMPORTANT: the field names here (and on the nested {@link ApiMethodInfo}) ARE the GCP field names —
@@ -49,5 +51,30 @@ export class ApiCallInfo {
         readonly type: ApiType,
         /** Response only — undefined on the 'request' tag. */
         readonly result?: ApiResult,
+        /**
+         * Wall-clock milliseconds the call took. RESPONSE tag only (undefined on 'request') — a
+         * request has no duration yet. Present on BOTH the success and failure paths, so
+         * `jsonPayload.api.durationMs>1000 AND api.result="failure"` finds slow failures.
+         *
+         * There is deliberately no `statusCode` beside this. LogApiCall runs deep in the stack over
+         * in-process calls, pubsub handlers, and cloud-task enqueues — none of which have an HTTP
+         * status — and business logic must not know about HTTP. `result` (see {@link ApiResult}) is
+         * the transport-neutral outcome, exactly as {@link LogApiCall.isUserError} classifies by
+         * portable Error TYPE rather than by status code.
+         */
+        readonly durationMs?: number,
+        /**
+         * Bytes of the serialized request DTO. Stamped on BOTH tags: the 'request' tag reports it as
+         * soon as it is known, and the 'response' tag repeats it so one record shows the whole
+         * exchange (`api.requestSize` + `api.responseSize` without a join).
+         *
+         * This is the TOTAL size of the body, measured BEFORE any log chunking — chunking is a
+         * transport concern handled by the GCP backends, and a body split across 3 records still
+         * reports its one true size here.
+         */
+        readonly requestSize?: number,
+        /** Bytes of the serialized response. RESPONSE tag only, and only when the call succeeded —
+         *  a thrown error produced no response body to measure. Total size, pre-chunking. */
+        readonly responseSize?: number,
     ) {}
 }

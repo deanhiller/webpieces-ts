@@ -33,6 +33,7 @@
  */
 export { WinstonGcpFactory } from './WinstonGcpFactory';
 export { WinstonConsoleFactory } from './WinstonConsoleFactory';
+export { ChunkingConsoleTransport } from './ChunkingConsoleTransport';
 export { WinstonLogger, LEVEL_TO_WINSTON } from './WinstonLogger';
 export {
     LEVEL_TO_SEVERITY,

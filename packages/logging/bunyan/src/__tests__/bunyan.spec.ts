@@ -1,10 +1,19 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { Writable } from 'stream';
 import bunyan from 'bunyan';
-import { ContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
+import {
+    ContextKey,
+    GCP_LOG_BUDGET_BYTES,
+    HeaderRegistry,
+    LogChunkInfo,
+    MAX_GCP_LOG_BYTES,
+    ServiceInfo,
+} from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { BunyanLogger } from '../BunyanLogger';
 import { BunyanConsoleFactory } from '../BunyanConsoleFactory';
+import { ChunkingRawStream } from '../ChunkingRawStream';
+import { LoggedError } from '../LoggedError';
 import { logLevelToBunyanLevel } from '../levels';
 
 const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
@@ -227,5 +236,107 @@ describe('bunyan stamps the ServiceInfo identity on every record', () => {
         const rec = JSON.parse(lines[0]);
         expect(rec.v).toBe(0);
         expect(rec.version).toBe('v3.2.1-rc4');
+    });
+});
+
+/** A bunyan record as a raw stream receives it. */
+type RawRecord = Record<string, unknown>;
+
+/** Stands in for the LoggingBunyan Writable, collecting the records that reach Cloud Logging. */
+class RecordingTarget extends Writable {
+    readonly records: RawRecord[] = [];
+    constructor() {
+        super({ objectMode: true });
+    }
+    override _write(record: RawRecord, _enc: BufferEncoding, cb: (e?: Error | null) => void): void {
+        this.records.push(record);
+        cb();
+    }
+}
+
+/** A BunyanLogger writing through the real ChunkingRawStream into a RecordingTarget. */
+class ChunkHarness {
+    readonly target = new RecordingTarget();
+    readonly log: BunyanLogger;
+    constructor(budgetBytes: number) {
+        const base = bunyan.createLogger({
+            name: 'chunk-test',
+            streams: [{ level: 'info', type: 'raw', stream: new ChunkingRawStream(this.target, budgetBytes) }],
+        });
+        this.log = new BunyanLogger(base);
+    }
+    chunkOf(record: RawRecord): LogChunkInfo {
+        return record['logChunk'] as LogChunkInfo;
+    }
+}
+
+describe('ChunkingRawStream — an oversized entry fails the whole entries.write call', () => {
+    it('passes a within-budget record straight through, untagged', async () => {
+        const h = new ChunkHarness(GCP_LOG_BUDGET_BYTES);
+        withContext(() => h.log.info('small message'));
+        await flush();
+
+        expect(h.target.records.length).toBe(1);
+        expect(h.target.records[0]['msg']).toBe('small message');
+        expect(h.target.records[0]['logChunk']).toBeUndefined();
+    });
+
+    it('splits an oversized msg and reassembles byte-exactly', async () => {
+        const message = `response=${JSON.stringify({ blob: 'x'.repeat(20_000) })}`;
+        const h = new ChunkHarness(4096);
+        withContext(() => h.log.info(message));
+        await flush();
+
+        const records = h.target.records;
+        expect(records.length).toBeGreaterThan(1);
+
+        const uids = new Set(records.map((r: RawRecord) => h.chunkOf(r).uid));
+        expect(uids.size).toBe(1);
+        records.forEach((rec: RawRecord, i: number) => {
+            expect(h.chunkOf(rec).index).toBe(i);
+            expect(h.chunkOf(rec).total).toBe(records.length);
+        });
+
+        expect(records.map((r: RawRecord) => r['msg'] as string).join('')).toBe(message);
+        // Every piece keeps the context, or it could not be correlated in Cloud Logging.
+        for (const rec of records) {
+            expect(rec['requestId']).toBe('req-123');
+            expect(rec['authToken']).toBe('sup...lue');
+        }
+    });
+
+    it('keeps a giant stack WHOLE across pieces — it is no longer truncated to 5 frames', async () => {
+        const err = new Error('boom');
+        const frames = '    at someFrame (/a/b/c.ts:1:1)\n'.repeat(4000);
+        err.stack = `Error: boom\n${frames}`;
+
+        const h = new ChunkHarness(8192);
+        withContext(() => h.log.error('failed', err));
+        await flush();
+
+        const records = h.target.records;
+        expect(records.length).toBeGreaterThan(1);
+
+        const rebuilt = records.map((r: RawRecord) => (r['err'] as LoggedError).stack ?? '').join('');
+        expect(rebuilt).toBe(err.stack);
+        // The old guard replaced the name with "error too long: Error" and cut the message to 100
+        // chars. Both must be intact now.
+        for (const rec of records) {
+            expect((rec['err'] as LoggedError).name).toBe('Error');
+            expect((rec['err'] as LoggedError).message).toBe('boom');
+        }
+    });
+
+    it('holds every piece under the real GCP budget for a 600KB body', async () => {
+        const h = new ChunkHarness(GCP_LOG_BUDGET_BYTES);
+        withContext(() => h.log.info(`response=${JSON.stringify({ blob: 'q'.repeat(600_000) })}`));
+        await flush();
+
+        expect(h.target.records.length).toBeGreaterThan(1);
+        for (const rec of h.target.records) {
+            const bytes = new TextEncoder().encode(JSON.stringify(rec)).length;
+            expect(bytes).toBeLessThanOrEqual(GCP_LOG_BUDGET_BYTES);
+            expect(bytes).toBeLessThan(MAX_GCP_LOG_BYTES);
+        }
     });
 });

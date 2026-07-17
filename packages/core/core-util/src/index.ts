@@ -24,6 +24,7 @@ export type { LoggerFactory } from './logging/LoggerFactory';
 export { ConsoleLogger } from './logging/ConsoleLogger';
 export { ConsoleLoggerFactory } from './logging/ConsoleLoggerFactory';
 export { LogManager } from './logging/LogManager';
+export { LogChunker, LogChunkerImpl, LogChunkInfo, MAX_GCP_LOG_BYTES, GCP_LOG_BUDGET_BYTES } from './logging/LogChunker';
 
 // HTTP API contract (merged from former @webpieces/http-api).
 // Shared HTTP API definition consumed by both client and server: REST
