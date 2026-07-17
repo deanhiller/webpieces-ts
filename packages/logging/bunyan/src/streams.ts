@@ -2,6 +2,7 @@ import { Writable } from 'stream';
 import Logger from 'bunyan';
 import { LoggingBunyan } from '@google-cloud/logging-bunyan';
 import { LoggedError } from './LoggedError';
+import { ChunkingRawStream } from './ChunkingRawStream';
 
 // A parsed bunyan JSON record: standard fields plus arbitrary injected context
 // tags. Values are whatever JSON holds.
@@ -84,13 +85,25 @@ function writeConsole(line: string): void {
  * to @google-cloud/logging-bunyan, exactly as the tested trytami service does.
  * Sends to the Cloud Logging API (needs ADC on the instance).
  *
+ * Records pass through a {@link ChunkingRawStream} first, because Cloud Logging caps a LogEntry at
+ * 256 KiB and rejects the whole `entries.write` call when one entry exceeds it — so a single fat
+ * response body or stack trace can take a batch of good entries down with it. Oversized records are
+ * SPLIT into several complete records sharing a `logChunk.uid` rather than lost or truncated.
+ *
  * We do NOT filter by level — that is bunyan's job. The stream is created at
  * bunyan's default level ('info'); there is no webpieces level knob.
  */
 // webpieces-disable no-function-outside-class -- bunyan Stream factory; whole file is bunyan stream/render factories
 export function createGoogleCloudStream(): Logger.Stream {
     const loggingBunyan = new LoggingBunyan();
-    return loggingBunyan.stream('info');
+    // stream('info') returns { level, type: 'raw', stream: loggingBunyan } — we keep bunyan's raw
+    // contract and only interpose on the stream it writes records to.
+    const gcp = loggingBunyan.stream('info');
+    return {
+        level: gcp.level,
+        type: 'raw',
+        stream: new ChunkingRawStream(loggingBunyan),
+    };
 }
 
 /**

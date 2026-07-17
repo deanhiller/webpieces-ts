@@ -36,4 +36,5 @@ export { BunyanGcpFactory } from './BunyanGcpFactory';
 export { BunyanConsoleFactory } from './BunyanConsoleFactory';
 export { BunyanLogger } from './BunyanLogger';
 export { createGoogleCloudStream, createConsoleStream } from './streams';
+export { ChunkingRawStream } from './ChunkingRawStream';
 export { LEVEL_TO_BUNYAN, logLevelToBunyanLevel } from './levels';

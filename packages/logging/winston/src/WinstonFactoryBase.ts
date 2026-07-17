@@ -1,5 +1,6 @@
 import { createLogger, transports } from 'winston';
 import type { Logger as WinstonBase } from 'winston';
+import type Transport from 'winston-transport';
 import type { Format } from 'logform';
 import type { Logger, LoggerFactory } from '@webpieces/core-util';
 import { ServiceInfo } from '@webpieces/core-util';
@@ -23,7 +24,13 @@ export abstract class WinstonFactoryBase implements LoggerFactory {
     private readonly base: WinstonBase;
     private readonly loggers = new Map<string, Logger>();
 
-    protected constructor(finalFormat: Format) {
+    /**
+     * @param transport - the sink to write through. Defaults to a plain Console; the GCP subclass
+     *   passes a {@link ChunkingConsoleTransport} instead, because only there does a per-entry size
+     *   limit exist. Taking the whole transport (rather than a size knob) keeps the size limit a fact
+     *   about the SINK, which is where it actually lives — a dev terminal has no such limit.
+     */
+    protected constructor(finalFormat: Format, transport?: Transport) {
         // Read at STARTUP (this ctor runs while booting), so a forgotten ServiceInfo.setInfo(...)
         // fails the deploy rather than shipping logs that cannot say which build emitted them.
         const defaultMeta: Record<string, string> = {
@@ -35,7 +42,7 @@ export abstract class WinstonFactoryBase implements LoggerFactory {
         this.base = createLogger({
             format: finalFormat,
             defaultMeta: defaultMeta,
-            transports: [new transports.Console()],
+            transports: [transport ?? new transports.Console()],
             handleExceptions: true,
             handleRejections: true,
         });

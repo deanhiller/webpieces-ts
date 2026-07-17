@@ -10,27 +10,18 @@ const MISSING_CONTEXT_MESSAGE =
     'RequestContext.run() by a server filter. That filter appears to be missing: correlation ' +
     'fields (requestId, tenant, ...) will be absent from logs until it is added. Reported once.';
 
-// Above this serialized size the error is truncated, so one giant stack can't
-// blow up a log line (ported from the tested trytami AppLogger).
-const MAX_ERR_SERIALIZED = 100_000;
-
-function truncateStack(stack: string | undefined, maxLines = 5): string {
-    if (!stack) {
-        return '';
-    }
-    return stack.split('\n').slice(0, maxLines).join('\n');
-}
-
+/**
+ * The error, whole. There is deliberately NO size guard here any more.
+ *
+ * This used to truncate an error over 100KB down to 5 stack frames and a 100-character message, to
+ * keep one giant stack from blowing past Cloud Logging's per-entry limit. That traded the wrong
+ * thing away: a stack trace big enough to trip the limit is precisely the one worth reading, and it
+ * arrived pre-shredded. The GCP stream now SPLITS an oversized record across several complete
+ * records instead (see ChunkingRawStream), so the whole stack survives and nothing is lost — which
+ * makes truncating here strictly harmful.
+ */
 function normalizeError(err: Error): LoggedError {
-    const full = new LoggedError(err.name, err.message, err.stack);
-    if (JSON.stringify({ err: full }).length <= MAX_ERR_SERIALIZED) {
-        return full;
-    }
-    return new LoggedError(
-        `error too long: ${err.name}`,
-        err.message.substring(0, 100),
-        truncateStack(err.stack, 5),
-    );
+    return new LoggedError(err.name, err.message, err.stack);
 }
 
 /**

@@ -2,11 +2,19 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { Writable } from 'stream';
 import { createLogger, format, transports } from 'winston';
 import type { Logger as WinstonBase } from 'winston';
-import { ContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
+import {
+    ContextKey,
+    GCP_LOG_BUDGET_BYTES,
+    HeaderRegistry,
+    LogChunkInfo,
+    MAX_GCP_LOG_BYTES,
+    ServiceInfo,
+} from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { WinstonLogger } from '../WinstonLogger';
 import { WinstonConsoleFactory } from '../WinstonConsoleFactory';
 import { WinstonGcpFactory } from '../WinstonGcpFactory';
+import { ChunkingConsoleTransport } from '../ChunkingConsoleTransport';
 import { bigIntSafeFormat, injectContextFormat, severityFormat } from '../format';
 
 const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
@@ -196,5 +204,164 @@ describe('winston factories', () => {
         expect(line).not.toContain('version');
         // ...while the per-request key that IS worth reading locally still renders.
         expect(line).toContain('requestId=req-123');
+    });
+});
+
+/** One parsed GCP log line. Values are whatever JSON holds. */
+type LogRecord = Record<string, unknown>;
+
+const chunkOf = (rec: LogRecord): LogChunkInfo => rec['logChunk'] as LogChunkInfo;
+
+/**
+ * A logger wired with the GCP format stack writing through the real ChunkingConsoleTransport.
+ * The transport extends Console (which writes to stdout), so we capture stdout rather than
+ * injecting a stream — that keeps the REAL transport under test instead of a stand-in.
+ */
+class ChunkHarness {
+    readonly lines: string[] = [];
+    readonly log: WinstonLogger;
+    private readonly restore: () => void;
+
+    constructor(budgetBytes: number) {
+        const lines = this.lines;
+        // winston's Console transport writes to `console._stdout` when it exists — which under vitest
+        // is NOT process.stdout — so patch the stream the transport actually reaches for.
+        const sink = (console as unknown as { _stdout: NodeJS.WriteStream })._stdout;
+        const original = sink.write;
+        sink.write = ((chunk: string | Uint8Array): boolean => {
+            lines.push(String(chunk).trimEnd());
+            return true;
+        }) as typeof sink.write;
+        this.restore = (): void => {
+            sink.write = original;
+        };
+
+        const raw = createLogger({
+            level: 'silly',
+            format: format.combine(bigIntSafeFormat(), injectContextFormat(), severityFormat(), format.json()),
+            defaultMeta: { svcName: 'chunk-test' },
+            transports: [new ChunkingConsoleTransport(budgetBytes)],
+        });
+        this.log = new WinstonLogger(raw);
+    }
+
+    stop(): void {
+        this.restore();
+    }
+
+    records(): LogRecord[] {
+        return this.lines.map((line: string) => JSON.parse(line));
+    }
+}
+
+describe('ChunkingConsoleTransport — GCP silently DROPS oversized jsonPayload entries', () => {
+    it('leaves a within-budget record alone: one line, no logChunk tag', async () => {
+        const h = new ChunkHarness(GCP_LOG_BUDGET_BYTES);
+        withContext(() => h.log.info('small message'));
+        await flush();
+        h.stop();
+
+        expect(h.lines.length).toBe(1);
+        const rec = h.records()[0];
+        expect(rec['message']).toBe('small message');
+        expect(rec['logChunk']).toBeUndefined();
+        expect(rec['requestId']).toBe('req-123');
+    });
+
+    it('splits an oversized message into COMPLETE records that each parse as JSON', async () => {
+        const budget = 4096;
+        const body = JSON.stringify({ blob: 'x'.repeat(20_000) });
+        const message = `[API-server-resp-SUCCESS] SaveApi.save response=${body}`;
+
+        const h = new ChunkHarness(budget);
+        withContext(() => h.log.info(message));
+        await flush();
+        h.stop();
+
+        expect(h.lines.length).toBeGreaterThan(1);
+        // The whole point: a sliced JSON line would be unparseable and land as textPayload.
+        for (const line of h.lines) {
+            expect(() => JSON.parse(line)).not.toThrow();
+            expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(budget);
+        }
+    });
+
+    it('reassembles byte-exactly: sort by logChunk.index, concat message', async () => {
+        const message = `payload=${JSON.stringify({ blob: 'y'.repeat(20_000) })}`;
+        const h = new ChunkHarness(4096);
+        withContext(() => h.log.info(message));
+        await flush();
+        h.stop();
+
+        const records = h.records();
+        const uids = new Set(records.map((r: LogRecord) => chunkOf(r).uid));
+        expect(uids.size).toBe(1); // one message → one uid to grep
+
+        const total = records.length;
+        records.forEach((rec: LogRecord, i: number) => {
+            expect(chunkOf(rec).index).toBe(i);
+            expect(chunkOf(rec).total).toBe(total);
+        });
+
+        const rebuilt = records
+            .slice()
+            .sort((a: LogRecord, b: LogRecord) => chunkOf(a).index - chunkOf(b).index)
+            .map((r: LogRecord) => r['message'] as string)
+            .join('');
+        expect(rebuilt).toBe(message);
+    });
+
+});
+
+describe('ChunkingConsoleTransport — each piece must stand on its own', () => {
+    it('keeps the envelope on EVERY piece, so a chunk is never orphaned', async () => {
+        const h = new ChunkHarness(4096);
+        withContext(() => h.log.warn(`big=${'z'.repeat(20_000)}`));
+        await flush();
+        h.stop();
+
+        // Guard the loop below: with zero records it would assert nothing and pass vacuously.
+        expect(h.records().length).toBeGreaterThan(1);
+        // Without these, a piece could not be correlated or filtered in Cloud Logging.
+        for (const rec of h.records()) {
+            expect(rec['requestId']).toBe('req-123');
+            expect(rec['severity']).toBe('WARNING');
+            expect(rec['svcName']).toBe('chunk-test');
+            expect(rec['authToken']).toBe('sup...lue'); // secured value stays masked on every piece
+        }
+    });
+
+    it('splits a giant STACK TRACE instead of truncating it — the stack is why you opened the logs', async () => {
+        const err = new Error('boom');
+        err.stack = `Error: boom\n${'    at someFrame (/a/b/c.ts:1:1)\n'.repeat(1000)}`;
+
+        const h = new ChunkHarness(4096);
+        withContext(() => h.log.error('failed', err));
+        await flush();
+        h.stop();
+
+        const records = h.records();
+        expect(records.length).toBeGreaterThan(1);
+        const rebuilt = records.map((r: LogRecord) => (r['errStack'] as string) ?? '').join('');
+        expect(rebuilt).toBe(err.stack); // every frame survives
+        for (const rec of records) {
+            expect(rec['errName']).toBe('Error');
+            expect(rec['errMessage']).toBe('boom');
+        }
+    });
+
+    it('holds each record under the REAL GCP ceiling for a 600KB body', async () => {
+        const h = new ChunkHarness(GCP_LOG_BUDGET_BYTES);
+        withContext(() => h.log.info(`response=${JSON.stringify({ blob: 'q'.repeat(600_000) })}`));
+        await flush();
+        h.stop();
+
+        expect(h.lines.length).toBeGreaterThan(1);
+        for (const line of h.lines) {
+            const bytes = new TextEncoder().encode(line).length;
+            expect(bytes).toBeLessThanOrEqual(GCP_LOG_BUDGET_BYTES);
+            // The limit that actually drops entries — the budget exists to stay well clear of it.
+            expect(bytes).toBeLessThan(MAX_GCP_LOG_BYTES);
+        }
     });
 });

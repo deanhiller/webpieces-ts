@@ -1,5 +1,6 @@
 import { format } from 'winston';
 import { WinstonFactoryBase } from './WinstonFactoryBase';
+import { ChunkingConsoleTransport } from './ChunkingConsoleTransport';
 import { bigIntSafeFormat, injectContextFormat, severityFormat } from './format';
 
 /**
@@ -13,6 +14,12 @@ import { bigIntSafeFormat, injectContextFormat, severityFormat } from './format'
  *
  * The service name + version come from {@link ServiceInfo}, which startup must have populated
  * (this constructor reads them); they are NOT factory options.
+ *
+ * Writes through a {@link ChunkingConsoleTransport} rather than a plain Console, because THIS is the
+ * backend with a size limit: Cloud Logging caps a LogEntry at 256 KiB and — critically — an
+ * oversized jsonPayload entry is DROPPED, not truncated, with no error raised anywhere. A big
+ * response body or stack trace would simply never appear. The transport splits such a record into
+ * several complete, parseable records sharing a `jsonPayload.logChunk.uid`.
  */
 export class WinstonGcpFactory extends WinstonFactoryBase {
     constructor() {
@@ -23,6 +30,7 @@ export class WinstonGcpFactory extends WinstonFactoryBase {
                 severityFormat(),
                 format.json(),
             ),
+            new ChunkingConsoleTransport(),
         );
     }
 }

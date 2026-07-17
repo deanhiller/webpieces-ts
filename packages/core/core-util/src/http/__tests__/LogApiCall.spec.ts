@@ -52,8 +52,10 @@ describe('LogApiCall.execute — success + active guard', () => {
 
         expect(res).toEqual({ ok: true });
         expect(ctx.sets.map(s => s.key)).toEqual([API, API]); // both stamps target API_CALL_INFO
-        expect(ctx.values()[0]).toEqual(new ApiCallInfo(info('client'), 'request', undefined));
-        expect(ctx.values()[1]).toEqual(new ApiCallInfo(info('client'), 'response', 'success'));
+        // Field-wise rather than a deep-equal on the whole tag: durationMs is wall-clock, so it can
+        // never be asserted by construction. It gets its own tests below.
+        expect(ctx.values()[0]).toMatchObject({ method: info('client'), type: 'request', result: undefined });
+        expect(ctx.values()[1]).toMatchObject({ method: info('client'), type: 'response', result: 'success' });
         // set → log → remove: every stamp is cleared, so nothing is ever held across the await.
         expect(ctx.removes).toEqual([API, API]);
     });
@@ -77,7 +79,10 @@ describe('LogApiCall.execute — success + active guard', () => {
         const res = await LogApiCall.execute(info('client'), { q: 'x' }, async () => undefined);
 
         expect(res).toBeUndefined();
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('client'), 'response', 'success'));
+        expect(ctx.values().at(-1)).toMatchObject({ type: 'response', result: 'success' });
+        // JSON.stringify(undefined) is undefined, not '' — so there is no body to measure and a 0
+        // here would be a lie.
+        expect(ctx.values().at(-1)?.responseSize).toBeUndefined();
     });
 
     it('throws when the ApiCallContext is not active (no request scope / factory not built)', async () => {
@@ -102,7 +107,7 @@ describe('LogApiCall.execute — error result mapping', () => {
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
 
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('server'), 'response', 'success'));
+        expect(ctx.values().at(-1)).toMatchObject({ method: info('server'), type: 'response', result: 'success' });
     });
 
     it('CLIENT receiving a 4xx → response:failure — the outbound call failed', async () => {
@@ -115,7 +120,7 @@ describe('LogApiCall.execute — error result mapping', () => {
             }),
         ).rejects.toBeInstanceOf(HttpBadRequestError);
 
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('client'), 'response', 'failure'));
+        expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'failure' });
     });
 
     it('HttpUserError (266) → response:success on BOTH sides', async () => {
@@ -141,7 +146,91 @@ describe('LogApiCall.execute — error result mapping', () => {
             }),
         ).rejects.toThrow('boom');
 
-        expect(ctx.values().at(-1)).toEqual(new ApiCallInfo(info('server'), 'response', 'failure'));
+        expect(ctx.values().at(-1)).toMatchObject({ method: info('server'), type: 'response', result: 'failure' });
+    });
+});
+
+describe('LogApiCall.execute — durationMs', () => {
+    it('times the call and stamps durationMs on the response tag only', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        await LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+            await new Promise(resolve => setTimeout(resolve, 25));
+            return { ok: true };
+        });
+
+        // A request has not happened yet, so it has no duration.
+        expect(ctx.values()[0].durationMs).toBeUndefined();
+        const durationMs = ctx.values()[1].durationMs;
+        expect(durationMs).toBeGreaterThanOrEqual(20);
+        expect(durationMs).toBeLessThan(5000);
+    });
+
+    it('still reports durationMs when the call FAILS — a slow timeout must show its real cost', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        await expect(
+            LogApiCall.execute(info('server'), { q: 'x' }, async () => {
+                await new Promise(resolve => setTimeout(resolve, 25));
+                throw new Error('slow boom');
+            }),
+        ).rejects.toThrow('slow boom');
+
+        expect(ctx.values().at(-1)?.durationMs).toBeGreaterThanOrEqual(20);
+        expect(ctx.values().at(-1)?.result).toBe('failure');
+    });
+});
+
+describe('LogApiCall.execute — body sizes', () => {
+    it('stamps requestSize/responseSize as real UTF-8 byte counts of the serialized bodies', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        const request = { q: 'x' };
+        const response = { ok: true, note: 'hello' };
+        await LogApiCall.execute(info('client'), request, async () => response);
+
+        const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+        expect(ctx.values()[0].requestSize).toBe(bytes(request));
+        expect(ctx.values()[1].requestSize).toBe(bytes(request)); // repeated, so one record shows both
+        expect(ctx.values()[1].responseSize).toBe(bytes(response));
+    });
+
+    it('counts BYTES not characters — multibyte bodies must not under-report', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        // '日本語' is 3 chars but 9 UTF-8 bytes; a .length-based size would be wrong here.
+        const request = { q: '日本語' };
+        await LogApiCall.execute(info('client'), request, async () => ({ ok: true }));
+
+        const serialized = JSON.stringify(request);
+        expect(ctx.values()[0].requestSize).toBe(new TextEncoder().encode(serialized).length);
+        expect(ctx.values()[0].requestSize).toBeGreaterThan(serialized.length);
+    });
+
+    it('reports the TOTAL body size, not a chunked/truncated size (chunking is the backend\'s job)', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        const big = { blob: 'a'.repeat(500_000) };
+        await LogApiCall.execute(info('server'), { q: 'x' }, async () => big);
+
+        // Well past the GCP per-entry limit: this layer still reports the one true size.
+        expect(ctx.values().at(-1)?.responseSize).toBeGreaterThan(500_000);
+    });
+
+    it('carries no statusCode — business logic must not know about HTTP', async () => {
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        await LogApiCall.execute(info('server'), { q: 'x' }, async () => ({ ok: true }));
+
+        for (const tag of ctx.values()) {
+            expect(tag).not.toHaveProperty('statusCode');
+        }
     });
 });
 

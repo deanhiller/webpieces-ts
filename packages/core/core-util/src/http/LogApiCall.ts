@@ -9,7 +9,7 @@ import {toError} from "../lib/errorUtils";
 import {LogManager} from "../logging/LogManager";
 import {ApiCallInfo} from "./ApiCallInfo";
 import {ApiMethodInfo} from "./ApiMethodInfo";
-import {ApiCallContextHolder} from "./ApiCallContext";
+import {ApiCallContext, ApiCallContextHolder} from "./ApiCallContext";
 import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
 
 const log = LogManager.getLogger('LogApiCall');
@@ -64,18 +64,9 @@ export class LogApiCallImpl {
         method: (dto: any) => Promise<any>,
         // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary
     ): Promise<any> {
-        // Throws if no ApiCallContext was installed at startup, or there is no active scope to stamp
-        // into (loud misconfiguration — an api call with nowhere to tag is a bug).
-        const ctx = ApiCallContextHolder.get();
-        if (!ctx.isActive()) {
-            throw new Error(
-                'LogApiCall requires an ACTIVE ApiCallContext. On a Node server, run inside the ' +
-                'RequestContext.run(...) a server filter opens; in a browser, build ClientHttpBrowserFactory first.',
-            );
-        }
+        const ctx = this.activeContext();
         const key = WebpiecesCoreHeaders.API_CALL_INFO;
         const side = methodInfo.side;
-        const server = side === 'server';
         const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
         // set → emit → remove, as ONE synchronous span: the tag is live only while the logger reads it,
         // never across an await, so a single browser global slot can never be clobbered by a concurrent call.
@@ -85,34 +76,92 @@ export class LogApiCallImpl {
             ctx.remove(key);
         };
 
+        // Stringify ONCE and reuse for both the log text and the size — a second JSON.stringify of a
+        // large DTO purely to measure it would double the cost of the thing we are measuring.
+        const requestBody = JSON.stringify(requestDto);
+        const requestSize = this.byteSize(requestBody);
+        // Declared out here so the catch below can read it too. Reassigned just before the call, so
+        // the number times ONLY the call and not our own request-logging.
+        let startMs = Date.now();
+
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller
         try {
-            stamp(new ApiCallInfo(methodInfo, 'request', undefined), () =>
-                log.info(`[API-${side}-req] ${id} request=${JSON.stringify(requestDto)}`));
+            stamp(new ApiCallInfo(methodInfo, 'request', undefined, undefined, requestSize), () =>
+                log.info(`[API-${side}-req] ${id} request=${requestBody}`));
 
             if(!requestDto)
                 throw new Error(`Request cannot be null and was from ${id}`);
 
+            startMs = Date.now();
             const response = await method(requestDto);
+            const durationMs = Date.now() - startMs;
 
-            stamp(new ApiCallInfo(methodInfo, 'response', 'success'), () =>
-                log.info(`[API-${side}-resp-SUCCESS] ${id} response=${JSON.stringify(response)}`));
+            const responseBody = JSON.stringify(response);
+            stamp(
+                new ApiCallInfo(
+                    methodInfo, 'response', 'success', durationMs, requestSize, this.byteSize(responseBody),
+                ),
+                () => log.info(`[API-${side}-resp-SUCCESS] ${id} response=${responseBody}`));
 
             return response;
         } catch (err: unknown) {
             const error = toError(err);
-            const errorType = error.constructor.name;
-            const errorMessage = error.message;
-            // Side-dependent: a 4xx the SERVER raised is a handled non-failure (OTHER); the same 4xx a
-            // CLIENT receives means its call FAILED. HttpUserError (266) is never a failure, either side.
-            const isUser = this.isUserError(error, server);
-
-            stamp(new ApiCallInfo(methodInfo, 'response', isUser ? 'success' : 'failure'), () =>
-                isUser
-                    ? log.warn(`[API-${side}-resp-OTHER] ${id} errorType=${errorType}`)
-                    : log.error(`[API-${side}-resp-FAIL] ${id} errorType=${errorType} error=${errorMessage}`));
+            // Duration comes off the SAME start as the success path, so a slow failure (a timeout, a
+            // hung dependency) reports its real cost rather than nothing.
+            this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp);
             throw error;
         }
+    }
+
+    /**
+     * The ApiCallContext to stamp into. Throws if none was installed at startup, or if there is no
+     * active scope — loud misconfiguration, because an api call with nowhere to tag is a bug.
+     */
+    private activeContext(): ApiCallContext {
+        const ctx = ApiCallContextHolder.get();
+        if (!ctx.isActive()) {
+            throw new Error(
+                'LogApiCall requires an ACTIVE ApiCallContext. On a Node server, run inside the ' +
+                'RequestContext.run(...) a server filter opens; in a browser, build ClientHttpBrowserFactory first.',
+            );
+        }
+        return ctx;
+    }
+
+    /**
+     * Tag + log a thrown call. There is no responseSize — a throw produced no response body to measure.
+     */
+    private logFailure(
+        error: Error,
+        methodInfo: ApiMethodInfo,
+        durationMs: number,
+        requestSize: number | undefined,
+        stamp: (info: ApiCallInfo, emit: () => void) => void,
+    ): void {
+        const side = methodInfo.side;
+        const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
+        const errorType = error.constructor.name;
+        // Side-dependent: a 4xx the SERVER raised is a handled non-failure (OTHER); the same 4xx a
+        // CLIENT receives means its call FAILED. HttpUserError (266) is never a failure, either side.
+        const isUser = this.isUserError(error, side === 'server');
+
+        stamp(
+            new ApiCallInfo(methodInfo, 'response', isUser ? 'success' : 'failure', durationMs, requestSize),
+            () => isUser
+                ? log.warn(`[API-${side}-resp-OTHER] ${id} errorType=${errorType}`)
+                : log.error(`[API-${side}-resp-FAIL] ${id} errorType=${errorType} error=${error.message}`));
+    }
+
+    /**
+     * UTF-8 byte size of an already-serialized body. TextEncoder, not Buffer: LogApiCall runs in the
+     * browser bundle. Undefined in, undefined out — a `Promise<void>` method has no body to measure,
+     * and a 0 there would be a lie (JSON.stringify(undefined) returns undefined, not '').
+     */
+    private byteSize(serialized: string | undefined): number | undefined {
+        if (serialized === undefined) {
+            return undefined;
+        }
+        return new TextEncoder().encode(serialized).length;
     }
 
     /**
