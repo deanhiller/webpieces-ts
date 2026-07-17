@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { ApiCallContextHolder, HeaderRegistry, LoggerFactory, LogManager } from '@webpieces/core-util';
+import { ApiCallContextHolder, HeaderRegistry, LoggerFactory, LogManager, ServiceInfo } from '@webpieces/core-util';
 import { RequestContextApiCallContext } from '@webpieces/core-context';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
@@ -48,6 +48,13 @@ export async function setupRuntime(
      * Or special case servers that want to override specific things */
     appOverrides?: ContainerModule,
 ): Promise<ApiFactory> {
+    // 0. This service must be NAMED. Both webpieces logging backends already read ServiceInfo in
+    // their constructors, so a bunyan/winston app has failed before reaching here — but an app that
+    // installs its OWN LoggerFactory touches neither, and would otherwise boot unnamed and stamp no
+    // requestIdSource. Assert it HERE, the one startup every server runs, so the request path can
+    // trust the name exists and never has to throw over it mid-traffic.
+    ServiceInfo.getName();
+
     // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
     HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);
 

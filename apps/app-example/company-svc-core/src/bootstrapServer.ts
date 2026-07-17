@@ -1,7 +1,7 @@
 import express from 'express';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { ApiFactory, AppModules, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
-import { toError, LogManager, ClientRegistry, ErrorTranslation } from '@webpieces/core-util';
+import { toError, LogManager, ClientRegistry, ErrorTranslation, ServiceInfo } from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
 
@@ -19,6 +19,11 @@ export async function setupCompanyRuntime(
     appModules: AppModules,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
+    // Name this service FIRST: a logger backend reads ServiceInfo in its own constructor, and
+    // setupRuntime asserts it before anything else. Doing it in the company wrapper means every
+    // server AND every test that boots one is named, with no per-call-site boilerplate.
+    ServiceInfo.setName(options.svcName);
+
     // Install the app's error translations at the same point we install the logger/registry config,
     // so exception<->wire translation is part of the express-server wiring "only when express is
     // used." Consulted before the built-in webpieces mapping on BOTH sides (see ErrorTranslation).

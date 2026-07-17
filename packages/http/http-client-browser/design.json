@@ -25,8 +25,8 @@
                     "level": 1
                 },
                 {
-                    "id": "ResponseHeadersListener",
-                    "className": "ResponseHeadersListener",
+                    "id": "RequestLifecycleListener",
+                    "className": "RequestLifecycleListener",
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
@@ -45,16 +45,16 @@
                 },
                 {
                     "from": "ClientHttpBrowserFactory",
-                    "to": "ResponseHeadersListener",
+                    "to": "RequestLifecycleListener",
                     "injection": "type",
-                    "token": "ResponseHeadersListener",
-                    "tokenKey": "type:ResponseHeadersListener",
-                    "paramName": "headersListener",
-                    "paramType": "ResponseHeadersListener"
+                    "token": "RequestLifecycleListener",
+                    "tokenKey": "type:RequestLifecycleListener",
+                    "paramName": "lifecycleListener",
+                    "paramType": "RequestLifecycleListener"
                 }
             ],
             "unresolved": [
-                "ResponseHeadersListener"
+                "RequestLifecycleListener"
             ]
         }
     ]

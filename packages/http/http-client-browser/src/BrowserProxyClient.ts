@@ -1,7 +1,7 @@
 import { AuthMeta, ContextMgr, ClientRegistry, RouteMetadata } from '@webpieces/core-util';
-import { ApiPrototype, ProxyClient } from '@webpieces/http-client-core';
+import { ApiPrototype, ProxyClient, RequestOutcome } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
-import { ResponseHeadersListener } from './ResponseHeadersListener';
+import { RequestLifecycleListener } from './RequestLifecycleListener';
 
 /**
  * The browser {@link ProxyClient}. Reads context from the app-held store (via {@link ContextMgr}),
@@ -18,7 +18,7 @@ export class BrowserProxyClient extends ProxyClient {
 
     constructor(
         private readonly contextMgr: ContextMgr,
-        private readonly headersListener?: ResponseHeadersListener,
+        private readonly lifecycleListener?: RequestLifecycleListener,
     ) {
         super();
     }
@@ -49,11 +49,15 @@ export class BrowserProxyClient extends ProxyClient {
     }
 
     /**
-     * Forward the response headers to the app's listener, if one was registered on the factory.
-     * The optional chain makes this a no-op when no listener is present — the default browser case.
+     * Forward the call's lifecycle to the app's listener, if one was registered on the factory. The
+     * optional chain makes both a no-op when no listener is present — the default browser case.
      */
-    protected override onResponseHeaders(route: RouteMetadata, headers: Headers): void {
-        this.headersListener?.onResponseHeaders(route, headers);
+    protected override onRequestStart(route: RouteMetadata): void {
+        this.lifecycleListener?.onRequestStart(route);
+    }
+
+    protected override onRequestEnd(route: RouteMetadata, outcome: RequestOutcome): void {
+        this.lifecycleListener?.onRequestEnd(route, outcome);
     }
 
     /**

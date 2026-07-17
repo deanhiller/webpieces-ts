@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { Writable } from 'stream';
 import { createLogger, format, transports } from 'winston';
 import type { Logger as WinstonBase } from 'winston';
-import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { WinstonLogger } from '../WinstonLogger';
 import { WinstonConsoleFactory } from '../WinstonConsoleFactory';
@@ -102,6 +102,23 @@ describe('winston GCP format stack', () => {
 });
 
 describe('winston factories', () => {
+    // Both factories read the service name from ServiceInfo in their constructor, so name the
+    // service first — exactly as a real startup does.
+    beforeEach(() => {
+        ServiceInfo.clear();
+        ServiceInfo.setName('test-svc');
+    });
+
+    afterEach(() => {
+        ServiceInfo.clear();
+    });
+
+    it('FAILS FAST when the service was never named — at construction, i.e. at startup', () => {
+        ServiceInfo.clear();
+
+        expect(() => new WinstonConsoleFactory()).toThrow(/ServiceInfo\.setName\(\.\.\.\) has not been called/);
+    });
+
     it('WinstonConsoleFactory caches one Logger per name', () => {
         const factory = new WinstonConsoleFactory();
         expect(factory.getLogger('A')).toBe(factory.getLogger('A'));

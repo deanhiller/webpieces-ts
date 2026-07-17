@@ -10,9 +10,11 @@ import {
     LogApiCall,
     LogApiCallImpl,
     ApiMethodInfo,
+    toError,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
+import { RequestOutcome } from './RequestOutcome';
 
 /**
  * ProxyClient - the HTTP call engine behind one API contract's client proxy.
@@ -88,13 +90,27 @@ export abstract class ProxyClient {
     protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
 
     /**
-     * Observe the response headers after each call, before the body is consumed. Symmetric with the
-     * outbound {@link outboundHeaders} hook: this is the ONLY place the `fetch` Response — and thus
-     * its `Headers` — exists, so an app that needs to read a response header (e.g. a server-version
-     * stamp for client↔server version matching) overrides this in its subclass. The default ignores
-     * them, so every existing subclass is unaffected.
+     * Fires immediately BEFORE `fetch`, once per RPC — the progress "start marker". Symmetric with
+     * {@link onRequestEnd}: every start is followed by exactly one end, on every path, so a listener
+     * can drive a counter (bar on / bar off) without leaking a permanently-spinning bar.
+     *
+     * The default is a no-op, so every existing subclass is unaffected.
      */
-    protected onResponseHeaders(_route: RouteMetadata, _headers: Headers): void {}
+    protected onRequestStart(_route: RouteMetadata): void {}
+
+    /**
+     * Fires exactly ONCE after the call settles, on EVERY path (2xx, HTTP error, network reject) —
+     * the "stop marker", carrying how it settled.
+     *
+     * Subsumes the older header-only hook: this is the ONLY place the `fetch` Response — and thus its
+     * `Headers` — exists, so an app that needs to read a response header (e.g. a server-version stamp
+     * for client↔server version matching) reads `outcome.headers`, still BEFORE the body is consumed
+     * and on both the ok and error paths. `outcome.ok`/`outcome.error` add the success-or-error
+     * signal the header-only seam could not give.
+     *
+     * The default is a no-op, so every existing subclass is unaffected.
+     */
+    protected onRequestEnd(_route: RouteMetadata, _outcome: RequestOutcome): void {}
 
     // ---------------------------------------------------------------- contract binding
 
@@ -218,23 +234,71 @@ export abstract class ProxyClient {
 
     /**
      * Execute the fetch request and handle response.
+     *
+     * Brackets the call with the lifecycle seam: {@link onRequestStart} once before `fetch`, then
+     * {@link onRequestEnd} exactly once on each of the three ways a call can settle. The end hook
+     * fires BEFORE the throw on both failure paths, so a listener always sees the stop marker even
+     * though the caller sees an exception.
      */
     // webpieces-disable no-any-unknown -- the response DTO's type is erased at the proxy boundary
     private async executeFetch(url: string, options: RequestInit, route: RouteMetadata): Promise<unknown> {
-        // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
-        const response = await fetch(url, options);
+        this.onRequestStart(route);
 
-        // Inbound seam — invoked before the body is consumed, on BOTH the ok and error paths, so
-        // version (and any future) headers are observed even on error responses.
-        this.onResponseHeaders(route, response.headers);
+        // A network reject (offline, DNS, CORS preflight) means no Response ever existed, so there is
+        // no status and no headers to report — only status 0 and the failure itself.
+        let response: Response;
+        // webpieces-disable no-unmanaged-exceptions -- translate a network reject into a lifecycle END, then rethrow
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
+            response = await fetch(url, options);
+        } catch (err: unknown) {
+            const error = toError(err);
+            this.onRequestEnd(route, new RequestOutcome(false, 0, undefined, error));
+            throw error;
+        }
 
         if (response.ok) {
-            return await response.json();
+            // webpieces-disable no-unmanaged-exceptions -- a malformed 2xx body must still report the END marker
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+            try {
+                const body = await response.json();
+                this.onRequestEnd(route, new RequestOutcome(true, response.status, response.headers));
+                return body;
+            } catch (err: unknown) {
+                const error = toError(err);
+                this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
+                throw error;
+            }
         }
 
         // Handle errors (non-2xx responses): parse ProtocolError from the response body and
-        // reconstruct the appropriate HttpError subclass.
-        const protocolError = (await response.json()) as ProtocolError;
-        throw ClientErrorTranslator.translateError(response, protocolError);
+        // reconstruct the appropriate HttpError subclass. The headers still reach the seam here, so
+        // a version (or any future) header is observed even on error responses.
+        //
+        // The parse is GUARDED because a non-2xx body is not always ours: an infra 502/504 (load
+        // balancer, proxy) returns HTML, and `response.json()` throws on it. Unguarded, the END
+        // marker would never fire for exactly the 5xx case the seam exists to catch — the caller
+        // would see the throw while the app's progress bar span never closed. Either way the caller
+        // still gets the same failure it always got; only the lifecycle report is new.
+        //
+        // `translated` is the HttpError subclass ClientErrorTranslator picked, and translateError
+        // RETURNS Error — so nothing in this seam is ever `unknown`.
+        let translated: Error;
+        // webpieces-disable no-unmanaged-exceptions -- a non-JSON error body must still report the END marker
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const protocolError = (await response.json()) as ProtocolError;
+            translated = ClientErrorTranslator.translateError(response, protocolError);
+        } catch (err: unknown) {
+            const error = toError(err);
+            // The error body was not ours (e.g. an infra 502 serving HTML), so there was no
+            // ProtocolError to translate — report the parse failure itself as the outcome.
+            this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, error));
+            throw error;
+        }
+
+        this.onRequestEnd(route, new RequestOutcome(false, response.status, response.headers, translated));
+        throw translated;
     }
 }
