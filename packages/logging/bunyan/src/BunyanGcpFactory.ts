@@ -1,5 +1,4 @@
 import { BunyanFactoryBase } from './BunyanFactoryBase';
-import { BunyanFactoryOptions } from './BunyanFactoryOptions';
 import { createGoogleCloudStream } from './streams';
 
 /**
@@ -9,9 +8,12 @@ import { createGoogleCloudStream } from './streams';
  * structured payload fields, read straight from RequestContext on each line. This
  * matches the tested-in-GCP trytami service exactly. Requires GCP Application
  * Default Credentials on the instance.
+ *
+ * The service name comes from {@link ServiceInfo}, which startup must have named
+ * BEFORE constructing this.
  */
 export class BunyanGcpFactory extends BunyanFactoryBase {
-    constructor(opts: BunyanFactoryOptions) {
-        super(opts.serviceName, [createGoogleCloudStream()]);
+    constructor() {
+        super([createGoogleCloudStream()]);
     }
 }

@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { Writable } from 'stream';
 import bunyan from 'bunyan';
-import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { BunyanLogger } from '../BunyanLogger';
 import { BunyanConsoleFactory } from '../BunyanConsoleFactory';
-import { BunyanFactoryOptions } from '../BunyanFactoryOptions';
 import { logLevelToBunyanLevel } from '../levels';
 
 const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
@@ -110,13 +109,27 @@ describe('logging outside RequestContext.run', () => {
 });
 
 describe('BunyanConsoleFactory', () => {
+    // The factory reads its (bunyan-mandatory) root-logger name from ServiceInfo, so name the
+    // service first — exactly as a real startup does, before constructing the factory.
+    beforeEach(() => {
+        ServiceInfo.clear();
+        ServiceInfo.setName('test-svc');
+    });
+
     afterEach(() => {
+        ServiceInfo.clear();
         vi.restoreAllMocks();
+    });
+
+    it('FAILS FAST when the service was never named — at construction, i.e. at startup', () => {
+        ServiceInfo.clear();
+
+        expect(() => new BunyanConsoleFactory()).toThrow(/ServiceInfo\.setName\(\.\.\.\) has not been called/);
     });
 
     it('writes a human-readable line with context tags', async () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-        const factory = new BunyanConsoleFactory(new BunyanFactoryOptions('test-svc'));
+        const factory = new BunyanConsoleFactory();
         withContext(() => factory.getLogger('MyLogger').info('hello world'));
         await flush();
 
@@ -128,7 +141,7 @@ describe('BunyanConsoleFactory', () => {
     });
 
     it('caches one Logger per name', () => {
-        const factory = new BunyanConsoleFactory(new BunyanFactoryOptions('test-svc'));
+        const factory = new BunyanConsoleFactory();
         expect(factory.getLogger('X')).toBe(factory.getLogger('X'));
         expect(factory.getLogger('X')).not.toBe(factory.getLogger('Y'));
     });

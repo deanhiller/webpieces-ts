@@ -4,7 +4,7 @@ import { BrowserApiCallContext } from './BrowserApiCallContext';
 import { BrowserProxyClient } from './BrowserProxyClient';
 import { ClientConfig } from './ClientConfig';
 import { MutableContextStore } from './MutableContextStore';
-import { ResponseHeadersListener } from './ResponseHeadersListener';
+import { RequestLifecycleListener } from './RequestLifecycleListener';
 
 /**
  * ClientHttpBrowserFactory - builds type-safe HTTP clients for a BROWSER from API prototypes
@@ -40,7 +40,7 @@ export class ClientHttpBrowserFactory {
 
     constructor(
         store: MutableContextStore,
-        private readonly headersListener?: ResponseHeadersListener,
+        private readonly lifecycleListener?: RequestLifecycleListener,
     ) {
         this.contextMgr = new ContextMgr(store);
         // Bind the BROWSER ApiCallContext so LogApiCall (core-util) stamps the `api` tag into the
@@ -56,7 +56,7 @@ export class ClientHttpBrowserFactory {
      * @param config - This client's state (its baseUrl)
      */
     createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
-        const proxyClient = new BrowserProxyClient(this.contextMgr, this.headersListener);
+        const proxyClient = new BrowserProxyClient(this.contextMgr, this.lifecycleListener);
         proxyClient.init(apiPrototype, config);
         return buildClientProxy(apiPrototype, proxyClient);
     }

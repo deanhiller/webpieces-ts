@@ -23,6 +23,25 @@ export class WebpiecesCoreHeaders {
      */
     static readonly REQUEST_ID = new ContextKey('requestId', 'x-request-id');
 
+    /**
+     * WHICH SERVICE MINTED {@link REQUEST_ID} — the name from {@link ServiceInfo}, stamped by
+     * `RequestContextHeaders.fillFromRequest` ONLY on the branch that generates a new id (i.e. when
+     * the inbound request carried no `x-request-id`). It answers the question the id alone cannot:
+     * "this trace starts here — is that right?" An id appearing with no source means it came from
+     * outside; an id sourced by a service that should never be an entry point is a routing bug.
+     *
+     * - `httpHeader` UNDEFINED → NOT transferred over the wire, and that is the WHOLE POINT. If it
+     *   travelled, hop 2 would inherit it, hop 3 would inherit it, and "who started this trace"
+     *   would be indistinguishable from "who passed it along" — the origin, the one fact this key
+     *   carries, would be lost. It is absent on every hop that did NOT mint the id, which is exactly
+     *   the signal: present == I am the origin.
+     * - `isLogged` TRUE → emitted as a plain string at `jsonPayload.requestIdSource`.
+     */
+    static readonly REQUEST_ID_SOURCE = new ContextKey(
+        'requestIdSource',
+        /*httpHeader*/ undefined
+    );
+
     static readonly ORG_ID = new ContextKey('orgId', 'x-org-id');
 
     static readonly USER_ID = new ContextKey('userId', 'x-user-id');
@@ -87,6 +106,7 @@ export class WebpiecesCoreHeaders {
     static getAllHeaders(): ContextKey[] {
         return [
             WebpiecesCoreHeaders.REQUEST_ID,
+            WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
             WebpiecesCoreHeaders.USER_ID,
             WebpiecesCoreHeaders.ORG_ID,
             WebpiecesCoreHeaders.USER_ROLES,

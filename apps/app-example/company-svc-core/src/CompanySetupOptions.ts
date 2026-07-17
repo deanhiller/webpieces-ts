@@ -26,11 +26,16 @@ export class CompanySetupOptions {
      *   (see {@link ErrorTranslation}). This binds them "only when express is used"; an app may
      *   instead call ClientRegistry.addErrorTranslation(...) directly at its own startup site (and
      *   MUST do the same on the browser/Angular side, since those translations run client-side).
+     * @param svcName - This service's name, published to ServiceInfo by {@link setupCompanyRuntime}.
+     *   It names every log line and stamps `requestIdSource` on request-ids this service mints.
+     *   Defaulted so the example's tests stay boilerplate-free; a REAL company wrapper would make
+     *   this required, since every deployed service should say what it is.
      */
     constructor(
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
         public readonly errorTranslations: ErrorTranslation[] = [],
+        public readonly svcName: string = 'app-example',
     ) {}
 }

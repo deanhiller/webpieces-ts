@@ -1,6 +1,7 @@
 import {
     HeaderRegistry,
     RecorderKeys,
+    ServiceInfo,
     TestCaseRecorder,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
@@ -91,6 +92,22 @@ export class RequestContextHeaders {
 
         if (!RequestContext.hasHeader(WebpiecesCoreHeaders.REQUEST_ID)) {
             RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID, this.generateRequestId());
+            this.stampRequestIdSource();
+        }
+    }
+
+    /**
+     * Record that WE minted the id — only ever called from the generate branch above, so the key is
+     * ABSENT on a hop that inherited the caller's id. Present == this service is the trace's origin.
+     *
+     * Uses `tryGetName()`, never `getName()`: this runs PER REQUEST, and a missing log field must
+     * not 500 live traffic. A server that booted already passed `setupRuntime`'s startup check, so
+     * the name is always there in practice; only a test driving the context directly sees undefined.
+     */
+    private stampRequestIdSource(): void {
+        const svcName = ServiceInfo.tryGetName();
+        if (svcName) {
+            RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID_SOURCE, svcName);
         }
     }
 
