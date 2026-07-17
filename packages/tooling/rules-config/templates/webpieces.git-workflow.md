@@ -25,6 +25,18 @@ Never `git merge` or `git rebase` main into your branch directly — it breaks t
 produces clean PR diffs. Sync only via `pnpm wp-start-update` (a 3-point squash-update). This is enforced
 by the `redirect-how-to-merge-main` guard.
 
+**AI never runs `git merge` or `git rebase` — at all.** The guard blocks both outright: on any branch,
+against any target, in any form (including `--squash` and `--ff-only`), and in any compound command
+(`git checkout <feature> && git rebase main` is blocked even when you were on `main` a moment ago).
+Only `--abort` / `--quit` are allowed, since they undo rather than merge. Read-only `git merge-base` is
+unaffected. The gated commands merge internally as child processes the hook never sees, so
+`wp-start-update` / `wp-start-upsert-pr` keep working normally.
+
+There is no bypass, and you must not build one. If you are certain a raw merge/rebase is genuinely
+required, STOP and ask the human to run that exact command — and tell them plainly that it is almost
+certainly the wrong call and that they should push back and make you use the 3-point merge instead.
+Nearly every time you reach this point, the real answer is `pnpm wp-start-update`.
+
 ## Commands
 
 1. **`pnpm wp-start-update`** — squash-update your branch from main (standalone, no PR). Clean merge →

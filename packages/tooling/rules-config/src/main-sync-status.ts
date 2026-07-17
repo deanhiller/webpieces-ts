@@ -249,6 +249,10 @@ export class MainSyncStatusService {
             '1. Fetch latest main:            git fetch origin main',
             `2. New branch off origin/main:   git checkout -b ${currentBranch}-v2 origin/main`,
             `3. Squash-merge old branch:      git merge --squash ${currentBranch}`,
+            '   ^^ HUMAN-ONLY. `git merge` is blocked for AI (redirect-how-to-merge-main). AI: ask the',
+            '   human to run step 3, and warn them it is a raw merge — only correct here because the',
+            '   branch is already broken. For a normal update from main they should push back and',
+            '   tell you to use `pnpm wp-start-update` (3-point merge) instead.',
             `4. Commit the squash:            git add -A && git commit -m "Squashed from ${currentBranch}"`,
             '5. If a PR exists:               open a NEW PR for the -v2 branch and close the old one.',
         ];

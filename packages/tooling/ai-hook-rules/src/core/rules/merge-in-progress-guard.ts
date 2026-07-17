@@ -7,6 +7,7 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
+import { CommandScanner } from '../command-scan';
 
 const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
@@ -37,12 +38,16 @@ function findUnvalidatedMerge(workspaceRoot: string): string | null {
     return null;
 }
 
+const BLOCKED_GIT_SUBCOMMANDS: readonly string[] = ['commit', 'push', 'merge', 'rebase'];
+const SCANNER = new CommandScanner();
+
 // Operations that would let an agent route around the merge gate.
+//
+// Routed through CommandScanner rather than `/\bgit\s+merge\b/`: that pattern matches the read-only
+// `git merge-base origin/main HEAD` (`\b` sits between `e` and `-`), which appears in this repo's own
+// documented build command — so an in-progress merge used to block a harmless diff-scope lookup.
 function isBlockedDuringMerge(cmd: string): boolean {
-    return /\bgit\s+commit\b/.test(cmd)
-        || /\bgit\s+push\b/.test(cmd)
-        || /\bgit\s+merge\b/.test(cmd)
-        || /\bgit\s+rebase\b/.test(cmd)
+    return SCANNER.commandInvokesAnyGit(cmd, BLOCKED_GIT_SUBCOMMANDS)
         || /\bgh\s+pr\s+(create|edit|merge)\b/.test(cmd);
 }
 

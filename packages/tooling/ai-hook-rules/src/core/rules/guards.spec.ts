@@ -57,6 +57,16 @@ describe('merge-in-progress-guard', () => {
         expect(mergeInProgressGuard.check(ctx('pnpm wp-finish-upsert-pr', root)).length).toBe(0);
     });
 
+    it('does not mistake read-only `git merge-base` for `git merge`', () => {
+        // `\bgit\s+merge\b` matched merge-base (the \b sits between `e` and `-`), so an in-progress
+        // merge blocked the diff-scope lookup in this repo's own documented build command.
+        const root = withMarker(false);
+        expect(mergeInProgressGuard.check(ctx('git merge-base origin/main HEAD', root)).length).toBe(0);
+        expect(mergeInProgressGuard.check(ctx('pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)', root)).length).toBe(0);
+        // ...but a real merge is still blocked.
+        expect(mergeInProgressGuard.check(ctx('git merge main', root)).length).toBe(1);
+    });
+
     it('allows everything once the marker is validated', () => {
         const root = withMarker(true);
         expect(mergeInProgressGuard.check(ctx('git commit -m x', root)).length).toBe(0);
