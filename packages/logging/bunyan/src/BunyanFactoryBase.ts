@@ -14,8 +14,15 @@ import { BunyanLogger } from './BunyanLogger';
  * The root logger's `name` is bunyan's ONE mandatory option (its constructor throws
  * `options.name (string) is required`), and it comes from {@link ServiceInfo} — so an
  * app names itself ONCE, in one place, for logging AND for requestIdSource. Reading it
- * here means a forgotten `ServiceInfo.setName(...)` throws OUR actionable error while
+ * here means a forgotten `ServiceInfo.setInfo(...)` throws OUR actionable error while
  * the process boots, rather than bunyan's opaque TypeError.
+ *
+ * `version` rides alongside as a bunyan BASE FIELD (bunyan passes unknown top-level options straight
+ * onto every record — it strips only stream/streams/level/serializers/src, and its own format
+ * version is `v`, so there is no collision). This backend previously could not stamp a version at
+ * all: it lived on winston's factory options, which made "do my logs say which build emitted them?"
+ * depend on the logging library rather than on the service. Both backends now read the ONE
+ * {@link ServiceInfo}.
  *
  * Per-logger names ride as `loggerName` on each child rather than `name`, because
  * bunyan REFUSES to let a child override `name` (`invalid options.name: child cannot
@@ -26,7 +33,11 @@ export abstract class BunyanFactoryBase implements LoggerFactory {
     private readonly loggers = new Map<string, WpLogger>();
 
     protected constructor(streams: Logger.Stream[]) {
-        this.base = Logger.createLogger({ name: ServiceInfo.getName(), streams });
+        this.base = Logger.createLogger({
+            name: ServiceInfo.getName(),
+            version: ServiceInfo.getVersion(),
+            streams,
+        });
     }
 
     getLogger(name: string): WpLogger {

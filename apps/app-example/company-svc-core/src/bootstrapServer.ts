@@ -19,10 +19,10 @@ export async function setupCompanyRuntime(
     appModules: AppModules,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
-    // Name this service FIRST: a logger backend reads ServiceInfo in its own constructor, and
+    // Identify this service FIRST: a logger backend reads ServiceInfo in its own constructor, and
     // setupRuntime asserts it before anything else. Doing it in the company wrapper means every
-    // server AND every test that boots one is named, with no per-call-site boilerplate.
-    ServiceInfo.setName(options.svcName);
+    // server AND every test that boots one is named+versioned, with no per-call-site boilerplate.
+    ServiceInfo.setInfo(options.svcName, options.svcVersion);
 
     // Install the app's error translations at the same point we install the logger/registry config,
     // so exception<->wire translation is part of the express-server wiring "only when express is

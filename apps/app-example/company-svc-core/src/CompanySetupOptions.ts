@@ -30,6 +30,11 @@ export class CompanySetupOptions {
      *   It names every log line and stamps `requestIdSource` on request-ids this service mints.
      *   Defaulted so the example's tests stay boilerplate-free; a REAL company wrapper would make
      *   this required, since every deployed service should say what it is.
+     * @param svcVersion - This build's version, published to ServiceInfo alongside svcName. Opaque
+     *   to webpieces — a git SHA, a semver tag, a CI build number — it just has to identify THIS
+     *   build, so a log line can say which one emitted it. Real deployments inject it at build time
+     *   (a Docker build arg into a generated file, an env var, ...); the default here marks a build
+     *   that was NOT injected, which is exactly what a developer's local run is.
      */
     constructor(
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
@@ -37,5 +42,6 @@ export class CompanySetupOptions {
         public readonly config?: WebpiecesConfig,
         public readonly errorTranslations: ErrorTranslation[] = [],
         public readonly svcName: string = 'app-example',
+        public readonly svcVersion: string = 'local-dev',
     ) {}
 }

@@ -1,6 +1,5 @@
 import { format } from 'winston';
 import { WinstonFactoryBase } from './WinstonFactoryBase';
-import { WinstonFactoryOptions } from './WinstonFactoryOptions';
 import { bigIntSafeFormat, injectContextFormat, severityFormat } from './format';
 
 /**
@@ -11,9 +10,12 @@ import { bigIntSafeFormat, injectContextFormat, severityFormat } from './format'
  * @google-cloud transport — correlation rides the webpieces context, read
  * DIRECTLY from RequestContext on each line. This matches the tested-in-GCP
  * onetablet/monorepo-nx1 core logger exactly.
+ *
+ * The service name + version come from {@link ServiceInfo}, which startup must have populated
+ * (this constructor reads them); they are NOT factory options.
  */
 export class WinstonGcpFactory extends WinstonFactoryBase {
-    constructor(opts: WinstonFactoryOptions = new WinstonFactoryOptions()) {
+    constructor() {
         super(
             format.combine(
                 bigIntSafeFormat(),
@@ -21,7 +23,6 @@ export class WinstonGcpFactory extends WinstonFactoryBase {
                 severityFormat(),
                 format.json(),
             ),
-            opts,
         );
     }
 }

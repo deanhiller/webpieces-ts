@@ -9,7 +9,7 @@ const headers = new RequestContextHeaders();
 beforeEach(() => {
     HeaderRegistry.configure([], /*platformHeaders*/ true);
     ServiceInfo.clear();
-    ServiceInfo.setName('svc-a');
+    ServiceInfo.setInfo('svc-a', '1.0.0');
 });
 
 afterEach(() => {

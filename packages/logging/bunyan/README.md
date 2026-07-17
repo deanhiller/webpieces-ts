@@ -20,9 +20,10 @@ import { LogManager, HeaderRegistry } from '@webpieces/core-util';
 import { ServiceInfo } from '@webpieces/core-util';
 import { BunyanGcpFactory, BunyanConsoleFactory } from '@webpieces/bunyan';
 
-// FIRST: name this service. Both factories read it in their CONSTRUCTOR, so this must come
-// before you build one — a forgotten call throws at startup rather than shipping unnamed logs.
-ServiceInfo.setName('my-service');
+// FIRST: identify this service. Both factories read name+version in their CONSTRUCTOR, so this
+// must come before you build one — a forgotten call throws at startup rather than shipping logs
+// that cannot say which build emitted them.
+ServiceInfo.setInfo('my-service', '2.1.0');
 
 const loggerFactory = process.env.K_SERVICE
     ? new BunyanGcpFactory()
@@ -42,10 +43,13 @@ Credentials on the instance (automatic on Cloud Run), exactly as the source serv
 
 There are none — both factories take no arguments.
 
-- **Service name** — from `ServiceInfo.setName(...)` (see above), NOT a factory option. It
-  becomes bunyan's mandatory root-logger `name` and surfaces as `name` in the payload. It
-  lives in `@webpieces/core-util` because it is a fact about the SERVICE, not about bunyan:
-  the winston backend reads the same value, and so does `requestIdSource` (which records
-  which service minted a request-id).
+- **Service name + version** — from `ServiceInfo.setInfo(...)` (see above), NOT factory options.
+  The name becomes bunyan's mandatory root-logger `name` and surfaces as `name` in the payload;
+  the version rides as a bunyan base field and surfaces as `version`. They live in
+  `@webpieces/core-util` because they are facts about the SERVICE, not about bunyan: the winston
+  backend reads the same values, and `requestIdSource` reads the name (it records which service
+  minted a request-id).
+- **`version` is opaque** — a git SHA, a semver tag, a CI build number, whatever identifies your
+  build. webpieces neither parses nor derives it; your app decides where it comes from.
 - **Level** — there is deliberately no knob. webpieces does not filter by level; bunyan
   filters at its own default.

@@ -115,7 +115,19 @@ export function severityFormat(): Format {
 
 // Fields that are rendered specially (or not at all) by the local pretty format,
 // so they must not leak into the trailing "extra" JSON blob.
-const LOCAL_STRUCTURAL_KEYS = new Set<string>(['level', 'message', 'severity', 'svcGitHash', 'loggerName']);
+//
+// `svcName` + `version` (the ServiceInfo defaultMeta fields) are here to be rendered NOT AT ALL:
+// they earn their keep in GCP, where you filter across many services and deploys, but locally each
+// service logs to its own place and you can check git yourself — so on every single line they are
+// pure noise. GCP still gets both (this set only affects localPrettyFormat).
+const LOCAL_STRUCTURAL_KEYS = new Set<string>([
+    'level',
+    'message',
+    'severity',
+    'svcName',
+    'version',
+    'loggerName',
+]);
 
 /**
  * Local-only human format: `[loggerName] [requestId=… tenantId=…] level: message { …extra }`.

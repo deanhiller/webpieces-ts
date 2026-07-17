@@ -8,7 +8,7 @@
  * import { ServiceInfo } from '@webpieces/core-util';
  * import { BunyanGcpFactory, BunyanConsoleFactory } from '@webpieces/bunyan';
  *
- * ServiceInfo.setName('my-service');  // FIRST — the factories read it in their constructor
+ * ServiceInfo.setInfo('my-service', '2.1.0');  // FIRST — the factories read it in their constructor
  * const loggerFactory = process.env.K_SERVICE
  *   ? new BunyanGcpFactory()      // Cloud Logging via @google-cloud/logging-bunyan
  *   : new BunyanConsoleFactory(); // local → pretty console
@@ -16,10 +16,14 @@
  * ```
  *
  * BREAKING (was `new BunyanFactoryOptions('my-service')` passed to each factory): the service name
- * moved to `ServiceInfo.setName(...)` in @webpieces/core-util, because it is a fact about the
+ * moved to `ServiceInfo.setInfo(...)` in @webpieces/core-util, because it is a fact about the
  * SERVICE, not about bunyan — winston needs the same name, and so does `requestIdSource`. Migration:
- * delete the `BunyanFactoryOptions` import, call `ServiceInfo.setName(<the same string>)` before
- * building the factory, and drop the ctor argument. A forgotten call throws at startup.
+ * delete the `BunyanFactoryOptions` import, call `ServiceInfo.setInfo(<the same string>, <version>)`
+ * before building the factory, and drop the ctor argument. A forgotten call throws at startup.
+ *
+ * NEW: every line now also carries `version` (the second setInfo arg) — this backend could not stamp
+ * a build version before. It is opaque: a git SHA, a semver tag, a CI build number, whatever
+ * identifies your build.
  *
  * Both backends auto-enrich every line with the logged context keys, read
  * DIRECTLY from the active RequestContext (@webpieces/core-context) on each line —
