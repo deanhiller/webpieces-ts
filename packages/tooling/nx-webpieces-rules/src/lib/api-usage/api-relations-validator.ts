@@ -14,7 +14,7 @@
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import { resolveRole } from '../role-resolver';
-import { ApiScanResult } from './api-scanner';
+import { ApiScanResult, UnresolvedApiCall } from './api-scanner';
 
 /** Roles that must justify every api-lib dependency (top-level runnables). */
 const CHECKED_ROLES: ReadonlyArray<string> = ['server', 'client'];
@@ -26,6 +26,12 @@ export interface UnclassifiedApiDep {
     apiLib: string;
     /** The API contract class names that api-lib exports (for the fix hint). */
     apis: string[];
+    /**
+     * Contracts this project DOES name at a call site but which never resolved to decorated
+     * source. When non-empty the wiring almost certainly exists and the scan is blind — advice
+     * to "add a controller" or "remove the dependency" would be actively wrong.
+     */
+    unresolved: UnresolvedApiCall[];
 }
 
 /** The API class names owned by `apiLib`, sorted (for a stable fix hint). */
@@ -63,15 +69,47 @@ export function findUnclassifiedApiDeps(
         for (const dep of entry.dependsOn) {
             if (!scan.apiLibProjects.has(dep)) continue;
             if (entry.apiRelations && entry.apiRelations[dep]) continue;
-            violations.push({ project: projectName, role, apiLib: dep, apis: apisOwnedBy(scan, dep) });
+            violations.push({
+                project: projectName,
+                role,
+                apiLib: dep,
+                apis: apisOwnedBy(scan, dep),
+                unresolved: scan.unresolvedApiCalls.filter((c: UnresolvedApiCall) => c.project === projectName),
+            });
         }
     }
     return violations;
 }
 
+/**
+ * The project DOES wire this contract up — we just couldn't see it, because the import resolved
+ * to a decorator-erased declaration file. Report THAT, not a list of dead ends: telling a dev to
+ * register a controller they already registered, or to delete a load-bearing dependency, sends
+ * them chasing ghosts and gets the whole validator turned off.
+ */
+// webpieces-disable no-function-outside-class -- pure formatter, matches the validator-lib style
+function describeBlindScan(violation: UnclassifiedApiDep): string {
+    const lines = [
+        `  ❌ '${violation.project}' (role:${violation.role}) depends on api-lib '${violation.apiLib}' and its ` +
+            `wiring IS present in source, but the contract could not be read:`,
+    ];
+    for (const call of violation.unresolved) {
+        lines.push(
+            `       • ${call.api} at ${call.at} resolved to ${call.declaredIn} (decorators erased in .d.ts).`,
+        );
+    }
+    lines.push(
+        `     This is a CONFIG gap, not a wiring gap. Do NOT add a controller and do NOT remove the dependency.`,
+        `     Fix: add a tsconfig.base.json 'paths' entry for '${violation.apiLib}' → its src/index.ts,`,
+        `     so the import resolves to source instead of dist/.`,
+    );
+    return lines.join('\n');
+}
+
 /** Human-readable, fix-oriented report for one unclassified dependency. */
 // webpieces-disable no-function-outside-class -- pure formatter, matches the validator-lib style
 export function describeUnclassifiedApiDep(violation: UnclassifiedApiDep): string {
+    if (violation.unresolved.length > 0) return describeBlindScan(violation);
     const apiHint = violation.apis.length > 0 ? violation.apis.join(', ') : 'the API';
     const theApi = violation.apis[0] ?? 'TheApi';
     const lines = [
