@@ -21,6 +21,7 @@ function scan(apiLibs: string[], scanned: string[]): ApiScanResult {
         apiLibProjects: new Set(apiLibs),
         apiIndex: new Map(),
         scannedProjects: new Set(scanned),
+        unresolvedApiCalls: [],
     };
 }
 

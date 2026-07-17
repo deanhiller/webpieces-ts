@@ -8,7 +8,9 @@ import { describe, it, expect } from 'vitest';
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import type { ApiScanResult } from '../api-usage/api-scanner';
-import { findUnclassifiedApiDeps } from '../api-usage/api-relations-validator';
+import { UnresolvedApiCall } from '../api-usage/api-scanner';
+import { findUnclassifiedApiDeps, describeUnclassifiedApiDep } from '../api-usage/api-relations-validator';
+import type { UnclassifiedApiDep } from '../api-usage/api-relations-validator';
 
 function infos(entries: [string, string[]][]): Map<string, ProjectInfo> {
     const map = new Map<string, ProjectInfo>();
@@ -27,6 +29,7 @@ function scanResult(apiLibs: string[]): ApiScanResult {
         apiIndex,
         // Every server/client in these tests has real production source.
         scannedProjects: new Set(['client-server', 'some-lib']),
+        unresolvedApiCalls: [],
     };
 }
 
@@ -111,5 +114,40 @@ describe('findUnclassifiedApiDeps — scan-coverage', () => {
             scanResult(['client-server-api']),
         );
         expect(violations).toEqual([]);
+    });
+});
+
+describe('describeUnclassifiedApiDep', () => {
+    function violation(unresolved: UnresolvedApiCall[]): UnclassifiedApiDep {
+        return {
+            project: 'reports-dispatcher',
+            role: 'server',
+            apiLib: 'reports-dispatcher-api',
+            apis: ['ReportsDispatcherApi'],
+            unresolved,
+        };
+    }
+
+    it('offers the wire-it-up options when the dependency really is unexplained', () => {
+        const message = describeUnclassifiedApiDep(violation([]));
+        expect(message).toContain('addRoutes(ReportsDispatcherApi, TheController)');
+        expect(message).toContain('If the dependency is unused, remove');
+    });
+
+    it('diagnoses the erased-decorator config gap instead of sending devs to chase ghosts', () => {
+        const call = new UnresolvedApiCall(
+            'reports-dispatcher',
+            'ReportsDispatcherApi',
+            'services/reports-dispatcher/src/routes/ReportsDispatcherRoutes.ts:15',
+            'libraries/apis/reports-dispatcher-api/dist/apis/reports-dispatcher-api.d.ts',
+        );
+        const message = describeUnclassifiedApiDep(violation([call]));
+
+        expect(message).toContain('decorators erased');
+        expect(message).toContain("tsconfig.base.json 'paths'");
+        expect(message).toContain('ReportsDispatcherRoutes.ts:15');
+        // The advice that cost monorepo-nx2 a month of a rotted graph must NOT reappear.
+        expect(message).not.toContain('If the dependency is unused, remove');
+        expect(message).not.toContain('add a controller and register it');
     });
 });

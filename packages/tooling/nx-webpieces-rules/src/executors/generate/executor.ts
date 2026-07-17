@@ -13,7 +13,8 @@ import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
-import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
+import { ProjectInfo } from '../../lib/project-info';
+import { scanAndAttachApiRelations, describeUnresolvedApiCalls } from '../../lib/api-usage/api-scanner';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { deriveRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
@@ -42,6 +43,18 @@ function generateRuntimeGraph(workspaceRoot: string, graph: EnhancedGraph, hidde
     console.log(
         `✅ Runtime graph saved (${serviceCount} services, ${runtimeGraph.runtimeEdges.length} runtime edges)`,
     );
+}
+
+/**
+ * Scan for api relations and attach them, surfacing any contract we could NOT map back to source.
+ * Unresolved contracts mean the graph we are about to WRITE is incomplete, so they must be loud —
+ * a green run that quietly omits a service gets committed, rendered, and trusted.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
+function scanApiRelations(workspaceRoot: string, graph: EnhancedGraph, projectInfos: Map<string, ProjectInfo>): void {
+    console.log('🔎 Scanning source for implements/uses API relations...');
+    const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos);
+    if (scan.unresolvedApiCalls.length > 0) console.warn(describeUnresolvedApiCalls(scan.unresolvedApiCalls));
 }
 
 export default async function runExecutor(
@@ -73,8 +86,7 @@ export default async function runExecutor(
         // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
         // scanning source, so dependencies.json + the viz + the runtime graph all
         // read the same derived truth.
-        console.log('🔎 Scanning source for implements/uses API relations...');
-        scanAndAttachApiRelations(workspaceRoot, enhancedGraph, projectInfos);
+        scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
 
         // Step 4: Save the graph
         console.log('💾 Saving graph to architecture/dependencies.json...');
