@@ -126,8 +126,13 @@ export class ForkPoint {
         process.stderr.write('   (it fatals inside a worktree: "main is already checked out at <primary>"):\n');
         process.stderr.write(`   git checkout -b ${featureName}-v2 origin/main\n`);
         process.stderr.write('\n');
-        process.stderr.write('3. Squash merge your old branch:\n');
+        process.stderr.write('3. Squash merge your old branch — THIS STEP IS FOR THE HUMAN TO RUN:\n');
         process.stderr.write(`   git merge --squash ${currentBranch}\n`);
+        process.stderr.write('   AI: `git merge` is blocked for you (redirect-how-to-merge-main) and you must NOT\n');
+        process.stderr.write('   work around it. Ask the human to run that one command, and warn them:\n');
+        process.stderr.write('   "This is a raw git merge. It is only correct here because the branch is already\n');
+        process.stderr.write('    broken and is being rebuilt onto origin/main. For a NORMAL update from main,\n');
+        process.stderr.write('    push back and tell me to use `pnpm wp-start-update` (3-point merge) instead."\n');
         process.stderr.write('\n');
         process.stderr.write('4. Commit the squashed changes:\n');
         process.stderr.write(`   git add -A && git commit -m "Squashed from ${currentBranch}"\n`);
