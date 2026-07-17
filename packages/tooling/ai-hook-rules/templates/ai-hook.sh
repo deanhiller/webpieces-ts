@@ -88,6 +88,13 @@ if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
 fi
+# DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
+# origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
+# assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
+if [ -n "$DRIFT_PKG" ] && printf '%s' "$CMD" | grep -Eq '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*[[:space:]]*$'; then
+  wp_log ALLOW-SYNC          # record the git sync we let through (may be what re-syncs the pin)
+  exit 0
+fi
 wp_log "$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection
 if [ -n "$BROKEN_BIN" ]; then
   # Report (do NOT auto-clean) the orphaned pnpm staging dirs — a package pnpm was mid-way through
@@ -100,7 +107,11 @@ if [ -n "$BROKEN_BIN" ]; then
   fi
   REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: rm -rf node_modules && pnpm install${STAGING_NOTE}"
 elif [ -n "$DRIFT_PKG" ]; then
-  REASON="❌ webpieces is out of date: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. This hook rejects every call except 'pnpm install' because your installed webpieces is older than webpieces.config.json requires. Please run 'pnpm install' now, then retry."
+  # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
+  # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
+  # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
+  # to 'pnpm install', which DOWNGRADES them further from correct.
+  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: run 'git pull' first (or 'git merge --ff-only origin/main'), THEN 'pnpm install'. git pull/fetch/merge are allowed while this guard is up."
 else
   REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
 fi
