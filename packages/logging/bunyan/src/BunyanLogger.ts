@@ -3,13 +3,6 @@ import type { Logger as WpLogger } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { LoggedError } from './LoggedError';
 
-// A log line with no active RequestContext = a missing request-wrapping server
-// filter. We report that once (below), never on every line.
-const MISSING_CONTEXT_MESSAGE =
-    'Log emitted OUTSIDE RequestContext.run(...) — every request must be wrapped in ' +
-    'RequestContext.run() by a server filter. That filter appears to be missing: correlation ' +
-    'fields (requestId, tenant, ...) will be absent from logs until it is added. Reported once.';
-
 /**
  * The error, whole. There is deliberately NO size guard here any more.
  *
@@ -37,10 +30,6 @@ function normalizeError(err: Error): LoggedError {
  * the plain ConsoleLogger — so it does not belong on RequestContext.
  */
 export class BunyanLogger implements WpLogger {
-    // One-shot latch (see MISSING_CONTEXT_MESSAGE) — flips true after the first
-    // out-of-context line so we report the missing filter exactly once, not per line.
-    private reportedMissingContext = false;
-
     constructor(private readonly bunyan: Logger) {}
 
     trace(message: string, err?: Error): void {
@@ -65,8 +54,11 @@ export class BunyanLogger implements WpLogger {
 
     private buildFields(err?: Error): Record<string, string | object | LoggedError> {
         const fields: Record<string, string | object | LoggedError> = {};
+        // No active RequestContext (startup, a background job, or an in-process call the caller did
+        // not wrap) simply logs with no context fields — an empty context is normal, not an error.
+        // The in-process client's ApiClientFactory.requireActiveContext() throws precisely when a
+        // request-path wrap is genuinely missing.
         if (!RequestContext.isActive()) {
-            this.reportMissingContextOnce();
             return fields;
         }
 
@@ -81,15 +73,5 @@ export class BunyanLogger implements WpLogger {
             fields['err'] = normalizeError(err);
         }
         return fields;
-    }
-
-    // Report the missing request-wrapping filter once. Uses the RAW bunyan logger
-    // (not buildFields()), so there is no re-entrancy — just a single extra line.
-    private reportMissingContextOnce(): void {
-        if (this.reportedMissingContext) {
-            return;
-        }
-        this.reportedMissingContext = true;
-        this.bunyan.error(MISSING_CONTEXT_MESSAGE);
     }
 }

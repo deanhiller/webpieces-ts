@@ -71,14 +71,16 @@ export function bigIntSafeFormat(): Format {
  *
  * This mirrors the (duplicated, on purpose) inline logic in BunyanLogger: it must run
  * ONLY when a winston backend is installed, never for the plain ConsoleLogger. A log
- * line with no active RequestContext = a missing request-wrapping server filter; we
- * report that once (closure latch, via console.error so there is no re-entrancy back
- * into winston and no dependency on LogManager).
+ * line with no active RequestContext just injects nothing (startup and background-job
+ * lines are legitimately out of context).
  */
 // webpieces-disable no-function-outside-class -- winston format(fn) factory; whole file is winston Format factories
 export function injectContextFormat(): Format {
-    let reportedMissingContext = false;
     return format((info: TransformableInfo) => {
+        // No active RequestContext (startup, a background job, or an in-process call the caller did
+        // not wrap) simply injects nothing — an empty context is normal, not an error. The one place
+        // a request-path wrap can legitimately be missing (the in-process client) is caught precisely
+        // by ApiClientFactory.requireActiveContext(), which throws at the api boundary.
         if (RequestContext.isActive()) {
             // ONE loop, in HeaderRegistry.buildStructuredLogFields. Values may be OBJECTS (the `api`
             // tag), so an object-valued key nests into jsonPayload.<name> (winston JSON-serializes the
@@ -89,14 +91,6 @@ export function injectContextFormat(): Format {
                     info[name] = value;
                 }
             });
-        } else if (!reportedMissingContext) {
-            reportedMissingContext = true;
-            // This IS a logging backend; direct stderr for the framework-misconfig warning.
-            console.error(
-                'Log emitted OUTSIDE RequestContext.run(...) — every request must be wrapped in ' +
-                    'RequestContext.run() by a server filter. That filter appears to be missing: ' +
-                    'correlation fields (requestId, tenant, ...) will be absent from logs. Reported once.',
-            );
         }
         return info;
     })();
