@@ -19,6 +19,9 @@ import { logLevelToBunyanLevel } from '../levels';
 const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
 // secured → masked in logs
 const AUTH_TOKEN = new ContextKey('authToken', 'x-auth-token', true);
+// routed-endpoint identity — rendered specially by the console line ([Controller.method]).
+const CONTROLLER = new ContextKey('controller');
+const METHOD = new ContextKey('method');
 
 // Run `fn` inside a RequestContext carrying the canned context values the loggers
 // read directly (requestId + a long secured authToken that masks to "sup...lue").
@@ -48,7 +51,7 @@ class BunyanHarness {
 }
 
 beforeAll(() => {
-    HeaderRegistry.configure([REQUEST_ID, AUTH_TOKEN], /*platformHeaders*/ false);
+    HeaderRegistry.configure([REQUEST_ID, AUTH_TOKEN, CONTROLLER, METHOD], /*platformHeaders*/ false);
 });
 
 async function flush(): Promise<void> {
@@ -146,7 +149,7 @@ describe('BunyanConsoleFactory', () => {
         await flush();
 
         const line = String(spy.mock.calls[0][0]);
-        expect(line).toContain('logger:MyLogger');
+        expect(line).toContain('[MyLogger]');
         expect(line).toContain('requestId:req-123');
         expect(line).toContain('authToken:sup...lue');
         expect(line).toContain('hello world');
@@ -184,6 +187,65 @@ describe('BunyanConsoleFactory', () => {
  * NOT as a factory base field — so it appears the moment setInfo has run, is absent before, and
  * logging keeps working either way. This is the field GCP filters on.
  */
+describe('BunyanConsoleFactory local pretty line (trytami format)', () => {
+    beforeEach(() => {
+        ServiceInfo.clear();
+        ServiceInfo.setInfo('test-svc', '9.9.9');
+    });
+    afterEach(() => {
+        ServiceInfo.clear();
+        vi.restoreAllMocks();
+    });
+
+    // Level FIRST, then time, then [Controller.method], then [loggerName], then key:value tags.
+    // controller/method must NOT also render as key:value tags.
+    it('renders [LEVEL][time][Controller.method][loggerName][tags]: msg — level first', async () => {
+        const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        const factory = new BunyanConsoleFactory();
+        RequestContext.run(() => {
+            RequestContext.putHeader(REQUEST_ID, 'req-123');
+            RequestContext.putHeader(CONTROLLER, 'LoginController');
+            RequestContext.putHeader(METHOD, 'login');
+            factory.getLogger('TokenService').info('hello world');
+        });
+        await flush();
+
+        const line = String(spy.mock.calls[0][0]);
+        expect(line).toMatch(
+            /^\[INFO \]\[\d{2}:\d{2}:\d{2}\.\d{3}\]\[LoginController\.login\]\[TokenService\]\[/,
+        );
+        expect(line).toContain('requestId:req-123');
+        expect(line).toContain('hello world');
+        expect(line).not.toContain('controller:');
+        expect(line).not.toContain('method:');
+    });
+
+    it('honors the console field allow-list (renders only requestId, hides authToken)', async () => {
+        const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        const factory = new BunyanConsoleFactory(['requestId']);
+        withContext(() => factory.getLogger('L').info('hi'));
+        await flush();
+
+        const line = String(spy.mock.calls[0][0]);
+        expect(line).toContain('requestId:req-123');
+        expect(line).not.toContain('authToken');
+    });
+
+    it('appends the multi-line Error Details block on error', async () => {
+        const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        const factory = new BunyanConsoleFactory();
+        withContext(() => factory.getLogger('L').error('boom', new Error('bad')));
+        await flush();
+
+        const line = String(spy.mock.calls[spy.mock.calls.length - 1][0]);
+        expect(line).toContain('[ERROR]');
+        expect(line).toContain('Error Details:');
+        expect(line).toContain('Message: bad');
+        expect(line).toContain('Name: Error');
+        expect(line).toContain('Stack Trace:');
+    });
+});
+
 describe('bunyan stamps the ServiceInfo build version on every in-request record', () => {
     afterEach(() => {
         ServiceInfo.clear();

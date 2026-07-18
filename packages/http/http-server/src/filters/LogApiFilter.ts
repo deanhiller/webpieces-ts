@@ -1,7 +1,8 @@
 import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
 import { Filter, WpResponse, Service } from '@webpieces/http-routing';
-import { LogManager } from '@webpieces/core-util';
+import { LogManager, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
+import { RequestContext } from '@webpieces/core-context';
 
 /**
  * LogApiFilter - Structured API logging for all requests/responses.
@@ -40,6 +41,19 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // the backend. apiClass is the CONTRACT name (routeMeta.apiName, e.g. 'SaveApi') so a server log
         // line MATCHES the client's for the same call; controllerName keeps the impl (e.g. 'SaveController').
         const rm = meta.routeMeta;
+
+        // Stamp the routed endpoint's IMPLEMENTATION identity onto the request context so EVERY log line
+        // of this request (not just the api req/resp lines) carries the concrete controller class +
+        // handler method name — what you actually grep for, and more useful than the raw requestPath. GCP
+        // gets them as separate jsonPayload.controller / jsonPayload.method; the local console formatters
+        // render them together as a compact [Controller.method] bracket. They clear with the request scope.
+        if (rm.controllerClassName) {
+            RequestContext.putHeader(WebpiecesCoreHeaders.CONTROLLER, rm.controllerClassName);
+        }
+        if (rm.methodName) {
+            RequestContext.putHeader(WebpiecesCoreHeaders.METHOD, rm.methodName);
+        }
+
         const info = new ApiMethodInfo(
             'server',
             rm.apiName ?? rm.controllerClassName ?? 'Unknown',

@@ -57,6 +57,18 @@ export class WebpiecesCoreHeaders {
      */
     static readonly CLIENT_VERSION = new ContextKey('clientVersion', 'x-webpieces-client-version');
 
+    /**
+     * A frontend-minted correlation id that groups every request triggered by ONE user interaction
+     * (a click / navigation). Generated and refreshed in the browser (an app-level UI concern), then
+     * carried on every outbound request under `x-webpieces-clickid` so the server logs of a whole
+     * click flow share it.
+     *
+     * - `httpHeader` SET → transferred: copied off the inbound request into context and re-emitted on
+     *   outbound hops, so the id follows the interaction across services.
+     * - `isLogged` TRUE → emitted as a plain string on every log line of the request.
+     */
+    static readonly CLICK_ID = new ContextKey('clickId', 'x-webpieces-clickid');
+
     static readonly ORG_ID = new ContextKey('orgId', 'x-org-id');
 
     static readonly USER_ID = new ContextKey('userId', 'x-user-id');
@@ -99,6 +111,28 @@ export class WebpiecesCoreHeaders {
     static readonly REQUEST_PATH = new ContextKey('requestPath', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
 
     /**
+     * The routed endpoint's IMPLEMENTATION identity: the concrete controller class name
+     * ({@link RouteMetadata.controllerClassName}, e.g. `LoginController`) and the handler method NAME
+     * ({@link RouteMetadata.methodName}, e.g. `login`), stamped once per request by {@link LogApiFilter}
+     * after route matching so every subsequent log line of the request carries them.
+     *
+     * These say WHICH CODE ran, which is what you actually grep for — far more useful than the raw
+     * `requestPath`. They are the top-level, filterable twin of what previously only lived nested in
+     * {@link ApiCallInfo} (`api.method.controllerName` / `api.method.methodName`). The local console
+     * formatters render them together as a compact `[Controller.method]` bracket; GCP keeps them as two
+     * separate `jsonPayload.controller` / `jsonPayload.method` fields.
+     *
+     * NOTE: `method` here is the CODE method name (e.g. `login`), NOT the HTTP verb — that is
+     * {@link HTTP_METHOD} (`httpMethod`).
+     *
+     * - `httpHeader` UNDEFINED → NOT transferred: each hop stamps its OWN routed controller/method.
+     * - `isLogged` TRUE → emitted by the logging backends as plain strings.
+     */
+    static readonly CONTROLLER = new ContextKey('controller', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
+
+    static readonly METHOD = new ContextKey('method', /*httpHeader*/ undefined, /*isSecured*/ false, /*isLogged*/ true);
+
+    /**
      * NO CREDENTIAL KEYS LIVE HERE.
      *
      * `authorization` and `x-webpieces-shared-secret` used to be ContextKeys. That made them
@@ -123,6 +157,7 @@ export class WebpiecesCoreHeaders {
             WebpiecesCoreHeaders.REQUEST_ID,
             WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
             WebpiecesCoreHeaders.CLIENT_VERSION,
+            WebpiecesCoreHeaders.CLICK_ID,
             WebpiecesCoreHeaders.USER_ID,
             WebpiecesCoreHeaders.ORG_ID,
             WebpiecesCoreHeaders.USER_ROLES,
@@ -130,6 +165,8 @@ export class WebpiecesCoreHeaders {
             WebpiecesCoreHeaders.API_CALL_INFO,
             WebpiecesCoreHeaders.HTTP_METHOD,
             WebpiecesCoreHeaders.REQUEST_PATH,
+            WebpiecesCoreHeaders.CONTROLLER,
+            WebpiecesCoreHeaders.METHOD,
         ];
     }
 }

@@ -20,6 +20,10 @@ import { bigIntSafeFormat, injectContextFormat, severityFormat } from '../format
 const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
 // secured → masked in logs
 const AUTH_TOKEN = new ContextKey('authToken', 'x-auth-token', true);
+// the routed-endpoint identity keys — rendered specially by the console line ([Controller.method]),
+// promoted to top-level jsonPayload.controller / jsonPayload.method in GCP.
+const CONTROLLER = new ContextKey('controller');
+const METHOD = new ContextKey('method');
 
 // Run `fn` inside a RequestContext carrying the canned context values the loggers
 // read directly (requestId + a long secured authToken that masks to "sup...lue").
@@ -61,7 +65,7 @@ class GcpHarness {
 }
 
 beforeAll(() => {
-    HeaderRegistry.configure([REQUEST_ID, AUTH_TOKEN], /*platformHeaders*/ false);
+    HeaderRegistry.configure([REQUEST_ID, AUTH_TOKEN, CONTROLLER, METHOD], /*platformHeaders*/ false);
 });
 
 async function flush(): Promise<void> {
@@ -129,6 +133,22 @@ describe('winston GCP format stack', () => {
         expect(errRec.errName).toBe('Error');
         expect(errRec.errMessage).toBe('bad');
         expect(typeof errRec.errStack).toBe('string');
+    });
+
+    // The console line shows controller/method compactly as [Controller.method]; GCP keeps them as two
+    // separate, filterable top-level fields (jsonPayload.controller / jsonPayload.method).
+    it('promotes controller + method to top-level jsonPayload fields', async () => {
+        const h = new GcpHarness();
+        RequestContext.run(() => {
+            RequestContext.putHeader(CONTROLLER, 'LoginController');
+            RequestContext.putHeader(METHOD, 'login');
+            h.log.info('hi');
+        });
+        await flush();
+
+        const rec = JSON.parse(h.lines[0]);
+        expect(rec.controller).toBe('LoginController');
+        expect(rec.method).toBe('login');
     });
 
     it('serializes bigint safely (no crash)', async () => {
@@ -204,7 +224,62 @@ describe('winston factories', () => {
         expect(line).not.toContain('svcName');
         expect(line).not.toContain('version');
         // ...while the per-request key that IS worth reading locally still renders.
-        expect(line).toContain('requestId=req-123');
+        expect(line).toContain('requestId:req-123');
+    });
+});
+
+describe('WinstonConsoleFactory local pretty line (trytami format)', () => {
+    beforeEach(() => {
+        ServiceInfo.clear();
+        ServiceInfo.setInfo('test-svc', '9.9.9');
+    });
+    afterEach(() => {
+        ServiceInfo.clear();
+        vi.restoreAllMocks();
+    });
+
+    // Level FIRST, then time, then the compact [Controller.method] bracket, then [loggerName], then the
+    // key:value context tags. controller/method must NOT also appear as key:value tags.
+    it('renders [LEVEL][time][Controller.method][loggerName][tags]: msg — level first', async () => {
+        const line = await captureStdout(() => {
+            RequestContext.run(() => {
+                RequestContext.putHeader(REQUEST_ID, 'req-123');
+                RequestContext.putHeader(CONTROLLER, 'LoginController');
+                RequestContext.putHeader(METHOD, 'login');
+                new WinstonConsoleFactory().getLogger('TokenService').info('hello world');
+            });
+        });
+
+        expect(line).toMatch(
+            /\[INFO \]\[\d{2}:\d{2}:\d{2}\.\d{3}\]\[LoginController\.login\]\[TokenService\]\[/,
+        );
+        expect(line).toContain('requestId:req-123');
+        expect(line).toContain('hello world');
+        expect(line).not.toContain('controller:');
+        expect(line).not.toContain('method:');
+    });
+
+    // The app-chosen ordered allow-list: only listed keys render locally (authToken hidden here) while
+    // GCP still receives every logged key.
+    it('honors the console field allow-list (renders only requestId, hides authToken)', async () => {
+        const line = await captureStdout(() => {
+            withContext(() => new WinstonConsoleFactory(['requestId']).getLogger('L').info('hi'));
+        });
+
+        expect(line).toContain('requestId:req-123');
+        expect(line).not.toContain('authToken');
+    });
+
+    it('appends the multi-line Error Details block on error', async () => {
+        const line = await captureStdout(() => {
+            withContext(() => new WinstonConsoleFactory().getLogger('L').error('boom', new Error('bad')));
+        });
+
+        expect(line).toContain('[ERROR]');
+        expect(line).toContain('Error Details:');
+        expect(line).toContain('Message: bad');
+        expect(line).toContain('Name: Error');
+        expect(line).toContain('Stack Trace:');
     });
 });
 

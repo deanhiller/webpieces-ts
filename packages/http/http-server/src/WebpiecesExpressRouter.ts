@@ -88,10 +88,34 @@ export class WebpiecesExpressRouter {
                         return;
                     }
                     log.info(`Listening on http://localhost:${port}`);
+                    this.logStartupBanner(port);
                     resolve(server);
                 });
             },
         );
+    }
+
+    /**
+     * The "Svr Ready!!" ASCII banner, LOCAL DEV ONLY (skipped on Cloud Run, where `K_SERVICE` is set and
+     * every line becomes its own structured log entry — a multi-line banner there is pure noise). Copied
+     * verbatim from the trytami service so a familiar splash marks "the server is up and reachable".
+     */
+    private logStartupBanner(port: number): void {
+        if (process.env['K_SERVICE']) {
+            return;
+        }
+        log.info(`
+ ___                           _____               _
+/  _|                          | _ \\             | |
+\\ \`--.  _ _ ___   ___ _ _  | |_/ /_  _ _  _| |_   _
+ \`--. \\/ _ \\ '_\\ \\ / / _ \\ '_| |    // _ \\/ _\` |/ _\` | | | |
+/\\_/ /  _/ |   \\ V /  _/ |    | |\\ \\  _/ (_| | (_| | |_| |
+\\___/ \\_|_|    \\_/ \\_|_|    \\_| \\_\\_|\\_,_|\\_,_|\\_, |
+                                                         _/ |
+                                                        |_/
+
+  Svr Ready!!  port=${port}
+`);
     }
 
     /**

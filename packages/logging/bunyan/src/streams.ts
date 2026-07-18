@@ -9,6 +9,12 @@ import { ChunkingRawStream } from './ChunkingRawStream';
 type JsonValue = string | number | boolean | object | null;
 type BunyanRecord = Record<string, JsonValue>;
 
+// The two context keys rendered SPECIALLY (as the compact `[Controller.method]` bracket) rather than
+// as `key:value` tags — they name WHICH CODE ran, the thing you grep for. Kept in sync with
+// WebpiecesCoreHeaders.CONTROLLER / .METHOD by name. They are excluded from the generic tag loop.
+const CONTROLLER_FIELD = 'controller';
+const METHOD_FIELD = 'method';
+
 // bunyan record fields that are structural / rendered specially, so they are not
 // shown as context tags in the local console line.
 //
@@ -17,6 +23,9 @@ type BunyanRecord = Record<string, JsonValue>;
 // locally each service logs to its own place and you can check git yourself — so as a tag on every
 // single line they are pure noise. Listing them here is the bunyan twin of winston's
 // LOCAL_STRUCTURAL_KEYS; GCP still gets both (that stream does its own formatting).
+//
+// `loggerName` (its own `[…]` bracket) and `controller`/`method` (the `[Controller.method]` bracket)
+// are rendered specially too, so they are excluded here from the generic `key:value` tag loop.
 const BUNYAN_STD_FIELDS = new Set<string>([
     'v',
     'level',
@@ -29,41 +38,94 @@ const BUNYAN_STD_FIELDS = new Set<string>([
     'src',
     'err',
     'loggerName',
+    CONTROLLER_FIELD,
+    METHOD_FIELD,
 ]);
 
+// "HH:MM:SS.mmm" in LOCAL time — matching the winston backend (fecha 'HH:mm:ss.SSS') and the trytami
+// format this was tuned for (`Date.toTimeString()`, also local). Parsing the ISO to a Date and reading
+// local fields (rather than splitting the UTC ISO string) is what keeps the two backends byte-identical;
+// milliseconds are zero-padded to 3 digits (trytami's raw `getMilliseconds()` rendered 5ms as ".5").
+// webpieces-disable no-function-outside-class -- bunyan render helper; whole file is bunyan stream/render factories
 function formatTime(iso: JsonValue): string {
     if (typeof iso !== 'string') {
         return '';
     }
-    // ISO 8601 "2026-07-08T12:34:56.789Z" → "12:34:56.789"
-    const timePart = iso.split('T')[1];
-    return timePart ? timePart.replace('Z', '') : iso;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+        return iso;
+    }
+    const p2 = (n: number): string => String(n).padStart(2, '0');
+    const p3 = (n: number): string => String(n).padStart(3, '0');
+    return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
+}
+
+// The compact `[Controller.method]` bracket (or `[Controller]`, or '' when neither is present, e.g. a
+// startup / static / pre-route line). Empty controller drops the whole bracket.
+// webpieces-disable no-function-outside-class -- bunyan render helper; whole file is bunyan stream/render factories
+function formatControllerMethod(controller: JsonValue, method: JsonValue): string {
+    if (typeof controller !== 'string' || controller.length === 0) {
+        return '';
+    }
+    const suffix = typeof method === 'string' && method.length > 0 ? `.${method}` : '';
+    return `[${controller}${suffix}]`;
+}
+
+// Build the ordered `key:value` context tags. When `fields` is given it is an app-chosen ALLOW-LIST:
+// only those keys render, in that order (specials skipped). When absent, every non-structural string
+// field renders in record order. Empty/object-valued fields are dropped either way.
+// webpieces-disable no-function-outside-class -- bunyan render helper; whole file is bunyan stream/render factories
+function buildTags(obj: BunyanRecord, fields?: string[]): string[] {
+    const tags: string[] = [];
+    const push = (key: string): void => {
+        const value = obj[key];
+        if (typeof value === 'object' || value == null) {
+            return;
+        }
+        const str = String(value);
+        if (str.length === 0) {
+            return;
+        }
+        tags.push(`${key}:${str}`);
+    };
+    if (fields) {
+        for (const key of fields) {
+            if (key === CONTROLLER_FIELD || key === METHOD_FIELD || key === 'loggerName') {
+                continue;
+            }
+            push(key);
+        }
+    } else {
+        for (const key of Object.keys(obj)) {
+            if (BUNYAN_STD_FIELDS.has(key)) {
+                continue;
+            }
+            push(key);
+        }
+    }
+    return tags;
 }
 
 /**
  * Render one bunyan JSON line as a human-readable, greppable console line:
- * `[LEVEL][time][ctx tags]: message` plus multi-line error details. Ported from
- * the tested trytami writeConsole, generalized: every non-structural field
- * (i.e. the injected context keys) becomes a `key:value` tag.
+ * `[LEVEL][time][Controller.method][loggerName][ctx tags]: message` plus multi-line error details.
+ * Level FIRST, then time (the ordering the trytami format was tuned for). `controller`/`method` render
+ * as a compact bracket, `loggerName` as its own bracket, and every other injected context key becomes a
+ * `key:value` tag (optionally filtered/ordered by the app `fields` allow-list).
  */
-function writeConsole(line: string): void {
+// webpieces-disable no-function-outside-class -- bunyan render helper; whole file is bunyan stream/render factories
+function writeConsole(line: string, fields?: string[]): void {
     const obj: BunyanRecord = JSON.parse(line);
     const levelName = (Logger.nameFromLevel[obj['level'] as number] ?? 'info').toUpperCase().padEnd(5);
     const time = formatTime(obj['time']);
 
-    const tags: string[] = [];
-    if (obj['loggerName']) {
-        tags.push(`logger:${String(obj['loggerName'])}`);
-    }
-    for (const key of Object.keys(obj)) {
-        if (BUNYAN_STD_FIELDS.has(key)) {
-            continue;
-        }
-        tags.push(`${key}:${String(obj[key])}`);
-    }
+    const controllerMethod = formatControllerMethod(obj[CONTROLLER_FIELD], obj[METHOD_FIELD]);
+    const loggerBracket = obj['loggerName'] ? `[${String(obj['loggerName'])}]` : '';
+
+    const tags = buildTags(obj, fields);
     const tagStr = tags.length > 0 ? tags.join(', ') : 'no-context';
 
-    let message = `[${levelName}][${time}][${tagStr}]: ${String(obj['msg'] ?? '')}`;
+    let message = `[${levelName}][${time}]${controllerMethod}${loggerBracket}[${tagStr}]: ${String(obj['msg'] ?? '')}`;
 
     const err = obj['err'] as LoggedError | undefined;
     if (err) {
@@ -109,12 +171,16 @@ export function createGoogleCloudStream(): Logger.Stream {
 /**
  * The local dev stream: human-readable text to stdout via {@link writeConsole}.
  * No level is set — bunyan filters at its own default ('info').
+ *
+ * `consoleFields`, when given, is the app-chosen ordered ALLOW-LIST of context keys to render in the
+ * console line (hides noise like `requestPath` locally while GCP still gets every logged key). When
+ * omitted, every non-structural context key renders in record order.
  */
 // webpieces-disable no-function-outside-class -- bunyan Stream factory; whole file is bunyan stream/render factories
-export function createConsoleStream(): Logger.Stream {
+export function createConsoleStream(consoleFields?: string[]): Logger.Stream {
     const writable = new Writable({
         write(chunk: Buffer | string, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
-            writeConsole(chunk.toString());
+            writeConsole(chunk.toString(), consoleFields);
             callback();
         },
     });
