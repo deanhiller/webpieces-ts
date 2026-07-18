@@ -1,6 +1,7 @@
 import { Writable } from 'stream';
 import Logger from 'bunyan';
 import { LoggingBunyan } from '@google-cloud/logging-bunyan';
+import { ApiCallLogName } from '@webpieces/core-util';
 import { LoggedError } from './LoggedError';
 import { ChunkingRawStream } from './ChunkingRawStream';
 
@@ -120,7 +121,9 @@ function writeConsole(line: string, fields?: string[]): void {
     const time = formatTime(obj['time']);
 
     const controllerMethod = formatControllerMethod(obj[CONTROLLER_FIELD], obj[METHOD_FIELD]);
-    const loggerBracket = obj['loggerName'] ? `[${String(obj['loggerName'])}]` : '';
+    // LogApiCall lines render as a self-describing [API.{side}.{phase}] bracket instead of the opaque
+    // [LogApiCall]; every other line keeps its plain [loggerName] bracket.
+    const loggerBracket = ApiCallLogName.bracket(obj['loggerName'], obj['api']);
 
     const tags = buildTags(obj, fields);
     const tagStr = tags.length > 0 ? tags.join(', ') : 'no-context';

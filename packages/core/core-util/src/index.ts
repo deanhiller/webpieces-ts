@@ -138,6 +138,8 @@ export { LogApiCall, LogApiCallImpl } from './http/LogApiCall';
 // RequestContext-backed impl is installed by @webpieces/core-context; the browser gets the no-op.
 export { ApiCallInfo } from './http/ApiCallInfo';
 export type { ApiType, ApiResult } from './http/ApiCallInfo';
+// Console-render bridge: turns LogApiCall's [LogApiCall] bracket into [API.{side}.{phase}] locally.
+export { ApiCallLogName, ApiCallLogNameImpl, LOG_API_CALL_LOGGER_NAME } from './http/ApiCallLogName';
 export { ApiMethodInfo } from './http/ApiMethodInfo';
 export type { ApiSide } from './http/ApiMethodInfo';
 export { ApiCallContextHolder } from './http/ApiCallContext';
