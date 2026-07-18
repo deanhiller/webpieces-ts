@@ -7,7 +7,7 @@ import { PublicController } from './controllers/public-controller';
 
 /**
  * LegacyRoutes - the legacy server's route group (a {@link RouteModule}): its api routes plus any
- * extra user filters. ErrorLogFilter + AuthFilter are auto-installed by the framework.
+ * extra user filters. LogApiFilter + AuthFilter are auto-installed by the framework.
  *
  * `additionalFilters` is the extension/test seam (below the auto-installed framework filters): the
  * integration test injects order-recording filters to assert priority + glob scoping.

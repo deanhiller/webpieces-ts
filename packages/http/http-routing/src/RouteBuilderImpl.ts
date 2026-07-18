@@ -245,7 +245,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         log.info(`Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
 
         // ONE chain for both HTTP and in-process — no transport tier. The fixed framework
-        // filters (ErrorLogFilter, AuthFilter) are auto-installed and read the transport-neutral
+        // filters (LogApiFilter, AuthFilter) are auto-installed and read the transport-neutral
         // HttpRequest, so they run identically in both.
         const filterDefinitions = this.getFilterDefinitions();
 
@@ -267,7 +267,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         };
 
         if (matchingFilters.length === 0) {
-            throw new Error("No filters found for route — the framework auto-installs ErrorLogFilter + AuthFilter, so this indicates a wiring problem.");
+            throw new Error("No filters found for route — the framework auto-installs LogApiFilter + AuthFilter, so this indicates a wiring problem.");
         }
 
         // Chain filters: highest priority (first in array) should run first (be outermost)

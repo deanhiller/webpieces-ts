@@ -1,35 +1,46 @@
-import {provideFrameworkSingleton, MethodMeta} from '@webpieces/http-routing';
-import { Filter, WpResponse, Service } from '@webpieces/http-routing';
-import { LogManager, WebpiecesCoreHeaders } from '@webpieces/core-util';
-import { LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
+import { LogManager, WebpiecesCoreHeaders, LogApiCall, ApiMethodInfo } from '@webpieces/core-util';
+import { Filter, WpResponse, Service } from '../Filter';
+import { MethodMeta } from '../MethodMeta';
 
 /**
- * LogApiFilter - Structured API logging for all requests/responses.
- * Priority: 1800 (after ContextFilter at 2000, before custom filters)
+ * LogApiFilter - the OUTERMOST fixed framework filter (auto-installed at priority 1,000,000 on
+ * every route, above AuthFilter). It logs the request AND the response/failure for EVERY call —
+ * over HTTP or via createApiClient — and stamps the routed controller identity so every log line
+ * of the request carries [Controller.method].
+ *
+ * Being outermost is deliberate: a request rejected by AuthFilter (401), or any other below-it
+ * filter, is STILL logged here with its request body and controller identity. (The former
+ * ErrorLogFilter sat above auth but logged only a bare error line — no request, no identity;
+ * LogApiFilter replaces it and subsumes its error-logging via LogApiCall.)
  *
  * Logging patterns (via LogApiCall):
- * - [API-server-req] Class.method /url request={...}
+ * - [API-server-req] Class.method request={...}
  * - [API-server-resp-SUCCESS] Class.method response={...}
  * - [API-server-resp-FAIL] Class.method error=... (server errors: 500, 502, 504)
  * - [API-server-resp-OTHER] Class.method errorType=... (user errors: 400, 401, 403, 404, 266)
  *
- * Headers are read from RequestContext (NOT from meta.requestHeaders which is undefined
- * after ContextFilter runs at priority 2000).
+ * User errors (HttpUnauthorizedError, HttpBadRequestError, etc.) are logged as OTHER, not FAIL,
+ * because they are expected behavior from the server's perspective. LogApiCall re-throws the
+ * error unchanged; the transport (express adapter, or another framework's adapter) maps
+ * HttpError subclasses → HTTP status, so in-process and HTTP paths log identically.
  *
- * User errors (HttpBadRequestError, etc.) are logged as OTHER, not FAIL,
- * because they are expected behavior from the server's perspective.
+ * Headers are read from RequestContext (NOT from meta.requestHeaders which is undefined
+ * after ContextFilter runs).
  */
 const log = LogManager.getLogger('LogApiFilter');
 
 @provideFrameworkSingleton()
+// webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
+    // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
     async filter(
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
         // Wrap nextFilter.invoke in a method that returns the response
+        // webpieces-disable no-any-unknown -- response DTO is erased at the api/proxy boundary
         const method = async (): Promise<unknown> => {
             const wpResponse = await nextFilter.invoke(meta);
             return wpResponse.response;

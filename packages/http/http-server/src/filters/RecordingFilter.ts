@@ -21,9 +21,9 @@ import { TestCaseRecorderImpl } from '../recorder/TestCaseRecorderImpl';
  * RecordingFilter - Records a request as a replayable test case (port of Java
  * RecordingFilter).
  *
- * Suggested priority: 1850 (after ContextFilter 2000 so the RECORDING header
- * has been transferred to the context, after AuthFilter 1900 so only real
- * authorized flows are recorded, before LogApiFilter 1800).
+ * Suggested priority: 1850 — a user-filter priority that runs BELOW the fixed
+ * framework filters (LogApiFilter 1,000,000 outermost, AuthFilter 900,000), so
+ * only real authorized flows are recorded.
  *
  * Activates when WebpiecesConfig.recordingAlwaysOn is set OR the request
  * carries WebpiecesCoreHeaders.RECORDING (x-webpieces-recording). While

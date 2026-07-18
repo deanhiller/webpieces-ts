@@ -1,7 +1,9 @@
 // Express adapter (the only place express lifecycle lives) over the node-only ApiFactory
 export { WebpiecesExpressRouter } from './WebpiecesExpressRouter';
 export { WebpiecesMiddleware } from './WebpiecesMiddleware';
-export { LogApiFilter } from './filters/LogApiFilter';
+// LogApiFilter is now a FIXED framework filter auto-installed by WebpiecesRouter (outermost, at
+// priority 1,000,000, above AuthFilter). Apps must NOT install it themselves — it is no longer
+// exported here. Remove any `router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'))`.
 export { RecordingFilter } from './filters/RecordingFilter';
 
 // Test-case recording (contract lives in @webpieces/core-util)
