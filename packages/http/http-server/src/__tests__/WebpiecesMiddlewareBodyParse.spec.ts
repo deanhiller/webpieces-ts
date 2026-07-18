@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'stream';
 import { HttpBadRequestError } from '@webpieces/core-util';
-import { ExpressWrapper } from '../WebpiecesMiddleware';
+import { ExpressWrapper } from '../ExpressWrapper';
 
 /** Captures the response status + serialized body written by executeImpl on the success path. */
 class FakeResponse {

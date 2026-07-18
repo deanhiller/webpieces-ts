@@ -57,7 +57,7 @@ export class TestCaseRecorderImpl implements TestCaseRecorder {
             const baseName = this.buildBaseName(serverEndpoint, testCase.recordedAt);
             const specSource = this.specGenerator.generate(testCase, `${baseName}.fixture.json`);
 
-            log.info(`[TestCaseRecorder] Recorded ${serverEndpoint.apiName}.${serverEndpoint.methodName} ` +
+            log.info(`Recorded ${serverEndpoint.apiName}.${serverEndpoint.methodName} ` +
                 `(${this.downstreamCalls.length} downstream calls)\n` +
                 `--- fixture (${baseName}.fixture.json) ---\n${fixtureJson}\n` +
                 `--- generated spec (${baseName}.spec.ts) ---\n${specSource}`);
@@ -66,13 +66,13 @@ export class TestCaseRecorderImpl implements TestCaseRecorder {
                 fs.mkdirSync(recordingDir, { recursive: true });
                 fs.writeFileSync(path.join(recordingDir, `${baseName}.fixture.json`), fixtureJson);
                 fs.writeFileSync(path.join(recordingDir, `${baseName}.spec.ts`), specSource);
-                log.info(`[TestCaseRecorder] Wrote fixture + spec to ${recordingDir}/${baseName}.*`);
+                log.info(`Wrote fixture + spec to ${recordingDir}/${baseName}.*`);
             }
 
             return testCase;
         } catch (err: unknown) {
             const error = toError(err);
-            log.error('[TestCaseRecorder] Failed to emit test case (request unaffected)', error);
+            log.error('Failed to emit test case (request unaffected)', error);
             return undefined;
         }
     }
