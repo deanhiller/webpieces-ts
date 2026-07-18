@@ -26,16 +26,18 @@ export type ExpressRouteHandler = (
  * WebpiecesMiddleware - Express middleware for WebPieces server.
  *
  * This class contains all Express middleware used by WebpiecesServer:
- * 1. globalErrorHandler - Outermost error handler, returns HTML 500 page
- * 2. logNextLayer - Request/response logging
- * 3. jsonTranslator - JSON Content-Type validation and error translation
+ * 1. errorHandler - Top-level 4-arg error middleware, returns HTML 500 page. Mounted AFTER the
+ *    routes so express can forward downstream failures to it (express routes errors DOWN a
+ *    separate pipeline, it does not bubble them back up through next()). Last-resort net only:
+ *    api routes translate their own errors to JSON inside the filter chain (ExpressWrapper).
+ * 2. corsMiddleware - Opt-in CORS (mounted only when corsOrigins is non-empty).
  *
- * The middleware is injected into WebpiecesServerImpl and registered with Express
- * in the start() method.
+ * Per-request logging is intentionally NOT here — the api filter chain's LogApiCall already logs
+ * every request/response with full context (requestId, method, path, body), so a plain express
+ * START/END line would only duplicate it with less information.
  *
- * IMPORTANT: jsonTranslator does NOT dispatch routes - route dispatch happens via
- * Express's registered route handlers (created by RouteBuilder.createHandler()).
- * jsonTranslator only validates Content-Type and translates errors to JSON.
+ * Route dispatch happens via Express's registered route handlers (the per-route ExpressWrapper),
+ * NOT via this middleware.
  *
  * NEW: ExpressWrapper simplified - no longer handles JSON or headers
  * - JSON parsing/serialization moved to JsonFilter
@@ -53,34 +55,29 @@ export class WebpiecesMiddleware {
 
 
     /**
-     * Global error handler middleware - catches ALL unhandled errors.
-     * Returns HTML 500 error page for any errors that escape the filter chain.
+     * Top-level error handler — the last-ditch catch-all. MUST be mounted AFTER all routes (see
+     * {@link WebpiecesExpressRouter}). The 4-argument `(err, req, res, next)` signature is what
+     * tells express this is an error-handling middleware: express's router forwards ANY downstream
+     * failure to it — synchronous throws AND rejected async-handler promises alike (the router does
+     * `promise.then(null, err => next(err))`, and a `next(err)` with a truthy arg jumps straight to
+     * the first 4-arg middleware). This is why a `try { await next() } catch` wrapper is NOT needed
+     * (and would not work) — express `next()` is not promise-aware, so it never hands the parent the
+     * downstream promise; errors travel down this separate pipeline instead of bubbling back up.
      *
-     * This is the outermost safety net - JsonTranslator catches JSON API errors,
-     * this catches everything else.
+     * Returns an HTML 500 page. Api routes translate their own errors to JSON inside the filter
+     * chain (JsonFilter/ExpressWrapper), so this normally only fires for failures OUTSIDE a route
+     * (body parsing, unmatched paths, a bug in the wrapper itself).
      */
-    async globalErrorHandler(
-        req: Request,
-        res: Response,
-        next: NextFunction,
-    ): Promise<void> {
-        log.info(`🔴 [Layer 1: GlobalErrorHandler] Request START: ${req.method} ${req.path}`);
-
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Global error handler IS the top-level catch-all
-        try {
-            // await next() catches BOTH:
-            // 1. Synchronous throws from next() itself
-            // 2. Rejected promises from downstream async middleware
-            await next();
-            log.info(
-                `🔴 [Layer 1: GlobalErrorHandler] Request END (success): ${req.method} ${req.path}`,
-            );
-        } catch (err: unknown) {
-            const error = toError(err);
-            log.error('🔴 [Layer 1: GlobalErrorHandler] Caught unhandled error:', error);
-            if (!res.headersSent) {
-                // Return HTML error page (not JSON - JsonTranslator handles JSON errors)
-                res.status(500).send(`
+    // webpieces-disable no-any-unknown -- a thrown/forwarded express error is genuinely unknown until narrowed
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- express needs the 4-arg (err,req,res,next) arity to recognize this as error-handling middleware
+    errorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
+        const error = toError(err);
+        log.error(`Unhandled error: ${req.method} ${req.path}`, error);
+        if (res.headersSent) {
+            return;
+        }
+        // Return HTML error page (not JSON - api routes translate JSON errors in their filter chain)
+        res.status(500).send(`
           <!DOCTYPE html>
           <html>
           <head><title>Server Error</title></head>
@@ -91,22 +88,6 @@ export class WebpiecesMiddleware {
           </body>
           </html>
         `);
-            }
-            log.info(
-                `🔴 [Layer 1: GlobalErrorHandler] Request END (error): ${req.method} ${req.path}`,
-            );
-        }
-    }
-
-    /**
-     * Logging middleware - logs request/response flow.
-     * Demonstrates middleware execution order.
-     * IMPORTANT: Must be async and await next() to properly chain with async middleware.
-     */
-    async logNextLayer(req: Request, res: Response, next: NextFunction): Promise<void> {
-        log.info(`🟡 [Layer 2: LogNextLayer] Before next() - ${req.method} ${req.path}`);
-        await next();
-        log.info(`🟡 [Layer 2: LogNextLayer] After next() - ${req.method} ${req.path}`);
     }
 
     /**

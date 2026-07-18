@@ -50,8 +50,8 @@ export class WebpiecesExpressRouter {
     }
 
     /**
-     * Add the webpieces global middleware (HTML error page, optional CORS, request logging), bind
-     * the routes, then app.listen(port). Convenience for a non-legacy webpieces server where
+     * Add the webpieces global middleware (optional CORS), bind the routes, mount the top-level
+     * error handler AFTER them, then app.listen(port). Convenience for a non-legacy webpieces server where
      * webpieces owns the whole express app. Resolves with the http.Server once listening.
      *
      * CORS is mounted ONLY when `config.corsOrigins` is non-empty — see the note below and
@@ -63,8 +63,6 @@ export class WebpiecesExpressRouter {
         config?: WebpiecesConfig,
     ): Promise<HttpServer> {
         // Global middleware layers (outermost first) — only for a webpieces-owned app.
-        app.use(this.middleware.globalErrorHandler.bind(this.middleware));
-
         // CORS is OPT-IN, and stays OFF in production. A server that serves its own browser app does
         // not need it — a browser applies no cors check to a same-origin request — so mounting it
         // would only hand credentialed cross-origin read access to whatever it allows, for nothing.
@@ -75,9 +73,12 @@ export class WebpiecesExpressRouter {
             app.use(this.middleware.corsMiddleware(config));
         }
 
-        app.use(this.middleware.logNextLayer.bind(this.middleware));
-
         this.bindExpress(app);
+
+        // Top-level error handler is mounted LAST (AFTER the routes). Express only forwards a
+        // downstream failure to a 4-arg error middleware that sits BELOW the failing route — it does
+        // NOT bubble errors back up through next(). See WebpiecesMiddleware.errorHandler.
+        app.use(this.middleware.errorHandler.bind(this.middleware));
 
         return new Promise<HttpServer>(
             (resolve: (server: HttpServer) => void, reject: (err: Error) => void) => {
