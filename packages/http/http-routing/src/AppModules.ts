@@ -15,7 +15,7 @@ import { WebpiecesRouter } from './WebpiecesRouter';
  * ```ts
  * export class AuthRoutes implements RouteModule {
  *   configure(router: WebpiecesRouter): void {
- *     router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));
+ *     router.addFilter(new FilterDefinition(1800, MyFilter, '*')); // your own filters only
  *     router.addRoutes(AuthApi, AuthController);
  *   }
  * }

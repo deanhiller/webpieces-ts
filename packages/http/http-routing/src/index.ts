@@ -69,6 +69,10 @@ export { FilterChain } from './FilterChain';
 export { MethodMeta } from './MethodMeta';
 export { RouteHandler } from './RouteHandler';
 
+// LogApiFilter: the fixed OUTERMOST framework filter (auto-installed at 1,000,000 above
+// AuthFilter). Exported for reference/testing only — apps must NOT install it themselves.
+export { LogApiFilter } from './filters/LogApiFilter';
+
 // RouteBuilderImpl (the route table + chain composer) is now INTERNAL — it is never
 // handed to upper layers. The express layer consumes ApiFactory.apiClients() instead.
 

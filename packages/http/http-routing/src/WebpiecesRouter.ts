@@ -9,7 +9,7 @@ import { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 import { ApiClientFactory } from './ApiClientFactory';
 import { ApiFactory } from './ApiFactory';
 import { ApiClient } from './ApiClient';
-import { ErrorLogFilter } from './filters/ErrorLogFilter';
+import { LogApiFilter } from './filters/LogApiFilter';
 import { AuthFilter } from './filters/AuthFilter';
 
 /**
@@ -44,8 +44,9 @@ export interface WebpiecesRouterOptions {
  * ```typescript
  * const router = await WebpiecesRouterFactory.create({ appBindings: [AppModule] });
  * router.addRoutes(SaveApi, SaveController);
- * router.addFilter(new FilterDefinition(1800, LogApiFilter, '*'));  // your own filters
- * // (ErrorLogFilter + AuthFilter are auto-installed above yours; auth is AuthMode-driven)
+ * router.addFilter(new FilterDefinition(1800, MyFilter, '*'));  // your own filters
+ * // (LogApiFilter + AuthFilter are auto-installed above yours; auth is AuthMode-driven.
+ * //  LogApiFilter logs request+response for EVERY call — do NOT install it yourself.)
  *
  * // test (no express): runs the SAME filter chain (incl. auth) -> controller
  * const api = router.createApiClient(SaveApi);
@@ -89,12 +90,14 @@ export class WebpiecesRouter implements ApiFactory {
 
     /**
      * Auto-install the two fixed framework filters on every route (apps add only their own
-     * filters below these): ErrorLogFilter outermost (log + let the transport translate), then
+     * filters below these): LogApiFilter outermost (logs request + response/failure for every
+     * call and stamps [Controller.method], then re-throws for the transport to translate), then
      * AuthFilter (enforces the endpoint's AuthMode off the HttpRequest). Both run over HTTP AND
-     * in-process — there is no transport tier.
+     * in-process — there is no transport tier. Because LogApiFilter is outermost, requests that
+     * AuthFilter rejects (401) are still logged with their body + controller identity.
      */
     private installFixedFilters(): void {
-        this.addFilter(new FilterDefinition(1_000_000, ErrorLogFilter, '*'));
+        this.addFilter(new FilterDefinition(1_000_000, LogApiFilter, '*'));
         this.addFilter(new FilterDefinition(900_000, AuthFilter, '*'));
     }
 
@@ -131,7 +134,7 @@ export class WebpiecesRouter implements ApiFactory {
 
     /**
      * Register a user filter (runs in-process AND over HTTP, below the auto-installed fixed
-     * ErrorLogFilter + AuthFilter).
+     * LogApiFilter + AuthFilter).
      */
     addFilter(filter: FilterDefinition): this {
         this.routeBuilder.addFilter(filter);
