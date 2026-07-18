@@ -46,7 +46,7 @@ export class WebpiecesExpressRouter {
         for (const apiClient of this.apiFactory.apiClients()) {
             count += this.mountApiClient(app, apiClient);
         }
-        log.info(`[WebpiecesExpressRouter] Mounted ${count} webpieces route(s) onto express`);
+        log.info(`Mounted ${count} webpieces route(s) onto express`);
     }
 
     /**
@@ -83,11 +83,11 @@ export class WebpiecesExpressRouter {
             (resolve: (server: HttpServer) => void, reject: (err: Error) => void) => {
                 const server: HttpServer = app.listen(port, (error?: Error) => {
                     if (error) {
-                        log.error(`[WebpiecesExpressRouter] Failed to start on port ${port}:`, error);
+                        log.error(`Failed to start on port ${port}:`, error);
                         reject(error);
                         return;
                     }
-                    log.info(`[WebpiecesExpressRouter] Listening on http://localhost:${port}`);
+                    log.info(`Listening on http://localhost:${port}`);
                     resolve(server);
                 });
             },
@@ -144,7 +144,7 @@ export class WebpiecesExpressRouter {
                 app.patch(path, expressHandler);
                 break;
             default:
-                log.warn(`[WebpiecesExpressRouter] Unknown HTTP method: ${httpMethod}`);
+                log.warn(`Unknown HTTP method: ${httpMethod}`);
         }
     }
 }

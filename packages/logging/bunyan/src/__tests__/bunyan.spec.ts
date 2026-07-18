@@ -92,10 +92,11 @@ describe('BunyanLogger context enrichment', () => {
 });
 
 describe('logging outside RequestContext.run', () => {
-    // A log line with no active context = a missing request-wrapping server filter.
-    // BunyanLogger reports it ONCE (via the raw bunyan logger, so no re-entrancy)
-    // and never spins, even across many out-of-context lines.
-    it('reports the missing filter exactly once and never infinite-loops', async () => {
+    // A log line with no active context (startup, a background job, or an unwrapped in-process call)
+    // is legitimate: logging keeps working, just with no context fields — and there is NO extra
+    // "missing filter" warning line (that vague, startup-tripped nudge was removed; the real misuse
+    // is caught precisely by ApiClientFactory.requireActiveContext()).
+    it('logs out-of-context lines with no context fields and no extra warning', async () => {
         const h = new BunyanHarness();
         const log = new BunyanLogger(h.base);
 
@@ -111,9 +112,10 @@ describe('logging outside RequestContext.run', () => {
         expect(msgs).toContain('no-ctx-2');
         expect(msgs).toContain('no-ctx-3');
 
-        // ...plus exactly ONE "missing filter" report across all three
+        // ...and nothing else: exactly the three lines, no "missing filter" report
+        expect(h.lines.length).toBe(3);
         const reports = msgs.filter((m: string) => m.includes('OUTSIDE RequestContext.run'));
-        expect(reports.length).toBe(1);
+        expect(reports.length).toBe(0);
     });
 });
 

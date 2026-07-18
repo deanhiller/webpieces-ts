@@ -7,7 +7,7 @@ import {
     ErrorTranslation,
     ErrorWireForm,
 } from '@webpieces/core-util';
-import { ExpressWrapper } from '../WebpiecesMiddleware';
+import { ExpressWrapper } from '../ExpressWrapper';
 
 /** A custom app error at HTTP 460 — the concrete driver (mirrors Mealco's HttpAiBadRequestError). */
 class AiBadRequestError extends HttpError {

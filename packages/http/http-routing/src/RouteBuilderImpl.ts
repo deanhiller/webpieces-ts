@@ -242,7 +242,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         const route = routeWithMeta.definition;
         const routeMeta = route.routeMeta;
 
-        log.info(`[RouteBuilder] Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
+        log.info(`Setting up route: ${routeMeta.httpMethod} ${routeMeta.path}`);
 
         // ONE chain for both HTTP and in-process — no transport tier. The fixed framework
         // filters (ErrorLogFilter, AuthFilter) are auto-installed and read the transport-neutral
