@@ -11,8 +11,11 @@ import {ApiCallInfo} from "./ApiCallInfo";
 import {ApiMethodInfo} from "./ApiMethodInfo";
 import {ApiCallContext, ApiCallContextHolder} from "./ApiCallContext";
 import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
+import {LOG_API_CALL_LOGGER_NAME} from "./ApiCallLogName";
 
-const log = LogManager.getLogger('LogApiCall');
+// The console backends special-case THIS logger name into a self-describing [API.{side}.{phase}]
+// bracket (see ApiCallLogName) — so the name here and the name they match are the one constant.
+const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
 
 /**
  * LogApiCall - Generic API call logging utility, used by BOTH server-side (LogApiFilter) and

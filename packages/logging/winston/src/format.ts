@@ -14,7 +14,7 @@
 import { format } from 'winston';
 import type { Format, TransformableInfo } from 'logform';
 import { stringify as safeStringify } from 'safe-stable-stringify';
-import { HeaderRegistry } from '@webpieces/core-util';
+import { HeaderRegistry, ApiCallLogName } from '@webpieces/core-util';
 import type { ContextKey } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
@@ -181,7 +181,10 @@ export function localPrettyFormat(fields?: string[]): Format {
             typeof controller === 'string' && controller.length > 0
                 ? `[${controller}${typeof method === 'string' && method.length > 0 ? `.${method}` : ''}]`
                 : '';
-        const loggerBracket = info['loggerName'] ? `[${String(info['loggerName'])}]` : '';
+        // LogApiCall lines render as a self-describing [API.{side}.{phase}] bracket instead of the opaque
+        // [LogApiCall]; every other line keeps its plain [loggerName] bracket. (info indexes to `unknown`.)
+        const loggerBracket = ApiCallLogName.bracket(
+            info['loggerName'] as string | undefined, info['api'] as object | undefined);
 
         // Ordered `key:value` context tags. `fields` (allow-list) wins; else the registered logged keys.
         // Only STRING values render (an object-valued key like `api` is dropped here and falls into the
