@@ -14,16 +14,14 @@ afterEach(() => {
  * picked: the name existed only under bunyan (which REQUIRES a root-logger name, so a winston app
  * shipped unnamed), and the version existed only under winston (as an optional `svcGitHash`, so a
  * bunyan app could not stamp one at all). ServiceInfo makes both ONE framework-level fact, read by
- * both logging backends AND by RequestContextHeaders (to stamp requestIdSource).
+ * both logging backends AND by RequestContextHeaders (requestIdSource + outbound clientVersion).
  */
 describe('ServiceInfo identifies this service exactly once, at startup', () => {
-    it('round-trips name AND version to both readers', () => {
+    it('round-trips name AND version', () => {
         ServiceInfo.setInfo('my-service', '2.1.0');
 
         expect(ServiceInfo.getName()).toBe('my-service');
-        expect(ServiceInfo.tryGetName()).toBe('my-service');
         expect(ServiceInfo.getVersion()).toBe('2.1.0');
-        expect(ServiceInfo.tryGetVersion()).toBe('2.1.0');
     });
 
     /**
@@ -56,40 +54,35 @@ describe('ServiceInfo identifies this service exactly once, at startup', () => {
         ServiceInfo.setInfo('my-service', '2.1.0');
         ServiceInfo.clear();
 
-        expect(ServiceInfo.tryGetName()).toBeUndefined();
-        expect(ServiceInfo.tryGetVersion()).toBeUndefined();
+        expect(ServiceInfo.getName()).toBeUndefined();
+        expect(ServiceInfo.getVersion()).toBeUndefined();
     });
 });
 
 /**
- * The failure design, in one line: throw while BOOTING, never mid-traffic. getName()/getVersion()
- * are called by the logger factories + setupRuntime, all of which run at startup — so a forgotten
- * setInfo kills the deploy. The request path uses the tryGet* pair and simply omits the field.
+ * The failure design: READS never throw (a missing log field must not 500 live traffic, and logging
+ * must work before setInfo), so the "a deployed build must say which build it is" guarantee is
+ * enforced ONCE, loudly, by whoever requires it — assertIdentified(), which setupRuntime calls while
+ * booting.
  */
-describe('ServiceInfo fails fast at startup, never on the request path', () => {
+describe('ServiceInfo reads never throw; assertIdentified fails fast at startup', () => {
+    it('getName()/getVersion() return undefined when never set — the request path never blows up', () => {
+        expect(ServiceInfo.getName()).toBeUndefined();
+        expect(ServiceInfo.getVersion()).toBeUndefined();
+    });
+
     /**
      * The message must say exactly what to do rather than surfacing bunyan's opaque
      * "options.name (string) is required".
      */
-    it('getName() THROWS an actionable error when never set', () => {
-        expect(() => ServiceInfo.getName()).toThrow(/ServiceInfo\.setInfo\(\.\.\.\) has not been called/);
-        expect(() => ServiceInfo.getName()).toThrow(/BEFORE constructing the logger factory/);
+    it('assertIdentified() THROWS an actionable error when never set', () => {
+        expect(() => ServiceInfo.assertIdentified()).toThrow(/ServiceInfo\.setInfo\(\.\.\.\) has not been called/);
+        expect(() => ServiceInfo.assertIdentified()).toThrow(/Identify this service at startup/);
     });
 
-    /** Same fail-fast for the version half — an unversioned deploy is the thing this prevents. */
-    it('getVersion() THROWS the same actionable error when never set', () => {
-        expect(() => ServiceInfo.getVersion()).toThrow(/ServiceInfo\.setInfo\(\.\.\.\) has not been called/);
-        expect(() => ServiceInfo.getVersion()).toThrow(/BEFORE constructing the logger factory/);
-    });
-
-    /**
-     * A missing log field must not 500 live traffic. Any real server has already passed
-     * setupRuntime's checks, so undefined here only ever means "a unit test drove the context
-     * directly".
-     */
-    it('tryGet*() return undefined instead of throwing — the request path never blows up', () => {
-        expect(ServiceInfo.tryGetName()).toBeUndefined();
-        expect(ServiceInfo.tryGetVersion()).toBeUndefined();
+    it('assertIdentified() passes once both halves are set', () => {
+        ServiceInfo.setInfo('my-service', '2.1.0');
+        expect(() => ServiceInfo.assertIdentified()).not.toThrow();
     });
 
     it('rejects a blank name — always a bug, never a use case', () => {
@@ -110,7 +103,7 @@ describe('ServiceInfo fails fast at startup, never on the request path', () => {
     it('leaves BOTH unset when validation fails — no half-applied state', () => {
         expect(() => ServiceInfo.setInfo('my-service', '')).toThrow();
 
-        expect(ServiceInfo.tryGetName()).toBeUndefined();
-        expect(ServiceInfo.tryGetVersion()).toBeUndefined();
+        expect(ServiceInfo.getName()).toBeUndefined();
+        expect(ServiceInfo.getVersion()).toBeUndefined();
     });
 });

@@ -7,7 +7,7 @@
  * deps), which is why it lives in core-util beside {@link ClientRegistry}.
  *
  * ```ts
- * // startup, FIRST — before the logger factory is constructed (it reads this):
+ * // startup, FIRST:
  * ServiceInfo.setInfo('my-service', '2.1.0');
  * ```
  *
@@ -21,20 +21,20 @@
  *
  * Switching backends silently changed which fields your logs carried. Several unrelated readers
  * need these same two facts, so they belong to the framework, not to a backend:
- * - the bunyan backend, to satisfy bunyan's mandatory root-logger `name`, and to stamp `version`;
  * - the winston backend, to stamp `svcName` + `version`;
- * - {@link WebpiecesCoreHeaders.REQUEST_ID_SOURCE}, to record WHO minted a request id.
+ * - the bunyan backend, to stamp `version` (its root-logger `name` is a fixed constant now);
+ * - {@link WebpiecesCoreHeaders.REQUEST_ID_SOURCE}, to record WHO minted a request id;
+ * - {@link WebpiecesCoreHeaders.CLIENT_VERSION}, so a downstream server can log which build called it.
  *
  * VERSION IS OPAQUE. It is whatever string identifies THIS build — a git SHA, a semver tag, a CI
  * build number. webpieces neither parses nor derives it; the app decides where it comes from (a
  * generated file, an env var, a Docker build arg) and passes it here.
  *
- * FAIL FAST, AT STARTUP. {@link getName} / {@link getVersion} throw, and the logger factories +
- * `setupRuntime` call them while the process is booting — so a forgotten `setInfo` kills the deploy
- * (the revision never goes healthy) instead of quietly shipping logs that cannot say which build
- * emitted them. Nothing on the REQUEST path may throw over this: a missing log field must never 500
- * live traffic, so per-request readers use {@link tryGetName} / {@link tryGetVersion} and simply
- * omit the field.
+ * DOES NOT THROW ON READ. {@link getName} / {@link getVersion} return `undefined` when unset, so a
+ * log line emitted before `setInfo` (early boot) still ships — it simply omits the version. Logging
+ * never blocks on identity. The "a deployed build MUST identify itself" guarantee is enforced ONCE,
+ * loudly, at startup by whoever requires it (`setupRuntime` calls {@link assertIdentified}), instead
+ * of by every reader throwing.
  */
 export class ServiceInfo {
     /** This service's name. Process-global; set once at startup. */
@@ -44,14 +44,11 @@ export class ServiceInfo {
     private static svcVersion: string | undefined;
 
     /**
-     * Identify this service. Call it FIRST at startup — before constructing the logger factory,
-     * which reads both values during its own constructor.
+     * Identify this service. Call it at startup.
      *
      * LAST CALL WINS, deliberately. A real deployment identifies itself once, but an in-process test
      * can legitimately boot TWO services back-to-back (see the app-example e2e two-server flow), so a
-     * "one process = one service" rule would reject a case that genuinely exists. Since a logger
-     * factory captures both values in its own constructor, each server built that way still keeps
-     * what was set when IT was built.
+     * "one process = one service" rule would reject a case that genuinely exists.
      *
      * @param name - this service's name, e.g. 'my-service'.
      * @param version - the opaque identifier of THIS build (git SHA, semver, CI build number).
@@ -74,51 +71,38 @@ export class ServiceInfo {
     }
 
     /**
-     * This service's name, REQUIRED. For STARTUP callers only (the logger factories, setupRuntime) —
-     * they run while booting, so throwing here fails the deploy rather than live traffic.
-     *
-     * @throws Error if {@link setInfo} was never called.
+     * This service's name, or `undefined` when {@link setInfo} has not been called. Does NOT throw:
+     * readers (logging backends, requestIdSource, outbound CLIENT_VERSION) simply omit the field when
+     * it is missing, so a pre-`setInfo` log line still emits. Callers that REQUIRE identity call
+     * {@link assertIdentified} at startup instead.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
-    static getName(): string {
-        if (!ServiceInfo.svcName) {
-            throw new Error(ServiceInfo.notSetMessage());
-        }
+    static getName(): string | undefined {
         return ServiceInfo.svcName;
     }
 
     /**
-     * This build's version, REQUIRED. For STARTUP callers only (the logger factories, setupRuntime),
-     * for the same reason as {@link getName}.
+     * This build's version, or `undefined` when unset — same non-throwing contract as {@link getName}.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
+    static getVersion(): string | undefined {
+        return ServiceInfo.svcVersion;
+    }
+
+    /**
+     * FAIL FAST, AT STARTUP. Throws unless BOTH name and version are set. Whoever wants the "a
+     * deployed build must be able to say which build it is" guarantee calls this while booting
+     * (`setupRuntime` does) — so a forgotten `setInfo` kills the deploy (the revision never goes
+     * healthy) instead of quietly shipping logs that cannot say which build emitted them. Nothing on
+     * the REQUEST path calls this: a missing log field must never 500 live traffic.
      *
      * @throws Error if {@link setInfo} was never called.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
-    static getVersion(): string {
-        if (!ServiceInfo.svcVersion) {
+    static assertIdentified(): void {
+        if (!ServiceInfo.svcName || !ServiceInfo.svcVersion) {
             throw new Error(ServiceInfo.notSetMessage());
         }
-        return ServiceInfo.svcVersion;
-    }
-
-    /**
-     * This service's name, or undefined when unset. For the REQUEST path, which must NOT throw: a
-     * server that booted has already passed the {@link getName} check in `setupRuntime`, so a real
-     * request always finds a name here. Only a unit test driving the context directly can see
-     * undefined — and there, omitting a log field beats exploding.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
-    static tryGetName(): string | undefined {
-        return ServiceInfo.svcName;
-    }
-
-    /**
-     * This build's version, or undefined when unset. For the REQUEST path, which must NOT throw —
-     * same reasoning as {@link tryGetName}.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
-    static tryGetVersion(): string | undefined {
-        return ServiceInfo.svcVersion;
     }
 
     /** Reset — for tests, mirroring {@link ClientRegistry.clear}. */
@@ -129,20 +113,20 @@ export class ServiceInfo {
     }
 
     /**
-     * The one actionable "you forgot to call setInfo" message. Shared by {@link getName} and
-     * {@link getVersion}: setInfo sets BOTH, so either being missing has the identical cause and
-     * the identical fix — telling the caller only about the half they happened to read first would
-     * send them back for a second round.
+     * The one actionable "you forgot to call setInfo" message, thrown by {@link assertIdentified}:
+     * setInfo sets BOTH, so either being missing has the identical cause and the identical fix —
+     * telling the caller only about the half they happened to read first would send them back for a
+     * second round.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
     private static notSetMessage(): string {
         return (
-            'ServiceInfo.setInfo(...) has not been called. Identify this service at startup, ' +
-            'BEFORE constructing the logger factory (it reads name+version in its constructor):\n' +
+            'ServiceInfo.setInfo(...) has not been called. Identify this service at startup:\n' +
             "    ServiceInfo.setInfo('my-service', '2.1.0');\n" +
             'The name+version stamp every log line (so you can tell WHICH BUILD emitted a line), ' +
-            'and the name records which service minted a request id (requestIdSource). The version ' +
-            'is opaque — a git SHA, a semver tag, a CI build number, whatever identifies your build.'
+            'the name records which service minted a request id (requestIdSource), and the version ' +
+            'travels to downstream servers as clientVersion. The version is opaque — a git SHA, a ' +
+            'semver tag, a CI build number, whatever identifies your build.'
         );
     }
 }

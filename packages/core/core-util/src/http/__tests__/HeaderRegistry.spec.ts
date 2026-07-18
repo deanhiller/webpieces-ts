@@ -90,37 +90,6 @@ describe('HeaderRegistry dedup validation', () => {
     });
 });
 
-describe('HeaderRegistry.buildStructuredLogFields vs buildLogFields (object values)', () => {
-    const api = new ContextKey('api', undefined, false, /*isLogged*/ true); // object-valued
-    const reqId = new ContextKey('requestId', 'x-request-id');              // string-valued
-    const apiValue = { side: 'client', type: 'request' };
-
-    function read(key: ContextKey): unknown {
-        if (key.name === 'api') return apiValue;
-        if (key.name === 'requestId') return 'abc';
-        return undefined;
-    }
-
-    it('structured builder keeps the object value; string builder DROPS it', () => {
-        const registry = configureWith(api, reqId);
-
-        const structured = registry.buildStructuredLogFields(read);
-        expect(structured.get('api')).toBe(apiValue);   // object survives -> nests into jsonPayload.api
-        expect(structured.get('requestId')).toBe('abc');
-
-        const flat = registry.buildLogFields((k: ContextKey) => read(k) as string | undefined);
-        expect(flat.has('api')).toBe(false);            // object-valued key skipped from the string map
-        expect(flat.get('requestId')).toBe('abc');
-    });
-
-    it('structured builder still masks secured STRING values', () => {
-        const secret = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
-        const registry = configureWith(secret);
-        const structured = registry.buildStructuredLogFields(() => 'abcdefghijklmnop'); // len>15 -> abc...nop
-        expect(structured.get('authorization')).toBe('abc...nop');
-    });
-});
-
 describe('WebpiecesCoreHeaders.API_CALL_INFO', () => {
     it('is logged but NOT transferred over the wire (per-hop only)', () => {
         const key = WebpiecesCoreHeaders.API_CALL_INFO;

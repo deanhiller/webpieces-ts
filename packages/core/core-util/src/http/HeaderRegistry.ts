@@ -1,5 +1,4 @@
 import { ContextKey } from '../ContextKey';
-import { ContextRead, StructuredContextRead } from './ContextReader';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 
 /**
@@ -103,65 +102,14 @@ export class HeaderRegistry {
         return this.securedNames;
     }
 
-    /** Keys that appear in logs. isLogged=true. */
+    /**
+     * Keys that appear in logs. isLogged=true. The node logging backends read THESE and build the log
+     * field map directly from the active context — see `RequestContext.buildLogFields()` /
+     * `buildStructuredLogFields()`. (The registry used to own those two builders behind a read
+     * callback, but only the server ever called them, so the seam was inlined away.)
+     */
     getLoggedKeys(): ContextKey[] {
         return this.loggedKeys;
-    }
-
-    /**
-     * The log/MDC field map: every logged key with a value, under its `name`, secured values masked.
-     *
-     * The ONE implementation, because the registry owns the keys and each {@link ContextKey} knows
-     * how to mask its own value. Callers differ only in WHERE a value is read from:
-     * `RequestContext.buildLogFields()` passes its own getHeader (server), and `ContextMgr` passes
-     * the app-held store's read (browser).
-     *
-     * getLoggedKeys() is precomputed at configure() time, so this is hot-path safe.
-     */
-    buildLogFields(read: ContextRead): Map<string, string> {
-        const fields = new Map<string, string>();
-        for (const key of this.getLoggedKeys()) {
-            const value = read(key);
-            // typeof-string guard: an object-valued logged key (API_CALL_INFO) must NOT leak into the
-            // flat string map — this map feeds wire/MDC + recorder fixtures, which are string-only.
-            // `read` is typed string-returning, but a key like API_CALL_INFO actually holds an object at
-            // runtime; the guard keeps it out. Object-valued keys ride buildStructuredLogFields instead.
-            if (typeof value === 'string' && value) {
-                fields.set(key.name, key.maskIfSecured(value));
-            }
-        }
-        return fields;
-    }
-
-    /**
-     * The STRUCTURED log-field map: like {@link buildLogFields}, but values may be objects, so an
-     * object-valued logged key (e.g. {@link ApiCallInfo} under API_CALL_INFO) survives as an object
-     * instead of being dropped. The node logging backends (winston/bunyan) call THIS — they
-     * JSON-serialize the whole record, so an object value nests into `jsonPayload.<name>` (→
-     * filterable `jsonPayload.api.side`, `.result`, ...). String values are still masked per key.
-     *
-     * The flat {@link buildLogFields} stays string-only for wire/MDC/recorder-fixture callers, which
-     * must not carry heterogeneous objects. This is the deliberate second builder (registry stays the
-     * single source of truth for WHICH keys log; the two builders differ only in value SHAPE).
-     */
-    buildStructuredLogFields(read: StructuredContextRead): Map<string, string | object> {
-        const fields = new Map<string, string | object>();
-        for (const key of this.getLoggedKeys()) {
-            const value = read(key);
-            if (value === undefined || value === null) {
-                continue;
-            }
-            if (typeof value === 'string') {
-                if (value) {
-                    fields.set(key.name, key.maskIfSecured(value));
-                }
-            } else if (typeof value === 'object') {
-                fields.set(key.name, value);
-            }
-            // Non-string primitives (number/boolean/bigint) are not expected for logged context keys;
-            // ignore them here rather than String()-flattening, keeping the shape honest.
-        }
-        return fields;
     }
 
     /** Look up a key by its HTTP header name (case-insensitive). O(1) via the precomputed map. */

@@ -125,7 +125,6 @@ export type { ErrorTranslation } from './http/ErrorTranslation';
 export { templateDeriver } from './http/templateDeriver';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';
-export type { ContextRead, StructuredContextRead } from './http/ContextReader';
 
 // BROWSER-ONLY outbound-header propagation (app-held store + registry -> outbound HTTP headers).
 // Only @webpieces/http-client-browser may name it; the server reads RequestContext directly via

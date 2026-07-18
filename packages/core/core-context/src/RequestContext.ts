@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { ContextKey, HeaderRegistry } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
 import { HttpRequest } from './HttpRequest';
 
 /** Reserved context key under which the current HttpRequest is stored. */
@@ -93,12 +93,22 @@ class RequestContextImpl {
      * log line is never worth crashing a request over.
      */
     buildLogFields(): Map<string, string> {
+        const fields = new Map<string, string>();
         if (!this.isActive()) {
-            return new Map<string, string>();
+            return fields;
         }
-        // The registry owns the keys and each ContextKey masks its own value; we only supply
-        // WHERE to read from. The browser's ContextMgr calls the same method with its store's read.
-        return HeaderRegistry.get().buildLogFields((key: ContextKey) => this.getHeader<string>(key));
+        // The registry owns WHICH keys log (getLoggedKeys); we read each straight from THIS context
+        // and each ContextKey masks its own secured value. String-only — this map feeds wire/MDC +
+        // recorder fixtures — so an object-valued key (API_CALL_INFO) is guarded out by the
+        // typeof-string check; objects ride buildStructuredLogFields instead. (Was a HeaderRegistry
+        // method taking a read callback; only the server ever called it, so the seam was dead weight.)
+        for (const key of HeaderRegistry.get().getLoggedKeys()) {
+            const value = this.getHeader<string>(key);
+            if (typeof value === 'string' && value) {
+                fields.set(key.name, key.maskIfSecured(value));
+            }
+        }
+        return fields;
     }
 
     /**
@@ -109,12 +119,47 @@ class RequestContextImpl {
      *
      * Returns an EMPTY map outside a `run(...)` block (a log line is never worth crashing over) — same
      * as {@link buildLogFields}.
+     *
+     * PLUS this build's `version` from {@link ServiceInfo}. It is NOT a {@link ContextKey} — it is a
+     * process-global identity fact, added HERE so every request log line of BOTH node backends
+     * (winston/bunyan read this one map) says which build emitted it, with no per-backend duplication.
+     * Read via the non-throwing {@link ServiceInfo.getVersion}, so it is simply ABSENT until
+     * `setInfo` has run — logging keeps working before the service is identified, then `version`
+     * starts appearing. A caller-set `version` header (there is none by convention) would be
+     * overwritten here; that is intentional — the build version is authoritative.
      */
     buildStructuredLogFields(): Map<string, string | object> {
+        const fields = new Map<string, string | object>();
         if (!this.isActive()) {
-            return new Map<string, string | object>();
+            return fields;
         }
-        return HeaderRegistry.get().buildStructuredLogFields((key: ContextKey) => this.getHeader(key));
+        // Like buildLogFields, but values may be OBJECTS (API_CALL_INFO): read UNTYPED so the object
+        // survives and winston/bunyan nest it into jsonPayload.<name>. Secured STRING values are still
+        // masked per key; non-string primitives are ignored rather than String()-flattened. (Inlined
+        // from HeaderRegistry for the same reason as buildLogFields — only the server called it.)
+        for (const key of HeaderRegistry.get().getLoggedKeys()) {
+            const value = this.getHeader(key);
+            if (value === undefined || value === null) {
+                continue;
+            }
+            if (typeof value === 'string') {
+                if (value) {
+                    fields.set(key.name, key.maskIfSecured(value));
+                }
+            } else if (typeof value === 'object') {
+                fields.set(key.name, value);
+            }
+        }
+        // PLUS this build's `version` from ServiceInfo — NOT a ContextKey, a process-global identity
+        // fact, added HERE so every request log line of BOTH node backends (they read this one map)
+        // says which build emitted it, with no per-backend duplication. Non-throwing read: simply
+        // ABSENT until setInfo has run, so logging works before the service is identified, then
+        // `version` starts appearing.
+        const version = ServiceInfo.getVersion();
+        if (version) {
+            fields.set('version', version);
+        }
+        return fields;
     }
 
 

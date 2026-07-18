@@ -42,6 +42,21 @@ export class WebpiecesCoreHeaders {
         /*httpHeader*/ undefined
     );
 
+    /**
+     * The CALLER's build version — so a downstream server's logs record which build of the client
+     * called it (surfaces as `jsonPayload.clientVersion`). Distinct from the log line's own `version`
+     * (this service's build): `version` answers "which build wrote this line?", `clientVersion`
+     * answers "which build asked us to?".
+     *
+     * - `httpHeader` SET → transferred over the wire, BUT unlike a normal transferred key it is NOT
+     *   copied from the context onward. Each hop OVERWRITES it with its OWN `ServiceInfo.getVersion()`
+     *   as it becomes the client to the next hop (see `buildOutboundHeaders`), so on any given server
+     *   `clientVersion` is always the IMMEDIATE caller's version, never a stale grand-caller's.
+     * - `isLogged` TRUE → the inbound value lands in the context and flows through the normal log
+     *   field map; no backend change needed.
+     */
+    static readonly CLIENT_VERSION = new ContextKey('clientVersion', 'x-webpieces-client-version');
+
     static readonly ORG_ID = new ContextKey('orgId', 'x-org-id');
 
     static readonly USER_ID = new ContextKey('userId', 'x-user-id');
@@ -107,6 +122,7 @@ export class WebpiecesCoreHeaders {
         return [
             WebpiecesCoreHeaders.REQUEST_ID,
             WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
+            WebpiecesCoreHeaders.CLIENT_VERSION,
             WebpiecesCoreHeaders.USER_ID,
             WebpiecesCoreHeaders.ORG_ID,
             WebpiecesCoreHeaders.USER_ROLES,

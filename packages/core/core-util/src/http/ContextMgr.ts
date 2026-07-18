@@ -1,6 +1,8 @@
 import { ContextKey } from '../ContextKey';
 import { ContextReader } from './ContextReader';
 import { HeaderRegistry } from './HeaderRegistry';
+import { ServiceInfo } from './ServiceInfo';
+import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 
 /**
  * ContextMgr - propagates the magic context onto outbound BROWSER requests.
@@ -51,6 +53,17 @@ export class ContextMgr {
             if (value !== undefined && value !== null && value !== '') {
                 outbound.set(key.httpHeader!, value);
             }
+        }
+
+        // CLIENT_VERSION: a browser ORIGINATES a call, so it sends its OWN app build version (from
+        // ServiceInfo) and the server logs which client build called it — same rule as the server-side
+        // RequestContextHeaders. Our version wins; absent if this app was never identified via setInfo.
+        const myVersion = ServiceInfo.getVersion();
+        const clientVersionHeader = WebpiecesCoreHeaders.CLIENT_VERSION.httpHeader!;
+        if (myVersion) {
+            outbound.set(clientVersionHeader, myVersion);
+        } else {
+            outbound.delete(clientVersionHeader);
         }
 
         return outbound;

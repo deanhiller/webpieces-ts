@@ -142,8 +142,9 @@ describe('winston GCP format stack', () => {
 });
 
 describe('winston factories', () => {
-    // Both factories read the service name + version from ServiceInfo in their constructor, so
-    // identify the service first — exactly as a real startup does.
+    // The factory reads svcName from ServiceInfo at construction (a defaultMeta base field); the build
+    // `version` rides the per-record context map instead. We identify the service first so both appear
+    // on the lines these tests emit.
     beforeEach(() => {
         ServiceInfo.clear();
         ServiceInfo.setInfo('test-svc', '9.9.9');
@@ -153,10 +154,10 @@ describe('winston factories', () => {
         ServiceInfo.clear();
     });
 
-    it('FAILS FAST when the service was never identified — at construction, i.e. at startup', () => {
+    it('does NOT throw when the service was never identified — logging works before setInfo', () => {
         ServiceInfo.clear();
 
-        expect(() => new WinstonConsoleFactory()).toThrow(/ServiceInfo\.setInfo\(\.\.\.\) has not been called/);
+        expect(() => new WinstonConsoleFactory()).not.toThrow();
     });
 
     it('WinstonConsoleFactory caches one Logger per name', () => {
@@ -174,12 +175,12 @@ describe('winston factories', () => {
     /**
      * The point of the ServiceInfo identity: a GCP line must say WHICH SERVICE and WHICH BUILD
      * emitted it, so you can filter jsonPayload.svcName / jsonPayload.version across a fleet and a
-     * rollout. The version field used to be `svcGitHash` (winston-only, optional, and presuming a
-     * git SHA); this pins the rename and the new required-ness.
+     * rollout. `svcName` is a factory defaultMeta base field; `version` rides the per-request context
+     * map, so this asserts it on an in-request line (the normal case).
      */
-    it('WinstonGcpFactory stamps svcName + version on every JSON line', async () => {
+    it('WinstonGcpFactory stamps svcName + version on every in-request JSON line', async () => {
         const written = await captureStdout(() => {
-            new WinstonGcpFactory().getLogger('MyLogger').info('hello');
+            withContext(() => new WinstonGcpFactory().getLogger('MyLogger').info('hello'));
         });
 
         const rec = JSON.parse(written);

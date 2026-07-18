@@ -48,14 +48,12 @@ export async function setupRuntime(
      * Or special case servers that want to override specific things */
     appOverrides?: ContainerModule,
 ): Promise<ApiFactory> {
-    // 0. This service must be IDENTIFIED (name + build version). Both webpieces logging backends
-    // already read ServiceInfo in their constructors, so a bunyan/winston app has failed before
-    // reaching here — but an app that installs its OWN LoggerFactory touches neither, and would
-    // otherwise boot anonymous, stamp no requestIdSource, and ship logs that cannot say which build
-    // emitted them. Assert HERE, the one startup every server runs, so the request path can trust
-    // both exist and never has to throw over them mid-traffic.
-    ServiceInfo.getName();
-    ServiceInfo.getVersion();
+    // 0. This service must be IDENTIFIED (name + build version). The logging backends and the request
+    // path READ ServiceInfo without throwing (a missing log field must never 500 live traffic, and
+    // logging must work before setInfo). So the "a deployed build must say which build it is"
+    // guarantee is enforced HERE instead — the one startup every server runs — so a forgotten
+    // setInfo kills the deploy (the revision never goes healthy) rather than shipping anonymous logs.
+    ServiceInfo.assertIdentified();
 
     // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
     HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);

@@ -118,8 +118,9 @@ describe('logging outside RequestContext.run', () => {
 });
 
 describe('BunyanConsoleFactory', () => {
-    // The factory reads its (bunyan-mandatory) root-logger name + the version from ServiceInfo, so
-    // identify the service first — exactly as a real startup does, before constructing the factory.
+    // The factory no longer reads ServiceInfo (its bunyan root name is a fixed constant, and the
+    // build version rides the per-record context map). We still set an identity here because the
+    // context map stamps `version` from it on the lines these tests emit.
     beforeEach(() => {
         ServiceInfo.clear();
         ServiceInfo.setInfo('test-svc', '9.9.9');
@@ -130,10 +131,10 @@ describe('BunyanConsoleFactory', () => {
         vi.restoreAllMocks();
     });
 
-    it('FAILS FAST when the service was never identified — at construction, i.e. at startup', () => {
+    it('does NOT throw when the service was never identified — logging works before setInfo', () => {
         ServiceInfo.clear();
 
-        expect(() => new BunyanConsoleFactory()).toThrow(/ServiceInfo\.setInfo\(\.\.\.\) has not been called/);
+        expect(() => new BunyanConsoleFactory()).not.toThrow();
     });
 
     it('writes a human-readable line with context tags', async () => {
@@ -150,12 +151,12 @@ describe('BunyanConsoleFactory', () => {
     });
 
     /**
-     * The service name + build version are ServiceInfo base fields on every record — but LOCALLY
-     * they are noise: you know which service you just started, and you can check git yourself. The
-     * console renderer tags every NON-structural field, so both must be listed as structural
-     * (BUNYAN_STD_FIELDS in ../streams) or they would ride along on every single line.
+     * The build `version` rides every record (from the context map) — but LOCALLY it is noise: you
+     * can check git yourself. The console renderer tags every NON-structural field, so `version` must
+     * be listed as structural (BUNYAN_STD_FIELDS in ../streams) or it would ride every single line.
+     * (The bunyan root `name` is a fixed constant now, also structural, so it never shows either.)
      */
-    it('keeps svcName + version OUT of the local console line — noise you already know', async () => {
+    it('keeps version OUT of the local console line — noise you already know', async () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
         const factory = new BunyanConsoleFactory();
         withContext(() => factory.getLogger('MyLogger').info('hello world'));
@@ -164,7 +165,6 @@ describe('BunyanConsoleFactory', () => {
         const line = String(spy.mock.calls[0][0]);
         expect(line).not.toContain('9.9.9');
         expect(line).not.toContain('version');
-        expect(line).not.toContain('test-svc');
         // ...while the per-request tag that IS worth reading locally still renders.
         expect(line).toContain('requestId:req-123');
     });
@@ -177,63 +177,52 @@ describe('BunyanConsoleFactory', () => {
 });
 
 /**
- * The version half of ServiceInfo exists so a log line can say WHICH BUILD emitted it. bunyan could
- * not stamp one at all before (it lived on winston's factory options), so this pins that it now
- * rides on the record itself — the thing GCP filters on.
+ * The version half of ServiceInfo exists so a log line can say WHICH BUILD emitted it. It now rides
+ * every in-request record via the per-record context map (RequestContext.buildStructuredLogFields),
+ * NOT as a factory base field — so it appears the moment setInfo has run, is absent before, and
+ * logging keeps working either way. This is the field GCP filters on.
  */
-describe('bunyan stamps the ServiceInfo identity on every record', () => {
+describe('bunyan stamps the ServiceInfo build version on every in-request record', () => {
     afterEach(() => {
         ServiceInfo.clear();
     });
 
-    it('puts svcName on `name` and the build version on `version`', () => {
-        ServiceInfo.clear();
+    it('adds `version` from ServiceInfo — present after setInfo', async () => {
         ServiceInfo.setInfo('billing-svc', 'v3.2.1-rc4');
+        const h = new BunyanHarness();
+        const log = new BunyanLogger(h.base.child({ loggerName: 'MyLogger' }));
+        withContext(() => log.info('hello'));
+        await flush();
 
-        const lines: string[] = [];
-        const stream = new Writable({
-            write(chunk: Buffer | string, _enc: BufferEncoding, cb: (e?: Error | null) => void): void {
-                lines.push(chunk.toString());
-                cb();
-            },
-        });
-        // Build the root logger exactly as BunyanFactoryBase does, against a capturing stream.
-        const base = bunyan.createLogger({
-            name: ServiceInfo.getName(),
-            version: ServiceInfo.getVersion(),
-            streams: [{ stream }],
-        });
-        new BunyanLogger(base.child({ loggerName: 'MyLogger' })).info('hello');
-
-        const rec = JSON.parse(lines[0]);
-        expect(rec.name).toBe('billing-svc');
+        const rec = JSON.parse(h.lines[0]);
         expect(rec.version).toBe('v3.2.1-rc4');
     });
 
-    /**
-     * `version` must survive as its own field: bunyan DELETES a handful of reserved option names
-     * (stream/streams/level/serializers/src) from base fields, and uses `v` for its own log-format
-     * version. A future rename onto one of those would silently drop the build id.
-     */
-    it('does not collide with a bunyan reserved field — `v` stays bunyan\'s format version', () => {
+    it('omits `version` when the service is not identified — the line still emits', async () => {
         ServiceInfo.clear();
+        const h = new BunyanHarness();
+        const log = new BunyanLogger(h.base.child({ loggerName: 'MyLogger' }));
+        withContext(() => log.info('hello'));
+        await flush();
+
+        const rec = JSON.parse(h.lines[0]);
+        expect(rec.msg).toBe('hello');       // logging works before setInfo...
+        expect(rec.version).toBeUndefined(); // ...just without a build id
+    });
+
+    /**
+     * `version` must survive as its own field: bunyan uses `v` for its own log-format version, so the
+     * build id must not land there. (bunyan also DELETES reserved option names stream/streams/level/
+     * serializers/src from base fields — a future rename onto one of those would silently drop it.)
+     */
+    it('does not collide with a bunyan reserved field — `v` stays bunyan\'s format version', async () => {
         ServiceInfo.setInfo('billing-svc', 'v3.2.1-rc4');
+        const h = new BunyanHarness();
+        const log = new BunyanLogger(h.base.child({ loggerName: 'MyLogger' }));
+        withContext(() => log.info('hello'));
+        await flush();
 
-        const lines: string[] = [];
-        const stream = new Writable({
-            write(chunk: Buffer | string, _enc: BufferEncoding, cb: (e?: Error | null) => void): void {
-                lines.push(chunk.toString());
-                cb();
-            },
-        });
-        const base = bunyan.createLogger({
-            name: ServiceInfo.getName(),
-            version: ServiceInfo.getVersion(),
-            streams: [{ stream }],
-        });
-        base.info('hello');
-
-        const rec = JSON.parse(lines[0]);
+        const rec = JSON.parse(h.lines[0]);
         expect(rec.v).toBe(0);
         expect(rec.version).toBe('v3.2.1-rc4');
     });
