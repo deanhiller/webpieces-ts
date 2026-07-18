@@ -13,12 +13,14 @@ import { WinstonLogger } from './WinstonLogger';
  * out a cached {@link WinstonLogger} per name (each a winston child carrying
  * `loggerName`). Subclasses differ only in the format stack they pass up.
  *
- * Every line carries `svcName` + `version` from {@link ServiceInfo}. Neither used to be a property
- * of the SERVICE: winston has no mandatory logger name (so this backend emitted none — a winston
- * service was distinguishable only by GCP's own resource labels), and the version lived here as an
- * optional `svcGitHash` factory option that bunyan had no counterpart for. Both now come from the
- * ONE {@link ServiceInfo}, so the fields on your logs no longer depend on which logging library the
- * app happened to pick. `version` is opaque — whatever string the app used to identify its build.
+ * Every line carries `svcName` from {@link ServiceInfo} (winston has no mandatory logger name, so this
+ * backend used to emit none — a winston service was distinguishable only by GCP's own resource
+ * labels). It is read here at construction and rides as `defaultMeta`; it is simply absent if the
+ * service was not identified before this factory was built.
+ *
+ * `version` is NOT read here: it is stamped per-record by `RequestContext.buildStructuredLogFields`
+ * (the one map `injectContextFormat` already loops), so it appears the moment `setInfo` runs — even
+ * if that is after this factory was constructed — and logging works before it.
  */
 export abstract class WinstonFactoryBase implements LoggerFactory {
     private readonly base: WinstonBase;
@@ -31,12 +33,14 @@ export abstract class WinstonFactoryBase implements LoggerFactory {
      *   about the SINK, which is where it actually lives — a dev terminal has no such limit.
      */
     protected constructor(finalFormat: Format, transport?: Transport) {
-        // Read at STARTUP (this ctor runs while booting), so a forgotten ServiceInfo.setInfo(...)
-        // fails the deploy rather than shipping logs that cannot say which build emitted them.
-        const defaultMeta: Record<string, string> = {
-            svcName: ServiceInfo.getName(),
-            version: ServiceInfo.getVersion(),
-        };
+        // svcName is a base field on every record when known. Non-throwing read: if the service was
+        // not identified before this factory was built, svcName is simply omitted rather than blocking
+        // the deploy — setupRuntime enforces identity separately via ServiceInfo.assertIdentified().
+        const svcName = ServiceInfo.getName();
+        const defaultMeta: Record<string, string> = {};
+        if (svcName) {
+            defaultMeta['svcName'] = svcName;
+        }
 
         // No level set — we do NOT filter; that is winston's job (defaults to 'info').
         this.base = createLogger({

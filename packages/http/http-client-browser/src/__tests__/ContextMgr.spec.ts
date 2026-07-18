@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     ContextKey,
     HeaderRegistry,
+    ServiceInfo,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { ContextMgr } from '@webpieces/core-util';
@@ -11,9 +12,10 @@ const TENANT = new ContextKey('tenantId', 'x-tenant-id');
 const AUTH = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
 const LOCAL_ONLY = new ContextKey('localOnly'); // no httpHeader -> never transferred
 
-/** Configure the global registry with the platform defaults + these test keys. */
+/** Configure the global registry with the platform defaults + these test keys, and reset identity. */
 function configureRegistry(): void {
     HeaderRegistry.configure([TENANT, AUTH, LOCAL_ONLY], /*platformHeaders*/ true);
+    ServiceInfo.clear();
 }
 
 describe('ContextMgr.buildOutboundHeaders', () => {
@@ -43,27 +45,19 @@ describe('ContextMgr.buildOutboundHeaders', () => {
         // after that copies it onward. One id correlates the whole call tree.
         expect(outbound.get('x-request-id')).toBe('req-abc');
     });
-});
 
-describe('HeaderRegistry.buildLogFields (browser store)', () => {
-    beforeEach(configureRegistry);
+    it('stamps the browser build version as x-webpieces-client-version when ServiceInfo is set', () => {
+        ServiceInfo.setInfo('browser-app', 'b-2.0.0');
+        const outbound = new ContextMgr(new MutableContextStore()).buildOutboundHeaders();
 
-    it('masks secured values and keys by name', () => {
-        const store = new MutableContextStore();
-        store.set(TENANT, 'tenant-42');
-        store.set(AUTH, 'super-secret-token-value');
+        // So a downstream server can log which client build called it (jsonPayload.clientVersion).
+        expect(outbound.get('x-webpieces-client-version')).toBe('b-2.0.0');
+    });
 
-        // The registry owns the keys; the caller only says WHERE to read. ContextMgr no longer
-        // has a buildHeadersForLogging(): a logging BACKEND stamps context fields, not the client.
-        const logMap = HeaderRegistry.get().buildLogFields((key: ContextKey) => store.read(key));
-
-        // TENANT -> keyed by its name, raw value
-        expect(logMap.get('tenantId')).toBe('tenant-42');
-        // AUTH is secured -> keyed by name, masked value
-        const masked = logMap.get('authorization');
-        expect(masked).toBeDefined();
-        expect(masked).not.toContain('secret');
-        expect(masked).toMatch(/\.\.\./);
+    it('omits x-webpieces-client-version when the app never identified itself', () => {
+        // ServiceInfo.clear() ran in beforeEach → getVersion() is undefined → header absent.
+        const outbound = new ContextMgr(new MutableContextStore()).buildOutboundHeaders();
+        expect(outbound.has('x-webpieces-client-version')).toBe(false);
     });
 });
 

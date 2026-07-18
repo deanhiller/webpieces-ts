@@ -51,6 +51,18 @@ export class RequestContextHeaders {
             }
         }
 
+        // CLIENT_VERSION is transferred, but each hop sends ITS OWN build version (not the inherited
+        // one) so a downstream server logs which build actually called it. Overwrite whatever the loop
+        // copied from an inbound clientVersion with ours; if THIS service has no version, drop it
+        // rather than forward the caller's as if it were ours. Non-throwing read — absent before setInfo.
+        const myVersion = ServiceInfo.getVersion();
+        const clientVersionHeader = WebpiecesCoreHeaders.CLIENT_VERSION.httpHeader!;
+        if (myVersion) {
+            headers.set(clientVersionHeader, myVersion);
+        } else {
+            headers.delete(clientVersionHeader);
+        }
+
         return headers;
     }
 
@@ -100,12 +112,12 @@ export class RequestContextHeaders {
      * Record that WE minted the id — only ever called from the generate branch above, so the key is
      * ABSENT on a hop that inherited the caller's id. Present == this service is the trace's origin.
      *
-     * Uses `tryGetName()`, never `getName()`: this runs PER REQUEST, and a missing log field must
-     * not 500 live traffic. A server that booted already passed `setupRuntime`'s startup check, so
-     * the name is always there in practice; only a test driving the context directly sees undefined.
+     * Uses the non-throwing `getName()`: this runs PER REQUEST, and a missing log field must not 500
+     * live traffic. A server that booted already passed `setupRuntime`'s `assertIdentified()` check,
+     * so the name is always there in practice; only a test driving the context directly sees undefined.
      */
     private stampRequestIdSource(): void {
-        const svcName = ServiceInfo.tryGetName();
+        const svcName = ServiceInfo.getName();
         if (svcName) {
             RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID_SOURCE, svcName);
         }
