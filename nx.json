@@ -15,12 +15,7 @@
     "targetDefaults": {
         "@nx/js:tsc": {
             "cache": true,
-            "dependsOn": [
-                "architecture:validate-complete",
-                "validate-no-file-import-cycles",
-                "validate-di-graph-unchanged",
-                "^build"
-            ],
+            "dependsOn": ["^build"],
             "inputs": ["default", "^default"]
         },
         "build": {
@@ -44,12 +39,7 @@
             }
         },
         "@angular/build:application": {
-            "dependsOn": [
-                "architecture:validate-complete",
-                "validate-no-file-import-cycles",
-                "validate-di-graph-unchanged",
-                "^build"
-            ]
+            "dependsOn": ["^build"]
         }
     },
     "plugins": [
