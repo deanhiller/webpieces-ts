@@ -1,5 +1,8 @@
 import { ErrorTranslation, ErrorWireForm } from './ErrorTranslation';
 import { ProtocolError } from './errors';
+import { FailureClassifier } from './FailureClassifier';
+import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
+import { ApiMethodInfo } from './ApiMethodInfo';
 
 /**
  * Derives a base URL for a service name that has NO registered mapping — the pluggable half of
@@ -58,6 +61,22 @@ export class ClientRegistry {
      * work. See {@link ErrorTranslation}.
      */
     private static readonly errorTranslations: ErrorTranslation[] = [];
+
+    /**
+     * The app/company DEFAULT {@link FailureClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
+     * so a single strategy covers the server router AND all internal clients. Undefined = use the
+     * webpieces built-in ({@link WEBPIECES_DEFAULT_FAILURE_CLASSIFIER}). Populated once at startup on the
+     * SERVER and in the BROWSER — same no-DI pattern as {@link ClientRegistry.mappings}.
+     */
+    private static appDefaultFailureClassifier: FailureClassifier | undefined;
+
+    /**
+     * Per-EXTERNAL-client {@link FailureClassifier}s, keyed by {@link ApiMethodInfo.apiClass}
+     * ('FirestoreAdminClient', 'ClaudeApi', ...). Consulted BEFORE the default tier, so an external
+     * client overrides the default for its own apiClass only. Internal clients / the server register
+     * nothing here and fall through to the default. See {@link ClientRegistry.classifyFailure}.
+     */
+    private static readonly failureClassifiersByApiClass = new Map<string, FailureClassifier>();
 
     /** Map a service name to `http://localhost:<port>`. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
@@ -190,11 +209,63 @@ export class ClientRegistry {
         return undefined;
     }
 
-    /** Reset mappings, the deriver, AND error translations. For tests, so the process-globals do not leak across specs. */
+    /**
+     * Set the app/company DEFAULT failure classifier — ONE per process, covering the server router and
+     * all internal clients (it branches on {@link ApiMethodInfo.side}). Call ONCE at startup, on the
+     * server AND in the browser. Overrides the webpieces built-in for calls no per-apiClass classifier
+     * claims. See {@link FailureClassifier}.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static setDefaultFailureClassifier(classifier: FailureClassifier): void {
+        ClientRegistry.appDefaultFailureClassifier = classifier;
+    }
+
+    /**
+     * Register a per-EXTERNAL-client failure classifier, keyed by {@link ApiMethodInfo.apiClass}
+     * (e.g. 'FirestoreAdminClient'). Consulted BEFORE the default tier for calls with that apiClass.
+     * Call ONCE at startup. See {@link FailureClassifier}.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static addFailureClassifier(apiClass: string, classifier: FailureClassifier): void {
+        ClientRegistry.failureClassifiersByApiClass.set(apiClass, classifier);
+    }
+
+    /**
+     * Is this thrown API-call error a real FAILURE (true) or an expected non-failure (false)?
+     * Resolved most-specific-first, and ALWAYS definitive (returns a boolean):
+     *   1. the per-apiClass classifier, if one is registered for `methodInfo.apiClass` — unless it defers;
+     *   2. else the app default classifier, if one was set — unless it defers;
+     *   3. else the webpieces built-in ({@link WEBPIECES_DEFAULT_FAILURE_CLASSIFIER}), which never defers.
+     * A `?? true` backstop keeps an unexpectedly-deferring built-in fail-safe (treat as failure).
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static classifyFailure(error: Error, methodInfo: ApiMethodInfo): boolean {
+        const perClient = ClientRegistry.failureClassifiersByApiClass.get(methodInfo.apiClass);
+        if (perClient !== undefined) {
+            const verdict = perClient.isFailure(error, methodInfo);
+            if (verdict !== undefined) {
+                return verdict;
+            }
+        }
+        if (ClientRegistry.appDefaultFailureClassifier !== undefined) {
+            const verdict = ClientRegistry.appDefaultFailureClassifier.isFailure(error, methodInfo);
+            if (verdict !== undefined) {
+                return verdict;
+            }
+        }
+        return WEBPIECES_DEFAULT_FAILURE_CLASSIFIER.isFailure(error, methodInfo) ?? true;
+    }
+
+    /**
+     * Reset mappings, the deriver, error translations, AND failure classifiers. For tests, so the
+     * process-globals do not leak across specs.
+     */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
     static clear(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
         ClientRegistry.errorTranslations.length = 0;
+        ClientRegistry.appDefaultFailureClassifier = undefined;
+        ClientRegistry.failureClassifiersByApiClass.clear();
     }
 }
