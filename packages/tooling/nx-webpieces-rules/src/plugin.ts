@@ -269,7 +269,15 @@ function addPerProjectTargets(
 
         processedRoots.add(projectRoot);
 
-        const targets = buildPerProjectTargets(isProjectJson, projectRoot, opts);
+        const architectureEnabled =
+            opts.workspace.enabled === true &&
+            existsSync(join(context.workspaceRoot, 'architecture'));
+        const targets = buildPerProjectTargets(
+            isProjectJson,
+            projectRoot,
+            opts,
+            architectureEnabled,
+        );
 
         if (Object.keys(targets).length === 0) continue;
 
@@ -293,26 +301,36 @@ function buildPerProjectTargets(
     isProjectJson: boolean,
     projectRoot: string,
     opts: Required<ArchitecturePluginOptions>,
+    architectureEnabled: boolean,
 ): Record<string, TargetConfiguration> {
     const targets: Record<string, TargetConfiguration> = {};
+
+    // Per-project validation gates that `ci` must depend on. Collected as they are added
+    // so `ci` references only gates that actually exist on THIS project (a package.json-only
+    // project has none).
+    const validationTargets: string[] = [];
 
     // Add circular-deps target ONLY for project.json projects
     if (isProjectJson && opts.circularDeps.enabled) {
         if (!isExcluded(projectRoot, opts.circularDeps.excludePatterns!)) {
             const targetName = opts.circularDeps.targetName!;
             targets[targetName] = createCircularDepsTarget(projectRoot, targetName);
+            validationTargets.push(targetName);
         }
     }
 
     // Per-project DI design DAG: regenerate design.json/design.md on every build,
-    // then gate the build on the committed copies being current.
+    // then gate CI on the committed copies being current.
     if (isProjectJson && opts.workspace.validations!.diGraph) {
         targets['di-graph-generate'] = createDiGraphGenerateTarget();
         targets['validate-di-graph-unchanged'] = createValidateDiGraphUnchangedTarget();
+        validationTargets.push('validate-di-graph-unchanged');
     }
 
-    // Add ci target to ALL projects (both project.json and package.json)
-    targets['ci'] = createCiTarget();
+    // Add ci target to ALL projects (both project.json and package.json). ci aggregates
+    // lint + build + test + the validation gates that formerly rode on the compile
+    // executor's targetDefaults, so a bare `build` stays a fast compile-only step.
+    targets['ci'] = createCiTarget(validationTargets, architectureEnabled);
 
     return targets;
 }
@@ -537,19 +555,35 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
 
 /**
  * Create per-project ci target - Gradle-style composite target
- * Runs lint, build, and test in parallel
- * (with test depending on build via targetDefaults)
+ * Composite CI target: runs lint, build, test, and every validation gate.
+ *
+ * Validation (architecture graph completeness, per-project file-import cycles, DI-graph
+ * unchanged) lives HERE, not on the build/compile target. That keeps `nx build` a fast
+ * compile-only step for local iteration while `nx ci` is the full gate the PR check runs.
+ *
+ * The per-project gates are passed in because they exist only on project.json projects;
+ * `architecture:validate-complete` is a cross-project dep added only when the workspace
+ * `architecture` project exists.
  *
  * NOTE: Type checking is done by the build target (@nx/js:tsc) during compilation.
  */
-function createCiTarget(): TargetConfiguration {
+// webpieces-disable no-function-outside-class -- Nx inference plugin: createNodes invokes these as module-scope target factories; the entire plugin is intentionally functional (matching the surrounding 18 factories), a DI class is not how the Nx plugin API is called.
+export function createCiTarget(
+    perProjectValidation: string[],
+    architectureEnabled: boolean,
+): TargetConfiguration {
+    const dependsOn: string[] = ['lint', 'build', 'test', ...perProjectValidation];
+    if (architectureEnabled) {
+        dependsOn.push('architecture:validate-complete');
+    }
     return {
         executor: 'nx:noop',
         cache: true,
-        dependsOn: ['lint', 'build', 'test'],
+        dependsOn,
         metadata: {
             technologies: ['nx'],
-            description: 'Run all CI checks: lint, build, and test (Gradle-style composite target)',
+            description:
+                'Run all CI checks: lint, build, test, and validation (Gradle-style composite target)',
         },
     };
 }
