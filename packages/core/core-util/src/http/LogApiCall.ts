@@ -1,10 +1,3 @@
-import {
-    HttpBadRequestError,
-    HttpUnauthorizedError,
-    HttpForbiddenError,
-    HttpNotFoundError,
-    HttpUserError,
-} from './errors';
 import {toError} from "../lib/errorUtils";
 import {LogManager} from "../logging/LogManager";
 import {ApiCallInfo} from "./ApiCallInfo";
@@ -12,6 +5,8 @@ import {ApiMethodInfo} from "./ApiMethodInfo";
 import {ApiCallContext, ApiCallContextHolder} from "./ApiCallContext";
 import {WebpiecesCoreHeaders} from "./WebpiecesCoreHeaders";
 import {LOG_API_CALL_LOGGER_NAME} from "./ApiCallLogName";
+import {ClientRegistry} from "./ClientRegistry";
+import {WEBPIECES_DEFAULT_FAILURE_CLASSIFIER} from "./WebpiecesDefaultFailureClassifier";
 
 // The console backends special-case THIS logger name into a self-describing [API.{side}.{phase}]
 // bracket (see ApiCallLogName) — so the name here and the name they match are the one constant.
@@ -144,9 +139,11 @@ export class LogApiCallImpl {
         const side = methodInfo.side;
         const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
         const errorType = error.constructor.name;
-        // Side-dependent: a 4xx the SERVER raised is a handled non-failure (OTHER); the same 4xx a
-        // CLIENT receives means its call FAILED. HttpUserError (266) is never a failure, either side.
-        const isUser = this.isUserError(error, side === 'server');
+        // Pluggable classification (ClientRegistry): a per-apiClass EXTERNAL-client classifier wins,
+        // else the app default, else the webpieces built-in — which is side-dependent (a 4xx the SERVER
+        // raised is a handled non-failure; the same 4xx a CLIENT receives means its call FAILED; 266 is
+        // never a failure either side). `isUser` = "treat as non-failure (OTHER / result:'success')".
+        const isUser = !ClientRegistry.classifyFailure(error, methodInfo);
 
         stamp(
             new ApiCallInfo(methodInfo, 'response', isUser ? 'success' : 'failure', durationMs, requestSize),
@@ -171,49 +168,21 @@ export class LogApiCallImpl {
      * Is this error a NON-failure for HEALTH/METRICS — the process working CORRECTLY (log OTHER, api
      * result:'success') — rather than a real failure to surface (log FAIL, result:'failure')?
      *
-     * The question is "are things WORKING?", NOT "was it an HTTP 4xx vs 5xx" — and the two are not the
-     * same (see 408 below). Classification is by portable Error TYPE, never by transport: LogApiCall runs
-     * deep in the stack (in-process calls, pubsub/queue handlers, HTTP — one code path) and only ever
-     * sees a thrown Error. The Http* classes are poorly named for that (the `Http` prefix is historical),
-     * but they ARE portable error types that travel with the throw anywhere, so matching the TYPE works
-     * with or without any HTTP in the picture. Do NOT swap this for an `error.code` 4xx range check — that
-     * both re-couples to HTTP AND would bury 408.
-     *
-     * SERVER — a healthy server correctly rejecting a CLIENT'S mistake is metrics NOISE, not a failure:
-     * - HttpBadRequestError (400)   "your request is malformed"
-     * - HttpUnauthorizedError (401) "you're not authenticated"
-     * - HttpForbiddenError (403)    "authenticated, but not allowed"
-     * - HttpNotFoundError (404)     "wrong url / no such entity" (EndpointNotFoundError is a subclass)
-     *   → the server is fine, the caller erred → result:'success', logged OTHER.
-     *
-     * SERVER — something may actually be WRONG, so SURFACE it (result:'failure', logged FAIL):
-     * - HttpTimeoutError (408): a 4xx, but the client may NEVER have seen the response — deliberately
-     *   absent from the list below so it counts as a failure.
-     * - 500 / 502 / 504 / 598, and any non-Http Error: real failures.
-     *
-     * HttpUserError (266): ALWAYS a non-failure, server OR client — an expected "user made a mistake" signal.
-     * CLIENT: receiving ANY error except 266 means the outbound call FAILED → result:'failure'.
+     * BACK-COMPAT SHIM: the canonical logic now lives in {@link WebpiecesDefaultFailureClassifier}
+     * (the webpieces built-in tier), and the LIVE classification path is
+     * {@link ClientRegistry.classifyFailure} (per-apiClass → app default → built-in). This method
+     * delegates to the built-in so existing callers/tests keep the exact old behavior; it does NOT
+     * consult registered classifiers. `apiClass`/`methodName` are irrelevant to the built-in (it reads
+     * only `side`), hence the empty strings.
      *
      * @param error  - The already-normalized error (callers pass toError(err), never a raw catch value)
      * @param server - True when this side is the SERVER handling an inbound call; false for a CLIENT's outbound call
      * @returns true if this should be treated as a non-failure (OTHER / result:'success')
      */
     isUserError(error: Error, server: boolean): boolean {
-        // 266 is the one error that is never a failure, on either side.
-        if (error instanceof HttpUserError) {
-            return true;
-        }
-        // A client that RECEIVED any error (except the 266 above) made a failed call.
-        if (!server) {
-            return false;
-        }
-        // SERVER: only a healthy rejection of the caller's mistake is a non-failure. Note 408
-        // (HttpTimeoutError) is intentionally NOT here — the client may never have seen the response.
-        return (
-            error instanceof HttpBadRequestError ||
-            error instanceof HttpUnauthorizedError ||
-            error instanceof HttpForbiddenError ||
-            error instanceof HttpNotFoundError
+        return !WEBPIECES_DEFAULT_FAILURE_CLASSIFIER.isFailure(
+            error,
+            new ApiMethodInfo(server ? 'server' : 'client', '', ''),
         );
     }
 }

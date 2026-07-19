@@ -122,6 +122,14 @@ export { ServiceInfo } from './http/ServiceInfo';
 // ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
 export { ErrorWireForm } from './http/ErrorTranslation';
 export type { ErrorTranslation } from './http/ErrorTranslation';
+// Pluggable per-client failure classification (is a thrown API-call error a real failure or an
+// expected non-failure?). Registered on ClientRegistry at startup; consulted by LogApiCall.
+export type { FailureClassifier } from './http/FailureClassifier';
+export { KeyedFailureClassifier } from './http/FailureClassifier';
+export {
+    WebpiecesDefaultFailureClassifier,
+    WEBPIECES_DEFAULT_FAILURE_CLASSIFIER,
+} from './http/WebpiecesDefaultFailureClassifier';
 export { templateDeriver } from './http/templateDeriver';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';

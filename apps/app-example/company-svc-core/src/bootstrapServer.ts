@@ -1,7 +1,14 @@
 import express from 'express';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { ApiFactory, AppModules, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
-import { toError, LogManager, ClientRegistry, ErrorTranslation, ServiceInfo } from '@webpieces/core-util';
+import {
+    toError,
+    LogManager,
+    ClientRegistry,
+    ErrorTranslation,
+    KeyedFailureClassifier,
+    ServiceInfo,
+} from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
 
@@ -28,6 +35,16 @@ export async function setupCompanyRuntime(
     // so exception<->wire translation is part of the express-server wiring "only when express is
     // used." Consulted before the built-in webpieces mapping on BOTH sides (see ErrorTranslation).
     options.errorTranslations.forEach((t: ErrorTranslation) => ClientRegistry.addErrorTranslation(t));
+
+    // Same "only when express is used" install point for failure classification: the app default
+    // (server + internal clients) and any per-external-client classifiers (keyed by apiClass). The
+    // browser/Angular side registers its own via ClientRegistry directly. See FailureClassifier.
+    if (options.defaultFailureClassifier !== undefined) {
+        ClientRegistry.setDefaultFailureClassifier(options.defaultFailureClassifier);
+    }
+    options.failureClassifiers.forEach((k: KeyedFailureClassifier) =>
+        ClientRegistry.addFailureClassifier(k.apiClass, k.classifier),
+    );
     return setupRuntime(
         new RuntimeSetupOptions(options.loggerFactory, /*platformHeaders*/ true, options.config),
         appModules,

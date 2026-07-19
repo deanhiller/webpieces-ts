@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ClientRegistry } from '../ClientRegistry';
 import { ErrorTranslation, ErrorWireForm } from '../ErrorTranslation';
-import { ProtocolError, HttpError } from '../errors';
+import { FailureClassifier } from '../FailureClassifier';
+import { ApiMethodInfo } from '../ApiMethodInfo';
+import { ProtocolError, HttpError, HttpNotFoundError, HttpBadRequestError } from '../errors';
 
 describe('ClientRegistry', () => {
     beforeEach(() => {
@@ -211,5 +213,68 @@ describe('ClientRegistry error translations — precedence', () => {
 
         const rebuilt = ClientRegistry.tryTranslateFromWire(400, new ProtocolError());
         expect(rebuilt).toBeInstanceOf(AiBadRequestError);
+    });
+});
+
+const client = (apiClass: string): ApiMethodInfo => new ApiMethodInfo('client', apiClass, 'someMethod');
+const server = (apiClass: string): ApiMethodInfo => new ApiMethodInfo('server', apiClass, 'someMethod');
+
+/**
+ * Pluggable failure classification: per-apiClass EXTERNAL-client classifier → app default → webpieces
+ * built-in, resolved most-specific-first, deferring on `undefined`.
+ */
+describe('ClientRegistry failure classification', () => {
+    beforeEach(() => {
+        ClientRegistry.clear();
+    });
+
+    it('with nothing registered, uses the webpieces built-in (server 4xx = non-failure, client = failure)', () => {
+        // server rejecting the caller's bad request is a NON-failure...
+        expect(ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), server('SaveApi'))).toBe(false);
+        // ...but a client RECEIVING that same 4xx failed its call.
+        expect(ClientRegistry.classifyFailure(new HttpBadRequestError('bad'), client('SaveApi'))).toBe(true);
+    });
+
+    it('a per-apiClass classifier overrides the default for THAT client only', () => {
+        // Firestore: a not-found miss is EXPECTED (non-failure); other errors defer to the default.
+        const firestore: FailureClassifier = {
+            isFailure: (error: Error) => (error instanceof HttpNotFoundError ? false : undefined),
+        };
+        ClientRegistry.addFailureClassifier('FirestoreAdminClient', firestore);
+
+        // A 404 on the firestore client is now a NON-failure...
+        expect(ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('FirestoreAdminClient'))).toBe(false);
+        // ...but a 404 on a DIFFERENT client still hits the built-in (client → failure).
+        expect(ClientRegistry.classifyFailure(new HttpNotFoundError('miss'), client('SaveApi'))).toBe(true);
+        // ...and a non-404 on firestore DEFERS to the built-in (client → failure).
+        expect(ClientRegistry.classifyFailure(new Error('boom'), client('FirestoreAdminClient'))).toBe(true);
+    });
+
+    it('a per-apiClass classifier that DEFERS falls through to the app default', () => {
+        // App default: on the CLIENT side, treat everything as a non-failure (lenient company policy).
+        const appDefault: FailureClassifier = {
+            isFailure: (_error: Error, m: ApiMethodInfo) => (m.side === 'client' ? false : undefined),
+        };
+        ClientRegistry.setDefaultFailureClassifier(appDefault);
+        // Per-client classifier that always defers.
+        ClientRegistry.addFailureClassifier('FirestoreAdminClient', { isFailure: () => undefined });
+
+        // per-client defers → app default claims it (client → non-failure)
+        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(false);
+        // no per-client entry, app default defers on server → built-in (server non-4xx → failure)
+        expect(ClientRegistry.classifyFailure(new Error('x'), server('SaveApi'))).toBe(true);
+    });
+
+    it('an unregistered external client is FAIL-SAFE (falls to built-in → failure on the client)', () => {
+        expect(ClientRegistry.classifyFailure(new Error('boom'), client('TwilioApi'))).toBe(true);
+    });
+
+    it('clear() empties the default AND per-apiClass classifiers', () => {
+        ClientRegistry.setDefaultFailureClassifier({ isFailure: () => false });
+        ClientRegistry.addFailureClassifier('FirestoreAdminClient', { isFailure: () => false });
+        ClientRegistry.clear();
+
+        // Back to the built-in: a client error is a failure again.
+        expect(ClientRegistry.classifyFailure(new Error('x'), client('FirestoreAdminClient'))).toBe(true);
     });
 });

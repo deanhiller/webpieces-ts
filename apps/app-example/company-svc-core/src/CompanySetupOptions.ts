@@ -1,4 +1,10 @@
-import { LoggerFactory, ConsoleLoggerFactory, ErrorTranslation } from '@webpieces/core-util';
+import {
+    LoggerFactory,
+    ConsoleLoggerFactory,
+    ErrorTranslation,
+    FailureClassifier,
+    KeyedFailureClassifier,
+} from '@webpieces/core-util';
 import { ContainerModule } from 'inversify';
 import { WebpiecesConfig } from '@webpieces/http-routing';
 
@@ -26,6 +32,12 @@ export class CompanySetupOptions {
      *   (see {@link ErrorTranslation}). This binds them "only when express is used"; an app may
      *   instead call ClientRegistry.addErrorTranslation(...) directly at its own startup site (and
      *   MUST do the same on the browser/Angular side, since those translations run client-side).
+     * @param defaultFailureClassifier - Optional app/company DEFAULT failure classifier installed on
+     *   ClientRegistry at startup (see {@link FailureClassifier}). ONE per app; reads `side`, so it
+     *   covers the server router AND all internal clients. Unset ⇒ webpieces' built-in classification.
+     * @param failureClassifiers - Per-EXTERNAL-client classifiers, each keyed by apiClass
+     *   ('FirestoreAdminClient', ...). Installed on ClientRegistry at startup. Same "only when express
+     *   is used" binding as errorTranslations; the browser side registers its own via ClientRegistry.
      * @param svcName - This service's name, published to ServiceInfo by {@link setupCompanyRuntime}.
      *   It names every log line and stamps `requestIdSource` on request-ids this service mints.
      *   Defaulted so the example's tests stay boilerplate-free; a REAL company wrapper would make
@@ -41,6 +53,8 @@ export class CompanySetupOptions {
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
         public readonly errorTranslations: ErrorTranslation[] = [],
+        public readonly defaultFailureClassifier?: FailureClassifier,
+        public readonly failureClassifiers: KeyedFailureClassifier[] = [],
         public readonly svcName: string = 'app-example',
         public readonly svcVersion: string = 'local-dev',
     ) {}

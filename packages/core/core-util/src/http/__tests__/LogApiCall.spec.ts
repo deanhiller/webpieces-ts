@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { LogApiCall } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
 import { ApiCallContext, ApiCallContextHolder } from '../ApiCallContext';
 import { ContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
-import { HttpBadRequestError, HttpUserError } from '../errors';
+import { ClientRegistry } from '../ClientRegistry';
+import { HttpBadRequestError, HttpUserError, HttpNotFoundError } from '../errors';
 
 /**
  * A recording {@link ApiCallContext}: keeps every (key, value) it was asked to stamp so a test can
@@ -147,6 +148,50 @@ describe('LogApiCall.execute — error result mapping', () => {
         ).rejects.toThrow('boom');
 
         expect(ctx.values().at(-1)).toMatchObject({ method: info('server'), type: 'response', result: 'failure' });
+    });
+});
+
+describe('LogApiCall.execute — pluggable per-client failure classification', () => {
+    // The registry is a process-global; clear it so a registered classifier does not leak into the
+    // other specs in this file (which assert the built-in behavior).
+    afterEach(() => {
+        ClientRegistry.clear();
+    });
+
+    it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
+        // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
+        ClientRegistry.addFailureClassifier('SaveApi', {
+            isFailure: (error: Error) => (error instanceof HttpNotFoundError ? false : undefined),
+        });
+
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        await expect(
+            LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+                throw new HttpNotFoundError('doc missing');
+            }),
+        ).rejects.toBeInstanceOf(HttpNotFoundError);
+
+        // Without the classifier this client 4xx would be 'failure'; the classifier makes it 'success'.
+        expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'success' });
+    });
+
+    it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
+        ClientRegistry.addFailureClassifier('SaveApi', {
+            isFailure: (error: Error) => (error instanceof HttpNotFoundError ? false : undefined),
+        });
+
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        await expect(
+            LogApiCall.execute(info('client'), { q: 'x' }, async () => {
+                throw new HttpBadRequestError('server said no');
+            }),
+        ).rejects.toBeInstanceOf(HttpBadRequestError);
+
+        expect(ctx.values().at(-1)).toMatchObject({ method: info('client'), type: 'response', result: 'failure' });
     });
 });
 
