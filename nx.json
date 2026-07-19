@@ -16,7 +16,7 @@
         "@nx/js:tsc": {
             "cache": true,
             "dependsOn": ["^build"],
-            "inputs": ["default", "^default"]
+            "inputs": ["production", "^production"]
         },
         "build": {
             "dependsOn": ["^build"],
@@ -39,7 +39,9 @@
             }
         },
         "@angular/build:application": {
-            "dependsOn": ["^build"]
+            "cache": true,
+            "dependsOn": ["^build"],
+            "inputs": ["production", "^production"]
         }
     },
     "plugins": [
