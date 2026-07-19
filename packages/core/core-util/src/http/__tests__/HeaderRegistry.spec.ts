@@ -90,6 +90,20 @@ describe('HeaderRegistry dedup validation', () => {
     });
 });
 
+describe('WebpiecesCoreHeaders.ACTION_ID', () => {
+    it('is the app-minted grouping id: transferred over the wire AND logged', () => {
+        const key = WebpiecesCoreHeaders.ACTION_ID;
+        expect(key.name).toBe('actionId');
+        expect(key.httpHeader).toBe('x-webpieces-actionid'); // rides every call of one user action
+        expect(key.isTransferred()).toBe(true);              // follows the action across service hops
+        expect(key.isLogged).toBe(true);
+
+        const registry = configureWith(...WebpiecesCoreHeaders.getAllHeaders());
+        expect(registry.getTransferredKeys()).toContain(key);
+        expect(registry.getLoggedKeys()).toContain(key);
+    });
+});
+
 describe('WebpiecesCoreHeaders.API_CALL_INFO', () => {
     it('is logged but NOT transferred over the wire (per-hop only)', () => {
         const key = WebpiecesCoreHeaders.API_CALL_INFO;

@@ -58,16 +58,29 @@ export class WebpiecesCoreHeaders {
     static readonly CLIENT_VERSION = new ContextKey('clientVersion', 'x-webpieces-client-version');
 
     /**
-     * A frontend-minted correlation id that groups every request triggered by ONE user interaction
-     * (a click / navigation). Generated and refreshed in the browser (an app-level UI concern), then
-     * carried on every outbound request under `x-webpieces-clickid` so the server logs of a whole
-     * click flow share it.
+     * A frontend/app-minted correlation id that groups every request triggered by ONE user ACTION.
+     *
+     * An "action" is a single thing the user did in the GUI — a CLICK on a button/link, or TYPING in a
+     * field — or a background poller tick: anything that may fan out into MULTIPLE remote calls. That one
+     * action fires 1..N browser HTTP calls, each of which gets its own framework-minted {@link REQUEST_ID}
+     * (one per HTTP call, shared within that call's server→server subtree). `actionId` sits ABOVE
+     * `requestId` and is what stitches those N requests back to the single action that caused them:
+     *
+     *     actionId  (app-minted, ONE per user action, rides EVERY call of that action)
+     *        └── 1..N requestId  (framework-minted, ONE per HTTP call)
+     *
+     * Grep one `actionId` in the logs → every `requestId` it spawned, and every log line of the whole
+     * action. Minted and refreshed by the app (a UI concern), carried under `x-webpieces-actionid`.
+     *
+     * Browser/app-minted ONLY: unlike {@link REQUEST_ID}, the framework transfers and logs it but must
+     * NOT auto-mint one server-side. Absent `actionId` ⇒ a non-action flow (system / cron / task), which
+     * is the correct signal.
      *
      * - `httpHeader` SET → transferred: copied off the inbound request into context and re-emitted on
-     *   outbound hops, so the id follows the interaction across services.
+     *   outbound hops, so the id follows the action across services.
      * - `isLogged` TRUE → emitted as a plain string on every log line of the request.
      */
-    static readonly CLICK_ID = new ContextKey('clickId', 'x-webpieces-clickid');
+    static readonly ACTION_ID = new ContextKey('actionId', 'x-webpieces-actionid');
 
     static readonly ORG_ID = new ContextKey('orgId', 'x-org-id');
 
@@ -157,7 +170,7 @@ export class WebpiecesCoreHeaders {
             WebpiecesCoreHeaders.REQUEST_ID,
             WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
             WebpiecesCoreHeaders.CLIENT_VERSION,
-            WebpiecesCoreHeaders.CLICK_ID,
+            WebpiecesCoreHeaders.ACTION_ID,
             WebpiecesCoreHeaders.USER_ID,
             WebpiecesCoreHeaders.ORG_ID,
             WebpiecesCoreHeaders.USER_ROLES,
