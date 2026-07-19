@@ -27,6 +27,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'prisma-converter': {},
     'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
+    'no-custom-css': { allowGlobs: [] },
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},
     'framework-tag': { mode: 'MODIFIED_PROJECTS', knownTypes: ['browser', 'react', 'angular', 'node', 'express'] },

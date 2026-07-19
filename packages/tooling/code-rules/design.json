@@ -145,6 +145,22 @@
                     "level": 2
                 },
                 {
+                    "id": "NoCustomCssConfig",
+                    "className": "NoCustomCssConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/rule-configs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoCustomCssValidator",
+                    "className": "NoCustomCssValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-custom-css.ts",
+                    "level": 2
+                },
+                {
                     "id": "NoDestructureConfig",
                     "className": "NoDestructureConfig",
                     "kind": "class",
@@ -454,6 +470,15 @@
                 },
                 {
                     "from": "CodeRulesEngine",
+                    "to": "NoCustomCssValidator",
+                    "injection": "type",
+                    "token": "NoCustomCssValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-custom-css.ts#NoCustomCssValidator",
+                    "paramName": "noCustomCss",
+                    "paramType": "NoCustomCssValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
                     "to": "NoDestructureValidator",
                     "injection": "type",
                     "token": "NoDestructureValidator",
@@ -631,6 +656,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoAnyUnknownConfig",
                     "paramName": "config",
                     "paramType": "NoAnyUnknownConfig"
+                },
+                {
+                    "from": "NoCustomCssValidator",
+                    "to": "NoCustomCssConfig",
+                    "injection": "type",
+                    "token": "NoCustomCssConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoCustomCssConfig",
+                    "paramName": "config",
+                    "paramType": "NoCustomCssConfig"
                 },
                 {
                     "from": "NoDestructureValidator",

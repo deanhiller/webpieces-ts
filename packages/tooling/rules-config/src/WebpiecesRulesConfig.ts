@@ -13,6 +13,7 @@ import {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    NoCustomCssConfig,
     NoProcessExitOutsideMainConfig,
     NoFunctionOutsideClassConfig,
     InjectAnnotationNotNeededForConcreteClassConfig,
@@ -47,6 +48,7 @@ export class WebpiecesRulesConfig {
     'throw-cause-required'?: ThrowCauseRequiredConfig;
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
+    'no-custom-css'?: NoCustomCssConfig;
     'no-process-exit-outside-main'?: NoProcessExitOutsideMainConfig;
     'no-function-outside-class'?: NoFunctionOutsideClassConfig;
     'inject-annotation-not-needed-for-concrete-class'?: InjectAnnotationNotNeededForConcreteClassConfig;

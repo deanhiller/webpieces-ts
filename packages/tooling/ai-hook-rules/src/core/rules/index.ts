@@ -10,6 +10,7 @@ export const builtInRuleNames: readonly string[] = [
     'catch-error-pattern',
     'throw-cause-required',
     'no-symbol-di-tokens',
+    'no-custom-css',
     'no-process-exit-outside-main',
     'branch-creation-guard',
     'pr-creation-or-push-guard',
