@@ -29,6 +29,8 @@ graph TD
     MaxMethodLinesValidator["MaxMethodLinesValidator"]
     NoAnyUnknownConfig["NoAnyUnknownConfig"]:::many
     NoAnyUnknownValidator["NoAnyUnknownValidator"]
+    NoCustomCssConfig["NoCustomCssConfig"]:::many
+    NoCustomCssValidator["NoCustomCssValidator"]
     NoDestructureConfig["NoDestructureConfig"]:::many
     NoDestructureValidator["NoDestructureValidator"]
     NoDirectApiResolverValidator["NoDirectApiResolverValidator"]
@@ -66,6 +68,7 @@ graph TD
     CodeRulesEngine --> MaxFileLinesValidator
     CodeRulesEngine --> MaxMethodLinesValidator
     CodeRulesEngine --> NoAnyUnknownValidator
+    CodeRulesEngine --> NoCustomCssValidator
     CodeRulesEngine --> NoDestructureValidator
     CodeRulesEngine --> NoDirectApiResolverValidator
     CodeRulesEngine --> NoFunctionOutsideClassValidator
@@ -86,6 +89,7 @@ graph TD
     MaxFileLinesValidator --> MaxFileLinesConfig
     MaxMethodLinesValidator --> MaxMethodLinesConfig
     NoAnyUnknownValidator --> NoAnyUnknownConfig
+    NoCustomCssValidator --> NoCustomCssConfig
     NoDestructureValidator --> NoDestructureConfig
     NoDirectApiResolverValidator --> AngularNoDirectApiInResolverConfig
     NoFunctionOutsideClassValidator --> NoFunctionOutsideClassConfig

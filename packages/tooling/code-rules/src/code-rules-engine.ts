@@ -18,6 +18,7 @@ import { CatchErrorPatternValidator } from './validate-catch-error-pattern';
 import { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptions';
 import { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 import { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
+import { NoCustomCssValidator } from './validate-no-custom-css';
 import { NoProcessExitOutsideMainValidator } from './validate-no-process-exit-outside-main';
 import { NoFunctionOutsideClassValidator } from './validate-no-function-outside-class';
 import { InjectAnnotationNotNeededForConcreteClassValidator } from './validate-inject-annotation-not-needed-for-concrete-class';
@@ -51,6 +52,7 @@ export class CodeRulesEngine {
         private readonly noUnmanagedExceptions: NoUnmanagedExceptionsValidator,
         private readonly noDirectApiResolver: NoDirectApiResolverValidator,
         private readonly noSymbolDiTokens: NoSymbolDiTokensValidator,
+        private readonly noCustomCss: NoCustomCssValidator,
         private readonly noProcessExitOutsideMain: NoProcessExitOutsideMainValidator,
         private readonly noFunctionOutsideClass: NoFunctionOutsideClassValidator,
         private readonly injectAnnotationNotNeeded: InjectAnnotationNotNeededForConcreteClassValidator,
@@ -58,13 +60,13 @@ export class CodeRulesEngine {
         private readonly roleTag: RoleTagValidator,
     ) {}
 
-    /** The 18 injected built-in validators, in run order. */
+    /** The 19 injected built-in validators, in run order. */
     private builtIns(): CodeValidator<BaseRuleConfig>[] {
         return [
             this.maxMethodLines, this.maxFileLines, this.requireReturnType, this.noInlineTypeLiterals,
             this.noAnyUnknown, this.noImplicitAny, this.prismaValidateDtos, this.prismaConverter,
             this.noDestructure, this.catchErrorPattern, this.noUnmanagedExceptions, this.noDirectApiResolver,
-            this.noSymbolDiTokens, this.noProcessExitOutsideMain, this.noFunctionOutsideClass,
+            this.noSymbolDiTokens, this.noCustomCss, this.noProcessExitOutsideMain, this.noFunctionOutsideClass,
             this.injectAnnotationNotNeeded, this.frameworkTag, this.roleTag,
         ];
     }

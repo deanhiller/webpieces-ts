@@ -69,6 +69,7 @@ export {
     ThrowCauseRequiredConfig,
     AngularNoDirectApiInResolverConfig,
     NoSymbolDiTokensConfig,
+    NoCustomCssConfig,
     NoProcessExitOutsideMainConfig,
     NoFunctionOutsideClassConfig,
     InjectAnnotationNotNeededForConcreteClassConfig,

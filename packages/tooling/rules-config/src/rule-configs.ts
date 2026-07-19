@@ -250,6 +250,22 @@ export class AngularNoDirectApiInResolverConfig extends BaseRuleConfig {
     };
 }
 
+// Bans hand-written CSS in Angular sources (styles:/styleUrls:/styleUrl: in @Component, and inline
+// style=/[style.x]/[ngStyle] in templates) so teams style with Tailwind utility classes. `allowGlobs`
+// exempts paths WITHIN the Angular scope (e.g. a vendored Fuse kit copied verbatim with its own CSS).
+export class NoCustomCssConfig extends BaseRuleConfig {
+    declare mode?: ModifiedCodeMode;
+    disableAllowed?: boolean;
+    allowGlobs?: string[];
+
+    static readonly SCHEMA: SchemaShape<NoCustomCssConfig> = {
+        mode: new FieldDef('string', MODIFIED_CODE_MODES),
+        disableAllowed: FieldDef.optional('boolean'),
+        allowGlobs: FieldDef.optional('string[]'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoSymbolDiTokensConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
