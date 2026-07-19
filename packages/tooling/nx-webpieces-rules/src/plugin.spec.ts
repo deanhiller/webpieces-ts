@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { isInsideNestedGitRepo } from './plugin';
+import { isInsideNestedGitRepo, createCiTarget } from './plugin';
 
 function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-plugin-'));
@@ -43,5 +43,34 @@ describe('isInsideNestedGitRepo', () => {
         fs.mkdirSync(clone, { recursive: true });
         fs.writeFileSync(path.join(clone, '.git'), 'gitdir: /somewhere\n');
         expect(isInsideNestedGitRepo(root, 'repositories/wt')).toBe(true);
+    });
+});
+
+describe('createCiTarget', () => {
+    it('always aggregates lint + build + test', () => {
+        const ci = createCiTarget([], false);
+        expect(ci.executor).toBe('nx:noop');
+        expect(ci.dependsOn).toEqual(['lint', 'build', 'test']);
+    });
+
+    it('appends the per-project validation gates so ci validates but build stays fast', () => {
+        const ci = createCiTarget(
+            ['validate-no-file-import-cycles', 'validate-di-graph-unchanged'],
+            false,
+        );
+        expect(ci.dependsOn).toEqual([
+            'lint',
+            'build',
+            'test',
+            'validate-no-file-import-cycles',
+            'validate-di-graph-unchanged',
+        ]);
+    });
+
+    it('adds the cross-project architecture gate only when the workspace exists', () => {
+        const withArch = createCiTarget(['validate-no-file-import-cycles'], true);
+        expect(withArch.dependsOn).toContain('architecture:validate-complete');
+        const withoutArch = createCiTarget(['validate-no-file-import-cycles'], false);
+        expect(withoutArch.dependsOn).not.toContain('architecture:validate-complete');
     });
 });

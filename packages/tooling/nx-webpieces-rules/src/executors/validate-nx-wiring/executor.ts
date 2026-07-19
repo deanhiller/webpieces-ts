@@ -1,20 +1,22 @@
 /**
  * Validate Nx Wiring Executor
  *
- * Enforces that the webpieces validators are actually wired into the build. Two checks:
+ * Enforces that the build graph is wired for correct build ORDER. Two checks:
  *
  * 1. nx.json targetDefaults — the compile executors (@nx/js:tsc, @angular/build:application)
  *    must carry the load-bearing dependsOn:
- *      ["architecture:validate-complete", "validate-no-file-import-cycles", "^build"]
+ *      ["^build"]
  *
  * 2. Per-project override guard — a project that declares its OWN build.dependsOn OVERRIDES
  *    the targetDefaults entirely (nx does not merge dependsOn). That silently drops `^build`
- *    (→ upstream libs not built first, builds against an empty dist) AND the validator gates
- *    (→ the project builds green while validating nothing). So we check each compile project's
- *    RESOLVED build.dependsOn and fail if it is missing any required entry.
+ *    (→ upstream libs not built first, builds against an empty dist). So we check each compile
+ *    project's RESOLVED build.dependsOn and fail if `^build` is missing.
  *
- * If either is stripped, validators exist but never run and the build stays green while
- * validating nothing. This executor fails when the wiring is missing.
+ * NOTE: the webpieces validators (architecture:validate-complete, per-project file-import
+ * cycles, DI-graph unchanged) NO LONGER ride on the compile target. They live on the `ci`
+ * composite target (synthesized by this plugin's createCiTarget), so `build`/compile is a
+ * fast compile-only step while `nx ci` runs the full gate. This executor therefore only
+ * guards build ORDER (`^build`), not the validators — those are guaranteed by the plugin.
  *
  * Conservative by design: only REQUIRES wiring on compile executors actually in use
  * (@nx/js:tsc, @angular/build:application). A repo that uses neither passes.
@@ -43,14 +45,10 @@ export interface ExecutorResult {
     success: boolean;
 }
 
-const DEFAULT_REQUIRED_DEPS: string[] = [
-    'architecture:validate-complete',
-    'validate-no-file-import-cycles',
-    'validate-di-graph-unchanged',
-];
-
-// Per-project build targets must ALSO keep `^build` so build order follows nx's full graph.
-const BUILD_ORDER_DEP = '^build';
+// Compile executors (and any per-project build override) must keep `^build` so build order
+// follows nx's full graph — upstreams are built into dist before dependents compile.
+// Validators no longer belong here; they ride on the `ci` composite target instead.
+const DEFAULT_REQUIRED_DEPS: string[] = ['^build'];
 
 const DEFAULT_COMPILE_EXECUTORS: string[] = [
     '@nx/js:tsc',
@@ -157,7 +155,7 @@ function normalizeDeps(deps: (string | TargetDependencyConfig)[]): string[] {
 
 /**
  * Check each compile project's RESOLVED build.dependsOn (targetDefaults already merged in)
- * for the required gates + `^build`. A project that overrode them away is flagged.
+ * for `^build`. A project that overrode it away is flagged.
  */
 function findProjectGateProblems(
     projectsConfig: ProjectsConfigurations,
@@ -182,14 +180,14 @@ function findProjectGateProblems(
 }
 
 function reportFailure(problems: WiringProblem[], requiredDeps: string[]): void {
-    console.error('\n❌ webpieces validators are not wired into your build (nx.json).\n');
-    console.error('The validators exist but no build depends on them, so they never run.');
+    console.error('\n❌ Build order is not wired in nx.json targetDefaults.\n');
+    console.error('Compile executors must keep "^build" so upstream libs build into dist first.');
     console.error('Add the missing dependsOn entries to nx.json targetDefaults:\n');
     const depsList = requiredDeps.map((dep: string) => `"${dep}"`).join(', ');
     for (const problem of problems) {
         const missingList = problem.missing.map((dep: string) => `"${dep}"`).join(', ');
         console.error(`  "${problem.executorName}": {`);
-        console.error(`      "dependsOn": [${depsList}, "^build"]`);
+        console.error(`      "dependsOn": [${depsList}]`);
         console.error('  }');
         console.error(`    missing: ${missingList}\n`);
     }
@@ -198,13 +196,12 @@ function reportFailure(problems: WiringProblem[], requiredDeps: string[]): void 
 }
 
 function reportProjectGateFailure(problems: ProjectGateProblem[]): void {
-    console.error('\n❌ Some projects override away the build gates in their project.json.\n');
+    console.error('\n❌ Some projects override away the build order in their project.json.\n');
     console.error('A project-level build.dependsOn OVERRIDES nx.json targetDefaults (nx does not');
     console.error('merge dependsOn). That silently drops "^build" (upstreams not built first →');
-    console.error('builds against an empty dist) and/or the validators (build stays green while');
-    console.error('validating nothing).\n');
+    console.error('builds against an empty dist).\n');
     console.error('Fix: remove build.dependsOn from these project.json files so targetDefaults');
-    console.error('apply, OR include all required entries explicitly:\n');
+    console.error('apply, OR include "^build" explicitly:\n');
     for (const p of problems) {
         const missingList = p.missing.map((dep) => `"${dep}"`).join(', ');
         console.error(`  ${p.project} (${p.executorName}):`);
@@ -244,10 +241,7 @@ export default async function runExecutor(
 
     const targetDefaults = readTargetDefaults(context.root);
     const wiringProblems = findProblems(relevantExecutors, targetDefaults, requiredDeps);
-    const gateProblems = findProjectGateProblems(projectsConfig, inUse, [
-        ...requiredDeps,
-        BUILD_ORDER_DEP,
-    ]);
+    const gateProblems = findProjectGateProblems(projectsConfig, inUse, requiredDeps);
 
     if (wiringProblems.length === 0 && gateProblems.length === 0) {
         console.log('✅ Validators are wired into the build (targetDefaults + every project)\n');
