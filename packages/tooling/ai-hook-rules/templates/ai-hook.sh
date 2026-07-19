@@ -20,12 +20,46 @@ BIN="$ROOT/node_modules/.bin/$BIN_NAME"
 # node_modules; the first mismatch wins. Range specs (^ ~ workspace:*) are skipped, so they never
 # false-positive; best-effort — a version we cannot read is skipped. On drift we fall through to the
 # SAME fail-closed path as a missing bin (allow only pnpm install, deny the rest).
+#
+# pnpm CATALOGS: a dep pinned via "catalog:" / "catalog:<name>" carries NO digit-version in package.json,
+# so the old scraper matched nothing and the guard was BLIND to it — DRIFT_PKG stayed empty and the
+# stale bin ran (the 2026-07 "0.3.369 vs 0.4.405" incident). Resolve those specs through the top-level
+# `catalogs:` block of pnpm-lock.yaml (catalog -> pkg -> resolved version) before comparing.
 DRIFT_PKG=""
 DRIFT_DECLARED=""
 DRIFT_INSTALLED=""
 if [ -f "$ROOT/package.json" ]; then
+  # Only when a @webpieces dep actually uses a "catalog:" spec do we scan the (possibly huge) lockfile —
+  # a cheap grep keeps the common, catalog-free repo from paying that cost on every tool call. One awk
+  # pass over pnpm-lock.yaml emits "<catalog> <@webpieces/pkg> <version>" lines for the sh lookup below;
+  # \047 is a single quote (so this awk program carries none and stays safely single-quotable in sh).
+  WP_CATALOGS=""
+  if grep -Eq '"@webpieces/[^"]*"[[:space:]]*:[[:space:]]*"catalog:' "$ROOT/package.json" 2>/dev/null && [ -f "$ROOT/pnpm-lock.yaml" ]; then
+    WP_CATALOGS="$(awk '
+      { n=0; while (substr($0,n+1,1)==" ") n++; c=substr($0,n+1) }
+      c=="" { next }
+      n==0 { incat=(c ~ /^catalogs: *$/)?1:0; cat=""; pkg=""; next }
+      incat==0 { next }
+      n==2 { cat=c; sub(/:.*/,"",cat); pkg=""; next }
+      n==4 { pkg=c; sub(/: *$/,"",pkg); gsub(/["\047]/,"",pkg); next }
+      n==6 && substr(pkg,1,11)=="@webpieces/" && c ~ /^version:/ {
+        v=c; sub(/^version: */,"",v); gsub(/["\047 ]/,"",v);
+        if (cat!="" && v!="") print cat " " pkg " " v
+      }
+    ' "$ROOT/pnpm-lock.yaml" 2>/dev/null)"
+  fi
   while IFS=' ' read -r WP_NAME WP_DECL; do
     [ -n "$WP_NAME" ] || continue
+    # Resolve the declared spec to an EXACT version, or skip it: ranges (^ ~ workspace:*) never drift,
+    # and a catalog spec we cannot resolve is best-effort skipped rather than guessed.
+    case "$WP_DECL" in
+      catalog:*)
+        WP_CAT="${WP_DECL#catalog:}"; [ -n "$WP_CAT" ] || WP_CAT="default"
+        WP_DECL="$(printf '%s\n' "$WP_CATALOGS" | awk -v c="$WP_CAT" -v p="@webpieces/$WP_NAME" '$1==c && $2==p {print $3; exit}')"
+        [ -n "$WP_DECL" ] || continue ;;
+      [0-9]*) : ;;
+      *) continue ;;
+    esac
     WP_MANIFEST="$ROOT/node_modules/@webpieces/$WP_NAME/package.json"
     [ -f "$WP_MANIFEST" ] || continue
     WP_INST="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$WP_MANIFEST" | head -n1)"
@@ -37,15 +71,28 @@ if [ -f "$ROOT/package.json" ]; then
       break
     fi
   done <<WPEOF
-$(sed -n 's/.*"@webpieces\/\([A-Za-z0-9._-]*\)"[[:space:]]*:[[:space:]]*"\([0-9][0-9A-Za-z.-]*\)".*/\1 \2/p' "$ROOT/package.json")
+$(sed -n 's/.*"@webpieces\/\([A-Za-z0-9._-]*\)"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1 \2/p' "$ROOT/package.json")
 WPEOF
+fi
+# --- webpieces committed-shim self-guard (this file is webpieces-managed; a revert/edit is a mistake) --
+# THIS file (.claude/webpieces/ai-hook.sh) is GENERATED from the installed @webpieces/ai-hook-rules
+# template and committed only so the hook has a stable entry point when node_modules is absent. If it no
+# longer matches the installed template, someone reverted or hand-edited it (the exact mistake that hides
+# the fix behind a stale escape hatch) — its fail-closed logic can no longer be trusted, so we fail closed
+# and make the cure explicit rather than silently running possibly-stale guard logic. Best-effort: only
+# when the template is actually present (skip on a fresh clone / global install), and only when there is
+# NO version drift (that has its own, more precise message; comparing bytes across versions is just noise).
+SHIM_STALE=""
+WP_TEMPLATE="$ROOT/node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh"
+if [ -z "$DRIFT_PKG" ] && [ -f "$WP_TEMPLATE" ] && ! cmp -s "$0" "$WP_TEMPLATE"; then
+  SHIM_STALE=1
 fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
 BROKEN_BIN=""
 CRASH_MSG=""
-if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
+if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ] && [ -z "$SHIM_STALE" ]; then
   OUT_FILE="${TMPDIR:-/tmp}/wp-ai-hook-out.$$"
   ERR_FILE="${TMPDIR:-/tmp}/wp-ai-hook-err.$$"
   printf '%s' "$PAYLOAD" | "$BIN" "$@" >"$OUT_FILE" 2>"$ERR_FILE"
@@ -82,11 +129,18 @@ wp_log() {                   # $1 = decision label (ALLOW-INSTALL | DENY | DENY-
   { mkdir -p "$LOG_DIR" 2>/dev/null && printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "$1" "$CMD" >> "$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
 }
 DENY_LABEL="DENY"
-[ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"    # version drift, not a missing bin
-[ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"  # bin present but CRASHED (corrupt node_modules)
+[ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
+[ -n "$SHIM_STALE" ] && DENY_LABEL="DENY-SHIM-STALE"  # committed shim reverted/edited (self-guard)
+[ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
 if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*[[:space:]]*$' || printf '%s' "$CMD" | grep -Eq '^rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?[[:space:]]*$'; then
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
+fi
+# Always let the shim-regen cure through: wp-upgrade-shim rewrites the committed shim from the installed
+# template, so it is the ONLY fix for a self-guard block — denying it would deadlock the assistant.
+if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim[[:space:]]*$'; then
+  wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
+  exit 0
 fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
@@ -106,6 +160,11 @@ if [ -n "$BROKEN_BIN" ]; then
     STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
   fi
   REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: rm -rf node_modules && pnpm install${STAGING_NOTE}"
+elif [ -n "$SHIM_STALE" ]; then
+  # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
+  # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
+  # allowlisted command that re-arms it.
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the installed @webpieces/ai-hook-rules template (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until it is regenerated. Run exactly this, then retry: pnpm exec wp-upgrade-shim (rewrites the committed shim from the installed template; do NOT revert it again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead)."
 elif [ -n "$DRIFT_PKG" ]; then
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
