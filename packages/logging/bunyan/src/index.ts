@@ -5,14 +5,13 @@
  * startup via `LogManager.setFactory(...)`:
  *
  * ```ts
- * import { ServiceInfo } from '@webpieces/core-util';
  * import { BunyanGcpFactory, BunyanConsoleFactory } from '@webpieces/bunyan';
  *
- * ServiceInfo.setInfo('my-service', '2.1.0');  // FIRST — the factories read it in their constructor
  * const loggerFactory = process.env.K_SERVICE
  *   ? new BunyanGcpFactory()      // Cloud Logging via @google-cloud/logging-bunyan
  *   : new BunyanConsoleFactory(); // local → pretty console
- * // hand to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...))
+ * // setupRuntime identifies the service (name+version are REQUIRED inputs) and installs the backend:
+ * // setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', loggerFactory, ...))
  * ```
  *
  * BREAKING (was `new BunyanFactoryOptions('my-service')` passed to each factory): the service name

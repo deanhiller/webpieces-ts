@@ -38,11 +38,13 @@ export class CompanySetupOptions {
      * @param failureClassifiers - Per-EXTERNAL-client classifiers, each keyed by apiClass
      *   ('FirestoreAdminClient', ...). Installed on ClientRegistry at startup. Same "only when express
      *   is used" binding as errorTranslations; the browser side registers its own via ClientRegistry.
-     * @param svcName - This service's name, published to ServiceInfo by {@link setupCompanyRuntime}.
-     *   It names every log line and stamps `requestIdSource` on request-ids this service mints.
+     * @param svcName - This service's name, forwarded into RuntimeSetupOptions so {@link setupRuntime}
+     *   publishes it to ServiceInfo. It names every log line and stamps `requestIdSource` on request-ids
+     *   this service mints.
      *   Defaulted so the example's tests stay boilerplate-free; a REAL company wrapper would make
      *   this required, since every deployed service should say what it is.
-     * @param svcVersion - This build's version, published to ServiceInfo alongside svcName. Opaque
+     * @param svcVersion - This build's version, forwarded into RuntimeSetupOptions and published to
+     *   ServiceInfo alongside svcName by {@link setupRuntime}. Opaque
      *   to webpieces — a git SHA, a semver tag, a CI build number — it just has to identify THIS
      *   build, so a log line can say which one emitted it. Real deployments inject it at build time
      *   (a Docker build arg into a generated file, an env var, ...); the default here marks a build

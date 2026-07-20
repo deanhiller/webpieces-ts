@@ -5,15 +5,18 @@
  * startup via `LogManager.setFactory(...)`:
  *
  * ```ts
- * import { ServiceInfo } from '@webpieces/core-util';
  * import { WinstonGcpFactory, WinstonConsoleFactory } from '@webpieces/winston';
  *
- * ServiceInfo.setInfo('my-service', '2.1.0');  // FIRST — the factories read it in their constructor
  * const loggerFactory = process.env.K_SERVICE
  *   ? new WinstonGcpFactory()      // Cloud Run → stdout JSON
  *   : new WinstonConsoleFactory(); // local → pretty console
- * // hand to setupRuntime(new RuntimeSetupOptions(loggerFactory, ...))
+ * // setupRuntime identifies the service (name+version are REQUIRED inputs) and installs the backend:
+ * // setupRuntime(new RuntimeSetupOptions('my-service', '2.1.0', loggerFactory, ...))
  * ```
+ *
+ * (svcName rides winston `defaultMeta`, read at factory CONSTRUCTION — so if you need it on winston
+ * lines, call `ServiceInfo.setInfo('my-service', '2.1.0')` before building the factory too; `version`
+ * is stamped per-record and appears the moment setupRuntime runs regardless of construction order.)
  *
  * BREAKING (was `new WinstonFactoryOptions(svcGitHash)` passed to each factory): the version moved
  * to `ServiceInfo.setInfo(name, version)` in @webpieces/core-util, because it is a fact about the

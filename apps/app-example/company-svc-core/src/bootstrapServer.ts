@@ -7,7 +7,6 @@ import {
     ClientRegistry,
     ErrorTranslation,
     KeyedFailureClassifier,
-    ServiceInfo,
 } from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
@@ -26,11 +25,6 @@ export async function setupCompanyRuntime(
     appModules: AppModules,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
-    // Identify this service FIRST: a logger backend reads ServiceInfo in its own constructor, and
-    // setupRuntime asserts it before anything else. Doing it in the company wrapper means every
-    // server AND every test that boots one is named+versioned, with no per-call-site boilerplate.
-    ServiceInfo.setInfo(options.svcName, options.svcVersion);
-
     // Install the app's error translations at the same point we install the logger/registry config,
     // so exception<->wire translation is part of the express-server wiring "only when express is
     // used." Consulted before the built-in webpieces mapping on BOTH sides (see ErrorTranslation).
@@ -46,7 +40,13 @@ export async function setupCompanyRuntime(
         ClientRegistry.addFailureClassifier(k.apiClass, k.classifier),
     );
     return setupRuntime(
-        new RuntimeSetupOptions(options.loggerFactory, /*platformHeaders*/ true, options.config),
+        new RuntimeSetupOptions(
+            options.svcName,
+            options.svcVersion,
+            options.loggerFactory,
+            /*platformHeaders*/ true,
+            options.config,
+        ),
         appModules,
         options.appOverrides,
     );

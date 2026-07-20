@@ -113,8 +113,9 @@ export class RequestContextHeaders {
      * ABSENT on a hop that inherited the caller's id. Present == this service is the trace's origin.
      *
      * Uses the non-throwing `getName()`: this runs PER REQUEST, and a missing log field must not 500
-     * live traffic. A server that booted already passed `setupRuntime`'s `assertIdentified()` check,
-     * so the name is always there in practice; only a test driving the context directly sees undefined.
+     * live traffic. A server that booted already ran `setupRuntime`, which calls `ServiceInfo.setInfo`
+     * with its required name+version, so the name is always there in practice; only a test driving the
+     * context directly sees undefined.
      */
     private stampRequestIdSource(): void {
         const svcName = ServiceInfo.getName();

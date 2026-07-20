@@ -35,7 +35,8 @@ export abstract class WinstonFactoryBase implements LoggerFactory {
     protected constructor(finalFormat: Format, transport?: Transport) {
         // svcName is a base field on every record when known. Non-throwing read: if the service was
         // not identified before this factory was built, svcName is simply omitted rather than blocking
-        // the deploy — setupRuntime enforces identity separately via ServiceInfo.assertIdentified().
+        // the deploy — setupRuntime identifies the service via ServiceInfo.setInfo (name+version are
+        // required inputs) before it serves traffic.
         const svcName = ServiceInfo.getName();
         const defaultMeta: Record<string, string> = {};
         if (svcName) {
