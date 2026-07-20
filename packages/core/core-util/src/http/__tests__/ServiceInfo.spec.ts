@@ -61,28 +61,14 @@ describe('ServiceInfo identifies this service exactly once, at startup', () => {
 
 /**
  * The failure design: READS never throw (a missing log field must not 500 live traffic, and logging
- * must work before setInfo), so the "a deployed build must say which build it is" guarantee is
- * enforced ONCE, loudly, by whoever requires it — assertIdentified(), which setupRuntime calls while
- * booting.
+ * must work before setInfo), so a pre-`setInfo` log line still emits. The "a deployed build must say
+ * which build it is" guarantee is enforced by making name+version REQUIRED inputs to setInfo (which
+ * `setupRuntime` takes and calls) — a blank value throws at startup rather than shipping anonymously.
  */
-describe('ServiceInfo reads never throw; assertIdentified fails fast at startup', () => {
+describe('ServiceInfo reads never throw; setInfo fails fast on blank identity', () => {
     it('getName()/getVersion() return undefined when never set — the request path never blows up', () => {
         expect(ServiceInfo.getName()).toBeUndefined();
         expect(ServiceInfo.getVersion()).toBeUndefined();
-    });
-
-    /**
-     * The message must say exactly what to do rather than surfacing bunyan's opaque
-     * "options.name (string) is required".
-     */
-    it('assertIdentified() THROWS an actionable error when never set', () => {
-        expect(() => ServiceInfo.assertIdentified()).toThrow(/ServiceInfo\.setInfo\(\.\.\.\) has not been called/);
-        expect(() => ServiceInfo.assertIdentified()).toThrow(/Identify this service at startup/);
-    });
-
-    it('assertIdentified() passes once both halves are set', () => {
-        ServiceInfo.setInfo('my-service', '2.1.0');
-        expect(() => ServiceInfo.assertIdentified()).not.toThrow();
     });
 
     it('rejects a blank name — always a bug, never a use case', () => {

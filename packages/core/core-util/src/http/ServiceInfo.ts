@@ -33,8 +33,8 @@
  * DOES NOT THROW ON READ. {@link getName} / {@link getVersion} return `undefined` when unset, so a
  * log line emitted before `setInfo` (early boot) still ships — it simply omits the version. Logging
  * never blocks on identity. The "a deployed build MUST identify itself" guarantee is enforced ONCE,
- * loudly, at startup by whoever requires it (`setupRuntime` calls {@link assertIdentified}), instead
- * of by every reader throwing.
+ * loudly, at startup by whoever calls {@link setInfo} — `setupRuntime` takes name+version as REQUIRED
+ * inputs and calls it, so a blank value throws and kills the deploy — instead of every reader throwing.
  */
 export class ServiceInfo {
     /** This service's name. Process-global; set once at startup. */
@@ -73,8 +73,9 @@ export class ServiceInfo {
     /**
      * This service's name, or `undefined` when {@link setInfo} has not been called. Does NOT throw:
      * readers (logging backends, requestIdSource, outbound CLIENT_VERSION) simply omit the field when
-     * it is missing, so a pre-`setInfo` log line still emits. Callers that REQUIRE identity call
-     * {@link assertIdentified} at startup instead.
+     * it is missing, so a pre-`setInfo` log line still emits. Identity is REQUIRED where it matters —
+     * `setupRuntime` takes name+version and calls {@link setInfo} at startup, so a real server is
+     * always identified before it serves traffic.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
     static getName(): string | undefined {
@@ -89,44 +90,10 @@ export class ServiceInfo {
         return ServiceInfo.svcVersion;
     }
 
-    /**
-     * FAIL FAST, AT STARTUP. Throws unless BOTH name and version are set. Whoever wants the "a
-     * deployed build must be able to say which build it is" guarantee calls this while booting
-     * (`setupRuntime` does) — so a forgotten `setInfo` kills the deploy (the revision never goes
-     * healthy) instead of quietly shipping logs that cannot say which build emitted them. Nothing on
-     * the REQUEST path calls this: a missing log field must never 500 live traffic.
-     *
-     * @throws Error if {@link setInfo} was never called.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
-    static assertIdentified(): void {
-        if (!ServiceInfo.svcName || !ServiceInfo.svcVersion) {
-            throw new Error(ServiceInfo.notSetMessage());
-        }
-    }
-
     /** Reset — for tests, mirroring {@link ClientRegistry.clear}. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
     static clear(): void {
         ServiceInfo.svcName = undefined;
         ServiceInfo.svcVersion = undefined;
-    }
-
-    /**
-     * The one actionable "you forgot to call setInfo" message, thrown by {@link assertIdentified}:
-     * setInfo sets BOTH, so either being missing has the identical cause and the identical fix —
-     * telling the caller only about the half they happened to read first would send them back for a
-     * second round.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); populated once at startup, never DI-injected
-    private static notSetMessage(): string {
-        return (
-            'ServiceInfo.setInfo(...) has not been called. Identify this service at startup:\n' +
-            "    ServiceInfo.setInfo('my-service', '2.1.0');\n" +
-            'The name+version stamp every log line (so you can tell WHICH BUILD emitted a line), ' +
-            'the name records which service minted a request id (requestIdSource), and the version ' +
-            'travels to downstream servers as clientVersion. The version is opaque — a git SHA, a ' +
-            'semver tag, a CI build number, whatever identifies your build.'
-        );
     }
 }

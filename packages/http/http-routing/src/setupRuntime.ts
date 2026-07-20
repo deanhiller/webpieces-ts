@@ -18,6 +18,13 @@ import { ApiFactory } from './ApiFactory';
  */
 export class RuntimeSetupOptions {
     constructor(
+        /** This service's name — published to ServiceInfo. Names every log line and stamps
+         * `requestIdSource` on request-ids this service mints. Must be non-blank. */
+        public readonly svcName: string,
+        /** This build's version — published to ServiceInfo alongside svcName. Opaque to webpieces
+         * (a git SHA, a semver tag, a CI build number); it just has to identify THIS build so a log
+         * line can say which one emitted it. Must be non-blank. */
+        public readonly svcVersion: string,
         /** Logging backend to install (LogManager.setFactory). */
         public readonly loggerFactory: LoggerFactory,
         /** Include the webpieces platform default headers. */
@@ -48,12 +55,13 @@ export async function setupRuntime(
      * Or special case servers that want to override specific things */
     appOverrides?: ContainerModule,
 ): Promise<ApiFactory> {
-    // 0. This service must be IDENTIFIED (name + build version). The logging backends and the request
-    // path READ ServiceInfo without throwing (a missing log field must never 500 live traffic, and
-    // logging must work before setInfo). So the "a deployed build must say which build it is"
-    // guarantee is enforced HERE instead — the one startup every server runs — so a forgotten
-    // setInfo kills the deploy (the revision never goes healthy) rather than shipping anonymous logs.
-    ServiceInfo.assertIdentified();
+    // 0. IDENTIFY this service (name + build version) FIRST, before anything logs. Name and version
+    // are REQUIRED inputs to this call, so a build cannot boot anonymously — setInfo throws on a
+    // blank value, which kills the deploy (the revision never goes healthy) rather than shipping logs
+    // that cannot say which build emitted them. Reads of ServiceInfo elsewhere never throw (a missing
+    // log field must never 500 live traffic); the "say which build you are" guarantee lives HERE, the
+    // one startup every server runs.
+    ServiceInfo.setInfo(options.svcName, options.svcVersion);
 
     // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
     HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);
