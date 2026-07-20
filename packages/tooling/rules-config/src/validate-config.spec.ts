@@ -1,4 +1,5 @@
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+import { HOOK_GUARD_NAMES } from './sections';
 
 // A minimal valid match-rule entry, cloned + tweaked per test.
 function validMatchRule(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -380,5 +381,25 @@ describe('validateMatchRulesSection', () => {
     it('flags duplicate entry names', () => {
         const errors = validateMatchRulesSection([validMatchRule(), validMatchRule()]);
         expect(errors.some(e => e.includes('duplicate entry name "no-fetch"'))).toBe(true);
+    });
+});
+
+// Registry-consistency invariants. main-stale-guard shipped in 0.4.415 registered in HOOK_GUARD_NAMES
+// (so the validator DEMANDED it in config) but absent from RULE_SCHEMAS (so the validator REJECTED it
+// as an unknown rule) — a hard deadlock: config-without-it fails the sync check, config-with-it fails
+// validation, and the only writes still allowed (config edits, pnpm install) can't reach the version
+// pin. These tests lock the two name-lists together so a half-wired guard can never ship again.
+describe('rule registry consistency', () => {
+    it('every hook-guard name has a schema in RULE_SCHEMAS (else the validator demands a key it then rejects)', () => {
+        const schema = new Set(allRuleNames());
+        const missing = HOOK_GUARD_NAMES.filter((name: string): boolean => !schema.has(name));
+        expect(missing).toEqual([]);
+    });
+
+    it('allRuleNames is exactly the schema keys, so the installer seeds every known rule', () => {
+        // allRuleNames drives buildSeedConfig; a name missing here can never be seeded and a repo
+        // could not add it via `wp-install-ai-hooks --sync`.
+        expect(allRuleNames().length).toBeGreaterThan(0);
+        expect(new Set(allRuleNames()).has('main-stale-guard')).toBe(true);
     });
 });
