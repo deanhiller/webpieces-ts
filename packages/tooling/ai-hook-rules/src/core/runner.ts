@@ -126,6 +126,54 @@ export function runBash(command: string, cwd: string, mode: HookMode = 'all'): B
     return runBashInternal(command, cwd, mode);
 }
 
+// The name of the ONLY rule permitted to block a Read. Reads are the highest-blast-radius tool
+// there is, so this path is an explicit single-rule allowlist rather than the general rule loop.
+const READ_SCOPED_GUARDS: ReadonlySet<string> = new Set(['main-stale-guard']);
+
+/**
+ * The Read path. Deliberately NOT `run()`:
+ *
+ *  - NO config-sync check. A rule present in code but missing from webpieces.config.json blocks
+ *    every Write/Edit/Bash by design — but applying that to Read would mean an upgrade that adds
+ *    any new rule instantly blocks the agent from reading the very config file it must edit to fix
+ *    it. Reads must never carry that failure mode.
+ *  - NO general rule loop. Only READ_SCOPED_GUARDS run, so no code-style rule can ever see a Read.
+ *  - Fails OPEN everywhere, including on a thrown rule (the caller catches and allows).
+ *
+ * Returns null (allow) unless the one guard fires.
+ */
+// webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
+export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): BlockedResult | null {
+    // Code-style mode has nothing to say about a read.
+    if (mode === 'rules') return null;
+
+    const loaded = loadAndValidate(cwd);
+    // No config → nothing to enforce. Unlike the edit path we do NOT block: an unconfigured repo
+    // must still be readable.
+    if (loaded.configPath === null) return null;
+
+    const workspaceRoot = path.dirname(loaded.configPath);
+
+    // Same git-repo-boundary governance as bash: a read inside a different clone is out of scope.
+    const gitRoot = gitToplevel(cwd);
+    if (gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot)) return null;
+
+    const relativePath = path.relative(workspaceRoot, filePath);
+    const all = loadRules(loaded.rulesConfig, workspaceRoot);
+    const rules = filterByExcludedPaths(
+        all.filter((r: Rule): boolean => READ_SCOPED_GUARDS.has(r.name)),
+        relativePath,
+        loaded.excludePaths,
+    );
+    if (rules.length === 0) return null;
+
+    const ctx = new FileContext('Read', filePath, relativePath, workspaceRoot, 0, 0, 0, 0);
+    const groups = runFileRules(rules, ctx);
+    if (groups.length === 0) return null;
+
+    return new BlockedResult(formatReport(relativePath, groups));
+}
+
 // Installer bypass — package-manager install commands ALWAYS pass, ahead of any config load. A
 // webpieces.config.json that is ahead of the installed validator (new rule tokens the published
 // binary doesn't know yet) makes loadAndValidate() throw and would deny `pnpm install` — the very

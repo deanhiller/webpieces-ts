@@ -1,0 +1,250 @@
+import { execSync, spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+
+import {
+    MainStaleGuardConfig,
+    DEFAULT_HANG_TIMEOUT_MINUTES,
+    readMainSyncStatus,
+    MainSyncStatus,
+} from '@webpieces/rules-config';
+
+import type { FileContext, Violation } from '../types';
+import { Violation as V } from '../types';
+import { FileRuleBase } from '../rule-base';
+import { FixHint, Option } from '../fix-hint';
+import { toError } from '../to-error';
+import { triggerMainSyncRefresh } from '../main-sync-refresh';
+import { logGuardDecision, GuardDecision } from '../decision-log';
+
+/**
+ * Blocks READS while you are sitting on a `main` that is behind `origin/main`.
+ *
+ * WHY READ, of all tools: a stale main means the AI reads stale FILE CONTENT and then reasons,
+ * plans and writes against code that no longer exists upstream. Blocking the write is too late —
+ * the bad premise is already in context. So the block lands on the read.
+ *
+ * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `git pull origin main`,
+ * `pnpm install`, any webpieces upgrade — is a Bash command, and this guard never looks at Bash.
+ * So there is no command allowlist to maintain and no way to lock the agent out of its own fix.
+ * (`git pull origin main` is explicitly permitted on main by redirect-how-to-merge-main, which
+ * returns null when the branch IS main — the two guards are complementary, not stacked.)
+ *
+ * Everything here is FAIL-OPEN. A guard that blocks reads on bad data is far worse than one that
+ * misses; every unknown resolves to "allow". The four deliberate escape valves:
+ *
+ *   1. DIRTY TREE  — uncommitted work on main means `git pull` is not a guaranteed fast-forward.
+ *                    Blocking reads there would trap the agent: it could not read the files it
+ *                    needs to resolve the very conflict blocking it. Allow.
+ *   2. CACHE LAG   — we do NOT compare hashes for equality. The cached `originMain` is written by
+ *                    the detached refresher and is arbitrarily old, so `local !== origin` stays
+ *                    true for a while AFTER a successful pull, which would spin the agent forever.
+ *                    Instead: is the cached origin/main an ANCESTOR of local main? If local main
+ *                    already contains it, we are not behind. That flips the instant the pull lands,
+ *                    with no refresher round-trip. This is the single most important line here.
+ *   3. CONFIG READ — webpieces.config.json stays readable so the agent can always read-then-edit
+ *                    it to set `mode: OFF`. Its EDIT is already bypassed in runner.ts + hook-core;
+ *                    this closes the read half of that same escape hatch.
+ *   4. NO DATA     — no cache, cache for another branch, empty originMain (offline), or no local
+ *                    main at all (fresh clone / worktree) → allow.
+ *
+ * Runs from the Read fast path in hook-core (Read is neither a file-edit nor a bash payload, so it
+ * never reaches the runner's rule loop). Fires the detached refresher on every call, which is also
+ * what makes reads keep the shared main-sync cache warm for feature-branch-guard.
+ */
+export class MainStaleGuardRule extends FileRuleBase<MainStaleGuardConfig> {
+    constructor(config: MainStaleGuardConfig) { super(config, 'main-stale-guard'); }
+
+    readonly description = 'Block reads while on a `main` branch that is behind origin/main — stale main means the AI reads stale files.';
+    override readonly files = ['**/*'];
+    override readonly defaultOptions = {
+        hangTimeoutMinutes: DEFAULT_HANG_TIMEOUT_MINUTES,
+    };
+    readonly fixHint = new FixHint(
+        'You are on main and main is behind origin/main — reading files would give you stale content.',
+        'Bring main up to date before reading anything else:',
+        [
+            new Option('git pull origin main   ← the fix. Then simply retry the read.', true),
+            new Option('Still allowed right now: EVERY Bash command (installs, upgrades, builds), all Write/Edit, and reading webpieces.config.json.'),
+            new Option('Disable in webpieces.config.json under hookGuards → main-stale-guard (mode OFF) if intentional.'),
+        ],
+    );
+
+    check(ctx: FileContext): readonly Violation[] {
+        // Outside the workspace root — no jurisdiction.
+        if (ctx.relativePath.startsWith('..')) return [];
+
+        const branch = this.currentBranch(ctx.workspaceRoot);
+        if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
+        // The whole guard is about a checked-out main. Anything else is feature-branch-guard's job.
+        if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main');
+
+        // Keep the shared cache warm for the next call. Detached; never blocks this read.
+        triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
+
+        // Escape valve 3 — the read half of the config escape hatch.
+        if (this.isConfigFile(ctx.relativePath)) return this.allow(ctx, branch, 'webpieces-config-read (escape hatch)');
+
+        const status = readMainSyncStatus(ctx.workspaceRoot);
+        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+
+        const cache = this.cacheSummary(status);
+        if (status.branch !== 'main') return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        // Offline / origin unresolvable, or no local main to compare against.
+        if (status.originMain === '') return this.allow(ctx, branch, 'origin-main-unknown (fail-open)', cache);
+
+        // Escape valve 2 — ancestry, NOT equality. See the class comment.
+        if (this.contains(ctx.workspaceRoot, status.originMain)) {
+            return this.allow(ctx, branch, 'local-main-contains-origin (up to date)', cache);
+        }
+
+        // Escape valve 1 — a dirty tree means the pull is not a clean fast-forward; do not trap
+        // the agent away from the files it needs to resolve it.
+        if (this.isDirty(ctx.workspaceRoot)) {
+            return this.allow(ctx, branch, 'dirty-tree-on-main (fail-open)', cache);
+        }
+
+        return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
+    }
+
+    // Is `commit` an ancestor of (i.e. already contained in) HEAD? Local-only and fast — no network.
+    //
+    // spawnSync, not execSync, precisely because the EXIT CODE is the answer and we must tell three
+    // outcomes apart: 0 = ancestor (up to date), 1 = cleanly NOT an ancestor (genuinely behind),
+    // anything else = git could not answer (bad/pruned object, not a repo) which must fail OPEN.
+    // execSync collapses 1 and "git broke" into the same thrown Error, so it cannot make that call.
+    // Arg-array form also means the commit hash is never parsed by a shell.
+    private contains(workspaceRoot: string, commit: string): boolean {
+        const result = spawnSync('git', ['merge-base', '--is-ancestor', commit, 'HEAD'], {
+            cwd: workspaceRoot,
+            encoding: 'utf8',
+        });
+        if (result.status === 0) return true;
+        if (result.status === 1) return false;
+        return true; // unknown/failed → treat as "contained" so the guard allows
+    }
+
+    private isDirty(workspaceRoot: string): boolean {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const out = execSync('git status --porcelain', {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            return out.trim().length > 0;
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            // Cannot tell → assume dirty, which is the fail-OPEN direction for this guard.
+            return true;
+        }
+    }
+
+    private isConfigFile(relativePath: string): boolean {
+        return relativePath === 'webpieces.config.json';
+    }
+
+    // How far behind we are, for the message. Best-effort — a bare "behind" reads fine without it.
+    private behindCount(workspaceRoot: string): string {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const out = execSync('git rev-list --count HEAD..origin/main', {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            }).trim();
+            return /^\d+$/.test(out) ? out : '?';
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return '?';
+        }
+    }
+
+    private staleMainMessage(workspaceRoot: string): string {
+        return [
+            `You are on main and main is ${this.behindCount(workspaceRoot)} commit(s) behind origin/main.`,
+            'Reading files right now would give you STALE content and everything you plan from it',
+            'would be built on code that no longer exists upstream. Reads are blocked until you update.',
+            '',
+            'Run exactly this, then retry the read:',
+            '  git pull origin main',
+            '',
+            'Still allowed while this block is up:',
+            '  - EVERY Bash command (pnpm install, any webpieces upgrade, builds, all git/gh)',
+            '  - All Write/Edit (feature-branch-guard governs those separately)',
+            '  - Reading and editing webpieces.config.json (set main-stale-guard mode OFF to disable)',
+        ].join('\n');
+    }
+
+    private cacheSummary(status: MainSyncStatus): string {
+        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} ts=${status.timestamp}`;
+    }
+
+    private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW', reason, cache);
+        return [];
+    }
+
+    private block(ctx: FileContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
+        return [new V(1, ctx.relativePath, message)];
+    }
+
+    private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
+        logGuardDecision(
+            ctx.workspaceRoot,
+            new GuardDecision('main-stale-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache),
+        );
+    }
+
+    /**
+     * The current branch, WITHOUT spawning git on the common path.
+     *
+     * This runs on EVERY read, so it is the one call whose cost actually matters. Spawning
+     * `git rev-parse --abbrev-ref HEAD` measures ~12ms — essentially all process-spawn overhead —
+     * whereas `.git/HEAD` is a single tiny file whose read is microseconds. On a feature branch
+     * (the overwhelmingly common case) that file read is the ONLY work this guard does before
+     * short-circuiting, so reads stay effectively free.
+     *
+     * Falls back to spawning git whenever `.git/HEAD` cannot answer authoritatively:
+     *   - `.git` is a FILE, not a dir → we are in a worktree and HEAD lives elsewhere
+     *   - detached HEAD → the file holds a raw sha, not a `ref:` line
+     *   - anything unreadable/unexpected
+     * The fallback is correct in all those cases; it is just slower, and they are rare.
+     */
+    private currentBranch(workspaceRoot: string): string | null {
+        const fromHead = this.branchFromGitHead(workspaceRoot);
+        if (fromHead !== null) return fromHead;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return execSync('git rev-parse --abbrev-ref HEAD', {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            }).trim();
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
+    }
+
+    // Parse `.git/HEAD` ("ref: refs/heads/<branch>"). null = cannot answer, caller must fall back.
+    private branchFromGitHead(workspaceRoot: string): string | null {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const gitPath = path.join(workspaceRoot, '.git');
+            // A worktree/submodule has `.git` as a file pointing at the real gitdir — HEAD is not here.
+            if (!fs.statSync(gitPath).isDirectory()) return null;
+            const head = fs.readFileSync(path.join(gitPath, 'HEAD'), 'utf8').trim();
+            const match = /^ref:\s*refs\/heads\/(.+)$/.exec(head);
+            return match ? match[1] : null; // no match = detached HEAD → fall back
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
+    }
+}

@@ -35,6 +35,10 @@ export class MainSyncStatus {
     // An OPEN (not merged) PR tracking this branch, if any — '' = none or not-yet-known. Advisory.
     // Kept OUT of the positional constructor (a defaulted field) so existing call sites don't churn.
     openPr: string = '';
+    // The LOCAL refs/heads/main hash — '' = main does not exist locally (fresh clone / worktree) or
+    // could not be read. Paired with `originMain`, this is what tells the main-stale-guard whether a
+    // checked-out `main` is behind its remote. Defaulted field for the same reason as `openPr`.
+    localMain: string = '';
 
     constructor(
         branch: string,
@@ -88,6 +92,7 @@ interface RawStatus {
     conflictFiles?: string[];
     timestamp?: string;
     openPr?: string;
+    localMain?: string;
 }
 
 interface RawLock {
@@ -136,6 +141,7 @@ export class MainSyncStatusService {
                 raw.timestamp ?? '',
             );
             status.openPr = raw.openPr ?? '';
+            status.localMain = raw.localMain ?? '';
             return status;
         } catch (err: unknown) {
             const error = toError(err);
@@ -207,12 +213,14 @@ export class MainSyncStatusService {
 
         const head = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
         const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
+        const localMain = this.localMainHash(repoRoot);
         const featureHead = head.ok ? head.out : '';
         if (!head.ok || !originMain.ok) {
             const status = this.benignStatus(branch, featureHead);
             status.branchAlreadyMerged = mergedPr !== '';
             status.mergedPr = mergedPr;
             status.openPr = openPr;
+            status.localMain = localMain;
             return status;
         }
 
@@ -220,6 +228,7 @@ export class MainSyncStatusService {
         if (!forkPoint.ok || forkPoint.out === '') {
             const noFork = new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
             noFork.openPr = openPr;
+            noFork.localMain = localMain;
             return noFork;
         }
 
@@ -240,6 +249,7 @@ export class MainSyncStatusService {
             new Date().toISOString(),
         );
         status.openPr = openPr;
+        status.localMain = localMain;
         return status;
     }
 
@@ -269,6 +279,7 @@ export class MainSyncStatusService {
             const status = new MainSyncStatus(
                 branch, false, '', true, originMain.out, originMain.out, featureHead.out, false, [], new Date().toISOString(),
             );
+            status.localMain = this.localMainHash(repoRoot);
             this.writeMainSyncStatus(repoRoot, status);
         } catch (err: unknown) {
             const error = toError(err);
@@ -303,6 +314,13 @@ export class MainSyncStatusService {
     // The actual checked-out branch in repoRoot — cwd-correct so the cache's `branch` label matches.
     private gitBranch(repoRoot: string): string {
         const result = this.capture(repoRoot, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+        return result.ok ? result.out : '';
+    }
+
+    // The LOCAL main hash. `refs/heads/main` (not the bare name) so it can never resolve to a remote
+    // ref or a tag. '' when main does not exist locally — which the guard treats as fail-open.
+    private localMainHash(repoRoot: string): string {
+        const result = this.capture(repoRoot, 'git', ['rev-parse', 'refs/heads/main']);
         return result.ok ? result.out : '';
     }
 

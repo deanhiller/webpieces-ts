@@ -18,4 +18,5 @@ export const builtInRuleNames: readonly string[] = [
     'pr-merge-guard',
     'redirect-how-to-merge-main',
     'feature-branch-guard',
+    'main-stale-guard',
 ];

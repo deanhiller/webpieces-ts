@@ -4,7 +4,11 @@ import { RuleOptions } from '@webpieces/rules-config';
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError, RuleFailError } from '@webpieces/rules-config';
 import { FixHint } from './fix-hint';
 
-export type ToolKind = 'Write' | 'Edit' | 'MultiEdit';
+// 'Read' is a first-class member because main-stale-guard is a file-scoped guard that runs on the
+// Read fast path. It is deliberately NOT in HANDLED_FILE_TOOLS (hook-core), so normalizeToolKind()
+// still returns null for it and Read never enters the edit/file rule pipeline — only the one guard
+// that asks for it. Nothing switches exhaustively on this union; it is carried for logging.
+export type ToolKind = 'Write' | 'Edit' | 'MultiEdit' | 'Read';
 export type RuleScope = 'edit' | 'file' | 'bash';
 // Which category of built-in rules a hook invocation runs: code-style 'rules', git/PR/branch
 // 'guards' (the hookGuards section), or 'all' (both categories — used by the openclaw plugin adapter,

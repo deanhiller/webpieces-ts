@@ -466,6 +466,23 @@ export class FeatureBranchGuardConfig extends BaseRuleConfig {
     };
 }
 
+// Blocks Read while the checked-out branch IS main AND local main is behind origin/main — because a
+// stale main means the AI reads stale FILES, which is the actual damage. Deliberately scoped to Read
+// only: every cure (`git pull origin main`, `pnpm install`, any upgrade) is a Bash command, and Bash
+// is never touched by this guard, so there is no allowlist to maintain and no way to wedge.
+// hangTimeoutMinutes tunes the detached refresher's stale-lock reclaim window (as on
+// feature-branch-guard, whose cache this guard shares).
+export class MainStaleGuardConfig extends BaseRuleConfig {
+    declare mode?: OnOffMode;
+    hangTimeoutMinutes?: number;
+
+    static readonly SCHEMA: SchemaShape<MainStaleGuardConfig> = {
+        mode: new FieldDef('string', ON_OFF_MODES),
+        hangTimeoutMinutes: FieldDef.optional('number'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoFileImportCyclesConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
     ignoreTypeOnly?: boolean;
