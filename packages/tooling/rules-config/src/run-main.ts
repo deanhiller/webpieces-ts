@@ -17,7 +17,8 @@ export function runMain(main: () => Promise<void>): void {
     // webpieces-disable no-any-unknown -- a promise rejection is genuinely of unknown type; narrowed below.
     main().catch((err: unknown) => {
         if (err instanceof CliExitError) {
-            if (err.message) process.stderr.write(err.message + '\n');
+            // A 0 exit is a success message (e.g. `--help`) → stdout; a non-zero abort → stderr.
+            if (err.message) (err.exitCode === 0 ? process.stdout : process.stderr).write(err.message + '\n');
             process.exit(err.exitCode);
         }
         process.stderr.write((err instanceof Error ? err.message : String(err)) + '\n');
