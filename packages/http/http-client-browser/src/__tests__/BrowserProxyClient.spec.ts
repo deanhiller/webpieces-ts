@@ -8,6 +8,7 @@ import {
     ContextKey,
     Endpoint,
     HeaderRegistry,
+    OfflineError,
     Public,
     Rpc,
 } from '@webpieces/core-util';
@@ -263,19 +264,23 @@ describe('BrowserProxyClient reports the request lifecycle to a registered liste
  * precisely the failures (offline, a 5xx from infra) a user is most likely to actually hit.
  */
 describe('BrowserProxyClient ends the lifecycle even when no usable body ever arrives', () => {
-    it('a NETWORK reject ends with status 0 and no headers — no Response ever existed', async () => {
+    it('a NETWORK reject ends with status 0 and surfaces a typed OfflineError', async () => {
         const networkErr = new Error('Failed to fetch');
         stubFetchNetworkReject(networkErr);
         const listener = new RecordingListener();
 
-        // webpieces-disable no-unmanaged-exceptions -- the reject rethrows UNTOUCHED after the seam fires
-        await expect(clientWith(listener).save(new SaveRequest('q'))).rejects.toThrow('Failed to fetch');
+        // The raw reject is now CLASSIFIED into a typed OfflineError before it rethrows, so an app
+        // does one `instanceof OfflineError` check instead of matching browser message text.
+        // webpieces-disable no-unmanaged-exceptions -- the classified reject rethrows after the seam fires
+        await expect(clientWith(listener).save(new SaveRequest('q'))).rejects.toBeInstanceOf(OfflineError);
 
         const outcome = listener.onlyEnd();
         expect(outcome.ok).toBe(false);
         expect(outcome.status).toBe(0);
         expect(outcome.headers).toBeUndefined();
-        expect(outcome.error).toBe(networkErr);
+        expect(outcome.error).toBeInstanceOf(OfflineError);
+        // The original reject stays reachable as `cause`, so no detail is lost.
+        expect((outcome.error as OfflineError).cause).toBe(networkErr);
     });
 
     /**
