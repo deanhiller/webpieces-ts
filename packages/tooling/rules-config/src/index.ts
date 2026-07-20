@@ -2,6 +2,7 @@ export { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 export { InformAiError } from './inform-ai-error';
 export { RuleFailError } from './rule-fail-error';
 export { CliExitError } from './cli-exit-error';
+export { CliUsage, CliArgsCheck, CliArgs } from './cli-args';
 export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
