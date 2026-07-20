@@ -11,6 +11,7 @@ import {
     LogApiCallImpl,
     ApiMethodInfo,
     toError,
+    NetworkRejectClassifier,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientErrorTranslator } from './ClientErrorTranslator';
@@ -40,6 +41,9 @@ export abstract class ProxyClient {
     // Assigned by initRoutes(), which every subclass's init() calls immediately after construction.
     private routeMap!: Map<string, RouteMetadata>;
     private apiName!: string;
+
+    // Stateless + dependency-free, so the browser bundle keeps no DI on the fetch path.
+    private readonly networkRejectClassifier = new NetworkRejectClassifier();
 
     constructor(protected readonly logApiCall: LogApiCallImpl = LogApiCall) {}
 
@@ -245,7 +249,9 @@ export abstract class ProxyClient {
         this.onRequestStart(route);
 
         // A network reject (offline, DNS, CORS preflight) means no Response ever existed, so there is
-        // no status and no headers to report — only status 0 and the failure itself.
+        // no status and no headers to report — only status 0 and the failure itself. toNetworkError
+        // turns that reject into a typed OfflineError (a genuine bug passes through untouched), and we
+        // classify BEFORE onRequestEnd so a lifecycle listener sees the SAME typed error the caller will.
         let response: Response;
         // webpieces-disable no-unmanaged-exceptions -- translate a network reject into a lifecycle END, then rethrow
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -254,8 +260,9 @@ export abstract class ProxyClient {
             response = await fetch(url, options);
         } catch (err: unknown) {
             const error = toError(err);
-            this.onRequestEnd(route, new RequestOutcome(false, 0, undefined, error));
-            throw error;
+            const networkError = this.networkRejectClassifier.toNetworkError(error, url);
+            this.onRequestEnd(route, new RequestOutcome(false, 0, undefined, networkError));
+            throw networkError;
         }
 
         if (response.ok) {

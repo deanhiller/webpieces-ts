@@ -85,8 +85,10 @@ export {
     HttpBadGatewayError,
     HttpGatewayTimeoutError,
     HttpInternalServerError,
+    HttpTooManyRequestsError,
     HttpVendorError,
     HttpUserError,
+    OfflineError,
     // Error subtype constants
     ENTITY_NOT_FOUND,
     WRONG_LOGIN_TYPE,
@@ -97,6 +99,8 @@ export {
     WRONG_COMPANY,
     NO_REG_CODE,
 } from './http/errors';
+
+export { NetworkRejectClassifier } from './http/networkReject';
 
 // Date/Time DTOs and Utilities (inspired by Java Time / JSR-310)
 export {

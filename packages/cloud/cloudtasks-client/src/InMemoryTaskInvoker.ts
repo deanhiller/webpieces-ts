@@ -1,7 +1,7 @@
 import { inject, optional } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
-import { LogManager, toError, Secrets, SECRETS } from '@webpieces/core-util';
+import { LogManager, toError, NetworkRejectClassifier, Secrets, SECRETS } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
 
 const log = LogManager.getLogger('InMemoryTaskInvoker');
@@ -27,6 +27,8 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     private counter = 0;
     /** Scheduled (not-yet-delivered) jobs, so delete() can cancel them. */
     private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+    /** Sharpens the delivery-failure LOG: "unreachable target" vs a bare "Failed to fetch". */
+    private readonly networkRejectClassifier = new NetworkRejectClassifier();
 
     constructor(
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
@@ -93,7 +95,10 @@ export class InMemoryTaskInvoker extends TaskInvoker {
             log.debug(`local task ${taskId} delivered: HTTP ${response.status}`);
         } catch (err: unknown) {
             const error = toError(err);
-            log.error(`local task ${taskId} delivery to ${url} threw: ${error.message}`);
+            // Detached job — we never rethrow, so classify only to sharpen the LOG: an operator reads
+            // "the target was unreachable" (OfflineError) instead of a bare "Failed to fetch".
+            const deliveryError = this.networkRejectClassifier.toNetworkError(error, url);
+            log.error(`local task ${taskId} delivery to ${url} threw: ${deliveryError.message}`);
         }
     }
 

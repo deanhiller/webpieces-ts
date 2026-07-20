@@ -100,6 +100,20 @@ export class HttpUnauthorizedError extends HttpError {
 }
 
 /**
+ * HttpTooManyRequestsError - 429 Too Many Requests.
+ *
+ * The one member of the HttpError ladder that never made it over from trytami. Without it, apps are
+ * forced back to `err.code === 429` — the exact untyped pattern this ladder exists to replace.
+ */
+export class HttpTooManyRequestsError extends HttpError {
+    constructor(message: string, cause?: Error) {
+        super(message, 429, undefined, cause);
+        this.name = 'TooManyRequests';
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
  * HttpForbiddenError - 403 Forbidden.
  */
 export class HttpForbiddenError extends HttpError {
@@ -191,6 +205,26 @@ export class HttpUserError extends HttpError {
         super(message, 266, 'USER_ERROR', cause);
         this.name = 'UserError';
         this.errorCode = errorCode;
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
+ * OfflineError - the request never reached a server.
+ *
+ * Offline, DNS failure, connection refused, CORS preflight rejected: `fetch` itself rejected, so no
+ * Response — and therefore no HTTP status — ever existed. That is precisely why this extends `Error`
+ * and NOT `HttpError`: an `HttpError` carries a `code` and means "the server replied with a failure",
+ * a different situation a caller usually retries differently. Subclassing it would give this a bogus
+ * status and make it match `instanceof HttpError` ladders that must not catch a transport reject.
+ *
+ * The original failure (a raw `TypeError: Failed to fetch`, or undici's coded reject) is always
+ * preserved as `cause`, so a caller that wants the underlying detail can still reach it.
+ */
+export class OfflineError extends Error {
+    constructor(message: string, cause?: Error) {
+        super(message, { cause });
+        this.name = 'OfflineError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }
