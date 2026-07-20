@@ -1,12 +1,12 @@
 import * as path from 'path';
 
-import { run, runBash } from '../core/runner';
+import { run, runBash, runRead } from '../core/runner';
 import { logRejection } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog, logGuardInvocation } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder } from '@webpieces/rules-config';
-import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode } from '../core/types';
+import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
 import { healShim } from '../bin/shim';
@@ -115,6 +115,31 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     emitDeny(result.report, 'Bash');
 }
 
+/**
+ * The read-scoped guard pass. Returns normally to ALLOW; only calls emitDeny when the guard fires.
+ *
+ * Wrapped in its own catch that swallows into an allow. Every other path in this hook fails CLOSED,
+ * and that is right for edits and shell commands — but a crash here would block the agent from
+ * READING, which includes reading webpieces.config.json to turn the offending guard off. So this one
+ * path deliberately inverts the policy: a broken read-guard degrades to a no-op, never to a wedge.
+ */
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
+function handleRead(filePath: string, cwd: string, mode: HookMode): void {
+    if (filePath === '') return;
+    let result: BlockedResult | null = null;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        result = runRead(filePath, cwd, mode);
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error;
+        return; // fail OPEN — see the doc comment
+    }
+    if (!result) return;
+    logRejection('Read', new NormalizedToolInput(filePath, []), result, cwd);
+    emitDeny(result.report, 'Read');
+}
+
 function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const toolKind = normalizeToolKind(payload.tool_name);
     if (!toolKind) { emitAllow(); }
@@ -176,14 +201,19 @@ export async function runMain(mode: HookMode): Promise<void> {
         // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
         const cwd = payload.cwd ?? process.cwd();
 
-        // Read-only tools (Read): log-and-allow. Record the file the AI opened in guard-invocations.log
-        // (guards mode only — rules mode never writes the invocation log), then allow immediately,
-        // BEFORE healShim and the rule/guard engine. So a read is never blocked or slowed, yet the audit
-        // trail shows whether the AI read a project's design.json before editing it. See setup.ts.
+        // Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped
+        // guard (main-stale-guard) and allow. Runs BEFORE healShim and the general rule engine — no
+        // code-style rule ever sees a Read, and the only way this path can deny is a stale `main`.
+        // The audit trail still records every file the AI opened (see setup.ts).
         if (READ_ONLY_TOOLS.has(payload.tool_name)) {
+            const readPath = payload.tool_input.file_path ?? '';
             if (mode !== 'rules') {
-                logGuardInvocation(cwd, payload.tool_name, payload.tool_input.file_path ?? '');
+                logGuardInvocation(cwd, payload.tool_name, readPath);
+                // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
+                // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
+                triggerMainSyncRefresh(cwd);
             }
+            handleRead(readPath, cwd, mode);
             emitAllow();
         }
 
