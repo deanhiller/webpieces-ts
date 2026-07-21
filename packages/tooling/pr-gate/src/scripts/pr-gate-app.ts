@@ -4,6 +4,7 @@ import { StartUpdateCommand } from './commands/start-update-command';
 import { FinishUpdateCommand } from './commands/finish-update-command';
 import { StartUpsertPrCommand } from './commands/start-upsert-pr-command';
 import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
+import { CleanupCommand } from './commands/cleanup-command';
 
 /**
  * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the 4
@@ -19,6 +20,7 @@ export class PrGateApp {
         private readonly finishUpdateCommand: FinishUpdateCommand,
         private readonly startUpsertPrCommand: StartUpsertPrCommand,
         private readonly finishUpsertPrCommand: FinishUpsertPrCommand,
+        private readonly cleanupCommand: CleanupCommand,
     ) {}
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */
@@ -39,5 +41,10 @@ export class PrGateApp {
     /** `wp-finish-upsert-pr`: finalize merge, authoritative build gate, dashboard, create/update PR. */
     finishUpsertPr(): Promise<void> {
         return this.finishUpsertPrCommand.run();
+    }
+
+    /** `wp-cleanup`: delete local branches whose PR is already merged (or that hold no commits). */
+    cleanup(): Promise<void> {
+        return this.cleanupCommand.run();
     }
 }

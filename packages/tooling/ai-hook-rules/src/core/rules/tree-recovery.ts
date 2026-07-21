@@ -72,9 +72,19 @@ export class TreeRecovery {
      * Reap the tree you just finished with. The worktree order is load-bearing: prune clears
      * worktrees whose directory is already gone (`git worktree remove` FAILS on those), and the
      * branch delete must come LAST because git refuses to delete a branch a worktree still holds.
+     *
+     * The BRANCH form ends in `pnpm wp-cleanup`, not `git branch -d <branch>`. An agent reads a bare
+     * `-d`/`-D` as destructive and stops to ask permission, so the branch survives the turn and local
+     * branches pile up — the exact failure this whole cleanup path exists to prevent. wp-cleanup is
+     * one named command that deletes only provably-dead branches (and reaps every OTHER dead one at
+     * the same time), so it is safe to allowlist and never needs a judgement call.
+     *
+     * The WORKTREE form still spells out git commands: wp-cleanup deliberately reaps parked branches
+     * only — a worktree-held branch is spared — so it cannot do this job, and the prune → remove →
+     * delete ordering is the part that has to be exactly right.
      */
     cleanupSteps(kind: TreeKind, branch: string, worktreePath: string = '<worktree-dir>'): string[] {
-        const branchForm = `  git checkout main && git pull origin main && git branch -d ${branch}`;
+        const branchForm = '  git checkout main && git pull origin main && pnpm wp-cleanup';
         const worktreeForm =
             `  git worktree prune && git worktree remove ${worktreePath} && git branch -D ${branch}`;
 

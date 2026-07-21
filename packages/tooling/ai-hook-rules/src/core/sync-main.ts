@@ -1,6 +1,10 @@
 import {
+    BranchReaper,
     DEFAULT_HANG_TIMEOUT_MINUTES,
+    MergedBranchesCache,
     MergedBranchesService,
+    ReapResult,
+    loadAndValidate,
     computeMainSyncStatus,
     writeMainSyncStatus,
     writeMainSyncLock,
@@ -55,10 +59,16 @@ export function main(): void {
             const cache = mergedBranches.computeMergedBranches(repoRoot);
             mergedBranches.writeMergedBranches(repoRoot, cache);
 
+            // Third step, same detached run: actually DELETE the dead branches. Reporting them was
+            // never enough — the reap was only ever a `git branch -D` string in a fix hint, which an
+            // agent reads as destructive and stalls on, so nothing was ever cleaned. Here nobody has
+            // to be asked. Reuses the verdicts we JUST computed (no second `gh` call).
+            const reaped = autoReap(repoRoot, cache);
+
             // FINISH after a successful write — START-without-FINISH means we were killed mid-run.
             logSyncEvent(repoRoot, new SyncLogEvent(
                 'FINISH', process.pid, status.branch,
-                `merged=${String(status.branchAlreadyMerged)} mergedPr=${status.mergedPr} forkPoint=${String(status.hasForkPoint)} conflict=${String(status.conflict)} deletableBranches=${String(cache.deletable.length)} ms=${String(Date.now() - startedMs)}`,
+                `merged=${String(status.branchAlreadyMerged)} mergedPr=${status.mergedPr} forkPoint=${String(status.hasForkPoint)} conflict=${String(status.conflict)} deletableBranches=${String(cache.deletable.length)} reaped=${String(reaped)} ms=${String(Date.now() - startedMs)}`,
             ));
         } finally {
             // Always flip the lock off so a compute failure can't wedge the guard until the
@@ -70,6 +80,42 @@ export function main(): void {
         // Detached: swallow so a transient git/fs error never leaves poison state (the next hook call
         // spawns a fresh refresher) — but record WHY it died so the failure isn't invisible.
         logSyncEvent(repoRoot, new SyncLogEvent('ERROR', process.pid, '-', `${error.message} | ${error.stack ?? ''}`));
+    }
+}
+
+/**
+ * Delete the branches the verdicts just declared dead. Returns how many actually went.
+ *
+ * WHY it is safe to do this unattended: every candidate is provably dead (merged PR / squash backup
+ * of a merged branch / zero commits of its own), `main` and any worktree-held branch are excluded
+ * upstream, and each delete is logged with the branch's pre-delete SHA plus the exact command that
+ * restores it. WHY it is safe to do it HERE: this refresher already recomputed those verdicts on
+ * this very run, so it is acting on evidence seconds old, not on the deliberately-stale cache file.
+ *
+ * Swallows everything. We are detached and fire-and-forget: cleanup failing must never damage the
+ * main-sync status this process exists to produce — but every failure is logged, because a silent
+ * background deletion is exactly what nobody should have to trust.
+ */
+// webpieces-disable no-function-outside-class -- module-level helper of this detached main(), matching the file's existing shape
+function autoReap(repoRoot: string, cache: MergedBranchesCache): number {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const config = loadAndValidate(repoRoot).rulesConfig['branch-creation-guard'];
+        // Absent config → reap. The branch cap this feeds is worthless if nothing ever reaps, and a
+        // consumer must not have to add a config key to stop drowning in dead branches. Turning the
+        // guard OFF entirely, or setting autoReapMergedBranches:false, opts back out.
+        if (config?.mode === 'OFF' || config?.autoReapMergedBranches === false) return 0;
+
+        const result: ReapResult = new BranchReaper().reap(repoRoot, 'auto-reap', cache);
+        for (const failure of result.failed) {
+            logSyncEvent(repoRoot, new SyncLogEvent(
+                'ERROR', process.pid, failure.branch, `reap failed: ${failure.error}`));
+        }
+        return result.reaped.length;
+    } catch (err: unknown) {
+        const error = toError(err);
+        logSyncEvent(repoRoot, new SyncLogEvent('ERROR', process.pid, '-', `autoReap: ${error.message}`));
+        return 0;
     }
 }
 

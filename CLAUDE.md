@@ -341,6 +341,17 @@ pnpm wp-finish-upsert-pr       # authoritative build gate, then creates/updates 
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 
+Once the PR merges, clean up with `pnpm wp-cleanup` — **never `git branch -D`**:
+
+```bash
+gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup
+```
+
+`wp-cleanup` deletes only provably-dead branches (merged PR, squash-merge backup of one, or no
+commits of their own), spares everything else for a human, and logs each deletion with its
+pre-delete SHA and a `recover=` command. Do not stop to ask whether it is safe to run — it is the
+sanctioned cleanup command, and asking is what let stale branches pile up in the first place.
+
 **The ONLY reasons to stop before posting the PR:**
 - The human explicitly said "don't open a PR yet."
 - The build or tests are red.
@@ -356,3 +367,4 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
 5. ❌ Skipping tests for new features
 6. ❌ Not documenting differences from Java version
 7. ❌ Stopping at a green build and asking "want me to open a PR?" instead of posting it (see "Finishing a Feature")
+8. ❌ Asking "can I clean up these merged branches?" instead of just running `pnpm wp-cleanup`

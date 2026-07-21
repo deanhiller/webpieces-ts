@@ -17,12 +17,28 @@
                     "level": 6
                 },
                 {
+                    "id": "BranchMutationLog",
+                    "className": "BranchMutationLog",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
+                    "level": 3
+                },
+                {
                     "id": "BranchNaming",
                     "className": "BranchNaming",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts",
                     "level": 7
+                },
+                {
+                    "id": "BranchReaper",
+                    "className": "BranchReaper",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/branch-reaper.ts",
+                    "level": 2
                 },
                 {
                     "id": "BuildAffected",
@@ -39,6 +55,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/cleanTmp.ts",
                     "level": 4
+                },
+                {
+                    "id": "CleanupCommand",
+                    "className": "CleanupCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts",
+                    "level": 1
                 },
                 {
                     "id": "Dashboard",
@@ -113,6 +137,14 @@
                     "level": 6
                 },
                 {
+                    "id": "MergedBranchesService",
+                    "className": "MergedBranchesService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/merged-branches.ts",
+                    "level": 3
+                },
+                {
                     "id": "OpenPrCheck",
                     "className": "OpenPrCheck",
                     "kind": "class",
@@ -159,6 +191,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts",
                     "level": 1
+                },
+                {
+                    "id": "WorktreeService",
+                    "className": "WorktreeService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/worktrees.ts",
+                    "level": 4
                 }
             ],
             "edges": [
@@ -172,7 +212,43 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "BranchReaper",
+                    "to": "BranchMutationLog",
+                    "injection": "type",
+                    "token": "BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "paramName": "mutationLog",
+                    "paramType": "BranchMutationLog"
+                },
+                {
+                    "from": "BranchReaper",
+                    "to": "MergedBranchesService",
+                    "injection": "type",
+                    "token": "MergedBranchesService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
+                    "paramName": "mergedBranches",
+                    "paramType": "MergedBranchesService"
+                },
+                {
                     "from": "CleanTmp",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "CleanupCommand",
+                    "to": "BranchReaper",
+                    "injection": "type",
+                    "token": "BranchReaper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-reaper.ts#BranchReaper",
+                    "paramName": "branchReaper",
+                    "paramType": "BranchReaper"
+                },
+                {
+                    "from": "CleanupCommand",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
@@ -442,6 +518,15 @@
                     "paramType": "MergeState"
                 },
                 {
+                    "from": "MergedBranchesService",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktrees",
+                    "paramType": "WorktreeService"
+                },
+                {
                     "from": "OpenPrCheck",
                     "to": "BranchNaming",
                     "injection": "type",
@@ -449,6 +534,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "CleanupCommand",
+                    "injection": "type",
+                    "token": "CleanupCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/cleanup-command.ts#CleanupCommand",
+                    "paramName": "cleanupCommand",
+                    "paramType": "CleanupCommand"
                 },
                 {
                     "from": "PrGateApp",

@@ -60,6 +60,17 @@ const WORKTREE_ADD_EXISTING = new RegExp(
     String.raw`git\s+worktree\s+add\s+(?:-{1,2}[A-Za-z-]+\s+)*\S+\s+(${REF_NAME})`,
 );
 
+// `git branch <name> <sha>` — RESTORING a branch at an explicit commit, which is exactly the
+// `recover=` command wp-cleanup writes to branch-mutations.log for every branch it reaps.
+//
+// This must be allowed UNCONDITIONALLY, ahead of even the caps. The entire argument for letting the
+// tooling delete branches unattended is that any delete is one logged command away from being undone
+// — so a guard that blocks that command turns a real guarantee into a decorative one. (It did: the
+// generic `git branch <name>` creation pattern matched the restore and refused it, demanding the
+// branch be recreated off origin/main, which is precisely the content the restore is meant to bring
+// back.) A restore also cannot grow the branch list beyond what already existed.
+const RESTORE_AT_SHA = new RegExp(String.raw`git\s+branch\s+${REF_NAME}\s+[0-9a-f]{7,40}(?:\W|$)`);
+
 // A trailing `wp<number>` was the old squash-merge generation marker (base → basewp2 → basewp3).
 // The tooling NO LONGER produces it — a sync now lands back on the same feature name — but the suffix
 // stays RESERVED so a human branch can't collide with a leftover `…wpN` still floating in a consumer
@@ -239,15 +250,12 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         // survive this early-out and reach the worktree cap below.
         if (!requestedName && !this.worktreeAdd) return [];
 
-        if (requestedName && RESERVED_GENERATION_SUFFIX.test(requestedName)) {
-            return [new V(
-                1,
-                truncate(ctx.command),
-                `Branch name '${requestedName}' ends in 'wp<number>', which is reserved for the ` +
-                `squash-merge tool's generation marker (base → basewp2 → basewp3). ` +
-                `Rename it to a plain feature branch. ${this.branchFormat}.`,
-            )];
-        }
+        // Restoring a reaped branch at its logged SHA is undo, not creation — always allowed, and
+        // checked before the caps so a full branch list can never trap you on the recovery path.
+        if (!this.worktreeAdd && RESTORE_AT_SHA.test(command)) return [];
+
+        const reserved = this.checkReservedSuffix(ctx, requestedName);
+        if (reserved) return [reserved];
 
         const capViolation = this.checkCaps(ctx, requestedName !== null);
         if (capViolation) return [capViolation];
@@ -331,6 +339,19 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             `blocks those reads) and every edit is blocked by feature-branch-guard. Base the new worktree ` +
             `on fresh main instead: git fetch origin main && git worktree add ../${dir} -b <new-branch> origin/main`,
         )];
+    }
+
+    // The reserved `…wpN` generation suffix — see RESERVED_GENERATION_SUFFIX for why it stays blocked
+    // even though the tooling no longer produces it.
+    private checkReservedSuffix(ctx: BashContext, requestedName: string | null): Violation | null {
+        if (!requestedName || !RESERVED_GENERATION_SUFFIX.test(requestedName)) return null;
+        return new V(
+            1,
+            truncate(ctx.command),
+            `Branch name '${requestedName}' ends in 'wp<number>', which is reserved for the ` +
+            `squash-merge tool's generation marker (base → basewp2 → basewp3). ` +
+            `Rename it to a plain feature branch. ${this.branchFormat}.`,
+        );
     }
 
     /**
@@ -420,8 +441,14 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
      * by one of exactly two proofs: a MERGED PR (the work is in main), or zero commits of its own
      * (there is no work). Deleting the list cannot lose anything — so just run the command.
      *
-     * The wording must not overstate that: the list is NOT uniformly "merged PR" branches, and a
-     * message that tells an agent to run `git branch -D` has to be exactly true about why that's safe.
+     * The command is `pnpm wp-cleanup`, NOT the `git branch -D a b c` this used to emit. Two reasons,
+     * both learned the hard way: agents read a bare `-D` as destructive and stop to ask (so nothing
+     * was ever cleaned, and this cap kept firing), and the multi-name form aborts wholesale on the
+     * first branch git refuses, stranding every branch after it in the list. wp-cleanup recomputes
+     * the verdicts, deletes one branch per command, and logs each pre-delete SHA.
+     *
+     * The wording must not overstate the safety: the list is NOT uniformly "merged PR" branches, and
+     * a message that tells an agent to delete has to be exactly true about why that's safe.
      */
     private capFixHint(cache: MergedBranchesCache): FixHint {
         const options: Option[] = [];
@@ -429,9 +456,10 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (cache.deletable.length > 0) {
             const names = cache.deletable.map((entry: DeletableBranch): string => entry.branch);
             options.push(new Option(
-                `Delete these ${String(names.length)} dead branches — each is either backed by a MERGED PR ` +
-                `or has no commits of its own, so no work can be lost (see merged-branches.json for the ` +
-                `per-branch reason): git branch -D ${names.join(' ')}`,
+                `Run: pnpm wp-cleanup — it deletes these ${String(names.length)} dead branches. Each is either ` +
+                `backed by a MERGED PR or has no commits of its own, so no work can be lost, and every delete ` +
+                `is logged with a recover-by-SHA command (see merged-branches.json for the per-branch reason): ` +
+                names.join(' '),
                 true,
             ));
         }
