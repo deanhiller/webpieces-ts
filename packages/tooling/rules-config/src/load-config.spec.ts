@@ -32,9 +32,16 @@ const CODE_RULE_NAMES = [
     'validate-ts-in-src',
 ];
 
+// Required fields beyond the universal mode/ignoreModifiedUntilEpoch pair. Kept as data so adding
+// another required field is a one-line fixture change rather than a hunt through every test.
+const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
+    // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
+    'branch-creation-guard': { autoReapMergedBranches: false },
+};
+
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {
     const base: Record<string, unknown> = {};
-    for (const name of names) base[name] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+    for (const name of names) base[name] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0, ...EXTRA_REQUIRED[name] };
     return { ...base, ...overrides };
 }
 

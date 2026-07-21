@@ -41,7 +41,15 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
         excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
     'no-js-files': { mode: 'OFF' },
-    'branch-creation-guard': { mode: 'ON', subBranchNaming: 'feature/<ticket>/<short-description>' },
+    // autoReapMergedBranches ships FALSE. It is schema-required so every consumer must state a value,
+    // and the framework default must be the conservative one: an upgrade should never start deleting
+    // a project's branches unattended before a human has opted in. Set it true to let the background
+    // refresher reap dead branches on its own; `pnpm wp-cleanup` works either way.
+    'branch-creation-guard': {
+        mode: 'ON',
+        subBranchNaming: 'feature/<ticket>/<short-description>',
+        autoReapMergedBranches: false,
+    },
     'pr-creation-or-push-guard': { mode: 'ON' },
     'merge-in-progress-guard': { mode: 'ON' },
     'pr-merge-guard': { mode: 'ON' },

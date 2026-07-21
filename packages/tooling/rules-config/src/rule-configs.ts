@@ -392,13 +392,16 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     // parked branches count against maxLocalBranches. Enforced at `git worktree add`.
     maxWorktrees?: number;
     // Let the detached background refresher DELETE dead branches on its own, instead of only
-    // reporting them. Defaults to TRUE when absent — the cap it feeds is worthless if nothing ever
-    // reaps, and every candidate is provably dead (merged PR / squash backup / no commits) and
-    // recoverable by the SHA logged to branch-mutations.log. Set false to go back to report-only.
+    // reporting them. Every candidate is provably dead (merged PR / squash backup / no commits) and
+    // recoverable by the SHA logged to branch-mutations.log — but it is still UNATTENDED deletion,
+    // so this is schema-REQUIRED like `mode` and `ignoreModifiedUntilEpoch`. "Every built-in rule
+    // must be explicitly configured — no silent defaults" (validate-config.ts) applies with extra
+    // force here: branches disappearing on a preference nobody ever stated is precisely the kind of
+    // default that must not exist. Validation makes each consumer answer the question once.
     //
-    // Deliberately OPTIONAL and defaulted so no webpieces.config.json needs a new key to get the
-    // behavior: an already-installed validator rejects config keys it has never heard of, so a
-    // required key here would deadlock every consumer until they upgraded.
+    // TS-optional but schema-required — the same split `mode` uses. Absent at RUNTIME therefore means
+    // the config never passed validation, and the only safe reading of "nobody has answered" is: do
+    // not delete anything.
     autoReapMergedBranches?: boolean;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
@@ -407,7 +410,7 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
         branchFormat: FieldDef.optional('string'),
         maxLocalBranches: FieldDef.optional('number'),
         maxWorktrees: FieldDef.optional('number'),
-        autoReapMergedBranches: FieldDef.optional('boolean'),
+        autoReapMergedBranches: new FieldDef('boolean'),
         ...BASE_RULE_SCHEMA,
     };
 }

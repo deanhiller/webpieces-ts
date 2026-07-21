@@ -196,6 +196,38 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
                 mode: 'ON_NO_SUBBRANCHES',
                 branchFormat: 'Name it {whoami}/<feature>',
                 subBranchNaming: 'feature/<ticket>/<desc>',
+                autoReapMergedBranches: true,
+                ignoreModifiedUntilEpoch: 0,
+            },
+        });
+        expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
+    });
+
+});
+
+describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', () => {
+    /**
+     * autoReapMergedBranches lets the background refresher DELETE branches with nobody watching, so
+     * it is required rather than defaulted: a project must say `true` or `false` out loud. A default
+     * would mean branches vanishing on a preference the project never expressed — and the reader of
+     * webpieces.config.json would have no way to tell whether that was intended.
+     */
+    it('branch-creation-guard requires an explicit autoReapMergedBranches — no silent default', () => {
+        const errors = validateWebpiecesConfig({
+            'branch-creation-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
+        });
+        expect(
+            errorsFor('branch-creation-guard', errors).some(
+                e => e.includes('Missing required field "autoReapMergedBranches"'),
+            ),
+        ).toBe(true);
+    });
+
+    it('branch-creation-guard accepts autoReapMergedBranches false (report-only)', () => {
+        const errors = validateWebpiecesConfig({
+            'branch-creation-guard': {
+                mode: 'ON',
+                autoReapMergedBranches: false,
                 ignoreModifiedUntilEpoch: 0,
             },
         });

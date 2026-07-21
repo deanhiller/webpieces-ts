@@ -124,9 +124,10 @@ A branch is only ever deleted when it is backed by a **merged PR**, is a squash-
 holds **no commits of its own**. Anything else is spared for a human to decide, and
 `.webpieces/merged-branches.json` carries the per-branch and per-worktree reason either way.
 
-Most of the time you will never see this cap, because the background refresher reaps dead branches on its
-own (`branch-creation-guard.autoReapMergedBranches`, on by default). `wp-cleanup` is what you run when you
-want it to happen right now.
+With `branch-creation-guard.autoReapMergedBranches: true` you will rarely see this cap at all — the
+background refresher reaps dead branches on its own, and `wp-cleanup` is just how you make it happen right
+now. That key is **required** in `webpieces.config.json`: unattended deletion is not something you should
+get by default, so every project states `true` or `false` explicitly.
 
 You also cannot **check out a dead branch into a new worktree**: `git worktree add ../dir <branch>` is
 blocked when that branch's PR is already merged, because the result is a directory full of pre-merge code.
