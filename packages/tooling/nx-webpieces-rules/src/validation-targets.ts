@@ -23,18 +23,6 @@ export class ValidationTargets {
         };
     }
 
-    noSkipLevel(): TargetConfiguration {
-        return {
-            executor: '@webpieces/nx-webpieces-rules:validate-no-skiplevel-deps',
-            cache: true,
-            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json'],
-            metadata: {
-                technologies: ['nx'],
-                description: 'Validate no project has redundant transitive dependencies',
-            },
-        };
-    }
-
     packageJson(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-packagejson',

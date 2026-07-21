@@ -49,7 +49,6 @@ export interface CircularDepsOptions {
  */
 export interface ValidationOptions {
     noCycles?: boolean;
-    noSkipLevelDeps?: boolean;
     architectureUnchanged?: boolean;
     validatePackageJson?: boolean;
     validateNewMethods?: boolean;
@@ -114,10 +113,6 @@ const DEFAULT_OPTIONS: Required<ArchitecturePluginOptions> = {
         graphPath: 'architecture/dependencies.json',
         validations: {
             noCycles: true,
-            // Retired: the architecture graph is now auto-reduced in `generate`, so the
-            // committed graph can never contain a skip-level edge. Defaults off; the
-            // executor is a no-op kept for one release. See validate-no-skiplevel-deps.
-            noSkipLevelDeps: false,
             architectureUnchanged: true,
             validatePackageJson: true,
             validateNewMethods: true,
@@ -356,7 +351,6 @@ function buildValidationTargetsList(
     const targets: string[] = [];
     if (validations!.noCycles) targets.push('validate-no-architecture-cycles');
     if (validations!.architectureUnchanged) targets.push('validate-architecture-unchanged');
-    if (validations!.noSkipLevelDeps) targets.push('validate-no-skiplevel-deps');
     if (validations!.validatePackageJson) targets.push('validate-packagejson');
     // Use combined validate-code instead of 3 separate targets
     if (
@@ -405,9 +399,6 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (validations.architectureUnchanged) {
         targets['validate-architecture-unchanged'] = createValidateUnchangedTarget(graphPath);
-    }
-    if (validations.noSkipLevelDeps) {
-        targets['validate-no-skiplevel-deps'] = targetFactory.noSkipLevel();
     }
     if (validations.validatePackageJson) {
         targets['validate-packagejson'] = targetFactory.packageJson();
@@ -548,7 +539,7 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
         dependsOn: validationTargets,
         metadata: {
             technologies: ['nx'],
-            description: 'Run all architecture validations (cycles, unchanged, skip-level deps)',
+            description: 'Run all architecture validations (cycles, unchanged, package.json, code rules)',
         },
     };
 }

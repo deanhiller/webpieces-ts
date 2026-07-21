@@ -39,7 +39,6 @@ These validations check the entire workspace architecture and run only once, reg
 |------|-------------|--------|
 | **validate-no-architecture-cycles** | Validates no cycles exist in the project dependency graph (`architecture/dependencies.json`) | ✅ TESTED |
 | **validate-architecture-unchanged** | Validates `project.json` dependencies match blessed `architecture/dependencies.json` | ✅ TESTED |
-| **validate-no-skiplevel-deps** | Enforces layer hierarchy - no redundant transitive dependencies | ✅ TESTED |
 | **validate-packagejson** | Validates `package.json` dependencies match `project.json` build.dependsOn | ✅ TESTED |
 | **validate-new-methods** | Validates new/modified methods don't exceed max line count (git-based, affected mode) | ✅ TESTED |
 | **validate-versions-locked** | Validates package.json versions are locked (no ^, ~, *) and npm ci compatible | ✅ TESTED |
@@ -115,7 +114,6 @@ build target (CI — last line of defense)
                              • validate-code (runs 12 sub-validators)
                              • validate-no-architecture-cycles
                              • validate-architecture-unchanged  
-                             • validate-no-skiplevel-deps
                              • validate-packagejson
                              • validate-versions-locked
 
