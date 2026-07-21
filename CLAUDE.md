@@ -294,6 +294,7 @@ export class MyRoutes implements Routes {
 3. **Write tests first** - Unit tests for logic, integration tests for behavior
 4. **Update documentation** - Keep this file and claude.patterns.md up to date
 5. **Follow existing patterns** - Look at similar features for consistency
+6. **Post the PR** - The feature is not done until the PR is up (see "Finishing a Feature" below)
 
 ## Build Verification (CRITICAL)
 
@@ -319,6 +320,33 @@ pnpm run build-all
 - Assume changes are safe without verification
 - Commit code that doesn't pass build-all
 
+**A green `build-all` is NOT the finish line.** You run `build-all` many times while developing; none
+of those greens mean the work is ready for review. When the feature is actually complete, proceed to
+"Finishing a Feature" — do not stop at a green build.
+
+## Finishing a Feature (CRITICAL)
+
+**RULE: Finishing a feature MEANS posting the PR. They are the same step, not two.**
+
+When the code is written, tests pass, and `build-all` is green, your **very next action is to post the
+PR** — do NOT end your turn with "want me to open a PR?" That question is already answered: **yes,
+always.** Commit your work (the tooling never commits for you), then run the gated flow:
+
+```bash
+pnpm wp-start-upsert-pr        # updates from main, pushes, runs the build gate, tells you to write review.json
+# → write .webpieces/review.json (its `title` becomes the PR title)
+pnpm wp-finish-upsert-pr       # authoritative build gate, then creates/updates the PR
+```
+
+The full workflow (worktrees, conflicts, the 3-point merge) is documented in
+`.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
+
+**The ONLY reasons to stop before posting the PR:**
+- The human explicitly said "don't open a PR yet."
+- The build or tests are red.
+
+Otherwise, stopping after a green build without posting the PR is a bug — not politeness.
+
 ## Common Mistakes to Avoid
 
 1. ❌ Using interfaces for data structures
@@ -327,3 +355,4 @@ pnpm run build-all
 4. ❌ Using `any` instead of `unknown` for generic types
 5. ❌ Skipping tests for new features
 6. ❌ Not documenting differences from Java version
+7. ❌ Stopping at a green build and asking "want me to open a PR?" instead of posting it (see "Finishing a Feature")
