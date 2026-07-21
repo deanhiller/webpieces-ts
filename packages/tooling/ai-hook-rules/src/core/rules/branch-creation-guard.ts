@@ -52,6 +52,14 @@ const BRANCH_PATTERNS: RegExp[] = [
 // still hit the cap.
 const WORKTREE_ADD = /git\s+worktree\s+add\b/;
 
+// `git worktree add <path> <existing-branch>` — the checkout-an-existing-branch form. Captures the
+// LAST bare (non-flag) argument, which is the committish; the first bare argument is the path.
+// Flags that take a value (`--reason <s>`, `-b <name>`) are excluded by the caller, which only uses
+// this on commands with no `-b`/`-B` at all.
+const WORKTREE_ADD_EXISTING = new RegExp(
+    String.raw`git\s+worktree\s+add\s+(?:-{1,2}[A-Za-z-]+\s+)*\S+\s+(${REF_NAME})`,
+);
+
 // A trailing `wp<number>` was the old squash-merge generation marker (base → basewp2 → basewp3).
 // The tooling NO LONGER produces it — a sync now lands back on the same feature name — but the suffix
 // stays RESERVED so a human branch can't collide with a leftover `…wpN` still floating in a consumer
@@ -244,9 +252,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         const capViolation = this.checkCaps(ctx, requestedName !== null);
         if (capViolation) return [capViolation];
 
-        // `git worktree add` of an EXISTING branch (or --detach) creates no branch: the cap above was the
-        // only rule that applies to it. Nothing left to check.
-        if (!requestedName) return [];
+        // `git worktree add` of an EXISTING branch (or --detach) creates no branch, so the naming and
+        // fresh-main rules below do not apply — but one thing still does: the branch may be DEAD.
+        if (!requestedName) return this.checkWorktreeOntoDeadBranch(ctx, command);
 
         // Explicitly basing off origin/main is always allowed — it creates the branch from fresh main
         // regardless of the current branch, and is the ONLY way that also works inside a linked worktree
@@ -283,6 +291,45 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             `${this.freshMainCommand(requestedName)}. ${this.branchFormat}. ` +
             `If you truly need a stacked sub-branch (requires human approval), name it per ` +
             `branch-creation-guard.subBranchNaming ('${this.subBranchNaming}').`,
+        )];
+    }
+
+    /**
+     * `git worktree add ../dir <existing-branch>` onto a branch whose PR is ALREADY MERGED.
+     *
+     * The count caps never catch this: the command creates no branch, and if you are under the
+     * worktree cap it sails straight through — materialising a fresh directory full of PRE-MERGE
+     * code that the AI will then read, plan from and edit. read-stale-guard blocks the reads and
+     * feature-branch-guard blocks the edits once you are in there, but that is a turn wasted per
+     * tool call. Refuse at the moment of creation instead, using the SAME merged-PR proof the caps
+     * already have precomputed on disk.
+     *
+     * Fails OPEN exactly like both caps: no cache (fresh clone, no `gh`, refresher hasn't run) or an
+     * unparseable command → no opinion.
+     */
+    private checkWorktreeOntoDeadBranch(ctx: BashContext, command: string): readonly Violation[] {
+        if (!this.worktreeAdd) return [];
+
+        const match = WORKTREE_ADD_EXISTING.exec(command);
+        if (!match) return [];
+        const branch = match[1];
+        // `origin/main` (and any remote-tracking ref) is the RECOMMENDED base, never a dead branch.
+        if (branch.startsWith('origin/')) return [];
+
+        const cache = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
+        if (!cache) return [];
+
+        const dead = cache.deletable.find((entry: DeletableBranch): boolean => entry.branch === branch);
+        if (!dead) return [];
+
+        const dir = branch.replace(/\//g, '-');
+        return [new V(
+            1,
+            truncate(ctx.command),
+            `Branch '${branch}' is dead — ${dead.reason}. A worktree on it would be a directory full of ` +
+            `PRE-MERGE code: everything you read there is stale relative to origin/main (read-stale-guard ` +
+            `blocks those reads) and every edit is blocked by feature-branch-guard. Base the new worktree ` +
+            `on fresh main instead: git fetch origin main && git worktree add ../${dir} -b <new-branch> origin/main`,
         )];
     }
 

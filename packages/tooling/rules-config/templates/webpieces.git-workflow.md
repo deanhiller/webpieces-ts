@@ -117,6 +117,28 @@ git worktree prune && git worktree remove ../<feature-dir> && git branch -D <bra
 A branch is only ever proposed for deletion when it is backed by a **merged PR** or holds **no commits of
 its own**. Anything else is spared for a human to decide.
 
+You also cannot **check out a dead branch into a new worktree**: `git worktree add ../dir <branch>` is
+blocked when that branch's PR is already merged, because the result is a directory full of pre-merge code.
+Base the new worktree on fresh main instead (`git worktree add ../dir -b <new> origin/main`).
+
+### A merged worktree is a dead worktree — reads are blocked in it
+
+`read-stale-guard` blocks **Read** (not just Write/Edit) once the branch you are standing on has a merged
+PR, in a worktree exactly as in the primary clone. Everything in that tree is a pre-merge snapshot, so any
+plan you build from reading it is built on code `origin/main` has already moved past. The guard prints the
+cure for *the tree you are actually in* — the `git worktree add … origin/main` form in a worktree, the
+`git checkout -b … origin/main` form in the primary clone — plus the prune → remove → delete reap for the
+dead worktree itself. Bash, Write/Edit and reading `webpieces.config.json` all stay allowed, and a **dirty**
+tree fails open so uncommitted work can always be read and rescued.
+
+### A fresh worktree has no `node_modules`
+
+git does not copy `node_modules` into a new worktree, and the committed hook shim
+(`.claude/webpieces/ai-hook.sh`) resolves the guard binary relative to the tree it lives in. So the first
+tool call in a brand-new worktree fails **closed** with "not installed". That is expected — run
+`pnpm install` **in the worktree** (installing in the primary clone does nothing for it); `pnpm install` is
+one of the few commands the fail-closed shim always allows.
+
 ## One branch name — local, remote, and PR are always identical
 
 A sync does its work on a transient `<feature>Squash` branch and, when it finishes, force-pushes and

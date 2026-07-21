@@ -7,6 +7,7 @@ import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 import { CommandScanner } from '../command-scan';
+import { TreeRecovery } from './tree-recovery';
 
 const INSTRUCT_FILE = 'webpieces.git-workflow.md';
 const UPDATE_COMMAND = 'pnpm wp-start-update';
@@ -50,6 +51,7 @@ const SWITCHES_TO_NON_MAIN = /git\s+(?:checkout|switch)\s+(?!main\b|-\s|-$)\S+/;
 
 export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeMainConfig> {
     private readonly scanner = new CommandScanner();
+    private readonly recovery = new TreeRecovery();
 
     constructor(config: RedirectHowToMergeMainConfig) { super(config, 'redirect-how-to-merge-main'); }
 
@@ -92,8 +94,15 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
         if (SWITCHES_TO_NON_MAIN.test(ctx.command)) {
             return this.block(ctx, segment, 'Blocked: this command switches to a feature branch and then pulls main into it.');
         }
-        // The recommended `git checkout main && git pull origin main`.
-        if (/git\s+(?:checkout|switch)\s+main\b/.test(ctx.command)) return null;
+        // The recommended `git checkout main && git pull origin main` — but ONLY in the primary
+        // clone. Inside a linked worktree that checkout FATALS ("'main' is already checked out at
+        // <primary>"), so waving it through here hands the AI a command that cannot work and costs
+        // it a turn to discover. Steer to the fetch, which is all a worktree needs.
+        if (/git\s+(?:checkout|switch)\s+main\b/.test(ctx.command)) {
+            if (this.recovery.kindOf(ctx.workspaceRoot) !== 'worktree') return null;
+            // updateMainSteps already explains the worktree/fatal reasoning — don't say it twice.
+            return this.block(ctx, segment, ['Blocked.', ...this.recovery.updateMainSteps('worktree')].join('\n'));
+        }
 
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,

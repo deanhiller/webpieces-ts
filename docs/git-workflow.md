@@ -68,6 +68,28 @@ git worktree prune && git worktree remove ../old-feature && git branch -D dean/o
 A branch is only ever proposed for deletion when it is backed by a **merged PR** or holds **no commits of
 its own**. Anything else is spared for a human to decide.
 
+Checking a *dead* branch out into a new worktree is blocked too: `git worktree add ../dir <merged-branch>`
+would materialize a directory full of pre-merge code. Base it on fresh main instead
+(`git worktree add ../dir -b <new> origin/main`).
+
+### A merged worktree is a dead worktree
+
+`read-stale-guard` blocks **reads** — not just edits — once the branch you are on has a merged PR, in a
+worktree exactly as in the primary clone. (This is the case the old main-only guard could never see: a
+linked worktree can never have `main` checked out, so "is main stale?" never fired in one.) Everything in
+that tree is a pre-merge snapshot. The block prints the cure for the tree you are actually in — the
+`git worktree add … origin/main` form in a worktree, `git checkout -b … origin/main` in the primary clone —
+and, in a worktree, the prune → remove → delete reap for the dead tree itself. A **dirty** tree fails open
+so uncommitted work can always be read and rescued; Bash, Write/Edit and `webpieces.config.json` stay
+readable regardless.
+
+### A fresh worktree needs its own `pnpm install`
+
+git does not copy `node_modules` into a new worktree, and the committed hook shim resolves the guard
+binary relative to the tree it lives in — so the first tool call in a brand-new worktree fails **closed**
+with "not installed". Run `pnpm install` **in the worktree** (the primary clone's `node_modules` does not
+serve it); the fail-closed shim always allows that command.
+
 ### Updating your feature branch from main
 
 **NEVER run** `git merge origin/main`, `git merge main`, `git rebase origin/main`, `git rebase main`,

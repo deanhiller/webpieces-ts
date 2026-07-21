@@ -264,12 +264,14 @@ describe('read-stale-guard — merged feature branch', () => {
         expect(message).toContain('webpieces.config.json');
     });
 
-    // THE asymmetry vs. state A: a dirty tree does NOT fail open here, because the cure
-    // (`git checkout -b <new> origin/main`) carries uncommitted work across — nothing to resolve.
-    it('blocks even when the tree is dirty', () => {
+    // Same escape valve as state A, for the same reason: uncommitted work on a merged branch exists
+    // NOWHERE else, and rescuing it means reading the files it touches. The cure usually carries the
+    // changes across — but when it does not, a blocked read is an agent that cannot see what it is
+    // about to lose. feature-branch-guard still blocks the EDITS, so the state is surfaced anyway.
+    it('fails OPEN when the tree is dirty, so uncommitted work can still be read and rescued', () => {
         onMergedBranch();
         state.porcelain = ' M src/a.ts\n';
-        expect(rule().check(ctx()).length).toBe(1);
+        expect(rule().check(ctx()).length).toBe(0);
     });
 
     it('does not spawn git on this path either (.git/HEAD fast path)', () => {
@@ -286,6 +288,37 @@ describe('read-stale-guard — merged feature branch', () => {
 });
 
 // The state-B fail-open valves. Same doctrine as state A: never block on data we do not have.
+// The worktree flavour of the merged-branch block. Split into its own describe so the block above
+// stays inside the max-method-lines budget.
+describe('read-stale-guard — merged LINKED WORKTREE', () => {
+    beforeEach(reset);
+
+    // A merged LINKED WORKTREE is the state this guard exists for that the old main-only guard could
+    // never see: a worktree can never have `main` checked out, so state A never fires in one. The cure
+    // must be the worktree cure — `git checkout -b` is right for the primary clone, and telling a
+    // worktree to `git checkout main` would hand it a command git refuses outright.
+    it('gives a merged WORKTREE the worktree cure, not the branch one', () => {
+        onMergedBranch();
+        // A linked worktree's `.git` is a FILE (a gitdir: pointer), which is exactly how
+        // WorktreeService.isLinkedWorktree tells the two trees apart.
+        state.gitHead = 'gitdir: /repo/.git/worktrees/x\n';
+        state.gitIsDir = false;
+        const message = rule().check(ctx())[0].message ?? '';
+        expect(message).toContain('git worktree add');
+        expect(message).not.toContain('git checkout -b');
+        expect(message).not.toContain('git checkout main');
+    });
+
+    it('tells a merged worktree to reap itself, so it stops spending the worktree budget', () => {
+        onMergedBranch();
+        state.gitHead = 'gitdir: /repo/.git/worktrees/x\n';
+        state.gitIsDir = false;
+        const message = rule().check(ctx())[0].message ?? '';
+        expect(message).toContain('git worktree remove');
+        expect(message).toContain('git branch -D');
+    });
+});
+
 describe('read-stale-guard — merged feature branch, fail-open', () => {
     beforeEach(reset);
 

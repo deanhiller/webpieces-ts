@@ -3,10 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const git = vi.hoisted(() => ({
     porcelain: '' as string,
     status: 0,
+    // What `<root>/.git` is: a directory (primary clone), a file (linked worktree), or absent.
+    dotGit: 'dir' as 'dir' | 'file' | 'missing',
 }));
 
 vi.mock('child_process', () => ({
     spawnSync: (): { status: number; stdout: string } => ({ status: git.status, stdout: git.porcelain }),
+}));
+
+vi.mock('fs', () => ({
+    statSync: (): { isDirectory: () => boolean } => {
+        if (git.dotGit === 'missing') throw new Error('ENOENT: no such file or directory');
+        return { isDirectory: (): boolean => git.dotGit === 'dir' };
+    },
 }));
 
 import { WorktreeService, Worktree } from './worktrees';
@@ -14,6 +23,56 @@ import { WorktreeService, Worktree } from './worktrees';
 beforeEach(() => {
     git.status = 0;
     git.porcelain = '';
+    git.dotGit = 'dir';
+});
+
+describe('WorktreeService.isLinkedWorktree', () => {
+    it('is false in the primary clone (.git is a DIRECTORY)', () => {
+        git.dotGit = 'dir';
+        expect(new WorktreeService().isLinkedWorktree('/repo')).toBe(false);
+    });
+
+    it('is true in a linked worktree (.git is a FILE holding a gitdir: pointer)', () => {
+        git.dotGit = 'file';
+        expect(new WorktreeService().isLinkedWorktree('/work/feature')).toBe(true);
+    });
+
+    // Fail-open: an unreadable/absent .git must NOT be reported as a worktree, because callers print
+    // the worktree-only command when this says true. Unknown → both forms → recoverable.
+    it('is false when .git cannot be read at all', () => {
+        git.dotGit = 'missing';
+        expect(new WorktreeService().isLinkedWorktree('/not/a/repo')).toBe(false);
+    });
+});
+
+describe('WorktreeService.currentWorktree', () => {
+    const PORCELAIN = [
+        'worktree /repo',
+        'HEAD aaa',
+        'branch refs/heads/main',
+        '',
+        'worktree /work/feature',
+        'HEAD bbb',
+        'branch refs/heads/dean/feature',
+        '',
+    ].join('\n');
+
+    it('finds the record whose path is the tree we are standing in', () => {
+        git.porcelain = PORCELAIN;
+        const tree = new WorktreeService().currentWorktree('/work/feature');
+        expect(tree?.branch).toBe('dean/feature');
+        expect(tree?.isMain).toBe(false);
+    });
+
+    it('matches the primary clone too, and normalizes a trailing slash', () => {
+        git.porcelain = PORCELAIN;
+        expect(new WorktreeService().currentWorktree('/repo/')?.isMain).toBe(true);
+    });
+
+    it('returns null when the root is not one of git\'s worktrees', () => {
+        git.porcelain = PORCELAIN;
+        expect(new WorktreeService().currentWorktree('/somewhere/else')).toBeNull();
+    });
 });
 
 describe('WorktreeService', () => {

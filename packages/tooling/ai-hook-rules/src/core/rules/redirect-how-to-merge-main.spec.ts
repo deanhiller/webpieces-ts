@@ -106,3 +106,46 @@ describe('redirect-how-to-merge-main — the pull path', () => {
         expect(rule.check(ctx('git checkout feat && git pull origin main', repo)).length).toBe(1);
     });
 });
+
+// `git checkout main && git pull origin main` is the ALLOWED form in the primary clone — and an
+// impossible one inside a linked worktree, where git refuses ("'main' is already checked out at
+// <primary>"). Waving it through there hands the AI a command that cannot work. Real worktree here,
+// not a mock: the whole signal is git's own on-disk layout (.git is a FILE in a linked worktree).
+describe('redirect-how-to-merge-main — inside a linked worktree', () => {
+    let repo: string;
+    let worktree: string;
+
+    function git(...args: string[]): void {
+        execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+    }
+
+    beforeAll(() => {
+        repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-wt-'));
+        git('init', '-b', 'main');
+        git('config', 'core.hooksPath', '/dev/null');
+        git('config', 'user.email', 'test@example.com');
+        git('config', 'user.name', 'test');
+        fs.writeFileSync(path.join(repo, 'f.txt'), 'x');
+        git('add', '-A');
+        git('commit', '-m', 'init');
+        worktree = path.join(repo, '..', path.basename(repo) + '-wt');
+        git('worktree', 'add', worktree, '-b', 'dean/feat');
+    });
+
+    afterAll(() => {
+        fs.rmSync(worktree, { recursive: true, force: true });
+        fs.rmSync(repo, { recursive: true, force: true });
+    });
+
+    it('blocks `git checkout main && git pull origin main` and steers to the fetch', () => {
+        const violations = rule.check(ctx('git checkout main && git pull origin main', worktree));
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('linked worktree');
+        expect(violations[0].message).toContain('git fetch origin main');
+    });
+
+    it('still allows that exact command in the primary clone', () => {
+        git('checkout', 'main');
+        expect(rule.check(ctx('git checkout main && git pull origin main', repo)).length).toBe(0);
+    });
+});

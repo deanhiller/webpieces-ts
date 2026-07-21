@@ -172,7 +172,16 @@ elif [ -n "$DRIFT_PKG" ]; then
   # to 'pnpm install', which DOWNGRADES them further from correct.
   REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: run 'git pull' first (or 'git merge --ff-only origin/main'), THEN 'pnpm install'. git pull/fetch/merge are allowed while this guard is up."
 else
-  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
+  # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
+  # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no
+  # node_modules, so the very first tool call in a brand-new worktree fail-closes on a missing bin.
+  # Naming that explicitly turns a baffling "not installed" into a one-command fix, and the HERE is
+  # load-bearing: installing in the primary clone does nothing for this tree.
+  WORKTREE_NOTE=""
+  if [ -f "$ROOT/.git" ]; then
+    WORKTREE_NOTE=" NOTE: $ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run 'pnpm install' HERE (in this worktree), not in the primary clone."
+  fi
+  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry.${WORKTREE_NOTE} (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
 fi
 if [ "$TOOL" = "Bash" ]; then
   BS='\'                     # one literal backslash, so the \u001b escape never sits in this source
