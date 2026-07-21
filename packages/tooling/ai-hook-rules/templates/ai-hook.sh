@@ -138,27 +138,27 @@ DENY_LABEL="DENY"
 [ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "$SHIM_STALE" ] && DENY_LABEL="DENY-SHIM-STALE"  # committed shim reverted/edited (self-guard)
 [ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
-if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*[[:space:]]*$' || printf '%s' "$CMD" | grep -Eq '^rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$' || printf '%s' "$CMD" | grep -Eq '^rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
 fi
 # Always let the shim-regen cure through: wp-upgrade-shim rewrites the committed shim from the installed
 # template, so it is the ONLY fix for a self-guard block — denying it would deadlock the assistant.
-if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
   exit 0
 fi
 # Same cure, without the version coupling: copying templates/ai-hook.sh over the committed shim is what
 # we now TELL the reader to run (the bin only exists in >= 0.4.408), so it must be allowed or the deny
 # names a command it then blocks. Both paths are literal and webpieces-owned - nothing else can be hit.
-if printf '%s' "$CMD" | grep -Eq '^cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
   exit 0
 fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
 # assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
-if [ -n "$DRIFT_PKG" ] && printf '%s' "$CMD" | grep -Eq '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*[[:space:]]*$'; then
+if [ -n "$DRIFT_PKG" ] && printf '%s' "$CMD" | grep -Eq '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-SYNC          # record the git sync we let through (may be what re-syncs the pin)
   exit 0
 fi
@@ -172,7 +172,7 @@ if [ -n "$BROKEN_BIN" ]; then
   if [ "${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
     STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
   fi
-  REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: rm -rf node_modules && pnpm install${STAGING_NOTE}"
+  REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: rm -rf node_modules && pnpm install - it is explicitly ALLOWED through while this guard is up (not a deadlock), so run it YOURSELF rather than handing it to the human.${STAGING_NOTE}"
 elif [ -n "$SHIM_STALE" ]; then
   # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
   # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
@@ -181,9 +181,16 @@ elif [ -n "$SHIM_STALE" ]; then
   # >= 0.4.408, so naming it alone left every older repo with a hard block and a command-not-found —
   # so lead with the plain cp of the installed template, which works on every version, and name the
   # version it restores. The bin is mentioned second, as the equivalent when it is present.
+  #
+  # SAY THAT THE CURE IS ALLOWED THROUGH (2026-07-21, part 1): the text asserted a flat "every tool call
+  # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
+  # block its own fix too, never tried it, and handed the "deadlock" to the human. The cure IS
+  # allowlisted (see RESTORE_SHIM_ALLOW_ERE / UPGRADE_SHIM_ALLOW_ERE above); the message just never said
+  # so. The drift branch below has always said it ("git pull/fetch/merge are allowed while this guard is
+  # up") and has never produced that failure — so state it here in the same plain words.
   SHIM_VER_NOTE=""
   [ -n "$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version $SHIM_TPL_VER)"
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces${SHIM_VER_NOTE} version of it, then retry: cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh - that copy works on EVERY webpieces version and is the whole fix. (Equivalent only if your installed version is 0.4.408 or newer: pnpm exec wp-upgrade-shim. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces${SHIM_VER_NOTE} version of it, then retry: cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh - that copy works on EVERY webpieces version and is the whole fix. THIS IS NOT A DEADLOCK: the cure is explicitly ALLOWED through while this guard is up, so run it YOURSELF now - do not hand it back to the human. (Equivalent only if your installed version is 0.4.408 or newer: pnpm exec wp-upgrade-shim. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
 elif [ -n "$DRIFT_PKG" ]; then
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the

