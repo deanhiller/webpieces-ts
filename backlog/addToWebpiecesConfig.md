@@ -2,9 +2,9 @@
 
 ## Summary
 
-6 Nx infrastructure executors in `packages/tooling/nx-webpieces-rules/src/executors/` hardcode their behavior and ignore `webpieces.config.json`. Unlike every other rule in the system, they can't be disabled or epoch-gated. Wire them up so users can set `{"enabled": false}` or `ignoreModifiedUntilEpoch` on them the same way they do for every other rule.
+5 Nx infrastructure executors in `packages/tooling/nx-webpieces-rules/src/executors/` hardcode their behavior and ignore `webpieces.config.json`. Unlike every other rule in the system, they can't be disabled or epoch-gated. Wire them up so users can set `{"enabled": false}` or `ignoreModifiedUntilEpoch` on them the same way they do for every other rule.
 
-## Scope — the 6 executors that need wiring
+## Scope — the 5 executors that need wiring
 
 Each already exists as a working Nx executor; they just don't read `webpieces.config.json` today.
 
@@ -12,7 +12,6 @@ Each already exists as a working Nx executor; they just don't read `webpieces.co
 |---|---|---|
 | `packages/tooling/nx-webpieces-rules/src/executors/validate-architecture-unchanged/executor.ts` | `validate-architecture-unchanged` | yes (diff comparison) |
 | `packages/tooling/nx-webpieces-rules/src/executors/validate-no-architecture-cycles/executor.ts` | `validate-no-architecture-cycles` | yes (cycle set) |
-| `packages/tooling/nx-webpieces-rules/src/executors/validate-no-skiplevel-deps/executor.ts` | `validate-no-skiplevel-deps` | yes (edge set) |
 | `packages/tooling/nx-webpieces-rules/src/executors/validate-packagejson/executor.ts` | `validate-packagejson` | no — enabled/disabled only |
 | `packages/tooling/nx-webpieces-rules/src/executors/validate-versions-locked/executor.ts` | `validate-versions-locked` | no — enabled/disabled only |
 | `packages/tooling/nx-webpieces-rules/src/executors/validate-eslint-sync/executor.ts` | `validate-eslint-sync` | no — enabled/disabled only |
@@ -24,9 +23,9 @@ Each already exists as a working Nx executor; they just don't read `webpieces.co
 
 ## Approach
 
-1. **Add default entries** in `packages/tooling/rules-config/src/default-rules.ts` — add all 6 new keys, each `{ enabled: true }`. For the 3 that support it, document `ignoreModifiedUntilEpoch` as a supported option.
+1. **Add default entries** in `packages/tooling/rules-config/src/default-rules.ts` — add all 5 new keys, each `{ enabled: true }`. For the 2 that support it, document `ignoreModifiedUntilEpoch` as a supported option.
 2. **Add a helper** in `packages/tooling/rules-config/src/index.ts` — e.g. `isRuleEnabled(config: ResolvedConfig, key: string): boolean`. Returns `true` if the rule entry is absent (fail-safe) or `enabled !== false`.
-3. **Per-executor integration** — at the top of each of the 6 `executor.ts`:
+3. **Per-executor integration** — at the top of each of the 5 `executor.ts`:
    ```ts
    const config = loadConfig(context.root);
    if (!isRuleEnabled(config, '<rule-key>')) {
@@ -34,9 +33,9 @@ Each already exists as a working Nx executor; they just don't read `webpieces.co
        return { success: true };
    }
    ```
-4. **Epoch gating** for the 3 diff-based executors (`validate-architecture-unchanged`, `validate-no-architecture-cycles`, `validate-no-skiplevel-deps`): read `ignoreModifiedUntilEpoch` from the rule options. If `Date.now() / 1000 < epoch`, log a "grandfathered until $DATE" notice and return `{ success: true }`. For `packagejson` / `versions-locked` / `eslint-sync`: all-or-nothing — skip the epoch logic.
+4. **Epoch gating** for the 2 diff-based executors (`validate-architecture-unchanged`, `validate-no-architecture-cycles`): read `ignoreModifiedUntilEpoch` from the rule options. If `Date.now() / 1000 < epoch`, log a "grandfathered until $DATE" notice and return `{ success: true }`. For `packagejson` / `versions-locked` / `eslint-sync`: all-or-nothing — skip the epoch logic.
 5. **Tests** — add spec files next to each executor, mirroring the existing `packages/tooling/rules-config/src/load-config.spec.ts` style. At minimum cover: (a) default `enabled: true` runs normally, (b) `enabled: false` returns success with a skip message, (c) for epoch-gated executors, `ignoreModifiedUntilEpoch` set in the future returns success.
-6. **Docs** — update `webpieces.config.json` at repo root to include the 6 new keys with their defaults so users discover them.
+6. **Docs** — update `webpieces.config.json` at repo root to include the 5 new keys with their defaults so users discover them.
 
 ## Key existing utilities to reuse
 

@@ -30,11 +30,6 @@
             "schema": "./src/executors/validate-architecture-unchanged/schema.json",
             "description": "Validate the architecture graph matches the saved blessed graph"
         },
-        "validate-no-skiplevel-deps": {
-            "implementation": "./src/executors/validate-no-skiplevel-deps/executor",
-            "schema": "./src/executors/validate-no-skiplevel-deps/schema.json",
-            "description": "Validate no project has redundant transitive dependencies"
-        },
         "validate-api-relations": {
             "implementation": "./src/executors/validate-api-relations/executor",
             "schema": "./src/executors/validate-api-relations/schema.json",

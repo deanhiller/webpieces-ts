@@ -23,7 +23,7 @@ export default async function helpExecutor(
     console.log('    npm run arch:visualize                 # Visualize dependency graph');
     console.log('');
     console.log('  Validation:');
-    console.log('    npm run arch:validate                  # Quick validation (no-cycles + no-skiplevel-deps)');
+    console.log('    npm run arch:validate                  # Quick validation (no-cycles)');
     console.log('    npm run arch:validate-all              # Full arch validation (+ unchanged check)');
     console.log('    npm run arch:check-circular            # Check all projects for circular deps');
     console.log('    npm run arch:check-circular-affected   # Check affected projects only');
@@ -35,7 +35,6 @@ export default async function helpExecutor(
     console.log('    nx run architecture:generate                         # Generate dependency graph');
     console.log('    nx run architecture:visualize                        # Visualize dependency graph');
     console.log('    nx run architecture:validate-no-architecture-cycles  # Check for circular project dependencies');
-    console.log('    nx run architecture:validate-no-skiplevel-deps       # Check for redundant dependencies');
     console.log('    nx run architecture:validate-architecture-unchanged  # Validate against blessed graph');
     console.log('');
     console.log('  Per-project file import cycle checking:');
