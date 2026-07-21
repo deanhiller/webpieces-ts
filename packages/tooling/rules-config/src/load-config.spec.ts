@@ -19,7 +19,7 @@ function mktmp(contents: Record<string, string>): string {
 // Code rules go under `rules`; the 7 bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
-    'redirect-how-to-merge-main', 'feature-branch-guard', 'main-stale-guard',
+    'redirect-how-to-merge-main', 'feature-branch-guard', 'read-stale-guard',
 ];
 const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
@@ -230,5 +230,18 @@ describe('loadAndValidate — deprecated key aliasing', () => {
         expect(loaded.rulesConfig['pr-creation-or-push-guard']).toBeDefined();
         expect(loaded.resolved.userConfiguredRuleNames.has('pr-creation-or-push-guard')).toBe(true);
         expect(loaded.resolved.userConfiguredRuleNames.has('pr-creation-guard')).toBe(false);
+    });
+
+    it('accepts the deprecated main-stale-guard key and normalizes it to read-stale-guard', () => {
+        const sections = allRulesOff();
+        // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
+        const guards = sections['hookGuards'] as Record<string, unknown>;
+        guards['main-stale-guard'] = guards['read-stale-guard'];
+        delete guards['read-stale-guard'];
+        const dir = writeConfig(sections);
+        const loaded = loadAndValidate(dir); // must NOT throw on the deprecated key
+        expect(loaded.rulesConfig['read-stale-guard']).toBeDefined();
+        expect(loaded.resolved.userConfiguredRuleNames.has('read-stale-guard')).toBe(true);
+        expect(loaded.resolved.userConfiguredRuleNames.has('main-stale-guard')).toBe(false);
     });
 });

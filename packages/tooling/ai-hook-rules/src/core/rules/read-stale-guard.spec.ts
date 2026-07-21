@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MainSyncStatus, MainStaleGuardConfig } from '@webpieces/rules-config';
+import { MainSyncStatus, ReadStaleGuardConfig } from '@webpieces/rules-config';
 
 import type { FileContext } from '../types';
 
@@ -70,16 +70,16 @@ vi.mock('../decision-log', () => ({
     GuardDecision: class { constructor(...args: unknown[]) { void args; } },
 }));
 
-import { MainStaleGuardRule } from './main-stale-guard';
+import { ReadStaleGuardRule } from './read-stale-guard';
 
 function ctx(relativePath: string = 'src/a.ts'): FileContext {
     return { relativePath, workspaceRoot: '/tmp/x', tool: 'Read', options: {} } as FileContext;
 }
 
-function rule(): MainStaleGuardRule {
-    const cfg = new MainStaleGuardConfig();
+function rule(): ReadStaleGuardRule {
+    const cfg = new ReadStaleGuardConfig();
     cfg.mode = 'ON';
-    return new MainStaleGuardRule(cfg);
+    return new ReadStaleGuardRule(cfg);
 }
 
 // A cache that says "on main, and origin/main is some commit". Behind-ness is decided by ancestorRc,
@@ -105,7 +105,7 @@ function reset(): void {
 
 // ---- the per-read cost path ---------------------------------------------------------------------
 // This runs on EVERY read, so it must not spawn a git process on the common (feature-branch) case.
-describe('main-stale-guard — branch detection cost', () => {
+describe('read-stale-guard — branch detection cost', () => {
     beforeEach(reset);
 
     describe('branch detection cost', () => {
@@ -139,7 +139,7 @@ describe('main-stale-guard — branch detection cost', () => {
 });
 
 // ---- the one case that blocks -------------------------------------------------------------------
-describe('main-stale-guard — blocking', () => {
+describe('read-stale-guard — blocking', () => {
     beforeEach(reset);
 
     it('blocks a read on a clean main that is behind origin/main', () => {
@@ -162,11 +162,11 @@ describe('main-stale-guard — blocking', () => {
 
 // ---- the fail-open escape valves (D1-D12) -------------------------------------------------------
 // Every row here is a deadlock this guard would otherwise create. They all resolve to ALLOW.
-describe('main-stale-guard — fail-open escape valves', () => {
+describe('read-stale-guard — fail-open escape valves', () => {
     beforeEach(reset);
 
     // ---- D1/D8: scope --------------------------------------------------------------------------
-    it('allows when not on main (feature-branch-guard owns that case)', () => {
+    it('allows on a feature branch whose cache is not (yet) for this branch', () => {
         state.branch = 'dean/x';
         expect(rule().check(ctx()).length).toBe(0);
     });
@@ -222,13 +222,105 @@ describe('main-stale-guard — fail-open escape valves', () => {
 
 });
 
+// ---- state B: an already-merged feature branch ---------------------------------------------------
+// Same damage as a stale main (the AI reads a PRE-MERGE snapshot), so the same tool gets blocked.
+// The one deliberate difference from state A is the dirty tree: here it still blocks.
+// On a feature branch, cache for THAT branch, PR merged. `main`-only axes (ancestorRc, localMain)
+// are irrelevant on this path.
+function mergedStatus(over: Partial<MainSyncStatus> = {}): MainSyncStatus {
+    return status(Object.assign(
+        { branch: 'dean/x', branchAlreadyMerged: true, mergedPr: '432' },
+        over,
+    ));
+}
+
+function onMergedBranch(over: Partial<MainSyncStatus> = {}): void {
+    state.branch = 'dean/x';
+    state.status = mergedStatus(over);
+}
+
+describe('read-stale-guard — merged feature branch', () => {
+    beforeEach(reset);
+
+    it('blocks a read on a branch whose PR is already merged', () => {
+        onMergedBranch();
+        const violations = rule().check(ctx());
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('already merged into main');
+        expect(violations[0].message).toContain('merged PR #432');
+    });
+
+    it('tells the agent to branch off origin/main (never `git checkout main`, which fatals in a worktree)', () => {
+        onMergedBranch();
+        const message = rule().check(ctx())[0].message ?? '';
+        expect(message).toContain('git checkout -b <new-feature-branch> origin/main');
+        expect(message).toContain('git fetch origin main');
+    });
+
+    it('names what is still allowed, so the agent is never stuck', () => {
+        onMergedBranch();
+        const message = rule().check(ctx())[0].message ?? '';
+        expect(message).toContain('EVERY Bash command');
+        expect(message).toContain('webpieces.config.json');
+    });
+
+    // THE asymmetry vs. state A: a dirty tree does NOT fail open here, because the cure
+    // (`git checkout -b <new> origin/main`) carries uncommitted work across — nothing to resolve.
+    it('blocks even when the tree is dirty', () => {
+        onMergedBranch();
+        state.porcelain = ' M src/a.ts\n';
+        expect(rule().check(ctx()).length).toBe(1);
+    });
+
+    it('does not spawn git on this path either (.git/HEAD fast path)', () => {
+        onMergedBranch();
+        state.gitHead = 'ref: refs/heads/dean/x\n';
+        expect(rule().check(ctx()).length).toBe(1);
+        expect(state.execBranchCalls).toBe(0);
+    });
+
+    it('blocks with PR#? when the merged PR number is unknown', () => {
+        onMergedBranch({ mergedPr: '' });
+        expect(rule().check(ctx()).length).toBe(1);
+    });
+});
+
+// The state-B fail-open valves. Same doctrine as state A: never block on data we do not have.
+describe('read-stale-guard — merged feature branch, fail-open', () => {
+    beforeEach(reset);
+
+    it('still allows reading webpieces.config.json so mode OFF stays reachable', () => {
+        onMergedBranch();
+        expect(rule().check(ctx('webpieces.config.json')).length).toBe(0);
+    });
+
+    it('allows a clean, unmerged feature branch', () => {
+        onMergedBranch({ branchAlreadyMerged: false, mergedPr: '' });
+        expect(rule().check(ctx()).length).toBe(0);
+    });
+
+    it('fails open when there is no cache yet', () => {
+        state.branch = 'dean/x';
+        state.status = null;
+        expect(rule().check(ctx()).length).toBe(0);
+    });
+
+    // This is also what un-blocks the agent the moment it follows the cure: the new branch has no
+    // cache entry of its own yet, so the merged flag from the OLD branch can never leak onto it.
+    it('fails open when the cache is for a different branch', () => {
+        state.branch = 'dean/fresh';
+        state.status = mergedStatus();
+        expect(rule().check(ctx()).length).toBe(0);
+    });
+});
+
 // ---- config -------------------------------------------------------------------------------------
-describe('main-stale-guard — config', () => {
+describe('read-stale-guard — config', () => {
     beforeEach(reset);
 
     it('does not run when mode is OFF', () => {
-        const cfg = new MainStaleGuardConfig();
+        const cfg = new ReadStaleGuardConfig();
         cfg.mode = 'OFF';
-        expect(new MainStaleGuardRule(cfg).shouldRun()).toBe(false);
+        expect(new ReadStaleGuardRule(cfg).shouldRun()).toBe(false);
     });
 });

@@ -384,7 +384,8 @@ describe('validateMatchRulesSection', () => {
     });
 });
 
-// Registry-consistency invariants. main-stale-guard shipped in 0.4.415 registered in HOOK_GUARD_NAMES
+// Registry-consistency invariants. read-stale-guard (then named main-stale-guard) shipped in 0.4.415
+// registered in HOOK_GUARD_NAMES
 // (so the validator DEMANDED it in config) but absent from RULE_SCHEMAS (so the validator REJECTED it
 // as an unknown rule) — a hard deadlock: config-without-it fails the sync check, config-with-it fails
 // validation, and the only writes still allowed (config edits, pnpm install) can't reach the version
@@ -400,6 +401,6 @@ describe('rule registry consistency', () => {
         // allRuleNames drives buildSeedConfig; a name missing here can never be seeded and a repo
         // could not add it via `wp-install-ai-hooks --sync`.
         expect(allRuleNames().length).toBeGreaterThan(0);
-        expect(new Set(allRuleNames()).has('main-stale-guard')).toBe(true);
+        expect(new Set(allRuleNames()).has('read-stale-guard')).toBe(true);
     });
 });

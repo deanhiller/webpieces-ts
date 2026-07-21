@@ -82,7 +82,7 @@ export {
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
     FeatureBranchGuardConfig,
-    MainStaleGuardConfig,
+    ReadStaleGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,

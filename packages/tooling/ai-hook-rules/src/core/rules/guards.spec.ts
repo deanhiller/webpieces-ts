@@ -83,7 +83,8 @@ describe('merge-in-progress-guard', () => {
 // The runtime-side twin of rules-config's registry-consistency test. A name in builtInRuleNames loads
 // at runtime and makes config-sync DEMAND a config entry for it — but validation accepts that entry
 // only if the name is also in RULE_SCHEMAS (allRuleNames). A name in one list but not the other is the
-// exact deadlock main-stale-guard shipped with in 0.4.415. Lock them together here too.
+// exact deadlock read-stale-guard (then named main-stale-guard) shipped with in 0.4.415. Lock them
+// together here too.
 describe('built-in rule registry is validatable', () => {
     it('every built-in rule name has a schema (allRuleNames), so its config entry can be validated and seeded', () => {
         const schema = new Set(allRuleNames());

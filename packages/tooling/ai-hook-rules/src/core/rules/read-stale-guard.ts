@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
-    MainStaleGuardConfig,
+    ReadStaleGuardConfig,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     readMainSyncStatus,
     MainSyncStatus,
@@ -16,13 +16,26 @@ import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
+import { MergedBranchMessage } from './merged-branch-message';
 
 /**
- * Blocks READS while you are sitting on a `main` that is behind `origin/main`.
+ * Blocks READS while the checked-out branch is a stale place to read from. TWO states:
  *
- * WHY READ, of all tools: a stale main means the AI reads stale FILE CONTENT and then reasons,
+ *   A. on `main`, and local main is BEHIND origin/main
+ *   B. on a feature branch whose PR is ALREADY MERGED (a pre-merge snapshot; origin/main has moved
+ *      past it and a squash merge means its HEAD is not even an ancestor of main)
+ *
+ * WHY READ, of all tools: either state means the AI reads stale FILE CONTENT and then reasons,
  * plans and writes against code that no longer exists upstream. Blocking the write is too late —
- * the bad premise is already in context. So the block lands on the read.
+ * the bad premise is already in context. So the block lands on the read. (feature-branch-guard
+ * blocks the WRITE in state B; this guard is the read-side half of that same protection, and the
+ * two share one recovery message via MergedBranchMessage.)
+ *
+ * THE DIRTY-TREE ASYMMETRY is deliberate. State A fails OPEN on a dirty tree because `git pull` is
+ * then not a guaranteed fast-forward and the agent would be trapped away from the files it needs to
+ * resolve the conflict. State B blocks ANYWAY, because its cure — `git checkout -b <new>
+ * origin/main` — carries uncommitted changes onto the fresh branch, so there is nothing to resolve
+ * and nothing to be trapped by.
  *
  * WHY THIS CANNOT WEDGE: the block is scoped to Read ONLY. Every cure — `git pull origin main`,
  * `pnpm install`, any webpieces upgrade — is a Bash command, and this guard never looks at Bash.
@@ -35,7 +48,8 @@ import { logGuardDecision, GuardDecision } from '../decision-log';
  *
  *   1. DIRTY TREE  — uncommitted work on main means `git pull` is not a guaranteed fast-forward.
  *                    Blocking reads there would trap the agent: it could not read the files it
- *                    needs to resolve the very conflict blocking it. Allow.
+ *                    needs to resolve the very conflict blocking it. Allow. (State A ONLY — see
+ *                    the dirty-tree asymmetry above.)
  *   2. CACHE LAG   — we do NOT compare hashes for equality. The cached `originMain` is written by
  *                    the detached refresher and is arbitrarily old, so `local !== origin` stays
  *                    true for a while AFTER a successful pull, which would spin the agent forever.
@@ -52,21 +66,21 @@ import { logGuardDecision, GuardDecision } from '../decision-log';
  * never reaches the runner's rule loop). Fires the detached refresher on every call, which is also
  * what makes reads keep the shared main-sync cache warm for feature-branch-guard.
  */
-export class MainStaleGuardRule extends FileRuleBase<MainStaleGuardConfig> {
-    constructor(config: MainStaleGuardConfig) { super(config, 'main-stale-guard'); }
+export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
+    constructor(config: ReadStaleGuardConfig) { super(config, 'read-stale-guard'); }
 
-    readonly description = 'Block reads while on a `main` branch that is behind origin/main — stale main means the AI reads stale files.';
+    readonly description = 'Block reads on a branch that is stale to read from — a `main` behind origin/main, or a feature branch whose PR is already merged.';
     override readonly files = ['**/*'];
     override readonly defaultOptions = {
         hangTimeoutMinutes: DEFAULT_HANG_TIMEOUT_MINUTES,
     };
     readonly fixHint = new FixHint(
-        'You are on main and main is behind origin/main — reading files would give you stale content.',
-        'Bring main up to date before reading anything else:',
+        'This branch is stale to read from — reading it would give you pre-merge/out-of-date content.',
+        'Get onto current code before reading anything else:',
         [
-            new Option('git pull origin main   ← the fix. Then simply retry the read.', true),
+            new Option('On main, behind origin/main → git pull origin main. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main. Then retry the read.', true),
             new Option('Still allowed right now: EVERY Bash command (installs, upgrades, builds), all Write/Edit, and reading webpieces.config.json.'),
-            new Option('Disable in webpieces.config.json under hookGuards → main-stale-guard (mode OFF) if intentional.'),
+            new Option('Disable in webpieces.config.json under hookGuards → read-stale-guard (mode OFF) if intentional.'),
         ],
     );
 
@@ -76,15 +90,22 @@ export class MainStaleGuardRule extends FileRuleBase<MainStaleGuardConfig> {
 
         const branch = this.currentBranch(ctx.workspaceRoot);
         if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
-        // The whole guard is about a checked-out main. Anything else is feature-branch-guard's job.
-        if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main');
 
-        // Keep the shared cache warm for the next call. Detached; never blocks this read.
+        // Keep the shared cache warm for the next call. Detached; never blocks this read. Fired for
+        // BOTH states — the merged-branch signal comes out of that same cache.
         triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
 
-        // Escape valve 3 — the read half of the config escape hatch.
+        // Escape valve 3 — the read half of the config escape hatch. Ahead of BOTH states' blocks so
+        // the agent can always read-then-edit the file that turns this guard off.
         if (this.isConfigFile(ctx.relativePath)) return this.allow(ctx, branch, 'webpieces-config-read (escape hatch)');
 
+        return branch === 'main'
+            ? this.checkStaleMain(ctx, branch)
+            : this.checkMergedBranch(ctx, branch);
+    }
+
+    // State A — on main, possibly behind origin/main.
+    private checkStaleMain(ctx: FileContext, branch: string): readonly Violation[] {
         const status = readMainSyncStatus(ctx.workspaceRoot);
         if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
@@ -105,6 +126,38 @@ export class MainStaleGuardRule extends FileRuleBase<MainStaleGuardConfig> {
         }
 
         return this.block(ctx, branch, 'on-stale-main', this.staleMainMessage(ctx.workspaceRoot), cache);
+    }
+
+    /**
+     * State B — a feature branch whose PR is already merged. Reads a PRE-MERGE snapshot, so every
+     * plan built from it is built on code origin/main has moved past.
+     *
+     * `branchAlreadyMerged` comes straight from the shared cache (the refresher's `gh pr list --state
+     * merged`), so this path spawns nothing. No `gh` / offline → `mergedPr` is '' → not merged → allow,
+     * which is the fail-open direction for free.
+     *
+     * NOTE the missing dirty-tree check: unlike state A, we block a dirty tree too. `git checkout -b
+     * <new> origin/main` carries uncommitted work across, so the agent is never trapped here.
+     */
+    private checkMergedBranch(ctx: FileContext, branch: string): readonly Violation[] {
+        const status = readMainSyncStatus(ctx.workspaceRoot);
+        if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
+
+        const cache = this.cacheSummary(status);
+        // Cache written for a DIFFERENT branch (just switched; the refresh for this one hasn't landed).
+        // Never block on another branch's signals — this is also what un-blocks the instant the agent
+        // follows the cure and checks out a fresh branch.
+        if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
+        if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
+
+        const pr = status.mergedPr !== '' ? status.mergedPr : '?';
+        return this.block(
+            ctx,
+            branch,
+            `already-merged PR#${pr}`,
+            new MergedBranchMessage().forReads(branch, status.mergedPr),
+            cache,
+        );
     }
 
     // Is `commit` an ancestor of (i.e. already contained in) HEAD? Local-only and fast — no network.
@@ -174,12 +227,13 @@ export class MainStaleGuardRule extends FileRuleBase<MainStaleGuardConfig> {
             'Still allowed while this block is up:',
             '  - EVERY Bash command (pnpm install, any webpieces upgrade, builds, all git/gh)',
             '  - All Write/Edit (feature-branch-guard governs those separately)',
-            '  - Reading and editing webpieces.config.json (set main-stale-guard mode OFF to disable)',
+            '  - Reading and editing webpieces.config.json (set read-stale-guard mode OFF to disable)',
         ].join('\n');
     }
 
     private cacheSummary(status: MainSyncStatus): string {
-        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} ts=${status.timestamp}`;
+        const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
+        return `cache=${status.branch} localMain=${status.localMain.slice(0, 8)} originMain=${status.originMain.slice(0, 8)} merged=${merged} ts=${status.timestamp}`;
     }
 
     private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
@@ -195,7 +249,7 @@ export class MainStaleGuardRule extends FileRuleBase<MainStaleGuardConfig> {
     private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('main-stale-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache),
+            new GuardDecision('read-stale-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache),
         );
     }
 

@@ -128,7 +128,7 @@ export function runBash(command: string, cwd: string, mode: HookMode = 'all'): B
 
 // The name of the ONLY rule permitted to block a Read. Reads are the highest-blast-radius tool
 // there is, so this path is an explicit single-rule allowlist rather than the general rule loop.
-const READ_SCOPED_GUARDS: ReadonlySet<string> = new Set(['main-stale-guard']);
+const READ_SCOPED_GUARDS: ReadonlySet<string> = new Set(['read-stale-guard']);
 
 /**
  * The Read path. Deliberately NOT `run()`:

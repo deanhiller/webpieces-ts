@@ -15,6 +15,7 @@ import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
+import { MergedBranchMessage } from './merged-branch-message';
 
 /**
  * Comprehensive "are you on a proper feature branch?" guard — the single rule that blocks edits when
@@ -143,17 +144,9 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         ].join('\n');
     }
 
+    // Shared with read-stale-guard, which blocks READS in this same state — see MergedBranchMessage.
     private alreadyMergedMessage(branch: string, mergedPr: string): string {
-        const pr = mergedPr !== '' ? ` (merged PR #${mergedPr})` : '';
-        return [
-            `It looks like you forgot to switch to main and delete this branch "${branch}" — its PR is already merged into main${pr}.`,
-            'Your work is in main — do NOT keep editing this stale branch (you will reconflict with main).',
-            'Start fresh — branch off origin/main (works on the primary repo AND inside a worktree; never',
-            '`git checkout main`, which fatals in a worktree):',
-            '  1. git fetch origin main',
-            '  2. git checkout -b <new-feature-branch> origin/main',
-            'Please add to memory: start a new branch off origin/main after a PR is merged.',
-        ].join('\n');
+        return new MergedBranchMessage().forEdits(branch, mergedPr);
     }
 
     private conflictMessage(conflictFiles: readonly string[], openPr: string): string {
