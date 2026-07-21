@@ -101,10 +101,11 @@ function autoReap(repoRoot: string, cache: MergedBranchesCache): number {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const config = loadAndValidate(repoRoot).rulesConfig['branch-creation-guard'];
-        // Absent config → reap. The branch cap this feeds is worthless if nothing ever reaps, and a
-        // consumer must not have to add a config key to stop drowning in dead branches. Turning the
-        // guard OFF entirely, or setting autoReapMergedBranches:false, opts back out.
-        if (config?.mode === 'OFF' || config?.autoReapMergedBranches === false) return 0;
+        // Strictly opt-IN: only an explicit `true` reaps. `autoReapMergedBranches` is schema-required,
+        // so every validated config states an answer — which means "absent" here is not a consumer
+        // who wants the default, it is a config that never passed validation. Deleting branches on
+        // that basis would be deleting on a preference nobody expressed.
+        if (config?.mode === 'OFF' || config?.autoReapMergedBranches !== true) return 0;
 
         const result: ReapResult = new BranchReaper().reap(repoRoot, 'auto-reap', cache);
         for (const failure of result.failed) {
