@@ -154,12 +154,22 @@
         "nx-wiring": {
             "mode": "RUN_EVERY_TIME",
             "ignoreModifiedUntilEpoch": 0
+        },
+        "no-custom-css": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 0
         }
     },
     "hookGuards": {
         "branch-creation-guard": {
             "mode": "ON_NO_SUBBRANCHES",
             "subBranchNaming": "feature/<ticket>/<short-description>",
+            "autoReapMergedBranches": true,
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "read-stale-guard": {
+            "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
         "pr-creation-guard": {
