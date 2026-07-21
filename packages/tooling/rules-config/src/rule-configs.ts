@@ -391,6 +391,15 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     // branch budget, five worktrees would leave room for zero branches. Held branches count here;
     // parked branches count against maxLocalBranches. Enforced at `git worktree add`.
     maxWorktrees?: number;
+    // Let the detached background refresher DELETE dead branches on its own, instead of only
+    // reporting them. Defaults to TRUE when absent — the cap it feeds is worthless if nothing ever
+    // reaps, and every candidate is provably dead (merged PR / squash backup / no commits) and
+    // recoverable by the SHA logged to branch-mutations.log. Set false to go back to report-only.
+    //
+    // Deliberately OPTIONAL and defaulted so no webpieces.config.json needs a new key to get the
+    // behavior: an already-installed validator rejects config keys it has never heard of, so a
+    // required key here would deadlock every consumer until they upgraded.
+    autoReapMergedBranches?: boolean;
 
     static readonly SCHEMA: SchemaShape<BranchCreationGuardConfig> = {
         mode: new FieldDef('string', BRANCH_GUARD_MODES),
@@ -398,6 +407,7 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
         branchFormat: FieldDef.optional('string'),
         maxLocalBranches: FieldDef.optional('number'),
         maxWorktrees: FieldDef.optional('number'),
+        autoReapMergedBranches: FieldDef.optional('boolean'),
         ...BASE_RULE_SCHEMA,
     };
 }

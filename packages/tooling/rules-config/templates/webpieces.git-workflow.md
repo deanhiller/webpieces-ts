@@ -72,6 +72,12 @@ Nearly every time you reach this point, the real answer is `pnpm wp-start-update
    conflict here, finish with `pnpm wp-finish-upsert-pr` (not `wp-finish-update`).
 4. **`pnpm wp-finish-upsert-pr`** — validates any in-progress merge, requires your `review.json` (its
    `title` becomes the PR title), runs the **authoritative** build gate, pushes, and creates/updates the PR.
+5. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge
+   backup of a merged branch, or no commits of their own). Run it after `gh pr merge`, or any time the
+   branch cap blocks you. It takes no arguments and needs no judgement call from you: it recomputes the
+   verdicts itself, deletes one branch per command, spares anything a human should rule on, and logs
+   every deletion with its pre-delete SHA plus a `recover=` command in
+   `.webpieces/hooks/branch-mutations.log`. **Use this instead of `git branch -D`.**
 
 ## Worktrees (works the same as a primary clone)
 
@@ -108,14 +114,19 @@ worktree cap, *not* the branch cap — so 5 worktrees plus 5 parked branches is 
 is blocked at creation until the dead ones are reaped. Creation is the gate because it is the only moment
 cleanup is both cheap and obviously worth it.
 
-When blocked, the guard names exactly what is dead and hands you the command;
-`.webpieces/merged-branches.json` carries the per-branch and per-worktree reason. Reaping a worktree is
-always prune → remove → delete, in that order — git refuses to delete a branch a worktree still holds:
+Reap dead **branches** with `pnpm wp-cleanup` — never `git branch -D` by hand. Reaping a **worktree** is
+still explicit git, always prune → remove → delete in that order, because git refuses to delete a branch a
+worktree still holds (and `wp-cleanup` deliberately spares worktree-held branches for that reason):
 ```bash
 git worktree prune && git worktree remove ../<feature-dir> && git branch -D <branch>
 ```
-A branch is only ever proposed for deletion when it is backed by a **merged PR** or holds **no commits of
-its own**. Anything else is spared for a human to decide.
+A branch is only ever deleted when it is backed by a **merged PR**, is a squash-merge backup of one, or
+holds **no commits of its own**. Anything else is spared for a human to decide, and
+`.webpieces/merged-branches.json` carries the per-branch and per-worktree reason either way.
+
+Most of the time you will never see this cap, because the background refresher reaps dead branches on its
+own (`branch-creation-guard.autoReapMergedBranches`, on by default). `wp-cleanup` is what you run when you
+want it to happen right now.
 
 You also cannot **check out a dead branch into a new worktree**: `git worktree add ../dir <branch>` is
 blocked when that branch's PR is already merged, because the result is a directory full of pre-merge code.

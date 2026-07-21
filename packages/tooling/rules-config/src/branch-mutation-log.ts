@@ -17,13 +17,19 @@ const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors th
 const MAX_DETAIL_LEN = 400;
 
 // The workflow verb whose branch mutation is being logged (the bin the AI/human invoked).
-export type MutationVerb = 'wp-start-update' | 'wp-finish-update' | 'wp-start-upsert-pr' | 'wp-finish-upsert-pr';
+// `auto-reap` is the odd one out: no human invoked it — it is the detached background refresher
+// (sync-main.ts) deleting dead branches on its own. It gets a verb precisely BECAUSE it is
+// unattended: a deletion nobody watched happen is the one that most needs an audit line.
+export type MutationVerb =
+    | 'wp-start-update' | 'wp-finish-update' | 'wp-start-upsert-pr' | 'wp-finish-upsert-pr'
+    | 'wp-cleanup' | 'auto-reap';
 
 // A boundary within a verb's execution. START/END bracket the whole run; the middle phases mark each
 // irreversible git step so an interrupt leaves a breadcrumb at the last phase reached.
+// REAP is a whole mutation in one line (a branch delete has no phases) — see BranchReaper.
 export type MutationPhase =
     | 'START' | 'BACKUP' | 'CHECKOUT_MAIN' | 'PULL' | 'SQUASH' | 'RENAME'
-    | 'FINALIZE' | 'CONFLICT' | 'INTERRUPTED' | 'END';
+    | 'FINALIZE' | 'CONFLICT' | 'INTERRUPTED' | 'END' | 'REAP';
 
 // Data-only record of one branch-mutation event (per CLAUDE.md: classes for data, explicit construction).
 export class BranchMutationEvent {
@@ -37,6 +43,11 @@ export class BranchMutationEvent {
     conflictFiles: string[] = [];
     outcome: string = '';
     artifacts: string[] = [];
+    // The commit a DELETED branch pointed at, captured immediately before the delete. This is what
+    // makes a reap auditable AND reversible: the work is already in main, and the pre-delete tip is
+    // still addressable by hash (the reflog holds it ~90 days), so formatDetail renders a literal
+    // `recover=git branch <name> <sha>` next to it. Empty for mutations that delete nothing.
+    sha: string = '';
 
     constructor(verb: MutationVerb, phase: MutationPhase) {
         this.verb = verb;
@@ -82,11 +93,17 @@ export class BranchMutationLog {
     // Render only the fields this event actually set, as `key=value` tokens — greppable on one line.
     private formatDetail(event: BranchMutationEvent): string {
         const parts: string[] = [];
-        if (event.fromBranch !== '' || event.toBranch !== '') parts.push(`from=${event.fromBranch || '?'} to=${event.toBranch || '?'}`);
+        // A rename/move has both ends; a REAP has only the branch it destroyed. Printing `to=?` for
+        // the latter reads like a lost destination rather than "there was never one".
+        if (event.fromBranch !== '' && event.toBranch !== '') parts.push(`from=${event.fromBranch} to=${event.toBranch}`);
+        else if (event.fromBranch !== '') parts.push(`branch=${event.fromBranch}`);
+        else if (event.toBranch !== '') parts.push(`from=? to=${event.toBranch}`);
         if (event.oldMain !== '' || event.newMain !== '') parts.push(`oldMain=${event.oldMain || '?'} newMain=${event.newMain || '?'}`);
         if (event.conflict) parts.push('conflict=true');
         if (event.conflictFiles.length > 0) parts.push(`conflictFiles=${event.conflictFiles.length}(${event.conflictFiles.join(',')})`);
         if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
+        // Emitted as one unit so the hash is never separated from the command that undoes the delete.
+        if (event.sha !== '') parts.push(`sha=${event.sha} recover=git branch ${event.fromBranch || '?'} ${event.sha}`);
         for (const artifact of event.artifacts) parts.push(`artifact=${artifact}`);
         return parts.join(' ');
     }

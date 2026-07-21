@@ -13,9 +13,12 @@ appears in each root's tree.
 ```mermaid
 graph TD
     AiBranchName["AiBranchName"]
+    BranchMutationLog["BranchMutationLog"]
     BranchNaming["BranchNaming"]
+    BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
     CleanTmp["CleanTmp"]
+    CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
@@ -25,14 +28,20 @@ graph TD
     MergeEnd["MergeEnd"]
     MergeStart["MergeStart"]
     MergeState["MergeState"]
+    MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
     PrGateApp["PrGateApp"]:::controller
     RepoRootFinder["RepoRootFinder"]
     RunUpdate["RunUpdate"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
+    WorktreeService["WorktreeService"]
     AiBranchName --> BranchNaming
+    BranchReaper --> BranchMutationLog
+    BranchReaper --> MergedBranchesService
     CleanTmp --> RepoRootFinder
+    CleanupCommand --> BranchReaper
+    CleanupCommand --> RepoRootFinder
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
@@ -62,7 +71,9 @@ graph TD
     MergeStart --> GatherInfo
     MergeStart --> GitExec
     MergeStart --> MergeState
+    MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
+    PrGateApp --> CleanupCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
     PrGateApp --> StartUpdateCommand

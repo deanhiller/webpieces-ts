@@ -30,6 +30,11 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
 
     // Single fix, no distinct options — the whole guidance lives in mainMessage so it renders as
     // one coherent block (never split into fake "Fix Option 1/2/3").
+    //
+    // `pnpm wp-cleanup` rather than `git branch -d <branch>`: a raw `-d` reads as destructive, so
+    // agents ask permission and stop, and the branch survives. wp-cleanup is one named command that
+    // deletes ONLY provably-dead branches — and it reaps every OTHER dead branch at the same time,
+    // which is the moment that actually keeps the local branch list bounded.
     get fixHint(): FixHint {
         return new FixHint(
             'After merging a PR you must clean up the branch (and the worktree, if it has one).',
@@ -48,7 +53,10 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
     check(ctx: BashContext): readonly Violation[] {
         if (!/gh\s+pr\s+merge/.test(ctx.command)) return [];
 
-        const hasDelete = /git\s+branch\s+-[dD]/.test(ctx.command);
+        // `wp-cleanup` counts as a delete: it is the command the branch-flavoured cleanupSteps now
+        // hand out, and it deletes the just-merged branch (plus every other dead one). A literal
+        // `git branch -d` still satisfies the guard too — narrower, but not wrong.
+        const hasDelete = /git\s+branch\s+-[dD]|wp-cleanup/.test(ctx.command);
         const hasCheckout = /git\s+(checkout|switch)\s+main/.test(ctx.command);
         const hasWorktreeRemove = /git\s+worktree\s+remove\b/.test(ctx.command);
 

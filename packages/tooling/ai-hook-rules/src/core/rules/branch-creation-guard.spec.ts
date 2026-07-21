@@ -254,7 +254,12 @@ describe('branch-creation-guard local-branch cap', () => {
 
         const hint = r.fixHint;
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
-        expect(flat).toContain('git branch -D a b c');
+        // `pnpm wp-cleanup`, NOT `git branch -D a b c`: the multi-name form aborts wholesale on the
+        // first branch git refuses, and a bare `-D` makes agents stop and ask instead of cleaning.
+        // The dead branches are still NAMED so the human can see what is about to go.
+        expect(flat).toContain('pnpm wp-cleanup');
+        expect(flat).toContain('a b c');
+        expect(flat).not.toContain('git branch -D');
         expect(flat).toContain('merged-branches.json');
         expect(flat).toContain('maxLocalBranches');
     });
@@ -264,7 +269,37 @@ describe('branch-creation-guard local-branch cap', () => {
         git.cacheJson = cacheWith(['a']);
         expect(rule('ON', { maxLocalBranches: 5 }).check(ctx('git checkout -b dean/next origin/main')).length).toBe(0);
     });
+});
 
+describe('branch-creation-guard restore-at-SHA (the wp-cleanup undo path)', () => {
+    /**
+     * The `recover=git branch <name> <sha>` command wp-cleanup logs for every branch it reaps must
+     * always run. Without this the safety story is circular: deletes are "safe because they're one
+     * command away from undo", and that command is refused — observed live, the guard answered a
+     * restore with "create it off origin/main instead", which is exactly the content being restored.
+     * Checked ahead of the caps too, so a full branch list cannot trap you on the recovery path.
+     */
+    it('always allows restoring a reaped branch at its logged SHA, even at the cap', () => {
+        git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
+        git.cacheJson = cacheWith(['a', 'b', 'c']);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxLocalBranches: 5 });
+        const restore = 'git branch dean/reaped 58368f29991becc08497b11a73eb63a00c171ff1';
+        expect(r.check(ctx(restore)).length).toBe(0);
+        // The short form the log's `recover=` may carry works too.
+        expect(r.check(ctx('git branch dean/reaped 58368f29')).length).toBe(0);
+    });
+
+    // The allow keys off a COMMITTISH base, not any second argument. `git branch x main` is an
+    // ordinary creation and must still spend/respect the cap.
+    it('still blocks a plain branch creation off a non-sha base at the cap', () => {
+        git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
+        git.cacheJson = cacheWith(['a', 'b', 'c']);
+        expect(rule('ON_NO_SUBBRANCHES', { maxLocalBranches: 5 }).check(ctx('git branch dean/next main')).length).toBe(1);
+    });
+});
+
+describe('branch-creation-guard cap fail-open and escapes', () => {
     // Fail OPEN: with no cache on disk we have no idea what is safe to delete, so we must not block.
     it('does not block when the cache has not been generated yet', () => {
         git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e', 'f'];

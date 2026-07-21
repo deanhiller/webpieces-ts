@@ -167,6 +167,11 @@ export {
     Worktree,
     WorktreeService,
 } from './worktrees';
+export {
+    ReapedBranch,
+    ReapResult,
+    BranchReaper,
+} from './branch-reaper';
 export type { MutationVerb, MutationPhase } from './branch-mutation-log';
 export {
     BranchMutationEvent,

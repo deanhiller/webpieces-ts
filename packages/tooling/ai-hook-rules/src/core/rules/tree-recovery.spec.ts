@@ -84,16 +84,26 @@ describe('TreeRecovery.cleanupSteps', () => {
         expect(remove).toBeLessThan(del);
     });
 
-    it('uses the plain checkout+delete form in the primary clone', () => {
+    /**
+     * The primary-clone form hands out `pnpm wp-cleanup`, never a bare `git branch -d`. An agent
+     * treats a raw delete flag as destructive and stops to ask, so the branch survives the turn —
+     * which is precisely how local branches piled up while this advice was being printed correctly.
+     */
+    it('uses the checkout + wp-cleanup form in the primary clone, never a raw branch delete', () => {
         const text = new TreeRecovery().cleanupSteps('branch', 'dean/x').join('\n');
-        expect(text).toContain('git branch -d dean/x');
+        expect(text).toContain('git checkout main');
+        expect(text).toContain('pnpm wp-cleanup');
+        expect(text).not.toContain('git branch -d');
         expect(text).not.toContain('git worktree remove');
     });
 
+    // The worktree arm keeps its explicit `git branch -D`: wp-cleanup deliberately spares
+    // worktree-held branches, so it cannot finish that job.
     it('gives both forms when unknown', () => {
         const text = new TreeRecovery().cleanupSteps('unknown', 'dean/x', '/work/x').join('\n');
-        expect(text).toContain('git branch -d dean/x');
+        expect(text).toContain('pnpm wp-cleanup');
         expect(text).toContain('git worktree remove /work/x');
+        expect(text).toContain('git branch -D dean/x');
     });
 });
 
