@@ -16,6 +16,7 @@ import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
 import { MergedBranchMessage } from './merged-branch-message';
+import { TreeRecovery } from './tree-recovery';
 
 /**
  * Comprehensive "are you on a proper feature branch?" guard — the single rule that blocks edits when
@@ -79,7 +80,8 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         // State 2: this feature branch was already merged into main.
         if (status.branchAlreadyMerged) {
             const pr = status.mergedPr !== '' ? status.mergedPr : '?';
-            return this.block(ctx, branch, `already-merged PR#${pr}`, this.alreadyMergedMessage(branch, status.mergedPr), cache);
+            const merged = this.alreadyMergedMessage(ctx.workspaceRoot, branch, status.mergedPr);
+            return this.block(ctx, branch, `already-merged PR#${pr}`, merged, cache);
         }
         // State 3: no fork point — main was merged into the branch.
         if (!status.hasForkPoint) {
@@ -145,8 +147,12 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     }
 
     // Shared with read-stale-guard, which blocks READS in this same state — see MergedBranchMessage.
-    private alreadyMergedMessage(branch: string, mergedPr: string): string {
-        return new MergedBranchMessage().forEdits(branch, mergedPr);
+    // The tree kind picks the flavour of the cure: a dead LINKED WORKTREE is told to open a new
+    // worktree off origin/main and reap this one; the primary clone is told to branch off origin/main.
+    private alreadyMergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
+        return new MergedBranchMessage().forEdits(
+            branch, mergedPr, new TreeRecovery().kindOf(workspaceRoot), workspaceRoot,
+        );
     }
 
     private conflictMessage(conflictFiles: readonly string[], openPr: string): string {

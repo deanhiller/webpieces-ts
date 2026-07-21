@@ -1,5 +1,9 @@
 import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
+
+import { toError } from './to-error';
 
 /**
  * Reading the git worktree list.
@@ -78,6 +82,47 @@ export class WorktreeService {
             if (tree.branch !== '') held.add(tree.branch);
         }
         return held;
+    }
+
+    /**
+     * Am I standing in a LINKED worktree (as opposed to the primary clone)?
+     *
+     * This is the question every recovery message needs, because the two trees take different
+     * commands: `git checkout main` fatals inside a linked worktree ("main is already checked out
+     * at <primary>"), and a dead linked worktree is reaped with `git worktree remove`, not
+     * `git branch -d`. A guard that cannot tell them apart must print BOTH forms and let the AI
+     * guess — which is exactly how an AI ends up running the fatal one.
+     *
+     * The test is a single `statSync`, no process spawn: git gives a linked worktree a `.git` FILE
+     * (a `gitdir:` pointer) where the primary clone has a `.git` DIRECTORY. This runs on the read
+     * path, where reads vastly outnumber every other tool call, so the cost matters.
+     *
+     * Returns FALSE on anything uncertain (no `.git` at all, unreadable, a submodule's `.git` file
+     * in a non-worktree checkout). False is the fail-open direction here: callers then print both
+     * forms rather than confidently printing the wrong one.
+     */
+    isLinkedWorktree(root: string): boolean {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return !fs.statSync(path.join(root, '.git')).isDirectory();
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return false;
+        }
+    }
+
+    /**
+     * The worktree record for the tree rooted at `root`, or null when it is not one of git's
+     * worktrees (or git could not answer). Callers use it to name the exact directory a
+     * `git worktree remove` has to take — a reap instruction with the wrong path is worse than none.
+     */
+    currentWorktree(root: string): Worktree | null {
+        const resolved = path.resolve(root);
+        for (const tree of this.listWorktrees(root)) {
+            if (path.resolve(tree.path) === resolved) return tree;
+        }
+        return null;
     }
 
     /**

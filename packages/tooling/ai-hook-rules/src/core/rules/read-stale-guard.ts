@@ -17,6 +17,7 @@ import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
 import { MergedBranchMessage } from './merged-branch-message';
+import { TreeRecovery } from './tree-recovery';
 
 /**
  * Blocks READS while the checked-out branch is a stale place to read from. TWO states:
@@ -136,8 +137,12 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
      * merged`), so this path spawns nothing. No `gh` / offline → `mergedPr` is '' → not merged → allow,
      * which is the fail-open direction for free.
      *
-     * NOTE the missing dirty-tree check: unlike state A, we block a dirty tree too. `git checkout -b
-     * <new> origin/main` carries uncommitted work across, so the agent is never trapped here.
+     * The DIRTY-TREE escape valve is the same one state A has, for the same reason: uncommitted work
+     * on a merged branch is work that exists nowhere else, and rescuing it means READING the files it
+     * touches. `git checkout -b <new> origin/main` usually carries those changes across — but when it
+     * does not (an overlapping change landed in main), a blocked read is an agent that cannot even
+     * see what it is about to lose. feature-branch-guard still blocks the EDITS, so the state is
+     * surfaced loudly either way; we just refuse to cut off the rescue path.
      */
     private checkMergedBranch(ctx: FileContext, branch: string): readonly Violation[] {
         const status = readMainSyncStatus(ctx.workspaceRoot);
@@ -149,14 +154,28 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         // follows the cure and checks out a fresh branch.
         if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
         if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
+        if (this.isDirty(ctx.workspaceRoot)) {
+            return this.allow(ctx, branch, 'dirty-merged-branch (fail-open)', cache);
+        }
 
         const pr = status.mergedPr !== '' ? status.mergedPr : '?';
         return this.block(
             ctx,
             branch,
             `already-merged PR#${pr}`,
-            new MergedBranchMessage().forReads(branch, status.mergedPr),
+            this.mergedMessage(ctx.workspaceRoot, branch, status.mergedPr),
             cache,
+        );
+    }
+
+    // The merged-branch text, told in the flavour of the tree we are standing in: a linked worktree
+    // is told to open a NEW worktree off origin/main and reap this dead one; the primary clone is
+    // told to branch off origin/main. Neither is ever told to `git checkout main` (fatal in a
+    // worktree). Detection is one statSync — see WorktreeService.isLinkedWorktree.
+    private mergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
+        const recovery = new TreeRecovery();
+        return new MergedBranchMessage().forReads(
+            branch, mergedPr, recovery.kindOf(workspaceRoot), workspaceRoot,
         );
     }
 

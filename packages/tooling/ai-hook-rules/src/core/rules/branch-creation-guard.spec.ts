@@ -402,3 +402,42 @@ describe('branch-creation-guard reserved wp<number> suffix', () => {
         expect(rule('ON').check(ctx('git checkout -b dean/upgrade-webpieces-0.3.213')).length).toBe(0);
     });
 });
+
+// `git worktree add ../dir <existing-branch>` creates no branch, so the naming/fresh-main rules do
+// not apply to it — but the branch it checks out can be DEAD, and neither count cap catches that.
+// Left alone, it materializes a whole directory of pre-merge code for the AI to read and plan from.
+describe('branch-creation-guard worktree add onto a dead branch', () => {
+    beforeEach(() => {
+        git.branch = 'main';
+        git.behind = 0;
+        git.worktreePorcelain = porcelain(0);
+    });
+
+    it('blocks adding a worktree onto a branch whose PR is already merged', () => {
+        git.cacheJson = cacheWith(['dean/merged']);
+        const violations = rule('ON').check(ctx('git worktree add ../old dean/merged'));
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('is dead');
+        expect(violations[0].message).toContain('PR #100 merged');
+        // …and hands back the worktree form of the cure, never `git checkout -b`.
+        expect(violations[0].message).toContain('git worktree add ../dean-merged -b <new-branch> origin/main');
+    });
+
+    it('allows a worktree onto a branch that still holds unmerged work', () => {
+        git.cacheJson = cacheWith(['dean/merged'], ['dean/alive']);
+        expect(rule('ON').check(ctx('git worktree add ../alive dean/alive')).length).toBe(0);
+    });
+
+    // The recommended base is a remote-tracking ref, not a branch — it can never be "dead".
+    it('never trips on the recommended origin/main base', () => {
+        git.cacheJson = cacheWith(['dean/merged']);
+        expect(rule('ON').check(ctx('git worktree add ../fresh origin/main')).length).toBe(0);
+        expect(rule('ON').check(ctx('git worktree add ../fresh -b dean/new origin/main')).length).toBe(0);
+    });
+
+    // Same fail-open contract as both caps: no cache on disk → no opinion.
+    it('fails OPEN when there is no merged-branches cache yet', () => {
+        git.cacheJson = null;
+        expect(rule('ON').check(ctx('git worktree add ../old dean/merged')).length).toBe(0);
+    });
+});
