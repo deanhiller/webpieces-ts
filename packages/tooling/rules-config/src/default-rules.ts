@@ -50,7 +50,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // so it is opted into per-repo (webpieces.config.json → hookGuards) only AFTER the release
     // carrying it is published and installed. Flipping it ON here would arm it for every consumer
     // on upgrade, before anyone has verified the fail-open paths against their own git layout.
-    'main-stale-guard': { mode: 'OFF' },
+    'read-stale-guard': { mode: 'OFF' },
 };
 
 export const defaultRulesDir: readonly string[] = [];

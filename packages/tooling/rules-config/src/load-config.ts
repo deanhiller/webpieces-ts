@@ -34,6 +34,9 @@ export class LoadedConfig {
 const DEPRECATED_RULE_ALIASES: Readonly<Record<string, string>> = {
     'pr-merge-cleanup': 'pr-merge-guard',
     'pr-creation-guard': 'pr-creation-or-push-guard',
+    // Renamed once the guard grew a second blocked state (already-merged feature branch): it is no
+    // longer about `main` at all, it is THE guard that can block a Read.
+    'main-stale-guard': 'read-stale-guard',
 };
 
 // webpieces-disable no-any-unknown -- opaque per-rule option bags from consumer JSON, validated later

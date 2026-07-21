@@ -36,7 +36,7 @@ export class MainSyncStatus {
     // Kept OUT of the positional constructor (a defaulted field) so existing call sites don't churn.
     openPr: string = '';
     // The LOCAL refs/heads/main hash — '' = main does not exist locally (fresh clone / worktree) or
-    // could not be read. Paired with `originMain`, this is what tells the main-stale-guard whether a
+    // could not be read. Paired with `originMain`, this is what tells the read-stale-guard whether a
     // checked-out `main` is behind its remote. Defaulted field for the same reason as `openPr`.
     localMain: string = '';
 

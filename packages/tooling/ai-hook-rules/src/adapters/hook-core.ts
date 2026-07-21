@@ -202,7 +202,7 @@ export async function runMain(mode: HookMode): Promise<void> {
         const cwd = payload.cwd ?? process.cwd();
 
         // Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped
-        // guard (main-stale-guard) and allow. Runs BEFORE healShim and the general rule engine — no
+        // guard (read-stale-guard) and allow. Runs BEFORE healShim and the general rule engine — no
         // code-style rule ever sees a Read, and the only way this path can deny is a stale `main`.
         // The audit trail still records every file the AI opened (see setup.ts).
         if (READ_ONLY_TOOLS.has(payload.tool_name)) {

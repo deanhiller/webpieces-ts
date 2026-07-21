@@ -25,7 +25,7 @@ import {
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
     FeatureBranchGuardConfig,
-    MainStaleGuardConfig,
+    ReadStaleGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     DiGraphConfig,
@@ -61,7 +61,7 @@ export class WebpiecesRulesConfig {
     'pr-merge-guard'?: PrMergeGuardConfig;
     'redirect-how-to-merge-main'?: RedirectHowToMergeMainConfig;
     'feature-branch-guard'?: FeatureBranchGuardConfig;
-    'main-stale-guard'?: MainStaleGuardConfig;
+    'read-stale-guard'?: ReadStaleGuardConfig;
     'no-file-import-cycles'?: NoFileImportCyclesConfig;
     'runtime-architecture'?: RuntimeArchitectureConfig;
     'di-graph'?: DiGraphConfig;
