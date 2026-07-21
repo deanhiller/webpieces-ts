@@ -111,6 +111,33 @@ export const UPGRADE_SHIM_ALLOW_JS =
 // The exact command we tell the assistant to run to regenerate a reverted/edited committed shim.
 export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
 
+// The PRIMARY, version-AGNOSTIC cure for the self-guard — and the reason this exists (hit 2026-07-21):
+// the self-guard's deny used to name ONLY `pnpm exec wp-upgrade-shim`, but that bin ships in
+// @webpieces/ai-hook-rules >= 0.4.408. Every repo on an OLDER installed release — i.e. exactly the
+// repos that can hit this, since node_modules is what the shim compares itself against — got
+// "command not found" and was left with a hard block and no working cure. In the reporter's words, the
+// message gave "ZERO information" on how to actually fix it.
+//
+// A plain `cp` of the installed template over the committed shim has none of that version coupling:
+// templates/ai-hook.sh ships in EVERY release, it is the exact byte-for-byte artifact the self-guard
+// compares against (`cmp -s "$0" "$WP_TEMPLATE"`), and cp onto an existing file keeps the destination's
+// mode, so the shim stays executable with no chmod. It cures the block on any version, old or new —
+// which is why the deny now leads with it and only mentions the bin as the newer equivalent.
+//
+// Kept as tight as the other escape hatches: anchored at both ends, no flags, and BOTH paths are
+// literal webpieces-owned paths — so no other file can be read or written and no operator can ride
+// along. Keep in sync with RESTORE_SHIM_ALLOW_JS below (locked by a unit test).
+export const RESTORE_SHIM_ALLOW_ERE =
+    '^cp[[:space:]]+(\\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\\.sh[[:space:]]+(\\./)?\\.claude/webpieces/ai-hook\\.sh[[:space:]]*$';
+
+// JS-regex twin of RESTORE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
+export const RESTORE_SHIM_ALLOW_JS =
+    /^cp\s+(\.\/)?node_modules\/@webpieces\/ai-hook-rules\/templates\/ai-hook\.sh\s+(\.\/)?\.claude\/webpieces\/ai-hook\.sh\s*$/;
+
+// The exact command the self-guard's deny tells the assistant to run. Works on EVERY installed version.
+export const RESTORE_SHIM_CMD =
+    'cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh';
+
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The
 // grep pattern is interpolated from INSTALLER_ALLOW_ERE (its value has no backslashes).
@@ -187,10 +214,16 @@ fi
 # and make the cure explicit rather than silently running possibly-stale guard logic. Best-effort: only
 # when the template is actually present (skip on a fresh clone / global install), and only when there is
 # NO version drift (that has its own, more precise message; comparing bytes across versions is just noise).
+#
+# SHIM_TPL_VER is the version of @webpieces/ai-hook-rules the template came from. It goes in the deny
+# text so the reader knows WHICH version's shim the cure installs — without it the message named a file
+# and a bin but never the thing being restored, which is what made it unactionable.
 SHIM_STALE=""
+SHIM_TPL_VER=""
 WP_TEMPLATE="$ROOT/node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh"
 if [ -z "$DRIFT_PKG" ] && [ -f "$WP_TEMPLATE" ] && ! cmp -s "$0" "$WP_TEMPLATE"; then
   SHIM_STALE=1
+  SHIM_TPL_VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$ROOT/node_modules/@webpieces/ai-hook-rules/package.json" 2>/dev/null | head -n1)"
 fi`;
 
 // Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
@@ -257,6 +290,13 @@ if printf '%s' "\$CMD" | grep -Eq '${UPGRADE_SHIM_ALLOW_ERE}'; then
   wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
   exit 0
 fi
+# Same cure, without the version coupling: copying templates/ai-hook.sh over the committed shim is what
+# we now TELL the reader to run (the bin only exists in >= 0.4.408), so it must be allowed or the deny
+# names a command it then blocks. Both paths are literal and webpieces-owned - nothing else can be hit.
+if printf '%s' "\$CMD" | grep -Eq '${RESTORE_SHIM_ALLOW_ERE}'; then
+  wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
+  exit 0
+fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
 # assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
@@ -305,7 +345,13 @@ elif [ -n "\$SHIM_STALE" ]; then
   # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
   # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
   # allowlisted command that re-arms it.
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the installed @webpieces/ai-hook-rules template (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until it is regenerated. Run exactly this, then retry: ${UPGRADE_SHIM_CMD} (rewrites the committed shim from the installed template; do NOT revert it again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead)."
+  # The cure MUST work on the version that is actually installed. wp-upgrade-shim only exists in
+  # >= 0.4.408, so naming it alone left every older repo with a hard block and a command-not-found —
+  # so lead with the plain cp of the installed template, which works on every version, and name the
+  # version it restores. The bin is mentioned second, as the equivalent when it is present.
+  SHIM_VER_NOTE=""
+  [ -n "\$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version \$SHIM_TPL_VER)"
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules\${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces\${SHIM_VER_NOTE} version of it, then retry: ${RESTORE_SHIM_CMD} - that copy works on EVERY webpieces version and is the whole fix. (Equivalent only if your installed version is 0.4.408 or newer: ${UPGRADE_SHIM_CMD}. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
 elif [ -n "\$DRIFT_PKG" ]; then
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the

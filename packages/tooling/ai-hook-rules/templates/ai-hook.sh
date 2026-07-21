@@ -82,10 +82,16 @@ fi
 # and make the cure explicit rather than silently running possibly-stale guard logic. Best-effort: only
 # when the template is actually present (skip on a fresh clone / global install), and only when there is
 # NO version drift (that has its own, more precise message; comparing bytes across versions is just noise).
+#
+# SHIM_TPL_VER is the version of @webpieces/ai-hook-rules the template came from. It goes in the deny
+# text so the reader knows WHICH version's shim the cure installs — without it the message named a file
+# and a bin but never the thing being restored, which is what made it unactionable.
 SHIM_STALE=""
+SHIM_TPL_VER=""
 WP_TEMPLATE="$ROOT/node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh"
 if [ -z "$DRIFT_PKG" ] && [ -f "$WP_TEMPLATE" ] && ! cmp -s "$0" "$WP_TEMPLATE"; then
   SHIM_STALE=1
+  SHIM_TPL_VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/node_modules/@webpieces/ai-hook-rules/package.json" 2>/dev/null | head -n1)"
 fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
@@ -142,6 +148,13 @@ if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:spa
   wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
   exit 0
 fi
+# Same cure, without the version coupling: copying templates/ai-hook.sh over the committed shim is what
+# we now TELL the reader to run (the bin only exists in >= 0.4.408), so it must be allowed or the deny
+# names a command it then blocks. Both paths are literal and webpieces-owned - nothing else can be hit.
+if printf '%s' "$CMD" | grep -Eq '^cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh[[:space:]]*$'; then
+  wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
+  exit 0
+fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
 # assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
@@ -164,7 +177,13 @@ elif [ -n "$SHIM_STALE" ]; then
   # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
   # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
   # allowlisted command that re-arms it.
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the installed @webpieces/ai-hook-rules template (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until it is regenerated. Run exactly this, then retry: pnpm exec wp-upgrade-shim (rewrites the committed shim from the installed template; do NOT revert it again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead)."
+  # The cure MUST work on the version that is actually installed. wp-upgrade-shim only exists in
+  # >= 0.4.408, so naming it alone left every older repo with a hard block and a command-not-found —
+  # so lead with the plain cp of the installed template, which works on every version, and name the
+  # version it restores. The bin is mentioned second, as the equivalent when it is present.
+  SHIM_VER_NOTE=""
+  [ -n "$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version $SHIM_TPL_VER)"
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces${SHIM_VER_NOTE} version of it, then retry: cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh - that copy works on EVERY webpieces version and is the whole fix. (Equivalent only if your installed version is 0.4.408 or newer: pnpm exec wp-upgrade-shim. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
 elif [ -n "$DRIFT_PKG" ]; then
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
