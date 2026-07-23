@@ -1,7 +1,7 @@
 // The "commands" section of webpieces.config.json. It configures the gated command endpoints that
 // the bash guards point agents toward (instead of running raw `gh pr create` / finishing a merge by
 // hand), plus the pr-gate build dashboard. pr-gate lives here (not at the top level) because it
-// configures the wp-upsert-pr / wp-git-merge-complete commands — the guards only POINT at them.
+// configures the wp-start-upsert-pr / wp-finish-upsert-pr commands — the guards only POINT at them.
 //
 // Data-only (per CLAUDE.md, classes for data). Built + validated by loadAndValidate (load-config.ts).
 

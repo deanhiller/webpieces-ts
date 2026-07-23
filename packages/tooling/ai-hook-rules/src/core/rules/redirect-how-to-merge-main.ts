@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { RedirectHowToMergeMainConfig, RepoRootFinder } from '@webpieces/rules-config';
+import { RedirectHowToMergeMainConfig, RepoRootFinder, SyncFlowGuidance } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -10,24 +10,30 @@ import { CommandScanner } from '../command-scan';
 import { TreeRecovery } from './tree-recovery';
 
 const INSTRUCT_FILE = 'webpieces.git-workflow.md';
-const UPDATE_COMMAND = 'pnpm wp-start-update';
+const GUIDANCE = new SyncFlowGuidance();
 
 const FIX_HINT = new FixHint(
     '`git merge` / `git rebase` are never run by AI — on any branch, in any form.',
     'To bring main\'s changes into your feature branch:\n'
-    + `  ${UPDATE_COMMAND}        (then: pnpm wp-finish-upsert-pr)\n`
-    + 'That does a 3-point merge (fork-point=A, feature-HEAD=B, main-HEAD=C), which is what keeps PR\n'
-    + 'diffs clean. A raw `git merge`/`git rebase` destroys the fork-point system. The gated commands\n'
-    + 'merge internally as child processes this hook never sees, so they are unaffected by this guard.\n'
+    + '\n'
+    + GUIDANCE.flows().join('\n') + '\n'
+    + '\n'
+    + 'Either flow does a 3-point merge (fork-point=A, feature-HEAD=B, main-HEAD=C), which is what\n'
+    + 'keeps PR diffs clean. A raw `git merge`/`git rebase` destroys the fork-point system. The gated\n'
+    + 'commands merge internally as child processes this hook never sees, so they are unaffected by\n'
+    + 'this guard.\n'
+    + '\n'
+    + GUIDANCE.readOnlyChecks().join('\n') + '\n'
     + '\n'
     + 'If you believe a raw merge/rebase is genuinely required, do NOT run it and do NOT work around\n'
     + 'this guard. STOP and ask the HUMAN to run that exact command themselves — and when you ask,\n'
     + 'warn them, in these words:\n'
     + '\n'
     + '  "I am asking you to run a raw git merge/rebase. This is almost always the WRONG call —\n'
-    + `   \`${UPDATE_COMMAND}\` / \`pnpm wp-finish-upsert-pr\` does a 3-point merge and is the correct\n`
-    + '   flow. Please push back and tell me to use the 3-point merge instead, unless you are certain\n'
-    + '   this is a genuine exception."\n'
+    + '   the gated pair for my situation (`wp-start-update` → `wp-finish-update` with no PR, or\n'
+    + '   `wp-start-upsert-pr` → `wp-finish-upsert-pr` when a PR is open) does a 3-point merge and is\n'
+    + '   the correct flow. Please push back and tell me to use the 3-point merge instead, unless you\n'
+    + '   are certain this is a genuine exception."\n'
     + '\n'
     + 'READ the instruct-ai git-workflow doc at the absolute path on the violation line above for the\n'
     + 'full flow (incl. worktrees).\n'
@@ -39,6 +45,9 @@ const FIX_HINT = new FixHint(
 // protects. They stay allowed so a repo left mid-operation (e.g. by a human-run rebase) can still be
 // cleaned up. `--continue` is deliberately NOT here: it COMPLETES the operation.
 const UNDO_FLAG = /--(?:abort|quit)\b/;
+
+// Typed as a query ("would this fast-forward?"), but a successful --ff-only IS the merge.
+const FF_ONLY = /--ff-only\b/;
 
 function truncate(s: string): string {
     const MAX = 120;
@@ -77,7 +86,12 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
         // ANY branch, there is no branch to consult — and so no HEAD to spoof.
         if (this.scanner.invokesGit(segment, 'merge') || this.scanner.invokesGit(segment, 'rebase')) {
             if (UNDO_FLAG.test(segment)) return null;
-            return this.block(ctx, segment, 'Direct `git merge`/`git rebase` is blocked — AI never runs it, on any branch.');
+            // `--ff-only` reads like a probe ("can I fast-forward?") but it MUTATES whenever the answer
+            // is yes, so say that here — the AI that typed it was usually only trying to look.
+            const probe = FF_ONLY.test(segment)
+                ? ' `--ff-only` is NOT a read-only check — it moves your branch whenever it succeeds; see the read-only checks below.'
+                : '';
+            return this.block(ctx, segment, 'Direct `git merge`/`git rebase` is blocked — AI never runs it, on any branch.' + probe);
         }
 
         // 2. pull: unlike merge/rebase this DOES retain a legitimate on-main form
@@ -118,7 +132,7 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
         return new V(
             1,
             truncate(segment),
-            `${what} Use '${UPDATE_COMMAND}' (3-point merge). If you truly need a raw merge/rebase, ask the HUMAN to run it — and warn them to push back. Full flow: READ ${docPath}.`,
+            `${what} Use the gated 3-point flow instead: 'pnpm wp-start-update' → 'pnpm wp-finish-update' when NO PR is open, or 'pnpm wp-start-upsert-pr' → 'pnpm wp-finish-upsert-pr' when a PR IS open (required then — the merge rewrites the branch and the PR must be re-pointed in the same run). If you truly need a raw merge/rebase, ask the HUMAN to run it — and warn them to push back. Full flow: READ ${docPath}.`,
         );
     }
 }

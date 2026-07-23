@@ -125,7 +125,9 @@ describe('feature-branch-guard conflict steering', () => {
         expect(violations[0].message).toContain('#303');
         expect(violations[0].message).toContain('wp-start-upsert-pr');
         expect(violations[0].message).toContain('wp-finish-upsert-pr');
-        // Must NOT tell the AI to run the update-only flow — it would just fail-fast.
-        expect(violations[0].message).not.toContain('wp-start-update');
+        // Must NOT tell the AI to RUN the update-only flow — it would just fail-fast. (The prose may
+        // still name `wp-start-update` to explain that it refuses when a PR is open; what must never
+        // appear is the runnable `pnpm` form, which reads as an instruction.)
+        expect(violations[0].message).not.toContain('pnpm wp-start-update');
     });
 });

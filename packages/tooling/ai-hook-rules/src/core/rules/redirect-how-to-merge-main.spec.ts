@@ -38,6 +38,29 @@ describe('redirect-how-to-merge-main — merge/rebase are banned outright', () =
         expect(rule.check(ctx('git merge --ff-only origin/main', NO_GIT_NEEDED)).length).toBe(1);
     });
 
+    it('names BOTH paired flows — never a start from one pair with the other pair\'s finish', () => {
+        const hint = rule.fixHint.mainMessage;
+        expect(hint).toContain('pnpm wp-start-update');
+        expect(hint).toContain('pnpm wp-finish-update');
+        expect(hint).toContain('pnpm wp-start-upsert-pr');
+        expect(hint).toContain('pnpm wp-finish-upsert-pr');
+        expect(hint).toContain('wp-start-update    → wp-finish-update');
+        expect(hint).toContain('wp-start-upsert-pr → wp-finish-upsert-pr');
+        // The bug this fixes: the hint used to say "wp-start-update (then: wp-finish-upsert-pr)".
+        expect(hint).not.toContain('wp-start-update        (then: pnpm wp-finish-upsert-pr)');
+        // An open PR removes the choice.
+        expect(hint).toContain('MUST use the upsert-pr pair');
+    });
+
+    it('offers read-only ways to LOOK, and says --ff-only is not one', () => {
+        const hint = rule.fixHint.mainMessage;
+        expect(hint).toContain('git merge-base --is-ancestor origin/main HEAD');
+        expect(hint).toContain('`git merge --ff-only` is NOT a look');
+        // The violation line itself calls it out, since that is what the AI reads first.
+        const violation = rule.check(ctx('git merge --ff-only origin/main 2>/dev/null', NO_GIT_NEEDED))[0];
+        expect(violation.message).toContain('NOT a read-only check');
+    });
+
     it('allows the undo forms — they cannot create a merge commit', () => {
         expect(rule.check(ctx('git merge --abort', NO_GIT_NEEDED)).length).toBe(0);
         expect(rule.check(ctx('git rebase --abort', NO_GIT_NEEDED)).length).toBe(0);
