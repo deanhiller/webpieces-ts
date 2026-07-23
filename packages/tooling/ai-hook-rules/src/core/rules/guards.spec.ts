@@ -22,9 +22,34 @@ function ctx(command: string, workspaceRoot: string): BashContext {
     return { command, workspaceRoot, options: {} } as BashContext;
 }
 
+// A real temp root: a blocking guard now WRITES the git-workflow doc it links to, so the root must be
+// a directory we own rather than a made-up path.
+function tempRoot(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guards-'));
+}
+
 describe('pr-creation-or-push-guard', () => {
+    it('writes the git-workflow doc it points the AI at (it may not exist yet)', () => {
+        const root = tempRoot();
+        const doc = path.join(root, WEBPIECES_TMP_DIR, 'instruct-ai', 'webpieces.git-workflow.md');
+        expect(fs.existsSync(doc)).toBe(false);
+
+        const violations = prCreationOrPushGuard.check(ctx('gh pr create --title x', root));
+        expect(violations.length).toBe(1);
+        expect(fs.existsSync(doc)).toBe(true);
+        // And the message points at exactly that file.
+        expect(violations[0].message).toContain(doc);
+
+        // A STALE copy is as misleading as a missing one — the guard overwrites, not writes-if-missing.
+        fs.writeFileSync(doc, 'stale content from an older @webpieces');
+        prCreationOrPushGuard.check(ctx('gh pr create --title x', root));
+        expect(fs.readFileSync(doc, 'utf8')).not.toContain('stale content');
+
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
     it('blocks direct PR creation paths, allows read-only and the gated command', () => {
-        const root = '/tmp/x';
+        const root = tempRoot();
         expect(prCreationOrPushGuard.check(ctx('gh pr create --title x', root)).length).toBe(1);
         expect(prCreationOrPushGuard.check(ctx('gh api repos/o/r/pulls -f title=x', root)).length).toBe(1);
         expect(prCreationOrPushGuard.check(ctx('gh pr list', root)).length).toBe(0);
@@ -32,7 +57,7 @@ describe('pr-creation-or-push-guard', () => {
     });
 
     it('blocks a manual git push, but not the gated commands or other git reads', () => {
-        const root = '/tmp/x';
+        const root = tempRoot();
         expect(prCreationOrPushGuard.check(ctx('git push origin HEAD', root)).length).toBe(1);
         expect(prCreationOrPushGuard.check(ctx('git push -u origin base', root)).length).toBe(1);
         expect(prCreationOrPushGuard.check(ctx('git push --force-with-lease', root)).length).toBe(1);
