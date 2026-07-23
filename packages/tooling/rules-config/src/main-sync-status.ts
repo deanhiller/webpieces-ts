@@ -262,7 +262,9 @@ export class MainSyncStatusService {
             '   ^^ HUMAN-ONLY. `git merge` is blocked for AI (redirect-how-to-merge-main). AI: ask the',
             '   human to run step 3, and warn them it is a raw merge — only correct here because the',
             '   branch is already broken. For a normal update from main they should push back and',
-            '   tell you to use `pnpm wp-start-update` (3-point merge) instead.',
+            '   tell you to use the gated 3-point merge instead: `pnpm wp-start-update` (paired with',
+            '   `pnpm wp-finish-update`) when no PR is open, or `pnpm wp-start-upsert-pr` (paired with',
+            '   `pnpm wp-finish-upsert-pr`) when a PR IS open — a PR MUST use the upsert-pr pair.',
             `4. Commit the squash:            git add -A && git commit -m "Squashed from ${currentBranch}"`,
             '5. If a PR exists:               open a NEW PR for the -v2 branch and close the old one.',
         ];

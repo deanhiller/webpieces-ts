@@ -39,7 +39,7 @@ export class MergeEnd {
     ): Promise<void> {
         if (conflictedFiles !== null) {
             process.stdout.write('\n' + SEP + '🔎 Validating Merge Resolution\n' + SEP + '\n');
-            this.validateResolution(repoRoot, mergeDir, conflictedFiles);
+            this.validateResolution(repoRoot, verb, mergeDir, conflictedFiles);
             // Stage the AI's resolved conflicts, but NEVER sweep untracked files into the squash commit.
             // Fail on untracked so the AI commits or deletes them explicitly; then `git add -u` stages
             // tracked resolutions only.
@@ -67,14 +67,18 @@ export class MergeEnd {
 
     // Validate the AI's resolution of the conflicted files. Throws CliExitError with a fix instruction
     // on any failure; returns only when all three checks pass.
-    private validateResolution(repoRoot: string, mergeDir: string, conflictedFiles: string[]): void {
+    // `verb` is the bin the AI actually ran (wp-finish-update or wp-finish-upsert-pr) — every "re-run"
+    // instruction below is rendered from it. It used to be hardcoded to wp-finish-upsert-pr, which told
+    // someone in the update-only flow to finish with the PR command: a pairing that does not exist.
+    private validateResolution(repoRoot: string, verb: MutationVerb, mergeDir: string, conflictedFiles: string[]): void {
+        const reRun = `pnpm ${verb}`;
         // 1. Scoped conflict-marker scan (only the conflicted files — O(conflicts), not O(repo)).
         const scan = this.mergeState.scanConflictMarkers(repoRoot, conflictedFiles);
         if (!scan.clean) {
             throw new CliExitError(1,
                 '❌ Unresolved conflict markers (<<<<<<< / ======= / >>>>>>>) remain in:\n' +
                 scan.filesWithMarkers.map((file: string): string => `  - ${file}`).join('\n') +
-                '\n\nResolve them, then re-run: pnpm wp-finish-upsert-pr',
+                `\n\nResolve them, then re-run: ${reRun}`,
             );
         }
 
@@ -83,7 +87,7 @@ export class MergeEnd {
         if (unmerged !== '') {
             throw new CliExitError(1,
                 '❌ Git still reports unmerged files:\n' + unmerged +
-                '\n\nResolve and `git add` them, then re-run: pnpm wp-finish-upsert-pr',
+                '\n\nResolve and `git add` them, then re-run: ' + reRun,
             );
         }
         process.stdout.write('✅ No conflict markers in resolved files.\n');
@@ -99,7 +103,7 @@ export class MergeEnd {
                 `❌ Missing/empty merge explanation (${MERGE_EXPLANATION_FILE}) for:\n` +
                 missing +
                 '\n\nWrite a few sentences on how you resolved each (which side, what you combined, why),\n' +
-                'then re-run: pnpm wp-finish-upsert-pr',
+                'then re-run: ' + reRun,
             );
         }
         process.stdout.write('✅ Merge explanations present for all resolved files.\n');

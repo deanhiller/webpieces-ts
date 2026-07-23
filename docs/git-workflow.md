@@ -96,12 +96,32 @@ serve it); the fail-closed shim always allows that command.
 or `git pull origin main` on a feature branch — all blocked by `redirect-how-to-merge-main`.
 
 **ALWAYS use the squash-update commands** (worktree-native — they branch off `origin/main` and never
-check out local `main`):
+check out local `main`). Which pair you use is decided by one question: **is a PR already open for this
+branch?**
+
+No PR open — the update-only pair:
 ```bash
-pnpm wp-start-update     # 3-point squash-update from main (standalone, no PR)
+pnpm wp-start-update     # 3-point squash-update from main (no PR)
 # clean merge  → finalizes automatically (nothing else to run)
 # conflicts    → /wp-merge to resolve, then:
-pnpm wp-finish-update    # finalize after you've resolved conflicts
+pnpm wp-finish-update    # finalize after you've resolved conflicts (PAIRS with wp-start-update)
+```
+
+A PR IS open — you **must** use the PR pair instead (see "Creating a PR" below): the 3-point merge
+rewrites the branch and force-pushes a new generation, so the PR has to be re-pointed in the same run.
+`wp-start-update` refuses when it finds an open PR rather than stranding that PR on the old generation.
+
+Never mix halves — `wp-start-update` finishes with `wp-finish-update`, `wp-start-upsert-pr` finishes
+with `wp-finish-upsert-pr`.
+
+If you only want to **look** at how you stand vs main, do not reach for `git merge --ff-only origin/main`
+— that mutates on success and is blocked. Read-only checks:
+```bash
+git fetch origin main                                 # refresh the ref, no merge
+git merge-base --is-ancestor origin/main HEAD         # exit 0 = already contains main
+git rev-list --left-right --count origin/main...HEAD  # "<behind>  <ahead>"
+git log --oneline HEAD..origin/main                   # what main has that you do not
+cat .webpieces/main-sync-status.json                  # the tooling's own answer + predicted conflicts
 ```
 
 ### Creating a PR
@@ -114,6 +134,8 @@ pnpm wp-start-upsert-pr    # update from main + advisory build, then tells you t
 # resolve conflicts with /wp-merge if prompted
 pnpm wp-finish-upsert-pr   # authoritative build gate, push, create/update the PR + dashboard
 ```
+This same pair is what you use to update from main once a PR exists — `wp-start-upsert-pr` runs the
+identical 3-point engine *and* re-points the PR afterwards.
 
 If a human genuinely needs an out-of-band push (no PR), they must run it themselves — a manual push
 bypasses the build gate, `review.json`, and dashboard.
@@ -127,7 +149,8 @@ If you suspect broken fork-point history, check for merge commits between A and 
 A=$(git merge-base origin/main HEAD)
 git log --merges $A..HEAD
 ```
-Any commits here mean the squash-update was bypassed. Fix by running `pnpm wp-start-update`.
+Any commits here mean the squash-update was bypassed. Fix by running `pnpm wp-start-update` (or
+`pnpm wp-start-upsert-pr` if a PR is already open).
 
 ---
 

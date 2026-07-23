@@ -337,7 +337,7 @@ describe('validateCommandsSection', () => {
 
     it('accepts a valid commands section with string command overrides', () => {
         const errors = validateCommandsSection(
-            { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm wp-upsert-pr', mergeComplete: 'pnpm wp-git-merge-complete' },
+            { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm my-upsert-pr', mergeComplete: 'pnpm my-merge-complete' },
             undefined,
         );
         expect(errors).toEqual([]);

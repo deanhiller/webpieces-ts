@@ -1,5 +1,5 @@
 import { execSync, spawnSync } from 'child_process';
-import { CliExitError, runMain } from '@webpieces/rules-config';
+import { CliExitError, runMain, SyncFlowGuidance } from '@webpieces/rules-config';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -46,7 +46,7 @@ export async function main(): Promise<void> {
     process.stdout.write(SEP);
     process.stdout.write('\n');
     process.stdout.write('1. Update your branch with latest main:\n');
-    process.stdout.write('   pnpm wp-start-update\n');
+    process.stdout.write(new SyncFlowGuidance().flows().map((l: string): string => '   ' + l).join('\n') + '\n');
     process.stdout.write('\n');
     process.stdout.write('2. ⚠️  IMPORTANT: REVIEW THE CODE AFTER MERGE!\n');
     process.stdout.write('   - Check for merge conflicts\n');

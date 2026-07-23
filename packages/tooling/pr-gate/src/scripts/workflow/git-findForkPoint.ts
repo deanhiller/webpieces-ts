@@ -111,7 +111,8 @@ export class ForkPoint {
     private printMergeFromMainError(commit: string, parent: string, featureName: string, currentBranch: string): void {
         process.stderr.write('\n');
         process.stderr.write(SEP);
-        process.stderr.write('❌ This branch merged main without pnpm wp-start-update\n');
+        process.stderr.write('❌ This branch merged main without the gated update (pnpm wp-start-update, or\n');
+        process.stderr.write('   pnpm wp-start-upsert-pr when a PR is open)\n');
         process.stderr.write(SEP);
         process.stderr.write('\n');
         process.stderr.write(`Merge commit detected: ${commit}\n`);
@@ -132,7 +133,9 @@ export class ForkPoint {
         process.stderr.write('   work around it. Ask the human to run that one command, and warn them:\n');
         process.stderr.write('   "This is a raw git merge. It is only correct here because the branch is already\n');
         process.stderr.write('    broken and is being rebuilt onto origin/main. For a NORMAL update from main,\n');
-        process.stderr.write('    push back and tell me to use `pnpm wp-start-update` (3-point merge) instead."\n');
+        process.stderr.write('    push back and tell me to use the gated 3-point merge instead: `pnpm wp-start-update`\n');
+        process.stderr.write('    (paired with `pnpm wp-finish-update`) when no PR is open, or `pnpm wp-start-upsert-pr`\n');
+        process.stderr.write('    (paired with `pnpm wp-finish-upsert-pr`) when one is."\n');
         process.stderr.write('\n');
         process.stderr.write('4. Commit the squashed changes:\n');
         process.stderr.write(`   git add -A && git commit -m "Squashed from ${currentBranch}"\n`);

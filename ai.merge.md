@@ -29,14 +29,25 @@ main mergeable):
 You do **not** run the fork-point/backup/squash steps by hand anymore — the `@webpieces/pr-gate`
 commands do all of it (worktree-safe), and they record the 3-point context for you:
 
+Two pairs exist; an OPEN PR on this branch means you MUST use the second one (the 3-point merge
+rewrites the branch, so the PR must be re-pointed in the same run):
+
 ```bash
-pnpm wp-start-update      # standalone update from main (no PR); or pnpm wp-start-upsert-pr for the PR flow
+# A. No PR open yet:
+pnpm wp-start-update      # update from main (no PR)
 # clean   → finalizes automatically
 # conflict → the tool writes A/B/C context + per-file B-A.diff / C-A.diff under
 #            .webpieces/merge-info/<slug>/merge-<n>/ and hands resolution to you:
 /wp-merge                 # resolve each conflicted file using the A/B/C context
-pnpm wp-finish-update     # finalize (standalone); in the PR flow run pnpm wp-finish-upsert-pr instead
+pnpm wp-finish-update     # finalize — PAIRS with wp-start-update
+
+# B. A PR is open (or you are posting one):
+pnpm wp-start-upsert-pr   # same 3-point engine, then push
+/wp-merge                 # only if it reported conflicts
+pnpm wp-finish-upsert-pr  # finalize + build gate + create/update the PR — PAIRS with wp-start-upsert-pr
 ```
+
+Never mix halves across the two pairs.
 
 The tool takes a pre-merge snapshot branch and, on a clean merge, force-pushes and renames back to your
 feature branch so local / `origin/<feature>` / PR head always share one name.

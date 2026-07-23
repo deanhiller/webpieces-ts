@@ -6,6 +6,7 @@ import {
     readMainSyncStatus,
     squashRecoverySteps,
     MainSyncStatus,
+    SyncFlowGuidance,
 } from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '../types';
@@ -45,7 +46,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         'You must be on a clean, up-to-date feature branch to edit code. Pick one:',
         [
             new Option('On main → create a feature branch. Already merged → branch off fresh main.', true),
-            new Option('main moved/conflicts (mid-work) → `pnpm wp-start-update` (merge), `/wp-merge` (resolve), `pnpm wp-finish-update`. Have an OPEN PR? use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr`.'),
+            new Option('main moved/conflicts, NO PR yet → `pnpm wp-start-update` (merge), `/wp-merge` (resolve), `pnpm wp-finish-update`. An OPEN PR? then you MUST use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr` (the merge rewrites the branch, so the PR must be re-pointed in the same run). Never mix a start from one pair with a finish from the other.'),
             new Option('Disable in webpieces.config.json under feature-branch-guard (mode OFF) if intentional.'),
         ],
     );
@@ -167,29 +168,28 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         // Steer EARLY: if a PR already tracks this branch, the update-only flow would just fail-fast
         // (a 3-point update strands the PR on the old branch generation), so recommend ONLY the PR
         // flow and don't waste the AI's tokens on wp-start-update.
+        const guidance = new SyncFlowGuidance();
+        // An OPEN PR removes the choice, so print ONLY the PR flow here — showing the update-only flow
+        // as if it were an option just burns tokens on a command that fail-fasts.
         if (openPr !== '') {
-            return header.concat([
-                `An OPEN PR (#${openPr}) already tracks this branch, so you MUST use the PR flow (it`,
-                're-merges main AND updates the PR — the update-only flow would strand the PR on the',
-                'old branch generation):',
-                '  1. pnpm wp-start-upsert-pr   ← merges main + writes 3-point context',
-                '  2. /wp-merge                 ← resolve each conflicted file (only if conflicts)',
-                '  3. pnpm wp-finish-upsert-pr  ← validate, build, push, upsert the PR',
-            ]).join('\n');
+            return header
+                .concat([
+                    `An OPEN PR (#${openPr}) already tracks this branch, so the PR flow is the ONLY option`,
+                    'here — it re-merges main AND re-points the PR in the same run:',
+                    '',
+                ])
+                .concat(guidance.prFlow())
+                .concat(['', ...guidance.whyPrForcesFlowB()])
+                .join('\n');
         }
-        return header.concat([
-            'You must merge main in before editing further. If you are mid-work and just want to keep',
-            'editing (no PR yet), use the UPDATE-ONLY flow:',
-            '  1. pnpm wp-start-update   ← merges main (auto-finalizes if clean; renames <branch>wpN → wpN+1)',
-            '  2. /wp-merge              ← resolve each conflicted file (only if there are conflicts)',
-            '  3. pnpm wp-finish-update  ← finalize the merge (only after resolving)',
-            '',
-            'If you already have an OPEN PR for this branch, use the PR flow instead (wp-start-update',
-            'refuses when a PR exists — it would strand the PR on the old branch generation):',
-            '  1. pnpm wp-start-upsert-pr   ← merges main + writes 3-point context',
-            '  2. /wp-merge                 ← resolve each conflicted file',
-            '  3. pnpm wp-finish-upsert-pr  ← validate, build, push, upsert the PR',
-        ]).join('\n');
+        return header
+            .concat([
+                'You must merge main in before editing further. No PR is open for this branch, so flow A',
+                'below is the one to use — but use flow B the moment a PR exists:',
+                '',
+            ])
+            .concat(guidance.flows())
+            .join('\n');
     }
 
     private noForkPointMessage(branch: string): string {

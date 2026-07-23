@@ -56,6 +56,13 @@ export {
 } from './constants';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {
+    SyncFlowGuidance,
+    WP_START_UPDATE,
+    WP_FINISH_UPDATE,
+    WP_START_UPSERT_PR,
+    WP_FINISH_UPSERT_PR,
+} from './sync-flow-guidance';
+export {
     MaxMethodLinesConfig,
     MaxFileLinesConfig,
     RequireReturnTypeConfig,
