@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { RedirectHowToMergeMainConfig, RepoRootFinder, SyncFlowGuidance } from '@webpieces/rules-config';
+import { RedirectHowToMergeMainConfig, RepoRootFinder, SyncFlowGuidance, writeTemplate } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
@@ -114,8 +114,8 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
         // it a turn to discover. Steer to the fetch, which is all a worktree needs.
         if (/git\s+(?:checkout|switch)\s+main\b/.test(ctx.command)) {
             if (this.recovery.kindOf(ctx.workspaceRoot) !== 'worktree') return null;
-            // updateMainSteps already explains the worktree/fatal reasoning — don't say it twice.
-            return this.block(ctx, segment, ['Blocked.', ...this.recovery.updateMainSteps('worktree')].join('\n'));
+            // block() appends updateMainSteps for the tree we are in — don't say it twice here.
+            return this.block(ctx, segment, 'Blocked.');
         }
 
         const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
@@ -128,11 +128,26 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<RedirectHowToMergeM
     }
 
     private block(ctx: BashContext, segment: string, what: string): Violation {
+        // Materialize the doc we are about to send the AI to. This guard fires long before any `wp-*`
+        // command runs (those are what normally write it), so the linked path could easily not exist —
+        // and a STALE copy from an older @webpieces is just as misleading, hence overwrite.
+        writeTemplate(ctx.workspaceRoot, INSTRUCT_FILE);
         const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
+        // "How do I get MAIN itself current?" is a different question from "sync my feature branch",
+        // and it used to have no answer anywhere on this path — the flows cover feature branches and
+        // the read-only checks cover looking. An AI on main with no third option improvises, and what
+        // it improvises is `git reset --hard origin/main`. Answer the question instead, shaped to the
+        // tree we are actually in (in a worktree `git checkout main` fatals).
+        const updateMain = [
+            '',
+            'On main and just wanted to bring MAIN itself up to date? That is a different question from',
+            'syncing a feature branch, and merge/reset is not the answer to it:',
+            ...this.recovery.updateMainSteps(this.recovery.kindOf(ctx.workspaceRoot)),
+        ].join('\n');
         return new V(
             1,
             truncate(segment),
-            `${what} Use the gated 3-point flow instead: 'pnpm wp-start-update' → 'pnpm wp-finish-update' when NO PR is open, or 'pnpm wp-start-upsert-pr' → 'pnpm wp-finish-upsert-pr' when a PR IS open (required then — the merge rewrites the branch and the PR must be re-pointed in the same run). If you truly need a raw merge/rebase, ask the HUMAN to run it — and warn them to push back. Full flow: READ ${docPath}.`,
+            `${what} Use the gated 3-point flow instead: 'pnpm wp-start-update' → 'pnpm wp-finish-update' when NO PR is open, or 'pnpm wp-start-upsert-pr' → 'pnpm wp-finish-upsert-pr' when a PR IS open (required then — the merge rewrites the branch and the PR must be re-pointed in the same run). If you truly need a raw merge/rebase, ask the HUMAN to run it — and warn them to push back. Full flow: READ ${docPath}.${updateMain}`,
         );
     }
 }

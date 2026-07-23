@@ -193,17 +193,24 @@ elif [ -n "$SHIM_STALE" ]; then
   # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
   # block its own fix too, never tried it, and handed the "deadlock" to the human. The cure IS
   # allowlisted (see RESTORE_SHIM_ALLOW_ERE / UPGRADE_SHIM_ALLOW_ERE above); the message just never said
-  # so. The drift branch below has always said it ("git pull/fetch/merge are allowed while this guard is
-  # up") and has never produced that failure — so state it here in the same plain words.
+  # so. The drift branch below has always named its allowed cure in plain words and has never produced
+  # that failure — so state it here the same way.
   SHIM_VER_NOTE=""
   [ -n "$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version $SHIM_TPL_VER)"
   REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. Run EXACTLY this to rewrite the shim from the installed webpieces${SHIM_VER_NOTE} template, then retry: pnpm exec wp-upgrade-shim - that is the whole fix. THIS IS NOT A DEADLOCK: it is explicitly ALLOWED through while this guard is up, so run it YOURSELF now - do not hand it back to the human. (Command not found? Your installed @webpieces/ai-hook-rules predates 0.4.408, which is older than this guard's cure - ask the human to restore the shim or upgrade webpieces. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
 elif [ -n "$DRIFT_PKG" ]; then
+  # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
+  # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
+  # is up — the ONE command redirect-how-to-merge-main blocks in every form. An AI that obeyed the
+  # drift message got hard-blocked by the other guard with no path forward, which is how improvised
+  # 'git reset --hard' workarounds get invented. (NOTE: the shim's SYNC allowlist does let merge
+  # through here, because the guards are DOWN — that is exactly why the text must not recommend it.)
+  #
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
   # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
   # to 'pnpm install', which DOWNGRADES them further from correct.
-  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: run 'git pull' first (or 'git merge --ff-only origin/main'), THEN 'pnpm install'. git pull/fetch/merge are allowed while this guard is up."
+  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: get the checkout current FIRST, THEN 'pnpm install'. To get main itself current: ON main, run 'git pull origin main'. In a linked worktree (main is checked out in the primary clone, so checkout main fatals there), run 'git fetch origin main' and branch off origin/main. Do NOT reach for git merge --ff-only / git reset --hard / git checkout -B main: merge and rebase are blocked in EVERY form by redirect-how-to-merge-main, and the reset/-B forms silently throw away commits. To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or pnpm wp-start-upsert-pr (a PR is open). git pull and git fetch are allowed while this guard is up and are the cure here. Do not reach for git merge: this guard lets it through only because the guards are DOWN, and the moment they come back redirect-how-to-merge-main blocks it in every form."
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
   # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no

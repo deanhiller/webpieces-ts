@@ -14,8 +14,9 @@ function ctx(command: string, workspaceRoot: string): BashContext {
 }
 
 // The merge/rebase path never shells out to git — that is the design win of the blanket ban, and it
-// is what makes these cases testable at all. Any root will do.
-const NO_GIT_NEEDED = '/tmp/does-not-matter';
+// is what makes these cases testable at all. It DOES write the git-workflow doc it links to, so the
+// root must be a real directory we own.
+const NO_GIT_NEEDED = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-'));
 
 describe('redirect-how-to-merge-main — merge/rebase are banned outright', () => {
     it('blocks the regression: a compound command that lands on a feature branch first', () => {
@@ -36,29 +37,6 @@ describe('redirect-how-to-merge-main — merge/rebase are banned outright', () =
         // A non-main target is still a merge — it still breaks the fork-point system.
         expect(rule.check(ctx('git merge feature-x', NO_GIT_NEEDED)).length).toBe(1);
         expect(rule.check(ctx('git merge --ff-only origin/main', NO_GIT_NEEDED)).length).toBe(1);
-    });
-
-    it('names BOTH paired flows — never a start from one pair with the other pair\'s finish', () => {
-        const hint = rule.fixHint.mainMessage;
-        expect(hint).toContain('pnpm wp-start-update');
-        expect(hint).toContain('pnpm wp-finish-update');
-        expect(hint).toContain('pnpm wp-start-upsert-pr');
-        expect(hint).toContain('pnpm wp-finish-upsert-pr');
-        expect(hint).toContain('wp-start-update    → wp-finish-update');
-        expect(hint).toContain('wp-start-upsert-pr → wp-finish-upsert-pr');
-        // The bug this fixes: the hint used to say "wp-start-update (then: wp-finish-upsert-pr)".
-        expect(hint).not.toContain('wp-start-update        (then: pnpm wp-finish-upsert-pr)');
-        // An open PR removes the choice.
-        expect(hint).toContain('MUST use the upsert-pr pair');
-    });
-
-    it('offers read-only ways to LOOK, and says --ff-only is not one', () => {
-        const hint = rule.fixHint.mainMessage;
-        expect(hint).toContain('git merge-base --is-ancestor origin/main HEAD');
-        expect(hint).toContain('`git merge --ff-only` is NOT a look');
-        // The violation line itself calls it out, since that is what the AI reads first.
-        const violation = rule.check(ctx('git merge --ff-only origin/main 2>/dev/null', NO_GIT_NEEDED))[0];
-        expect(violation.message).toContain('NOT a read-only check');
     });
 
     it('allows the undo forms — they cannot create a merge commit', () => {
@@ -84,6 +62,60 @@ describe('redirect-how-to-merge-main — merge/rebase are banned outright', () =
         expect(rule.check(ctx("grep 'git rebase main' notes.md", NO_GIT_NEEDED)).length).toBe(0);
         expect(rule.check(ctx('echo "git merge main"', NO_GIT_NEEDED)).length).toBe(0);
         expect(rule.check(ctx('git commit -m "merge main into feat"', NO_GIT_NEEDED)).length).toBe(0);
+    });
+});
+
+// What the AI actually READS when blocked: the fix hint's text and the doc it is sent to. These are
+// the surface that drifted before (a start from one pair + the other pair's finish).
+describe('redirect-how-to-merge-main — what the block tells the AI', () => {
+    it('names BOTH paired flows — never a start from one pair with the other pair\'s finish', () => {
+        const hint = rule.fixHint.mainMessage;
+        expect(hint).toContain('pnpm wp-start-update');
+        expect(hint).toContain('pnpm wp-finish-update');
+        expect(hint).toContain('pnpm wp-start-upsert-pr');
+        expect(hint).toContain('pnpm wp-finish-upsert-pr');
+        expect(hint).toContain('wp-start-update    → wp-finish-update');
+        expect(hint).toContain('wp-start-upsert-pr → wp-finish-upsert-pr');
+        // The bug this fixes: the hint used to say "wp-start-update (then: wp-finish-upsert-pr)".
+        expect(hint).not.toContain('wp-start-update        (then: pnpm wp-finish-upsert-pr)');
+        // An open PR removes the choice.
+        expect(hint).toContain('MUST use the upsert-pr pair');
+    });
+
+    it('writes the git-workflow doc it points the AI at, and links that exact path', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-doc-'));
+        const doc = path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md');
+        expect(fs.existsSync(doc)).toBe(false);
+
+        const violations = rule.check(ctx('git merge origin/main', root));
+        expect(violations.length).toBe(1);
+        expect(fs.existsSync(doc)).toBe(true);
+        expect(violations[0].message).toContain(doc);
+        // The doc it writes must itself describe both pairs — it is the thing the AI is sent to read.
+        const written = fs.readFileSync(doc, 'utf8');
+        expect(written).toContain('pnpm wp-finish-update');
+        expect(written).toContain('pnpm wp-finish-upsert-pr');
+
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('answers "how do I update MAIN itself" — the question that has no other answer here', () => {
+        // The dead end that produces `git reset --hard origin/main`: an AI ON main is shown how to sync
+        // a FEATURE branch and how to LOOK, but never how to fast-forward main. Now it is told.
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-main-'));
+        const message = rule.check(ctx('git merge --ff-only origin/main', root))[0].message;
+        expect(message).toContain('bring MAIN itself up to date');
+        expect(message).toContain('git checkout main && git pull origin main');
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('offers read-only ways to LOOK, and says --ff-only is not one', () => {
+        const hint = rule.fixHint.mainMessage;
+        expect(hint).toContain('git merge-base --is-ancestor origin/main HEAD');
+        expect(hint).toContain('`git merge --ff-only` is NOT a look');
+        // The violation line itself calls it out, since that is what the AI reads first.
+        const violation = rule.check(ctx('git merge --ff-only origin/main 2>/dev/null', NO_GIT_NEEDED))[0];
+        expect(violation.message).toContain('NOT a read-only check');
     });
 });
 

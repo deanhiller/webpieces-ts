@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { SyncFlowGuidance } from '@webpieces/rules-config';
 import { SHIM_VERSION_STAMP, UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, renderShim } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
@@ -67,7 +68,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
         expect(reason).toContain('0.3.272');                          // the (newer) installed
         // It must warn that installing here is the WRONG move, and name the real cure.
         expect(reason).toContain('DOWNGRADE');
-        expect(reason).toContain("run 'git pull' first");
+        expect(reason).toContain('get the checkout current FIRST');
     });
 
     it('does not false-positive on a range pin (^ / ~ / workspace:*) — only exact pins are compared', () => {
@@ -484,5 +485,33 @@ describe('shim version stamp (set-version.sh replaces it at publish)', () => {
     it('is the same token scripts/set-version.sh looks for (drift between the two ships unstamped)', () => {
         const script = fs.readFileSync(path.join(process.cwd(), 'scripts/set-version.sh'), 'utf8');
         expect(script).toContain(`PLACEHOLDER="${SHIM_VERSION_STAMP}"`);
+    });
+});
+
+// The drift message used to name `git merge --ff-only origin/main` and assert "git pull/fetch/merge
+// are allowed" — the one command redirect-how-to-merge-main blocks in EVERY form. An AI that obeyed it
+// hit a second guard with no way forward, which is how `git reset --hard` workarounds get invented.
+// The "how do I get current" half now comes from SyncFlowGuidance so the two cannot disagree again.
+describe('the version-drift message does not contradict redirect-how-to-merge-main', () => {
+    // Only the REASON line the AI is shown — the surrounding shell comments discuss the old wording
+    // on purpose, and a whole-file scan would trip over that history.
+    const reasonLine = renderShim('wp-ai-rules-hook')
+        .split('\n')
+        .find((l: string): boolean => l.includes('webpieces version drift')) ?? '';
+
+    it('never prescribes a merge as the cure', () => {
+        expect(reasonLine).not.toBe('');
+        expect(reasonLine).not.toContain('git merge --ff-only origin/main');
+        expect(reasonLine).not.toContain('git pull/fetch/merge are allowed');
+    });
+
+    it('renders the shared update-main advice verbatim', () => {
+        expect(reasonLine).toContain(new SyncFlowGuidance().updateMainAdvice());
+    });
+
+    it('keeps that advice shell-safe inside the double-quoted REASON string', () => {
+        const advice = new SyncFlowGuidance().updateMainAdvice();
+        // A backtick, `$` or `"` here would command-substitute or terminate REASON in the rendered sh.
+        expect(advice).not.toMatch(/[`$"\\]/);
     });
 });
