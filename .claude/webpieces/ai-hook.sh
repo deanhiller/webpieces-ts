@@ -1,4 +1,5 @@
 #!/bin/sh
+# webpieces shim version: REPLACEME_GIT_HASH_VERSION
 # Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit; the installer AND the running
 # guards binary both overwrite this file (self-healing) from renderShim(). Checked in on purpose so the
 # hook has a stable, committed entry point even when node_modules is absent. Safe to delete along with
@@ -138,27 +139,27 @@ DENY_LABEL="DENY"
 [ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "$SHIM_STALE" ] && DENY_LABEL="DENY-SHIM-STALE"  # committed shim reverted/edited (self-guard)
 [ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
-if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$' || printf '%s' "$CMD" | grep -Eq '^rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$' || printf '%s' "$CMD" | grep -Eq '^rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
 fi
 # Always let the shim-regen cure through: wp-upgrade-shim rewrites the committed shim from the installed
 # template, so it is the ONLY fix for a self-guard block — denying it would deadlock the assistant.
-if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
   exit 0
 fi
 # Same cure, without the version coupling: copying templates/ai-hook.sh over the committed shim is what
 # we now TELL the reader to run (the bin only exists in >= 0.4.408), so it must be allowed or the deny
 # names a command it then blocks. Both paths are literal and webpieces-owned - nothing else can be hit.
-if printf '%s' "$CMD" | grep -Eq '^cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
   exit 0
 fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
 # assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
-if [ -n "$DRIFT_PKG" ] && printf '%s' "$CMD" | grep -Eq '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>&1)?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if [ -n "$DRIFT_PKG" ] && printf '%s' "$CMD" | grep -Eq '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-SYNC          # record the git sync we let through (may be what re-syncs the pin)
   exit 0
 fi
@@ -177,26 +178,39 @@ elif [ -n "$SHIM_STALE" ]; then
   # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
   # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
   # allowlisted command that re-arms it.
-  # The cure MUST work on the version that is actually installed. wp-upgrade-shim only exists in
-  # >= 0.4.408, so naming it alone left every older repo with a hard block and a command-not-found —
-  # so lead with the plain cp of the installed template, which works on every version, and name the
-  # version it restores. The bin is mentioned second, as the equivalent when it is present.
+  # DO NOT NAME THE cp HERE (reverted 2026-07-21, the same day it was added). The cp is version-agnostic,
+  # which is why it was promoted to the headline cure — but webpieces' allowlist is not the only gate in
+  # front of the assistant. Claude Code's own permission classifier sees a raw cp overwriting a file in
+  # the repo and denies it, so the deny named a command that a DIFFERENT gate then blocked, and the
+  # assistant read the second denial as proof the block was unfixable. Observed live: the classifier
+  # refused the cp repeatedly and let pnpm exec wp-upgrade-shim straight through, because a named bin
+  # reads as a tool invocation rather than an arbitrary file overwrite. So name ONLY the bin.
+  # The cost is legacy repos on < 0.4.408, where that bin does not exist; they stay bumpy until they
+  # upgrade once, and the message tells them so instead of pretending a cp will get through.
+  # (RESTORE_SHIM_ALLOW_ERE stays in the allowlist — a HUMAN running the cp must still work.)
   #
   # SAY THAT THE CURE IS ALLOWED THROUGH (2026-07-21, part 1): the text asserted a flat "every tool call
   # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
   # block its own fix too, never tried it, and handed the "deadlock" to the human. The cure IS
   # allowlisted (see RESTORE_SHIM_ALLOW_ERE / UPGRADE_SHIM_ALLOW_ERE above); the message just never said
-  # so. The drift branch below has always said it ("git pull/fetch/merge are allowed while this guard is
-  # up") and has never produced that failure — so state it here in the same plain words.
+  # so. The drift branch below has always named its allowed cure in plain words and has never produced
+  # that failure — so state it here the same way.
   SHIM_VER_NOTE=""
   [ -n "$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version $SHIM_TPL_VER)"
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. Run EXACTLY this to replace the shim with the installed webpieces${SHIM_VER_NOTE} version of it, then retry: cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh - that copy works on EVERY webpieces version and is the whole fix. THIS IS NOT A DEADLOCK: the cure is explicitly ALLOWED through while this guard is up, so run it YOURSELF now - do not hand it back to the human. (Equivalent only if your installed version is 0.4.408 or newer: pnpm exec wp-upgrade-shim. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. Run EXACTLY this to rewrite the shim from the installed webpieces${SHIM_VER_NOTE} template, then retry: pnpm exec wp-upgrade-shim - that is the whole fix. THIS IS NOT A DEADLOCK: it is explicitly ALLOWED through while this guard is up, so run it YOURSELF now - do not hand it back to the human. (Command not found? Your installed @webpieces/ai-hook-rules predates 0.4.408, which is older than this guard's cure - ask the human to restore the shim or upgrade webpieces. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
 elif [ -n "$DRIFT_PKG" ]; then
+  # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
+  # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
+  # is up — the ONE command redirect-how-to-merge-main blocks in every form. An AI that obeyed the
+  # drift message got hard-blocked by the other guard with no path forward, which is how improvised
+  # 'git reset --hard' workarounds get invented. (NOTE: the shim's SYNC allowlist does let merge
+  # through here, because the guards are DOWN — that is exactly why the text must not recommend it.)
+  #
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
   # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
   # to 'pnpm install', which DOWNGRADES them further from correct.
-  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: run 'git pull' first (or 'git merge --ff-only origin/main'), THEN 'pnpm install'. git pull/fetch/merge are allowed while this guard is up."
+  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: get the checkout current FIRST, THEN 'pnpm install'. To get main itself current: ON main, run 'git pull origin main'. In a linked worktree (main is checked out in the primary clone, so checkout main fatals there), run 'git fetch origin main' and branch off origin/main. Do NOT reach for git merge --ff-only / git reset --hard / git checkout -B main: merge and rebase are blocked in EVERY form by redirect-how-to-merge-main, and the reset/-B forms silently throw away commits. To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or pnpm wp-start-upsert-pr (a PR is open). git pull and git fetch are allowed while this guard is up and are the cure here. Do not reach for git merge: this guard lets it through only because the guards are DOWN, and the moment they come back redirect-how-to-merge-main blocks it in every form."
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
   # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no
