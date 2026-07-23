@@ -179,6 +179,59 @@ export const RESTORE_SHIM_ALLOW_JS =
 export const RESTORE_SHIM_CMD =
     'cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh';
 
+// The THIRD cure for the self-guard, and the one with the longest shelf life: the installer itself.
+//
+// `wp-install-ai-hooks` has shipped in every release of this package since it created the shim (the
+// shim's own header line names it as the managing command), and install-entry.ts calls healShim()
+// FIRST, through the dependency-free ./shim module, before it lazily requires the rule engine. So it
+// re-arms the committed shim on a tree too broken to load setup.ts, exactly like wp-upgrade-shim, and
+// it does so on releases that predate wp-upgrade-shim (< 0.4.408) where that bin is not on disk at all.
+// That combination — always present AND a named bin rather than a raw file overwrite — is why the deny
+// now leads with it: the `cp` is version-agnostic too, but Claude Code's own permission classifier
+// treats a bare cp over a repo file as something to confirm, while a named bin reads as a tool call.
+//
+// Kept as tight as the other escape hatches: anchored at both ends, bare bin name, no flags, so no
+// shell operator can ride along. Keep in sync with INSTALL_HOOKS_ALLOW_JS below (locked by a unit test).
+export const INSTALL_HOOKS_ALLOW_ERE =
+    '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks' + CAPTURE_TAIL_ERE;
+
+// JS-regex twin of INSTALL_HOOKS_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
+export const INSTALL_HOOKS_ALLOW_JS =
+    new RegExp('^(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-install-ai-hooks' + CAPTURE_TAIL_JS_SRC);
+
+// The exact command the self-guard's deny names FIRST. Present in every release that has a shim.
+export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
+
+// ---------------------------------------------------------------------------
+// HOW EVERY DENY MUST SPELL ITS CURE (added 2026-07-23, from a live audit-log post-mortem).
+//
+// The guards were right, the message was right, and the assistant STILL handed the block back to the
+// human — because of one appended clause. From .webpieces/logs/ai-hook-shim.log in a consumer repo:
+//
+//   DENY-SHIM-STALE  cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh && git status --short
+//
+// That is the prescribed cure, verbatim, plus `&& git status --short`. Every allowlist here is anchored
+// to `$`, so the trailing `&&` made it a different command and it was denied — and the assistant read
+// its own denial as proof that "the guard blocks the very command that fixes it" and stopped.
+//
+// Widening the allowlist to accept `&& <anything>` is NOT the fix: these are fail-CLOSED escape hatches
+// whose entire security property is that no shell operator can ride along (`cp … && rm -rf /`). The fix
+// is to stop the assistant appending in the first place — so every deny that prescribes a command now
+// (a) numbers its cures as OPTIONs, (b) quotes each one so the exact bytes are unambiguous, and
+// (c) carries this rule, which says in plain words that adding `&&` gets it rejected again.
+//
+// CONSTRAINT on every string that reaches a deny REASON: no double quotes and no backslashes. The
+// reason is interpolated into a `REASON="…"` shell assignment and then printf'd into a JSON string, so
+// a `"` would break BOTH. Hence single quotes around the commands here — do not "improve" them.
+// ---------------------------------------------------------------------------
+export const NO_CHAINING_RULE =
+    'Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. ' +
+    'Seriously: do NOT append && anything (not even a harmless && git status), do NOT put a cd in front of it, ' +
+    'do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on ' +
+    'makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. ' +
+    'If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. ' +
+    'The ONLY additions that are tolerated are a trailing 2>&1 or a pipe into tail/head (e.g. 2>&1 | tail -20).';
+
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The
 // grep pattern is interpolated from INSTALLER_ALLOW_ERE (its value has no backslashes).
@@ -338,6 +391,13 @@ if printf '%s' "\$CMD" | grep -Eq '${RESTORE_SHIM_ALLOW_ERE}'; then
   wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
   exit 0
 fi
+# The installer, named FIRST by the self-guard deny: it heals the committed shim before it loads
+# anything heavy, and unlike wp-upgrade-shim it exists on EVERY release. A deny that names it must
+# allow it, or we recreate the exact bug this whole escape-hatch list exists to prevent.
+if printf '%s' "\$CMD" | grep -Eq '${INSTALL_HOOKS_ALLOW_ERE}'; then
+  wp_log ALLOW-INSTALL-HOOKS # record the installer we let through (re-arms the committed shim)
+  exit 0
+fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
 # assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
@@ -381,31 +441,35 @@ const DENY_REASON_SH = `if [ -n "\$BROKEN_BIN" ]; then
   if [ "\${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
     STAGING_NOTE=" Also found \$STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
   fi
-  REASON="❌ webpieces guards are DOWN and every tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. Run exactly this, then retry: ${RECOVERY_CMD} - it is explicitly ALLOWED through while this guard is up (not a deadlock), so run it YOURSELF rather than handing it to the human.\${STAGING_NOTE}"
+  REASON="❌ webpieces guards are DOWN and every OTHER tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. THIS IS NOT A DEADLOCK: the option below is explicitly ALLOWED through while this guard is up, so run it YOURSELF rather than handing it to the human. OPTION 1 - run EXACTLY this command, then retry: '${RECOVERY_CMD}'. ${NO_CHAINING_RULE}\${STAGING_NOTE}"
 elif [ -n "\$SHIM_STALE" ]; then
   # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
-  # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the ONE
-  # allowlisted command that re-arms it.
-  # DO NOT NAME THE cp HERE (reverted 2026-07-21, the same day it was added). The cp is version-agnostic,
-  # which is why it was promoted to the headline cure — but webpieces' allowlist is not the only gate in
-  # front of the assistant. Claude Code's own permission classifier sees a raw cp overwriting a file in
-  # the repo and denies it, so the deny named a command that a DIFFERENT gate then blocked, and the
-  # assistant read the second denial as proof the block was unfixable. Observed live: the classifier
-  # refused the cp repeatedly and let pnpm exec wp-upgrade-shim straight through, because a named bin
-  # reads as a tool invocation rather than an arbitrary file overwrite. So name ONLY the bin.
-  # The cost is legacy repos on < 0.4.408, where that bin does not exist; they stay bumpy until they
-  # upgrade once, and the message tells them so instead of pretending a cp will get through.
-  # (RESTORE_SHIM_ALLOW_ERE stays in the allowlist — a HUMAN running the cp must still work.)
+  # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the
+  # allowlisted commands that re-arm it.
+  #
+  # ORDER OF THE OPTIONS IS LOAD-BEARING — it encodes two separate failures we have already paid for:
+  #   1. wp-install-ai-hooks. NEW HEADLINE (2026-07-23). It heals the shim first via the dependency-free
+  #      module AND it has shipped in every release that has a shim, so it is the only cure that is both
+  #      a named bin and version-agnostic. That is strictly better than either option below.
+  #   2. wp-upgrade-shim. A named bin too, but only >= 0.4.408 — on an older installed release the deny
+  #      used to name it ALONE and the reader got "command not found" and a hard block.
+  #   3. the cp. Version-agnostic, and it was briefly the headline on 2026-07-21 for exactly that reason
+  #      — then reverted the same day: webpieces' allowlist is not the only gate in front of the
+  #      assistant, and Claude Code's own permission classifier treats a raw cp overwriting a repo file
+  #      as something to confirm. Naming it first meant a DIFFERENT gate blocked the prescribed cure and
+  #      the assistant read that as proof the block was unfixable. It stays listed (a human, and an AI
+  #      on a legacy release, must still have a working path) but LAST, with that caveat spelled out.
   #
   # SAY THAT THE CURE IS ALLOWED THROUGH (2026-07-21, part 1): the text asserted a flat "every tool call
   # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
-  # block its own fix too, never tried it, and handed the "deadlock" to the human. The cure IS
-  # allowlisted (see RESTORE_SHIM_ALLOW_ERE / UPGRADE_SHIM_ALLOW_ERE above); the message just never said
-  # so. The drift branch below has always named its allowed cure in plain words and has never produced
-  # that failure — so state it here the same way.
+  # block its own fix too, never tried it, and handed the "deadlock" to the human. The cures ARE
+  # allowlisted (INSTALL_HOOKS / UPGRADE_SHIM / RESTORE_SHIM above); the message just never said so.
+  #
+  # NO_CHAINING_RULE (2026-07-23, part 3) closes the last hole: the assistant ran the prescribed cure
+  # with '&& git status --short' welded on, got denied for the anchor, and stopped. See its comment.
   SHIM_VER_NOTE=""
   [ -n "\$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version \$SHIM_TPL_VER)"
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules\${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. Run EXACTLY this to rewrite the shim from the installed webpieces\${SHIM_VER_NOTE} template, then retry: ${UPGRADE_SHIM_CMD} - that is the whole fix. THIS IS NOT A DEADLOCK: it is explicitly ALLOWED through while this guard is up, so run it YOURSELF now - do not hand it back to the human. (Command not found? Your installed @webpieces/ai-hook-rules predates 0.4.408, which is older than this guard's cure - ask the human to restore the shim or upgrade webpieces. Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.)"
+  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules\${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: all three options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - present in every webpieces release, and it re-arms the shim before it loads anything else) - run EXACTLY this command: '${INSTALL_HOOKS_CMD}'. OPTION 2 (shim regen only; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${UPGRADE_SHIM_CMD}'. OPTION 3 (works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite - that prompt is NOT this guard) - run EXACTLY this command: '${RESTORE_SHIM_CMD}'. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead."
 elif [ -n "\$DRIFT_PKG" ]; then
   # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
   # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
@@ -418,7 +482,7 @@ elif [ -n "\$DRIFT_PKG" ]; then
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
   # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
   # to 'pnpm install', which DOWNGRADES them further from correct.
-  REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. Every call is blocked until they agree. WHICH ONE IS STALE decides the fix - compare the two versions above: (1) pin is NEWER than node_modules (you just pulled/switched to a branch pinning a newer webpieces) -> run 'pnpm install' to catch node_modules up. (2) pin is OLDER than node_modules (your checkout is behind origin, so the PIN is the stale side) -> 'pnpm install' would DOWNGRADE you: get the checkout current FIRST, THEN 'pnpm install'. ${new SyncFlowGuidance().updateMainAdvice()} git pull and git fetch are allowed while this guard is up and are the cure here. Do not reach for git merge: this guard lets it through only because the guards are DOWN, and the moment they come back redirect-how-to-merge-main blocks it in every form."
+  REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. Every OTHER call is blocked until they agree. WHICH ONE IS STALE decides which option is yours - compare the two versions above. OPTION 1 (the pin is NEWER than node_modules - you just pulled or switched to a branch pinning a newer webpieces) - run EXACTLY this command to catch node_modules up: 'pnpm install'. OPTION 2 (the pin is OLDER than node_modules - your checkout is behind origin, so the PIN is the stale side, and 'pnpm install' on its own would DOWNGRADE you) - get the checkout current FIRST, THEN run 'pnpm install'. ${new SyncFlowGuidance().updateMainAdvice()} git pull and git fetch are allowed while this guard is up and are the cure here. Do not reach for git merge: this guard lets it through only because the guards are DOWN, and the moment they come back redirect-how-to-merge-main blocks it in every form. ${NO_CHAINING_RULE}"
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
   # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no
@@ -429,7 +493,7 @@ else
   if [ -f "\$ROOT/.git" ]; then
     WORKTREE_NOTE=" NOTE: \$ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run 'pnpm install' HERE (in this worktree), not in the primary clone."
   fi
-  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run 'pnpm install' (or this repo's installer) to enable the webpieces AI guards, then retry.\${WORKTREE_NOTE} (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
+  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). OPTION 1 - run EXACTLY this command to enable the webpieces AI guards, then retry: 'pnpm install'. ${NO_CHAINING_RULE}\${WORKTREE_NOTE} (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
 fi`;
 
 export function renderShim(): string {
