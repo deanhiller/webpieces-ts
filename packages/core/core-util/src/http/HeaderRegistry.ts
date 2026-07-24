@@ -11,7 +11,7 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  *
  * ```ts
  * // startup (server AND browser), BEFORE LogManager.setFactory(...):
- * HeaderRegistry.configure(CompanyHeaders.getAllHeaders(), true);
+ * HeaderRegistry.configure(CompanyHeaders.ALL_HEADERS, true);
  * ```
  *
  * - `svrHeaders`      the context keys this process registers — by convention the whole
@@ -27,7 +27,7 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  */
 export class HeaderRegistry {
     /** The webpieces-supplied common keys; included when platformHeaders=true. */
-    static readonly DEFAULT_HEADERS: AnyContextKey[] = WebpiecesCoreHeaders.getAllHeaders();
+    static readonly DEFAULT_HEADERS: AnyContextKey[] = WebpiecesCoreHeaders.ALL_HEADERS;
 
     private static instance: HeaderRegistry | undefined;
 

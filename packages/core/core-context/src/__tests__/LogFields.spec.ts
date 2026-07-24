@@ -69,7 +69,7 @@ describe('RequestContext log-field builders', () => {
     });
 
     it('clientVersion arriving inbound rides the flat + structured maps (isLogged transferred key)', () => {
-        HeaderRegistry.configure(WebpiecesCoreHeaders.getAllHeaders(), /*platformHeaders*/ false);
+        HeaderRegistry.configure(WebpiecesCoreHeaders.ALL_HEADERS, /*platformHeaders*/ false);
 
         RequestContext.run(() => {
             RequestContext.putHeader(WebpiecesCoreHeaders.CLIENT_VERSION, 'caller-v9');

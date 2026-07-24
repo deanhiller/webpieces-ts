@@ -29,6 +29,6 @@ export class ClientServerAppModules implements AppModules {
 
     getHeaders(): AnyContextKey[] {
         // The company-wide key set (all keys across all servers) plus this app's own keys.
-        return [...CompanyHeaders.getAllHeaders(), ...AppHeaders.getAllHeaders()];
+        return [...CompanyHeaders.ALL_HEADERS, ...AppHeaders.ALL_HEADERS];
     }
 }

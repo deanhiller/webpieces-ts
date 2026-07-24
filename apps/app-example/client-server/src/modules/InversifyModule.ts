@@ -27,12 +27,10 @@ export class AppHeaders {
     static readonly CLIENT_TYPE = new ContextKey<string>('clientType', 'x-client-type');
 
     /**
-     * Get all app context keys as an array.
+     * All app context keys — a `static readonly` CONSTANT (compile-time data), not a method, so it
+     * stays out of the DI design graph as the data it is. Read at the startup composition root.
      */
-    // webpieces-disable no-function-outside-class -- pre-existing static key-registry accessor (a list of constants, not injectable behavior); pulled into modified-scope only by the ContextKey[] -> AnyContextKey[] return-type change
-    static getAllHeaders(): AnyContextKey[] {
-        return [AppHeaders.CLIENT_TYPE];
-    }
+    static readonly ALL_HEADERS: AnyContextKey[] = [AppHeaders.CLIENT_TYPE];
 }
 
 /**

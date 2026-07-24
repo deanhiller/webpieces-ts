@@ -35,7 +35,7 @@
 /**
  * A ContextKey whose value type is intentionally UNCONSTRAINED — a "key of any value type". Use this
  * (never a bare `ContextKey`, which no longer compiles) for genuinely mixed-bag collections and
- * key-agnostic code: `getAllHeaders(): AnyContextKey[]`, the {@link HeaderRegistry}'s key arrays, a
+ * key-agnostic code: `ALL_HEADERS: AnyContextKey[]`, the {@link HeaderRegistry}'s key arrays, a
  * reader that takes whatever key it is handed. Naming the mixed case makes "I mean any key" a visible,
  * deliberate statement, and confines the one sanctioned `unknown` to this single alias instead of
  * scattering `ContextKey<unknown>` — and its disable comment — across the codebase.
