@@ -27,15 +27,13 @@ export class CompanyHeaders {
     static readonly API_VERSION = new ContextKey<string>('apiVersion', 'x-api-version');
 
     /**
-     * Get all company context keys as an array.
+     * All company context keys — a `static readonly` CONSTANT (compile-time data), not a method, so it
+     * stays out of the DI design graph as the data it is. Read at the startup composition root.
      */
-    // webpieces-disable no-function-outside-class -- pre-existing static key-registry accessor (a list of constants, not injectable behavior); pulled into modified-scope only by the ContextKey[] -> AnyContextKey[] return-type change
-    static getAllHeaders(): AnyContextKey[] {
-        return [
-            CompanyHeaders.TENANT_ID,
-            CompanyHeaders.API_VERSION,
-            // userId/orgId/roles are FRAMEWORK keys (WebpiecesCoreHeaders), stamped by AuthFilter
-            // from the parsed JWT. Redefining them here clashes on the registry's duplicate check.
-        ];
-    }
+    static readonly ALL_HEADERS: AnyContextKey[] = [
+        CompanyHeaders.TENANT_ID,
+        CompanyHeaders.API_VERSION,
+        // userId/orgId/roles are FRAMEWORK keys (WebpiecesCoreHeaders), stamped by AuthFilter
+        // from the parsed JWT. Redefining them here clashes on the registry's duplicate check.
+    ];
 }

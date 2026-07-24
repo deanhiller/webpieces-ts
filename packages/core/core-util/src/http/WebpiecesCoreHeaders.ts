@@ -164,24 +164,24 @@ export class WebpiecesCoreHeaders {
      */
 
     /**
-     * Get all core context keys as an array (the platform DEFAULT_HEADERS set).
+     * All core context keys (the platform DEFAULT_HEADERS set). A `static readonly` CONSTANT, not a
+     * method: it is compile-time data — a list of the key definitions above — read once at the startup
+     * composition root (`HeaderRegistry.configure` / `HeaderRegistry.DEFAULT_HEADERS`). A method here
+     * would be un-injectable behavior the DI design graph can't reach; a constant is honest data.
      */
-    // webpieces-disable no-function-outside-class -- pre-existing static key-registry accessor (a list of constants, not injectable behavior); pulled into modified-scope only by the ContextKey[] -> AnyContextKey[] return-type change
-    static getAllHeaders(): AnyContextKey[] {
-        return [
-            WebpiecesCoreHeaders.REQUEST_ID,
-            WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
-            WebpiecesCoreHeaders.CLIENT_VERSION,
-            WebpiecesCoreHeaders.ACTION_ID,
-            WebpiecesCoreHeaders.USER_ID,
-            WebpiecesCoreHeaders.ORG_ID,
-            WebpiecesCoreHeaders.USER_ROLES,
-            WebpiecesCoreHeaders.RECORDING,
-            WebpiecesCoreHeaders.API_CALL_INFO,
-            WebpiecesCoreHeaders.HTTP_METHOD,
-            WebpiecesCoreHeaders.REQUEST_PATH,
-            WebpiecesCoreHeaders.CONTROLLER,
-            WebpiecesCoreHeaders.METHOD,
-        ];
-    }
+    static readonly ALL_HEADERS: AnyContextKey[] = [
+        WebpiecesCoreHeaders.REQUEST_ID,
+        WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
+        WebpiecesCoreHeaders.CLIENT_VERSION,
+        WebpiecesCoreHeaders.ACTION_ID,
+        WebpiecesCoreHeaders.USER_ID,
+        WebpiecesCoreHeaders.ORG_ID,
+        WebpiecesCoreHeaders.USER_ROLES,
+        WebpiecesCoreHeaders.RECORDING,
+        WebpiecesCoreHeaders.API_CALL_INFO,
+        WebpiecesCoreHeaders.HTTP_METHOD,
+        WebpiecesCoreHeaders.REQUEST_PATH,
+        WebpiecesCoreHeaders.CONTROLLER,
+        WebpiecesCoreHeaders.METHOD,
+    ];
 }

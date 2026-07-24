@@ -27,6 +27,6 @@ export class Server2AppModules implements AppModules {
     getHeaders(): AnyContextKey[] {
         // server2 registers the company-wide key set (it reads CompanyHeaders.TENANT_ID); it has
         // no app-specific keys of its own.
-        return CompanyHeaders.getAllHeaders();
+        return CompanyHeaders.ALL_HEADERS;
     }
 }

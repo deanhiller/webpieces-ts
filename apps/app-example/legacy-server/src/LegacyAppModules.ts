@@ -29,6 +29,6 @@ export class LegacyAppModules implements AppModules {
 
     getHeaders(): AnyContextKey[] {
         // The company-wide key set (all keys across all servers) plus this app's own keys.
-        return [...CompanyHeaders.getAllHeaders(), ...new AppHeaders().getAllHeaders()];
+        return [...CompanyHeaders.ALL_HEADERS, ...new AppHeaders().getAllHeaders()];
     }
 }

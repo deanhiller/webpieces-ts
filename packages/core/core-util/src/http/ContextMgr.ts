@@ -20,7 +20,7 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  * Example usage:
  * ```typescript
  * // startup, before bootstrap:
- * HeaderRegistry.configure(CompanyHeaders.getAllHeaders(), true);
+ * HeaderRegistry.configure(CompanyHeaders.ALL_HEADERS, true);
  *
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);

@@ -98,7 +98,7 @@ describe('WebpiecesCoreHeaders.ACTION_ID', () => {
         expect(key.isTransferred()).toBe(true);              // follows the action across service hops
         expect(key.isLogged).toBe(true);
 
-        const registry = configureWith(...WebpiecesCoreHeaders.getAllHeaders());
+        const registry = configureWith(...WebpiecesCoreHeaders.ALL_HEADERS);
         expect(registry.getTransferredKeys()).toContain(key);
         expect(registry.getLoggedKeys()).toContain(key);
     });
@@ -111,7 +111,7 @@ describe('WebpiecesCoreHeaders.API_CALL_INFO', () => {
         expect(key.isLogged).toBe(true);
         expect(key.isTransferred()).toBe(false); // httpHeader undefined -> never propagates to a downstream hop
 
-        const registry = configureWith(...WebpiecesCoreHeaders.getAllHeaders());
+        const registry = configureWith(...WebpiecesCoreHeaders.ALL_HEADERS);
         expect(registry.getTransferredKeys()).not.toContain(key);
         expect(registry.getLoggedKeys()).toContain(key);
     });

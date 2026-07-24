@@ -40,7 +40,7 @@ export interface RouteModule {
  *   static create(): MyAppModules { return new MyAppModules(); }
  *   getBindingModules(): ContainerModule[] { return [InversifyModule]; }
  *   getRoutingModules(): RouteModule[] { return [new AppRoutes()]; }
- *   getHeaders(): AnyContextKey[] { return AppHeaders.getAllHeaders(); }
+ *   getHeaders(): AnyContextKey[] { return AppHeaders.ALL_HEADERS; }
  * }
  *
  * // server.ts

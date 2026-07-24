@@ -12,7 +12,7 @@ import { ContextKey, AnyContextKey, ContextReader } from '@webpieces/core-util';
  * ```typescript
  * const store = new MutableContextStore();
  * // startup:
- * HeaderRegistry.configure(CompanyHeaders.getAllHeaders(), true);
+ * HeaderRegistry.configure(CompanyHeaders.ALL_HEADERS, true);
  * const factory = new ClientHttpFactory(new ContextMgr(store));
  * const client = factory.createRpcClient(SaveApi, new ClientConfig('server'));
  *
