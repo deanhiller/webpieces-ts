@@ -34,6 +34,15 @@ npm run build
 
 ## Architecture
 
+> **Deep dives:** the [`docs/architecture/`](./docs/architecture/README.md) folder explains the
+> four load-bearing ideas that make this framework unusual — [one API contract driving four
+> transports](./docs/architecture/one-contract-many-transports.md) (HTTP, in-process, browser,
+> Cloud Tasks), the [request-context model](./docs/architecture/context-propagation.md) that
+> propagates across async, process, and *queue* boundaries, [edge logging &
+> record/replay test generation](./docs/architecture/observability-and-recording.md), and the
+> [compile-time vs. inferred-runtime dependency graphs](./docs/architecture/dependency-graphs.md).
+> Start there if you are an AI or new engineer trying to understand *why* the code is shaped this way.
+
 ```
 packages/
 ├── core/
