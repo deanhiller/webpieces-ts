@@ -72,6 +72,19 @@ middleware, so a team can adopt it **one route at a time** next to their existin
 
 ---
 
+## How this codebase is tested — and why "internals tested only indirectly" is the goal
+
+### Feature tests that survive refactors — [`testing-philosophy.md`](./testing-philosophy.md)
+Tests are written **feature-style, api-to-api**, against the public contract — many living *outside*
+this repo, in the consuming services — and driven through the **real** filter chain in-process. The
+payoff: a behavior-preserving refactor of the internals touches **zero** tests, so the still-green
+suite is *real* evidence nothing broke. Rewriting a test during a pure refactor blows away the
+safety net at the exact moment you need it — the common (staff-level) mistake this framework is built
+to make unnecessary. The doc also maps engineer levels (L4→L8) onto testing practice, and shows the
+typed-`ContextKey<V>` fix for the `RequestContext` `Map<string, any>` seam as a worked L7 example.
+
+---
+
 ## How to verify anything here
 Every document cites concrete `path/to/File.ts` locations. If a claim and the code disagree, the
 **code wins** — please fix the doc. These are kept honest by being written *from* the source, not
