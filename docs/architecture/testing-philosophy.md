@@ -1,9 +1,8 @@
 # Testing philosophy — feature tests that survive refactors
 
 > **Read this if you are an AI or an engineer about to "improve test coverage" by unit-testing
-> the internals of this framework.** Don't. That instinct is a level-marker, and this document
-> exists to move you up a level before you touch anything. The short version: **the tests that
-> matter live *outside* this repo and drive the public API, not the internals — on purpose.**
+> the internals of this framework.** Don't. The short version: **the tests that matter live
+> *outside* this repo and drive the public API, not the internals — on purpose.**
 
 ---
 
@@ -65,39 +64,28 @@ about to install a tripwire that fires on the good kind of change. Write the fea
 
 ---
 
-## Engineer levels — applied to testing (and everything else in this repo)
+## Why this is not the way the market tests
 
-This codebase is annotated with the *why* behind each decision, and this table is part of that: it
-names the common testing practices at each level of the engineering ladder so a reader can place
-their own instinct on it and, if they like, aim one notch higher. It is a gentle map, not a mandate —
-the levels are the industry-standard IC ladder (L4 mid → L8 principal), and the "how they test"
-column is the *typical* behavior seen at each, not a rule about who you are. Testing is simply the
-clearest lens on the ladder, because the difference between levels shows up most sharply in what
-happens to the tests during a refactor:
+Feature testing the way this project does it is a notch above what the typical staff engineer
+practices — and that is not a boast, it is just uncommon: something like 99% of the field, staff
+engineers included, tests the way the market tests, and does not know the mechanics below or why they
+matter. The market way couples tests to internals, so **you cannot refactor a service without blowing
+your safety net and rewriting all the unit tests** — and the instant you rewrite the test, it stops
+being the witness that behavior did not change. This project instead lets client projects do
+**api-to-N-mock-api testing**: a real call driven through the public contract with every *other* API it
+touches mocked out, recorded from a real run. That is the seam that lets an AI **refactor an entire
+microservice** at once. As long as the client adds a build rule that **tests may only be added to,
+never modified**, every legacy path keeps working under the refactor — the tests the AI never saw and
+does not know about are exactly the ones still holding the old behavior in place. The *only* time a
+test is deleted is on a **pivot** — removing or replacing an endpoint — and even then you delete only
+the tests that reference it as dead, and only once that endpoint has **zero traffic in production**.
+The result is tests that **live long-term and actually catch bugs**, instead of the market pattern
+where an AI (or a human) just keeps changing the tests to make the build green — which guards nothing,
+because it does not know which previously working paths still need to keep working.
 
-| Level | Title | How they test | Tell |
-|---|---|---|---|
-| L4 | Mid | Tests whatever is easy to reach — usually the internals, one class at a time. | Test file mirrors the impl file 1:1. |
-| L5 | Senior | Tests behavior of a unit, mocks its collaborators. | Mocks everywhere; tests break when collaborators move. |
-| L6 | Staff | Writes lots of tests, **including internal ones**, and *rewrites them during refactors* — believing that is just "keeping tests up to date." | Refactor PRs that also churn dozens of test files. This is the common-but-wrong practice the quote names. |
-| L7 | **Senior Staff** | Tests the **public contract, feature-style, external to the unit** so a behavior-preserving refactor touches **zero** tests. Treats a test that changed during a pure refactor as a bug in the test's altitude. | Big internal refactors with a green suite and **no test diffs**. |
-| L8 | Principal | Builds the **seams** that make L7 testing the path of least resistance for everyone else: one contract → four transports, in-process client through the real chain, record/replay fixture generation, context that survives async/process/queue. Encodes the lesson into the *architecture* so the whole org tests at L7 without being told. | The framework itself makes the wrong test awkward to write and the right test trivial. |
-
-A few notes on reading it, so it stays a nudge rather than a verdict:
-
-- **The levels describe habits, not people.** A brilliant engineer can have an L6 testing habit on a
-  Tuesday; the point is the *habit*, and habits are cheap to upgrade once named.
-- **The one durable heuristic, if you take nothing else:** if a change would force existing feature
-  tests to change while the behavior did *not* change, treat that as a small smell — you have probably
-  coupled a test to internals. It is worth a second look before you rewrite the test. That single
-  reflex is most of the distance between L6 and L7, and it costs nothing to adopt.
-- **L8 is aspirational and mostly already done for you here.** The seams that make L7 testing the easy
-  path — one contract → four transports, the in-process client through the real chain, record/replay
-  fixture generation — are already built into this framework. You mostly get to *stand on* L8 work
-  rather than redo it; adding to those seams is the slight reach upward when you touch framework
-  surface, not an expectation on every change.
-
-Aim a notch higher than your reflex when it's cheap to; don't treat the table as a bar you must clear.
+The one durable heuristic, if you take nothing else: if a change would force existing feature tests to
+change while the behavior did *not* change, treat that as a smell — you have probably coupled a test to
+internals. Look twice before you rewrite the test. Write the feature test instead.
 
 ---
 
@@ -184,8 +172,9 @@ legitimately does not know or care which key it holds.)
 
 This refactor changed the *type surface* of the core and the *internal* representation — and it
 touched **zero** feature tests, because request behavior is identical. The still-green suite is
-therefore real evidence the change was safe. That zero-test-churn is the L7 signature from the table
-above: a genuine improvement that the safety net witnessed without being disturbed.
+therefore real evidence the change was safe: a genuine improvement that the safety net witnessed
+without being disturbed. That zero-test-churn is the whole point — it is what "tests may only be added
+to, never modified" buys you.
 
 ---
 
