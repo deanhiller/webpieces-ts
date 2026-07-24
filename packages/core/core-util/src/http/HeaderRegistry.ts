@@ -1,4 +1,4 @@
-import { ContextKey } from '../ContextKey';
+import { ContextKey, AnyContextKey } from '../ContextKey';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 
 /**
@@ -27,31 +27,31 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  */
 export class HeaderRegistry {
     /** The webpieces-supplied common keys; included when platformHeaders=true. */
-    static readonly DEFAULT_HEADERS: ContextKey[] = WebpiecesCoreHeaders.getAllHeaders();
+    static readonly DEFAULT_HEADERS: AnyContextKey[] = WebpiecesCoreHeaders.getAllHeaders();
 
     private static instance: HeaderRegistry | undefined;
 
-    private readonly keys: ContextKey[];
+    private readonly keys: AnyContextKey[];
 
     // Derived collections precomputed ONCE, here in the constructor (i.e. at
     // configure() time). The hot path — every log line calls getLoggedKeys(), every
     // outbound request calls getTransferredKeys() — then returns the cached array
     // instead of re-filtering the full key list on each call. These are reachable
     // only through HeaderRegistry.get(), which throws until configure() has run.
-    private readonly transferredKeys: ContextKey[];
+    private readonly transferredKeys: AnyContextKey[];
     private readonly securedNames: string[];
-    private readonly loggedKeys: ContextKey[];
-    private readonly byHttpHeader: Map<string, ContextKey>;
+    private readonly loggedKeys: AnyContextKey[];
+    private readonly byHttpHeader: Map<string, AnyContextKey>;
 
-    private constructor(keys: ContextKey[]) {
+    private constructor(keys: AnyContextKey[]) {
         this.keys = this.checkForDuplicates(keys);
-        this.transferredKeys = this.keys.filter((k: ContextKey) => k.httpHeader !== undefined);
+        this.transferredKeys = this.keys.filter((k: AnyContextKey) => k.httpHeader !== undefined);
         this.securedNames = this.keys
-            .filter((k: ContextKey) => k.isSecured)
-            .map((k: ContextKey) => k.name);
-        this.loggedKeys = this.keys.filter((k: ContextKey) => k.isLogged);
+            .filter((k: AnyContextKey) => k.isSecured)
+            .map((k: AnyContextKey) => k.name);
+        this.loggedKeys = this.keys.filter((k: AnyContextKey) => k.isLogged);
         this.byHttpHeader = new Map(
-            this.transferredKeys.map((k: ContextKey): [string, ContextKey] => [k.httpHeader!.toLowerCase(), k]),
+            this.transferredKeys.map((k: AnyContextKey): [string, AnyContextKey] => [k.httpHeader!.toLowerCase(), k]),
         );
     }
 
@@ -60,8 +60,8 @@ export class HeaderRegistry {
      * LogManager.setFactory(...) (logging masks/keys off this registry).
      */
     // webpieces-disable no-function-outside-class -- HeaderRegistry is a deliberately static global singleton (like LogManager); configured once at startup, never DI-injected
-    static configure(svrHeaders: ContextKey[], platformHeaders: boolean): void {
-        const all: ContextKey[] = [
+    static configure(svrHeaders: AnyContextKey[], platformHeaders: boolean): void {
+        const all: AnyContextKey[] = [
             ...(platformHeaders ? HeaderRegistry.DEFAULT_HEADERS : []),
             ...svrHeaders,
         ];
@@ -85,7 +85,7 @@ export class HeaderRegistry {
     }
 
     /** All registered keys (deduplicated). */
-    getKeys(): ContextKey[] {
+    getKeys(): AnyContextKey[] {
         return this.keys;
     }
 
@@ -93,7 +93,7 @@ export class HeaderRegistry {
      * Keys that transfer over the wire (inbound request -> context, and context ->
      * outbound request): those with an httpHeader set.
      */
-    getTransferredKeys(): ContextKey[] {
+    getTransferredKeys(): AnyContextKey[] {
         return this.transferredKeys;
     }
 
@@ -108,12 +108,12 @@ export class HeaderRegistry {
      * `buildStructuredLogFields()`. (The registry used to own those two builders behind a read
      * callback, but only the server ever called them, so the seam was inlined away.)
      */
-    getLoggedKeys(): ContextKey[] {
+    getLoggedKeys(): AnyContextKey[] {
         return this.loggedKeys;
     }
 
     /** Look up a key by its HTTP header name (case-insensitive). O(1) via the precomputed map. */
-    findByHttpHeader(httpHeader: string): ContextKey | undefined {
+    findByHttpHeader(httpHeader: string): AnyContextKey | undefined {
         return this.byHttpHeader.get(httpHeader.toLowerCase());
     }
 
@@ -121,9 +121,9 @@ export class HeaderRegistry {
      * Collapse exact duplicates, throw on conflicting definitions sharing a `name`
      * or an `httpHeader`.
      */
-    private checkForDuplicates(allKeys: ContextKey[]): ContextKey[] {
-        const byName = new Map<string, ContextKey>();
-        const byHttpHeader = new Map<string, ContextKey>();
+    private checkForDuplicates(allKeys: AnyContextKey[]): AnyContextKey[] {
+        const byName = new Map<string, AnyContextKey>();
+        const byHttpHeader = new Map<string, AnyContextKey>();
 
         for (const key of allKeys) {
             const nameKey = key.name.toLowerCase();
@@ -156,7 +156,7 @@ export class HeaderRegistry {
      * otherwise the platform would behave differently depending on which module's
      * definition happened to load first.
      */
-    private assertSameDefinition(existing: ContextKey, duplicate: ContextKey): void {
+    private assertSameDefinition(existing: AnyContextKey, duplicate: AnyContextKey): void {
         const conflicts: string[] = [];
         if (existing.httpHeader !== duplicate.httpHeader) {
             conflicts.push(`httpHeader ('${existing.httpHeader}' vs '${duplicate.httpHeader}')`);

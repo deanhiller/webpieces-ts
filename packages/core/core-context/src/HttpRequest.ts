@@ -1,4 +1,4 @@
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey } from '@webpieces/core-util';
 
 /**
  * HttpRequest - webpieces' TRANSPORT-NEUTRAL inbound request.
@@ -22,13 +22,13 @@ export class HttpRequest {
     ) {}
 
     /** First value of a header, looked up by ContextKey.httpHeader (or a raw lowercased name). */
-    getHeader(key: ContextKey | string): string | undefined {
+    getHeader(key: AnyContextKey | string): string | undefined {
         const values = this.getHeaderValues(key);
         return values && values.length > 0 ? values[0] : undefined;
     }
 
     /** All values of a header. */
-    getHeaderValues(key: ContextKey | string): string[] | undefined {
+    getHeaderValues(key: AnyContextKey | string): string[] | undefined {
         const name = (typeof key === 'string' ? key : key.httpHeader ?? key.name).toLowerCase();
         return this.headers.get(name);
     }

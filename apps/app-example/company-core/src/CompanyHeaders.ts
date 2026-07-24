@@ -1,4 +1,4 @@
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey } from '@webpieces/core-util';
 
 /**
  * Company-wide context keys shared across all company applications.
@@ -29,7 +29,8 @@ export class CompanyHeaders {
     /**
      * Get all company context keys as an array.
      */
-    static getAllHeaders(): ContextKey[] {
+    // webpieces-disable no-function-outside-class -- pre-existing static key-registry accessor (a list of constants, not injectable behavior); pulled into modified-scope only by the ContextKey[] -> AnyContextKey[] return-type change
+    static getAllHeaders(): AnyContextKey[] {
         return [
             CompanyHeaders.TENANT_ID,
             CompanyHeaders.API_VERSION,

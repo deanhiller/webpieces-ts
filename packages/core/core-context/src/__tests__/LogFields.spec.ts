@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { ContextKey, HeaderRegistry, ServiceInfo, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey, HeaderRegistry, ServiceInfo, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { RequestContext } from '../RequestContext';
 
 /**
@@ -10,9 +10,9 @@ import { RequestContext } from '../RequestContext';
  * that buildStructuredLogFields adds so every request line says which build emitted it.
  */
 describe('RequestContext log-field builders', () => {
-    const api = new ContextKey('api', undefined, /*isSecured*/ false, /*isLogged*/ true); // object-valued
-    const reqId = new ContextKey('requestId', 'x-request-id');
-    const secret = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
+    const api = new AnyContextKey('api', undefined, /*isSecured*/ false, /*isLogged*/ true); // object-valued
+    const reqId = new ContextKey<string>('requestId', 'x-request-id');
+    const secret = new ContextKey<string>('authorization', 'authorization', /*isSecured*/ true);
 
     afterEach(() => {
         ServiceInfo.clear();

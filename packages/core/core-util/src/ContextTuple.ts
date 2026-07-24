@@ -1,4 +1,4 @@
-import { ContextKey } from './ContextKey';
+import { ContextKey, AnyContextKey } from './ContextKey';
 
 /**
  * ContextTuple - one (ContextKey, value) pair to be stamped into the request's
@@ -8,7 +8,7 @@ import { ContextKey } from './ContextKey';
  */
 export class ContextTuple {
     constructor(
-        public readonly key: ContextKey,
+        public readonly key: AnyContextKey,
         // webpieces-disable no-any-unknown -- context values are arbitrary app-defined data
         public readonly value: unknown,
     ) {}

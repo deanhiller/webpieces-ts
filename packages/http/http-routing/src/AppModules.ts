@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey } from '@webpieces/core-util';
 import { WebpiecesRouter } from './WebpiecesRouter';
 
 /**
@@ -40,7 +40,7 @@ export interface RouteModule {
  *   static create(): MyAppModules { return new MyAppModules(); }
  *   getBindingModules(): ContainerModule[] { return [InversifyModule]; }
  *   getRoutingModules(): RouteModule[] { return [new AppRoutes()]; }
- *   getHeaders(): ContextKey[] { return AppHeaders.getAllHeaders(); }
+ *   getHeaders(): AnyContextKey[] { return AppHeaders.getAllHeaders(); }
  * }
  *
  * // server.ts
@@ -57,5 +57,5 @@ export interface AppModules {
     getRoutingModules(): RouteModule[];
     /** This company's own context keys(usually all keys across all servers),
      * registered into the global HeaderRegistry at startup. */
-    getHeaders(): ContextKey[];
+    getHeaders(): AnyContextKey[];
 }

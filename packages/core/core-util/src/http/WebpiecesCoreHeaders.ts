@@ -1,4 +1,4 @@
-import { ContextKey } from '../ContextKey';
+import { ContextKey, AnyContextKey } from '../ContextKey';
 import { ApiCallInfo } from './ApiCallInfo';
 
 /**
@@ -166,7 +166,8 @@ export class WebpiecesCoreHeaders {
     /**
      * Get all core context keys as an array (the platform DEFAULT_HEADERS set).
      */
-    static getAllHeaders(): ContextKey[] {
+    // webpieces-disable no-function-outside-class -- pre-existing static key-registry accessor (a list of constants, not injectable behavior); pulled into modified-scope only by the ContextKey[] -> AnyContextKey[] return-type change
+    static getAllHeaders(): AnyContextKey[] {
         return [
             WebpiecesCoreHeaders.REQUEST_ID,
             WebpiecesCoreHeaders.REQUEST_ID_SOURCE,

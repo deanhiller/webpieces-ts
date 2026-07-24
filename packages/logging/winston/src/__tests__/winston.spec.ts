@@ -17,13 +17,13 @@ import { WinstonGcpFactory } from '../WinstonGcpFactory';
 import { ChunkingConsoleTransport } from '../ChunkingConsoleTransport';
 import { bigIntSafeFormat, injectContextFormat, severityFormat } from '../format';
 
-const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
+const REQUEST_ID = new ContextKey<string>('requestId', 'x-request-id');
 // secured → masked in logs
-const AUTH_TOKEN = new ContextKey('authToken', 'x-auth-token', true);
+const AUTH_TOKEN = new ContextKey<string>('authToken', 'x-auth-token', true);
 // the routed-endpoint identity keys — rendered specially by the console line ([Controller.method]),
 // promoted to top-level jsonPayload.controller / jsonPayload.method in GCP.
-const CONTROLLER = new ContextKey('controller');
-const METHOD = new ContextKey('method');
+const CONTROLLER = new ContextKey<string>('controller');
+const METHOD = new ContextKey<string>('method');
 
 // Run `fn` inside a RequestContext carrying the canned context values the loggers
 // read directly (requestId + a long secured authToken that masks to "sup...lue").

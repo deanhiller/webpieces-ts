@@ -1,7 +1,7 @@
 import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
-import { ContextKey, Secrets, SECRETS } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey, Secrets, SECRETS } from '@webpieces/core-util';
 import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
 import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
@@ -29,7 +29,8 @@ export class AppHeaders {
     /**
      * Get all app context keys as an array.
      */
-    static getAllHeaders(): ContextKey[] {
+    // webpieces-disable no-function-outside-class -- pre-existing static key-registry accessor (a list of constants, not injectable behavior); pulled into modified-scope only by the ContextKey[] -> AnyContextKey[] return-type change
+    static getAllHeaders(): AnyContextKey[] {
         return [AppHeaders.CLIENT_TYPE];
     }
 }

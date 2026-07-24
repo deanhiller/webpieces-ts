@@ -60,7 +60,7 @@ class CapturingTaskInvoker extends TaskInvoker {
     }
 }
 
-const TENANT = new ContextKey('tenantId', 'x-tenant-id');
+const TENANT = new ContextKey<string>('tenantId', 'x-tenant-id');
 
 let invoker: CapturingTaskInvoker;
 let emailTasks: EmailApi;

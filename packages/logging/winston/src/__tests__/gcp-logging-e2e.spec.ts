@@ -25,7 +25,7 @@ import { WinstonGcpFactory } from '../WinstonGcpFactory';
  * chunked into unparseable lines. This test fails if the SHIPPED behaviour regresses.
  */
 
-const REQUEST_ID = new ContextKey('requestId', 'x-request-id');
+const REQUEST_ID = new ContextKey<string>('requestId', 'x-request-id');
 
 /** One parsed line of stdout, exactly as the logging agent would receive it. */
 type LogRecord = Record<string, unknown>;
