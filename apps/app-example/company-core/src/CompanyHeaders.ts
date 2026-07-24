@@ -18,13 +18,13 @@ export class CompanyHeaders {
      * Tenant ID for multi-tenant applications. Transferred to downstream services,
      * logged under 'tenantId'.
      */
-    static readonly TENANT_ID = new ContextKey('tenantId', 'x-tenant-id');
+    static readonly TENANT_ID = new ContextKey<string>('tenantId', 'x-tenant-id');
 
     /**
      * API version for this request. Allows gradual API migration and
      * version-specific behavior.
      */
-    static readonly API_VERSION = new ContextKey('apiVersion', 'x-api-version');
+    static readonly API_VERSION = new ContextKey<string>('apiVersion', 'x-api-version');
 
     /**
      * Get all company context keys as an array.

@@ -12,7 +12,7 @@ import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
  * so it obeys no-function-outside-class — construct one and read getAllHeaders().
  */
 export class AppHeaders {
-    readonly CLIENT_TYPE = new ContextKey('clientType', 'x-client-type');
+    readonly CLIENT_TYPE = new ContextKey<string>('clientType', 'x-client-type');
 
     getAllHeaders(): ContextKey[] {
         return [this.CLIENT_TYPE];

@@ -15,7 +15,9 @@ import { RequestContext } from './RequestContext';
 export class RequestContextReader implements ContextReader {
     /** Read a string context-key value from the active RequestContext. */
     read(key: ContextKey): string | undefined {
-        return RequestContext.getHeader<string>(key);
+        // `key` is a generically-typed ContextKey<unknown> here (the reader is key-agnostic), and
+        // this method's contract is string-only, so read by name rather than via the typed getHeader.
+        return RequestContext.get<string>(key.name);
     }
 
     /**

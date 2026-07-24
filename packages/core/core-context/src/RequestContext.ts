@@ -59,13 +59,21 @@ class RequestContextImpl {
         return this.storage.run(context, fn);
     }
 
-    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
-    getHeader<T = unknown>(key: ContextKey): T | undefined {
-        return this.get<T>(key.name);
+    /**
+     * Read the value stored under a {@link ContextKey}. The return type is the key's OWN value type
+     * `V` — `string` for wire/log keys, `ApiCallInfo` for the api tag, `TestCaseRecorder` for the
+     * recorder — INFERRED from the key, never asserted by the caller. This is the typed public
+     * surface over the deliberately type-erased backing Map.
+     */
+    getHeader<V>(key: ContextKey<V>): V | undefined {
+        return this.get<V>(key.name);
     }
 
-    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
-    putHeader(key: ContextKey, value: unknown): void {
+    /**
+     * Store a value under a {@link ContextKey}. `value` is type-checked against the key's value type
+     * `V`, so you cannot put a number under a `ContextKey<string>` or a raw object under a typed key.
+     */
+    putHeader<V>(key: ContextKey<V>, value: V): void {
         this.put(key.name, value);
     }
 
@@ -103,7 +111,9 @@ class RequestContextImpl {
         // typeof-string check; objects ride buildStructuredLogFields instead. (Was a HeaderRegistry
         // method taking a read callback; only the server ever called it, so the seam was dead weight.)
         for (const key of HeaderRegistry.get().getLoggedKeys()) {
-            const value = this.getHeader<string>(key);
+            // getLoggedKeys() is ContextKey<unknown>[] (mixed value types), so read by name and
+            // narrow with the typeof-string guard rather than asserting a value type per key.
+            const value = this.get<string>(key.name);
             if (typeof value === 'string' && value) {
                 fields.set(key.name, key.maskIfSecured(value));
             }

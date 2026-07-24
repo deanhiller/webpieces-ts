@@ -67,9 +67,13 @@ about to install a tripwire that fires on the good kind of change. Write the fea
 
 ## Engineer levels — applied to testing (and everything else in this repo)
 
-The whole codebase is annotated with the *why* behind each decision precisely so the next
-contributor — human or AI — operates a level higher than they walked in at. Testing is the clearest
-lens on the ladder:
+This codebase is annotated with the *why* behind each decision, and this table is part of that: it
+names the common testing practices at each level of the engineering ladder so a reader can place
+their own instinct on it and, if they like, aim one notch higher. It is a gentle map, not a mandate —
+the levels are the industry-standard IC ladder (L4 mid → L8 principal), and the "how they test"
+column is the *typical* behavior seen at each, not a rule about who you are. Testing is simply the
+clearest lens on the ladder, because the difference between levels shows up most sharply in what
+happens to the tests during a refactor:
 
 | Level | Title | How they test | Tell |
 |---|---|---|---|
@@ -79,45 +83,97 @@ lens on the ladder:
 | L7 | **Senior Staff** | Tests the **public contract, feature-style, external to the unit** so a behavior-preserving refactor touches **zero** tests. Treats a test that changed during a pure refactor as a bug in the test's altitude. | Big internal refactors with a green suite and **no test diffs**. |
 | L8 | Principal | Builds the **seams** that make L7 testing the path of least resistance for everyone else: one contract → four transports, in-process client through the real chain, record/replay fixture generation, context that survives async/process/queue. Encodes the lesson into the *architecture* so the whole org tests at L7 without being told. | The framework itself makes the wrong test awkward to write and the right test trivial. |
 
-Read the table as an instruction, not a description: **default to L7, and when you are building
-framework surface, reach for L8.** If a change you are making would force existing feature tests to
-change and the behavior did *not* change, that is your signal you have coupled to internals — climb
-back up a level and fix the altitude before proceeding.
+A few notes on reading it, so it stays a nudge rather than a verdict:
+
+- **The levels describe habits, not people.** A brilliant engineer can have an L6 testing habit on a
+  Tuesday; the point is the *habit*, and habits are cheap to upgrade once named.
+- **The one durable heuristic, if you take nothing else:** if a change would force existing feature
+  tests to change while the behavior did *not* change, treat that as a small smell — you have probably
+  coupled a test to internals. It is worth a second look before you rewrite the test. That single
+  reflex is most of the distance between L6 and L7, and it costs nothing to adopt.
+- **L8 is aspirational and mostly already done for you here.** The seams that make L7 testing the easy
+  path — one contract → four transports, the in-process client through the real chain, record/replay
+  fixture generation — are already built into this framework. You mostly get to *stand on* L8 work
+  rather than redo it; adding to those seams is the slight reach upward when you touch framework
+  surface, not an expectation on every change.
+
+Aim a notch higher than your reflex when it's cheap to; don't treat the table as a bar you must clear.
 
 ---
 
 ## Corollary — the `RequestContext` `Map<string, any>` "soft underbelly"
 
 A common audit note flags `RequestContext` storing `Map<string, any>` with `get<T = any>(key)` as a
-type-safety hole at the core (`packages/core/core-context/src/RequestContext.ts`). Here is how the
-levels play out on *that* specific line, because it is the same principle:
+type-safety hole at the core (`packages/core/core-context/src/RequestContext.ts`). The audit is
+half-right, and getting the other half right is what produces the fix. **This is now implemented —
+`ContextKey<V>` shipped — and the reasoning below is why.**
 
-- **The internal `Map<string, any>` is correct and should stay `any`.** A request context is a
-  genuinely heterogeneous store (strings, the recorder, method-meta objects). Type-erasure *inside*
-  a boxed store is the honest representation, and it is already fenced with
-  `// webpieces-disable no-any-unknown` justifications.
-- **The leak is the *public* untyped surface, not the private Map.** `get<T = any>(key: string)` and
-  `put(key, value: any)` let a *caller* assert any `T` for any string key — the type is invented at
-  the call site, not guaranteed by the store.
-- **The senior-staff / principal fix is to make the *key* carry the type**, then make the untyped
-  string-keyed accessors private. Today `ContextKey` (`packages/core/core-util/src/ContextKey.ts`)
-  carries `name`/`httpHeader`/`isSecured`/`isLogged` but **not a value type**. Give it one —
-  `ContextKey<V>` — and the public API becomes:
+### Why the store CANNOT be `Record<string, string>`
 
-  ```typescript
-  class ContextKey<V> { /* ...existing fields, phantom V... */ }
+The instinctive "fix" is to type the map as `Record<string, string>` (or `Map<string, string>`). That
+is impossible here, because a request context deliberately holds **four genuinely different kinds of
+value**, and only some of them are strings:
 
-  getHeader<V>(key: ContextKey<V>): V | undefined   // V is INFERRED from the key, never asserted
-  putHeader<V>(key: ContextKey<V>, value: V): void  // value is type-checked against the key
-  ```
+1. **Transferrable security / identity keys** — `userId`, `orgId`, `tenantId`, `requestId`, roles.
+   Strings, and they ride *over the wire* (their `ContextKey` has an `httpHeader`), so they propagate
+   across service hops. See [`context-propagation.md`](./context-propagation.md).
+2. **Log / correlation strings** — `requestId`, `actionId`, `requestPath`, `controller`, `method`.
+   Strings, stamped so every log line of the request carries them.
+3. **The live `TestCaseRecorder` — NOT a string.** This is the advanced bit: a real object sitting in
+   the context that *records* an API call as it runs, and on completion **generates a full test case
+   with every other API it called mocked out** (see
+   [`observability-and-recording.md`](./observability-and-recording.md)). You cannot flatten a
+   stateful recorder object into a `string`.
+4. **Object payloads for structured logging** — `ApiCallInfo` under the `api` key, nested by the
+   winston/bunyan backends into `jsonPayload.api.*`. An object, not a string.
 
-  The `any` now lives *only* behind the key boundary, in the private backing Map, where it is
-  provably safe because a slot can only be read and written through the one `ContextKey<V>` that
-  owns it. Callers get full inference; the heterogeneous store keeps its honest internal erasure.
-- **And note the payoff ties back to the top of this doc:** this refactor changes the *internal*
-  representation and the *type surface* — but the feature tests that drive the public contract do
-  **not** move, because request behavior is unchanged. That is the L7 signature: a real improvement
-  that costs zero test churn.
+Force all of that into `Record<string, string>` and you would have to serialize the recorder and the
+`ApiCallInfo` object to strings and reparse them on every read — throwing away their identity and
+their behavior. **A heterogeneous store is heterogeneous. Its backing map is *honestly* type-erased
+(`Map<string, unknown>` internally), and that is correct.** The `// webpieces-disable no-any-unknown`
+fences on it are not debt; they are the truthful annotation of a box that holds mixed types.
+
+### The real leak, and the shipped fix: `ContextKey<V>`
+
+The problem was never the internal erased map — it was the **public, untyped surface** over it. The
+old `getHeader<T = unknown>(key)` and `putHeader(key, value: unknown)` let a *caller* assert any type
+for any key: the type was invented at the call site, not guaranteed by the store.
+
+The fix moves the type onto the **key**. `ContextKey` already carried
+`name`/`httpHeader`/`isSecured`/`isLogged`; it now also carries the **type of the value stored under
+it** as a phantom parameter `V` (`packages/core/core-util/src/ContextKey.ts`):
+
+```typescript
+class ContextKey<V = unknown> {            // V = the value's type; a phantom, no runtime cost
+    declare readonly __valueType?: V;      // inference-only marker
+    // ...name, httpHeader, isSecured, isLogged unchanged...
+}
+
+// Each key now DECLARES its value type at the one place it is defined:
+static readonly USER_ID = new ContextKey<string>('userId', 'x-user-id');
+static readonly API_CALL_INFO = new ContextKey<ApiCallInfo>('api', undefined, false, true);
+static readonly RECORDER = new ContextKey<TestCaseRecorder>('webpieces-recorder', undefined, false, false);
+
+// The public accessors INFER V from the key — the caller never asserts it:
+getHeader<V>(key: ContextKey<V>): V | undefined   // returns exactly the key's value type
+putHeader<V>(key: ContextKey<V>, value: V): void  // value is type-checked against the key
+```
+
+Now `RequestContext.getHeader(WebpiecesCoreHeaders.USER_ID)` is typed `string | undefined`,
+`getHeader(RecorderKeys.RECORDER)` is typed `TestCaseRecorder | undefined`, and putting a number under
+a `ContextKey<string>` is a **compile error**. The `unknown` lives *only* behind the key boundary, in
+the erased backing map, where it is provably safe because a slot can only be read and written through
+the one `ContextKey<V>` that owns it. Callers get full inference; the heterogeneous store keeps its
+honest internal erasure. (Two genuinely key-agnostic loops — building outbound wire headers and the
+flat log-field map — still read by `key.name` as strings, because there the code legitimately does not
+know or care which key it holds.)
+
+### The tie-back to testing
+
+This refactor changed the *type surface* of the core and the *internal* representation — and it
+touched **zero** feature tests, because request behavior is identical. The still-green suite is
+therefore real evidence the change was safe. That zero-test-churn is the L7 signature from the table
+above: a genuine improvement that the safety net witnessed without being disturbed.
 
 ---
 

@@ -20,8 +20,25 @@
  *                must not be serialized into log lines).
  *
  * Per CLAUDE.md: data-only structures are classes, not interfaces.
+ *
+ * The type parameter `V` is the TYPE OF THE VALUE stored under this key — `string` for the wire/log
+ * keys (requestId, tenantId, ...), `ApiCallInfo` for the structured api tag, `TestCaseRecorder` for
+ * the recorder. It defaults to `unknown` so an untyped `ContextKey` still works. A heterogeneous
+ * store CANNOT be a `Record<string, string>` — the recorder and the api payload are not strings —
+ * so instead each KEY carries its own value type, and `RequestContext.getHeader/putHeader` INFER it
+ * from the key. That keeps the backing Map honestly type-erased while the public surface stays fully
+ * typed: a caller never asserts a value type, the key already declares it.
  */
-export class ContextKey {
+// webpieces-disable no-any-unknown -- `unknown` is the deliberate default value type for an untyped ContextKey (a heterogeneous store cannot be narrowed further); typed keys override it with string/ApiCallInfo/TestCaseRecorder
+export class ContextKey<V = unknown> {
+    /**
+     * Phantom marker carrying the value type {@link V}. It has no runtime existence (`declare`, never
+     * assigned) — it exists ONLY so `getHeader(key)` returns `V` and `putHeader(key, value)` checks
+     * `value` against `V`, both inferred straight from the key. Optional, so `ContextKey<A>` stays
+     * assignable to `ContextKey` (i.e. `ContextKey<unknown>`) — arrays of mixed keys keep working.
+     */
+    declare readonly __valueType?: V;
+
     /** Context storage key + log/MDC key + recorder name. Always set. */
     readonly name: string;
 
