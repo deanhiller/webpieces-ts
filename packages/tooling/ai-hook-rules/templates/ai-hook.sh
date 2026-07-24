@@ -1,9 +1,11 @@
 #!/bin/sh
-# webpieces shim version: REPLACEME_GIT_HASH_VERSION
-# Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit; the installer AND the running
-# guards binary both overwrite this file (self-healing) from renderShim(). Checked in on purpose so the
-# hook has a stable, committed entry point even when node_modules is absent. Safe to delete along with
-# the matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
+# Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit. This file is GENERATED from
+# renderShim() and is intentionally VERSION-AGNOSTIC and byte-STABLE across releases: it carries no
+# version stamp, so it only changes when its own logic changes. The installed guards binary is what
+# checks that this committed copy still matches renderShim() (the committed-shim self-guard); if you
+# revert or hand-edit this file the binary fails closed and names the cure. Checked in on purpose so
+# the hook has a stable entry point even when node_modules is absent. Safe to delete along with the
+# matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
 #
 # Usage (wired into .claude/settings.json): sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
 BIN_NAME="$1"
@@ -75,31 +77,12 @@ if [ -f "$ROOT/package.json" ]; then
 $(sed -n 's/.*"@webpieces\/\([A-Za-z0-9._-]*\)"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1 \2/p' "$ROOT/package.json")
 WPEOF
 fi
-# --- webpieces committed-shim self-guard (this file is webpieces-managed; a revert/edit is a mistake) --
-# THIS file (.claude/webpieces/ai-hook.sh) is GENERATED from the installed @webpieces/ai-hook-rules
-# template and committed only so the hook has a stable entry point when node_modules is absent. If it no
-# longer matches the installed template, someone reverted or hand-edited it (the exact mistake that hides
-# the fix behind a stale escape hatch) — its fail-closed logic can no longer be trusted, so we fail closed
-# and make the cure explicit rather than silently running possibly-stale guard logic. Best-effort: only
-# when the template is actually present (skip on a fresh clone / global install), and only when there is
-# NO version drift (that has its own, more precise message; comparing bytes across versions is just noise).
-#
-# SHIM_TPL_VER is the version of @webpieces/ai-hook-rules the template came from. It goes in the deny
-# text so the reader knows WHICH version's shim the cure installs — without it the message named a file
-# and a bin but never the thing being restored, which is what made it unactionable.
-SHIM_STALE=""
-SHIM_TPL_VER=""
-WP_TEMPLATE="$ROOT/node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh"
-if [ -z "$DRIFT_PKG" ] && [ -f "$WP_TEMPLATE" ] && ! cmp -s "$0" "$WP_TEMPLATE"; then
-  SHIM_STALE=1
-  SHIM_TPL_VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/node_modules/@webpieces/ai-hook-rules/package.json" 2>/dev/null | head -n1)"
-fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
 BROKEN_BIN=""
 CRASH_MSG=""
-if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ] && [ -z "$SHIM_STALE" ]; then
+if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
   OUT_FILE="${TMPDIR:-/tmp}/wp-ai-hook-out.$$"
   ERR_FILE="${TMPDIR:-/tmp}/wp-ai-hook-err.$$"
   printf '%s' "$PAYLOAD" | "$BIN" "$@" >"$OUT_FILE" 2>"$ERR_FILE"
@@ -137,31 +120,10 @@ wp_log() {                   # $1 = decision label (ALLOW-INSTALL | DENY | DENY-
 }
 DENY_LABEL="DENY"
 [ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
-[ -n "$SHIM_STALE" ] && DENY_LABEL="DENY-SHIM-STALE"  # committed shim reverted/edited (self-guard)
 [ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
 if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$' || printf '%s' "$CMD" | grep -Eq '^rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
-fi
-# Always let the shim-regen cure through: wp-upgrade-shim rewrites the committed shim from the installed
-# template, so it is the ONLY fix for a self-guard block — denying it would deadlock the assistant.
-if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
-  wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
-  exit 0
-fi
-# Same cure, without the version coupling: copying templates/ai-hook.sh over the committed shim is what
-# we now TELL the reader to run (the bin only exists in >= 0.4.408), so it must be allowed or the deny
-# names a command it then blocks. Both paths are literal and webpieces-owned - nothing else can be hit.
-if printf '%s' "$CMD" | grep -Eq '^cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
-  wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
-  exit 0
-fi
-# The installer, named FIRST by the self-guard deny: it heals the committed shim before it loads
-# anything heavy, and unlike wp-upgrade-shim it exists on EVERY release. A deny that names it must
-# allow it, or we recreate the exact bug this whole escape-hatch list exists to prevent.
-if printf '%s' "$CMD" | grep -Eq '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
-  wp_log ALLOW-INSTALL-HOOKS # record the installer we let through (re-arms the committed shim)
-  exit 0
 fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
@@ -181,34 +143,6 @@ if [ -n "$BROKEN_BIN" ]; then
     STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
   fi
   REASON="❌ webpieces guards are DOWN and every OTHER tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. THIS IS NOT A DEADLOCK: the option below is explicitly ALLOWED through while this guard is up, so run it YOURSELF rather than handing it to the human. OPTION 1 - run EXACTLY this command, then retry: 'rm -rf node_modules && pnpm install'. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT put a cd in front of it, do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The ONLY additions that are tolerated are a trailing 2>&1 or a pipe into tail/head (e.g. 2>&1 | tail -20).${STAGING_NOTE}"
-elif [ -n "$SHIM_STALE" ]; then
-  # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
-  # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the
-  # allowlisted commands that re-arm it.
-  #
-  # ORDER OF THE OPTIONS IS LOAD-BEARING — it encodes two separate failures we have already paid for:
-  #   1. wp-install-ai-hooks. NEW HEADLINE (2026-07-23). It heals the shim first via the dependency-free
-  #      module AND it has shipped in every release that has a shim, so it is the only cure that is both
-  #      a named bin and version-agnostic. That is strictly better than either option below.
-  #   2. wp-upgrade-shim. A named bin too, but only >= 0.4.408 — on an older installed release the deny
-  #      used to name it ALONE and the reader got "command not found" and a hard block.
-  #   3. the cp. Version-agnostic, and it was briefly the headline on 2026-07-21 for exactly that reason
-  #      — then reverted the same day: webpieces' allowlist is not the only gate in front of the
-  #      assistant, and Claude Code's own permission classifier treats a raw cp overwriting a repo file
-  #      as something to confirm. Naming it first meant a DIFFERENT gate blocked the prescribed cure and
-  #      the assistant read that as proof the block was unfixable. It stays listed (a human, and an AI
-  #      on a legacy release, must still have a working path) but LAST, with that caveat spelled out.
-  #
-  # SAY THAT THE CURE IS ALLOWED THROUGH (2026-07-21, part 1): the text asserted a flat "every tool call
-  # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
-  # block its own fix too, never tried it, and handed the "deadlock" to the human. The cures ARE
-  # allowlisted (INSTALL_HOOKS / UPGRADE_SHIM / RESTORE_SHIM above); the message just never said so.
-  #
-  # NO_CHAINING_RULE (2026-07-23, part 3) closes the last hole: the assistant ran the prescribed cure
-  # with '&& git status --short' welded on, got denied for the anchor, and stopped. See its comment.
-  SHIM_VER_NOTE=""
-  [ -n "$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version $SHIM_TPL_VER)"
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: all three options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - present in every webpieces release, and it re-arms the shim before it loads anything else) - run EXACTLY this command: 'pnpm exec wp-install-ai-hooks'. OPTION 2 (shim regen only; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: 'pnpm exec wp-upgrade-shim'. OPTION 3 (works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite - that prompt is NOT this guard) - run EXACTLY this command: 'cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh'. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT put a cd in front of it, do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The ONLY additions that are tolerated are a trailing 2>&1 or a pipe into tail/head (e.g. 2>&1 | tail -20). Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead."
 elif [ -n "$DRIFT_PKG" ]; then
   # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
   # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
