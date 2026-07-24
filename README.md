@@ -48,6 +48,14 @@ npm run build
 > client` rebuild chain) and [running alongside
 > Express](./docs/architecture/express-coexistence.md) (embed webpieces route-by-route next to your
 > existing framework). See [`docs/ADOPTION.md`](./docs/ADOPTION.md) for the production track record.
+>
+> **The engineering practice, not just the framework:**
+> [`docs/ENGINEERING-PRACTICE.md`](./docs/ENGINEERING-PRACTICE.md) — the org-level conventions
+> (feature testing append-only, one contract, error/context discipline, a gated git workflow) and the
+> three-stage machine that enforces them on humans *and* AI agents: edit-time PreToolUse hooks,
+> build-time code rules, and a PR gate, with a `mode` × `epoch` ratchet that installs a convention
+> into a legacy codebase without a migration project. This layer ships to npm separately and is
+> adoptable **without** the framework.
 
 ```
 packages/

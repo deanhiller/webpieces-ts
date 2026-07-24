@@ -72,6 +72,22 @@ middleware, so a team can adopt it **one route at a time** next to their existin
 
 ---
 
+## The org engineering practice — [`../ENGINEERING-PRACTICE.md`](../ENGINEERING-PRACTICE.md)
+
+The documents above describe the *framework*. `ENGINEERING-PRACTICE.md` describes the other, larger
+thing this repository ships: **an engineering practice for an organization, plus the machine that
+enforces it** — the conventions (feature testing, one contract, error/context discipline, a gated git
+workflow), the three enforcement stages (`ai-hook-rules` at edit time, `code-rules` at build time,
+`pr-gate` at PR time), and the `mode` × `epoch` × `disableAllowed` ratchet that lands a convention in
+a codebase that predates it without a migration project. It also covers how to roll the system out in
+your own org, and how to read the suppression census to tell a working rule from a miscalibrated one.
+
+Read it if you are wondering why `packages/tooling/` is about as large as the framework, or if you
+want the practice without the framework — the two are separable, and the tooling ships to npm on its
+own.
+
+---
+
 ## How this codebase is tested — and why "internals tested only indirectly" is the goal
 
 ### Feature tests that survive refactors — [`testing-philosophy.md`](./testing-philosophy.md)

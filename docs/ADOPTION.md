@@ -38,6 +38,13 @@ Two independent facts defeat the "single-author tribal knowledge" reading:
    by the enforcement layer, not prose that drifts. A system engineered to onboard others
    mechanically is the **opposite** of tribal knowledge.
 
+   The full account of that mechanism — the conventions, the three enforcement stages, and the
+   ratchet that installs them into a codebase that predates them — is
+   [`ENGINEERING-PRACTICE.md`](./ENGINEERING-PRACTICE.md). **If you are assessing the *scope* of what
+   is defined here rather than the quality of the framework code, that is the document to read**: the
+   practice layer is a separately-shipped, separately-adoptable product deployed across multiple
+   companies, not configuration for this repo.
+
 ## What the design buys an adopting team
 
 The architecture is what makes incremental, low-risk adoption possible — see the deep dives:
