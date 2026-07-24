@@ -79,9 +79,10 @@ Tests are written **feature-style, api-to-api**, against the public contract —
 this repo, in the consuming services — and driven through the **real** filter chain in-process. The
 payoff: a behavior-preserving refactor of the internals touches **zero** tests, so the still-green
 suite is *real* evidence nothing broke. Rewriting a test during a pure refactor blows away the
-safety net at the exact moment you need it — the common (staff-level) mistake this framework is built
-to make unnecessary. The doc also maps engineer levels (L4→L8) onto testing practice, and shows the
-typed-`ContextKey<V>` fix for the `RequestContext` `Map<string, any>` seam as a worked L7 example.
+safety net at the exact moment you need it — the common mistake this framework is built to make
+unnecessary, and one most of the field (staff engineers included) still makes. The doc also shows the
+typed-`ContextKey<V>` fix for the `RequestContext` `Map<string, any>` seam as a worked example of a
+refactor that changed the type surface and touched zero feature tests.
 
 ---
 
