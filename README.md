@@ -42,6 +42,12 @@ npm run build
 > record/replay test generation](./docs/architecture/observability-and-recording.md), and the
 > [compile-time vs. inferred-runtime dependency graphs](./docs/architecture/dependency-graphs.md).
 > Start there if you are an AI or new engineer trying to understand *why* the code is shaped this way.
+>
+> **Adopting it incrementally:** [API-first vs. the codegen
+> cascade](./docs/architecture/api-first-vs-codegen.md) (one contract, no `server → gen api → gen
+> client` rebuild chain) and [running alongside
+> Express](./docs/architecture/express-coexistence.md) (embed webpieces route-by-route next to your
+> existing framework). See [`docs/ADOPTION.md`](./docs/ADOPTION.md) for the production track record.
 
 ```
 packages/
