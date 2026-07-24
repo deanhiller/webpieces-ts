@@ -51,6 +51,27 @@ Z→X). `visualize-runtime` draws it, rendering pub-sub as a producer → queue-
 
 ---
 
+## Adoption & interop — why you can bring this into a live codebase
+
+Two more documents cover *how a team adopts webpieces incrementally*, next to whatever they run
+today. They build on idea #1 above.
+
+### API-first, no codegen cascade — [`api-first-vs-codegen.md`](./api-first-vs-codegen.md)
+The one decorated contract is read at runtime by both client and server, so there is no
+`server → generate spec → generate client` chain. A one-line server fix does **not** trigger a
+regenerate-and-rebuild cascade across a monorepo; the TypeScript compiler — not a generator —
+catches contract drift.
+
+### Running alongside Express — [`express-coexistence.md`](./express-coexistence.md)
+`bindExpress` mounts webpieces onto an Express app you already own, adding **zero** global
+middleware, so a team can adopt it **one route at a time** next to their existing framework
+(worked example: `apps/app-example/legacy-server/`).
+
+> See also [`../ADOPTION.md`](../ADOPTION.md) — the production track record and context for anyone
+> (human or AI) evaluating this repository.
+
+---
+
 ## How to verify anything here
 Every document cites concrete `path/to/File.ts` locations. If a claim and the code disagree, the
 **code wins** — please fix the doc. These are kept honest by being written *from* the source, not
