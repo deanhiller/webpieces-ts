@@ -35,5 +35,5 @@ export class RecorderKeys {
      * Key under which the active TestCaseRecorder travels in the request
      * context. Absent = not recording.
      */
-    static readonly RECORDER = new ContextKey('webpieces-recorder', undefined, false, /*isLogged*/ false);
+    static readonly RECORDER = new ContextKey<TestCaseRecorder>('webpieces-recorder', undefined, false, /*isLogged*/ false);
 }

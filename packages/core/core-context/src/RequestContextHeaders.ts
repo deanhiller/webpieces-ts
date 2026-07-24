@@ -45,7 +45,9 @@ export class RequestContextHeaders {
         const headers = new Map<string, string>();
         // getTransferredKeys() is precomputed at configure() time.
         for (const key of HeaderRegistry.get().getTransferredKeys()) {
-            const value = RequestContext.getHeader<string>(key);
+            // getTransferredKeys() is ContextKey<unknown>[]; every transferred value is a wire
+            // string, so read by name rather than asserting a value type on a generically-typed key.
+            const value = RequestContext.get<string>(key.name);
             if (value !== undefined && value !== null && value !== '') {
                 headers.set(key.httpHeader!, value);
             }

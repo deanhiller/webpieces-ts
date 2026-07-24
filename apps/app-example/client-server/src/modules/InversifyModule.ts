@@ -24,7 +24,7 @@ export class AppHeaders {
      * Type of client making the request.
      * Examples: 'web', 'mobile-ios', 'mobile-android', 'cli'
      */
-    static readonly CLIENT_TYPE = new ContextKey('clientType', 'x-client-type');
+    static readonly CLIENT_TYPE = new ContextKey<string>('clientType', 'x-client-type');
 
     /**
      * Get all app context keys as an array.
