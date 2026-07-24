@@ -177,22 +177,44 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     emitDeny(result.report, toolKind);
 }
 
+// What a stale committed shim lets through. Pure (no cwd / no emit) so it is unit-testable — the
+// RECOVERY carve-out is the load-bearing part. A stale shim must NEVER trap the actions needed to
+// recover: the original "block everything but the cures" version also shadowed the always-allowed
+// webpieces.config.json edit (handleFileTool) and blocked reads, so a repo that ALSO needed its config
+// fixed would deadlock — blocked from editing the one file whose edit is normally always allowed, and
+// blocked from reading it to know how. So on a stale shim we block real WORK but keep recovery open:
+//   - 'allow-cure' → a Bash shim cure (wp-install-ai-hooks / wp-upgrade-shim / cp): emitAllow directly,
+//                    bypassing the git guards, exactly as the old shim did for the cures.
+//   - 'pass'       → a recovery action the normal flow already permits, so fall THROUGH and let it: ANY
+//                    Read (you must read to know how to fix — see handleRead, which itself fails open),
+//                    or an edit to webpieces.config.json (the always-allowed recovery target).
+//   - 'deny'       → all OTHER work: blocked until the committed shim matches renderShim() again.
+export type ShimStaleDecision = 'allow-cure' | 'pass' | 'deny';
+// webpieces-disable no-function-outside-class -- pure decision helper beside the adapter's other module-scope functions; exported for direct unit testing.
+export function shimStaleRecoveryDecision(toolName: string, command: string, filePath: string): ShimStaleDecision {
+    if (READ_ONLY_TOOLS.has(toolName)) return 'pass';                       // any read: needed to recover
+    if (isShimCureCommand(command)) return 'allow-cure';                    // a Bash shim cure
+    if (path.basename(filePath) === CONFIG_FILENAME) return 'pass';         // the always-allowed config edit
+    return 'deny';
+}
+
 // Committed-shim self-guard, moved here from the rendered shim (2026-07-24). The committed
 // .claude/webpieces/ai-hook.sh is webpieces-MANAGED and generated from renderShim(); if it no longer
 // matches, it was reverted / hand-edited / predates this binary, so its OWN fail-closed logic can't be
 // trusted. We are the CURRENT binary from node_modules — the trustworthy party — so WE decide here
 // instead of the (possibly stale) shim. It used to `cmp` itself inside the shim: a double-edged trap,
 // since the check lived in the very file it guarded and a fix could only ship by regenerating that
-// file. Now: fail closed on EVERY tool (Reads included — nothing is safe until it matches again),
-// allowing ONLY the three cures (isShimCureCommand) so the AI can re-arm it — NOT a deadlock. We deny +
+// file. Now we fail closed on all real WORK while always leaving the recovery path open (see
+// shimStaleRecoveryDecision): the three cures, any Read, and editing webpieces.config.json. We deny +
 // tell the AI; we do NOT silently rewrite the file under it. 'rules' hook skips it (guards owns the
-// shim). `command` is '' for non-Bash tools, so only a Bash cure can match. Returns normally (nothing
-// to do) or exits via emitAllow/emitDeny.
+// shim). Returns normally (pass / nothing to do) or exits via emitAllow/emitDeny.
 // webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
-function enforceCommittedShim(toolName: string, command: string, cwd: string, mode: HookMode): void {
+function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     if (mode === 'rules' || !committedShimStale(cwd)) return;
-    if (isShimCureCommand(command)) emitAllow();
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion()), toolName);
+    const decision = shimStaleRecoveryDecision(payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '');
+    if (decision === 'pass') return;
+    if (decision === 'allow-cure') emitAllow();
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion()), payload.tool_name);
 }
 
 /**
@@ -219,9 +241,9 @@ export async function runMain(mode: HookMode): Promise<void> {
         // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
         const cwd = payload.cwd ?? process.cwd();
 
-        // Committed-shim self-guard (moved here from the shim, 2026-07-24). Runs BEFORE read handling so
-        // a stale shim blocks EVERY tool, Reads included — see enforceCommittedShim for the full why.
-        enforceCommittedShim(payload.tool_name, payload.tool_input.command ?? '', cwd, mode);
+        // Committed-shim self-guard: blocks real work while the committed shim is stale, but keeps the
+        // recovery path open (cures, reads, config edit). See enforceCommittedShim / shimStaleRecoveryDecision.
+        enforceCommittedShim(payload, cwd, mode);
 
         // Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped
         // guard (read-stale-guard) and allow. Runs BEFORE the general rule engine — no code-style rule
