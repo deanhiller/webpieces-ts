@@ -1,4 +1,4 @@
-import { ContextKey } from '../ContextKey';
+import { ContextKey, AnyContextKey } from '../ContextKey';
 
 /**
  * ContextReader - reads context-key values from an app-held store.
@@ -19,7 +19,7 @@ export interface ContextReader {
     /**
      * Read the string value of a context key. Returns undefined if not present.
      */
-    read(key: ContextKey): string | undefined;
+    read(key: AnyContextKey): string | undefined;
 
     /**
      * OPTIONAL: read a non-string context value (e.g. the active TestCaseRecorder
@@ -28,5 +28,5 @@ export interface ContextReader {
      * browsers — same as Java).
      */
     // webpieces-disable no-any-unknown -- context values are heterogeneous (recorder, meta objects)
-    readValue?(key: ContextKey): unknown;
+    readValue?(key: AnyContextKey): unknown;
 }

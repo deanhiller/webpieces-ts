@@ -1,4 +1,4 @@
-import { ApiCallContext, ContextKey } from '@webpieces/core-util';
+import { ApiCallContext, AnyContextKey } from '@webpieces/core-util';
 
 /**
  * BrowserApiCallContext - the BROWSER implementation of the {@link ApiCallContext} seam, so
@@ -27,11 +27,11 @@ export class BrowserApiCallContext implements ApiCallContext {
     }
 
     // webpieces-disable no-any-unknown -- a context value is heterogeneous (the api struct here; strings elsewhere)
-    set(contextKey: ContextKey, value: unknown): void {
+    set(contextKey: AnyContextKey, value: unknown): void {
         BrowserApiCallContext.store.set(contextKey.name, value);
     }
 
-    remove(contextKey: ContextKey): void {
+    remove(contextKey: AnyContextKey): void {
         BrowserApiCallContext.store.delete(contextKey.name);
     }
 

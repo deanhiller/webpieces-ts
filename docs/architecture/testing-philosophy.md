@@ -144,12 +144,13 @@ The fix moves the type onto the **key**. `ContextKey` already carried
 it** as a phantom parameter `V` (`packages/core/core-util/src/ContextKey.ts`):
 
 ```typescript
-class ContextKey<V = unknown> {            // V = the value's type; a phantom, no runtime cost
-    declare readonly __valueType?: V;      // inference-only marker
+class ContextKey<V> {                      // V = the value's type; REQUIRED, no default
+    declare readonly __valueType?: V;      // inference-only phantom, no runtime cost
     // ...name, httpHeader, isSecured, isLogged unchanged...
 }
 
-// Each key now DECLARES its value type at the one place it is defined:
+// Each key MUST declare its value type at the one place it is defined — a bare
+// `new ContextKey('x')` no longer compiles, so legacy keys are forced to state what they hold:
 static readonly USER_ID = new ContextKey<string>('userId', 'x-user-id');
 static readonly API_CALL_INFO = new ContextKey<ApiCallInfo>('api', undefined, false, true);
 static readonly RECORDER = new ContextKey<TestCaseRecorder>('webpieces-recorder', undefined, false, false);
@@ -159,14 +160,25 @@ getHeader<V>(key: ContextKey<V>): V | undefined   // returns exactly the key's v
 putHeader<V>(key: ContextKey<V>, value: V): void  // value is type-checked against the key
 ```
 
+**Why no default `= unknown`?** A default would let a legacy `new ContextKey('x')` keep compiling as
+`ContextKey<unknown>`, silently keeping the old untyped behavior. Removing it turns every un-migrated
+key into a **compile error** until it declares its value type — the type system does the migration,
+and there is no way to accidentally stay untyped.
+
+A genuinely mixed collection of keys (e.g. the `HeaderRegistry`'s arrays, `getAllHeaders()`) is spelled
+with the one sanctioned alias **`AnyContextKey = ContextKey<unknown>`** — never a bare `ContextKey`.
+Naming the mixed case makes "I mean a key of any value type" a *deliberate, visible* statement, and
+confines the single justified `unknown` (and its `webpieces-disable no-any-unknown`) to that one alias
+instead of scattering it across the codebase.
+
 Now `RequestContext.getHeader(WebpiecesCoreHeaders.USER_ID)` is typed `string | undefined`,
 `getHeader(RecorderKeys.RECORDER)` is typed `TestCaseRecorder | undefined`, and putting a number under
 a `ContextKey<string>` is a **compile error**. The `unknown` lives *only* behind the key boundary, in
 the erased backing map, where it is provably safe because a slot can only be read and written through
 the one `ContextKey<V>` that owns it. Callers get full inference; the heterogeneous store keeps its
 honest internal erasure. (Two genuinely key-agnostic loops — building outbound wire headers and the
-flat log-field map — still read by `key.name` as strings, because there the code legitimately does not
-know or care which key it holds.)
+flat log-field map — still read by `key.name` as strings via `AnyContextKey`, because there the code
+legitimately does not know or care which key it holds.)
 
 ### The tie-back to testing
 

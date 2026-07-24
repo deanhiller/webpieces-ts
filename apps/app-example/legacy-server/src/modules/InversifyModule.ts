@@ -1,7 +1,7 @@
 import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { Server2Api, TYPES } from '../remote/Server2Client';
-import { ContextKey, Secrets, SECRETS } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey, Secrets, SECRETS } from '@webpieces/core-util';
 import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
 import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
@@ -14,7 +14,7 @@ import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
 export class AppHeaders {
     readonly CLIENT_TYPE = new ContextKey<string>('clientType', 'x-client-type');
 
-    getAllHeaders(): ContextKey[] {
+    getAllHeaders(): AnyContextKey[] {
         return [this.CLIENT_TYPE];
     }
 }

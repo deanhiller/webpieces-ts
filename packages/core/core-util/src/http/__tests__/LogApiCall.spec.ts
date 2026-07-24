@@ -3,7 +3,7 @@ import { LogApiCall } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
 import { ApiCallContext, ApiCallContextHolder } from '../ApiCallContext';
-import { ContextKey } from '../../ContextKey';
+import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
 import { HttpBadRequestError, HttpUserError, HttpNotFoundError } from '../errors';
@@ -14,16 +14,16 @@ import { HttpBadRequestError, HttpUserError, HttpNotFoundError } from '../errors
  */
 class RecordingApiCallContext implements ApiCallContext {
     active = true;
-    readonly sets: { key: ContextKey; value: unknown }[] = [];
-    readonly removes: ContextKey[] = [];
+    readonly sets: { key: AnyContextKey; value: unknown }[] = [];
+    readonly removes: AnyContextKey[] = [];
 
     isActive(): boolean {
         return this.active;
     }
-    set(key: ContextKey, value: unknown): void {
+    set(key: AnyContextKey, value: unknown): void {
         this.sets.push({ key, value });
     }
-    remove(key: ContextKey): void {
+    remove(key: AnyContextKey): void {
         this.removes.push(key);
     }
     values(): ApiCallInfo[] {

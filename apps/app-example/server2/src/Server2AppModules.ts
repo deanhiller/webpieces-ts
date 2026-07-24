@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey } from '@webpieces/core-util';
 import { AppModules, RouteModule } from '@webpieces/http-routing';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { Server2Routes } from './Server2Routes';
@@ -24,7 +24,7 @@ export class Server2AppModules implements AppModules {
         return [new Server2Routes()];
     }
 
-    getHeaders(): ContextKey[] {
+    getHeaders(): AnyContextKey[] {
         // server2 registers the company-wide key set (it reads CompanyHeaders.TENANT_ID); it has
         // no app-specific keys of its own.
         return CompanyHeaders.getAllHeaders();

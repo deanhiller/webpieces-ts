@@ -1,4 +1,4 @@
-import { ContextKey, ContextReader } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey, ContextReader } from '@webpieces/core-util';
 
 /**
  * MutableContextStore - the BROWSER ContextReader.
@@ -25,12 +25,12 @@ export class MutableContextStore implements ContextReader {
     private values: Map<string, string> = new Map();
 
     /** Set (or overwrite) the current value for a context key. */
-    set(key: ContextKey, value: string): void {
+    set(key: AnyContextKey, value: string): void {
         this.values.set(key.name, value);
     }
 
     /** Remove the current value for a context key (e.g. on logout). */
-    remove(key: ContextKey): void {
+    remove(key: AnyContextKey): void {
         this.values.delete(key.name);
     }
 
@@ -39,7 +39,7 @@ export class MutableContextStore implements ContextReader {
         this.values.clear();
     }
 
-    read(key: ContextKey): string | undefined {
+    read(key: AnyContextKey): string | undefined {
         return this.values.get(key.name);
     }
 }

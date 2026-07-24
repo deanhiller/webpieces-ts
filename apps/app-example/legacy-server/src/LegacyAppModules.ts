@@ -1,5 +1,5 @@
 import { ContainerModule } from 'inversify';
-import { ContextKey } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey } from '@webpieces/core-util';
 import { AppModules, RouteModule, FilterDefinition } from '@webpieces/http-routing';
 import { CompanyHeaders } from '@webpieces/company-core';
 import { InversifyModule, AppHeaders } from './modules/InversifyModule';
@@ -27,7 +27,7 @@ export class LegacyAppModules implements AppModules {
         return [new LegacyRoutes(this.additionalFilters)];
     }
 
-    getHeaders(): ContextKey[] {
+    getHeaders(): AnyContextKey[] {
         // The company-wide key set (all keys across all servers) plus this app's own keys.
         return [...CompanyHeaders.getAllHeaders(), ...new AppHeaders().getAllHeaders()];
     }

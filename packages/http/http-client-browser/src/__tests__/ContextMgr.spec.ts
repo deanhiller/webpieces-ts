@@ -8,9 +8,9 @@ import {
 import { ContextMgr } from '@webpieces/core-util';
 import { MutableContextStore } from '../MutableContextStore';
 
-const TENANT = new ContextKey('tenantId', 'x-tenant-id');
-const AUTH = new ContextKey('authorization', 'authorization', /*isSecured*/ true);
-const LOCAL_ONLY = new ContextKey('localOnly'); // no httpHeader -> never transferred
+const TENANT = new ContextKey<string>('tenantId', 'x-tenant-id');
+const AUTH = new ContextKey<string>('authorization', 'authorization', /*isSecured*/ true);
+const LOCAL_ONLY = new ContextKey<string>('localOnly'); // no httpHeader -> never transferred
 
 /** Configure the global registry with the platform defaults + these test keys, and reset identity. */
 function configureRegistry(): void {

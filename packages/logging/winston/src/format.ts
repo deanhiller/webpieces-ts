@@ -15,7 +15,7 @@ import { format } from 'winston';
 import type { Format, TransformableInfo } from 'logform';
 import { stringify as safeStringify } from 'safe-stable-stringify';
 import { HeaderRegistry, ApiCallLogName } from '@webpieces/core-util';
-import type { ContextKey } from '@webpieces/core-util';
+import type { ContextKey, AnyContextKey } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
 // JSON-shaped value (the widest thing a log field / replacer value can hold),
@@ -168,7 +168,7 @@ export function localPrettyFormat(fields?: string[]): Format {
     let contextNames: string[] | undefined;
     return format.printf((info: TransformableInfo) => {
         if (!contextNames) {
-            contextNames = HeaderRegistry.get().getLoggedKeys().map((k: ContextKey) => k.name);
+            contextNames = HeaderRegistry.get().getLoggedKeys().map((k: AnyContextKey) => k.name);
         }
         const levelName = (WINSTON_LEVEL_TO_DISPLAY[info.level] ?? info.level.toUpperCase()).padEnd(5);
         const time = info['timestamp'] != null ? String(info['timestamp']) : '';

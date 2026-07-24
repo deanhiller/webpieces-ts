@@ -23,19 +23,32 @@
  *
  * The type parameter `V` is the TYPE OF THE VALUE stored under this key — `string` for the wire/log
  * keys (requestId, tenantId, ...), `ApiCallInfo` for the structured api tag, `TestCaseRecorder` for
- * the recorder. It defaults to `unknown` so an untyped `ContextKey` still works. A heterogeneous
- * store CANNOT be a `Record<string, string>` — the recorder and the api payload are not strings —
- * so instead each KEY carries its own value type, and `RequestContext.getHeader/putHeader` INFER it
- * from the key. That keeps the backing Map honestly type-erased while the public surface stays fully
- * typed: a caller never asserts a value type, the key already declares it.
+ * the recorder. It is REQUIRED (no default): every key must state what it holds, so a legacy
+ * `new ContextKey('x')` fails to compile until it declares `new ContextKey<string>('x')` — the
+ * type system does the migration for you. A heterogeneous store CANNOT be a `Record<string, string>`
+ * — the recorder and the api payload are not strings — so instead each KEY carries its own value
+ * type, and `RequestContext.getHeader/putHeader` INFER it from the key. That keeps the backing Map
+ * honestly type-erased while the public surface stays fully typed: a caller never asserts a value
+ * type, the key already declares it. A genuinely mixed collection of keys is spelled explicitly as
+ * `AnyContextKey[]`, so "I mean a mixed bag" is a visible, deliberate statement, never a default.
  */
-// webpieces-disable no-any-unknown -- `unknown` is the deliberate default value type for an untyped ContextKey (a heterogeneous store cannot be narrowed further); typed keys override it with string/ApiCallInfo/TestCaseRecorder
-export class ContextKey<V = unknown> {
+/**
+ * A ContextKey whose value type is intentionally UNCONSTRAINED — a "key of any value type". Use this
+ * (never a bare `ContextKey`, which no longer compiles) for genuinely mixed-bag collections and
+ * key-agnostic code: `getAllHeaders(): AnyContextKey[]`, the {@link HeaderRegistry}'s key arrays, a
+ * reader that takes whatever key it is handed. Naming the mixed case makes "I mean any key" a visible,
+ * deliberate statement, and confines the one sanctioned `unknown` to this single alias instead of
+ * scattering `ContextKey<unknown>` — and its disable comment — across the codebase.
+ */
+// webpieces-disable no-any-unknown -- the ONE sanctioned `unknown`: a key whose value type is deliberately unconstrained (mixed-bag collections / key-agnostic code). Every other site names AnyContextKey instead of repeating this.
+export type AnyContextKey = ContextKey<unknown>;
+
+export class ContextKey<V> {
     /**
      * Phantom marker carrying the value type {@link V}. It has no runtime existence (`declare`, never
      * assigned) — it exists ONLY so `getHeader(key)` returns `V` and `putHeader(key, value)` checks
      * `value` against `V`, both inferred straight from the key. Optional, so `ContextKey<A>` stays
-     * assignable to `ContextKey` (i.e. `ContextKey<unknown>`) — arrays of mixed keys keep working.
+     * assignable to `AnyContextKey` (i.e. `ContextKey<unknown>`) — arrays of mixed keys keep working.
      */
     declare readonly __valueType?: V;
 

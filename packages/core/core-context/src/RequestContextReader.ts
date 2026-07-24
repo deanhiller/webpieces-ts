@@ -1,4 +1,4 @@
-import { ContextKey, ContextReader } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey, ContextReader } from '@webpieces/core-util';
 import { RequestContext } from './RequestContext';
 
 /**
@@ -14,8 +14,8 @@ import { RequestContext } from './RequestContext';
  */
 export class RequestContextReader implements ContextReader {
     /** Read a string context-key value from the active RequestContext. */
-    read(key: ContextKey): string | undefined {
-        // `key` is a generically-typed ContextKey<unknown> here (the reader is key-agnostic), and
+    read(key: AnyContextKey): string | undefined {
+        // `key` is a generically-typed AnyContextKey here (the reader is key-agnostic), and
         // this method's contract is string-only, so read by name rather than via the typed getHeader.
         return RequestContext.get<string>(key.name);
     }
@@ -26,7 +26,7 @@ export class RequestContextReader implements ContextReader {
      * context without importing core-context itself.
      */
     // webpieces-disable no-any-unknown -- context values are heterogeneous (recorder, meta objects)
-    readValue(key: ContextKey): unknown {
+    readValue(key: AnyContextKey): unknown {
         return RequestContext.getHeader(key);
     }
 }

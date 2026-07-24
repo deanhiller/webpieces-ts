@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { ContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
+import { ContextKey, AnyContextKey, HeaderRegistry, ServiceInfo } from '@webpieces/core-util';
 import { HttpRequest } from './HttpRequest';
 
 /** Reserved context key under which the current HttpRequest is stored. */
@@ -78,11 +78,11 @@ class RequestContextImpl {
     }
 
     /** Clear one context key. Used by the api-tag seam's set → log → remove span (see LogApiCall). */
-    removeHeader(key: ContextKey): void {
+    removeHeader(key: AnyContextKey): void {
         this.remove(key.name);
     }
 
-    hasHeader(key: ContextKey): boolean {
+    hasHeader(key: AnyContextKey): boolean {
         return this.has(key.name);
     }
 
@@ -111,7 +111,7 @@ class RequestContextImpl {
         // typeof-string check; objects ride buildStructuredLogFields instead. (Was a HeaderRegistry
         // method taking a read callback; only the server ever called it, so the seam was dead weight.)
         for (const key of HeaderRegistry.get().getLoggedKeys()) {
-            // getLoggedKeys() is ContextKey<unknown>[] (mixed value types), so read by name and
+            // getLoggedKeys() is AnyContextKey[] (mixed value types), so read by name and
             // narrow with the typeof-string guard rather than asserting a value type per key.
             const value = this.get<string>(key.name);
             if (typeof value === 'string' && value) {
@@ -189,7 +189,7 @@ class RequestContextImpl {
     }
 
     // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
-    getHeaders(keys: ContextKey[]): unknown[] {
+    getHeaders(keys: AnyContextKey[]): unknown[] {
         return keys.map(key => this.getHeader(key));
     }
 
