@@ -9,7 +9,7 @@ import { RepoRootFinder } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
-import { healShim } from '../bin/shim';
+import { committedShimStale, isShimCureCommand, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -177,6 +177,24 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     emitDeny(result.report, toolKind);
 }
 
+// Committed-shim self-guard, moved here from the rendered shim (2026-07-24). The committed
+// .claude/webpieces/ai-hook.sh is webpieces-MANAGED and generated from renderShim(); if it no longer
+// matches, it was reverted / hand-edited / predates this binary, so its OWN fail-closed logic can't be
+// trusted. We are the CURRENT binary from node_modules — the trustworthy party — so WE decide here
+// instead of the (possibly stale) shim. It used to `cmp` itself inside the shim: a double-edged trap,
+// since the check lived in the very file it guarded and a fix could only ship by regenerating that
+// file. Now: fail closed on EVERY tool (Reads included — nothing is safe until it matches again),
+// allowing ONLY the three cures (isShimCureCommand) so the AI can re-arm it — NOT a deadlock. We deny +
+// tell the AI; we do NOT silently rewrite the file under it. 'rules' hook skips it (guards owns the
+// shim). `command` is '' for non-Bash tools, so only a Bash cure can match. Returns normally (nothing
+// to do) or exits via emitAllow/emitDeny.
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
+function enforceCommittedShim(toolName: string, command: string, cwd: string, mode: HookMode): void {
+    if (mode === 'rules' || !committedShimStale(cwd)) return;
+    if (isShimCureCommand(command)) emitAllow();
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion()), toolName);
+}
+
 /**
  * Shared entry point for all three Claude Code PreToolUse adapters. `mode` selects which tool kinds
  * to validate; payloads outside the mode's scope pass through (emitAllow). Blocks by emitting a
@@ -201,9 +219,13 @@ export async function runMain(mode: HookMode): Promise<void> {
         // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
         const cwd = payload.cwd ?? process.cwd();
 
+        // Committed-shim self-guard (moved here from the shim, 2026-07-24). Runs BEFORE read handling so
+        // a stale shim blocks EVERY tool, Reads included — see enforceCommittedShim for the full why.
+        enforceCommittedShim(payload.tool_name, payload.tool_input.command ?? '', cwd, mode);
+
         // Read-only tools (Read): audit-log, warm the main-sync cache, then run the ONE read-scoped
-        // guard (read-stale-guard) and allow. Runs BEFORE healShim and the general rule engine — no
-        // code-style rule ever sees a Read, and the only way this path can deny is a stale `main`.
+        // guard (read-stale-guard) and allow. Runs BEFORE the general rule engine — no code-style rule
+        // ever sees a Read, and the only way this path can deny is a stale `main`.
         // The audit trail still records every file the AI opened (see setup.ts).
         if (READ_ONLY_TOOLS.has(payload.tool_name)) {
             const readPath = payload.tool_input.file_path ?? '';
@@ -217,15 +239,11 @@ export async function runMain(mode: HookMode): Promise<void> {
             emitAllow();
         }
 
-        // Keep the committed shim (.claude/webpieces/ai-hook.sh) identical to renderShim() so its
-        // fail-closed escape hatch + installer allowlist never go stale — no human hand-edits it.
-        // Runs only when the guards binary is actually installed (i.e. now), is best-effort, and
-        // never throws into the decision below. 'rules' hook skips it (guards owns the shim).
+        // Per-invocation guard log (guard-invocations.log): tool + command/file + live branch +
+        // main-sync-status snapshot, on EVERY guards call, for later cleanup automation. Best-effort;
+        // never blocks the call. (The committed shim is no longer silently healed here — a mismatch is
+        // reported by the self-guard above, not rewritten out from under the AI.)
         if (mode !== 'rules') {
-            healShim(cwd);
-            // Per-invocation guard log (guard-invocations.log): tool + command/file + live branch +
-            // main-sync-status snapshot, on EVERY guards call, for later cleanup automation. Best-
-            // effort; never blocks the call.
             const target = payload.tool_name === 'Bash' ? (payload.tool_input.command ?? '') : (payload.tool_input.file_path ?? '');
             logGuardInvocation(cwd, payload.tool_name, target);
         }

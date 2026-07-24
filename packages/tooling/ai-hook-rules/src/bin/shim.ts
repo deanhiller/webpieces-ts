@@ -3,6 +3,8 @@ import * as path from 'path';
 
 import { SyncFlowGuidance } from '@webpieces/rules-config';
 
+import { toError } from '../core/to-error';
+
 // ---------------------------------------------------------------------------
 // The single checked-in shim (.claude/webpieces/ai-hook.sh). Both project hooks point at it, passing
 // their bin name as the first arg. settings.json points here (not at the bare bin) so a missing bin
@@ -16,21 +18,15 @@ import { SyncFlowGuidance } from '@webpieces/rules-config';
 // ---------------------------------------------------------------------------
 export const SHIM_MARKER = '.claude/webpieces/ai-hook.sh';
 
-// WHICH webpieces produced the shim in front of you, stamped into line 2 of the file itself.
-//
-// Every stall we have debugged this week started with the same unanswerable question: the committed
-// .claude/webpieces/ai-hook.sh is the file that DECIDES (it runs before the bin, and its logic is
-// whatever version last wrote it), but nothing in it said which release that was. So "is this repo's
-// guard old enough to lack the cure?" could only be answered by diffing bytes against a tarball —
-// which is exactly what took a live debugging session to do.
-//
-// scripts/set-version.sh rewrites this token in the PUBLISHED artifacts (dist templates/ai-hook.sh AND
-// the compiled shim.js that renderShim() lives in) to "<version> (<git sha>)". Both are rewritten
-// together on purpose: the self-guard compares the committed shim against templates/ai-hook.sh with
-// cmp, so if only one carried the stamp EVERY repo would fail-close permanently on a phantom edit.
-// In the source tree the token stays unreplaced — a shim reading REPLACEME_GIT_HASH_VERSION was
-// rendered from a source checkout, not an installed release, and that is worth knowing too.
-export const SHIM_VERSION_STAMP = 'REPLACEME_GIT_HASH_VERSION';
+// NO VERSION STAMP (removed 2026-07-24). The shim used to carry a per-release `# webpieces shim
+// version: <v> (<sha>)` on line 2, rewritten by scripts/set-version.sh at publish. It was a pure
+// human-eyeball diagnostic — nothing reads it (the deny's version note comes from the installed
+// package.json) — but it made the committed shim go byte-different on EVERY release even when the
+// logic was identical, so the committed-shim self-guard tripped on every upgrade over a comment (the
+// DENY-SHIM-STALE churn). It also carried its own hazard: stamp one of the two lockstep artifacts and
+// not the other and every consumer fail-closes forever on a phantom edit. Deleting it makes the shim
+// byte-STABLE across releases, so the self-guard (now in the binary) fires only on a genuine logic
+// change or a real tamper — which is what lets `pnpm install` be the fix for almost everything.
 
 export function shimPath(projectRoot: string): string {
     return path.join(projectRoot, '.claude', 'webpieces', 'ai-hook.sh');
@@ -136,10 +132,10 @@ export const SYNC_ALLOW_ERE =
 export const SYNC_ALLOW_JS =
     new RegExp('^git\\s+(pull|fetch|merge)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
 
-// The CURE for the committed-shim self-guard (below): regenerate .claude/webpieces/ai-hook.sh from the
-// installed template. Allowed on every fail-closed path — like the installer, it is a webpieces-owned,
-// no-network local action whose whole job is to re-arm the guard, so denying it would deadlock the
-// assistant against its own fix. Accepts the realistic spellings of the wp-upgrade-shim bin under
+// The CURE for the committed-shim self-guard (now enforced by the binary — see committedShimStale
+// below): regenerate .claude/webpieces/ai-hook.sh from renderShim(). Allowed while that guard is up —
+// like the installer, it is a webpieces-owned, no-network local action whose whole job is to re-arm the
+// guard, so denying it would deadlock the assistant against its own fix. Accepts the realistic spellings of the wp-upgrade-shim bin under
 // pnpm/npm/npx; anchored at both ends with only a bare bin name, so no shell operator can ride along.
 // Keep in sync with UPGRADE_SHIM_ALLOW_JS below (locked by a unit test).
 export const UPGRADE_SHIM_ALLOW_ERE =
@@ -160,9 +156,10 @@ export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
 // message gave "ZERO information" on how to actually fix it.
 //
 // A plain `cp` of the installed template over the committed shim has none of that version coupling:
-// templates/ai-hook.sh ships in EVERY release, it is the exact byte-for-byte artifact the self-guard
-// compares against (`cmp -s "$0" "$WP_TEMPLATE"`), and cp onto an existing file keeps the destination's
-// mode, so the shim stays executable with no chmod. It cures the block on any version, old or new —
+// templates/ai-hook.sh ships in EVERY release and is byte-identical to renderShim() (locked by a unit
+// test), which is exactly what the binary's committedShimStale() compares the committed shim against;
+// cp onto an existing file keeps the destination's mode, so the shim stays executable with no chmod.
+// It cures the block on any version, old or new —
 // which is why the deny now leads with it and only mentions the bin as the newer equivalent.
 //
 // Kept as tight as the other escape hatches: anchored at both ends, no flags, and BOTH paths are
@@ -299,25 +296,6 @@ if [ -f "$ROOT/package.json" ]; then
   done <<WPEOF
 $(sed -n 's/.*"@webpieces\\/\\([A-Za-z0-9._-]*\\)"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1 \\2/p' "$ROOT/package.json")
 WPEOF
-fi
-# --- webpieces committed-shim self-guard (this file is webpieces-managed; a revert/edit is a mistake) --
-# THIS file (.claude/webpieces/ai-hook.sh) is GENERATED from the installed @webpieces/ai-hook-rules
-# template and committed only so the hook has a stable entry point when node_modules is absent. If it no
-# longer matches the installed template, someone reverted or hand-edited it (the exact mistake that hides
-# the fix behind a stale escape hatch) — its fail-closed logic can no longer be trusted, so we fail closed
-# and make the cure explicit rather than silently running possibly-stale guard logic. Best-effort: only
-# when the template is actually present (skip on a fresh clone / global install), and only when there is
-# NO version drift (that has its own, more precise message; comparing bytes across versions is just noise).
-#
-# SHIM_TPL_VER is the version of @webpieces/ai-hook-rules the template came from. It goes in the deny
-# text so the reader knows WHICH version's shim the cure installs — without it the message named a file
-# and a bin but never the thing being restored, which is what made it unactionable.
-SHIM_STALE=""
-SHIM_TPL_VER=""
-WP_TEMPLATE="$ROOT/node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh"
-if [ -z "$DRIFT_PKG" ] && [ -f "$WP_TEMPLATE" ] && ! cmp -s "$0" "$WP_TEMPLATE"; then
-  SHIM_STALE=1
-  SHIM_TPL_VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$ROOT/node_modules/@webpieces/ai-hook-rules/package.json" 2>/dev/null | head -n1)"
 fi`;
 
 // Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
@@ -337,7 +315,7 @@ fi`;
 // stdout/stderr go through temp FILES, not $(command substitution), so the bin's bytes reach Claude
 // Code exactly as written — command substitution strips trailing newlines and would corrupt the
 // decision JSON. Reading the payload up-front ($PAYLOAD) is what replaces exec's stdin passthrough.
-const RUN_BIN_SH = `if [ -x "\$BIN" ] && [ -z "\$DRIFT_PKG" ] && [ -z "\$SHIM_STALE" ]; then
+const RUN_BIN_SH = `if [ -x "\$BIN" ] && [ -z "\$DRIFT_PKG" ]; then
   OUT_FILE="\${TMPDIR:-/tmp}/wp-ai-hook-out.\$\$"
   ERR_FILE="\${TMPDIR:-/tmp}/wp-ai-hook-err.\$\$"
   printf '%s' "\$PAYLOAD" | "\$BIN" "\$@" >"\$OUT_FILE" 2>"\$ERR_FILE"
@@ -372,31 +350,10 @@ wp_log() {                   # \$1 = decision label (ALLOW-INSTALL | DENY | DENY
 }
 DENY_LABEL="DENY"
 [ -n "\$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
-[ -n "\$SHIM_STALE" ] && DENY_LABEL="DENY-SHIM-STALE"  # committed shim reverted/edited (self-guard)
 [ -n "\$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
 if printf '%s' "\$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}' || printf '%s' "\$CMD" | grep -Eq '${RECOVERY_ALLOW_ERE}'; then
   wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the installer/recovery so the assistant can break the deadlock
-fi
-# Always let the shim-regen cure through: wp-upgrade-shim rewrites the committed shim from the installed
-# template, so it is the ONLY fix for a self-guard block — denying it would deadlock the assistant.
-if printf '%s' "\$CMD" | grep -Eq '${UPGRADE_SHIM_ALLOW_ERE}'; then
-  wp_log ALLOW-UPGRADE-SHIM  # record the shim regen we let through (re-arms the committed shim)
-  exit 0
-fi
-# Same cure, without the version coupling: copying templates/ai-hook.sh over the committed shim is what
-# we now TELL the reader to run (the bin only exists in >= 0.4.408), so it must be allowed or the deny
-# names a command it then blocks. Both paths are literal and webpieces-owned - nothing else can be hit.
-if printf '%s' "\$CMD" | grep -Eq '${RESTORE_SHIM_ALLOW_ERE}'; then
-  wp_log ALLOW-RESTORE-SHIM  # record the template copy we let through (re-arms the committed shim)
-  exit 0
-fi
-# The installer, named FIRST by the self-guard deny: it heals the committed shim before it loads
-# anything heavy, and unlike wp-upgrade-shim it exists on EVERY release. A deny that names it must
-# allow it, or we recreate the exact bug this whole escape-hatch list exists to prevent.
-if printf '%s' "\$CMD" | grep -Eq '${INSTALL_HOOKS_ALLOW_ERE}'; then
-  wp_log ALLOW-INSTALL-HOOKS # record the installer we let through (re-arms the committed shim)
-  exit 0
 fi
 # DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
 # origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
@@ -442,34 +399,6 @@ const DENY_REASON_SH = `if [ -n "\$BROKEN_BIN" ]; then
     STAGING_NOTE=" Also found \$STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
   fi
   REASON="❌ webpieces guards are DOWN and every OTHER tool call is BLOCKED: \${BIN_NAME} is installed but CRASHED (\$CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. THIS IS NOT A DEADLOCK: the option below is explicitly ALLOWED through while this guard is up, so run it YOURSELF rather than handing it to the human. OPTION 1 - run EXACTLY this command, then retry: '${RECOVERY_CMD}'. ${NO_CHAINING_RULE}\${STAGING_NOTE}"
-elif [ -n "\$SHIM_STALE" ]; then
-  # The committed shim differs from the installed template — reverted or hand-edited. State plainly that
-  # this file is webpieces-MANAGED so the reader does not "fix" it by reverting again, and name the
-  # allowlisted commands that re-arm it.
-  #
-  # ORDER OF THE OPTIONS IS LOAD-BEARING — it encodes two separate failures we have already paid for:
-  #   1. wp-install-ai-hooks. NEW HEADLINE (2026-07-23). It heals the shim first via the dependency-free
-  #      module AND it has shipped in every release that has a shim, so it is the only cure that is both
-  #      a named bin and version-agnostic. That is strictly better than either option below.
-  #   2. wp-upgrade-shim. A named bin too, but only >= 0.4.408 — on an older installed release the deny
-  #      used to name it ALONE and the reader got "command not found" and a hard block.
-  #   3. the cp. Version-agnostic, and it was briefly the headline on 2026-07-21 for exactly that reason
-  #      — then reverted the same day: webpieces' allowlist is not the only gate in front of the
-  #      assistant, and Claude Code's own permission classifier treats a raw cp overwriting a repo file
-  #      as something to confirm. Naming it first meant a DIFFERENT gate blocked the prescribed cure and
-  #      the assistant read that as proof the block was unfixable. It stays listed (a human, and an AI
-  #      on a legacy release, must still have a working path) but LAST, with that caveat spelled out.
-  #
-  # SAY THAT THE CURE IS ALLOWED THROUGH (2026-07-21, part 1): the text asserted a flat "every tool call
-  # is blocked" and then named a command to run — so the reader reasonably concluded the guard would
-  # block its own fix too, never tried it, and handed the "deadlock" to the human. The cures ARE
-  # allowlisted (INSTALL_HOOKS / UPGRADE_SHIM / RESTORE_SHIM above); the message just never said so.
-  #
-  # NO_CHAINING_RULE (2026-07-23, part 3) closes the last hole: the assistant ran the prescribed cure
-  # with '&& git status --short' welded on, got denied for the anchor, and stopped. See its comment.
-  SHIM_VER_NOTE=""
-  [ -n "\$SHIM_TPL_VER" ] && SHIM_VER_NOTE=" (installed version \$SHIM_TPL_VER)"
-  REASON="❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh template shipped inside the INSTALLED @webpieces/ai-hook-rules\${SHIM_VER_NOTE} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: all three options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - present in every webpieces release, and it re-arms the shim before it loads anything else) - run EXACTLY this command: '${INSTALL_HOOKS_CMD}'. OPTION 2 (shim regen only; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${UPGRADE_SHIM_CMD}'. OPTION 3 (works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite - that prompt is NOT this guard) - run EXACTLY this command: '${RESTORE_SHIM_CMD}'. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead."
 elif [ -n "\$DRIFT_PKG" ]; then
   # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
   # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
@@ -498,11 +427,13 @@ fi`;
 
 export function renderShim(): string {
     return `#!/bin/sh
-# webpieces shim version: ${SHIM_VERSION_STAMP}
-# Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit; the installer AND the running
-# guards binary both overwrite this file (self-healing) from renderShim(). Checked in on purpose so the
-# hook has a stable, committed entry point even when node_modules is absent. Safe to delete along with
-# the matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
+# Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit. This file is GENERATED from
+# renderShim() and is intentionally VERSION-AGNOSTIC and byte-STABLE across releases: it carries no
+# version stamp, so it only changes when its own logic changes. The installed guards binary is what
+# checks that this committed copy still matches renderShim() (the committed-shim self-guard); if you
+# revert or hand-edit this file the binary fails closed and names the cure. Checked in on purpose so
+# the hook has a stable entry point even when node_modules is absent. Safe to delete along with the
+# matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
 #
 # Usage (wired into .claude/settings.json): sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
 BIN_NAME="$1"
@@ -569,5 +500,82 @@ export function healShim(cwd: string): void {
     } catch (err: unknown) {
         //const error = toError(err);
         // Ignore: healing is a convenience, not part of the guard decision.
+    }
+}
+
+// ---------------------------------------------------------------------------
+// COMMITTED-SHIM SELF-GUARD — now enforced by the guards BINARY, not the shim (moved 2026-07-24).
+//
+// It used to live in the rendered shim (`cmp -s "$0" "$WP_TEMPLATE"` → fail closed). That was a
+// double-edged fix trap: the shim-matching logic lived IN the committed shim, so a bug in it could
+// only be fixed by regenerating the committed shim — which required passing the buggy shim's own gate
+// (via wp-upgrade-shim). The fix was locked behind the gate it needed to open.
+//
+// The drift guard MUST stay pre-binary (a stale validator can't be trusted to guard itself), but this
+// check's rationale — "don't run possibly-stale shim logic" — evaporates once the check is in the
+// binary: at that point the deciding code is the CURRENT binary from node_modules, not the reverted
+// shim. So the shim now only checks drift + bin-presence and always hands off; the binary (hook-core)
+// calls committedShimStale() and, on a mismatch, fails closed with shimStaleDenyReason() — the SAME
+// OPTION 1/2/3 message — while isShimCureCommand() lets the three cures through so the AI self-heals.
+// We deny + tell the AI; we do NOT silently rewrite the file under it. With the version stamp gone the
+// shim is byte-stable across releases, so this fires only on a genuine logic change or a real tamper.
+// ---------------------------------------------------------------------------
+
+// True when a committed shim EXISTS but no longer equals renderShim() (reverted, hand-edited, or a shim
+// whose LOGIC predates the installed binary). Missing shim → false: a fresh clone / global install has
+// nothing to guard, matching the old shim's `[ -f "$WP_TEMPLATE" ]` skip. Same comparison healShim
+// makes; never throws (an unreadable tree is treated as "not stale" so it can't wedge a tool call).
+// webpieces-disable no-function-outside-class -- pure fs+path helper in the shim module, beside healShim/renderShim.
+export function committedShimStale(cwd: string): boolean {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const root = findShimRoot(cwd);
+        if (root === null) return false;
+        return fs.readFileSync(shimPath(root), 'utf8') !== renderShim();
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error; // best-effort: an unreadable tree counts as "not stale" so this never wedges a tool call
+        return false;
+    }
+}
+
+// True when `command` is one of the three self-guard cures — the ONLY commands allowed through while a
+// stale committed shim blocks everything else, so the AI can re-arm it. Each JS twin already tolerates
+// a trailing `2>&1 | tail -N` and rejects any `&&`-chained tail (see CAPTURE_TAIL_JS_SRC).
+// webpieces-disable no-function-outside-class -- pure predicate over the exported allowlist twins; belongs beside them in the shim module.
+export function isShimCureCommand(command: string): boolean {
+    const cmd = command.trim();
+    return INSTALL_HOOKS_ALLOW_JS.test(cmd) || UPGRADE_SHIM_ALLOW_JS.test(cmd) || RESTORE_SHIM_ALLOW_JS.test(cmd);
+}
+
+// The fail-closed deny text for a stale committed shim, built from the single-source cure constants +
+// NO_CHAINING_RULE. `installedVersion` names WHICH webpieces the cure re-arms to (the binary is that
+// version); pass '' to omit the note rather than print an empty one. CONSTRAINT: the returned string
+// must contain no `"` and no `\` — it is JSON-serialized by denyJson() (a stray quote/backslash would
+// corrupt the PreToolUse decision payload, not just the text). Locked by a unit test.
+// webpieces-disable no-function-outside-class -- pure string builder over exported constants; the single source of the self-guard deny text now that the sh copy is gone.
+export function shimStaleDenyReason(installedVersion: string): string {
+    const verNote = installedVersion ? ` (installed version ${installedVersion})` : '';
+    return `❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces/ai-hook-rules${verNote} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: all three options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - present in every webpieces release, and it re-arms the shim before it loads anything else) - run EXACTLY this command: '${INSTALL_HOOKS_CMD}'. OPTION 2 (shim regen only; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${UPGRADE_SHIM_CMD}'. OPTION 3 (works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite - that prompt is NOT this guard) - run EXACTLY this command: '${RESTORE_SHIM_CMD}'. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.`;
+}
+
+// The shape of the fields we read out of this package's package.json.
+interface ShimPackageManifest {
+    readonly version?: string;
+}
+
+// The installed @webpieces/ai-hook-rules version, for shimStaleDenyReason's note. The binary IS this
+// package, so it reads its OWN package.json (two dirs up from src/bin). Best-effort: '' on any failure,
+// which shimStaleDenyReason renders as no note rather than a broken one.
+// webpieces-disable no-function-outside-class -- pure fs helper beside the shim module's other version plumbing.
+export function installedShimRulesVersion(): string {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as ShimPackageManifest;
+        return pkg.version ?? '';
+    } catch (err: unknown) {
+        const error = toError(err);
+        void error; // best-effort: no readable version → shimStaleDenyReason prints no note
+        return '';
     }
 }

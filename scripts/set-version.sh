@@ -70,34 +70,12 @@ if [ -d "dist/packages" ]; then
   done
 fi
 
-# Stamp the ai-hook shim with the version+sha actually being published.
-#
-# The committed .claude/webpieces/ai-hook.sh in a CONSUMER repo is the file that decides every tool
-# call, and until now it carried no clue which webpieces wrote it — so "does this repo's guard predate
-# the fix?" was answerable only by diffing it against an npm tarball. Line 2 now answers it directly.
-#
-# BOTH artifacts must be stamped in lockstep: templates/ai-hook.sh (what the self-guard cmp's against)
-# and the compiled shim.js (whose renderShim() writes the consumer's committed shim). Stamp one and not
-# the other and every consumer fail-closes forever on a phantom hand-edit. So this replaces the token
-# everywhere it appears under dist/, and then VERIFIES none survived.
-PLACEHOLDER="REPLACEME_GIT_HASH_VERSION"
-if [ -d "dist/packages" ]; then
-  SHORT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  STAMP="$FULL_VERSION ($SHORT_SHA)"
-  echo "🔖 Stamping ai-hook shim with: $STAMP"
-  # -l lists only matching files, so the loop is over the handful that actually carry the token.
-  grep -rl "$PLACEHOLDER" dist/packages 2>/dev/null | while read -r f; do
-    echo "   Stamping: $f"
-    tmp_file=$(mktemp)
-    sed "s/$PLACEHOLDER/$STAMP/g" "$f" > "$tmp_file"
-    cat "$tmp_file" > "$f"      # preserve the destination's mode (the shim must stay executable)
-    rm -f "$tmp_file"
-  done
-  if grep -rq "$PLACEHOLDER" dist/packages 2>/dev/null; then
-    echo "❌ $PLACEHOLDER survived in dist — the shim would ship unstamped:"
-    grep -rl "$PLACEHOLDER" dist/packages
-    exit 1
-  fi
-fi
+# NOTE (2026-07-24): the ai-hook shim no longer carries a version stamp, so there is nothing to rewrite
+# here. It used to embed `# webpieces shim version: <v> (<sha>)` on line 2, which made the committed
+# .claude/webpieces/ai-hook.sh go byte-different on EVERY release even when its logic was identical —
+# tripping the committed-shim self-guard on every upgrade over a comment, and risking a permanent
+# fail-close if the two lockstep artifacts were ever stamped unevenly. The shim is now intentionally
+# version-AGNOSTIC and byte-STABLE across releases; the installed guards binary reports its own version
+# in the deny text when it needs to. See renderShim() in packages/tooling/ai-hook-rules/src/bin/shim.ts.
 
 echo "✅ Version set to $FULL_VERSION for all packages"
