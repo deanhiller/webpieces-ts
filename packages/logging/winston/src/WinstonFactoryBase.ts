@@ -3,7 +3,6 @@ import type { Logger as WinstonBase } from 'winston';
 import type Transport from 'winston-transport';
 import type { Format } from 'logform';
 import type { Logger, LoggerFactory } from '@webpieces/core-util';
-import { ServiceInfo } from '@webpieces/core-util';
 import { WinstonLogger } from './WinstonLogger';
 
 /**
@@ -13,14 +12,12 @@ import { WinstonLogger } from './WinstonLogger';
  * out a cached {@link WinstonLogger} per name (each a winston child carrying
  * `loggerName`). Subclasses differ only in the format stack they pass up.
  *
- * Every line carries `svcName` from {@link ServiceInfo} (winston has no mandatory logger name, so this
- * backend used to emit none — a winston service was distinguishable only by GCP's own resource
- * labels). It is read here at construction and rides as `defaultMeta`; it is simply absent if the
- * service was not identified before this factory was built.
- *
- * `version` is NOT read here: it is stamped per-record by `RequestContext.buildStructuredLogFields`
- * (the one map `injectContextFormat` already loops), so it appears the moment `setInfo` runs — even
- * if that is after this factory was constructed — and logging works before it.
+ * Neither `svcName` nor `version` is read here: BOTH are stamped per-record by
+ * `RequestContext.buildStructuredLogFields` (the one map `injectContextFormat` already loops), so they
+ * appear the moment `setInfo` runs — even if that is after this factory was constructed — and logging
+ * works before it. This keeps winston and bunyan symmetrical: both read the same two ServiceInfo facts
+ * from the same map, on every line. (svcName used to ride as construction-time `defaultMeta`, which
+ * silently missed a `setInfo` that ran after the factory was built.)
  */
 export abstract class WinstonFactoryBase implements LoggerFactory {
     private readonly base: WinstonBase;
@@ -33,20 +30,12 @@ export abstract class WinstonFactoryBase implements LoggerFactory {
      *   about the SINK, which is where it actually lives — a dev terminal has no such limit.
      */
     protected constructor(finalFormat: Format, transport?: Transport) {
-        // svcName is a base field on every record when known. Non-throwing read: if the service was
-        // not identified before this factory was built, svcName is simply omitted rather than blocking
-        // the deploy — setupRuntime identifies the service via ServiceInfo.setInfo (name+version are
-        // required inputs) before it serves traffic.
-        const svcName = ServiceInfo.getName();
-        const defaultMeta: Record<string, string> = {};
-        if (svcName) {
-            defaultMeta['svcName'] = svcName;
-        }
-
-        // No level set — we do NOT filter; that is winston's job (defaults to 'info').
+        // No defaultMeta: svcName + version are BOTH stamped per-record by injectContextFormat (reading
+        // RequestContext.buildStructuredLogFields), so they pick up a late setInfo and stay symmetrical
+        // with the bunyan backend. No level set — we do NOT filter; that is winston's job (defaults to
+        // 'info').
         this.base = createLogger({
             format: finalFormat,
-            defaultMeta: defaultMeta,
             transports: [transport ?? new transports.Console()],
             handleExceptions: true,
             handleRejections: true,

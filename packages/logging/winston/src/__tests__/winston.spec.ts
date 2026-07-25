@@ -228,7 +228,7 @@ describe('winston factories', () => {
     });
 });
 
-describe('winston out-of-context version stamping', () => {
+describe('winston out-of-context svcName + version stamping', () => {
     beforeEach(() => {
         ServiceInfo.clear();
         ServiceInfo.setInfo('test-svc', '9.9.9');
@@ -239,10 +239,11 @@ describe('winston out-of-context version stamping', () => {
 
     /**
      * The bug this pins: startup and background-job lines emit with NO active RequestContext, yet must
-     * still carry `version` (jsonPayload.version) so a fleet/rollout filter finds them. `version` rides
-     * the per-record context map, which now stamps it even out of context.
+     * still carry `svcName` + `version` (jsonPayload.*) so a fleet/rollout filter finds them. Both ride
+     * the per-record context map, which now stamps them even out of context — and svcName no longer
+     * depends on construction-time defaultMeta, so a late setInfo is picked up too.
      */
-    it('WinstonGcpFactory stamps version on a line emitted OUTSIDE any RequestContext.run', async () => {
+    it('WinstonGcpFactory stamps svcName + version on a line emitted OUTSIDE any RequestContext.run', async () => {
         const written = await captureStdout(() => {
             new WinstonGcpFactory().getLogger('MyLogger').info('startup-line'); // NO withContext
         });

@@ -156,18 +156,21 @@ describe('BunyanConsoleFactory', () => {
     });
 
     /**
-     * The build `version` rides every record (from the context map) — but LOCALLY it is noise: you
-     * can check git yourself. The console renderer tags every NON-structural field, so `version` must
-     * be listed as structural (BUNYAN_STD_FIELDS in ../streams) or it would ride every single line.
-     * (The bunyan root `name` is a fixed constant now, also structural, so it never shows either.)
+     * `svcName` + `version` ride every record (from the context map) — but LOCALLY both are noise: you
+     * know which service you started and can check git yourself. The console renderer tags every
+     * NON-structural field, so both must be listed as structural (BUNYAN_STD_FIELDS in ../streams) or
+     * they would ride every single line. (The bunyan root `name` is a fixed constant now, also
+     * structural, so it never shows either.)
      */
-    it('keeps version OUT of the local console line — noise you already know', async () => {
+    it('keeps svcName + version OUT of the local console line — noise you already know', async () => {
         const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
         const factory = new BunyanConsoleFactory();
         withContext(() => factory.getLogger('MyLogger').info('hello world'));
         await flush();
 
         const line = String(spy.mock.calls[0][0]);
+        expect(line).not.toContain('test-svc');
+        expect(line).not.toContain('svcName');
         expect(line).not.toContain('9.9.9');
         expect(line).not.toContain('version');
         // ...while the per-request tag that IS worth reading locally still renders.
@@ -251,7 +254,7 @@ describe('bunyan stamps the ServiceInfo build version on every in-request record
         ServiceInfo.clear();
     });
 
-    it('adds `version` from ServiceInfo — present after setInfo', async () => {
+    it('adds `svcName` + `version` from ServiceInfo — present after setInfo', async () => {
         ServiceInfo.setInfo('billing-svc', 'v3.2.1-rc4');
         const h = new BunyanHarness();
         const log = new BunyanLogger(h.base.child({ loggerName: 'MyLogger' }));
@@ -259,6 +262,7 @@ describe('bunyan stamps the ServiceInfo build version on every in-request record
         await flush();
 
         const rec = JSON.parse(h.lines[0]);
+        expect(rec.svcName).toBe('billing-svc'); // now stamped like version (backend-symmetrical)
         expect(rec.version).toBe('v3.2.1-rc4');
     });
 
@@ -274,7 +278,7 @@ describe('bunyan stamps the ServiceInfo build version on every in-request record
         expect(rec.version).toBeUndefined(); // ...just without a build id
     });
 
-    it('stamps `version` on a line emitted OUTSIDE any RequestContext.run (startup/background)', async () => {
+    it('stamps `svcName` + `version` on a line emitted OUTSIDE any RequestContext.run (startup/background)', async () => {
         ServiceInfo.setInfo('billing-svc', 'v3.2.1-rc4');
         const h = new BunyanHarness();
         const log = new BunyanLogger(h.base.child({ loggerName: 'MyLogger' }));
@@ -283,7 +287,8 @@ describe('bunyan stamps the ServiceInfo build version on every in-request record
 
         const rec = JSON.parse(h.lines[0]);
         expect(rec.msg).toBe('startup-line');
-        expect(rec.version).toBe('v3.2.1-rc4'); // the whole point: version rides even with no context
+        expect(rec.svcName).toBe('billing-svc'); // the whole point: identity rides even with no context
+        expect(rec.version).toBe('v3.2.1-rc4');
     });
 
     /**

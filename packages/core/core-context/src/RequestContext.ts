@@ -127,27 +127,34 @@ class RequestContextImpl {
      * an {@link ApiCallInfo}) survives as an object and the winston/bunyan backends nest it into
      * `jsonPayload.api`. Reads values UNTYPED (not `<string>`) so the object comes through intact.
      *
-     * Outside a `run(...)` block it returns just the `version` entry below (not a fully empty map): a
-     * log line is never worth crashing over, and startup/background lines must still say which build
-     * emitted them.
+     * Outside a `run(...)` block it returns just the `svcName` + `version` entries below (not a fully
+     * empty map): a log line is never worth crashing over, and startup/background lines must still say
+     * which service and build emitted them.
      *
-     * PLUS this build's `version` from {@link ServiceInfo}. It is NOT a {@link ContextKey} — it is a
-     * process-global identity fact, added HERE (BEFORE the active-context check) so EVERY log line of
-     * BOTH node backends (winston/bunyan read this one map) says which build emitted it — request path,
-     * startup, and background jobs alike — with no per-backend duplication. Read via the non-throwing
-     * {@link ServiceInfo.getVersion}, so it is simply ABSENT until `setInfo` has run — logging keeps
-     * working before the service is identified, then `version` starts appearing. A caller-set `version`
-     * header (there is none by convention) would be overwritten here; that is intentional — the build
-     * version is authoritative.
+     * PLUS this service's `svcName` and this build's `version` from {@link ServiceInfo}. Neither is a
+     * {@link ContextKey} — they are process-global identity facts, added HERE (BEFORE the active-context
+     * check) so EVERY log line of BOTH node backends (winston/bunyan read this one map) says which
+     * service and build emitted it — request path, startup, and background jobs alike — with no
+     * per-backend duplication. This is the SINGLE place both are stamped, keeping the two backends
+     * symmetrical (jsonPayload.svcName + jsonPayload.version). Read via the non-throwing
+     * {@link ServiceInfo.getName} / {@link ServiceInfo.getVersion}, so each is simply ABSENT until
+     * `setInfo` has run — logging keeps working before the service is identified, then the fields start
+     * appearing. Caller-set `svcName`/`version` headers (there are none by convention) would be
+     * overwritten here; that is intentional — the ServiceInfo identity is authoritative.
      */
     buildStructuredLogFields(): Map<string, string | object> {
         const fields = new Map<string, string | object>();
-        // This build's `version` from ServiceInfo — NOT a ContextKey, a process-global identity fact.
-        // Added FIRST, BEFORE the active-context check, so it rides EVERY line of both node backends
-        // (they read this one map) — including startup and background-job lines emitted with NO active
-        // RequestContext. Was appended AFTER the early-return below, so those out-of-context lines
-        // silently shipped without `version`. Non-throwing read: simply ABSENT until setInfo has run,
-        // so logging works before the service is identified, then `version` starts appearing.
+        // This service's `svcName` + this build's `version` from ServiceInfo — NOT ContextKeys, they are
+        // process-global identity facts. Added FIRST, BEFORE the active-context check, so they ride EVERY
+        // line of both node backends (they read this one map) — including startup and background-job lines
+        // emitted with NO active RequestContext. Treated identically and read per-record via the
+        // non-throwing getters, so each is simply ABSENT until setInfo has run, then starts appearing —
+        // even if setInfo runs after a backend was constructed. This is the ONE place both facts are
+        // stamped, so winston and bunyan stay symmetrical (jsonPayload.svcName + jsonPayload.version).
+        const svcName = ServiceInfo.getName();
+        if (svcName) {
+            fields.set('svcName', svcName);
+        }
         const version = ServiceInfo.getVersion();
         if (version) {
             fields.set('version', version);
