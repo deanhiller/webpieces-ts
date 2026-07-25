@@ -138,4 +138,17 @@ describe('renderCommitBody', () => {
         expect(body).toContain('S1. S2. S3. S4.');
         expect(body).not.toContain('S5.');
     });
+
+    it('does not drop text or split on interior dots in filenames/paths/versions', () => {
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c',
+            review({ summary: 'Edits dependencies.json and runtime-graph.ts under src/lib. Bumps to 0.4.447 cleanly.' }),
+        );
+        const body = renderCommitBody(input, '');
+
+        // Both real sentences survive intact — the dotted tokens are NOT treated as sentence breaks and
+        // no prose is silently discarded.
+        expect(body).toContain('Edits dependencies.json and runtime-graph.ts under src/lib.');
+        expect(body).toContain('Bumps to 0.4.447 cleanly.');
+    });
 });

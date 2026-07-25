@@ -89,6 +89,27 @@ describe('validateWebpiecesConfig', () => {
     });
 });
 
+describe('validateWebpiecesConfig — retired runtime-architecture fields', () => {
+    it('rejects servicePaths + apiProjectPaths with a tailored "graph is auto-derived" hint', () => {
+        // Both fields were removed from the schema — they were never read. A config that still enumerates
+        // api libs must fail so the AI deletes the keys (not re-adds them, and not as a glob either).
+        const errors = validateWebpiecesConfig({
+            'runtime-architecture': {
+                mode: 'RUN_EVERY_TIME',
+                ignoreModifiedUntilEpoch: 0,
+                servicePaths: ['services/*/*'],
+                apiProjectPaths: ['libraries/apis/internal/portal-apis', 'libraries/apis/internal/lang-apis'],
+                allowedCycles: [],
+            },
+        });
+        const ra = errorsFor('runtime-architecture', errors);
+        const apiErr = ra.find(e => e.includes('Unknown field "apiProjectPaths"'));
+        expect(apiErr).toBeDefined();
+        expect(apiErr).toContain('derived automatically from architecture/dependencies.json');
+        expect(ra.some(e => e.includes('Unknown field "servicePaths"'))).toBe(true);
+    });
+});
+
 describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
     // Structural rules (import-cycle / runtime-architecture / nx-wiring) use RUN_EVERY_TIME, not ON.
     it('accepts RUN_EVERY_TIME and rejects ON for structural rules', () => {

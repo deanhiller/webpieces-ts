@@ -155,13 +155,30 @@ export class Dashboard {
         return flags;
     }
 
-    // First `max` sentences of `text` (split on . ! ?). Keeps the commit body scannable; the full
-    // summary still lives in the PR-body dashboard.
+    // First `max` sentences of `text`. A sentence ends at `. ! ?` ONLY when followed by whitespace or
+    // end-of-string, so interior dots in filenames/paths/versions (dependencies.json, runtime-graph.ts,
+    // 0.4.447) do NOT split — and, unlike a greedy `[^.!?]+` regex, no text is ever dropped when such a
+    // dot appears (that footgun silently deleted the run of prose up to the next real boundary). Keeps
+    // the commit body scannable; the full summary still lives in the PR-body dashboard.
     private firstSentences(text: string, max: number): string {
         if (text === '') return '';
-        const sentences = text.match(/[^.!?]+[.!?]+(\s|$)/g);
-        if (sentences === null) return text;
-        return sentences.slice(0, max).join('').trim();
+        const sentences: string[] = [];
+        let start = 0;
+        for (let i = 0; i < text.length && sentences.length < max; i++) {
+            const ch = text[i];
+            const isTerminator = ch === '.' || ch === '!' || ch === '?';
+            const next = text[i + 1];
+            if (isTerminator && (next === undefined || /\s/.test(next))) {
+                sentences.push(text.slice(start, i + 1).trim());
+                start = i + 1;
+            }
+        }
+        // Trailing text with no terminator still counts as a sentence (up to the cap).
+        if (sentences.length < max && start < text.length) {
+            const tail = text.slice(start).trim();
+            if (tail !== '') sentences.push(tail);
+        }
+        return sentences.join(' ').trim();
     }
 
     // Self-contained glob matcher (** , * , ?) so pr-gate needs no extra runtime dependency.
