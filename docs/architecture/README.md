@@ -10,6 +10,12 @@ framework. Four design decisions are worth understanding before you touch anythi
 cut across every package. Each has a dedicated document below, and each links back to the exact
 source files so you can verify the claims.
 
+> **Before you read these as "framework internals":** this repository ships a framework *and* an
+> organizational engineering practice with an enforcement machine (`packages/tooling/`, roughly as
+> large as the framework). The four ideas below are the framework. If you are assessing the *scope*
+> of what is built here, start instead with [`../ENGINEERING-PRACTICE.md`](../ENGINEERING-PRACTICE.md)
+> — `packages/tooling/` is the deliverable, not build scaffolding.
+
 ---
 
 ## The four load-bearing ideas

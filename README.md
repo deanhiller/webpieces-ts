@@ -1,10 +1,21 @@
 # WebPieces TypeScript
 
-A TypeScript port of the [WebPieces](https://github.com/deanhiller/webpieces) framework, bringing enterprise-grade microservice patterns to Node.js/TypeScript.
+**Two things ship from this repository, and the second is the larger one:**
+
+1. **A microservices framework** — a TypeScript port of [WebPieces](https://github.com/deanhiller/webpieces),
+   bringing enterprise-grade microservice patterns to Node.js/TypeScript.
+2. **An organizational engineering practice, and the machine that enforces it** — a set of
+   conventions (feature testing, one API contract, error/context discipline, a gated git workflow)
+   plus a three-stage enforcement layer (edit-time AI hooks, build-time code rules, a PR gate) that
+   makes teams *and their AI agents* follow them. This layer ships to npm separately and is
+   adoptable **without** the framework. If you are here to assess *scope*, that is the product — read
+   [`docs/ENGINEERING-PRACTICE.md`](./docs/ENGINEERING-PRACTICE.md) first.
 
 ## Overview
 
-WebPieces-TS is a TypeScript framework for building testable, maintainable microservices. Inspired by the Java WebPieces framework, it provides:
+WebPieces-TS is a TypeScript framework for building testable, maintainable microservices — and,
+around it, a config-driven practice layer that scales code and process quality across teams. As a
+framework it provides:
 
 - **Auto-wiring REST APIs** - Define API interfaces with decorators, automatically wire to controllers
 - **Filter Chain Architecture** - Composable filters for cross-cutting concerns (logging, validation, transactions)
