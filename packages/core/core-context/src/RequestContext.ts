@@ -127,19 +127,31 @@ class RequestContextImpl {
      * an {@link ApiCallInfo}) survives as an object and the winston/bunyan backends nest it into
      * `jsonPayload.api`. Reads values UNTYPED (not `<string>`) so the object comes through intact.
      *
-     * Returns an EMPTY map outside a `run(...)` block (a log line is never worth crashing over) — same
-     * as {@link buildLogFields}.
+     * Outside a `run(...)` block it returns just the `version` entry below (not a fully empty map): a
+     * log line is never worth crashing over, and startup/background lines must still say which build
+     * emitted them.
      *
      * PLUS this build's `version` from {@link ServiceInfo}. It is NOT a {@link ContextKey} — it is a
-     * process-global identity fact, added HERE so every request log line of BOTH node backends
-     * (winston/bunyan read this one map) says which build emitted it, with no per-backend duplication.
-     * Read via the non-throwing {@link ServiceInfo.getVersion}, so it is simply ABSENT until
-     * `setInfo` has run — logging keeps working before the service is identified, then `version`
-     * starts appearing. A caller-set `version` header (there is none by convention) would be
-     * overwritten here; that is intentional — the build version is authoritative.
+     * process-global identity fact, added HERE (BEFORE the active-context check) so EVERY log line of
+     * BOTH node backends (winston/bunyan read this one map) says which build emitted it — request path,
+     * startup, and background jobs alike — with no per-backend duplication. Read via the non-throwing
+     * {@link ServiceInfo.getVersion}, so it is simply ABSENT until `setInfo` has run — logging keeps
+     * working before the service is identified, then `version` starts appearing. A caller-set `version`
+     * header (there is none by convention) would be overwritten here; that is intentional — the build
+     * version is authoritative.
      */
     buildStructuredLogFields(): Map<string, string | object> {
         const fields = new Map<string, string | object>();
+        // This build's `version` from ServiceInfo — NOT a ContextKey, a process-global identity fact.
+        // Added FIRST, BEFORE the active-context check, so it rides EVERY line of both node backends
+        // (they read this one map) — including startup and background-job lines emitted with NO active
+        // RequestContext. Was appended AFTER the early-return below, so those out-of-context lines
+        // silently shipped without `version`. Non-throwing read: simply ABSENT until setInfo has run,
+        // so logging works before the service is identified, then `version` starts appearing.
+        const version = ServiceInfo.getVersion();
+        if (version) {
+            fields.set('version', version);
+        }
         if (!this.isActive()) {
             return fields;
         }
@@ -159,15 +171,6 @@ class RequestContextImpl {
             } else if (typeof value === 'object') {
                 fields.set(key.name, value);
             }
-        }
-        // PLUS this build's `version` from ServiceInfo — NOT a ContextKey, a process-global identity
-        // fact, added HERE so every request log line of BOTH node backends (they read this one map)
-        // says which build emitted it, with no per-backend duplication. Non-throwing read: simply
-        // ABSENT until setInfo has run, so logging works before the service is identified, then
-        // `version` starts appearing.
-        const version = ServiceInfo.getVersion();
-        if (version) {
-            fields.set('version', version);
         }
         return fields;
     }

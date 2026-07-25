@@ -54,18 +54,13 @@ export class BunyanLogger implements WpLogger {
 
     private buildFields(err?: Error): Record<string, string | object | LoggedError> {
         const fields: Record<string, string | object | LoggedError> = {};
-        // No active RequestContext (startup, a background job, or an in-process call the caller did
-        // not wrap) simply logs with no context fields — an empty context is normal, not an error.
-        // The in-process client's ApiClientFactory.requireActiveContext() throws precisely when a
-        // request-path wrap is genuinely missing.
-        if (!RequestContext.isActive()) {
-            return fields;
-        }
-
-        // ONE loop, in HeaderRegistry.buildStructuredLogFields — the registry owns the keys and each
-        // ContextKey masks its own value. Values may be OBJECTS (the `api` tag), so an object-valued key
-        // nests into the structured payload (bunyan's GCP stream serializes fields) rather than being
-        // dropped by the string-only buildLogFields.
+        // Called UNCONDITIONALLY (no active-context short-circuit): buildStructuredLogFields returns the
+        // build `version` even with NO active RequestContext — plus the logged context keys when one IS
+        // active. Startup, background-job, and unwrapped-call lines are thus stamped with `version` too;
+        // an empty context is normal, not an error. (The in-process client's
+        // ApiClientFactory.requireActiveContext() still throws precisely when a request-path wrap is
+        // genuinely missing.) Values may be OBJECTS (the `api` tag), so an object-valued key nests into
+        // the structured payload rather than being dropped by the string-only buildLogFields.
         RequestContext.buildStructuredLogFields().forEach((value: string | object, name: string) => {
             fields[name] = value;
         });
