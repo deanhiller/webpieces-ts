@@ -201,6 +201,10 @@
         "pr-merge-guard": {
             "mode": "OFF",
             "ignoreModifiedUntilEpoch": 0
+        },
+        "merged-branch-bash-guard": {
+            "mode": "ON",
+            "ignoreModifiedUntilEpoch": 0
         }
     },
     "commands": {

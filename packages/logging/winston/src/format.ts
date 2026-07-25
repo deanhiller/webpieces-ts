@@ -77,21 +77,19 @@ export function bigIntSafeFormat(): Format {
 // webpieces-disable no-function-outside-class -- winston format(fn) factory; whole file is winston Format factories
 export function injectContextFormat(): Format {
     return format((info: TransformableInfo) => {
-        // No active RequestContext (startup, a background job, or an in-process call the caller did
-        // not wrap) simply injects nothing — an empty context is normal, not an error. The one place
-        // a request-path wrap can legitimately be missing (the in-process client) is caught precisely
-        // by ApiClientFactory.requireActiveContext(), which throws at the api boundary.
-        if (RequestContext.isActive()) {
-            // ONE loop, in HeaderRegistry.buildStructuredLogFields. Values may be OBJECTS (the `api`
-            // tag), so an object-valued key nests into jsonPayload.<name> (winston JSON-serializes the
-            // whole record) rather than being dropped by the string-only buildLogFields. Caller-supplied
-            // fields win on conflict.
-            RequestContext.buildStructuredLogFields().forEach((value: string | object, name: string) => {
-                if (info[name] === undefined) {
-                    info[name] = value;
-                }
-            });
-        }
+        // Called UNCONDITIONALLY (no active-context guard): buildStructuredLogFields returns the build
+        // `version` even with NO active RequestContext — so startup, background-job, and unwrapped-call
+        // lines carry `version` too — plus the logged context keys when one IS active. An empty context
+        // is normal, not an error; the one place a request-path wrap can legitimately be missing (the
+        // in-process client) is still caught precisely by ApiClientFactory.requireActiveContext(), which
+        // throws at the api boundary. Values may be OBJECTS (the `api` tag), so an object-valued key
+        // nests into jsonPayload.<name> (winston JSON-serializes the whole record) rather than being
+        // dropped by the string-only buildLogFields. Caller-supplied fields win on conflict.
+        RequestContext.buildStructuredLogFields().forEach((value: string | object, name: string) => {
+            if (info[name] === undefined) {
+                info[name] = value;
+            }
+        });
         return info;
     })();
 }

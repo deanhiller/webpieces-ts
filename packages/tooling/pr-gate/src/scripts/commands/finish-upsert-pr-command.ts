@@ -65,8 +65,9 @@ export class FinishUpsertPrCommand {
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
-        const body = this.buildDashboard(repoRoot, true, review, title);
-        const prNum = this.upsertPr(repoRoot, base, body, title);
+        const input = this.computeDashboardInput(repoRoot, true, review, title);
+        const body = this.dashboard.renderDashboard(input);
+        const prNum = this.upsertPr(repoRoot, base, body, title, input);
 
         process.stdout.write(
             '\n' + SEP + '✅ PR finished — here is exactly what I did\n' + SEP + '\n' +
@@ -89,7 +90,7 @@ export class FinishUpsertPrCommand {
         return this.aiBranchName.getFeatureName().replace(/[-/]+/g, ' ').trim();
     }
 
-    private buildDashboard(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string): string {
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
@@ -100,13 +101,12 @@ export class FinishUpsertPrCommand {
 
         const gateResults = this.dashboard.computeGateResults(config.gates, changedFiles);
         const disables = this.dashboard.countAddedDisables(patch);
-        const input = new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review);
-        return this.dashboard.renderDashboard(input);
+        return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review);
     }
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /
     // create / merge against `baseBranch` (baseBranchName tolerates a leftover `…wpN` mid-transition).
-    private upsertPr(repoRoot: string, baseBranch: string, body: string, title: string): string {
+    private upsertPr(repoRoot: string, baseBranch: string, body: string, title: string, input: DashboardInput): string {
         const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         fs.mkdirSync(prDir, { recursive: true });
         const bodyFile = path.join(prDir, 'pr-body.md');
@@ -129,7 +129,19 @@ export class FinishUpsertPrCommand {
             process.stdout.write(`Updating PR #${num}...\n`);
             spawnSync('gh', ['pr', 'edit', num, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
         }
-        spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash'], { stdio: 'inherit' });
+
+        // Set the squash-merge SUBJECT to the PR title and the BODY to the compact commit summary, so
+        // main's history carries the PR title + risk/flags/link — NOT the internal `Squash merge of
+        // <branch>` subject GitHub would otherwise inherit from the single squash commit on the branch.
+        const mergeBodyFile = path.join(prDir, 'merge-commit-body.md');
+        fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, this.prUrl(baseBranch)) + '\n');
+        spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', title, '--body-file', mergeBodyFile], { stdio: 'inherit' });
         return num;
+    }
+
+    // The PR's web URL (for the commit-body back-link) — '' if it can't be resolved.
+    private prUrl(baseBranch: string): string {
+        const result = spawnSync('gh', ['pr', 'view', baseBranch, '--json', 'url', '--jq', '.url'], { encoding: 'utf8' });
+        return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 }

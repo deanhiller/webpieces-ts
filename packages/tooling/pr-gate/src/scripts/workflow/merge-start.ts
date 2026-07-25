@@ -215,6 +215,9 @@ export class MergeStart {
         if (nothingStaged) {
             process.stdout.write('ℹ️  Already up-to-date with main (nothing to merge).\n');
         } else {
+            // Internal, transient subject for the single squash commit on the feature branch. It NO LONGER
+            // reaches main's history: finish-upsert-pr squash-merges the PR with an explicit
+            // `gh pr merge --subject <PR title> --body-file <commit summary>`, so main carries the PR title.
             this.gitExec.runGitChecked(['commit', '-m', `Squash merge of ${currentBranch}`], 'Failed to commit squash merge');
             this.mergeState.writeCleanMergeMarker(mergeDir, hashes.hashForkPoint, hashes.hashFeatureHead, hashes.hashMainHead);
         }

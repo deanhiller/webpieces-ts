@@ -6,6 +6,7 @@ const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
 const countAddedDisables = (p: string): DisableCounts => dash.countAddedDisables(p);
 const renderDashboard = (i: DashboardInput): string => dash.renderDashboard(i);
+const renderCommitBody = (i: DashboardInput, url: string): string => dash.renderCommitBody(i, url);
 
 function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
     const base = new ReviewJson('A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
@@ -91,5 +92,50 @@ describe('renderDashboard', () => {
         expect(md).toContain('**DB Schema Changed:** 🔴 Yes (1 file(s))');
         expect(md).toContain('**Risk Level:** 🔴 **red**');
         expect(md).toContain('**Pattern Violations:** 🟡 Yes (2 violation(s))');
+    });
+});
+
+describe('renderCommitBody', () => {
+    it('always includes the risk score, omits green rows, and appends the PR link', () => {
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c',
+            review({ riskScore: 20, riskLevel: 'green', riskEmoji: '🟢', summary: 'One thing. Two thing. Three thing.' }),
+        );
+        const body = renderCommitBody(input, 'https://github.com/o/r/pull/42');
+
+        expect(body).toContain('Risk: ');
+        expect(body).toContain('20/100 🟢 (green)');
+        expect(body).toContain('Flags: 🟢 all green');
+        expect(body).toContain('One thing. Two thing. Three thing.');
+        expect(body).toContain('PR: https://github.com/o/r/pull/42');
+    });
+
+    it('lists every non-green flag (build, gates, violations, disables)', () => {
+        const gates = computeGateResults([new GateDefinition('API Changed', ['**/*Api.ts'], 'yellow')], ['src/FooApi.ts']);
+        const disables = countAddedDisables(['+++ b/a.ts', '+// webpieces-disable no-any-unknown -- x', '+// eslint-disable-next-line'].join('\n'));
+        const input = new DashboardInput(
+            'My PR', gates, disables, false, 'a', 'b', 'c',
+            review({ riskScore: 80, riskLevel: 'red', riskEmoji: '🔴', violations: ['boundary'] }),
+        );
+        const body = renderCommitBody(input, '');
+
+        expect(body).toContain('Flags (non-green):');
+        expect(body).toContain('- Build (nx affected): 🔴 Failed');
+        expect(body).toContain('- Pattern Violations: 🟡 1 violation(s)');
+        expect(body).toContain('- API Changed: 🟡 1 file(s)');
+        expect(body).toContain('- Webpieces Disables Added: 🟡 1 line(s) — no-any-unknown');
+        expect(body).toContain('- ESLint Disables Added: 🟡 1 line(s)');
+        expect(body).not.toContain('PR: ');
+    });
+
+    it('caps the summary at 4 sentences', () => {
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c',
+            review({ summary: 'S1. S2. S3. S4. S5. S6.' }),
+        );
+        const body = renderCommitBody(input, '');
+
+        expect(body).toContain('S1. S2. S3. S4.');
+        expect(body).not.toContain('S5.');
     });
 });

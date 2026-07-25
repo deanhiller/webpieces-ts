@@ -109,6 +109,61 @@ export class Dashboard {
         return lines.join('\n');
     }
 
+    // The squash-merge COMMIT body that lands in main's history (subject is the PR title, passed to
+    // `gh pr merge --subject`). Deliberately compact — unlike the full PR-body dashboard: the risk score
+    // (always), every NON-green flag (green rows omitted — a commit log should surface only what stands
+    // out), the summary capped at 4 sentences, and a quick link back to the PR for the full dashboard.
+    renderCommitBody(input: DashboardInput, prUrl: string): string {
+        const lines: string[] = [];
+        lines.push(`Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`);
+        lines.push('');
+        const flags = this.nonGreenFlags(input);
+        if (flags.length === 0) {
+            lines.push('Flags: 🟢 all green');
+        } else {
+            lines.push('Flags (non-green):');
+            for (const flag of flags) lines.push(`- ${flag}`);
+        }
+        const summary = this.firstSentences(input.review.summary.trim(), 4);
+        if (summary !== '') {
+            lines.push('');
+            lines.push(summary);
+        }
+        if (prUrl !== '') {
+            lines.push('');
+            lines.push(`PR: ${prUrl}`);
+        }
+        return lines.join('\n');
+    }
+
+    // Every dashboard row that is NOT green, as a flat bullet list for the commit body. Green rows
+    // (build passed, gate did not match, zero disables/violations) are intentionally omitted.
+    private nonGreenFlags(input: DashboardInput): string[] {
+        const flags: string[] = [];
+        if (!input.buildPassed) flags.push('Build (nx affected): 🔴 Failed');
+        if (input.review.violations.length > 0) flags.push(`Pattern Violations: 🟡 ${input.review.violations.length} violation(s)`);
+        for (const result of input.gateResults) {
+            if (result.matchedFiles.length === 0) continue;
+            const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
+            flags.push(`${result.name}: ${emoji} ${result.matchedFiles.length} file(s)`);
+        }
+        if (input.disables.webpiecesCount > 0) {
+            const which = input.disables.webpiecesRules.length > 0 ? ` — ${input.disables.webpiecesRules.join(', ')}` : '';
+            flags.push(`Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`);
+        }
+        if (input.disables.eslintCount > 0) flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
+        return flags;
+    }
+
+    // First `max` sentences of `text` (split on . ! ?). Keeps the commit body scannable; the full
+    // summary still lives in the PR-body dashboard.
+    private firstSentences(text: string, max: number): string {
+        if (text === '') return '';
+        const sentences = text.match(/[^.!?]+[.!?]+(\s|$)/g);
+        if (sentences === null) return text;
+        return sentences.slice(0, max).join('').trim();
+    }
+
     // Self-contained glob matcher (** , * , ?) so pr-gate needs no extra runtime dependency.
     private globToRegex(pattern: string): RegExp {
         let re = '';

@@ -228,6 +228,32 @@ describe('winston factories', () => {
     });
 });
 
+describe('winston out-of-context version stamping', () => {
+    beforeEach(() => {
+        ServiceInfo.clear();
+        ServiceInfo.setInfo('test-svc', '9.9.9');
+    });
+    afterEach(() => {
+        ServiceInfo.clear();
+    });
+
+    /**
+     * The bug this pins: startup and background-job lines emit with NO active RequestContext, yet must
+     * still carry `version` (jsonPayload.version) so a fleet/rollout filter finds them. `version` rides
+     * the per-record context map, which now stamps it even out of context.
+     */
+    it('WinstonGcpFactory stamps version on a line emitted OUTSIDE any RequestContext.run', async () => {
+        const written = await captureStdout(() => {
+            new WinstonGcpFactory().getLogger('MyLogger').info('startup-line'); // NO withContext
+        });
+
+        const rec = JSON.parse(written);
+        expect(rec.message).toBe('startup-line');
+        expect(rec.svcName).toBe('test-svc'); // factory defaultMeta — always present
+        expect(rec.version).toBe('9.9.9');    // now present even with no active context
+    });
+});
+
 describe('WinstonConsoleFactory local pretty line (trytami format)', () => {
     beforeEach(() => {
         ServiceInfo.clear();

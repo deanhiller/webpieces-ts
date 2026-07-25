@@ -1,16 +1,17 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { ContextKey, AnyContextKey, HeaderRegistry, ServiceInfo, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import { ContextKey, HeaderRegistry, ServiceInfo, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { RequestContext } from '../RequestContext';
 
 /**
  * RequestContext.buildLogFields / buildStructuredLogFields — the log-field maps the node logging
  * backends read on every line. This logic used to live on HeaderRegistry behind a read callback, but
  * only the server ever called it, so it was inlined here. These tests pin the behavior that moved:
- * object survival, secured masking, the empty-map-outside-run guard, AND the ServiceInfo `version`
- * that buildStructuredLogFields adds so every request line says which build emitted it.
+ * object survival, secured masking, the empty-FLAT-map-outside-run guard, AND the ServiceInfo
+ * `version` that buildStructuredLogFields adds — even OUT of context — so every line (request path,
+ * startup, background job) says which build emitted it.
  */
 describe('RequestContext log-field builders', () => {
-    const api = new AnyContextKey('api', undefined, /*isSecured*/ false, /*isLogged*/ true); // object-valued
+    const api = new ContextKey<object>('api', undefined, /*isSecured*/ false, /*isLogged*/ true); // object-valued (an AnyContextKey)
     const reqId = new ContextKey<string>('requestId', 'x-request-id');
     const secret = new ContextKey<string>('authorization', 'authorization', /*isSecured*/ true);
 
@@ -60,14 +61,6 @@ describe('RequestContext log-field builders', () => {
         });
     });
 
-    it('returns an EMPTY map outside RequestContext.run — a log line never crashes a request', () => {
-        HeaderRegistry.configure([reqId], /*platformHeaders*/ false);
-        ServiceInfo.setInfo('billing-svc', 'v1');
-
-        expect(RequestContext.buildLogFields().size).toBe(0);
-        expect(RequestContext.buildStructuredLogFields().size).toBe(0); // even version is omitted with no active scope
-    });
-
     it('clientVersion arriving inbound rides the flat + structured maps (isLogged transferred key)', () => {
         HeaderRegistry.configure(WebpiecesCoreHeaders.ALL_HEADERS, /*platformHeaders*/ false);
 
@@ -75,5 +68,31 @@ describe('RequestContext log-field builders', () => {
             RequestContext.putHeader(WebpiecesCoreHeaders.CLIENT_VERSION, 'caller-v9');
             expect(RequestContext.buildLogFields().get('clientVersion')).toBe('caller-v9');
         });
+    });
+});
+
+// The structured builder stamps the build `version` even with NO active RequestContext, so startup and
+// background-job lines say which build emitted them — the flat builder stays empty out of context.
+describe('buildStructuredLogFields — version outside RequestContext.run', () => {
+    const reqId = new ContextKey<string>('requestId', 'x-request-id');
+
+    afterEach(() => {
+        ServiceInfo.clear();
+    });
+
+    it('carries `version` while buildLogFields stays EMPTY (log line never crashes a request)', () => {
+        HeaderRegistry.configure([reqId], /*platformHeaders*/ false);
+        ServiceInfo.setInfo('billing-svc', 'v1');
+
+        expect(RequestContext.buildLogFields().size).toBe(0); // flat map: empty with no active scope
+        const structured = RequestContext.buildStructuredLogFields();
+        expect(structured.size).toBe(1);
+        expect(structured.get('version')).toBe('v1'); // process-global identity fact, not a context key
+    });
+
+    it('is empty before setInfo — version simply absent, logging still works', () => {
+        HeaderRegistry.configure([reqId], /*platformHeaders*/ false);
+
+        expect(RequestContext.buildStructuredLogFields().size).toBe(0);
     });
 });

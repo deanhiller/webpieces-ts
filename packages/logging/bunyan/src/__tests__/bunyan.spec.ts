@@ -274,6 +274,18 @@ describe('bunyan stamps the ServiceInfo build version on every in-request record
         expect(rec.version).toBeUndefined(); // ...just without a build id
     });
 
+    it('stamps `version` on a line emitted OUTSIDE any RequestContext.run (startup/background)', async () => {
+        ServiceInfo.setInfo('billing-svc', 'v3.2.1-rc4');
+        const h = new BunyanHarness();
+        const log = new BunyanLogger(h.base.child({ loggerName: 'MyLogger' }));
+        log.info('startup-line'); // NO withContext — no active RequestContext
+        await flush();
+
+        const rec = JSON.parse(h.lines[0]);
+        expect(rec.msg).toBe('startup-line');
+        expect(rec.version).toBe('v3.2.1-rc4'); // the whole point: version rides even with no context
+    });
+
     /**
      * `version` must survive as its own field: bunyan uses `v` for its own log-format version, so the
      * build id must not land there. (bunyan also DELETES reserved option names stream/streams/level/
