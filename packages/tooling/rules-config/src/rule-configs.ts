@@ -532,14 +532,15 @@ export class NoFileImportCyclesConfig extends BaseRuleConfig {
 
 export class RuntimeArchitectureConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
-    servicePaths?: string[];
-    apiProjectPaths?: string[];
+    // NOTE: `servicePaths` / `apiProjectPaths` were removed — they were never read. The runtime graph
+    // is derived SOLELY from architecture/dependencies.json apiRelations + project roles (see
+    // nx-webpieces-rules/src/lib/runtime-graph.ts), so any config still listing them (a hand-maintained
+    // enumeration of api libs) now fails the unknown-field check in validateWebpiecesConfig. There is
+    // nothing to enumerate — delete the keys.
     allowedCycles?: string[];
 
     static readonly SCHEMA: SchemaShape<RuntimeArchitectureConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        servicePaths: FieldDef.optional('string[]'),
-        apiProjectPaths: FieldDef.optional('string[]'),
         allowedCycles: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };

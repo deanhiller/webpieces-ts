@@ -168,6 +168,19 @@ function unknownRuleError(ruleName: string): string {
     );
 }
 
+// Fields we DELETED from a rule's schema, keyed by "<rule>.<field>". The generic unknown-field error
+// ("Unknown field ... Valid fields: [...]") is correct but doesn't say WHY the field vanished, so an AI
+// might re-add it. These hints explain the removal so the only action left is to delete the key.
+const RETIRED_FIELD_HINTS: Record<string, string> = {
+    'runtime-architecture.servicePaths':
+        'This field was removed — it was never read. The runtime graph is derived automatically from ' +
+        'architecture/dependencies.json (apiRelations + project roles). Delete it.',
+    'runtime-architecture.apiProjectPaths':
+        'This field was removed — it was never read. The runtime graph is derived automatically from ' +
+        'architecture/dependencies.json, so there is NO list of api libs to maintain. Delete it (do not ' +
+        'enumerate api libs and do not replace it with a glob).',
+};
+
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually
 export function validateWebpiecesConfig(
     rawRules: Record<string, Record<string, unknown>>,
@@ -188,7 +201,9 @@ export function validateWebpiecesConfig(
         for (const [key, value] of Object.entries(entry)) {
             const fieldDef = schema[key];
             if (!fieldDef) {
-                errors.push(`[${ruleName}] Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}]`);
+                const retiredHint = RETIRED_FIELD_HINTS[`${ruleName}.${key}`];
+                const suffix = retiredHint ? ` ${retiredHint}` : '';
+                errors.push(`[${ruleName}] Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}].${suffix}`);
                 continue;
             }
             if (fieldDef.type === 'string[]') {
