@@ -90,6 +90,7 @@ export {
     RedirectHowToMergeMainConfig,
     FeatureBranchGuardConfig,
     ReadStaleGuardConfig,
+    MergedBranchBashGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,

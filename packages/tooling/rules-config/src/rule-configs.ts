@@ -498,6 +498,25 @@ export class ReadStaleGuardConfig extends BaseRuleConfig {
     };
 }
 
+// The BASH-side half of the merged-branch protection. feature-branch-guard blocks Write/Edit and
+// read-stale-guard blocks the Read tool when the checked-out branch's PR is already merged — but
+// NOTHING blocked ordinary Bash, so an agent that only ran shell (booting servers, `cat`-ing files,
+// git) sailed through a whole session on a merged branch (the incident this guard closes). It is a
+// bash-scope hookGuard that DEFAULT-DENIES Bash on a merged branch, allowlisting only the recovery /
+// cleanup / read-only-inspection commands that get the agent OFF the branch. Shares the same
+// precomputed cache (main-sync-status.json / branchAlreadyMerged) the two file guards read.
+// hangTimeoutMinutes tunes the detached refresher's stale-lock reclaim window, as on those guards.
+export class MergedBranchBashGuardConfig extends BaseRuleConfig {
+    declare mode?: OnOffMode;
+    hangTimeoutMinutes?: number;
+
+    static readonly SCHEMA: SchemaShape<MergedBranchBashGuardConfig> = {
+        mode: new FieldDef('string', ON_OFF_MODES),
+        hangTimeoutMinutes: FieldDef.optional('number'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoFileImportCyclesConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
     ignoreTypeOnly?: boolean;

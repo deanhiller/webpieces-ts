@@ -18,6 +18,7 @@ export const HOOK_GUARD_NAMES: readonly string[] = [
     'redirect-how-to-merge-main',
     'feature-branch-guard',
     'read-stale-guard',
+    'merged-branch-bash-guard',
 ];
 
 const HOOK_GUARD_SET: ReadonlySet<string> = new Set(HOOK_GUARD_NAMES);

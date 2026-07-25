@@ -46,6 +46,29 @@ export class MergedBranchMessage {
     }
 
     /**
+     * The Bash variant. merged-branch-bash-guard DEFAULT-DENIES Bash on a merged branch, so unlike the
+     * Read/Write guards (whose escape hatch IS "every Bash command still runs") this one has to spell
+     * out the narrow allowlist — otherwise an agent reads "blocked" and believes it is wedged. The cure
+     * commands it lists are exactly the ones the allowlist lets through, so following this message can
+     * never hit the guard again.
+     */
+    forBash(branch: string, mergedPr: string, kind: TreeKind = 'unknown', worktreePath: string = '<worktree-dir>'): string {
+        return this.common(branch, mergedPr, kind, worktreePath).concat([
+            '',
+            'Bash is blocked here because working on a merged branch (booting servers, running builds,',
+            'reading files with cat/ls) operates on a PRE-MERGE snapshot that origin/main has moved past.',
+            '',
+            'Still allowed while this block is up (these get you OFF this branch — run one, then retry):',
+            '  - the fresh-start / cleanup git commands above',
+            '  - read-only orientation: git status|log|diff|show|branch, gh pr list|view|status',
+            '  - switching away: git checkout/switch <other-branch>, git worktree add/remove/prune',
+            '  - pnpm wp-cleanup and the gated wp-start-*/wp-finish-* commands, pnpm install / upgrades',
+            '',
+            'Please add to memory: start a new branch/worktree off origin/main after a PR is merged.',
+        ]).join('\n');
+    }
+
+    /**
      * The Read variant. Says WHY a read (not an edit) is blocked — reading this branch feeds the AI a
      * pre-merge snapshot of the codebase and every plan built on it is built on code main has already
      * moved past — and spells out the escape valves so the agent never believes it is stuck.

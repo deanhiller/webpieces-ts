@@ -19,4 +19,5 @@ export const builtInRuleNames: readonly string[] = [
     'redirect-how-to-merge-main',
     'feature-branch-guard',
     'read-stale-guard',
+    'merged-branch-bash-guard',
 ];

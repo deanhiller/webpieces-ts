@@ -8,7 +8,7 @@ import {
     CatchErrorPatternConfig, ThrowCauseRequiredConfig,
     NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, BranchCreationGuardConfig, PrCreationOrPushGuardConfig,
     MergeInProgressGuardConfig, PrMergeGuardConfig, RedirectHowToMergeMainConfig,
-    NoJsFilesConfig, FeatureBranchGuardConfig, ReadStaleGuardConfig, MatchRuleConfig,
+    NoJsFilesConfig, FeatureBranchGuardConfig, ReadStaleGuardConfig, MergedBranchBashGuardConfig, MatchRuleConfig,
 } from '@webpieces/rules-config';
 
 import type { Rule, PlainRule } from './types';
@@ -37,6 +37,7 @@ import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
 import { FeatureBranchGuardRule } from './rules/feature-branch-guard';
 import { ReadStaleGuardRule } from './rules/read-stale-guard';
+import { MergedBranchBashGuardRule } from './rules/merged-branch-bash-guard';
 import { MatchRule } from './rules/match-rule';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
@@ -68,6 +69,7 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'no-js-files': (c: BaseRuleConfig) => new NoJsFilesRule(c as NoJsFilesConfig),
     'feature-branch-guard': (c: BaseRuleConfig) => new FeatureBranchGuardRule(c as FeatureBranchGuardConfig),
     'read-stale-guard': (c: BaseRuleConfig) => new ReadStaleGuardRule(c as ReadStaleGuardConfig),
+    'merged-branch-bash-guard': (c: BaseRuleConfig) => new MergedBranchBashGuardRule(c as MergedBranchBashGuardConfig),
 };
 
 // Index the typed config by rule name. Each value is the rule's *Config (a plain object from
