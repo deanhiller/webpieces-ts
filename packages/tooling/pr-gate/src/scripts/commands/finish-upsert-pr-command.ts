@@ -149,6 +149,12 @@ export class FinishUpsertPrCommand {
         const subject = ref.number !== '' ? `${title} (#${ref.number})` : title;
         const mergeBodyFile = path.join(prDir, 'merge-commit-body.md');
         fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
+        // gh records the merge subject/body only at the moment auto-merge is FIRST enabled; a second
+        // `--auto` on an already-enabled PR silently keeps the OLD body. Re-running finish is the norm
+        // (edited review.json, new commits, an earlier build-gate failure), so without this the commit
+        // body that lands in main's history goes stale. Disable first — harmless (non-zero, stderr
+        // swallowed) when auto-merge is not enabled — so every run re-stamps the current subject/body.
+        spawnSync('gh', ['pr', 'merge', baseBranch, '--disable-auto'], { stdio: 'ignore' });
         spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
         return ref.number !== '' ? ref.number : num;
     }
