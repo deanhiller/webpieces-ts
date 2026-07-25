@@ -19,11 +19,13 @@ const METHOD_FIELD = 'method';
 // bunyan record fields that are structural / rendered specially, so they are not
 // shown as context tags in the local console line.
 //
-// `name` (the service) and `version` (the build) are ServiceInfo base fields riding on EVERY
-// record. They earn their keep in GCP, where you filter across many services and deploys, but
-// locally each service logs to its own place and you can check git yourself — so as a tag on every
+// `svcName` (the service) and `version` (the build) are ServiceInfo facts riding on EVERY record
+// (stamped per-record by RequestContext.buildStructuredLogFields — the same map winston reads, so the
+// two backends are symmetrical). `name` is bunyan's own mandatory root-logger field (a fixed
+// placeholder). All three earn their keep in GCP, where you filter across many services and deploys,
+// but locally each service logs to its own place and you can check git yourself — so as a tag on every
 // single line they are pure noise. Listing them here is the bunyan twin of winston's
-// LOCAL_STRUCTURAL_KEYS; GCP still gets both (that stream does its own formatting).
+// LOCAL_STRUCTURAL_KEYS; GCP still gets them (that stream does its own formatting).
 //
 // `loggerName` (its own `[…]` bracket) and `controller`/`method` (the `[Controller.method]` bracket)
 // are rendered specially too, so they are excluded here from the generic `key:value` tag loop.
@@ -31,6 +33,7 @@ const BUNYAN_STD_FIELDS = new Set<string>([
     'v',
     'level',
     'name',
+    'svcName',
     'version',
     'hostname',
     'pid',

@@ -16,6 +16,17 @@ import { Dashboard, DashboardInput } from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
+// A resolved PR's number + web URL. Both '' when the PR can't be resolved (e.g. create failed).
+class PrRef {
+    number: string;
+    url: string;
+
+    constructor(number: string, url: string) {
+        this.number = number;
+        this.url = url;
+    }
+}
+
 // FINISH of the AI-first PR flow. Runs after the AI wrote review.json. In order: (1) if a 3-point merge
 // was in progress, validate + commit + FINALIZE via merge-END; (2) REQUIRE review.json; (3) run the
 // authoritative build gate; (4) render the dashboard; (5) create/update the PR via `gh`. The ONLY
@@ -130,18 +141,29 @@ export class FinishUpsertPrCommand {
             spawnSync('gh', ['pr', 'edit', num, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
         }
 
-        // Set the squash-merge SUBJECT to the PR title and the BODY to the compact commit summary, so
-        // main's history carries the PR title + risk/flags/link — NOT the internal `Squash merge of
-        // <branch>` subject GitHub would otherwise inherit from the single squash commit on the branch.
+        // Set the squash-merge SUBJECT to the PR title (+ the `(#N)` GitHub normally appends, which an
+        // explicit --subject would otherwise drop) and the BODY to the compact commit summary, so main's
+        // history carries the PR title + risk/flags/link — NOT the internal `Squash merge of <branch>`
+        // subject GitHub would inherit from the single squash commit on the branch.
+        const ref = this.prRef(baseBranch);
+        const subject = ref.number !== '' ? `${title} (#${ref.number})` : title;
         const mergeBodyFile = path.join(prDir, 'merge-commit-body.md');
-        fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, this.prUrl(baseBranch)) + '\n');
-        spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', title, '--body-file', mergeBodyFile], { stdio: 'inherit' });
-        return num;
+        fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
+        spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
+        return ref.number !== '' ? ref.number : num;
     }
 
-    // The PR's web URL (for the commit-body back-link) — '' if it can't be resolved.
-    private prUrl(baseBranch: string): string {
-        const result = spawnSync('gh', ['pr', 'view', baseBranch, '--json', 'url', '--jq', '.url'], { encoding: 'utf8' });
-        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+    // The PR's number + web URL (for the merge subject `(#N)` and the commit-body back-link). Both ''
+    // if it can't be resolved. Rendered via jq into one tab-separated line so no JSON parsing is needed.
+    private prRef(baseBranch: string): PrRef {
+        const result = spawnSync(
+            'gh', ['pr', 'view', baseBranch, '--json', 'number,url', '--jq', '"\\(.number)\\t\\(.url)"'],
+            { encoding: 'utf8' },
+        );
+        if (result.status !== 0) {
+            return new PrRef('', '');
+        }
+        const parts = (result.stdout ?? '').trim().split('\t');
+        return new PrRef(parts[0] ?? '', parts[1] ?? '');
     }
 }

@@ -71,26 +71,28 @@ describe('RequestContext log-field builders', () => {
     });
 });
 
-// The structured builder stamps the build `version` even with NO active RequestContext, so startup and
-// background-job lines say which build emitted them — the flat builder stays empty out of context.
-describe('buildStructuredLogFields — version outside RequestContext.run', () => {
+// The structured builder stamps the ServiceInfo identity (`svcName` + `version`) even with NO active
+// RequestContext, so startup and background-job lines say which service/build emitted them — the flat
+// builder stays empty out of context. Both facts are treated identically (backend-symmetrical).
+describe('buildStructuredLogFields — svcName + version outside RequestContext.run', () => {
     const reqId = new ContextKey<string>('requestId', 'x-request-id');
 
     afterEach(() => {
         ServiceInfo.clear();
     });
 
-    it('carries `version` while buildLogFields stays EMPTY (log line never crashes a request)', () => {
+    it('carries `svcName` + `version` while buildLogFields stays EMPTY (log line never crashes a request)', () => {
         HeaderRegistry.configure([reqId], /*platformHeaders*/ false);
         ServiceInfo.setInfo('billing-svc', 'v1');
 
         expect(RequestContext.buildLogFields().size).toBe(0); // flat map: empty with no active scope
         const structured = RequestContext.buildStructuredLogFields();
-        expect(structured.size).toBe(1);
-        expect(structured.get('version')).toBe('v1'); // process-global identity fact, not a context key
+        expect(structured.size).toBe(2);
+        expect(structured.get('svcName')).toBe('billing-svc'); // process-global identity facts,
+        expect(structured.get('version')).toBe('v1');          // not context keys
     });
 
-    it('is empty before setInfo — version simply absent, logging still works', () => {
+    it('is empty before setInfo — svcName + version simply absent, logging still works', () => {
         HeaderRegistry.configure([reqId], /*platformHeaders*/ false);
 
         expect(RequestContext.buildStructuredLogFields().size).toBe(0);
