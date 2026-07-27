@@ -184,11 +184,82 @@ function resolvePackageDir(pkgName: string, workspaceRoot: string): string | nul
     }
 }
 
-function buildMadgeOptions(ignoreTypeOnly: boolean, excludePackages: string[], workspaceRoot: string): MadgeOptions {
+/**
+ * Realpath a directory, tolerating a non-existent path (returns the input).
+ * madge traverses through pnpm symlinks to real paths, and resolvePackageDir
+ * already realpaths its result, so projectRoot must be realpath'd too or the
+ * computed relative path won't line up with the ids madge emits.
+ */
+// webpieces-disable no-function-outside-class -- nx executor module; file is functional by convention (see resolvePackageDir/reportCycles above)
+function realpathOrSelf(dir: string): string {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort; fall back to the raw path
+    try {
+        return fs.realpathSync(dir);
+    // webpieces-disable catch-error-pattern -- path may not exist yet; use it as-is
+    } catch (err: unknown) {
+        //const error = toError(err);
+        return dir;
+    }
+}
+
+/** True if dir contains at least one .ts/.tsx source file anywhere beneath it. */
+// webpieces-disable no-function-outside-class -- nx executor module; file is functional by convention (see resolvePackageDir/reportCycles above)
+function hasSourceFiles(dir: string): boolean {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort scan; false on any read failure
+    try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'build') continue;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (hasSourceFiles(full)) return true;
+            } else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
+                return true;
+            }
+        }
+        return false;
+    // webpieces-disable catch-error-pattern -- unreadable dir; treat as no source
+    } catch (err: unknown) {
+        //const error = toError(err);
+        return false;
+    }
+}
+
+/**
+ * Build the exclude pattern for one resolved package dir, RELATIVE to the base
+ * madge is invoked with (projectRoot). madge matches excludeRegExp against ids
+ * relative to that base — e.g. '../../libraries/kami/src/x.ts' — so an absolute
+ * `^/abs/...` anchor can never match and silently excludes nothing. Returns the
+ * relative-anchored pattern. Warns (but still returns the pattern) when the dir
+ * holds no source madge would traverse, closing the resolves-but-matches-nothing
+ * silent-failure gap.
+ */
+// webpieces-disable no-function-outside-class -- nx executor module; file is functional by convention (see resolvePackageDir/reportCycles above)
+function buildExcludePattern(dir: string, base: string, pkgName: string): string {
+    // madge ids always use forward slashes; normalise path.sep so this holds on Windows.
+    const rel = path.relative(base, dir).split(path.sep).join('/');
+    if (!hasSourceFiles(dir)) {
+        console.warn(
+            `⚠️  no-file-import-cycles: excludePackages entry "${pkgName}" resolved to "${dir}"` +
+                ` but that directory contains no .ts/.tsx source — the exclusion will match nothing.`,
+        );
+    }
+    return `^${escapeRegex(rel)}(/|$)`;
+}
+
+// webpieces-disable no-function-outside-class -- nx executor module; file is functional by convention (see resolvePackageDir/reportCycles above)
+export function buildMadgeOptions(
+    ignoreTypeOnly: boolean,
+    excludePackages: string[],
+    workspaceRoot: string,
+    projectRoot: string,
+): MadgeOptions {
     const excludeRegExp = [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES];
+    // madge is invoked with projectRoot as its base and emits ids relative to it;
+    // realpath it to match resolvePackageDir's realpath'd result under pnpm symlinks.
+    const base = realpathOrSelf(projectRoot);
     for (const pkg of excludePackages) {
         const dir = resolvePackageDir(pkg, workspaceRoot);
-        if (dir) excludeRegExp.push(`^${escapeRegex(dir)}(/|$)`);
+        if (dir) excludeRegExp.push(buildExcludePattern(dir, base, pkg));
     }
     const options: MadgeOptions = {
         fileExtensions: ['ts', 'tsx'],
@@ -239,7 +310,7 @@ export default async function runExecutor(
     console.log(`\n🔁 Checking import cycles in ${projectName} (madge)\n`);
 
     const madge = loadMadge();
-    const result = await madge(projectRoot, buildMadgeOptions(ignoreTypeOnly, excludePackages, context.root));
+    const result = await madge(projectRoot, buildMadgeOptions(ignoreTypeOnly, excludePackages, context.root, projectRoot));
     const cycles = result.circular();
 
     if (cycles.length === 0) {
