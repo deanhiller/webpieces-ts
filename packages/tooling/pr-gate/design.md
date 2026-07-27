@@ -31,6 +31,7 @@ graph TD
     MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
     PrGateApp["PrGateApp"]:::controller
+    PrMerger["PrMerger"]
     RepoRootFinder["RepoRootFinder"]
     RunUpdate["RunUpdate"]
     StartUpdateCommand["StartUpdateCommand"]
@@ -53,6 +54,7 @@ graph TD
     FinishUpsertPrCommand --> GitExec
     FinishUpsertPrCommand --> MergeEnd
     FinishUpsertPrCommand --> MergeState
+    FinishUpsertPrCommand --> PrMerger
     FinishUpsertPrCommand --> RepoRootFinder
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
