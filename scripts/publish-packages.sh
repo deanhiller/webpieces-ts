@@ -44,6 +44,13 @@ PUBLISH_FLAGS="${PUBLISH_FLAGS:---access public --provenance}"
 ORDER=(
     packages/core/core-context
     packages/core/core-util
+    # A test/mock helper with no @webpieces deps. It was in SKIP for a long time because npm
+    # trusted publishing (OIDC + --provenance) cannot CREATE a brand-new scoped package — only
+    # publish to a name that already exists — so the first-ever publish 404'd and aborted the
+    # whole release. Once the name was bootstrapped on npm by an authenticated manual publish,
+    # CI can keep it in sync like every other package. Consumers (e.g. trytami) were cloning it
+    # by hand while it was unpublished; see issue #429's sibling report.
+    packages/core/core-mock
     packages/cloud/gcp-identity
     # Logging backends depend only on core-util.
     packages/logging/winston
@@ -66,9 +73,6 @@ ORDER=(
 
 # Publishable in package.json, but deliberately never released. Each needs a reason.
 SKIP=(
-    # A test/mock helper, not a released package. The npm token cannot create it, and the 404
-    # aborted the whole release before the tooling packages below could publish.
-    packages/core/core-mock
 )
 
 contains() {
@@ -88,7 +92,7 @@ while IFS= read -r pkg_json; do
     access="$(node -p "require('./$pkg_json').publishConfig?.access ?? ''")"
     [ "$access" = "public" ] || continue
 
-    if ! contains "$dir" "${ORDER[@]}" && ! contains "$dir" "${SKIP[@]}"; then
+    if ! contains "$dir" "${ORDER[@]}" && ! contains "$dir" "${SKIP[@]+"${SKIP[@]}"}"; then
         name="$(node -p "require('./$pkg_json').name")"
         echo "  ❌ $name ($dir) is publishable but is in neither ORDER nor SKIP in $0"
         failed=1
