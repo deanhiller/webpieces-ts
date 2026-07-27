@@ -74,6 +74,13 @@ export default defineConfig({
             'apps/*/*/{src,tests}/**/*.{test,spec}.{js,ts}',
         ],
         passWithNoTests: true,
+        // The tooling suites shell out to real `git` and to /bin/sh shims — a single test can fire a
+        // dozen subprocesses. Under `nx run-many` several projects run at once, and vitest's 5s
+        // default turns those into flaky timeouts that have nothing to do with the code under test
+        // (nx itself flags rules-config:test / ai-hook-rules:test as flaky). 30s is still short
+        // enough to catch a genuine hang.
+        testTimeout: 30_000,
+        hookTimeout: 30_000,
         pool: 'forks',
         poolOptions: {
             forks: {

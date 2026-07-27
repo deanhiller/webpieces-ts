@@ -191,15 +191,21 @@ export class PrismaConverterConfig extends BaseRuleConfig {
     };
 }
 
+// `allowedPaths` exempts whole file trees whose idioms are destructuring by construction (React /
+// React Native components and hooks — `const [x, setX] = useState()`, destructured props — framework
+// glue), matched with the shared glob/prefix/segment semantics of `isPathExcluded`. It is the ONLY
+// escape when `disableAllowed: false`, since that setting deliberately ignores inline disables.
 export class NoDestructureConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     allowTopLevel?: boolean;
     disableAllowed?: boolean;
+    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoDestructureConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         allowTopLevel: FieldDef.optional('boolean'),
         disableAllowed: FieldDef.optional('boolean'),
+        allowedPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };
 }
