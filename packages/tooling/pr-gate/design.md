@@ -17,9 +17,11 @@ graph TD
     BranchNaming["BranchNaming"]
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
+    ChecklistDetector["ChecklistDetector"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
+    DiffScope["DiffScope"]
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
     ForkPoint["ForkPoint"]
@@ -41,6 +43,7 @@ graph TD
     AiBranchName --> BranchNaming
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
+    ChecklistDetector --> DiffScope
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
@@ -51,6 +54,7 @@ graph TD
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
+    FinishUpsertPrCommand --> ChecklistDetector
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> GitExec
     FinishUpsertPrCommand --> MergeEnd
@@ -96,6 +100,7 @@ graph TD
     StartUpsertPrCommand --> AiBranchName
     StartUpsertPrCommand --> BranchNaming
     StartUpsertPrCommand --> BuildAffected
+    StartUpsertPrCommand --> ChecklistDetector
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate

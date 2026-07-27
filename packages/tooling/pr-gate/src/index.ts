@@ -10,7 +10,9 @@
 export {
     GateResult,
     DisableCounts,
+    ChecklistRow,
     DashboardInput,
     Dashboard,
 } from './dashboard/dashboard';
+export { ChecklistDetector, TriggeredChecklist } from './scripts/workflow/checklist-detector';
 export { PrGateApp } from './scripts/pr-gate-app';

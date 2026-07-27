@@ -49,6 +49,14 @@
                     "level": 2
                 },
                 {
+                    "id": "ChecklistDetector",
+                    "className": "ChecklistDetector",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts",
+                    "level": 2
+                },
+                {
                     "id": "CleanTmp",
                     "className": "CleanTmp",
                     "kind": "class",
@@ -71,6 +79,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/dashboard/dashboard.ts",
                     "level": 2
+                },
+                {
+                    "id": "DiffScope",
+                    "className": "DiffScope",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/diff-scope.ts",
+                    "level": 3
                 },
                 {
                     "id": "FinishUpdateCommand",
@@ -246,6 +262,15 @@
                     "paramType": "MergedBranchesService"
                 },
                 {
+                    "from": "ChecklistDetector",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
                     "from": "CleanTmp",
                     "to": "RepoRootFinder",
                     "injection": "type",
@@ -334,6 +359,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
                     "paramName": "buildAffected",
                     "paramType": "BuildAffected"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ChecklistDetector",
+                    "injection": "type",
+                    "token": "ChecklistDetector",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
+                    "paramName": "checklistDetector",
+                    "paramType": "ChecklistDetector"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -739,6 +773,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
                     "paramName": "buildAffected",
                     "paramType": "BuildAffected"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "ChecklistDetector",
+                    "injection": "type",
+                    "token": "ChecklistDetector",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
+                    "paramName": "checklistDetector",
+                    "paramType": "ChecklistDetector"
                 },
                 {
                     "from": "StartUpsertPrCommand",

@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
@@ -83,10 +84,12 @@ export class ConfigLoader {
 
         const rulesDir = consumerConfig.rulesDir ?? [];
 
+        // The repo root (dir holding webpieces.config.json) lets checklists[].docs existence be checked.
+        const repoRoot = path.dirname(configPath);
         const errors = [
             ...validateWebpiecesConfig(overrideRules, rulesDir.length > 0),
             ...validateSectionPlacement(rulesSection, hookGuardsSection),
-            ...validateCommandsSection(consumerConfig.commands, legacyPrGate),
+            ...validateCommandsSection(consumerConfig.commands, legacyPrGate, repoRoot),
             ...validateExcludePaths(consumerConfig.excludePaths),
             ...validateMatchRulesSection(consumerConfig['match-rules']),
         ];
