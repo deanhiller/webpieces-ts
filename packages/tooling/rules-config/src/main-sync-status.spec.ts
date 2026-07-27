@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -132,35 +132,92 @@ function git(repo: string, cmd: string): void {
 // Build a repo whose feature branch and main both diverge from a common base, then publish main as
 // origin/main (no real remote — computeMainSyncStatus only needs the ref to resolve; its `git fetch`
 // is best-effort and ignored). `mainEdits`/`featureEdits` are the files each side rewrites.
+//
+// The whole build runs as ONE `sh` invocation instead of ~14 separate `git` spawns. A spawn costs a
+// few ms on an idle machine but ~100ms once the suite runs projects in parallel, and paying that per
+// test is what pushed this file past the per-test timeout under load. `set -e` keeps a failing step
+// fatal, exactly as a throwing execSync did.
 function buildRepo(work: string, mainEdits: string[], featureEdits: string[]): void {
-    git(work, 'init');
-    git(work, 'config core.hooksPath /dev/null'); // neutralize any global pre-commit hooks
-    git(work, 'config user.email t@t.t');
-    git(work, 'config user.name t');
-    git(work, 'config commit.gpgsign false');
-    fs.writeFileSync(path.join(work, 'shared.txt'), 'base\n');
-    fs.writeFileSync(path.join(work, 'other.txt'), 'base\n');
-    git(work, 'add -A');
-    git(work, 'commit -m base');
-    git(work, 'branch -M main');
-
-    git(work, 'checkout -b feature');
+    const write = (file: string, text: string): string => `printf '${text}\\n' > ${file}`;
+    const steps = [
+        'set -e',
+        `cd ${work}`,
+        'git init -q',
+        'git config core.hooksPath /dev/null', // neutralize any global pre-commit hooks
+        'git config user.email t@t.t',
+        'git config user.name t',
+        'git config commit.gpgsign false',
+        write('shared.txt', 'base'),
+        write('other.txt', 'base'),
+        'git add -A',
+        'git commit -q -m base',
+        'git branch -M main',
+        'git checkout -q -b feature',
+    ];
     // No featureEdits => leave the feature branch even with base (used by the uncommitted/staged/
     // untracked overlap tests, where the ONLY feature-side change lives in the working tree).
     if (featureEdits.length > 0) {
-        for (const f of featureEdits) fs.writeFileSync(path.join(work, f), 'feature change\n');
-        git(work, 'add -A');
-        git(work, 'commit -m feature');
+        for (const f of featureEdits) steps.push(write(f, 'feature change'));
+        steps.push('git add -A', 'git commit -q -m feature');
     }
-
-    git(work, 'checkout main');
-    for (const f of mainEdits) fs.writeFileSync(path.join(work, f), 'main change\n');
-    git(work, 'add -A');
-    git(work, 'commit -m mainchange');
-    git(work, 'update-ref refs/remotes/origin/main refs/heads/main');
-
-    git(work, 'checkout feature');
+    steps.push('git checkout -q main');
+    for (const f of mainEdits) steps.push(write(f, 'main change'));
+    steps.push(
+        'git add -A',
+        'git commit -q -m mainchange',
+        'git update-ref refs/remotes/origin/main refs/heads/main',
+        'git checkout -q feature',
+    );
+    execSync(steps.join('\n'), { shell: '/bin/sh', stdio: 'pipe' });
 }
+
+// A repo of a given SHAPE, built once per file and handed to each test as a plain directory copy.
+// Nothing about these repos is per-test — only what the test then edits is — so rebuilding one per
+// test bought nothing and cost every one of its spawns again. fs.cpSync spawns nothing at all.
+const repoTemplates = new Map<string, string>();
+const templateRoots: string[] = [];
+
+function repoTemplate(mainEdits: string[], featureEdits: string[]): string {
+    const key = `${mainEdits.join(',')}|${featureEdits.join(',')}`;
+    const cached = repoTemplates.get(key);
+    if (cached !== undefined) return cached;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-tpl-'));
+    buildRepo(dir, mainEdits, featureEdits);
+    repoTemplates.set(key, dir);
+    templateRoots.push(dir);
+    return dir;
+}
+
+// Copy a template into `work`. A git repo with no remotes holds no absolute paths, so a plain
+// recursive copy is a working clone of it.
+function stageRepo(work: string, mainEdits: string[], featureEdits: string[]): void {
+    fs.cpSync(repoTemplate(mainEdits, featureEdits), work, { recursive: true });
+}
+
+// computeMainSyncStatus asks `gh` whether a merged/open PR tracks the branch. In a throwaway repo
+// with no GitHub remote the real gh answers "no PR" — after paying process startup and, depending on
+// the developer's gh state, a network round trip. A stub on PATH gives the SAME answer (non-zero =>
+// no PR) instantly, so these tests neither require gh to be installed nor inherit its latency.
+function stubGhOnPath(): string {
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-bin-'));
+    fs.writeFileSync(path.join(binDir, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    const previous = process.env['PATH'] ?? '';
+    process.env['PATH'] = `${binDir}${path.delimiter}${previous}`;
+    templateRoots.push(binDir);
+    return previous;
+}
+
+// Both integration describes share the stubbed gh and the template repos; set up once for the file.
+let pathBeforeStub = '';
+
+beforeAll(() => {
+    pathBeforeStub = stubGhOnPath();
+});
+
+afterAll(() => {
+    process.env['PATH'] = pathBeforeStub;
+    for (const dir of templateRoots) fs.rmSync(dir, { recursive: true, force: true });
+});
 
 describe('computeMainSyncStatus (integration)', () => {
     let work: string;
@@ -177,14 +234,14 @@ describe('computeMainSyncStatus (integration)', () => {
         // Set a misleading env var: the old getCurrentBranch would have returned it; gitBranch must not.
         const prev = process.env['GIT_BRANCH'];
         process.env['GIT_BRANCH'] = 'main';
-        buildRepo(work, ['other.txt'], ['shared.txt']);
+        stageRepo(work, ['other.txt'], ['shared.txt']);
         const status = computeMainSyncStatus(work);
         if (prev === undefined) delete process.env['GIT_BRANCH']; else process.env['GIT_BRANCH'] = prev;
         expect(status.branch).toBe('feature');
     });
 
     it('flags conflict=true when main and the branch touched the same file', () => {
-        buildRepo(work, ['shared.txt'], ['shared.txt']);
+        stageRepo(work, ['shared.txt'], ['shared.txt']);
         const status = computeMainSyncStatus(work);
         expect(status.hasForkPoint).toBe(true);
         expect(status.conflict).toBe(true);
@@ -192,7 +249,7 @@ describe('computeMainSyncStatus (integration)', () => {
     });
 
     it('flags conflict=false when main and the branch touched different files', () => {
-        buildRepo(work, ['shared.txt'], ['other.txt']);
+        stageRepo(work, ['shared.txt'], ['other.txt']);
         const status = computeMainSyncStatus(work);
         expect(status.hasForkPoint).toBe(true);
         expect(status.conflict).toBe(false);
@@ -201,7 +258,7 @@ describe('computeMainSyncStatus (integration)', () => {
     it('flags hasForkPoint=false when origin/main has no merge-base with the branch', () => {
         // An orphan commit shares no history with the branch — simulates the "main got merged /
         // history rewritten so there is no common ancestor" case the guard forces a human to fix.
-        buildRepo(work, ['shared.txt'], ['other.txt']);
+        stageRepo(work, ['shared.txt'], ['other.txt']);
         git(work, 'checkout --orphan orphanbranch');
         fs.writeFileSync(path.join(work, 'z.txt'), 'orphan\n');
         git(work, 'add -A');
@@ -233,7 +290,7 @@ describe('computeMainSyncStatus — working-tree overlap (Bug #1)', () => {
         // The feature branch commits nothing over the fork point; its only change to `shared.txt`
         // (which main also changed) is an unstaged working-tree edit — the exact "invisible until
         // committed" regression. featureChangedFiles must union the working tree in.
-        buildRepo(work, ['shared.txt'], []);
+        stageRepo(work, ['shared.txt'], []);
         fs.writeFileSync(path.join(work, 'shared.txt'), 'uncommitted feature edit\n');
         const status = computeMainSyncStatus(work);
         expect(status.hasForkPoint).toBe(true);
@@ -242,7 +299,7 @@ describe('computeMainSyncStatus — working-tree overlap (Bug #1)', () => {
     });
 
     it('flags conflict=true for a STAGED edit overlapping main', () => {
-        buildRepo(work, ['shared.txt'], []);
+        stageRepo(work, ['shared.txt'], []);
         fs.writeFileSync(path.join(work, 'shared.txt'), 'staged feature edit\n');
         git(work, 'add shared.txt');
         const status = computeMainSyncStatus(work);
@@ -252,7 +309,7 @@ describe('computeMainSyncStatus — working-tree overlap (Bug #1)', () => {
 
     it('flags conflict=true for an UNTRACKED new file overlapping a file main added', () => {
         // main adds `newfile.txt` in a commit; the feature side has it only as an untracked file.
-        buildRepo(work, ['newfile.txt'], []);
+        stageRepo(work, ['newfile.txt'], []);
         fs.writeFileSync(path.join(work, 'newfile.txt'), 'untracked on feature\n');
         const status = computeMainSyncStatus(work);
         expect(status.conflict).toBe(true);

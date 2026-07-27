@@ -74,13 +74,15 @@ export default defineConfig({
             'apps/*/*/{src,tests}/**/*.{test,spec}.{js,ts}',
         ],
         passWithNoTests: true,
-        // The tooling suites shell out to real `git` and to /bin/sh shims — a single test can fire a
-        // dozen subprocesses. Under `nx run-many` several projects run at once, and vitest's 5s
-        // default turns those into flaky timeouts that have nothing to do with the code under test
-        // (nx itself flags rules-config:test / ai-hook-rules:test as flaky). 30s is still short
-        // enough to catch a genuine hang.
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+        // The tooling suites shell out to real `git` and to /bin/sh shims. A process spawn costs a few
+        // ms on an idle machine but ~100ms once `nx run-many` has several projects going, so per-test
+        // cost is dominated by SPAWN COUNT, not by work. That is fixed where it belongs — batched grep
+        // (ShimTestkit.ereMatchSet), repo fixtures built once and copied (main-sync-status.spec), one
+        // shim run per it() — which took the worst test from ~13s to ~5s under a full parallel run.
+        // What is left is inherent: an integration test of a git-driven code path spawns git. 15s keeps
+        // ~3x headroom over that measured worst case while still catching a genuine hang.
+        testTimeout: 15_000,
+        hookTimeout: 15_000,
         pool: 'forks',
         poolOptions: {
             forks: {
