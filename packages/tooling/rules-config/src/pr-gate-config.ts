@@ -23,15 +23,40 @@ export class GateDefinition {
     }
 }
 
+// How wp-finish-upsert-pr should try to LAND the PR once it has posted it. GitHub's auto-merge queue
+// is a REPO-level setting (`allow_auto_merge`) that many orgs turn OFF as a policy control, and it
+// CANNOT be forced from the client: `gh pr merge --auto` calls the enablePullRequestAutoMerge GraphQL
+// mutation, which hard-errors with "Auto merge is not allowed for this repository" when the repo says
+// no. So the only lever a config knob has is WHICH PATHS WE ATTEMPT — never whether the queue exists.
+export const MERGE_MODE_AUTO = 'AUTO';
+export const MERGE_MODE_NONE = 'NONE';
+export const MERGE_MODES = [MERGE_MODE_AUTO, MERGE_MODE_NONE];
+
 export class PrGateConfig {
     mode: string;
     buildCommand: string;
     gates: GateDefinition[];
+    /**
+     * REQUIRED — every repo must state its policy; there is deliberately no default, because the two
+     * answers are a real policy decision and guessing it either merges when a team did not want that,
+     * or silently stops landing PRs on a team that relied on it.
+     *
+     * AUTO — wp-finish-upsert-pr LANDS the PR: squash-merge it right away when it is mergeable, else
+     *   enable GitHub auto-merge so it lands when the checks pass. Both carry an explicit --subject /
+     *   --body-file, which is the ONLY way main's history gets the PR title plus the compact
+     *   risk/flags body — no repo setting can produce that. Requires allow_auto_merge on the repo.
+     * NONE — wp-finish-upsert-pr only opens/updates the PR and stops; a human merges. NOTE the cost:
+     *   a UI merge cannot use the compact body, so main's commit falls back to the repo's
+     *   squash_merge_commit_title/message settings. Set squash_merge_commit_title=PR_TITLE there, or
+     *   commits land as the internal "Squash merge of <branch>" subject.
+     */
+    mergeMode: string;
 
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[]) {
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string) {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
+        this.mergeMode = mergeMode;
     }
 }
 
@@ -47,7 +72,7 @@ export function defaultGates(): GateDefinition[] {
 }
 
 export function defaultPrGateConfig(): PrGateConfig {
-    return new PrGateConfig('ON', '', defaultGates());
+    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO);
 }
 
 interface RawGate {
@@ -61,6 +86,7 @@ interface RawPrGateSection {
     mode?: string;
     buildCommand?: string;
     gates?: RawGate[];
+    mergeMode?: string;
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -82,5 +108,8 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const mode = raw.mode ?? defaults.mode;
     const buildCommand = raw.buildCommand ?? defaults.buildCommand;
     const gates = raw.gates !== undefined ? raw.gates.map(toGate) : defaults.gates;
-    return new PrGateConfig(mode, buildCommand, gates);
+    // REQUIRED — validatePrGateSection rejects an omitted/unknown value, so this fallback only ever
+    // applies to the no-config-file path that defaultPrGateConfig() serves.
+    const mergeMode = raw.mergeMode ?? defaults.mergeMode;
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode);
 }

@@ -287,6 +287,7 @@ describe('validatePrGateSection', () => {
         const errors = validatePrGateSection({
             mode: 'ON',
             buildCommand: 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)',
+            mergeMode: 'AUTO',
             gates: [
                 { name: 'API', patterns: ['**/*Api.ts'], warningColor: 'yellow' },
                 { name: 'DB Schema', patterns: ['**/schema.prisma'], warningColor: 'red', disabled: true },
@@ -317,6 +318,32 @@ describe('validatePrGateSection', () => {
         });
         expect(bad.some(e => e.includes('gates[0].warningColor must be "yellow" or "red"'))).toBe(true);
         expect(bad.some(e => e.includes('gates[0].disabled must be a boolean'))).toBe(true);
+    });
+});
+
+// Split from the block above only because the combined describe() callback exceeded max-method-lines.
+describe('validatePrGateSection — mergeMode (required policy)', () => {
+
+    it('REQUIRES mergeMode — the policy is never guessed', () => {
+        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x' });
+        expect(bad.some(e => e.includes('Missing required field "mergeMode"'))).toBe(true);
+    });
+
+    it('accepts every valid mergeMode', () => {
+        for (const mergeMode of ['AUTO', 'NONE']) {
+            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode })).toEqual([]);
+        }
+    });
+
+    it('rejects an unknown mergeMode and explains what each mode costs', () => {
+        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'DETECT' });
+        expect(bad.some(e => e.includes('"mergeMode" = "DETECT" is not valid'))).toBe(true);
+        expect(bad.some(e => e.includes('allow_auto_merge'))).toBe(true);
+        expect(bad.some(e => e.includes('squash_merge_commit_title'))).toBe(true);
+    });
+
+    it('does NOT require mergeMode when the whole gate is OFF', () => {
+        expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
     });
 });
 

@@ -171,7 +171,10 @@ export class FinishUpsertPrCommand {
         fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
         // PrMerger owns the direct-merge / auto-merge-fallback decision AND checks every gh status, so a
         // merge that did not happen is reported as such instead of being swallowed (see pr-merger.ts).
-        const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile);
+        // REQUIRED config — no default here on purpose. A missing value (an older published
+        // rules-config that has no such field) reaches PrMerger as '' and is treated as "do not merge".
+        const mergeMode = loadAndValidate(repoRoot).prGate.mergeMode ?? '';
+        const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile, mergeMode);
         return new UpsertResult(ref.number !== '' ? ref.number : num, outcome);
     }
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { MERGE_MODE_AUTO, MERGE_MODE_NONE } from '@webpieces/rules-config';
 import { PrMerger, MergeOutcome } from './pr-merger';
 
 // A PrMerger whose two `gh` seams are canned, so the decision logic is exercised with NO gh, no network
@@ -26,11 +27,15 @@ class FakePrMerger extends PrMerger {
     }
 }
 
-const merge = (statuses: number[], autoAllowed: boolean): [MergeOutcome, string[][]] => {
+const mergeIn = (statuses: number[], autoAllowed: boolean, mode: string): [MergeOutcome, string[][]] => {
     const merger = new FakePrMerger(statuses, autoAllowed);
-    const outcome = merger.merge('dean/feature', 'My PR title (#7)', '/tmp/body.md');
+    const outcome = merger.merge('dean/feature', 'My PR title (#7)', '/tmp/body.md', mode);
     return [outcome, merger.calls];
 };
+
+// AUTO — the mode where the tooling is allowed to land the PR.
+const merge = (statuses: number[], autoAllowed: boolean): [MergeOutcome, string[][]] =>
+    mergeIn(statuses, autoAllowed, MERGE_MODE_AUTO);
 
 // Every gh invocation flattened to a string, for asserting which flags were (and were NOT) used.
 const flat = (calls: string[][]): string[] => calls.map((c: string[]): string => c.join(' '));
@@ -89,6 +94,30 @@ describe('gh cannot be spawned at all', () => {
     it('a -1 status is a failure, never mistaken for the 0 that means success', () => {
         const [outcome] = merge([-1], false);
         expect(outcome.merged).toBe(false);
+        expect(outcome.message).toContain('did NOT merge');
+    });
+});
+
+describe('mergeMode NONE — "a human clicks merge" repos', () => {
+    it('runs NO gh merge command at all, even when the PR is perfectly mergeable', () => {
+        const [outcome, calls] = mergeIn([0], true, MERGE_MODE_NONE);
+        expect(outcome.merged).toBe(false);
+        expect(outcome.autoMergeEnabled).toBe(false);
+        expect(calls).toEqual([]);
+    });
+
+    it('still reports the subject GitHub should use, so the human merge can be checked', () => {
+        const [outcome] = mergeIn([0], true, MERGE_MODE_NONE);
+        expect(outcome.message).toContain('mergeMode is NONE');
+        expect(outcome.message).toContain('My PR title (#7)');
+    });
+});
+
+describe('an unknown or missing mergeMode — the fail-safe', () => {
+    it('does NOT merge, because an unreadable policy must never be read as permission to touch main', () => {
+        const [outcome, calls] = mergeIn([0], true, '');
+        expect(outcome.merged).toBe(false);
+        expect(calls).toEqual([]);
         expect(outcome.message).toContain('did NOT merge');
     });
 });
