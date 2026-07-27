@@ -25,6 +25,7 @@ graph TD
     ForkPoint["ForkPoint"]
     GatherInfo["GatherInfo"]
     GitExec["GitExec"]
+    LandPrCommand["LandPrCommand"]
     MergeEnd["MergeEnd"]
     MergeStart["MergeStart"]
     MergeState["MergeState"]
@@ -65,6 +66,10 @@ graph TD
     GatherInfo --> MergeState
     GatherInfo --> RepoRootFinder
     GitExec --> RepoRootFinder
+    LandPrCommand --> AiBranchName
+    LandPrCommand --> BranchNaming
+    LandPrCommand --> PrMerger
+    LandPrCommand --> RepoRootFinder
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
@@ -78,6 +83,7 @@ graph TD
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
+    PrGateApp --> LandPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
     RunUpdate --> AiBranchName

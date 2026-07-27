@@ -172,15 +172,7 @@
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
-        "pr-creation-guard": {
-            "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
-        },
         "merge-in-progress-guard": {
-            "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
-        },
-        "pr-merge-cleanup": {
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
@@ -195,11 +187,11 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "pr-creation-or-push-guard": {
-            "mode": "OFF",
+            "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
         "pr-merge-guard": {
-            "mode": "OFF",
+            "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         },
         "merged-branch-bash-guard": {

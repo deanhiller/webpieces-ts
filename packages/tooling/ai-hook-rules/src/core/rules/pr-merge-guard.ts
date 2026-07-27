@@ -16,7 +16,7 @@ function truncate(s: string): string {
 export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
     constructor(config: PrMergeGuardConfig) { super(config, 'pr-merge-guard'); }
 
-    readonly description = 'After merging a PR, require switching to main, pulling, and deleting the local branch.';
+    readonly description = 'Redirect a hand-rolled `gh pr merge` to `pnpm wp-land-pr`, then require branch cleanup.';
 
     // Substituted with the real branch name in check(); the getter reads it. Placeholder until then.
     private currentBranch = '<current-branch>';
@@ -37,8 +37,20 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
     // which is the moment that actually keeps the local branch list bounded.
     get fixHint(): FixHint {
         return new FixHint(
-            'After merging a PR you must clean up the branch (and the worktree, if it has one).',
-            ['Run `gh pr merge --squash`, then:', '']
+            'Land the PR with `pnpm wp-land-pr`, never a hand-rolled `gh pr merge`.',
+            [
+                'A bare `gh pr merge` writes the WRONG commit message into main. GitHub then falls back to',
+                'the repo\'s squash_merge_commit_title/message settings, which commonly means the internal',
+                '"Squash merge of <branch>" subject — and NEVER the compact risk/flags body, because no',
+                'value of those settings can produce it. Only an explicit `--subject`/`--body-file` can,',
+                'and `wp-land-pr` passes exactly the pair that `wp-finish-upsert-pr` already rendered:',
+                '',
+                '  pnpm wp-land-pr',
+                '',
+                'It squash-merges when the PR is mergeable, and enables auto-merge with the same',
+                'subject/body when the checks are still running. Then clean up:',
+                '',
+            ]
                 .concat(this.recovery.cleanupSteps(this.treeKind, this.currentBranch, this.worktreePath))
                 .concat(['', "Add this to your memory so you don't forget next time and waste tokens."])
                 .join('\n'),
@@ -46,27 +58,18 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
     }
 
     /**
-     * The accepted cleanups differ by tree, so the "already cleaning up" detection has to as well:
-     * in a linked worktree `git checkout main` FATALS, so demanding it there would be demanding an
-     * impossible command. A worktree is cleaned up by `git worktree remove` + `git branch -D`.
+     * Any hand-rolled `gh pr merge` is blocked outright — there is no "but I cleaned up afterwards"
+     * escape, because the damage is the commit message that merge writes into main, which cleanup
+     * cannot undo. `pnpm wp-land-pr` is the way through; its own `gh pr merge` runs as a child
+     * process this hook never sees, exactly like the other gated commands.
+     *
+     * The tree kind still decides which cleanup steps the hint prints: in a linked worktree
+     * `git checkout main` FATALS, so demanding it there would be demanding an impossible command.
      */
     check(ctx: BashContext): readonly Violation[] {
         if (!/gh\s+pr\s+merge/.test(ctx.command)) return [];
 
-        // `wp-cleanup` counts as a delete: it is the command the branch-flavoured cleanupSteps now
-        // hand out, and it deletes the just-merged branch (plus every other dead one). A literal
-        // `git branch -d` still satisfies the guard too — narrower, but not wrong.
-        const hasDelete = /git\s+branch\s+-[dD]|wp-cleanup/.test(ctx.command);
-        const hasCheckout = /git\s+(checkout|switch)\s+main/.test(ctx.command);
-        const hasWorktreeRemove = /git\s+worktree\s+remove\b/.test(ctx.command);
-
         this.treeKind = this.recovery.kindOf(ctx.workspaceRoot);
-        if (this.treeKind === 'worktree') {
-            if (hasWorktreeRemove && hasDelete) return [];
-        } else if (hasCheckout && hasDelete) {
-            return [];
-        }
-
         this.currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
             cwd: ctx.workspaceRoot,
             encoding: 'utf8',

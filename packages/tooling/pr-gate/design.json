@@ -113,6 +113,14 @@
                     "level": 5
                 },
                 {
+                    "id": "LandPrCommand",
+                    "className": "LandPrCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/land-pr-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "MergeEnd",
                     "className": "MergeEnd",
                     "kind": "class",
@@ -463,6 +471,42 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
+                    "from": "LandPrCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "LandPrCommand",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "branchNaming",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "LandPrCommand",
+                    "to": "PrMerger",
+                    "injection": "type",
+                    "token": "PrMerger",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts#PrMerger",
+                    "paramName": "prMerger",
+                    "paramType": "PrMerger"
+                },
+                {
+                    "from": "LandPrCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
                     "from": "MergeEnd",
                     "to": "BranchNaming",
                     "injection": "type",
@@ -578,6 +622,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/finish-upsert-pr-command.ts#FinishUpsertPrCommand",
                     "paramName": "finishUpsertPrCommand",
                     "paramType": "FinishUpsertPrCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "LandPrCommand",
+                    "injection": "type",
+                    "token": "LandPrCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/land-pr-command.ts#LandPrCommand",
+                    "paramName": "landPrCommand",
+                    "paramType": "LandPrCommand"
                 },
                 {
                     "from": "PrGateApp",
