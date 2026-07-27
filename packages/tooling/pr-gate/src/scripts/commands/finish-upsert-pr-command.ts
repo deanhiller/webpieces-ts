@@ -12,6 +12,7 @@ import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
 import { MergeEnd } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
+import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
 import { Dashboard, DashboardInput } from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -24,6 +25,18 @@ class PrRef {
     constructor(number: string, url: string) {
         this.number = number;
         this.url = url;
+    }
+}
+
+// The outcome of the whole upsert: the PR number ('' when it could not be resolved) plus what actually
+// happened to the merge, so the final summary reports the REAL result rather than assuming success.
+class UpsertResult {
+    prNumber: string;
+    merge: MergeOutcome;
+
+    constructor(prNumber: string, merge: MergeOutcome) {
+        this.prNumber = prNumber;
+        this.merge = merge;
     }
 }
 
@@ -41,6 +54,7 @@ export class FinishUpsertPrCommand {
         private readonly buildAffected: BuildAffected,
         private readonly mergeState: MergeState,
         private readonly mergeEnd: MergeEnd,
+        private readonly prMerger: PrMerger,
         private readonly dashboard: Dashboard,
     ) {}
 
@@ -78,13 +92,15 @@ export class FinishUpsertPrCommand {
         const title = this.prTitleFrom(review);
         const input = this.computeDashboardInput(repoRoot, true, review, title);
         const body = this.dashboard.renderDashboard(input);
-        const prNum = this.upsertPr(repoRoot, base, body, title, input);
+        const result = this.upsertPr(repoRoot, base, body, title, input);
+        const prNum = result.prNumber;
 
         process.stdout.write(
             '\n' + SEP + '✅ PR finished — here is exactly what I did\n' + SEP + '\n' +
             `   1. validated the build gate (authoritative)\n` +
             `   2. force-pushed your work to origin/${base}\n` +
             `   3. ${prNum ? `updated/created PR #${prNum}` : 'created the PR'} titled: "${title}"\n` +
+            `   4. ${result.merge.message}\n` +
             `   You are on  ${base}  — same name as the remote branch and the PR head.\n\n`,
         );
     }
@@ -117,7 +133,7 @@ export class FinishUpsertPrCommand {
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /
     // create / merge against `baseBranch` (baseBranchName tolerates a leftover `…wpN` mid-transition).
-    private upsertPr(repoRoot: string, baseBranch: string, body: string, title: string, input: DashboardInput): string {
+    private upsertPr(repoRoot: string, baseBranch: string, body: string, title: string, input: DashboardInput): UpsertResult {
         const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         fs.mkdirSync(prDir, { recursive: true });
         const bodyFile = path.join(prDir, 'pr-body.md');
@@ -134,11 +150,15 @@ export class FinishUpsertPrCommand {
             const create = spawnSync('gh', ['pr', 'create', '--head', baseBranch, '--base', 'main', '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
             if (create.status !== 0) {
                 process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
-                return '';
+                return new UpsertResult('', new MergeOutcome(false, false,
+                    '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)'));
             }
         } else {
             process.stdout.write(`Updating PR #${num}...\n`);
-            spawnSync('gh', ['pr', 'edit', num, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
+            const edit = spawnSync('gh', ['pr', 'edit', num, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
+            if (edit.status !== 0) {
+                process.stderr.write(`⚠️  gh pr edit failed — PR #${num} still shows its OLD title/body. The new body is in:\n  ` + bodyFile + '\n');
+            }
         }
 
         // Set the squash-merge SUBJECT to the PR title (+ the `(#N)` GitHub normally appends, which an
@@ -149,25 +169,10 @@ export class FinishUpsertPrCommand {
         const subject = ref.number !== '' ? `${title} (#${ref.number})` : title;
         const mergeBodyFile = path.join(prDir, 'merge-commit-body.md');
         fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
-        // Merge DIRECTLY with the explicit subject/body. A direct `gh pr merge --squash --subject
-        // --body-file` writes exactly this subject/body to main's history regardless of the repo's
-        // squash_merge_commit_title/message defaults — so the good "PR title (#N)" subject + risk/flags
-        // body lands even on client repos that have auto-merge DISABLED (allow_auto_merge=false), where
-        // `--auto` errors out and a later manual UI merge inherits the ugly `Squash merge of <branch>`
-        // subject from the branch's internal squash commit. This does NOT depend on any GitHub repo
-        // setting or on the caller enabling auto-merge.
-        const direct = spawnSync('gh', ['pr', 'merge', baseBranch, '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
-        if (direct.status !== 0) {
-            // Not mergeable yet (required checks still running, or the merge is otherwise blocked). Fall
-            // back to auto-merge carrying the SAME subject/body so it lands when checks pass. gh records
-            // the merge subject/body only at the moment auto-merge is FIRST enabled; a second `--auto` on
-            // an already-enabled PR silently keeps the OLD body, so disable-first re-stamps the current
-            // subject/body on every re-run (harmless no-op when auto-merge is not enabled).
-            process.stdout.write('Direct merge not possible yet — enabling auto-merge with the same subject/body...\n');
-            spawnSync('gh', ['pr', 'merge', baseBranch, '--disable-auto'], { stdio: 'ignore' });
-            spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
-        }
-        return ref.number !== '' ? ref.number : num;
+        // PrMerger owns the direct-merge / auto-merge-fallback decision AND checks every gh status, so a
+        // merge that did not happen is reported as such instead of being swallowed (see pr-merger.ts).
+        const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile);
+        return new UpsertResult(ref.number !== '' ? ref.number : num, outcome);
     }
 
     // The PR's number + web URL (for the merge subject `(#N)` and the commit-body back-link). Both ''

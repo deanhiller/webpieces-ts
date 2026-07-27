@@ -161,6 +161,14 @@
                     "level": 0
                 },
                 {
+                    "id": "PrMerger",
+                    "className": "PrMerger",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts",
+                    "level": 2
+                },
+                {
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
@@ -354,6 +362,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "PrMerger",
+                    "injection": "type",
+                    "token": "PrMerger",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts#PrMerger",
+                    "paramName": "prMerger",
+                    "paramType": "PrMerger"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
