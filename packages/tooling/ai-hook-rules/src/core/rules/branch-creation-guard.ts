@@ -93,13 +93,6 @@ const ORIGIN_MAIN_BASE = /git\s+(?:checkout\s+-[bB]|switch\s+-[cC])\s+\S+\s+orig
 // between the subcommand and the flags).
 const WORKTREE_ORIGIN_MAIN_BASE = /git\s+worktree\s+add\s+(?:\S+\s+)*origin\/main(?:\W|$)/;
 
-// Heredoc bodies: `<<EOF … \nEOF` / `<<-'EOF' … \nEOF`. Their content is DATA (a commit message, a
-// file being written), never a command.
-const HEREDOC_BODY = /<<-?\s*(['"]?)(\w+)\1[\s\S]*?^\t*\2\s*$/gm;
-
-// A single- or double-quoted span.
-const QUOTED_SPAN = /'([^']*)'|"([^"]*)"/g;
-
 function extractBranchName(command: string): string | null {
     for (const pattern of BRANCH_PATTERNS) {
         const m = pattern.exec(command);
@@ -229,20 +222,12 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
      * in `git checkout -b "dean/foo"`), so quoting a branch name cannot smuggle a creation past the
      * guard. Anything with whitespace inside quotes is prose, and collapses to a space.
      */
-    private stripNonCommandText(command: string): string {
-        const withoutHeredocs = command.replace(HEREDOC_BODY, ' ');
-        return withoutHeredocs.replace(QUOTED_SPAN, (match: string, single?: string, double?: string): string => {
-            const content = single ?? double ?? '';
-            return /\s/.test(content) ? ' ' : content;
-        });
-    }
-
     check(ctx: BashContext): readonly Violation[] {
         this.capCache = null;
         this.worktreeCapCache = null;
-        // Match against the command with heredoc bodies and prose-in-quotes removed. A commit message
-        // that merely MENTIONS a branch command is not a branch command.
-        const command = this.stripNonCommandText(ctx.command);
+        // Match against the command with heredoc bodies and prose-in-quotes removed (BashContext
+        // computes it for every guard now — this rule's private copy was the original).
+        const command = ctx.commandCode;
         const requestedName = extractBranchName(command);
         this.worktreeAdd = WORKTREE_ADD.test(command);
 

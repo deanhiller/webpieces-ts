@@ -67,7 +67,7 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
      * `git checkout main` FATALS, so demanding it there would be demanding an impossible command.
      */
     check(ctx: BashContext): readonly Violation[] {
-        if (!/gh\s+pr\s+merge/.test(ctx.command)) return [];
+        if (!/gh\s+pr\s+merge/.test(ctx.commandCode)) return [];
 
         this.treeKind = this.recovery.kindOf(ctx.workspaceRoot);
         this.currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {

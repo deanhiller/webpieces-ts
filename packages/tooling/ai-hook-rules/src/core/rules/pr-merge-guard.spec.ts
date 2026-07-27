@@ -11,11 +11,11 @@ vi.mock('child_process', () => ({
 }));
 
 import { PrMergeGuardConfig } from '@webpieces/rules-config';
-import type { BashContext } from '../types';
+import { BashContext } from '../types';
 import { PrMergeGuardRule } from './pr-merge-guard';
 
 function ctx(command: string): BashContext {
-    return { command, workspaceRoot: '/repo', options: {} } as BashContext;
+    return new BashContext(command, '/repo');
 }
 
 function guard(): PrMergeGuardRule {
@@ -49,6 +49,13 @@ describe('pr-merge-guard redirects every hand-rolled merge to wp-land-pr', () =>
     it('lets `pnpm wp-land-pr` through', () => {
         expect(guard().check(ctx('pnpm wp-land-pr')).length).toBe(0);
         expect(guard().check(ctx('pnpm wp-land-pr && pnpm wp-cleanup')).length).toBe(0);
+    });
+
+    // The exact command that this feature's own commit was blocked by: a commit message DESCRIBING
+    // the redirect. Matching is on ctx.commandCode, which drops heredoc bodies and quoted prose.
+    it('does not block a commit message that merely mentions merging', () => {
+        expect(guard().check(ctx("git commit -F - <<'EOF'\nredirect a hand-rolled gh pr merge to wp-land-pr\nEOF")).length).toBe(0);
+        expect(guard().check(ctx('git commit -m "explain why gh pr merge is blocked"')).length).toBe(0);
     });
 
     it('ignores commands that are not a PR merge', () => {

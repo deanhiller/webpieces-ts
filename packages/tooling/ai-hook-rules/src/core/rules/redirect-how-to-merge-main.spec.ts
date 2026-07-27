@@ -4,13 +4,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { RedirectHowToMergeMainConfig } from '@webpieces/rules-config';
-import type { BashContext } from '../types';
+import { BashContext } from '../types';
 import { RedirectHowToMergeMainRule } from './redirect-how-to-merge-main';
 
 const rule = new RedirectHowToMergeMainRule(new RedirectHowToMergeMainConfig());
 
 function ctx(command: string, workspaceRoot: string): BashContext {
-    return { command, workspaceRoot, options: {} } as BashContext;
+    return new BashContext(command, workspaceRoot);
 }
 
 // The merge/rebase path never shells out to git — that is the design win of the blanket ban, and it

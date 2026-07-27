@@ -11,7 +11,7 @@ import {
     WorktreeService,
 } from '@webpieces/rules-config';
 
-import type { BashContext } from '../types';
+import { BashContext } from '../types';
 import { BranchCreationGuardRule } from './branch-creation-guard';
 
 /**
@@ -32,7 +32,7 @@ function git(args: string, cwd: string = repo): string {
 }
 
 function ctx(command: string): BashContext {
-    return { command, workspaceRoot: repo, options: {} } as BashContext;
+    return new BashContext(command, repo);
 }
 
 const worktrees = new WorktreeService();
