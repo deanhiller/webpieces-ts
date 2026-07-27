@@ -28,25 +28,27 @@ export class GateDefinition {
 // CANNOT be forced from the client: `gh pr merge --auto` calls the enablePullRequestAutoMerge GraphQL
 // mutation, which hard-errors with "Auto merge is not allowed for this repository" when the repo says
 // no. So the only lever a config knob has is WHICH PATHS WE ATTEMPT — never whether the queue exists.
-export const MERGE_MODE_DETECT = 'DETECT';
-export const MERGE_MODE_DIRECT = 'DIRECT';
+export const MERGE_MODE_AUTO = 'AUTO';
 export const MERGE_MODE_NONE = 'NONE';
-export const MERGE_MODES = [MERGE_MODE_DETECT, MERGE_MODE_DIRECT, MERGE_MODE_NONE];
+export const MERGE_MODES = [MERGE_MODE_AUTO, MERGE_MODE_NONE];
 
 export class PrGateConfig {
     mode: string;
     buildCommand: string;
     gates: GateDefinition[];
     /**
-     * DETECT (default) — merge directly when the PR is mergeable; when it is NOT, ask the repo whether
-     *   auto-merge is allowed and queue it only if the answer is yes. Correct on both kinds of repo
-     *   with zero configuration, which is why it is the default: nobody has to set this.
-     * DIRECT — merge directly when mergeable, but NEVER queue auto-merge even where it is allowed.
-     *   For teams who want the merge to happen only while a run is watching it.
-     * NONE — post/update the PR and stop; nothing is merged or queued and a human clicks merge. For
-     *   repos whose policy is "no merge without a person" — which is usually what allow_auto_merge=false
-     *   is really expressing. Pair it with the repo's squash_merge_commit_title=PR_TITLE +
-     *   squash_merge_commit_message=PR_BODY so the human's UI merge still lands a good commit message.
+     * REQUIRED — every repo must state its policy; there is deliberately no default, because the two
+     * answers are a real policy decision and guessing it either merges when a team did not want that,
+     * or silently stops landing PRs on a team that relied on it.
+     *
+     * AUTO — wp-finish-upsert-pr LANDS the PR: squash-merge it right away when it is mergeable, else
+     *   enable GitHub auto-merge so it lands when the checks pass. Both carry an explicit --subject /
+     *   --body-file, which is the ONLY way main's history gets the PR title plus the compact
+     *   risk/flags body — no repo setting can produce that. Requires allow_auto_merge on the repo.
+     * NONE — wp-finish-upsert-pr only opens/updates the PR and stops; a human merges. NOTE the cost:
+     *   a UI merge cannot use the compact body, so main's commit falls back to the repo's
+     *   squash_merge_commit_title/message settings. Set squash_merge_commit_title=PR_TITLE there, or
+     *   commits land as the internal "Squash merge of <branch>" subject.
      */
     mergeMode: string;
 
@@ -70,7 +72,7 @@ export function defaultGates(): GateDefinition[] {
 }
 
 export function defaultPrGateConfig(): PrGateConfig {
-    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_DETECT);
+    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO);
 }
 
 interface RawGate {
@@ -106,7 +108,8 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const mode = raw.mode ?? defaults.mode;
     const buildCommand = raw.buildCommand ?? defaults.buildCommand;
     const gates = raw.gates !== undefined ? raw.gates.map(toGate) : defaults.gates;
-    // Omitted (the normal case) means DETECT — the mode that is right on both kinds of repo.
+    // REQUIRED — validatePrGateSection rejects an omitted/unknown value, so this fallback only ever
+    // applies to the no-config-file path that defaultPrGateConfig() serves.
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
     return new PrGateConfig(mode, buildCommand, gates, mergeMode);
 }

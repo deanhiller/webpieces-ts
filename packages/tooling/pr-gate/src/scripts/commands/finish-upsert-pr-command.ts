@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, writeTemplate, RepoRootFinder,
-    MERGE_MODE_DETECT,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -172,9 +171,9 @@ export class FinishUpsertPrCommand {
         fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
         // PrMerger owns the direct-merge / auto-merge-fallback decision AND checks every gh status, so a
         // merge that did not happen is reported as such instead of being swallowed (see pr-merger.ts).
-        // DETECT unless the repo overrode it — including when an older published rules-config has no
-        // mergeMode field at all, which must keep behaving exactly as it does today.
-        const mergeMode = loadAndValidate(repoRoot).prGate.mergeMode ?? MERGE_MODE_DETECT;
+        // REQUIRED config — no default here on purpose. A missing value (an older published
+        // rules-config that has no such field) reaches PrMerger as '' and is treated as "do not merge".
+        const mergeMode = loadAndValidate(repoRoot).prGate.mergeMode ?? '';
         const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile, mergeMode);
         return new UpsertResult(ref.number !== '' ? ref.number : num, outcome);
     }

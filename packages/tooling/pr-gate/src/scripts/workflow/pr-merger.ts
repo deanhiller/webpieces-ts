@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { MERGE_MODE_DIRECT, MERGE_MODE_NONE } from '@webpieces/rules-config';
+import { MERGE_MODE_AUTO, MERGE_MODE_NONE } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // What actually happened when we tried to land the squash merge. `message` is printed VERBATIM in the
@@ -28,9 +28,10 @@ export class MergeOutcome {
  *   --body-file` does not depend on that setting at all. When the PR is NOT yet mergeable there is no
  *   queue to fall back to, so we say so loudly instead of firing a `--auto` that can only fail.
  *
- * That branch is detected, not configured — DETECT is the default and is right on both. `mergeMode`
- * only exists to OVERRIDE it: DIRECT never queues, NONE never merges at all (for a repo whose policy
- * is that a person clicks merge). No mode can force a queue that the repo has turned off.
+ * WHICH of those a repo gets is not guessed — `pr-gate.mergeMode` is REQUIRED config. AUTO means the
+ * tooling lands PRs; NONE means it only posts them and a person merges. No mode can force a queue the
+ * repo has turned off, so AUTO on a repo with allow_auto_merge=false is a CONFIG error, reported as
+ * one rather than papered over.
  *
  * Every `gh` status is checked. Nothing here is allowed to fail silently.
  */
@@ -39,17 +40,17 @@ export class PrMerger {
     /**
      * @param subject       the squash-commit subject, normally `<PR title> (#N)`
      * @param mergeBodyFile file holding the squash-commit body (risk/flags/PR link)
-     * @param mergeMode     pr-gate.mergeMode from webpieces.config.json — DETECT (default) / DIRECT /
-     *                      NONE. An unrecognized or missing value is treated as DETECT, so a repo whose
-     *                      published rules-config predates this field keeps today's behavior.
+     * @param mergeMode     pr-gate.mergeMode from webpieces.config.json — AUTO or NONE. Anything else
+     *                      (including a repo still on a published rules-config that predates the field)
+     *                      is treated as NONE: when the policy is unreadable, do NOT touch main.
      */
     merge(baseBranch: string, subject: string, mergeBodyFile: string, mergeMode: string): MergeOutcome {
-        // NONE: the repo's policy is that a person clicks merge. Do not merge, do not queue, and say so
-        // — the PR itself is already posted/updated by this point, which is the whole job in this mode.
-        if (mergeMode === MERGE_MODE_NONE) {
+        // Anything that is not an explicit AUTO leaves the PR alone. The PR itself is already
+        // posted/updated by this point, which is the whole job in this mode.
+        if (mergeMode !== MERGE_MODE_AUTO) {
             return new MergeOutcome(false, false,
-                'did NOT merge — pr-gate.mergeMode is NONE, so the PR is left for a human to merge.\n' +
-                `      Merge subject GitHub should use: "${subject}"`);
+                `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so the PR is left for a human to merge.\n` +
+                `      Subject GitHub will use is its own (squash_merge_commit_title), NOT: "${subject}"`);
         }
 
         // A direct `gh pr merge --squash --subject --body-file` writes exactly this subject/body to
@@ -61,25 +62,16 @@ export class PrMerger {
         }
 
         // Past here the PR is not mergeable yet — checks still running, or a review / branch protection
-        // is blocking it. The auto-merge queue is the only way to still land it unattended.
-        if (mergeMode === MERGE_MODE_DIRECT) {
-            return new MergeOutcome(false, false,
-                '⚠️  did NOT merge, and queued NOTHING — the PR is not mergeable yet, and pr-gate.mergeMode\n' +
-                "      is DIRECT so auto-merge was not attempted. Re-run 'pnpm wp-finish-upsert-pr' once the\n" +
-                '      PR is mergeable and it will squash-merge it with the subject/body above.');
-        }
-
-        // DETECT: only ask GitHub about the queue on THIS path — a run whose direct merge succeeded
-        // never needs the answer, so the common case costs no extra API call.
+        // is blocking it. The auto-merge queue is the only way to still land it unattended, so only ask
+        // GitHub about the queue HERE: a run whose direct merge succeeded costs no extra API call.
         if (!this.autoMergeAllowed()) {
             return new MergeOutcome(false, false,
-                '⚠️  did NOT merge, and queued NOTHING — the PR is not mergeable yet (checks still running,\n' +
-                '      or a review / branch protection is blocking it) AND this repo does not allow\n' +
-                '      auto-merge (allow_auto_merge is not true), so there is no queue to fall back to.\n' +
-                "      Re-run 'pnpm wp-finish-upsert-pr' once the PR is mergeable and it will squash-merge\n" +
-                '      it with the subject/body above. Clicking merge in the GitHub UI instead lands the\n' +
-                '      internal "Squash merge of <branch>" subject in main. If this repo turns auto-merge\n' +
-                '      off deliberately, set commands.pr-gate.mergeMode to "NONE" to stop trying to merge.');
+                '⚠️  did NOT merge, and queued NOTHING — CONFIG MISMATCH: pr-gate.mergeMode is AUTO, but\n' +
+                '      this repo has allow_auto_merge=false, so there is no queue to fall back to and the\n' +
+                '      PR is not mergeable yet. `gh pr merge --auto` cannot override a repo that says no.\n' +
+                '      Fix it at ONE of the two ends: turn on "Allow auto-merge" in the repo settings, or\n' +
+                '      set commands.pr-gate.mergeMode to "NONE" (and set that repo\'s\n' +
+                '      squash_merge_commit_title to PR_TITLE so a human merge still gets a real subject).');
         }
 
         // gh records the merge subject/body only at the moment auto-merge is FIRST enabled; a second

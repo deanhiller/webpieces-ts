@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MERGE_MODE_DETECT, MERGE_MODE_DIRECT, MERGE_MODE_NONE } from '@webpieces/rules-config';
+import { MERGE_MODE_AUTO, MERGE_MODE_NONE } from '@webpieces/rules-config';
 import { PrMerger, MergeOutcome } from './pr-merger';
 
 // A PrMerger whose two `gh` seams are canned, so the decision logic is exercised with NO gh, no network
@@ -33,9 +33,9 @@ const mergeIn = (statuses: number[], autoAllowed: boolean, mode: string): [Merge
     return [outcome, merger.calls];
 };
 
-// The default mode, which is what every repo gets unless it sets pr-gate.mergeMode.
+// AUTO — the mode where the tooling is allowed to land the PR.
 const merge = (statuses: number[], autoAllowed: boolean): [MergeOutcome, string[][]] =>
-    mergeIn(statuses, autoAllowed, MERGE_MODE_DETECT);
+    mergeIn(statuses, autoAllowed, MERGE_MODE_AUTO);
 
 // Every gh invocation flattened to a string, for asserting which flags were (and were NOT) used.
 const flat = (calls: string[][]): string[] => calls.map((c: string[]): string => c.join(' '));
@@ -113,27 +113,11 @@ describe('mergeMode NONE — "a human clicks merge" repos', () => {
     });
 });
 
-describe('mergeMode DIRECT — merge when mergeable, never queue', () => {
-    it('still merges directly when the PR is mergeable', () => {
-        const [outcome, calls] = mergeIn([0], true, MERGE_MODE_DIRECT);
-        expect(outcome.merged).toBe(true);
-        expect(calls).toHaveLength(1);
-    });
-
-    it('does NOT fall back to --auto even on a repo that allows it', () => {
-        const [outcome, calls] = mergeIn([1], true, MERGE_MODE_DIRECT);
+describe('an unknown or missing mergeMode — the fail-safe', () => {
+    it('does NOT merge, because an unreadable policy must never be read as permission to touch main', () => {
+        const [outcome, calls] = mergeIn([0], true, '');
         expect(outcome.merged).toBe(false);
-        expect(outcome.autoMergeEnabled).toBe(false);
-        expect(outcome.message).toContain('DIRECT');
-        expect(calls).toHaveLength(1);
-        expect(flat(calls).some((c: string): boolean => c.includes('--auto'))).toBe(false);
-    });
-});
-
-describe('an unknown or missing mergeMode', () => {
-    it('behaves as DETECT, so an older published rules-config keeps today’s behavior', () => {
-        const [outcome, calls] = mergeIn([1, 0], true, '');
-        expect(outcome.autoMergeEnabled).toBe(true);
-        expect(flat(calls).some((c: string): boolean => c.includes('--auto'))).toBe(true);
+        expect(calls).toEqual([]);
+        expect(outcome.message).toContain('did NOT merge');
     });
 });

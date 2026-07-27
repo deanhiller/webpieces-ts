@@ -240,7 +240,21 @@ export function validateWebpiecesConfig(
 const PR_GATE_MODES = ['ON', 'OFF'] as const;
 // Optional — omitted means DETECT. Kept inline (like prGateExample) to avoid a load-config ↔
 // pr-gate-config import cycle; the canonical list + semantics live in pr-gate-config.ts.
-const PR_GATE_MERGE_MODES = ['DETECT', 'DIRECT', 'NONE'] as const;
+const PR_GATE_MERGE_MODES = ['AUTO', 'NONE'] as const;
+
+// Spelled out because the choice is a POLICY decision with a consequence the chooser cannot see:
+// only the AUTO path can put the compact risk/flags body in main's history, because a UI merge is
+// limited to the repo's squash_merge_commit_title/message settings and no setting produces it.
+const MERGE_MODE_HELP = (
+        `Must be one of: ${PR_GATE_MERGE_MODES.join(', ')}.\n` +
+        `  "AUTO" — wp-finish-upsert-pr lands the PR: it squash-merges when mergeable, else enables\n` +
+        `           GitHub auto-merge, both with an explicit --subject/--body-file so main's history\n` +
+        `           gets the PR title + the compact risk/flags body. Needs allow_auto_merge on the repo\n` +
+        `           (gh api repos/{owner}/{repo} --jq .allow_auto_merge).\n` +
+        `  "NONE" — wp-finish-upsert-pr only opens/updates the PR; a human merges it. The compact body\n` +
+        `           is then impossible, so set the repo's squash_merge_commit_title to PR_TITLE or\n` +
+        `           commits land as the internal "Squash merge of <branch>" subject.`
+);
 
 // Copy-paste example for the top-level `pr-gate` block (sibling of `rules`). Kept inline rather
 // than imported from pr-gate-config.ts to avoid a load-config ↔ pr-gate-config import cycle.
@@ -303,7 +317,9 @@ export function validatePrGateSection(section: unknown): string[] {
         errors.push(`[pr-gate] "mode" = "${String(s['mode'])}" is not valid. Must be one of: ${PR_GATE_MODES.join(', ')}.`);
     }
 
-    // buildCommand is required whenever the gate is active (mode !== OFF).
+    // buildCommand and mergeMode are both required whenever the gate is active (mode !== OFF). There
+    // is deliberately NO default for mergeMode: whether the tooling may land your PRs is a policy
+    // decision, and either guess is wrong for somebody.
     if (s['mode'] !== 'OFF') {
         const cmd = s['buildCommand'];
         if (typeof cmd !== 'string' || cmd.trim() === '') {
@@ -312,17 +328,12 @@ export function validatePrGateSection(section: unknown): string[] {
                 `Add e.g. "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)".`,
             );
         }
-    }
-
-    // Optional. Omitting it (DETECT) is right on BOTH an auto-merge repo and one with the queue turned
-    // off, so only a team that wants to override that behavior sets it.
-    if ('mergeMode' in s && (typeof s['mergeMode'] !== 'string' || !PR_GATE_MERGE_MODES.includes(s['mergeMode'] as typeof PR_GATE_MERGE_MODES[number]))) {
-        errors.push(
-            `[pr-gate] "mergeMode" = "${String(s['mergeMode'])}" is not valid. Must be one of: ` +
-            `${PR_GATE_MERGE_MODES.join(', ')} (omit it for DETECT — merge directly when mergeable, ` +
-            `and queue auto-merge only when the repo allows it). Use NONE for a repo whose policy is ` +
-            `"a human clicks merge".`,
-        );
+        const mm = s['mergeMode'];
+        if (!('mergeMode' in s)) {
+            errors.push(`[pr-gate] Missing required field "mergeMode". ${MERGE_MODE_HELP}`);
+        } else if (typeof mm !== 'string' || !PR_GATE_MERGE_MODES.includes(mm as typeof PR_GATE_MERGE_MODES[number])) {
+            errors.push(`[pr-gate] "mergeMode" = "${String(mm)}" is not valid. ${MERGE_MODE_HELP}`);
+        }
     }
 
     if ('gates' in s) {

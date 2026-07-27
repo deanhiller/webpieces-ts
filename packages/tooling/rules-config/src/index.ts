@@ -136,8 +136,7 @@ export {
     defaultGates,
     defaultPrGateConfig,
     buildPrGateConfig,
-    MERGE_MODE_DETECT,
-    MERGE_MODE_DIRECT,
+    MERGE_MODE_AUTO,
     MERGE_MODE_NONE,
     MERGE_MODES,
 } from './pr-gate-config';
