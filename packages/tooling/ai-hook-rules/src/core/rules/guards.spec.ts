@@ -10,7 +10,7 @@ import {
     MergeInProgressGuardConfig,
     allRuleNames,
 } from '@webpieces/rules-config';
-import type { BashContext } from '../types';
+import { BashContext } from '../types';
 import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';
 import { builtInRuleNames } from './index';
@@ -19,7 +19,7 @@ const prCreationOrPushGuard = new PrCreationOrPushGuardRule(new PrCreationOrPush
 const mergeInProgressGuard = new MergeInProgressGuardRule(new MergeInProgressGuardConfig());
 
 function ctx(command: string, workspaceRoot: string): BashContext {
-    return { command, workspaceRoot, options: {} } as BashContext;
+    return new BashContext(command, workspaceRoot);
 }
 
 // A real temp root: a blocking guard now WRITES the git-workflow doc it links to, so the root must be
@@ -27,6 +27,24 @@ function ctx(command: string, workspaceRoot: string): BashContext {
 function tempRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guards-'));
 }
+
+describe('pr-creation-or-push-guard matches code, not prose about code', () => {
+    // End-to-end proof for the guard whose `\bgit\s+push\b` pattern fires on the most ordinary English
+    // in a repo whose subject matter IS the git workflow. Stripping lives in BashContext.commandCode.
+    it('does not block a commit message that merely mentions the blocked commands', () => {
+        const root = tempRoot();
+        expect(prCreationOrPushGuard.check(ctx('git commit -m "document why git push is blocked"', root)).length).toBe(0);
+        expect(prCreationOrPushGuard.check(ctx("git commit -F - <<'EOF'\nwe now block gh pr create\nEOF", root)).length).toBe(0);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('still blocks the real commands', () => {
+        const root = tempRoot();
+        expect(prCreationOrPushGuard.check(ctx('git push origin HEAD', root)).length).toBe(1);
+        expect(prCreationOrPushGuard.check(ctx('gh pr create --title x', root)).length).toBe(1);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+});
 
 describe('pr-creation-or-push-guard', () => {
     it('writes the git-workflow doc it points the AI at (it may not exist yet)', () => {

@@ -65,7 +65,7 @@ export class PrCreationOrPushGuardRule extends BashRuleBase<PrCreationOrPushGuar
     get fixHint(): FixHint { return fixHintFor(this.upsertPrCommand); }
 
     check(ctx: BashContext): readonly Violation[] {
-        if (!isBlockedPrOrPush(ctx.command)) return [];
+        if (!isBlockedPrOrPush(ctx.commandCode)) return [];
         // Materialize the doc we are about to send the AI to. Pointing at a path that does not exist
         // (nothing has run a `wp-*` command in this tree yet) costs the AI a turn to discover; a STALE
         // copy from an older @webpieces is just as bad, so overwrite rather than write-if-missing.

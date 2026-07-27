@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { BranchCreationGuardConfig } from '@webpieces/rules-config';
 
-import type { BashContext } from '../types';
+import { BashContext } from '../types';
 
 // Mutable git state the mocked execSync/spawnSync read. vi.hoisted so the vi.mock factories (hoisted
 // above imports) can close over it without a TDZ error. `localBranches` feeds the cap check's
@@ -60,7 +60,7 @@ import type * as fs from 'fs';
 import { BranchCreationGuardRule } from './branch-creation-guard';
 
 function ctx(command: string): BashContext {
-    return { command, workspaceRoot: '/tmp/x', options: {} } as BashContext;
+    return new BashContext(command, '/tmp/x');
 }
 
 // A merged-branches cache with `deletable` entries — the shape the detached refresher writes.

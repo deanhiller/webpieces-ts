@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { MainSyncStatus, MergedBranchBashGuardConfig } from '@webpieces/rules-config';
 
-import type { BashContext } from '../types';
+import { BashContext } from '../types';
 
 type RulesConfigModule = typeof import('@webpieces/rules-config');
 
@@ -45,7 +45,7 @@ vi.mock('../decision-log', () => ({
 import { MergedBranchBashGuardRule } from './merged-branch-bash-guard';
 
 function ctx(command: string): BashContext {
-    return { command, workspaceRoot: '/tmp/x', options: {} } as BashContext;
+    return new BashContext(command, '/tmp/x');
 }
 
 function rule(): MergedBranchBashGuardRule {

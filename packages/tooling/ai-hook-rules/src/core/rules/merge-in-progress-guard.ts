@@ -68,7 +68,7 @@ export class MergeInProgressGuardRule extends BashRuleBase<MergeInProgressGuardC
     get fixHint(): FixHint { return fixHintFor(this.mergeCompleteCommand); }
 
     check(ctx: BashContext): readonly Violation[] {
-        if (!isBlockedDuringMerge(ctx.command)) return [];
+        if (!isBlockedDuringMerge(ctx.commandCode)) return [];
         const marker = findUnvalidatedMerge(ctx.workspaceRoot);
         if (!marker) return [];
         return [new V(

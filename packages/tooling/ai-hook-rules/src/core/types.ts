@@ -108,17 +108,51 @@ export class EditContext {
     }
 }
 
+// A heredoc and its body: `<<EOF` / `<<'EOF'` / `<<-EOF` through the terminator line.
+const HEREDOC_BODY = /<<-?\s*(['"]?)(\w+)\1[\s\S]*?^\t*\2\s*$/gm;
+
+// A single- or double-quoted span.
+const QUOTED_SPAN = /'([^']*)'|"([^"]*)"/g;
+
 export class BashContext {
     readonly tool: 'Bash';
     readonly command: string;
+    /**
+     * `command` with heredoc bodies and prose-in-quotes removed — what a guard should MATCH on, while
+     * `command` stays raw for the violation message (a human needs to see what they actually typed).
+     *
+     * A commit message that merely MENTIONS a blocked command is not that command. This repo's whole
+     * subject matter is the git workflow, so its commit messages, docs and the guards' own fix-hint
+     * text are full of `git push` / `gh pr …` strings; matching raw text blocks writing about the
+     * tooling. A guard that cries wolf is a guard someone eventually turns OFF, which costs far more
+     * than the theoretical bypass this opens (`sh -c '<blocked command>'` stops matching). That trade
+     * is deliberate: these guards exist to catch a FORGETFUL agent, not an adversarial one.
+     *
+     * ONLY for blocklist-shaped guards ("if the command matches X, block"), where stripping can only
+     * ever block LESS. Never use it in an allowlist-shaped guard such as merged-branch-bash-guard,
+     * where stripping could turn a permitted recovery command into a blocked one and deadlock the
+     * session — there, match on the raw `command`.
+     */
+    readonly commandCode: string;
     readonly workspaceRoot: string;
     options: RuleOptions;
 
     constructor(command: string, workspaceRoot: string) {
         this.tool = 'Bash';
         this.command = command;
+        this.commandCode = this.stripProse(command);
         this.workspaceRoot = workspaceRoot;
         this.options = {};
+    }
+
+    // A quoted span WITHOUT whitespace is kept: `git checkout "main"` is a real command with a quoted
+    // argument, not prose. One containing whitespace is a sentence, and becomes a single space.
+    private stripProse(command: string): string {
+        const withoutHeredocs = command.replace(HEREDOC_BODY, ' ');
+        return withoutHeredocs.replace(QUOTED_SPAN, (match: string, single?: string, double?: string): string => {
+            const content = single ?? double ?? '';
+            return /\s/.test(content) ? ' ' : content;
+        });
     }
 }
 
