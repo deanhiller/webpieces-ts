@@ -5,6 +5,12 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "types": "./src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.js"
+        }
+    },
     "author": "Dean Hiller",
     "license": "Apache-2.0",
     "repository": {
