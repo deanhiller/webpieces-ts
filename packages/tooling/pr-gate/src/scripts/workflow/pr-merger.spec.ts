@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { MERGE_MODE_DETECT, MERGE_MODE_DIRECT, MERGE_MODE_NONE } from '@webpieces/rules-config';
 import { PrMerger, MergeOutcome } from './pr-merger';
 
 // A PrMerger whose two `gh` seams are canned, so the decision logic is exercised with NO gh, no network
@@ -26,11 +27,15 @@ class FakePrMerger extends PrMerger {
     }
 }
 
-const merge = (statuses: number[], autoAllowed: boolean): [MergeOutcome, string[][]] => {
+const mergeIn = (statuses: number[], autoAllowed: boolean, mode: string): [MergeOutcome, string[][]] => {
     const merger = new FakePrMerger(statuses, autoAllowed);
-    const outcome = merger.merge('dean/feature', 'My PR title (#7)', '/tmp/body.md');
+    const outcome = merger.merge('dean/feature', 'My PR title (#7)', '/tmp/body.md', mode);
     return [outcome, merger.calls];
 };
+
+// The default mode, which is what every repo gets unless it sets pr-gate.mergeMode.
+const merge = (statuses: number[], autoAllowed: boolean): [MergeOutcome, string[][]] =>
+    mergeIn(statuses, autoAllowed, MERGE_MODE_DETECT);
 
 // Every gh invocation flattened to a string, for asserting which flags were (and were NOT) used.
 const flat = (calls: string[][]): string[] => calls.map((c: string[]): string => c.join(' '));
@@ -90,5 +95,45 @@ describe('gh cannot be spawned at all', () => {
         const [outcome] = merge([-1], false);
         expect(outcome.merged).toBe(false);
         expect(outcome.message).toContain('did NOT merge');
+    });
+});
+
+describe('mergeMode NONE — "a human clicks merge" repos', () => {
+    it('runs NO gh merge command at all, even when the PR is perfectly mergeable', () => {
+        const [outcome, calls] = mergeIn([0], true, MERGE_MODE_NONE);
+        expect(outcome.merged).toBe(false);
+        expect(outcome.autoMergeEnabled).toBe(false);
+        expect(calls).toEqual([]);
+    });
+
+    it('still reports the subject GitHub should use, so the human merge can be checked', () => {
+        const [outcome] = mergeIn([0], true, MERGE_MODE_NONE);
+        expect(outcome.message).toContain('mergeMode is NONE');
+        expect(outcome.message).toContain('My PR title (#7)');
+    });
+});
+
+describe('mergeMode DIRECT — merge when mergeable, never queue', () => {
+    it('still merges directly when the PR is mergeable', () => {
+        const [outcome, calls] = mergeIn([0], true, MERGE_MODE_DIRECT);
+        expect(outcome.merged).toBe(true);
+        expect(calls).toHaveLength(1);
+    });
+
+    it('does NOT fall back to --auto even on a repo that allows it', () => {
+        const [outcome, calls] = mergeIn([1], true, MERGE_MODE_DIRECT);
+        expect(outcome.merged).toBe(false);
+        expect(outcome.autoMergeEnabled).toBe(false);
+        expect(outcome.message).toContain('DIRECT');
+        expect(calls).toHaveLength(1);
+        expect(flat(calls).some((c: string): boolean => c.includes('--auto'))).toBe(false);
+    });
+});
+
+describe('an unknown or missing mergeMode', () => {
+    it('behaves as DETECT, so an older published rules-config keeps today’s behavior', () => {
+        const [outcome, calls] = mergeIn([1, 0], true, '');
+        expect(outcome.autoMergeEnabled).toBe(true);
+        expect(flat(calls).some((c: string): boolean => c.includes('--auto'))).toBe(true);
     });
 });

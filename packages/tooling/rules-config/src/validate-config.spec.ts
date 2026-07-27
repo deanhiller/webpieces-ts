@@ -318,6 +318,22 @@ describe('validatePrGateSection', () => {
         expect(bad.some(e => e.includes('gates[0].warningColor must be "yellow" or "red"'))).toBe(true);
         expect(bad.some(e => e.includes('gates[0].disabled must be a boolean'))).toBe(true);
     });
+
+    it('accepts an omitted mergeMode — DETECT is the default and nobody has to configure it', () => {
+        expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x' })).toEqual([]);
+    });
+
+    it('accepts every valid mergeMode', () => {
+        for (const mergeMode of ['DETECT', 'DIRECT', 'NONE']) {
+            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode })).toEqual([]);
+        }
+    });
+
+    it('rejects an unknown mergeMode and points at NONE for human-merge repos', () => {
+        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO' });
+        expect(bad.some(e => e.includes('"mergeMode" = "AUTO" is not valid'))).toBe(true);
+        expect(bad.some(e => e.includes('a human clicks merge'))).toBe(true);
+    });
 });
 
 describe('validateSectionPlacement', () => {

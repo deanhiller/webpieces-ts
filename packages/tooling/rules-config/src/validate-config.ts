@@ -238,6 +238,9 @@ export function validateWebpiecesConfig(
 }
 
 const PR_GATE_MODES = ['ON', 'OFF'] as const;
+// Optional — omitted means DETECT. Kept inline (like prGateExample) to avoid a load-config ↔
+// pr-gate-config import cycle; the canonical list + semantics live in pr-gate-config.ts.
+const PR_GATE_MERGE_MODES = ['DETECT', 'DIRECT', 'NONE'] as const;
 
 // Copy-paste example for the top-level `pr-gate` block (sibling of `rules`). Kept inline rather
 // than imported from pr-gate-config.ts to avoid a load-config ↔ pr-gate-config import cycle.
@@ -309,6 +312,17 @@ export function validatePrGateSection(section: unknown): string[] {
                 `Add e.g. "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)".`,
             );
         }
+    }
+
+    // Optional. Omitting it (DETECT) is right on BOTH an auto-merge repo and one with the queue turned
+    // off, so only a team that wants to override that behavior sets it.
+    if ('mergeMode' in s && (typeof s['mergeMode'] !== 'string' || !PR_GATE_MERGE_MODES.includes(s['mergeMode'] as typeof PR_GATE_MERGE_MODES[number]))) {
+        errors.push(
+            `[pr-gate] "mergeMode" = "${String(s['mergeMode'])}" is not valid. Must be one of: ` +
+            `${PR_GATE_MERGE_MODES.join(', ')} (omit it for DETECT — merge directly when mergeable, ` +
+            `and queue auto-merge only when the repo allows it). Use NONE for a repo whose policy is ` +
+            `"a human clicks merge".`,
+        );
     }
 
     if ('gates' in s) {

@@ -23,15 +23,38 @@ export class GateDefinition {
     }
 }
 
+// How wp-finish-upsert-pr should try to LAND the PR once it has posted it. GitHub's auto-merge queue
+// is a REPO-level setting (`allow_auto_merge`) that many orgs turn OFF as a policy control, and it
+// CANNOT be forced from the client: `gh pr merge --auto` calls the enablePullRequestAutoMerge GraphQL
+// mutation, which hard-errors with "Auto merge is not allowed for this repository" when the repo says
+// no. So the only lever a config knob has is WHICH PATHS WE ATTEMPT — never whether the queue exists.
+export const MERGE_MODE_DETECT = 'DETECT';
+export const MERGE_MODE_DIRECT = 'DIRECT';
+export const MERGE_MODE_NONE = 'NONE';
+export const MERGE_MODES = [MERGE_MODE_DETECT, MERGE_MODE_DIRECT, MERGE_MODE_NONE];
+
 export class PrGateConfig {
     mode: string;
     buildCommand: string;
     gates: GateDefinition[];
+    /**
+     * DETECT (default) — merge directly when the PR is mergeable; when it is NOT, ask the repo whether
+     *   auto-merge is allowed and queue it only if the answer is yes. Correct on both kinds of repo
+     *   with zero configuration, which is why it is the default: nobody has to set this.
+     * DIRECT — merge directly when mergeable, but NEVER queue auto-merge even where it is allowed.
+     *   For teams who want the merge to happen only while a run is watching it.
+     * NONE — post/update the PR and stop; nothing is merged or queued and a human clicks merge. For
+     *   repos whose policy is "no merge without a person" — which is usually what allow_auto_merge=false
+     *   is really expressing. Pair it with the repo's squash_merge_commit_title=PR_TITLE +
+     *   squash_merge_commit_message=PR_BODY so the human's UI merge still lands a good commit message.
+     */
+    mergeMode: string;
 
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[]) {
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string) {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
+        this.mergeMode = mergeMode;
     }
 }
 
@@ -47,7 +70,7 @@ export function defaultGates(): GateDefinition[] {
 }
 
 export function defaultPrGateConfig(): PrGateConfig {
-    return new PrGateConfig('ON', '', defaultGates());
+    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_DETECT);
 }
 
 interface RawGate {
@@ -61,6 +84,7 @@ interface RawPrGateSection {
     mode?: string;
     buildCommand?: string;
     gates?: RawGate[];
+    mergeMode?: string;
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -82,5 +106,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const mode = raw.mode ?? defaults.mode;
     const buildCommand = raw.buildCommand ?? defaults.buildCommand;
     const gates = raw.gates !== undefined ? raw.gates.map(toGate) : defaults.gates;
-    return new PrGateConfig(mode, buildCommand, gates);
+    // Omitted (the normal case) means DETECT — the mode that is right on both kinds of repo.
+    const mergeMode = raw.mergeMode ?? defaults.mergeMode;
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode);
 }
