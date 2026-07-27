@@ -9,7 +9,8 @@
         "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
         "wp-start-update": "./src/scripts/wp-start-update.js",
         "wp-finish-update": "./src/scripts/wp-finish-update.js",
-        "wp-cleanup": "./src/scripts/wp-cleanup.js"
+        "wp-cleanup": "./src/scripts/wp-cleanup.js",
+        "wp-land-pr": "./src/scripts/wp-land-pr.js"
     },
     "files": [
         "src/**/*"

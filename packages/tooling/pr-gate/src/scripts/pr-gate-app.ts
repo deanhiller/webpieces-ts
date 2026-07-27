@@ -5,10 +5,11 @@ import { FinishUpdateCommand } from './commands/finish-update-command';
 import { StartUpsertPrCommand } from './commands/start-upsert-pr-command';
 import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
+import { LandPrCommand } from './commands/land-pr-command';
 
 /**
- * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the 4
- * command classes → the injected git/merge/dashboard services). `@DocumentDesign` marks it the
+ * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the command
+ * classes → the injected git/merge/dashboard services). `@DocumentDesign` marks it the
  * top-of-DAG the DI-design analyzer roots on, so `role:app` pr-gate draws its design. Each `bin/*`
  * entry resolves THIS and calls the matching command method.
  */
@@ -21,6 +22,7 @@ export class PrGateApp {
         private readonly startUpsertPrCommand: StartUpsertPrCommand,
         private readonly finishUpsertPrCommand: FinishUpsertPrCommand,
         private readonly cleanupCommand: CleanupCommand,
+        private readonly landPrCommand: LandPrCommand,
     ) {}
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */
@@ -46,5 +48,10 @@ export class PrGateApp {
     /** `wp-cleanup`: delete local branches whose PR is already merged (or that hold no commits). */
     cleanup(): Promise<void> {
         return this.cleanupCommand.run();
+    }
+
+    /** `wp-land-pr`: squash-merge this branch's PR into main with the compact commit body. */
+    landPr(): Promise<void> {
+        return this.landPrCommand.run();
     }
 }

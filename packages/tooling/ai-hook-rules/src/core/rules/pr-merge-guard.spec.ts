@@ -22,35 +22,45 @@ function guard(): PrMergeGuardRule {
     return new PrMergeGuardRule(new PrMergeGuardConfig());
 }
 
-describe('pr-merge-guard accepts wp-cleanup as the branch delete', () => {
-    /**
-     * The whole point of routing cleanup through wp-cleanup: if the guard only recognised
-     * `git branch -d`, it would keep blocking the exact command its own fix hint now hands out —
-     * an agent that followed the instructions would be told it had not followed the instructions.
-     */
-    it('passes a merge chained with checkout main + pull + wp-cleanup', () => {
-        const command = 'gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup';
-        expect(guard().check(ctx(command)).length).toBe(0);
-    });
-
-    // The narrower literal form is not wrong, just less thorough — it must keep working.
-    it('still passes the literal git branch -d form', () => {
-        const command = 'gh pr merge --squash && git checkout main && git pull && git branch -d dean/feature';
-        expect(guard().check(ctx(command)).length).toBe(0);
-    });
-
-    it('blocks a bare merge with no cleanup at all', () => {
+describe('pr-merge-guard redirects every hand-rolled merge to wp-land-pr', () => {
+    it('blocks a bare merge', () => {
         expect(guard().check(ctx('gh pr merge --squash')).length).toBe(1);
     });
 
-    // wp-cleanup deletes the branch but does NOT move you off it — and you cannot delete the branch
-    // you are standing on, so the checkout is still load-bearing, not ceremony.
-    it('blocks wp-cleanup without first switching to main', () => {
-        expect(guard().check(ctx('gh pr merge --squash && pnpm wp-cleanup')).length).toBe(1);
+    /**
+     * There is deliberately NO "but I cleaned up afterwards" escape any more. The damage a raw
+     * `gh pr merge` does is the commit message it writes into main — GitHub falls back to the repo's
+     * squash_merge_commit_title/message, which can never yield the compact risk/flags body. Cleanup
+     * happens after the merge and cannot undo that, so it was never a valid excuse for the merge.
+     */
+    it('still blocks a merge chained with the full cleanup — cleanup does not fix the commit message', () => {
+        const command = 'gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup';
+        expect(guard().check(ctx(command)).length).toBe(1);
+    });
+
+    it('still blocks the literal git branch -d form for the same reason', () => {
+        const command = 'gh pr merge --squash && git checkout main && git pull && git branch -d dean/feature';
+        expect(guard().check(ctx(command)).length).toBe(1);
+    });
+
+    // The command the fix hint hands out must not itself trip the guard, or an agent that followed
+    // the instructions would be told it had not followed the instructions. wp-land-pr's own
+    // `gh pr merge` runs as a child process the hook never sees.
+    it('lets `pnpm wp-land-pr` through', () => {
+        expect(guard().check(ctx('pnpm wp-land-pr')).length).toBe(0);
+        expect(guard().check(ctx('pnpm wp-land-pr && pnpm wp-cleanup')).length).toBe(0);
     });
 
     it('ignores commands that are not a PR merge', () => {
         expect(guard().check(ctx('pnpm wp-cleanup')).length).toBe(0);
         expect(guard().check(ctx('gh pr list')).length).toBe(0);
+    });
+
+    it('names wp-land-pr in the fix hint, and still prints the cleanup steps', () => {
+        const g = guard();
+        g.check(ctx('gh pr merge --squash'));
+        const hint = `${g.fixHint.mainMessage}\n${g.fixHint.options}`;
+        expect(hint).toContain('pnpm wp-land-pr');
+        expect(hint).toContain('wp-cleanup');
     });
 });
