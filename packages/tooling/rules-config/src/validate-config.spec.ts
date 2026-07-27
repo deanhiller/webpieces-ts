@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
 
@@ -482,5 +485,59 @@ describe('rule registry consistency', () => {
         // could not add it via `wp-install-ai-hooks --sync`.
         expect(allRuleNames().length).toBeGreaterThan(0);
         expect(new Set(allRuleNames()).has('read-stale-guard')).toBe(true);
+    });
+});
+
+// webpieces-disable no-any-unknown -- a raw checklist entry from a test, mirrors consumer JSON
+function validChecklist(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        id: 'migrations', title: 'DB migrations', patterns: ['**/*.sql'], contentPatterns: [],
+        docs: ['.claude/migrations.md'], severity: 'WARN', blockMessage: '', disabled: false, ...overrides,
+    };
+}
+
+// webpieces-disable no-any-unknown -- a raw pr-gate section from a test
+function validPrGate(checklists: unknown[]): Record<string, unknown> {
+    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
+}
+
+describe('validatePrGateSection checklists', () => {
+    it('accepts a well-formed checklist (no repoRoot ⇒ docs existence is not checked)', () => {
+        const errors = validatePrGateSection(validPrGate([validChecklist()]));
+        expect(errors.filter((e: string): boolean => e.includes('checklist') || e.includes('.docs'))).toEqual([]);
+    });
+
+    it('rejects a duplicate checklist id', () => {
+        const errors = validatePrGateSection(validPrGate([validChecklist(), validChecklist()]));
+        expect(errors.some((e: string): boolean => /duplicate checklist id "migrations"/.test(e))).toBe(true);
+    });
+
+    it('rejects a severity outside BLOCK|WARN', () => {
+        const errors = validatePrGateSection(validPrGate([validChecklist({ severity: 'HIGH' })]));
+        expect(errors.some((e: string): boolean => /\.severity must be one of/.test(e))).toBe(true);
+    });
+
+    it('requires blockMessage on a BLOCK checklist', () => {
+        const errors = validatePrGateSection(validPrGate([validChecklist({ severity: 'BLOCK', blockMessage: '' })]));
+        expect(errors.some((e: string): boolean => /\.blockMessage is required for a BLOCK/.test(e))).toBe(true);
+    });
+
+    it('rejects a contentPattern that does not compile as a regex', () => {
+        const errors = validatePrGateSection(validPrGate([validChecklist({ contentPatterns: ['('] })]));
+        expect(errors.some((e: string): boolean => /\.contentPatterns\[0\] is not a valid regex/.test(e))).toBe(true);
+    });
+
+    it('rejects a docs path that does not exist under repoRoot (silent no-op guard)', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
+        const errors = validatePrGateSection(validPrGate([validChecklist({ docs: ['.claude/gone.md'] })]), dir);
+        expect(errors.some((e: string): boolean => /references ".claude\/gone.md", which does not exist/.test(e))).toBe(true);
+    });
+
+    it('accepts a docs path that exists under repoRoot', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
+        fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+        fs.writeFileSync(path.join(dir, '.claude', 'migrations.md'), '# checklist');
+        const errors = validatePrGateSection(validPrGate([validChecklist()]), dir);
+        expect(errors.filter((e: string): boolean => e.includes('does not exist'))).toEqual([]);
     });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, ReviewJson } from '@webpieces/rules-config';
-import { Dashboard, DashboardInput, GateResult, DisableCounts } from './dashboard';
+import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow } from './dashboard';
 
 const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
@@ -150,5 +150,35 @@ describe('renderCommitBody', () => {
         // no prose is silently discarded.
         expect(body).toContain('Edits dependencies.json and runtime-graph.ts under src/lib.');
         expect(body).toContain('Bumps to 0.4.447 cleanly.');
+    });
+});
+
+describe('renderDashboard checklists', () => {
+    it('renders NO checklist row when none triggered (non-adopting repos see no change)', () => {
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(),
+        );
+        expect(renderDashboard(input)).not.toContain('Checklist —');
+    });
+
+    it('renders one row per triggered checklist with severity + ack state', () => {
+        const rows = [
+            new ChecklistRow('DB migrations', 'WARN', true),
+            new ChecklistRow('Hasura metadata', 'BLOCK', true),
+        ];
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
+        );
+        const md = renderDashboard(input);
+        expect(md).toContain('**Checklist — DB migrations:** 🟡 WARN — acknowledged');
+        expect(md).toContain('**Checklist — Hasura metadata:** 🔴 BLOCK — acknowledged');
+    });
+
+    it('carries triggered checklists into the compact commit body', () => {
+        const rows = [new ChecklistRow('Hasura metadata', 'BLOCK', true)];
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
+        );
+        expect(renderCommitBody(input, '')).toContain('Checklist — Hasura metadata: 🔴 BLOCK — acknowledged');
     });
 });

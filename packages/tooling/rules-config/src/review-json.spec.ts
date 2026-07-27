@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadReviewJson, prDirFor, reviewJsonPath } from './review-json';
+import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist } from './review-json';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 
@@ -61,5 +61,67 @@ describe('loadReviewJson', () => {
     it('throws on an out-of-range riskScore and a bad riskLevel', () => {
         const file = tmpFile(JSON.stringify({ riskScore: 200, riskLevel: 'orange' }));
         expect(() => loadReviewJson(file)).toThrowError(/riskScore.*0–100/);
+    });
+});
+
+function validReview(overrides: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+        title: 'Fix the thing', riskScore: 10, riskLevel: 'green', summary: 'ok',
+        violations: [], risks: [], filesToReview: [], ...overrides,
+    });
+}
+
+const BLOCK = (id: string): RequiredChecklist =>
+    new RequiredChecklist(id, `${id} title`, 'BLOCK', [`.claude/${id}.md`], `Walk ${id}.`, ['x.sql']);
+const WARN = (id: string): RequiredChecklist =>
+    new RequiredChecklist(id, `${id} title`, 'WARN', [`.claude/${id}.md`], '', ['x.sql']);
+
+describe('loadReviewJson checklists', () => {
+    it('throws when a BLOCK checklist is not acknowledged, quoting the consumer blockMessage', () => {
+        const file = tmpFile(validReview());
+        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/Walk migrations\./);
+        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/not acknowledged/);
+    });
+
+    it('passes when the BLOCK checklist is acknowledged: true', () => {
+        const file = tmpFile(validReview({ checklists: [{ id: 'migrations', acknowledged: true, notes: ['walked it'] }] }));
+        const review = loadReviewJson(file, [BLOCK('migrations')]);
+        expect(review.checklists[0].id).toBe('migrations');
+        expect(review.checklists[0].acknowledged).toBe(true);
+        expect(review.checklists[0].notes).toEqual(['walked it']);
+    });
+
+    it('throws when the ack exists but acknowledged is false', () => {
+        const file = tmpFile(validReview({ checklists: [{ id: 'migrations', acknowledged: false, notes: [] }] }));
+        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/not acknowledged/);
+    });
+
+    it('never validates WARN checklists — an absent ack still passes', () => {
+        const file = tmpFile(validReview());
+        const review = loadReviewJson(file, [WARN('hasura')]);
+        expect(review.title).toBe('Fix the thing');
+        expect(review.checklists).toEqual([]);
+    });
+
+    it('ignores unknown ids in checklists[] (forward-compat)', () => {
+        const file = tmpFile(validReview({ checklists: [
+            { id: 'migrations', acknowledged: true, notes: [] },
+            { id: 'some-future-id', acknowledged: true, notes: [] },
+        ] }));
+        const review = loadReviewJson(file, [BLOCK('migrations')]);
+        expect(review.checklists.map((a): string => a.id)).toEqual(['migrations', 'some-future-id']);
+    });
+
+    it('required:[] produces a schema hint byte-identical to the no-argument call', () => {
+        const p = '/repo/.webpieces/pr-review/feat/review.json';
+        expect(reviewJsonSchemaHint(p, [])).toBe(reviewJsonSchemaHint(p));
+        expect(reviewJsonSchemaHint(p)).not.toContain('checklists');
+    });
+
+    it('a non-empty required set injects the checklist section + docs into the schema hint', () => {
+        const hint = reviewJsonSchemaHint('/repo/review.json', [BLOCK('migrations')]);
+        expect(hint).toContain('"checklists"');
+        expect(hint).toContain('.claude/migrations.md');
+        expect(hint).toContain('BLOCK');
     });
 });

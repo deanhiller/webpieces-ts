@@ -1,6 +1,9 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { FieldDef } from './field-def';
 import { sectionForRule, isHookGuard } from './sections';
 import { MODIFIED_CODE_MODES } from './rule-configs';
+import { CHECKLIST_BLOCK, CHECKLIST_SEVERITIES } from './checklist-config';
 import { DEFAULT_MATCH_RULES } from './match-rules-config';
 import { toError } from './to-error';
 import {
@@ -290,14 +293,67 @@ function validateGate(gate: unknown, index: number): string[] {
     return errors;
 }
 
+// One `checklists[]` entry, validated field-by-field (mirrors validateGate + validateMatchRule). When
+// `repoRoot` is supplied, each doc path must EXIST — a checklist pointing at a deleted doc is otherwise
+// a silent no-op, which is exactly the failure mode this whole feature exists to prevent.
+// webpieces-disable no-any-unknown -- one checklist entry from opaque consumer JSON, validated field-by-field
+// webpieces-disable no-function-outside-class -- module-level config validator, matches validateGate/validateMatchRule
+function validateChecklist(entry: unknown, index: number, repoRoot?: string): string[] {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+        return [`[pr-gate] checklists[${index}] must be an object { id, title, patterns, contentPatterns, docs, severity, blockMessage, disabled? }.`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing one opaque checklist entry from consumer JSON
+    const c = entry as Record<string, unknown>;
+    const label = typeof c['id'] === 'string' && c['id'] !== '' ? `"${c['id'] as string}"` : `checklists[${index}]`;
+    const errors: string[] = [];
+
+    if (typeof c['id'] !== 'string' || c['id'].trim() === '')
+        errors.push(`[pr-gate] checklists[${index}].id must be a non-empty string (it is the key echoed in review.json).`);
+    if (typeof c['title'] !== 'string' || c['title'].trim() === '')
+        errors.push(`[pr-gate] ${label}.title must be a non-empty string (the dashboard label).`);
+
+    if (c['patterns'] !== undefined && !isStringArray(c['patterns']))
+        errors.push(`[pr-gate] ${label}.patterns must be a string[] of path globs (omit or [] to match any changed file).`);
+    if (c['contentPatterns'] !== undefined && !isStringArray(c['contentPatterns'])) {
+        errors.push(`[pr-gate] ${label}.contentPatterns must be a string[] of regexes (omit or [] for a path-only trigger).`);
+    } else if (isStringArray(c['contentPatterns'])) {
+        c['contentPatterns'].forEach((p: string, pi: number): void => {
+            const rxErr = regexError(p);
+            if (rxErr) errors.push(`[pr-gate] ${label}.contentPatterns[${pi}] is not a valid regex: ${rxErr}`);
+        });
+    }
+
+    if (!isStringArray(c['docs']) || c['docs'].length === 0) {
+        errors.push(`[pr-gate] ${label}.docs must be a non-empty string[] of repo-relative doc paths the AI must read.`);
+    } else if (repoRoot !== undefined) {
+        c['docs'].forEach((doc: string): void => {
+            if (!fs.existsSync(path.join(repoRoot, doc)))
+                errors.push(`[pr-gate] ${label}.docs references "${doc}", which does not exist — a checklist pointing at a missing doc silently never fires.`);
+        });
+    }
+
+    if (typeof c['severity'] !== 'string' || !CHECKLIST_SEVERITIES.includes(c['severity'] as string))
+        errors.push(`[pr-gate] ${label}.severity must be one of: ${CHECKLIST_SEVERITIES.join(', ')}.`);
+    if (c['severity'] === CHECKLIST_BLOCK && (typeof c['blockMessage'] !== 'string' || c['blockMessage'].trim() === ''))
+        errors.push(`[pr-gate] ${label}.blockMessage is required for a ${CHECKLIST_BLOCK} checklist — it is the wording shown when the PR is refused.`);
+    if (c['blockMessage'] !== undefined && typeof c['blockMessage'] !== 'string')
+        errors.push(`[pr-gate] ${label}.blockMessage must be a string.`);
+    if (c['disabled'] !== undefined && typeof c['disabled'] !== 'boolean')
+        errors.push(`[pr-gate] ${label}.disabled must be a boolean (example/inactive checklist kept in the file).`);
+
+    return errors;
+}
+
 /**
  * Validate the top-level `pr-gate` section. It is REQUIRED (a client that opts out sets mode "OFF").
  * `buildCommand` is required unless mode is "OFF". Returns human-readable, copy-paste-friendly errors
  * — never throws. The pr-gate block lives outside the FieldDef-driven `rules` schema because its
- * nested `gates` array can't be expressed there, so it gets its own structural validation here.
+ * nested `gates`/`checklists` arrays can't be expressed there, so they get structural validation here.
+ * `repoRoot` (when known) lets the `checklists[].docs` existence check run.
  */
 // webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed below
-export function validatePrGateSection(section: unknown): string[] {
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+export function validatePrGateSection(section: unknown, repoRoot?: string): string[] {
     if (section === undefined || section === null) {
         return [
             `[pr-gate] Not configured in webpieces.config.json. Add this block under the "commands" ` +
@@ -347,6 +403,31 @@ export function validatePrGateSection(section: unknown): string[] {
         }
     }
 
+    // Optional extension point: diff-triggered company review checklists. Absent ⇒ no validation and no
+    // behavior change. Present ⇒ every entry validated field-by-field, ids unique across the array.
+    if ('checklists' in s) errors.push(...validateChecklists(s['checklists'], repoRoot));
+
+    return errors;
+}
+
+// The `checklists` array of a pr-gate section: each entry validated field-by-field, ids unique.
+// webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed below
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function validateChecklists(value: unknown, repoRoot?: string): string[] {
+    if (!Array.isArray(value)) {
+        return [`[pr-gate] "checklists" must be an array of { id, title, patterns, contentPatterns, docs, severity, blockMessage, disabled? }.`];
+    }
+    const errors: string[] = [];
+    const seenIds = new Set<string>();
+    for (let i = 0; i < value.length; i += 1) {
+        errors.push(...validateChecklist(value[i], i, repoRoot));
+        // webpieces-disable no-any-unknown -- reading the id off an opaque entry only to dedupe
+        const id = (value[i] as Record<string, unknown> | null)?.['id'];
+        if (typeof id === 'string' && id !== '') {
+            if (seenIds.has(id)) errors.push(`[pr-gate] duplicate checklist id "${id}" — each checklists[].id must be unique.`);
+            seenIds.add(id);
+        }
+    }
     return errors;
 }
 
@@ -535,7 +616,8 @@ export function validateSectionPlacement(
  * block is still present, telling the consumer to move it under `commands`.
  */
 // webpieces-disable no-any-unknown -- `commands`/`legacyPrGate` are opaque consumer JSON
-export function validateCommandsSection(commands: unknown, legacyPrGate: unknown): string[] {
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+export function validateCommandsSection(commands: unknown, legacyPrGate: unknown, repoRoot?: string): string[] {
     const errors: string[] = [];
 
     if (legacyPrGate !== undefined) {
@@ -555,7 +637,7 @@ export function validateCommandsSection(commands: unknown, legacyPrGate: unknown
 
     // pr-gate is required (set mode OFF to opt out). Prefer commands["pr-gate"]; fall back to the
     // legacy top-level block so an un-migrated file still validates its gate config.
-    errors.push(...validatePrGateSection(c['pr-gate'] ?? legacyPrGate));
+    errors.push(...validatePrGateSection(c['pr-gate'] ?? legacyPrGate, repoRoot));
 
     for (const field of ['upsertPr', 'mergeComplete']) {
         if (field in c && typeof c[field] !== 'string') {

@@ -1,9 +1,10 @@
 import { execSync } from 'child_process';
-import { reviewJsonPath, reviewJsonSchemaHint, writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
+import { ChecklistDetector } from '../workflow/checklist-detector';
 import { GitExec } from '../workflow/git-exec';
 import { RunUpdate } from '../workflow/run-update';
 
@@ -21,6 +22,7 @@ export class StartUpsertPrCommand {
         private readonly buildAffected: BuildAffected,
         private readonly gitExec: GitExec,
         private readonly runUpdate: RunUpdate,
+        private readonly checklistDetector: ChecklistDetector,
     ) {}
 
     async run(): Promise<void> {
@@ -43,12 +45,16 @@ export class StartUpsertPrCommand {
             '② Build gate (nx affected)', 'pnpm wp-start-upsert-pr', 'Build failed — fix it before reviewing.',
         ));
 
-        // Hand the AI its next step: write review.json, then run finish (which posts the PR).
+        // Hand the AI its next step: write review.json, then run finish (which posts the PR). Compute the
+        // consumer checklists this diff triggered so the schema hint names the exact docs to read BEFORE
+        // review.json is written (empty for repos with no checklists ⇒ the hint is unchanged).
+        const checklists = loadAndValidate(repoRoot).prGate.checklists;
+        const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, checklists));
         const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
         process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated, pushed, and the build gate passed. Now review your own changes and\n` +
-            `${reviewJsonSchemaHint(reviewPath)}\n\n` +
+            `${reviewJsonSchemaHint(reviewPath, required)}\n\n` +
             `Then run:  pnpm wp-finish-upsert-pr\n` +
             `(It re-validates the build, renders the dashboard with your risk/violations, and creates/updates the PR.)\n\n`,
         );

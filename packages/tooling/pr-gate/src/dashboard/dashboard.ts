@@ -13,6 +13,23 @@ export class GateResult {
     }
 }
 
+// One row for a consumer review checklist the branch triggered. `acknowledged` reflects the AI's
+// review.json ack (a BLOCK row is always acknowledged by the time it renders — an unacknowledged BLOCK
+// throws before the dashboard is built; a WARN row may render un-acknowledged). Rendered into the PR
+// body so the acknowledgment reaches the server — `.webpieces/` is gitignored, so the PR body is the
+// only artifact of the local flow that ever leaves the checkout.
+export class ChecklistRow {
+    title: string;
+    severity: string; // 'BLOCK' | 'WARN'
+    acknowledged: boolean;
+
+    constructor(title: string, severity: string, acknowledged: boolean) {
+        this.title = title;
+        this.severity = severity;
+        this.acknowledged = acknowledged;
+    }
+}
+
 export class DisableCounts {
     webpiecesCount: number;
     eslintCount: number;
@@ -34,10 +51,13 @@ export class DashboardInput {
     featureHead: string;
     mainHead: string;
     review: ReviewJson; // AI-authored risk/violations/summary (from review.json)
+    checklists: ChecklistRow[]; // consumer checklists this branch triggered; [] for non-adopting repos
 
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         title: string, gateResults: GateResult[], disables: DisableCounts,
         buildPassed: boolean, forkPoint: string, featureHead: string, mainHead: string, review: ReviewJson,
+        checklists: ChecklistRow[] = [],
     ) {
         this.title = title;
         this.gateResults = gateResults;
@@ -47,6 +67,7 @@ export class DashboardInput {
         this.featureHead = featureHead;
         this.mainHead = mainHead;
         this.review = review;
+        this.checklists = checklists;
     }
 }
 
@@ -94,6 +115,9 @@ export class Dashboard {
         lines.push(this.disableLine(input.disables));
         const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
         lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
+        // One row per triggered consumer checklist — only when some fired, so non-adopting repos see no
+        // change to the dashboard at all.
+        for (const row of input.checklists) lines.push(this.checklistLine(row));
         lines.push('');
         if (input.review.summary.trim() !== '') {
             lines.push('### Summary');
@@ -152,6 +176,12 @@ export class Dashboard {
             flags.push(`Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`);
         }
         if (input.disables.eslintCount > 0) flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
+        // A triggered checklist is noteworthy in main's history — carry each into the commit body.
+        for (const row of input.checklists) {
+            const emoji = row.severity === 'BLOCK' ? '🔴' : '🟡';
+            const ack = row.acknowledged ? 'acknowledged' : 'NOT acknowledged';
+            flags.push(`Checklist — ${row.title}: ${emoji} ${row.severity} — ${ack}`);
+        }
         return flags;
     }
 
@@ -213,6 +243,13 @@ export class Dashboard {
         if (result.matchedFiles.length === 0) return `**${result.name}:** 🟢 No`;
         const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
         return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
+    }
+
+    // A triggered consumer checklist: 🔴 for BLOCK (harder flag), 🟡 for WARN, plus the ack state.
+    private checklistLine(row: ChecklistRow): string {
+        const emoji = row.severity === 'BLOCK' ? '🔴' : '🟡';
+        const ack = row.acknowledged ? 'acknowledged' : 'NOT acknowledged';
+        return `**Checklist — ${row.title}:** ${emoji} ${row.severity} — ${ack}`;
     }
 
     // 10-cell risk bar colored by band (🟩 ≤25, 🟨 ≤50, 🟧 ≤75, 🟥 >75), at least one filled cell.

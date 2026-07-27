@@ -3,6 +3,8 @@
 // top-level `pr-gate` key in webpieces.config.json. It is built and validated by
 // loadAndValidate (load-config.ts); this module holds only the data classes + defaults + toGate.
 
+import { ChecklistDefinition, RawChecklist, toChecklist } from './checklist-config';
+
 export class GateDefinition {
     name: string;
     patterns: string[];
@@ -51,12 +53,17 @@ export class PrGateConfig {
      *   commits land as the internal "Squash merge of <branch>" subject.
      */
     mergeMode: string;
+    // Diff-triggered company review checklists (the extension point). Defaults to [] — an absent
+    // `checklists` key produces byte-identical behavior to before this field existed.
+    checklists: ChecklistDefinition[];
 
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = []) {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
         this.mergeMode = mergeMode;
+        this.checklists = checklists;
     }
 }
 
@@ -72,7 +79,8 @@ export function defaultGates(): GateDefinition[] {
 }
 
 export function defaultPrGateConfig(): PrGateConfig {
-    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO);
+    // No default checklists — the extension point is opt-in; the default monorepo ships none.
+    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO, []);
 }
 
 interface RawGate {
@@ -87,6 +95,7 @@ interface RawPrGateSection {
     buildCommand?: string;
     gates?: RawGate[];
     mergeMode?: string;
+    checklists?: RawChecklist[];
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -111,5 +120,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     // REQUIRED — validatePrGateSection rejects an omitted/unknown value, so this fallback only ever
     // applies to the no-config-file path that defaultPrGateConfig() serves.
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
-    return new PrGateConfig(mode, buildCommand, gates, mergeMode);
+    // Optional extension point — omitted ⇒ [] ⇒ no checklists computed anywhere downstream.
+    const checklists = raw.checklists !== undefined ? raw.checklists.map(toChecklist) : defaults.checklists;
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists);
 }

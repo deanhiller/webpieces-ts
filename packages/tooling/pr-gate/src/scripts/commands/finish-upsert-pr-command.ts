@@ -2,18 +2,20 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, writeTemplate, RepoRootFinder,
+    loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, ChecklistAck, RequiredChecklist,
+    writeTemplate, RepoRootFinder,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { ChecklistDetector } from '../workflow/checklist-detector';
 import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
 import { MergeEnd } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
 import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
-import { Dashboard, DashboardInput } from '../../dashboard/dashboard';
+import { Dashboard, DashboardInput, ChecklistRow } from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -56,6 +58,7 @@ export class FinishUpsertPrCommand {
         private readonly mergeEnd: MergeEnd,
         private readonly prMerger: PrMerger,
         private readonly dashboard: Dashboard,
+        private readonly checklistDetector: ChecklistDetector,
     ) {}
 
     async run(): Promise<void> {
@@ -76,7 +79,11 @@ export class FinishUpsertPrCommand {
         }
 
         // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
-        const review = loadReviewJson(reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName()));
+        //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
+        //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
+        const checklists = loadAndValidate(repoRoot).prGate.checklists;
+        const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, checklists));
+        const review = loadReviewJson(reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName()), required);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -90,7 +97,7 @@ export class FinishUpsertPrCommand {
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
-        const input = this.computeDashboardInput(repoRoot, true, review, title);
+        const input = this.computeDashboardInput(repoRoot, true, review, title, required);
         const body = this.dashboard.renderDashboard(input);
         const result = this.upsertPr(repoRoot, base, body, title, input);
         const prNum = result.prNumber;
@@ -117,7 +124,8 @@ export class FinishUpsertPrCommand {
         return this.aiBranchName.getFeatureName().replace(/[-/]+/g, ' ').trim();
     }
 
-    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string): DashboardInput {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private computeDashboardInput(repoRoot: string, buildPassed: boolean, review: ReviewJson, title: string, required: readonly RequiredChecklist[]): DashboardInput {
         const config = loadAndValidate(repoRoot).prGate;
         const forkPoint = this.gitOut(['merge-base', 'origin/main', 'HEAD']);
         const featureHead = this.gitOut(['rev-parse', 'HEAD']);
@@ -128,7 +136,17 @@ export class FinishUpsertPrCommand {
 
         const gateResults = this.dashboard.computeGateResults(config.gates, changedFiles);
         const disables = this.dashboard.countAddedDisables(patch);
-        return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review);
+        const rows = this.checklistRows(required, review);
+        return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows);
+    }
+
+    // Pair each triggered checklist with the AI's acknowledgment from review.json for the dashboard.
+    // (A BLOCK reaching this point is always acknowledged — loadReviewJson already threw otherwise.)
+    private checklistRows(required: readonly RequiredChecklist[], review: ReviewJson): ChecklistRow[] {
+        return required.map((req: RequiredChecklist): ChecklistRow => {
+            const ack = review.checklists.find((a: ChecklistAck): boolean => a.id === req.id);
+            return new ChecklistRow(req.title, req.severity, ack ? ack.acknowledged : false);
+        });
     }
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /

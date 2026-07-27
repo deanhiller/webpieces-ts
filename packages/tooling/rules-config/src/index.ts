@@ -141,7 +141,17 @@ export {
     MERGE_MODES,
 } from './pr-gate-config';
 export {
+    ChecklistDefinition,
+    toChecklist,
+    CHECKLIST_BLOCK,
+    CHECKLIST_WARN,
+    CHECKLIST_SEVERITIES,
+} from './checklist-config';
+export type { RawChecklist } from './checklist-config';
+export {
     ReviewJson,
+    ChecklistAck,
+    RequiredChecklist,
     ReviewJsonService,
     loadReviewJson,
     prDirFor,
