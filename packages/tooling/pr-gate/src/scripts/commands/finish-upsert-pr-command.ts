@@ -149,13 +149,24 @@ export class FinishUpsertPrCommand {
         const subject = ref.number !== '' ? `${title} (#${ref.number})` : title;
         const mergeBodyFile = path.join(prDir, 'merge-commit-body.md');
         fs.writeFileSync(mergeBodyFile, this.dashboard.renderCommitBody(input, ref.url) + '\n');
-        // gh records the merge subject/body only at the moment auto-merge is FIRST enabled; a second
-        // `--auto` on an already-enabled PR silently keeps the OLD body. Re-running finish is the norm
-        // (edited review.json, new commits, an earlier build-gate failure), so without this the commit
-        // body that lands in main's history goes stale. Disable first — harmless (non-zero, stderr
-        // swallowed) when auto-merge is not enabled — so every run re-stamps the current subject/body.
-        spawnSync('gh', ['pr', 'merge', baseBranch, '--disable-auto'], { stdio: 'ignore' });
-        spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
+        // Merge DIRECTLY with the explicit subject/body. A direct `gh pr merge --squash --subject
+        // --body-file` writes exactly this subject/body to main's history regardless of the repo's
+        // squash_merge_commit_title/message defaults — so the good "PR title (#N)" subject + risk/flags
+        // body lands even on client repos that have auto-merge DISABLED (allow_auto_merge=false), where
+        // `--auto` errors out and a later manual UI merge inherits the ugly `Squash merge of <branch>`
+        // subject from the branch's internal squash commit. This does NOT depend on any GitHub repo
+        // setting or on the caller enabling auto-merge.
+        const direct = spawnSync('gh', ['pr', 'merge', baseBranch, '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
+        if (direct.status !== 0) {
+            // Not mergeable yet (required checks still running, or the merge is otherwise blocked). Fall
+            // back to auto-merge carrying the SAME subject/body so it lands when checks pass. gh records
+            // the merge subject/body only at the moment auto-merge is FIRST enabled; a second `--auto` on
+            // an already-enabled PR silently keeps the OLD body, so disable-first re-stamps the current
+            // subject/body on every re-run (harmless no-op when auto-merge is not enabled).
+            process.stdout.write('Direct merge not possible yet — enabling auto-merge with the same subject/body...\n');
+            spawnSync('gh', ['pr', 'merge', baseBranch, '--disable-auto'], { stdio: 'ignore' });
+            spawnSync('gh', ['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile], { stdio: 'inherit' });
+        }
         return ref.number !== '' ? ref.number : num;
     }
 
