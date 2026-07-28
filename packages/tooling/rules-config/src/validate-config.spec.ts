@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
+import { defaultRules } from './default-rules';
 
 // A minimal valid match-rule entry, cloned + tweaked per test.
 function validMatchRule(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -485,6 +486,25 @@ describe('rule registry consistency', () => {
         // could not add it via `wp-install-ai-hooks --sync`.
         expect(allRuleNames().length).toBeGreaterThan(0);
         expect(new Set(allRuleNames()).has('read-stale-guard')).toBe(true);
+    });
+
+    it('every defaultRules key has a schema (else the loader defaults a rule the validator rejects)', () => {
+        const schema = new Set(allRuleNames());
+        const missing = Object.keys(defaultRules).filter((name: string): boolean => !schema.has(name));
+        expect(missing).toEqual([]);
+    });
+
+    // The five Nx infrastructure validators enforced unconditionally before they were wired to config.
+    // Their default MUST stay RUN_EVERY_TIME so upgrading a repo never silently stops a CI gate.
+    it('the Nx infrastructure validators default to RUN_EVERY_TIME (never silently disabled on upgrade)', () => {
+        const infra = [
+            'validate-architecture-unchanged', 'validate-no-architecture-cycles',
+            'validate-packagejson', 'validate-versions-locked', 'validate-eslint-sync',
+        ];
+        for (const name of infra) {
+            expect(new Set(allRuleNames()).has(name)).toBe(true);
+            expect(defaultRules[name]?.['mode']).toBe('RUN_EVERY_TIME');
+        }
     });
 });
 

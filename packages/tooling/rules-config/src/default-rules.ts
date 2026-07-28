@@ -41,6 +41,16 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
         excludePaths: [...DEFAULT_EXCLUDE_PATHS],
     },
     'no-js-files': { mode: 'OFF' },
+    // The five Nx infrastructure validators. They enforced unconditionally before they were wired to
+    // config, so RUN_EVERY_TIME is the only default that keeps existing repos behaving identically on
+    // upgrade. Set "mode": "OFF" to disable one; the two graph-baseline rules
+    // (validate-architecture-unchanged / validate-no-architecture-cycles) additionally honor
+    // ignoreModifiedUntilEpoch — the other three are all-or-nothing (see rule-configs.ts).
+    'validate-architecture-unchanged': { mode: 'RUN_EVERY_TIME' },
+    'validate-no-architecture-cycles': { mode: 'RUN_EVERY_TIME' },
+    'validate-packagejson': { mode: 'RUN_EVERY_TIME' },
+    'validate-versions-locked': { mode: 'RUN_EVERY_TIME' },
+    'validate-eslint-sync': { mode: 'RUN_EVERY_TIME' },
     // autoReapMergedBranches ships FALSE. It is schema-required so every consumer must state a value,
     // and the framework default must be the conservative one: an upgrade should never start deleting
     // a project's branches unattended before a human has opted in. Set it true to let the background

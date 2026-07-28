@@ -29,7 +29,8 @@ const CODE_RULE_NAMES = [
     'no-function-outside-class', 'inject-annotation-not-needed-for-concrete-class', 'framework-tag',
     'role-tag', 'no-file-import-cycles',
     'runtime-architecture', 'nx-wiring', 'di-graph', 'missing-design-annotation', 'no-js-files',
-    'validate-ts-in-src',
+    'validate-ts-in-src', 'validate-architecture-unchanged', 'validate-no-architecture-cycles',
+    'validate-packagejson', 'validate-versions-locked', 'validate-eslint-sync',
 ];
 
 // Required fields beyond the universal mode/ignoreModifiedUntilEpoch pair. Kept as data so adding

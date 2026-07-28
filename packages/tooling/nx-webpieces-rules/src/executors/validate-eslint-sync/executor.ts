@@ -2,6 +2,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { RuleGate } from '../../lib/rule-gate';
 
 export interface ValidateEslintSyncOptions {}
 
@@ -23,6 +24,11 @@ export default async function validateEslintSyncExecutor(
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
+
+    // All-or-nothing (honorEpoch = false): the two files either match or they do not.
+    if (new RuleGate().isDisabled(workspaceRoot, 'validate-eslint-sync', false)) {
+        return { success: true };
+    }
 
     const templatePath = join(workspaceRoot, 'packages/tooling/nx-webpieces-rules/templates/eslint.webpieces.config.mjs');
     const workspacePath = join(workspaceRoot, 'eslint.webpieces.config.mjs');

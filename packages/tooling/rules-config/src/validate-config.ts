@@ -42,6 +42,11 @@ import {
     MissingDesignAnnotationConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
+    ValidateArchitectureUnchangedConfig,
+    ValidateNoArchitectureCyclesConfig,
+    ValidatePackageJsonConfig,
+    ValidateVersionsLockedConfig,
+    ValidateEslintSyncConfig,
 } from './rule-configs';
 
 // Thin lookup table — each entry delegates to the class's own SCHEMA.
@@ -82,6 +87,11 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'missing-design-annotation': MissingDesignAnnotationConfig.SCHEMA,
     'no-js-files': NoJsFilesConfig.SCHEMA,
     'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
+    'validate-architecture-unchanged': ValidateArchitectureUnchangedConfig.SCHEMA,
+    'validate-no-architecture-cycles': ValidateNoArchitectureCyclesConfig.SCHEMA,
+    'validate-packagejson': ValidatePackageJsonConfig.SCHEMA,
+    'validate-versions-locked': ValidateVersionsLockedConfig.SCHEMA,
+    'validate-eslint-sync': ValidateEslintSyncConfig.SCHEMA,
 };
 
 // Every built-in rule name that has a typed schema (code rules + bash guards). The installer uses
