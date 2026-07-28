@@ -11,6 +11,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
+import { RuleGate } from '../../lib/rule-gate';
 import { toError } from '../../toError';
 
 export interface ValidateNoCyclesOptions {
@@ -23,8 +24,14 @@ export interface ExecutorResult {
 
 export default async function runExecutor(
     _options: ValidateNoCyclesOptions,
-    _context: ExecutorContext
+    context: ExecutorContext
 ): Promise<ExecutorResult> {
+    // Epoch-gateable: the existing cycle set can be grandfathered while a refactor lands, so this
+    // rule honors ignoreModifiedUntilEpoch / ignoreRuleWhileOnBranch in addition to mode: OFF.
+    if (new RuleGate().isDisabled(context.root, 'validate-no-architecture-cycles', true)) {
+        return { success: true };
+    }
+
     console.log('\n🔄 Validating No Circular Dependencies\n');
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions

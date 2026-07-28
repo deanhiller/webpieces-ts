@@ -17,6 +17,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
+import { RuleGate } from '../../lib/rule-gate';
 import { toError } from '../../toError';
 
 export interface ValidateVersionsLockedOptions {
@@ -346,9 +347,14 @@ export default async function runExecutor(
     _options: ValidateVersionsLockedOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
-    console.log('\n🔒 Validating Package Versions are LOCKED and CONSISTENT\n');
-
     const workspaceRoot = context.root;
+
+    // All-or-nothing (honorEpoch = false): there is no blessed baseline to grandfather against.
+    if (new RuleGate().isDisabled(workspaceRoot, 'validate-versions-locked', false)) {
+        return { success: true };
+    }
+
+    console.log('\n🔒 Validating Package Versions are LOCKED and CONSISTENT\n');
 
     // Step 1: Check for semver ranges (FAILS if any found)
     const semverResult = checkSemverRanges(workspaceRoot);

@@ -16,6 +16,7 @@ import {
     TestOnlyDepMode,
     validatePackageJsonDependencies,
 } from '../../lib/package-validator';
+import { RuleGate } from '../../lib/rule-gate';
 import { toError } from '../../toError';
 
 export interface ValidatePackageJsonOptions {
@@ -36,6 +37,11 @@ export default async function runExecutor(
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
+
+    // All-or-nothing (honorEpoch = false): there is no blessed baseline to grandfather against.
+    if (new RuleGate().isDisabled(workspaceRoot, 'validate-packagejson', false)) {
+        return { success: true };
+    }
 
     console.log('\n📦 Validating Package.json Dependencies\n');
 

@@ -45,6 +45,24 @@ These validations check the entire workspace architecture and run only once, reg
 | **validate-no-any-modified-code** | Validates new/modified methods don't use `any` type (git-based, affected mode) | ⏳ TODO |
 | **validate-no-implicit-any** | Validates parameters/variables/properties don't infer to `any` via TS compiler (TS7006/7005/7018/etc), git-based modes: OFF / NEW_AND_MODIFIED_CODE / NEW_AND_MODIFIED_FILES. Escape hatch: `// webpieces-disable no-implicit-any -- reason`. Pairs with `validate-no-any-unknown` (keyword ban) — together they force real types. | ✅ WIRED |
 
+### Configuring the infrastructure validators
+
+Five of these executors are now driven by `webpieces.config.json` like every other rule. Each config
+key is the same string as the Nx target name, lives in the `rules` section, and accepts
+`"mode": "RUN_EVERY_TIME"` (the default — behavior identical to before they were wired) or
+`"mode": "OFF"`.
+
+| Config key | `ignoreModifiedUntilEpoch` honored? |
+|---|---|
+| `validate-architecture-unchanged` | ✅ — compares against the blessed graph, so today's drift can be grandfathered |
+| `validate-no-architecture-cycles` | ✅ — the existing cycle set can be grandfathered while a refactor lands |
+| `validate-packagejson` | ❌ — all-or-nothing, use `"mode": "OFF"` |
+| `validate-versions-locked` | ❌ — all-or-nothing, use `"mode": "OFF"` |
+| `validate-eslint-sync` | ❌ — all-or-nothing, use `"mode": "OFF"` |
+
+A key that is absent (an older config, or a repo that has not adopted them yet) means the validator
+RUNS — disabling a CI gate is never a silent default.
+
 ---
 
 ## Section 2: Per-Project Validations

@@ -97,6 +97,11 @@ export {
     DiGraphConfig,
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
+    ValidateArchitectureUnchangedConfig,
+    ValidateNoArchitectureCyclesConfig,
+    ValidatePackageJsonConfig,
+    ValidateVersionsLockedConfig,
+    ValidateEslintSyncConfig,
     BaseRuleConfig,
 } from './rule-configs';
 // Mode unions + their value arrays — the single source of truth shared with code-rules.

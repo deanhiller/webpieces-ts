@@ -613,6 +613,74 @@ export class NoJsFilesConfig extends BaseRuleConfig {
     };
 }
 
+// ---------------------------------------------------------------------------
+// The five Nx infrastructure validators (architecture-unchanged, no-architecture-cycles,
+// packagejson, versions-locked, eslint-sync). They hardcoded their behavior until now — the ONLY
+// rules in the system that could not be turned off or time-boxed. Each is whole-graph / whole-repo
+// by nature (a cycle, a drifted dependencies.json, an unlocked version can be introduced by a file
+// nobody in this diff touched), so the only honest mode set is STRUCTURAL_MODES: RUN_EVERY_TIME
+// (the default) or OFF.
+//
+// Epoch gating splits the five in two, and the split is deliberate:
+//  - architecture-unchanged / no-architecture-cycles compare against a BLESSED baseline, so
+//    "grandfather today's drift until <epoch>" is a coherent request — those two honor
+//    ignoreModifiedUntilEpoch (and ignoreRuleWhileOnBranch) via shouldSkipRule.
+//  - packagejson / versions-locked / eslint-sync have no baseline to grandfather against; they are
+//    all-or-nothing, so their executors read `mode` ONLY. ignoreModifiedUntilEpoch is still present
+//    (it is schema-required on EVERY rule by BASE_RULE_SCHEMA) but is NOT honored by those three —
+//    set "mode": "OFF" to turn them off.
+// ---------------------------------------------------------------------------
+
+// Epoch-gateable: the current graph is compared to the blessed architecture/dependencies.json.
+export class ValidateArchitectureUnchangedConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<ValidateArchitectureUnchangedConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
+// Epoch-gateable: the set of project-level cycles can be grandfathered while a refactor lands.
+export class ValidateNoArchitectureCyclesConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<ValidateNoArchitectureCyclesConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
+// All-or-nothing (no baseline to grandfather): ignoreModifiedUntilEpoch is NOT honored.
+export class ValidatePackageJsonConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<ValidatePackageJsonConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
+// All-or-nothing (no baseline to grandfather): ignoreModifiedUntilEpoch is NOT honored.
+export class ValidateVersionsLockedConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<ValidateVersionsLockedConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
+// All-or-nothing (no baseline to grandfather): ignoreModifiedUntilEpoch is NOT honored.
+export class ValidateEslintSyncConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+
+    static readonly SCHEMA: SchemaShape<ValidateEslintSyncConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class ValidateTsInSrcConfig extends BaseRuleConfig {
     declare mode?: ValidateTsMode;
     allowedRootFiles?: string[];

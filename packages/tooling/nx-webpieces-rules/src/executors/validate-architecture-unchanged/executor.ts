@@ -16,6 +16,7 @@ import { compareGraphs } from '../../lib/graph-comparator';
 import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
+import { RuleGate } from '../../lib/rule-gate';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
 import { toError } from '../../toError';
 
@@ -82,6 +83,12 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const graphPath = options.graphPath;
     const workspaceRoot = context.root;
+
+    // Epoch-gateable: this rule diffs against the blessed architecture/dependencies.json, so
+    // "grandfather the current drift until <epoch>" is meaningful — hence honorEpoch = true.
+    if (new RuleGate().isDisabled(workspaceRoot, 'validate-architecture-unchanged', true)) {
+        return { success: true };
+    }
 
     console.log('\n🔍 Validating Architecture Unchanged\n');
 
