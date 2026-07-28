@@ -17,6 +17,8 @@
  * Per CLAUDE.md: data-only structures are classes, not interfaces.
  */
 
+import {MaskSpec} from "./LogFieldMask";
+
 /** Which end of the exchange this process is: the caller ('client') or the handler ('server'). */
 export type ApiSide = 'client' | 'server';
 
@@ -31,5 +33,11 @@ export class ApiMethodInfo {
         /** OPTIONAL — server-side impl class (e.g. 'SaveController'). Absent on clients, which have no
          *  impl. Surfaces as `jsonPayload.api.method.controllerName` for server-only drill-down. */
         readonly controllerName?: string,
+        /** OPTIONAL — which DTO fields to mask in the log lines, and how. Absent = log the DTO
+         *  verbatim exactly as before (the fast path, no per-field walk). Present = {@link LogApiCall}
+         *  runs {@link maskedStringify} so a declared-sensitive field (an OAuth refresh token, an
+         *  id-token JWT) is masked in the log while the REAL value still travels on the wire untouched.
+         *  Rides the call identity so the spec travels with the api definition, not a global app config. */
+        readonly mask?: MaskSpec,
     ) {}
 }

@@ -70,6 +70,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             rm.apiName ?? rm.controllerClassName ?? 'Unknown',
             rm.methodName,
             rm.controllerClassName,
+            rm.mask,
         );
         const response = await LogApiCall.execute(info, meta.requestDto, method);
         return new WpResponse(response);

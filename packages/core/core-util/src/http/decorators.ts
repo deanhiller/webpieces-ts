@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { MaskSpec, MaskMode } from './LogFieldMask';
 
 /**
  * Metadata keys for storing API routing information.
@@ -14,6 +15,8 @@ export const METADATA_KEYS = {
     QUEUE_OVERRIDE: 'webpieces:queue-override',
     /** Per-method @Endpoint options (e.g. formPost), parallel to ENDPOINTS. */
     ENDPOINT_OPTIONS: 'webpieces:endpoint-options',
+    /** Per-method @MaskLog spec (which DTO fields the LogApiCall path masks). */
+    MASK_LOG: 'webpieces:mask-log',
 };
 
 /**
@@ -49,6 +52,12 @@ export class RouteMetadata {
      * without knowing the apiClass/methodName. Default false = JSON.
      */
     readonly formPost: boolean;
+    /**
+     * The @MaskLog field-mask spec for this route, or undefined when the method declared none. Read
+     * ONCE here at route-build time and handed to {@link LogApiCall} via ApiMethodInfo, so the per-call
+     * log path pays for masking only on routes that opted in (the rest stay on plain JSON.stringify).
+     */
+    readonly mask?: MaskSpec;
 
     constructor(
         httpMethod: string,
@@ -58,6 +67,7 @@ export class RouteMetadata {
         authMeta?: AuthMeta,
         apiName?: string,
         formPost: boolean = false,
+        mask?: MaskSpec,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -66,6 +76,7 @@ export class RouteMetadata {
         this.authMeta = authMeta;
         this.apiName = apiName;
         this.formPost = formPost;
+        this.mask = mask;
     }
 }
 
@@ -185,6 +196,47 @@ export function Endpoint(path: string, options: EndpointOptions = {}): MethodDec
         opts[propertyKey as string] = options;
         Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, opts, metadataTarget);
     };
+}
+
+/**
+ * @MaskLog(fields) - declare which fields of THIS method's request/response DTOs the
+ * {@link LogApiCall} logging path must mask, so a secret riding on a DTO (an OAuth refresh token, an
+ * id-token JWT) is never written to the logs in cleartext. The REAL value still travels on the wire
+ * untouched — masking lives in the logging path only.
+ *
+ * ```typescript
+ * @Endpoint('/account')
+ * @MaskLog({ refreshToken: 'full', accessToken: 'last4', credential: 'full' })
+ * getEmailAccount(request: GetEmailAccountRequest): Promise<GetEmailAccountResponse> { ... }
+ * ```
+ *
+ * Matching is by field NAME at any depth (nested objects + array elements), so
+ * `response.account.refreshToken` is masked. Declared on the SHARED api contract, so BOTH the client
+ * `[API-client-*]` and server `[API-server-*]` lines mask it. The spec is read ONCE at route-build
+ * time and rides {@link RouteMetadata.mask}, so an unmasked method pays nothing at call time.
+ */
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function MaskLog(fields: Record<string, MaskMode>): MethodDecorator {
+    const spec = new MaskSpec(fields);
+    // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
+    return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
+        const metadataTarget = typeof target === 'function' ? target : target.constructor;
+        const specs: Record<string, MaskSpec> =
+            Reflect.getMetadata(METADATA_KEYS.MASK_LOG, metadataTarget) || {};
+        specs[propertyKey as string] = spec;
+        Reflect.defineMetadata(METADATA_KEYS.MASK_LOG, specs, metadataTarget);
+    };
+}
+
+/**
+ * The @MaskLog spec for one method, or undefined if the method declared none (the common case — the
+ * caller then logs the DTO verbatim on the plain JSON.stringify fast path).
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpointOptions
+export function getMaskSpec(apiClass: Function, methodName: string): MaskSpec | undefined {
+    const specs: Record<string, MaskSpec> =
+        Reflect.getMetadata(METADATA_KEYS.MASK_LOG, apiClass) || {};
+    return specs[methodName];
 }
 
 /**
