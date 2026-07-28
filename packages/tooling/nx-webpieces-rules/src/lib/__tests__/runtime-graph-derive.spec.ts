@@ -327,6 +327,110 @@ describe('an unresolvable target degrades to fan-out, but LOUDLY', () => {
 });
 
 /**
+ * The shared-library case #475 could not resolve: the client is built once in a shared lib from a
+ * config field, so no literal `ClientConfig` sits at the call site — it lives one indirection away in
+ * the app. The CALLING project declares its target with metadata.webpieces.callsService, the
+ * symmetric half of the implementing side's serviceName.
+ */
+describe('a client-project callsService declaration resolves an untargeted use to ONE edge', () => {
+    /** untargetedGraph() has NO literals; declaring callsService on the browser client is the fix. */
+    function withCallsService(value: string | Record<string, string>): EnhancedGraph {
+        const graph = untargetedGraph();
+        graph['helper-portal-angular'].callsService = value;
+        return graph;
+    }
+
+    it('produces exactly one edge per used api, to the declared service, with no warning (check 1)', () => {
+        const report = deriveRuntimeGraphReport(withCallsService('helper-portal'));
+        const edges = report.graph.runtimeEdges
+            .filter((e: RuntimeEdge) => e.from === 'helper-portal-angular')
+            .map((e: RuntimeEdge) => `${e.from}->${e.to}`);
+        expect(edges).toEqual(['helper-portal-angular->helper-svr']);
+        // No warning for the client whose target is now declared (helper-svr, still untargeted, is
+        // a separate matter). And nothing FAILS the build.
+        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular'))).toBe(false);
+        expect(report.problems).toEqual([]);
+    });
+
+    it('records the declared callsService on the node', () => {
+        const report = deriveRuntimeGraphReport(withCallsService('helper-portal'));
+        expect(report.graph.services['helper-portal-angular'].callsService).toBe('helper-portal');
+    });
+
+    it('lets a literal ClientConfig at the call site still WIN over the project declaration (check 2)', () => {
+        // companyWideApiGraph keeps the literal targetService 'helper-portal'; point callsService at a
+        // DIFFERENT (wrong) service. The literal must win, so the edge and lack of problems are unchanged.
+        const graph = companyWideApiGraph();
+        graph['helper-portal-angular'].callsService = 'lang-fsdb';
+        const report = deriveRuntimeGraphReport(graph);
+        expect(report.problems).toEqual([]);
+        expect(
+            report.graph.runtimeEdges
+                .filter((e: RuntimeEdge) => e.from === 'helper-portal-angular')
+                .map((e: RuntimeEdge) => e.to),
+        ).toEqual(['helper-svr']);
+    });
+
+    it('still fans out AND warns when a client declares neither literal nor callsService (check 3)', () => {
+        const report = deriveRuntimeGraphReport(untargetedGraph());
+        expect(
+            report.graph.runtimeEdges.some(
+                (e: RuntimeEdge) => e.from === 'helper-portal-angular' && e.to === 'lang-fsdb-svr',
+            ),
+        ).toBe(true);
+        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'))).toBe(
+            true,
+        );
+    });
+
+    it('FAILS the build when callsService names a service that does not serve the api (check 4)', () => {
+        // helper-svr uses HelperFsdbApi (served ONLY by helper-fsdb-svr). Aim its callsService at
+        // lang-fsdb, which serves LangFsdbApi — so the HelperFsdbApi call has nothing to answer it.
+        const graph = untargetedGraph();
+        graph['helper-svr'].callsService = 'lang-fsdb';
+        const report = deriveRuntimeGraphReport(graph);
+        expect(report.problems.some((p: string) => p.includes('does NOT serve') && p.includes('HelperFsdbApi'))).toBe(
+            true,
+        );
+    });
+
+    it('FAILS the build when callsService names a service no module answers to', () => {
+        const report = deriveRuntimeGraphReport(withCallsService('typo-portal'));
+        expect(
+            report.problems.some((p: string) => p.includes('callsService') && p.includes("'typo-portal'")),
+        ).toBe(true);
+    });
+
+});
+
+describe('a callsService MAP resolves per api-class for a client that calls several services', () => {
+    function withCallsService(value: Record<string, string>): EnhancedGraph {
+        const graph = untargetedGraph();
+        graph['helper-portal-angular'].callsService = value;
+        return graph;
+    }
+
+    it('resolves the listed api-class to its declared service', () => {
+        // helper-portal-angular only uses WarmupApi here; map it explicitly, leave others unlisted.
+        const report = deriveRuntimeGraphReport(withCallsService({ WarmupApi: 'helper-portal' }));
+        expect(report.problems).toEqual([]);
+        expect(
+            report.graph.runtimeEdges
+                .filter((e: RuntimeEdge) => e.from === 'helper-portal-angular')
+                .map((e: RuntimeEdge) => e.to),
+        ).toEqual(['helper-svr']);
+    });
+
+    it('falls back to fan-out+warn for an api the map does not list', () => {
+        // Map lists only AuthApi (not used here), so WarmupApi stays unresolved -> fan-out + warning.
+        const report = deriveRuntimeGraphReport(withCallsService({ AuthApi: 'auth' }));
+        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'))).toBe(
+            true,
+        );
+    });
+});
+
+/**
  * A target resolves against the MODULE name always, plus a declared `serviceName` alias. Both
  * adoption paths must work: monorepo-nx3 addresses `tf-ai-chat` for the `ai-chat` module, so it can
  * either declare the prefixed name as an alias, or write the module name and let ClientRegistry's
