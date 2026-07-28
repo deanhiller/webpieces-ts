@@ -104,7 +104,9 @@ export default async function runExecutor(
     const graph = report.graph;
     for (const warning of report.warnings) console.warn(`⚠️  ${warning}`);
 
-    const problems: string[] = checkCycles(graph, config.allowedCycles);
+    // A call site naming a service no module answers to FAILS: the contract is served in-repo, so
+    // the name is a typo or a stale rename, and the graph only ever hid it by fanning the edge out.
+    const problems: string[] = [...report.problems, ...checkCycles(graph, config.allowedCycles)];
     const unchanged = checkUnchanged(workspaceRoot, graph);
     if (unchanged) problems.push(unchanged);
 

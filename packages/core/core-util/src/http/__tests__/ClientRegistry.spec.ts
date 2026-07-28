@@ -84,7 +84,7 @@ describe('ClientRegistry resolution chain', () => {
     it('resolve() THROWS with no mapping and no deriver, naming every fix', async () => {
         // Node has no "own origin" to fall back to, so an unresolvable peer must fail loudly.
         await expect(ClientRegistry.resolve('helper-fsdb')).rejects.toThrow(
-            /No URL for service "helper-fsdb"[\s\S]*addMapping\('helper-fsdb', 8401\)[\s\S]*addUrlMapping[\s\S]*setDeriver\(gcpCloudRunDeriver\(\)\)[\s\S]*CLOUD RUN service name/,
+            /No URL for service "helper-fsdb"[\s\S]*addMapping\('helper-fsdb', 8401\)[\s\S]*addUrlMapping[\s\S]*setDeriver\(gcpCloudRunDeriver\(\)\)[\s\S]*deployed name differs from the module name/,
         );
     });
 

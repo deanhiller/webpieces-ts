@@ -46,6 +46,13 @@ function generateRuntimeGraph(workspaceRoot: string, graph: EnhancedGraph, hidde
     // Every edge the derivation had to GUESS at. Loud on purpose: a fanned-out edge is committed and
     // then reasoned about as if it were derived, which is how a fictional call survives for months.
     printRuntimeWarnings(report.warnings);
+    // Printed here, FAILED by validate-runtime-architecture: generate must still write the graph,
+    // or the validator would have nothing to compare against and the error would be unfixable.
+    if (report.problems.length > 0) {
+        console.error(`❌ ${report.problems.length} client call(s) name a service no module answers to:`);
+        for (const problem of report.problems) console.error(`     • ${problem}`);
+        console.error('   This FAILS architecture:validate-runtime-architecture.');
+    }
 }
 
 /** Print the derivation's guessed-edge warnings (nothing at all when the graph is fully targeted). */
