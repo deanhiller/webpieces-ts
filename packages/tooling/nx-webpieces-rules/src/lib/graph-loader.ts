@@ -166,6 +166,7 @@ function formatEntryLines(entry: GraphEntry): string[] {
     pushOptionalArrayField(lines, 'framework', entry.framework);
     pushOptionalField(lines, 'role', entry.role);
     pushOptionalField(lines, 'serviceName', entry.serviceName);
+    pushOptionalCallsServiceField(lines, entry.callsService);
     pushOptionalBooleanField(lines, 'drawOnGraph', entry.drawOnGraph);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
@@ -191,6 +192,23 @@ function formatEntryLines(entry: GraphEntry): string[] {
 function pushOptionalField(lines: string[], field: string, value: string | undefined): void {
     if (value !== undefined) {
         lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
+    }
+}
+
+/**
+ * Emit the optional `callsService` field (12-space indent). Unlike serviceName it may be EITHER a
+ * single service name (string) OR an { apiClassName: serviceName } map, so it is emitted with
+ * JSON.stringify to cover both inline. MUST be persisted here: the runtime graph's target resolution
+ * reads it back from the committed dependencies.json during validate — dropping it would make
+ * generate (which enriches it in-memory) and validate (which loads this file) derive different graphs.
+ */
+// webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling push*Field helpers here
+function pushOptionalCallsServiceField(
+    lines: string[],
+    value: string | Record<string, string> | undefined,
+): void {
+    if (value !== undefined) {
+        lines.push(`            "callsService": ${JSON.stringify(value)},`);
     }
 }
 

@@ -101,6 +101,32 @@ describe('graph-loader wrapper format', () => {
 
 });
 
+describe('graph-loader callsService', () => {
+    it('persists BOTH the string and map forms so validate re-derives the SAME graph as generate', () => {
+        const graph: EnhancedGraph = {
+            'portal-angular': { level: 2, dependsOn: [], framework: ['angular', 'browser'], callsService: 'helper-portal' },
+            'mixed-client': {
+                level: 2,
+                dependsOn: [],
+                framework: ['angular', 'browser'],
+                callsService: { WarmupApi: 'helper-portal', AuthApi: 'auth' },
+            },
+            'no-calls': { level: 0, dependsOn: [], framework: ['node'] },
+        };
+        saveGraph(graph, tmpRoot, 'calls/dependencies.json');
+        const raw = JSON.parse(fs.readFileSync(path.join(tmpRoot, 'calls/dependencies.json'), 'utf-8'));
+        expect(raw.projects['portal-angular'].callsService).toBe('helper-portal');
+        expect(raw.projects['mixed-client'].callsService).toEqual({ WarmupApi: 'helper-portal', AuthApi: 'auth' });
+        // a project that declares no target stays clean — no callsService line
+        expect('callsService' in raw.projects['no-calls']).toBe(false);
+
+        // The load path (JSON.parse) must surface it back, or validate would fan out where generate did not.
+        const loaded = loadBlessedGraph(tmpRoot, 'calls/dependencies.json');
+        expect(loaded!.projects['portal-angular'].callsService).toBe('helper-portal');
+        expect(loaded!.projects['mixed-client'].callsService).toEqual({ WarmupApi: 'helper-portal', AuthApi: 'auth' });
+    });
+});
+
 describe('graph-loader apiRelations', () => {
     it('round-trips apiRelations and omits it for plain-lib-only projects', () => {
         const graph: EnhancedGraph = {
