@@ -55,8 +55,16 @@ API level:
 apps are nodes; a library's relations are attributed transitively to the app that embeds it.
 
 **Which implementer** is decided by the call site, not by "everyone who implements it". The `uses`
-relation's `targetService` is matched against each node's declared `serviceName`, so exactly one
-edge is drawn. This matters most where the contract is most shared: a company-wide `WarmupApi`
+relation's `targetService` is matched against a runtime node — **its module name always, plus its
+declared `serviceName` alias if it has one** — so exactly one edge is drawn. A module name can never
+be shadowed by another module's alias; an alias that collides with one is reported as unreachable.
+
+A name that matches **neither** is a build FAILURE (`validate-runtime-architecture`), because the
+contract *is* served in-repo, so the name is a typo or a stale rename. This needs no allowlist for
+third-party services: a call to something outside the repo has no in-repo implementer, so it lands
+in `unresolvedUses` and never reaches the check. Where the deployed name differs from the module
+name (an environment prefix like `tf-`), translate it once in `ClientRegistry.setDeriver` or with a
+`serviceName` alias — never at the call site, which must keep naming something checkable. This matters most where the contract is most shared: a company-wide `WarmupApi`
 registered once in a library is attributed (correctly) to *every* server, so a cross-product edge
 would claim that every browser bundle calls every data server — and would manufacture cycles that
 fail the build. When the target cannot be resolved (a non-literal client config, an undeclared

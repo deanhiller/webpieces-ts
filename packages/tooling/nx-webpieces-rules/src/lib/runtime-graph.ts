@@ -112,6 +112,14 @@ export class RuntimeGraphReport {
         public readonly graph: RuntimeGraph,
         /** Human-readable lines naming every call site whose target the graph could not pin down. */
         public readonly warnings: string[],
+        /**
+         * Call sites that name a target the repo does not contain. Unlike a warning these FAIL the
+         * build: the contract IS served in-repo, so the name is a typo or a stale rename, and the
+         * only reason it stayed invisible is that the graph quietly fanned the edge out instead.
+         * (A call to a service outside the repo never reaches here — nothing in-repo implements its
+         * contract, so it is `unresolvedUses`.)
+         */
+        public readonly problems: string[] = [],
     ) {}
 }
 
@@ -194,21 +202,36 @@ class RelationSink {
 class RuntimeGraphDeriver {
     /** apiClassName -> the api-lib project that owns the contract (from the apiRelations key). */
     private readonly apiOwners = new Map<string, string>();
-    /** Declared serviceName -> the runtime node declaring it; how a targeted call resolves. */
+    /** Addressable name -> the runtime node answering to it; how a targeted call resolves. */
     private readonly nodeByServiceName = new Map<string, string>();
     private readonly warnings: string[] = [];
+    private readonly problems: string[] = [];
 
     constructor(
         private readonly projects: EnhancedGraph,
         /** Project names tagged drawOnGraph:false — kept in the JSON but flagged so the viz omits them. */
         private readonly hiddenProjects: Set<string>
     ) {
+        // A node ALWAYS answers to its own module name, so a repo whose deployed names match its
+        // project names needs no declaration at all — and no alias can ever redirect 'ai-chat' away
+        // from the ai-chat module. Module names are therefore claimed FIRST and are unshadowable.
+        for (const name of Object.keys(projects).sort()) {
+            if (this.isNode(name)) this.nodeByServiceName.set(name, name);
+        }
+        // `serviceName` then adds the alias a repo needs when its deployed name is NOT its module
+        // name (helper-svr serving 'helper-portal'). Colliding with a module is a misconfiguration,
+        // not a precedence question: the alias is silently unreachable, so say so.
         for (const name of Object.keys(projects).sort()) {
             const declared = projects[name].serviceName;
-            // A duplicate is already a metadata-validation failure at generate time; first (sorted)
-            // wins here purely so derivation stays deterministic rather than order-dependent.
-            if (this.isNode(name) && declared !== undefined && !this.nodeByServiceName.has(declared)) {
+            if (!this.isNode(name) || declared === undefined) continue;
+            const claimant = this.nodeByServiceName.get(declared);
+            if (claimant === undefined) {
                 this.nodeByServiceName.set(declared, name);
+            } else if (claimant !== name) {
+                this.problems.push(
+                    `${name} declares serviceName '${declared}', but that is already the module name of ` +
+                        `${claimant} — the alias can never be reached. Rename one of them.`,
+                );
             }
         }
     }
@@ -226,7 +249,7 @@ class RuntimeGraphDeriver {
             runtimeEdges: edgeResult.edges,
             unresolvedUses: edgeResult.unresolved,
         };
-        return new RuntimeGraphReport(graph, this.warnings);
+        return new RuntimeGraphReport(graph, this.warnings, this.problems);
     }
 
     /**
@@ -350,18 +373,18 @@ class RuntimeGraphDeriver {
 
         const node = this.nodeByServiceName.get(wanted);
         if (node === undefined) {
-            this.warnings.push(
-                `${user} uses "${ref.api}" against service '${wanted}', which NO project declares — ` +
-                    `falling back to one edge per implementer (${implementers.join(', ')}). Declare it as ` +
-                    `metadata.webpieces.serviceName in the serving project's project.json.`,
+            this.problems.push(
+                `${user} calls "${ref.api}" at service '${wanted}', but NO module answers to that name. ` +
+                    `${implementers.length} module(s) serve this contract (${implementers.join(', ')}). Either use ` +
+                    `the module name, or declare metadata.webpieces.serviceName: '${wanted}' on the module that ` +
+                    `serves it (and translate any environment prefix in ClientRegistry.setDeriver, not here).`,
             );
             return implementers;
         }
         if (!implementers.includes(node)) {
-            this.warnings.push(
-                `${user} uses "${ref.api}" against service '${wanted}' (${node}), but ${node} does NOT ` +
-                    `implement it — implementers are ${implementers.join(', ')}. Falling back to one edge per ` +
-                    `implementer; at runtime that call has nothing to answer it.`,
+            this.problems.push(
+                `${user} calls "${ref.api}" at service '${wanted}' (module ${node}), but ${node} does NOT serve ` +
+                    `that contract — ${implementers.join(', ')} do. At runtime that call has nothing to answer it.`,
             );
             return implementers;
         }

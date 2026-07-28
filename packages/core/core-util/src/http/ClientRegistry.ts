@@ -39,6 +39,12 @@ export type ServiceUrlDeriver = (svcName: string) => Promise<string>;
  * accessible with NO DI wiring. It is browser-safe (no `process.env`, no node-only deps), which is
  * why it lives in core-util rather than gcp-identity.
  *
+ * A `svcName` should be the nx MODULE name of the service you are calling — that is the one name
+ * `architecture:validate-runtime-architecture` can verify actually exists, so a typo or a rename
+ * fails the build instead of failing in production. When the DEPLOYED name differs (an environment
+ * prefix like `tf-`, or a Cloud Run service named unlike its module), translate it in ONE place —
+ * the deriver below, or a `serviceName` alias in the module's project.json — never at the call site.
+ *
  * ```ts
  * // startup, from the current environment's config:
  * ClientRegistry.addMapping('server2', 8202);                       // -> http://localhost:8202
@@ -161,7 +167,9 @@ export class ClientRegistry {
                 `  - localhost/AWS: ClientRegistry.addMapping('${svcName}', 8401)\n` +
                 `                or ClientRegistry.addUrlMapping('${svcName}', 'https://...')\n` +
                 `  - GCP: install a deriver — ClientRegistry.setDeriver(gcpCloudRunDeriver())\n` +
-                `  - typo? svcName must be the CLOUD RUN service name, not your project/module name`,
+                `  - deployed name differs from the module name (e.g. a 'tf-' prefix)? Translate it ONCE\n` +
+                `    in the deriver — setDeriver(s => gcpCloudRunDeriver()('tf-' + s)) — so every call\n` +
+                `    site keeps naming the MODULE, which architecture:validate-runtime-architecture checks`,
             );
         }
         return url;

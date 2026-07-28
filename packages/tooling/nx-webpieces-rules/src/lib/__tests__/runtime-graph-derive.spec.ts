@@ -304,23 +304,64 @@ describe('an unresolvable target degrades to fan-out, but LOUDLY', () => {
         );
     });
 
-    it('warns (and falls back) when the named service is declared by no project', () => {
+    it('FAILS when the named service matches no module and no declared alias', () => {
         const graph = companyWideApiGraph();
         graph['helper-portal-angular'].apiRelations!['warmup-api'].uses = [
             { api: 'WarmupApi', type: 'rpc', targetService: 'typo-portal' },
         ];
         const report = deriveRuntimeGraphReport(graph);
-        expect(report.warnings.some((w: string) => w.includes("'typo-portal'"))).toBe(true);
+        expect(report.problems.some((p: string) => p.includes("'typo-portal'"))).toBe(true);
+        // Still derives a graph — validate fails the build, generate must keep writing the file.
         expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.from === 'helper-portal-angular')).toBe(true);
     });
 
-    it('warns when the named service exists but does not implement the contract', () => {
+    it('FAILS when the named service exists but does not serve the contract', () => {
         const graph = companyWideApiGraph();
         graph['helper-svr'].apiRelations!['fsdb-api'].uses = [
             { api: 'HelperFsdbApi', type: 'rpc', targetService: 'lang-fsdb' },
         ];
         const report = deriveRuntimeGraphReport(graph);
-        expect(report.warnings.some((w: string) => w.includes('does NOT') && w.includes('HelperFsdbApi'))).toBe(true);
+        expect(report.problems.some((p: string) => p.includes('does NOT') && p.includes('HelperFsdbApi'))).toBe(true);
+    });
+
+});
+
+/**
+ * A target resolves against the MODULE name always, plus a declared `serviceName` alias. Both
+ * adoption paths must work: monorepo-nx3 addresses `tf-ai-chat` for the `ai-chat` module, so it can
+ * either declare the prefixed name as an alias, or write the module name and let ClientRegistry's
+ * deriver add the prefix at runtime.
+ */
+describe('what a target service name may resolve to', () => {
+    it('resolves a target by MODULE name with no declaration at all', () => {
+        const graph = companyWideApiGraph();
+        graph['helper-portal-angular'].apiRelations!['warmup-api'].uses = [
+            { api: 'WarmupApi', type: 'rpc', targetService: 'helper-svr' },
+        ];
+        const report = deriveRuntimeGraphReport(graph);
+        expect(report.problems).toEqual([]);
+        expect(report.graph.runtimeEdges.filter((e: RuntimeEdge) => e.from === 'helper-portal-angular')).toHaveLength(1);
+    });
+
+    it('resolves a target by declared alias when the deployed name differs from the module', () => {
+        // 'helper-portal' is not a module — only the alias on helper-svr makes it addressable.
+        const report = deriveRuntimeGraphReport(companyWideApiGraph());
+        expect(report.problems).toEqual([]);
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'helper-svr')).toBe(true);
+    });
+
+    it('never lets an alias shadow a real module, and reports the unreachable alias', () => {
+        const graph = companyWideApiGraph();
+        // lang-fsdb-svr claims the NAME of a sibling module as its alias...
+        graph['lang-fsdb-svr'].serviceName = 'helper-fsdb-svr';
+        graph['helper-svr'].apiRelations!['fsdb-api'].uses = [
+            { api: 'HelperFsdbApi', type: 'rpc', targetService: 'helper-fsdb-svr' },
+        ];
+        const report = deriveRuntimeGraphReport(graph);
+        // ...the module name still wins, so the call lands where the contract is actually served.
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'helper-fsdb-svr')).toBe(true);
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'lang-fsdb-svr')).toBe(false);
+        expect(report.problems.some((p: string) => p.includes('can never be reached'))).toBe(true);
     });
 
     it('stays silent for an untargeted use with exactly ONE implementer (nothing to guess)', () => {
