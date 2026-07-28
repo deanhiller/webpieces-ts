@@ -36,6 +36,15 @@ export interface GraphEntry {
      */
     serviceName?: string;
     /**
+     * The service(s) this project's clients call when the call site cannot carry a literal
+     * `ClientConfig` — the symmetric half of `serviceName`. DECLARED in project.json as
+     * metadata.webpieces.callsService, either a single service name (every untargeted `uses` aims
+     * there) or an `{ apiClassName: serviceName }` map (a client that calls several). Absent for a
+     * project that never calls anything, or one whose call sites all carry literals.
+     * See service-name-resolver.ts.
+     */
+    callsService?: string | Record<string, string>;
+    /**
      * When false, the project is hidden from the rendered architecture graphs
      * (its box AND every edge touching it are omitted from dependencies.html and
      * the runtime graph). It stays in this JSON so the data view is complete.
