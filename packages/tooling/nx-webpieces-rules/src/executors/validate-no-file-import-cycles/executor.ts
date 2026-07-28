@@ -57,6 +57,10 @@ interface MadgeOptions {
 }
 interface MadgeInstance {
     circular(): string[][];
+    // The full dependency graph: id → its dependency ids. Keys are the ids madge
+    // traversed (relative to the base it was invoked with) — used to detect
+    // excludeRegExp patterns that match nothing.
+    obj(): Record<string, string[]>;
 }
 type MadgeFn = (target: string, options: MadgeOptions) => Promise<MadgeInstance>;
 
@@ -252,8 +256,12 @@ export function buildMadgeOptions(
     excludePackages: string[],
     workspaceRoot: string,
     projectRoot: string,
+    // Raw patterns from config, handed to madge verbatim. Matched against ids RELATIVE TO
+    // projectRoot (see NoFileImportCyclesConfig.excludeRegExp) — the executor warns on any that
+    // match nothing so a mis-anchored (workspace-rooted / absolute) pattern isn't a silent no-op.
+    userExcludeRegExp: string[] = [],
 ): MadgeOptions {
-    const excludeRegExp = [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES];
+    const excludeRegExp = [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES, ...userExcludeRegExp];
     // madge is invoked with projectRoot as its base and emits ids relative to it;
     // realpath it to match resolvePackageDir's realpath'd result under pnpm symlinks.
     const base = realpathOrSelf(projectRoot);
@@ -275,12 +283,60 @@ export function buildMadgeOptions(
     return options;
 }
 
+/**
+ * The relative-id trap: madge matches excludeRegExp against ids RELATIVE TO
+ * projectRoot (e.g. 'src/generated/api.ts'), so a workspace-anchored pattern
+ * ('^libraries/apis/foo/src/...') or an absolute one ('^/abs/...') silently
+ * matches nothing and the exclusion is a no-op. To make that visible, run madge
+ * WITHOUT the user patterns to get the id universe and warn for any pattern that
+ * matches none of it (or is not a valid regex). Same "resolves but matches
+ * nothing" idea buildExcludePattern uses for excludePackages. Only invoked when
+ * the consumer actually configured excludeRegExp, so the extra traversal is paid
+ * only in the rare case that opts in.
+ */
+// webpieces-disable no-function-outside-class -- nx executor module; file is functional by convention (see resolvePackageDir/reportCycles above)
+async function warnOnUnmatchedExcludeRegExp(
+    madge: MadgeFn,
+    projectRoot: string,
+    baseOptions: MadgeOptions,
+    userExcludeRegExp: string[],
+): Promise<void> {
+    if (userExcludeRegExp.length === 0) return;
+    const universe = Object.keys((await madge(projectRoot, baseOptions)).obj());
+    for (const pattern of userExcludeRegExp) {
+        let re: RegExp;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- invalid user regex is reported, not thrown
+        try {
+            re = new RegExp(pattern);
+        // webpieces-disable catch-error-pattern -- surface the bad pattern to the consumer, then move on
+        } catch (err: unknown) {
+            const error = toError(err);
+            console.warn(
+                `⚠️  no-file-import-cycles: excludeRegExp entry "${pattern}" is not a valid regex` +
+                    ` (${error.message}) — skipping.`,
+            );
+            continue;
+        }
+        if (!universe.some((id: string) => re.test(id))) {
+            console.warn(
+                `⚠️  no-file-import-cycles: excludeRegExp entry "${pattern}" matched none of the` +
+                    ` ${universe.length} traversed file(s) — the exclusion does nothing.` +
+                    `\n   Patterns match paths RELATIVE TO THE PROJECT (e.g. "^src/generated/"),` +
+                    ` not workspace-rooted or absolute.`,
+            );
+        }
+    }
+}
+
 function reportCycles(projectName: string, cycles: string[][]): void {
     console.error(`\n❌ Found ${cycles.length} circular import cycle(s) in ${projectName}:\n`);
     cycles.forEach((cycle: string[], i: number) => {
         console.error(`  ${i + 1}. ${cycle.join(' → ')} → ${cycle[0]}`);
     });
     console.error('\nTo fix, break the cycle (extract a shared module, or use an interface).');
+    console.error('To exempt a path (generated code, a deliberate bidirectional model), add a pattern to');
+    console.error(`"${RULE_NAME}".excludeRegExp in webpieces.config.json. Patterns match paths RELATIVE`);
+    console.error('TO THE PROJECT, e.g. "^src/generated/" or "^src/modules/(item|category)/".');
     console.error('To time-box a known cycle, a human can set "ignoreModifiedUntilEpoch"');
     console.error(`(epoch seconds) on the "${RULE_NAME}" rule in webpieces.config.json.`);
     console.error(`To turn the gate off entirely, set "${RULE_NAME}".mode to "OFF".\n`);
@@ -306,12 +362,20 @@ export default async function runExecutor(
     const branch = rule?.options['ignoreRuleWhileOnBranch'] as string | undefined;
     const ignoreTypeOnly = (rule?.options['ignoreTypeOnly'] as boolean | undefined) ?? false;
     const excludePackages = (rule?.options['excludePackages'] as string[] | undefined) ?? [];
+    const userExcludeRegExp = (rule?.options['excludeRegExp'] as string[] | undefined) ?? [];
 
     console.log(`\n🔁 Checking import cycles in ${projectName} (madge)\n`);
 
     const madge = loadMadge();
-    const result = await madge(projectRoot, buildMadgeOptions(ignoreTypeOnly, excludePackages, context.root, projectRoot));
+    // baseOptions carries the built-in + excludePackages regexes only; the real run appends the
+    // consumer's excludeRegExp, and the warning pass re-uses baseOptions to see what those patterns
+    // *would* have to match against (madge's un-user-filtered id universe).
+    const baseOptions = buildMadgeOptions(ignoreTypeOnly, excludePackages, context.root, projectRoot);
+    const options = buildMadgeOptions(ignoreTypeOnly, excludePackages, context.root, projectRoot, userExcludeRegExp);
+    const result = await madge(projectRoot, options);
     const cycles = result.circular();
+
+    await warnOnUnmatchedExcludeRegExp(madge, projectRoot, baseOptions, userExcludeRegExp);
 
     if (cycles.length === 0) {
         console.log('✅ No circular import cycles found\n');
