@@ -48,6 +48,7 @@ import {
     ValidateVersionsLockedConfig,
     ValidateEslintSyncConfig,
 } from './rule-configs';
+import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 
 // Thin lookup table — each entry delegates to the class's own SCHEMA.
 // No field lists here; all schemas live with their config class.
@@ -66,6 +67,7 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'throw-cause-required': ThrowCauseRequiredConfig.SCHEMA,
     'angular-no-direct-api-in-resolver': AngularNoDirectApiInResolverConfig.SCHEMA,
     'no-symbol-di-tokens': NoSymbolDiTokensConfig.SCHEMA,
+    'no-client-creation-outside-server-or-client': NoClientCreationOutsideServerOrClientConfig.SCHEMA,
     'no-custom-css': NoCustomCssConfig.SCHEMA,
     'no-process-exit-outside-main': NoProcessExitOutsideMainConfig.SCHEMA,
     'no-function-outside-class': NoFunctionOutsideClassConfig.SCHEMA,

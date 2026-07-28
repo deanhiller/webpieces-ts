@@ -33,6 +33,7 @@ import {
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
+import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 
 export class WebpiecesRulesConfig {
     'max-method-lines'?: MaxMethodLinesConfig;
@@ -49,6 +50,7 @@ export class WebpiecesRulesConfig {
     'throw-cause-required'?: ThrowCauseRequiredConfig;
     'angular-no-direct-api-in-resolver'?: AngularNoDirectApiInResolverConfig;
     'no-symbol-di-tokens'?: NoSymbolDiTokensConfig;
+    'no-client-creation-outside-server-or-client'?: NoClientCreationOutsideServerOrClientConfig;
     'no-custom-css'?: NoCustomCssConfig;
     'no-process-exit-outside-main'?: NoProcessExitOutsideMainConfig;
     'no-function-outside-class'?: NoFunctionOutsideClassConfig;
