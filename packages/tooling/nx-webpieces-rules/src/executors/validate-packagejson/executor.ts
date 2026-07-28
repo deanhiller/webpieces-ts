@@ -13,6 +13,7 @@ import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import {
     PackageValidatorOptions,
+    ProjectValidationResult,
     TestOnlyDepMode,
     validatePackageJsonDependencies,
 } from '../../lib/package-validator';
@@ -65,7 +66,7 @@ class ValidationReporter {
         console.error('      packages never reach the production image)');
     }
 
-    reportSummary(projectResults: { valid: boolean }[]): void {
+    reportSummary(projectResults: ProjectValidationResult[]): void {
         const validProjects = projectResults.filter(r => r.valid).length;
         const totalProjects = projectResults.length;
         console.log(`\n📈 Validation Summary:`);
