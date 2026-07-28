@@ -91,7 +91,8 @@ describe('generateDot edge styling', () => {
             'server2-api': { level: 1, dependsOn: [], framework: ['browser', 'node'], role: 'api-lib' },
             'core-util': { level: 0, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
         });
-        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed];'); // implements = black dashed
+        // implements = black dashed, LABELED with the contracts it serves
+        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed, label="implements: SaveApi", fontsize=9];');
         expect(dot).toContain('"client-server" -> "server2-api";'); // uses = plain black solid, same as a plain dep
         expect(dot).toContain('"client-server" -> "core-util";'); // plain dep, unstyled
         expect(dot).toContain('color="#EF6C00", penwidth=2'); // api-lib box border
@@ -113,7 +114,42 @@ describe('generateDot edge styling', () => {
             },
             'shared-api': { level: 1, dependsOn: [], role: 'api-lib' },
         });
-        expect(dot).toContain('"svc" -> "shared-api" [style=dashed, color="#1976d2", penwidth=2];');
+        expect(dot).toContain(
+            '"svc" -> "shared-api" [style=dashed, color="#1976d2", penwidth=2, label="implements: AApi", fontsize=9];',
+        );
+    });
+
+});
+
+/**
+ * "Which server implements this contract?" is the question the diagram exists to answer, and a
+ * bare dashed line reads as "nothing was detected". Naming the contracts on the edge is the fix.
+ */
+describe('generateDot implements-edge labels', () => {
+    it('names the implemented contracts on the edge, capped with a stated "+N more"', () => {
+        const dot = viz.generateDot({
+            svc: {
+                level: 2,
+                dependsOn: ['big-api'],
+                role: 'server',
+                apiRelations: {
+                    'big-api': {
+                        kind: 'implements',
+                        implements: [
+                            { api: 'EApi', type: 'rpc' },
+                            { api: 'AApi', type: 'rpc' },
+                            { api: 'CApi', type: 'rpc' },
+                            { api: 'BApi', type: 'rpc' },
+                            { api: 'DApi', type: 'rpc' },
+                            { api: 'FApi', type: 'rpc' },
+                        ],
+                        uses: [],
+                    },
+                },
+            },
+            'big-api': { level: 1, dependsOn: [], role: 'api-lib' },
+        });
+        expect(dot).toContain('label="implements: AApi, BApi, CApi, DApi +2 more"');
     });
 });
 

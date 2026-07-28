@@ -165,6 +165,7 @@ function formatEntryLines(entry: GraphEntry): string[] {
 
     pushOptionalArrayField(lines, 'framework', entry.framework);
     pushOptionalField(lines, 'role', entry.role);
+    pushOptionalField(lines, 'serviceName', entry.serviceName);
     pushOptionalBooleanField(lines, 'drawOnGraph', entry.drawOnGraph);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);

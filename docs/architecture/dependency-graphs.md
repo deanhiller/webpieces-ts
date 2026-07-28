@@ -16,16 +16,29 @@ Per-project it carries:
 - `dependsOn` — the nx compile dependencies.
 - `apiRelations` — per API class, a `"kind": "implements" | "uses"` with a transport `type`
   (`rpc` | `pubsub`). Example: `angular-site` **uses** `client-server-api`; `client-server`
-  **implements** it.
-- metadata: `role`, `framework`, `responsibilitiesFile`, `designFile`, plus `aiInstructions` and
-  `commands` to regenerate/visualize.
+  **implements** it. A `uses` also carries `targetService` when the call site named one —
+  `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb'))` → `"targetService": "helper-fsdb"`.
+- metadata: `role`, `framework`, `serviceName`, `responsibilitiesFile`, `designFile`, plus
+  `aiInstructions` and `commands` to regenerate/visualize.
+
+`serviceName` is the name **clients address this app by** at runtime, declared in its `project.json`:
+
+```json
+{ "metadata": { "webpieces": { "serviceName": "helper-fsdb" } } }
+```
+
+It is declared, never derived: the nx project name, the client-facing name and the deployed name are
+three independent naming spaces (`helper-svr` serves `helper-portal`), so no strip-the-suffix rule
+can compute one from another. Most projects declare none — a library or a browser app is never
+addressed by name.
 
 ### `architecture/runtime-dependencies.json` — derived runtime call graph
 Derived *solely* from `dependencies.json`. It distinguishes implements vs uses at the service and
 API level:
 - `services.<name>.implements[]` / `.uses[]` — e.g. `client-server` implements
-  `[PublicApi, SaveApi, SecureApi]`, uses `[Server2Api]`.
-- `apis.<Name>.implementedBy[]` / `.usedBy[]` / `type`.
+  `[PublicApi, SaveApi, SecureApi]`, uses `[Server2Api]`; plus `serviceName` and `implementsVia`
+  (api → the embedded library that serves it, when it is not the service's own source).
+- `apis.<Name>.implementedBy[]` / `.usedBy[]` / `type` / `owner` (the api-lib holding the contract).
 - `runtimeEdges[]`: `{ from, to, via: [apis], type }` — the **inferred** calls.
 
 ## The inference (why two graphs are needed)
@@ -41,6 +54,15 @@ API level:
 `unresolvedUses` (a real diagnostic — someone calls an API nobody serves). Only `server`/`client`
 apps are nodes; a library's relations are attributed transitively to the app that embeds it.
 
+**Which implementer** is decided by the call site, not by "everyone who implements it". The `uses`
+relation's `targetService` is matched against each node's declared `serviceName`, so exactly one
+edge is drawn. This matters most where the contract is most shared: a company-wide `WarmupApi`
+registered once in a library is attributed (correctly) to *every* server, so a cross-product edge
+would claim that every browser bundle calls every data server — and would manufacture cycles that
+fail the build. When the target cannot be resolved (a non-literal client config, an undeclared
+name), the old fan-out still happens, but `deriveRuntimeGraphReport(...).warnings` names the call
+site and the executors print it: a wrong-but-green graph is worse than a failing one.
+
 Crucially, **both** `architecture:generate` and `architecture:validate-runtime-architecture` call
 the *same* `deriveRuntimeGraph`, so the committed graph and the validated graph can never diverge —
 the graph is enforced, not just documentation.
@@ -50,6 +72,13 @@ the graph is enforced, not just documentation.
 `packages/tooling/nx-webpieces-rules/src/lib/runtime-visualizer.ts` writes
 `tmp/webpieces/runtime-architecture.{dot,html}` (viz.js). Notable rendering rules:
 - A node's role is derived from implements vs uses: `role = svc.implements.length > 0 ? 'server' : 'client'`.
+- Each node **lists the contracts it implements and uses** (with `(via <lib>)` when it serves one
+  through an embedded library), so an api a service serves that nothing in-repo calls is still
+  visible — you no longer have to read it off an incoming edge.
+- A contract nothing in-repo implements (firestore, gmail, ...) is drawn as a **dashed terminal
+  node** grouped by its owning api-lib, from the `unresolvedUses` data. It is render-only: levels,
+  cycle detection and the JSON are unaffected. Turn it off with
+  `runtime-architecture.showExternalNodes: false` in `webpieces.config.json`.
 - `rpc` edges → a direct labeled arrow.
 - `pubsub` edges → producer → **queue cylinder** → consumer, with dashed `enqueue` / `deliver`
   arrows. The legend: "the producer enqueues a Cloud Task and the consumer is delivered it later."

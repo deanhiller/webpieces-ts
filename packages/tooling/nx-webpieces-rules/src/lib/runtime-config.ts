@@ -7,7 +7,8 @@
  *   "runtime-architecture": {
  *     "mode": "ON",                          // "OFF" disables the whole feature
  *     "ignoreModifiedUntilEpoch": 0,         // whole-rule punt (epoch seconds)
- *     "allowedCycles": [ { "services": ["a","b"], "reason": "...", "until": 1771931925 } ]
+ *     "allowedCycles": [ { "services": ["a","b"], "reason": "...", "until": 1771931925 } ],
+ *     "showExternalNodes": true               // draw firestore/gmail/... as terminal nodes
  *   }
  */
 
@@ -26,6 +27,8 @@ export interface RuntimeRuleConfig {
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
     allowedCycles: AllowedCycle[];
+    /** Render the dashed external terminal nodes in the runtime viz (default true). */
+    showExternalNodes: boolean;
 }
 
 /**
@@ -37,6 +40,7 @@ interface RuntimeRuleRaw {
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
     allowedCycles?: AllowedCycle[];
+    showExternalNodes?: boolean;
 }
 
 function isUsableCycle(cycle: AllowedCycle): boolean {
@@ -55,6 +59,9 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
         ignoreRuleWhileOnBranch:
             typeof raw.ignoreRuleWhileOnBranch === 'string' ? raw.ignoreRuleWhileOnBranch : undefined,
         allowedCycles: Array.isArray(raw.allowedCycles) ? raw.allowedCycles.filter(isUsableCycle) : [],
+        // Opt-OUT: the external systems are the ones that page you at 3am, so they are drawn unless
+        // a repo explicitly says its external surface is too noisy to be useful.
+        showExternalNodes: raw.showExternalNodes !== false,
     };
 }
 

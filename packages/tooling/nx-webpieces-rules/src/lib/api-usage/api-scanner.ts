@@ -14,6 +14,8 @@
  *                 without ever serving it — only `addRoutes` proves a served route.
  *   - USES:       `factory.createRpcClient(XxxApi, ...)`    → rpc client
  *                 `factory.createPubSubClient(XxxApi, ...)` → pubsub (Cloud Tasks) client
+ *                 The config argument (`new ClientConfig('helper-fsdb')`) names WHICH service the
+ *                 client talks to and is kept as `ApiRef.targetService` — see targetServiceOf.
  * An api-lib is DETECTED, not tagged: a project exporting an `abstract class`
  * carrying `@ApiPath` owns that API. Its transport is `@PubSub` → 'pubsub', else 'rpc'.
  *
@@ -39,6 +41,7 @@ import {
     ApiTransport,
     ApiRelation,
     ProjectApiRelations,
+    apiRefKey,
     deriveApiRelationKind,
     sortApiRefs,
 } from './api-relations';
@@ -46,6 +49,13 @@ import {
 const RPC_CLIENT_METHOD = 'createRpcClient';
 const PUBSUB_CLIENT_METHOD = 'createPubSubClient';
 const ADD_ROUTES_METHOD = 'addRoutes';
+
+/**
+ * Client-config class-name suffix whose FIRST constructor argument is the target service name —
+ * `ClientConfig('helper-fsdb')` (rpc) and `TaskClientConfig('helper-fsdb')` (pubsub) both take
+ * `svcName` first, and a consumer's own `XxxClientConfig` follows the same shape.
+ */
+const CLIENT_CONFIG_SUFFIX = 'ClientConfig';
 
 /**
  * An `addRoutes`/`createRpcClient`/`createPubSubClient` first argument that resolved to an
@@ -188,11 +198,15 @@ class RelationAccumulator {
     private readonly usesByOwner = new Map<string, Map<string, ApiRef>>();
 
     addImplements(owner: string, ref: ApiRef): void {
-        ensureRefMap(this.implementsByOwner, owner).set(ref.api, ref);
+        ensureRefMap(this.implementsByOwner, owner).set(apiRefKey(ref), ref);
     }
 
+    /**
+     * Keyed by api + targetService: one project legitimately binds the SAME contract against two
+     * different services (a WarmupApi client per data server), and those are two relations, not one.
+     */
     addUses(owner: string, ref: ApiRef): void {
-        ensureRefMap(this.usesByOwner, owner).set(ref.api, ref);
+        ensureRefMap(this.usesByOwner, owner).set(apiRefKey(ref), ref);
     }
 
     /** Build the deterministic { owner -> relation } record, owners in sorted order. */
@@ -302,7 +316,13 @@ export class ApiUsageScanner {
         }
         if (method === RPC_CLIENT_METHOD || method === PUBSUB_CLIENT_METHOD) {
             const info = this.apiInfoFromExpr(call.arguments[0], checker, project);
-            if (info) acc.addUses(info.owner, { api: info.api, type: info.type });
+            if (!info) return;
+            // Argument 2 names WHICH service this client talks to. Keeping it is what lets the
+            // runtime graph draw ONE edge instead of one per implementer of the contract.
+            const targetService = targetServiceOf(call);
+            const ref: ApiRef = { api: info.api, type: info.type };
+            if (targetService !== null) ref.targetService = targetService;
+            acc.addUses(info.owner, ref);
         }
     }
 
@@ -470,6 +490,25 @@ function isAbstractClass(cls: ts.ClassDeclaration): boolean {
 // webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
 function hasClassDecorator(cls: ts.ClassDeclaration, name: string): boolean {
     return classDecorators(cls).some((d: ts.Decorator) => decoratorName(d) === name);
+}
+
+/**
+ * The service a client-factory call aims at, from its config argument:
+ * `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb'))` → `'helper-fsdb'`.
+ *
+ * Only a `new <Xxx>ClientConfig('<string literal>')` yields a name. A variable, a template string
+ * or a computed expression yields null — the target is genuinely unknown at scan time, and the
+ * runtime graph must fall back to fan-out (loudly) rather than guess.
+ */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+function targetServiceOf(call: ts.CallExpression): string | null {
+    if (call.arguments.length < 2) return null;
+    const config = call.arguments[1];
+    if (!ts.isNewExpression(config) || !ts.isIdentifier(config.expression)) return null;
+    if (!config.expression.text.endsWith(CLIENT_CONFIG_SUFFIX)) return null;
+    const first = config.arguments?.[0];
+    if (first === undefined || !ts.isStringLiteral(first)) return null;
+    return first.text.length > 0 ? first.text : null;
 }
 
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts

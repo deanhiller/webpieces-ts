@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
-import type { ApiRelationKind } from './api-usage/api-relations';
+import type { ApiRef, ApiRelation, ApiRelationKind } from './api-usage/api-relations';
 import { GraphNames } from './graph-names';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { toError } from '../toError';
@@ -40,6 +40,9 @@ const DEFAULT_FRAMEWORK_COLOR = '#F5F5F5'; // grey - unknown/empty env set
  * the file is opened straight from the checkout.
  */
 const ARCH_OUTPUT_DIR = 'architecture';
+
+/** Contracts named on one `implements` edge label before it truncates to "+N more". */
+const MAX_EDGE_LABEL_APIS = 4;
 
 export class VisualizationPaths {
     htmlPath: string;
@@ -106,9 +109,39 @@ export class GraphVisualizer {
      * `kind` is undefined for every non-api-lib dependency edge.
      */
     private edgeAttrs(kind: ApiRelationKind | undefined): string {
-        if (kind === 'implements') return ' [style=dashed]';
-        if (kind === 'uses-implements') return ' [style=dashed, color="#1976d2", penwidth=2]';
+        if (kind === 'implements') return 'style=dashed';
+        if (kind === 'uses-implements') return 'style=dashed, color="#1976d2", penwidth=2';
         return '';
+    }
+
+    /**
+     * The DOT attribute list for ONE dependency edge. An edge that IMPLEMENTS contracts is also
+     * LABELED with them: the dashed line alone says "something here is implemented", which reads as
+     * "the tool did not detect anything" to everyone who has not memorized the legend. Naming the
+     * contracts makes `auth-store-api` visibly resolve to the server that serves it — the single
+     * most important relationship in a microservice architecture, and the one the diagram was
+     * silent about.
+     */
+    private edgeDot(from: string, to: string, relation: ApiRelation | undefined): string {
+        const attrs: string[] = [];
+        const styling = this.edgeAttrs(relation?.kind);
+        if (styling !== '') attrs.push(styling);
+        const served = (relation?.implements ?? []).map((ref: ApiRef) => ref.api);
+        if (served.length > 0) attrs.push(`label="implements: ${this.labelledApis(served)}", fontsize=9`);
+        const suffix = attrs.length === 0 ? '' : ` [${attrs.join(', ')}]`;
+        return `  "${from}" -> "${to}"${suffix};\n`;
+    }
+
+    /**
+     * The contract names for an edge label, sorted and capped so a shared api-lib serving a dozen
+     * contracts cannot blow the edge label up into a wall of text. The truncation is stated in the
+     * label ("+N more") rather than silent — the full list is in dependencies.json.
+     */
+    private labelledApis(apis: string[]): string {
+        const sorted = [...apis].sort();
+        if (sorted.length <= MAX_EDGE_LABEL_APIS) return sorted.join(', ');
+        const shown = sorted.slice(0, MAX_EDGE_LABEL_APIS).join(', ');
+        return `${shown} +${sorted.length - MAX_EDGE_LABEL_APIS} more`;
     }
 
     /**
@@ -200,8 +233,7 @@ export class GraphVisualizer {
                 // Both endpoints must be visible — an edge to/from a hidden box
                 // is dropped so no connection dangles into empty space.
                 if (graph[dep] !== undefined && this.isHidden(graph[dep])) continue;
-                const attrs = this.edgeAttrs(info.apiRelations?.[dep]?.kind);
-                dot += `  "${shortName}" -> "${this.names.getShortName(dep)}"${attrs};\n`;
+                dot += this.edgeDot(shortName, this.names.getShortName(dep), info.apiRelations?.[dep]);
             }
         }
         return dot;
@@ -473,7 +505,7 @@ export class GraphVisualizer {
         </div>
         <div class="legend-item">
             <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2" stroke-dasharray="5,3"/></svg>
-            <strong>implements:</strong> serves the API — NOTE: this is a build-dependency diagram, so a UML <em>implements</em> arrow can't be used; we use a dashed line to signal a build dep, because this server implements the api and the api is built first, then this server after.
+            <strong>implements:</strong> serves the API — labeled <code>implements: &lt;contracts&gt;</code> so you can see WHICH contracts resolve to this server without opening the JSON. NOTE: this is a build-dependency diagram, so a UML <em>implements</em> arrow can't be used; we use a dashed line to signal a build dep, because this server implements the api and the api is built first, then this server after.
         </div>
         <div class="legend-item">
             <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#1976d2" stroke-width="2" stroke-dasharray="5,3"/></svg>

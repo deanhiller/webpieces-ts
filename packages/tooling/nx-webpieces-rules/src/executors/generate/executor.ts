@@ -17,7 +17,7 @@ import { ProjectInfo } from '../../lib/project-info';
 import { scanAndAttachApiRelations, describeUnresolvedApiCalls } from '../../lib/api-usage/api-scanner';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
-import { deriveRuntimeGraph, saveRuntimeGraph } from '../../lib/runtime-graph';
+import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
@@ -37,12 +37,23 @@ export interface ExecutorResult {
 // webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
 function generateRuntimeGraph(workspaceRoot: string, graph: EnhancedGraph, hiddenProjects: Set<string>): void {
     console.log('📡 Deriving runtime graph from dependencies.json (implements × uses per API)...');
-    const runtimeGraph = deriveRuntimeGraph(graph, hiddenProjects);
-    saveRuntimeGraph(runtimeGraph, workspaceRoot);
-    const serviceCount = Object.keys(runtimeGraph.services).length;
+    const report = deriveRuntimeGraphReport(graph, hiddenProjects);
+    saveRuntimeGraph(report.graph, workspaceRoot);
+    const serviceCount = Object.keys(report.graph.services).length;
     console.log(
-        `✅ Runtime graph saved (${serviceCount} services, ${runtimeGraph.runtimeEdges.length} runtime edges)`,
+        `✅ Runtime graph saved (${serviceCount} services, ${report.graph.runtimeEdges.length} runtime edges)`,
     );
+    // Every edge the derivation had to GUESS at. Loud on purpose: a fanned-out edge is committed and
+    // then reasoned about as if it were derived, which is how a fictional call survives for months.
+    printRuntimeWarnings(report.warnings);
+}
+
+/** Print the derivation's guessed-edge warnings (nothing at all when the graph is fully targeted). */
+// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
+function printRuntimeWarnings(warnings: string[]): void {
+    if (warnings.length === 0) return;
+    console.warn(`⚠️  ${warnings.length} runtime edge(s) could not be targeted to ONE service:`);
+    for (const warning of warnings) console.warn(`     • ${warning}`);
 }
 
 /**

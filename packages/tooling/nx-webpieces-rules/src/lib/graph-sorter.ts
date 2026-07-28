@@ -30,6 +30,12 @@ export interface GraphEntry {
     framework?: string[];
     role?: string;
     /**
+     * The name CLIENTS address this app by at runtime (`new ClientConfig('helper-fsdb')`) — its
+     * deployed service name, DECLARED in project.json as metadata.webpieces.serviceName. Absent for
+     * anything nothing calls by name (libraries, browser apps). See service-name-resolver.ts.
+     */
+    serviceName?: string;
+    /**
      * When false, the project is hidden from the rendered architecture graphs
      * (its box AND every edge touching it are omitted from dependencies.html and
      * the runtime graph). It stays in this JSON so the data view is complete.

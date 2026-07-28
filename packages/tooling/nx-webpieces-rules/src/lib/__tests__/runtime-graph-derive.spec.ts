@@ -6,10 +6,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deriveRuntimeGraph, serializeRuntimeGraph } from '../runtime-graph';
+import { deriveRuntimeGraph, deriveRuntimeGraphReport, serializeRuntimeGraph } from '../runtime-graph';
 import type { RuntimeEdge } from '../runtime-graph';
 import type { EnhancedGraph } from '../graph-sorter';
-import { generateRuntimeDot } from '../runtime-visualizer';
+import type { ApiRef } from '../api-usage/api-relations';
+import { generateRuntimeDot, RuntimeVizOptions } from '../runtime-visualizer';
 
 /**
  * An EnhancedGraph like the one dependencies.json holds: `producer` uses two APIs owned by the
@@ -157,6 +158,255 @@ describe('drawOnGraph:false hides a service from the runtime render but keeps it
         expect(dot).not.toContain('-> "consumer"');
         expect(dot).not.toContain('queue__producer__consumer');
         expect(dot).toContain('"producer" [');
+    });
+});
+
+/**
+ * The shape that used to produce fiction: `WarmupApi` is registered ONCE in a shared library, so
+ * the transitive attribution (correctly) lands it on EVERY server. Every user of it therefore got
+ * an edge to every server in the repo — including a browser bundle to another product's data
+ * server, and a false helper-svr <-> lang cycle that failed the build.
+ *
+ * Each call site names its target (`new ClientConfig('helper-fsdb')`), captured as
+ * `ApiRef.targetService` and matched against the DECLARED `serviceName`. Note the naming spaces do
+ * not line up: helper-svr is called 'helper-portal'; no suffix rule could derive that.
+ */
+function companyWideApiGraph(): EnhancedGraph {
+    const warmup = { api: 'WarmupApi', type: 'rpc' as const };
+    return {
+        'warmup-api': { level: 0, dependsOn: [], role: 'api-lib', framework: ['browser', 'node'] },
+        'fsdb-api': { level: 0, dependsOn: [], role: 'api-lib', framework: ['browser', 'node'] },
+        // The shared lib every server embeds — the single registration of the company-wide contract.
+        'svc-core': {
+            level: 1,
+            dependsOn: ['warmup-api'],
+            role: 'lib',
+            framework: ['node'],
+            apiRelations: { 'warmup-api': { kind: 'implements', implements: [warmup], uses: [] } },
+        },
+        'helper-fsdb-svr': {
+            level: 2,
+            dependsOn: ['svc-core', 'fsdb-api'],
+            role: 'server',
+            framework: ['node'],
+            serviceName: 'helper-fsdb',
+            apiRelations: {
+                'fsdb-api': { kind: 'implements', implements: [{ api: 'HelperFsdbApi', type: 'rpc' }], uses: [] },
+            },
+        },
+        'lang-fsdb-svr': {
+            level: 2,
+            dependsOn: ['svc-core', 'fsdb-api'],
+            role: 'server',
+            framework: ['node'],
+            serviceName: 'lang-fsdb',
+            apiRelations: {
+                'fsdb-api': { kind: 'implements', implements: [{ api: 'LangFsdbApi', type: 'rpc' }], uses: [] },
+            },
+        },
+        'helper-svr': {
+            level: 3,
+            dependsOn: ['svc-core', 'fsdb-api', 'warmup-api'],
+            role: 'server',
+            framework: ['node'],
+            serviceName: 'helper-portal',
+            apiRelations: {
+                'fsdb-api': {
+                    kind: 'uses',
+                    implements: [],
+                    uses: [{ api: 'HelperFsdbApi', type: 'rpc', targetService: 'helper-fsdb' }],
+                },
+                'warmup-api': {
+                    kind: 'uses',
+                    implements: [],
+                    uses: [{ api: 'WarmupApi', type: 'rpc', targetService: 'helper-fsdb' }],
+                },
+            },
+        },
+        'helper-portal-angular': {
+            level: 3,
+            dependsOn: ['warmup-api'],
+            role: 'client',
+            framework: ['angular', 'browser'],
+            apiRelations: {
+                'warmup-api': {
+                    kind: 'uses',
+                    implements: [],
+                    uses: [{ api: 'WarmupApi', type: 'rpc', targetService: 'helper-portal' }],
+                },
+            },
+        },
+    };
+}
+
+/** The same graph with the client configs unreadable — the pre-fix behavior, now reported. */
+function untargetedGraph(): EnhancedGraph {
+    const graph = companyWideApiGraph();
+    for (const project of ['helper-svr', 'helper-portal-angular']) {
+        const relations = graph[project].apiRelations!;
+        for (const owner of Object.keys(relations)) {
+            relations[owner].uses = relations[owner].uses.map((ref: ApiRef) => ({ api: ref.api, type: ref.type }));
+        }
+    }
+    return graph;
+}
+
+describe('a targeted client call produces ONE edge, not one per implementer', () => {
+    const report = deriveRuntimeGraphReport(companyWideApiGraph());
+    const edges = report.graph.runtimeEdges.map((e: RuntimeEdge) => `${e.from}->${e.to}`).sort();
+
+    it('attributes the shared library’s implements to every server (the input to the bug)', () => {
+        expect(report.graph.apis['WarmupApi'].implementedBy).toEqual([
+            'helper-fsdb-svr',
+            'helper-svr',
+            'lang-fsdb-svr',
+        ]);
+    });
+
+    it('draws the browser edge ONLY to the server it names, not to every implementer', () => {
+        expect(edges.filter((e: string) => e.startsWith('helper-portal-angular->'))).toEqual([
+            'helper-portal-angular->helper-svr',
+        ]);
+    });
+
+    it('does not manufacture the cross-product edges (no other product’s data server)', () => {
+        expect(edges).not.toContain('helper-portal-angular->lang-fsdb-svr');
+        expect(edges).not.toContain('helper-svr->lang-fsdb-svr');
+    });
+
+    it('lets an app server warm its OWN data server without inventing a cycle', () => {
+        expect(edges.filter((e: string) => e.startsWith('helper-svr->'))).toEqual(['helper-svr->helper-fsdb-svr']);
+        const warmupEdge = report.graph.runtimeEdges.find(
+            (e: RuntimeEdge) => e.from === 'helper-svr' && e.to === 'helper-fsdb-svr',
+        );
+        expect(warmupEdge?.via).toEqual(['HelperFsdbApi', 'WarmupApi']);
+    });
+
+    it('says nothing when every call site resolved — warnings are for guesses only', () => {
+        expect(report.warnings).toEqual([]);
+    });
+
+    it('records the declared service name on the node', () => {
+        expect(report.graph.services['helper-svr'].serviceName).toBe('helper-portal');
+        expect(report.graph.services['helper-portal-angular'].serviceName).toBeUndefined();
+    });
+});
+
+describe('an unresolvable target degrades to fan-out, but LOUDLY', () => {
+    it('fans out and names each ambiguous call site when no client config literal was found', () => {
+        const report = deriveRuntimeGraphReport(untargetedGraph());
+        const edges = report.graph.runtimeEdges.map((e: RuntimeEdge) => `${e.from}->${e.to}`);
+        // The old, wrong behavior is preserved as the safe superset...
+        expect(edges).toContain('helper-portal-angular->lang-fsdb-svr');
+        // ...but it can no longer pass for a derived fact.
+        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'))).toBe(
+            true,
+        );
+    });
+
+    it('warns (and falls back) when the named service is declared by no project', () => {
+        const graph = companyWideApiGraph();
+        graph['helper-portal-angular'].apiRelations!['warmup-api'].uses = [
+            { api: 'WarmupApi', type: 'rpc', targetService: 'typo-portal' },
+        ];
+        const report = deriveRuntimeGraphReport(graph);
+        expect(report.warnings.some((w: string) => w.includes("'typo-portal'"))).toBe(true);
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.from === 'helper-portal-angular')).toBe(true);
+    });
+
+    it('warns when the named service exists but does not implement the contract', () => {
+        const graph = companyWideApiGraph();
+        graph['helper-svr'].apiRelations!['fsdb-api'].uses = [
+            { api: 'HelperFsdbApi', type: 'rpc', targetService: 'lang-fsdb' },
+        ];
+        const report = deriveRuntimeGraphReport(graph);
+        expect(report.warnings.some((w: string) => w.includes('does NOT') && w.includes('HelperFsdbApi'))).toBe(true);
+    });
+
+    it('stays silent for an untargeted use with exactly ONE implementer (nothing to guess)', () => {
+        expect(deriveRuntimeGraphReport(graphWithSharedLib()).warnings).toEqual([]);
+    });
+});
+
+describe('the runtime node says what it implements and where that came from', () => {
+    const derived = deriveRuntimeGraph(companyWideApiGraph());
+
+    it('records the library a contract is served through, not just that it is served', () => {
+        expect(derived.services['helper-svr'].implementsVia).toEqual({ WarmupApi: 'svc-core' });
+        expect(derived.services['helper-fsdb-svr'].implementsVia).toEqual({ WarmupApi: 'svc-core' });
+        // A contract from the server's OWN source has no "via" — it is not indirection.
+        expect(derived.services['helper-fsdb-svr'].implements).toContain('HelperFsdbApi');
+    });
+
+    it('names the implemented + used contracts ON the node, with no incoming edge needed', () => {
+        const dot = generateRuntimeDot(derived);
+        expect(dot).toContain('implements: HelperFsdbApi, WarmupApi (via svc-core)');
+        expect(dot).toContain('uses: HelperFsdbApi, WarmupApi');
+        // The declared runtime name is on the node too, so the ClientConfig string is discoverable.
+        expect(dot).toContain(', "helper-portal")');
+    });
+
+    it('shows an api that a server serves and NOTHING in-repo calls', () => {
+        const dot = generateRuntimeDot(derived);
+        expect(derived.apis['LangFsdbApi'].usedBy).toEqual([]);
+        expect(dot).toContain('LangFsdbApi');
+    });
+});
+
+/** A data server whose calls LEAVE the repo: nothing in-repo implements the firestore contracts. */
+function externalCallGraph(): EnhancedGraph {
+    return {
+        'lib-firestore': { level: 0, dependsOn: [], role: 'api-lib', framework: ['node'] },
+        'fsdb-svr': {
+            level: 1,
+            dependsOn: ['lib-firestore'],
+            role: 'server',
+            framework: ['node'],
+            serviceName: 'helper-fsdb',
+            apiRelations: {
+                'lib-firestore': {
+                    kind: 'uses',
+                    implements: [],
+                    uses: [
+                        { api: 'FirestoreReadApi', type: 'rpc' },
+                        { api: 'FirestoreWriteApi', type: 'rpc' },
+                    ],
+                },
+            },
+        },
+    };
+}
+
+describe('external systems are drawn as terminal nodes (render-only)', () => {
+    const derived = deriveRuntimeGraph(externalCallGraph());
+
+    it('leaves unresolvedUses exactly as before — this CONSUMES that data, it does not redefine it', () => {
+        expect(derived.unresolvedUses).toEqual([
+            { service: 'fsdb-svr', api: 'FirestoreReadApi' },
+            { service: 'fsdb-svr', api: 'FirestoreWriteApi' },
+        ]);
+    });
+
+    it('draws ONE dashed box per external library, labeled with the contracts flowing to it', () => {
+        const dot = generateRuntimeDot(derived);
+        expect(dot).toContain('"external__lib-firestore" [shape=box, style="dashed,filled"');
+        expect(dot).toContain('(external)"');
+        expect(dot).toContain('"fsdb-svr" -> "external__lib-firestore" [label="FirestoreReadApi, FirestoreWriteApi"');
+    });
+
+    it('keeps them OUT of the graph data — no service, no level, no cycle input', () => {
+        expect(derived.services['lib-firestore']).toBeUndefined();
+        expect(derived.runtimeEdges).toEqual([]);
+    });
+
+    it('can be switched off for a repo with a noisy external surface', () => {
+        const dot = generateRuntimeDot(derived, 'title', new RuntimeVizOptions(false));
+        expect(dot).not.toContain('external__');
+    });
+
+    it('omits an external node whose only caller is hidden', () => {
+        const hidden = deriveRuntimeGraph(externalCallGraph(), new Set(['fsdb-svr']));
+        expect(generateRuntimeDot(hidden)).not.toContain('external__');
     });
 });
 
