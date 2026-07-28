@@ -1,8 +1,15 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "Validate Package.json Executor",
-    "description": "Validates that package.json dependencies match project.json build dependencies",
+    "description": "Validates that package.json dependencies match project.json build dependencies, and that each dependency sits in the correct section (dependencies vs devDependencies)",
     "type": "object",
-    "properties": {},
+    "properties": {
+        "testOnlyDepMode": {
+            "type": "string",
+            "enum": ["error", "warn", "off"],
+            "default": "error",
+            "description": "What to do when a package imported ONLY by test/dev files is listed in \"dependencies\" (so `pnpm deploy --prod` ships it to production). 'error' fails the build (default), 'warn' reports without failing (migration path for existing repos), 'off' skips the check."
+        }
+    },
     "required": []
 }
