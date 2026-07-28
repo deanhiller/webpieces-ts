@@ -12,15 +12,20 @@
  * Y and X `implements` api Y. This edge does not exist in the compile-time
  * dependencies.json (both Z and X only compile-depend on the api library Y).
  *
- * WHICH X is decided by the call site, not by "everyone who implements Y":
- * `createRpcClient(Y, new ClientConfig('helper-fsdb'))` names its target, kept as
- * `ApiRef.targetService`, and matched against each node's DECLARED `serviceName`
- * (project.json metadata.webpieces.serviceName). Fanning an edge out to every
- * implementer instead is catastrophic for a company-wide contract registered in a
- * shared library — it manufactures calls that cannot happen, and cycles that do
- * not exist. When a target cannot be resolved the old fan-out still happens, but
- * a warning names the call site (see RuntimeGraphReport.warnings): a wrong-but-
- * green graph is worse than a failing one, so it must never degrade silently.
+ * WHICH X is decided by the call site, not by "everyone who implements Y", in
+ * priority order: (1) a literal at the call site —
+ * `createRpcClient(Y, new ClientConfig('helper-fsdb'))` — kept as
+ * `ApiRef.targetService`; else (2) the calling project's declared `callsService`
+ * (project.json metadata.webpieces.callsService), the symmetric half of
+ * `serviceName` for the shared-library case where the client is built once from a
+ * config field so no literal can sit at the call site; else (3) fan-out. A named
+ * target from (1) or (2) is matched against each node's DECLARED `serviceName`.
+ * Fanning an edge out to every implementer is catastrophic for a company-wide
+ * contract registered in a shared library — it manufactures calls that cannot
+ * happen, and cycles that do not exist. When a target cannot be resolved the old
+ * fan-out still happens, but a warning names the call site (see
+ * RuntimeGraphReport.warnings): a wrong-but-green graph is worse than a failing
+ * one, so it must never degrade silently.
  */
 
 import * as fs from 'fs';
@@ -40,6 +45,13 @@ export interface RuntimeService {
      * project.json. Absent for a service nothing calls by name (e.g. a browser app).
      */
     serviceName?: string;
+    /**
+     * The service(s) this node's clients call when the call site carries no literal `ClientConfig`,
+     * declared in its project.json (metadata.webpieces.callsService). A single name, or an
+     * `{ apiClassName: serviceName }` map. Absent when the node declares no target. Mirrors
+     * GraphEntry.callsService; it is the CALLING-side counterpart of `serviceName`.
+     */
+    callsService?: string | Record<string, string>;
     implements: string[];
     /**
      * apiClassName -> the LIBRARY project whose apiRelations declared that implements, for the apis
@@ -363,28 +375,71 @@ class RuntimeGraphDeriver {
     }
 
     /**
-     * WHICH implementers this one `uses` reaches. A call site naming its target resolves to exactly
-     * ONE node; anything else falls back to the historical fan-out — the only safe superset — and
-     * records WHY, so a fanned-out (i.e. possibly fictional) edge can never pass for a derived one.
+     * WHICH implementers this one `uses` reaches. Resolution order (most specific wins):
+     *   1. a literal `ClientConfig` at the call site (`ref.targetService`) — names ONE node;
+     *   2. else the calling project's declared `callsService` (project.json) — for the shared-library
+     *      case where the literal cannot sit at the call site, it lives one indirection away in the app;
+     *   3. else the historical fan-out — the only safe superset — recording WHY, so a fanned-out (i.e.
+     *      possibly fictional) edge can never pass for a derived one.
+     * A named target (1 or 2) that resolves to no module, or to a module that does not serve the
+     * contract, is a PROBLEM (fails the build), never a silent drop.
      */
     private targetsFor(user: string, ref: ApiRef, implementers: string[]): string[] {
-        const wanted = ref.targetService;
-        if (wanted === undefined) return this.untargetedFanOut(user, ref, implementers);
+        const literal = ref.targetService;
+        if (literal !== undefined) return this.resolveNamedTarget(user, ref, implementers, literal, 'literal');
 
+        const declared = this.callsServiceFor(user, ref.api);
+        if (declared !== undefined) return this.resolveNamedTarget(user, ref, implementers, declared, 'callsService');
+
+        return this.untargetedFanOut(user, ref, implementers);
+    }
+
+    /**
+     * The declared `callsService` target for this node's use of `api`, or undefined when none applies.
+     * A string declaration aims every untargeted use at one service; a map aims per api-class.
+     */
+    private callsServiceFor(user: string, api: string): string | undefined {
+        const declared = this.projects[user]?.callsService;
+        if (declared === undefined) return undefined;
+        if (typeof declared === 'string') return declared;
+        return declared[api];
+    }
+
+    /**
+     * Resolve a NAMED target (from a call-site literal or a project-level `callsService`) to the one
+     * module that serves it. A name no module answers to, or a module that does not serve the
+     * contract, fails the build — the wording names which declaration to fix, `source` deciding it.
+     */
+    private resolveNamedTarget(
+        user: string,
+        ref: ApiRef,
+        implementers: string[],
+        wanted: string,
+        source: 'literal' | 'callsService',
+    ): string[] {
         const node = this.nodeByServiceName.get(wanted);
+        const served = `${implementers.length} module(s) serve this contract (${implementers.join(', ')})`;
         if (node === undefined) {
             this.problems.push(
-                `${user} calls "${ref.api}" at service '${wanted}', but NO module answers to that name. ` +
-                    `${implementers.length} module(s) serve this contract (${implementers.join(', ')}). Either use ` +
-                    `the module name, or declare metadata.webpieces.serviceName: '${wanted}' on the module that ` +
-                    `serves it (and translate any environment prefix in ClientRegistry.setDeriver, not here).`,
+                source === 'callsService'
+                    ? `${user} declares metadata.webpieces.callsService '${wanted}' in its project.json, but NO ` +
+                          `module answers to that name. ${served}. Point callsService at a module name, or declare ` +
+                          `metadata.webpieces.serviceName: '${wanted}' on the module that serves "${ref.api}".`
+                    : `${user} calls "${ref.api}" at service '${wanted}', but NO module answers to that name. ` +
+                          `${served}. Either use the module name, or declare metadata.webpieces.serviceName: ` +
+                          `'${wanted}' on the module that serves it (and translate any environment prefix in ` +
+                          `ClientRegistry.setDeriver, not here).`,
             );
             return implementers;
         }
         if (!implementers.includes(node)) {
+            const via =
+                source === 'callsService'
+                    ? `${user} declares callsService '${wanted}' (module ${node})`
+                    : `${user} calls "${ref.api}" at service '${wanted}' (module ${node})`;
             this.problems.push(
-                `${user} calls "${ref.api}" at service '${wanted}' (module ${node}), but ${node} does NOT serve ` +
-                    `that contract — ${implementers.join(', ')} do. At runtime that call has nothing to answer it.`,
+                `${via}, but ${node} does NOT serve "${ref.api}" — ${implementers.join(', ')} do. At runtime that ` +
+                    `call has nothing to answer it.`,
             );
             return implementers;
         }
@@ -401,7 +456,9 @@ class RuntimeGraphDeriver {
             this.warnings.push(
                 `${user} uses "${ref.api}" with no literal client config, and ${implementers.length} services ` +
                     `implement it (${implementers.join(', ')}) — an edge is drawn to EVERY one, so all but one ` +
-                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>')).`,
+                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>')); ` +
+                    `or, when the client is built in a shared library (no literal can sit at the call site), ` +
+                    `declare metadata.webpieces.callsService: '<serviceName>' on ${user}'s project.json.`,
             );
         }
         return implementers;
@@ -431,6 +488,7 @@ class RuntimeGraphDeriver {
             const service: RuntimeService = {
                 level: 0,
                 serviceName: this.projects[decl.name]?.serviceName,
+                callsService: this.projects[decl.name]?.callsService,
                 implements: decl.implementsApis.map((r: ApiRef) => r.api),
                 implementsVia: decl.implementsVia.size > 0 ? sortedRecord(decl.implementsVia) : undefined,
                 // One api used against two services is two refs but ONE api in this list.

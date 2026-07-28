@@ -23,7 +23,7 @@ import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
 import { resolveDrawOnGraph } from './draw-on-graph-resolver';
-import { resolveServiceName, validateUniqueServiceNames } from './service-name-resolver';
+import { resolveCallsService, resolveServiceName, validateUniqueServiceNames } from './service-name-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
 import { toError } from '../toError';
 
@@ -91,15 +91,7 @@ export function enrichGraph(
             entry.role = roleResolution.role;
         }
 
-        // The runtime name clients address this app by — declared, never derived
-        // (see service-name-resolver.ts). Most projects declare none.
-        const serviceResolution = resolveServiceName(info, workspaceRoot);
-        if (serviceResolution.problem !== null) {
-            problems.push(serviceResolution.problem);
-        } else if (serviceResolution.serviceName !== null) {
-            entry.serviceName = serviceResolution.serviceName;
-            serviceNames.set(projectName, serviceResolution.serviceName);
-        }
+        enrichClientNames(entry, info, workspaceRoot, projectName, serviceNames, problems);
 
         // Only persist the field when hidden (false); drawn projects (the
         // default) stay clean in dependencies.json with no drawOnGraph line.
@@ -231,6 +223,38 @@ export function validateRoleDependencies(graph: EnhancedGraph, problems: string[
                     `is actually a library, or remove the dependency.`
             );
         }
+    }
+}
+
+/**
+ * Fill the two symmetric client-addressing fields — `serviceName` (the name clients address THIS app
+ * by) and `callsService` (the name THIS app's clients call when no literal ClientConfig sits at the
+ * call site). Both are declared in project.json, never derived (see service-name-resolver.ts).
+ */
+// webpieces-disable no-function-outside-class -- pure enrichment helper, mirrors enrichResponsibilities
+function enrichClientNames(
+    entry: EnhancedGraph[string],
+    info: ProjectInfo,
+    workspaceRoot: string,
+    projectName: string,
+    serviceNames: Map<string, string>,
+    problems: string[]
+): void {
+    const serviceResolution = resolveServiceName(info, workspaceRoot);
+    if (serviceResolution.problem !== null) {
+        problems.push(serviceResolution.problem);
+    } else if (serviceResolution.serviceName !== null) {
+        entry.serviceName = serviceResolution.serviceName;
+        serviceNames.set(projectName, serviceResolution.serviceName);
+    }
+
+    // Consumed by the runtime graph's target resolution (runtime-graph.ts), between the call-site
+    // literal and the fan-out fallback.
+    const callsResolution = resolveCallsService(info, workspaceRoot);
+    if (callsResolution.problem !== null) {
+        problems.push(callsResolution.problem);
+    } else if (callsResolution.callsService !== null) {
+        entry.callsService = callsResolution.callsService;
     }
 }
 
