@@ -527,11 +527,20 @@ export class NoFileImportCyclesConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
     ignoreTypeOnly?: boolean;
     excludePackages?: string[];
+    // Raw regex escape hatch for a cycle inside the project being checked — generated code, a
+    // vendored tree, or a deliberate bidirectional domain model — that `excludePackages` cannot reach
+    // (it resolves npm package NAMES, so it only excludes a *sibling* package, never a directory
+    // inside this one). Patterns are handed to madge verbatim and matched against ids RELATIVE TO THE
+    // PROJECT (e.g. "^src/generated/", "^src/modules/(item|category)/") — NOT workspace-rooted or
+    // absolute, which silently match nothing. The executor warns when a pattern matches zero
+    // traversed files, so a mis-anchored pattern is visible rather than a silent no-op.
+    excludeRegExp?: string[];
 
     static readonly SCHEMA: SchemaShape<NoFileImportCyclesConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         ignoreTypeOnly: FieldDef.optional('boolean'),
         excludePackages: FieldDef.optional('string[]'),
+        excludeRegExp: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };
 }
