@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, beforeAll } from 'vitest';
 import { LogApiCall } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
@@ -7,6 +7,11 @@ import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
 import { HttpBadRequestError, HttpUserError, HttpNotFoundError } from '../errors';
+import { MaskSpec } from '../LogFieldMask';
+import { LogManager } from '../../logging/LogManager';
+import { HeaderRegistry } from '../HeaderRegistry';
+import { Logger } from '../../logging/Logger';
+import { LoggerFactory } from '../../logging/LoggerFactory';
 
 /**
  * A recording {@link ApiCallContext}: keeps every (key, value) it was asked to stamp so a test can
@@ -276,6 +281,77 @@ describe('LogApiCall.execute — body sizes', () => {
         for (const tag of ctx.values()) {
             expect(tag).not.toHaveProperty('statusCode');
         }
+    });
+});
+
+/**
+ * A LoggerFactory that keeps every `[API-*]` line so a test can read what actually landed in the log —
+ * this is the only way to prove the MASK reaches the log text (the ApiCallInfo tag carries sizes, not
+ * bodies). Installed once for this block; other blocks assert the tag, not the text, so capturing is inert.
+ */
+class CapturingLoggerFactory implements LoggerFactory {
+    readonly lines: string[] = [];
+    getLogger(_name: string): Logger {
+        const record = (message: string): void => {
+            this.lines.push(message);
+        };
+        return { trace: record, debug: record, info: record, warn: record, error: record };
+    }
+}
+
+describe('LogApiCall.execute — opt-in field masking', () => {
+    const capturing = new CapturingLoggerFactory();
+
+    beforeAll(() => {
+        if (!HeaderRegistry.isConfigured()) {
+            HeaderRegistry.configure([API], /*platformHeaders*/ false);
+        }
+        LogManager.setFactory(capturing);
+    });
+
+    // The mask spec that would have stopped the real production leak (response.account.refreshToken).
+    const masked = (side: ApiSide): ApiMethodInfo =>
+        new ApiMethodInfo(side, 'HelperFsdbApi', 'getEmailAccount', undefined,
+            new MaskSpec({ refreshToken: 'full', accessToken: 'last4' }));
+
+    it('masks the secret in BOTH the request and response log lines, yet sends the real value on the wire', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        const realRefresh = '1//04hg2kWy8UcIvCgYIARAAGAQSNwF-L9Irok';
+        const request = { account: { refreshToken: realRefresh } };
+        let seenByWire: string | undefined;
+        const response = { account: { emailAddress: 'user@example.com', refreshToken: realRefresh } };
+
+        await LogApiCall.execute(masked('client'), request, async dto => {
+            // What the transport would put ON THE WIRE is the ORIGINAL, unmasked value (acceptance #4).
+            seenByWire = (dto as typeof request).account.refreshToken;
+            return response;
+        });
+
+        expect(seenByWire).toBe(realRefresh);
+
+        const reqLine = capturing.lines.find(l => l.includes('[API-client-req]'));
+        const respLine = capturing.lines.find(l => l.includes('[API-client-resp-SUCCESS]'));
+        expect(reqLine).toContain('"refreshToken":"*****"');
+        expect(reqLine).not.toContain(realRefresh);
+        expect(respLine).toContain('"refreshToken":"*****"');
+        expect(respLine).not.toContain(realRefresh);
+        // A non-sensitive field on the same DTO is untouched.
+        expect(respLine).toContain('"emailAddress":"user@example.com"');
+    });
+
+    it('an unmasked call logs the body byte-for-byte as before (no behavior change for existing callers)', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+        ApiCallContextHolder.install(ctx);
+
+        const response = { account: { refreshToken: 'still-cleartext-when-unmasked' } };
+        await LogApiCall.execute(info('client'), { q: 'x' }, async () => response);
+
+        const respLine = capturing.lines.find(l => l.includes('[API-client-resp-SUCCESS]'));
+        expect(respLine).toContain(`response=${JSON.stringify(response)}`);
     });
 });
 

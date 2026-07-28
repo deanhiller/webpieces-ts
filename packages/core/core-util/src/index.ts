@@ -49,9 +49,11 @@ export {
     Rpc,
     PubSub,
     Queue,
+    MaskLog,
     getApiPath,
     getEndpoints,
     getEndpointOptions,
+    getMaskSpec,
     isFormPost,
     isApiPath,
     getAuthMeta,
@@ -146,6 +148,11 @@ export { ContextMgr } from './http/ContextMgr';
 
 // API-call logging helper (uses LogManager above). Singleton: use the LogApiCall constant, not `new`.
 export { LogApiCall, LogApiCallImpl } from './http/LogApiCall';
+
+// Opt-in field masking for the LogApiCall log path — declare per-api sensitive fields so secrets
+// (OAuth refresh tokens, id-token JWTs) are masked in the logs while the real value stays on the wire.
+export { MaskSpec } from './http/LogFieldMask';
+export type { MaskMode } from './http/LogFieldMask';
 
 // The structured `api` tag + the context-writer seam LogApiCall stamps through. The Node
 // RequestContext-backed impl is installed by @webpieces/core-context; the browser gets the no-op.

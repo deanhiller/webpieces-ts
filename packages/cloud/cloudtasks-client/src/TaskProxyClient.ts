@@ -5,9 +5,11 @@ import {
     getEndpoints,
     getAuthMode,
     getQueueName,
+    getMaskSpec,
     assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
     AuthMode,
+    MaskSpec,
     LogManager,
     LogApiCall,
     ApiMethodInfo,
@@ -27,11 +29,15 @@ class EndpointPlan {
     path: string;
     queueName: string;
     authMode: AuthMode;
+    /** @MaskLog spec for this endpoint's request DTO, read once here so the enqueue log path masks
+     *  a secret on the task payload without a per-enqueue reflection hit. Undefined = log verbatim. */
+    mask?: MaskSpec;
 
-    constructor(path: string, queueName: string, authMode: AuthMode) {
+    constructor(path: string, queueName: string, authMode: AuthMode, mask?: MaskSpec) {
         this.path = path;
         this.queueName = queueName;
         this.authMode = authMode;
+        this.mask = mask;
     }
 }
 
@@ -108,7 +114,7 @@ export class TaskProxyClient {
         // TaskInvoker is bound, this method sits above it — so the enqueue edge gets structured
         // `jsonPayload.api.*` logging (and, once recording is unified at LogApiCall, is recorded)
         // uniformly, without touching either invoker impl.
-        const info = new ApiMethodInfo('client', this.apiName, methodName);
+        const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
         await LogApiCall.execute(info, requestDto, async () => {
             // Resolved lazily (not at client construction) so building a client stays synchronous.
             // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
@@ -151,6 +157,7 @@ export class TaskProxyClient {
                 basePath + endpoints[methodName],
                 getQueueName(apiClass, methodName),
                 authMode,
+                getMaskSpec(apiClass, methodName),
             );
             plans.set(methodName, plan);
         }

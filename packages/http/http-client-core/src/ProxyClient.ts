@@ -4,6 +4,7 @@ import {
     getEndpoints,
     getAuthMeta,
     isFormPost,
+    getMaskSpec,
     AuthMeta,
     RouteMetadata,
     ProtocolError,
@@ -82,7 +83,7 @@ export abstract class ProxyClient {
     ): Promise<unknown> {
         // apiClass = the CONTRACT name (this.apiName, e.g. 'SaveApi') so this client log line MATCHES
         // the server's for the same call. A client has no impl class, so controllerName is omitted.
-        const info = new ApiMethodInfo('client', this.apiName, route.methodName);
+        const info = new ApiMethodInfo('client', this.apiName, route.methodName, undefined, route.mask);
         return this.logApiCall.execute(info, requestDto, method);
     }
 
@@ -148,7 +149,10 @@ export abstract class ProxyClient {
             const formPost = isFormPost(apiPrototype, methodName);
             this.routeMap.set(
                 methodName,
-                new RouteMetadata('POST', fullPath, methodName, this.apiName, authMeta, undefined, formPost),
+                new RouteMetadata(
+                    'POST', fullPath, methodName, this.apiName, authMeta, undefined, formPost,
+                    getMaskSpec(apiPrototype, methodName),
+                ),
             );
         }
     }

@@ -76,7 +76,9 @@ export class LogApiCallImpl {
 
         // Stringify ONCE and reuse for both the log text and the size — a second JSON.stringify of a
         // large DTO purely to measure it would double the cost of the thing we are measuring.
-        const requestBody = JSON.stringify(requestDto);
+        // Only take the field-masking hit when this call declared sensitive fields; otherwise the plain
+        // JSON.stringify fast path, unchanged for every existing caller.
+        const requestBody = this.serialize(requestDto, methodInfo);
         const requestSize = this.byteSize(requestBody);
         // Declared out here so the catch below can read it too. Reassigned just before the call, so
         // the number times ONLY the call and not our own request-logging.
@@ -94,7 +96,7 @@ export class LogApiCallImpl {
             const response = await method(requestDto);
             const durationMs = Date.now() - startMs;
 
-            const responseBody = JSON.stringify(response);
+            const responseBody = this.serialize(response, methodInfo);
             stamp(
                 new ApiCallInfo(
                     methodInfo, 'response', 'success', durationMs, requestSize, this.byteSize(responseBody),
@@ -109,6 +111,20 @@ export class LogApiCallImpl {
             this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp);
             throw error;
         }
+    }
+
+    /**
+     * Serialize a DTO for the LOG LINE ONLY. With no mask on the call, this is a plain JSON.stringify
+     * (byte-for-byte the old behavior, no walk) so existing callers pay nothing. With a mask, it runs
+     * {@link MaskSpec.stringify}, which produces a masked STRING without ever mutating the DTO — so the
+     * object handed to the transport, and thus the value ON THE WIRE, is unchanged.
+     */
+    private serialize(
+        // webpieces-disable no-any-unknown -- DTO types are erased at the api/proxy boundary (matches execute)
+        dto: unknown,
+        methodInfo: ApiMethodInfo,
+    ): string | undefined {
+        return methodInfo.mask ? methodInfo.mask.stringify(dto) : JSON.stringify(dto);
     }
 
     /**
