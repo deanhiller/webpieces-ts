@@ -11,11 +11,20 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
-import { validatePackageJsonDependencies } from '../../lib/package-validator';
+import {
+    PackageValidatorOptions,
+    TestOnlyDepMode,
+    validatePackageJsonDependencies,
+} from '../../lib/package-validator';
 import { toError } from '../../toError';
 
 export interface ValidatePackageJsonOptions {
-    // No options needed for now
+    /**
+     * Strictness for "a test-only package is listed in dependencies" (i.e. it lands in
+     * the `pnpm deploy --prod` closure and ships to production).
+     * 'error' (default) | 'warn' (migration) | 'off'.
+     */
+    testOnlyDepMode?: TestOnlyDepMode;
 }
 
 export interface ExecutorResult {
@@ -42,7 +51,12 @@ export default async function runExecutor(
 
         // Step 3: Validate package.json dependencies match
         console.log('📦 Validating package.json dependencies match the architecture graph...');
-        const packageValidation = await validatePackageJsonDependencies(enhancedGraph, workspaceRoot);
+        const validatorOptions = new PackageValidatorOptions(options.testOnlyDepMode ?? 'error');
+        const packageValidation = await validatePackageJsonDependencies(
+            enhancedGraph,
+            workspaceRoot,
+            validatorOptions
+        );
 
         // Warnings never fail the build (e.g. runtime-only / peer deps).
         if (packageValidation.warnings.length > 0) {
@@ -59,8 +73,11 @@ export default async function runExecutor(
                 console.error(`  ${error}`);
             }
             console.error('\nTo fix:');
-            console.error('  1. Review the missing dependencies above');
-            console.error('  2. Add the missing dependencies to the respective package.json files');
+            console.error('  1. Review each error above — it names the SECTION the dependency belongs in');
+            console.error('  2. Imported by production source → package.json "dependencies"');
+            console.error('  3. Imported only by *.spec.ts / __tests__ / test configs → "devDependencies"');
+            console.error('     (devDependencies are excluded from `pnpm deploy --prod`, so test-only');
+            console.error('      packages never reach the production image)');
             return { success: false };
         }
 
