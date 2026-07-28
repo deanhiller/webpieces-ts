@@ -16,7 +16,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { loadBlessedGraph } from '../../lib/graph-loader';
 import {
-    deriveRuntimeGraph,
+    deriveRuntimeGraphReport,
     loadRuntimeGraph,
     runtimeAdjacency,
     runtimeGraphFileExists,
@@ -100,7 +100,9 @@ export default async function runExecutor(
     for (const name of Object.keys(depsFile.projects)) {
         if (depsFile.projects[name].drawOnGraph === false) hiddenProjects.add(name);
     }
-    const graph = deriveRuntimeGraph(depsFile.projects, hiddenProjects);
+    const report = deriveRuntimeGraphReport(depsFile.projects, hiddenProjects);
+    const graph = report.graph;
+    for (const warning of report.warnings) console.warn(`⚠️  ${warning}`);
 
     const problems: string[] = checkCycles(graph, config.allowedCycles);
     const unchanged = checkUnchanged(workspaceRoot, graph);

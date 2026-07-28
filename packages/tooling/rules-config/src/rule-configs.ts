@@ -544,10 +544,18 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
     // enumeration of api libs) now fails the unknown-field check in validateWebpiecesConfig. There is
     // nothing to enumerate — delete the keys.
     allowedCycles?: string[];
+    /**
+     * Draw a dashed terminal node for every contract a service calls that NOTHING in-repo
+     * implements (firestore, gmail, ...) — the vendor systems the runtime graph otherwise stops one
+     * hop short of. Defaults to true; set false in a repo whose external surface is noisy. Purely a
+     * RENDER switch: levels, cycle detection and runtime-dependencies.json are identical either way.
+     */
+    showExternalNodes?: boolean;
 
     static readonly SCHEMA: SchemaShape<RuntimeArchitectureConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         allowedCycles: FieldDef.optional('string[]'),
+        showExternalNodes: FieldDef.optional('boolean'),
         ...BASE_RULE_SCHEMA,
     };
 }

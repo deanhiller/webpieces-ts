@@ -3,6 +3,8 @@
  *
  * Fills the AI-oriented fields on each architecture/dependencies.json entry:
  *   framework            — from `framework:<x>` nx tag or package.json inference
+ *   serviceName          — from project.json metadata.webpieces.serviceName; the
+ *                          name clients address this app by at runtime
  *   shortDescription     — first paragraph of the project's responsibilities.md
  *   responsibilitiesFile — repo-relative path to the required responsibilities.md
  *   designFile           — repo-relative path to the generated DI design.json
@@ -21,6 +23,7 @@ import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
 import { resolveDrawOnGraph } from './draw-on-graph-resolver';
+import { resolveServiceName, validateUniqueServiceNames } from './service-name-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
 import { toError } from '../toError';
 
@@ -64,6 +67,8 @@ export function enrichGraph(
     workspaceRoot: string
 ): void {
     const problems: string[] = [];
+    // project -> declared serviceName, collected so duplicates can be reported across the workspace.
+    const serviceNames = new Map<string, string>();
 
     for (const [projectName, entry] of Object.entries(graph)) {
         const info = infos.get(projectName);
@@ -84,6 +89,16 @@ export function enrichGraph(
             problems.push(roleResolution.problem);
         } else if (roleResolution.role !== null) {
             entry.role = roleResolution.role;
+        }
+
+        // The runtime name clients address this app by — declared, never derived
+        // (see service-name-resolver.ts). Most projects declare none.
+        const serviceResolution = resolveServiceName(info, workspaceRoot);
+        if (serviceResolution.problem !== null) {
+            problems.push(serviceResolution.problem);
+        } else if (serviceResolution.serviceName !== null) {
+            entry.serviceName = serviceResolution.serviceName;
+            serviceNames.set(projectName, serviceResolution.serviceName);
         }
 
         // Only persist the field when hidden (false); drawn projects (the
@@ -107,6 +122,7 @@ export function enrichGraph(
         }
     }
 
+    validateUniqueServiceNames(serviceNames, problems);
     validateLibraryTypesMatch(graph, problems);
     validateRoleDependencies(graph, problems);
 

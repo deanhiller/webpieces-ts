@@ -9,7 +9,8 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { loadRuntimeGraph } from '../../lib/runtime-graph';
-import { writeRuntimeVisualization } from '../../lib/runtime-visualizer';
+import { writeRuntimeVisualization, RuntimeVizOptions } from '../../lib/runtime-visualizer';
+import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { toError } from '../../toError';
 
@@ -38,7 +39,9 @@ export default async function runExecutor(
             return { success: false };
         }
 
-        const vizPaths = writeRuntimeVisualization(graph, workspaceRoot);
+        const config = loadRuntimeConfig(workspaceRoot);
+        const options = new RuntimeVizOptions(config.showExternalNodes);
+        const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
         console.log(`✅ Generated: ${vizPaths.dotPath}`);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 

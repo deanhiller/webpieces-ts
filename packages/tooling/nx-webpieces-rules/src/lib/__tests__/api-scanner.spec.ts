@@ -81,6 +81,28 @@ describe('ApiUsageScanner over the example apps', () => {
     });
 });
 
+/**
+ * The client config argument names WHICH service a client talks to. Dropping it is what forced the
+ * runtime graph to fan an edge out to every implementer of a contract; keeping it makes the edge
+ * single-target. A non-literal config keeps the field ABSENT — "unknown", not "none" — so the graph
+ * knows to fall back rather than guess.
+ */
+describe('ApiUsageScanner — the target service at the call site', () => {
+    const result = new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan();
+
+    it('records the service named by a `new ClientConfig(...)` literal', () => {
+        const uses = result.relationsByProject.get('client-server')!['server2-api'] as ApiRelation;
+        expect(uses.uses[0].api).toBe('Server2Api');
+        expect(uses.uses[0].targetService).toBe('server2');
+    });
+
+    it('records nothing when the config is a variable (angular-site passes one in)', () => {
+        const uses = result.relationsByProject.get('angular-site')!['client-server-api'] as ApiRelation;
+        expect(uses.uses.length).toBeGreaterThan(0);
+        for (const ref of uses.uses) expect(ref.targetService).toBeUndefined();
+    });
+});
+
 describe('ApiUsageScanner — project-coverage edge cases', () => {
     const result = new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan();
 

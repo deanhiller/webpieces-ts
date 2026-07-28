@@ -30,6 +30,27 @@ export type ApiRelationKind = 'implements' | 'uses' | 'uses-implements';
 export interface ApiRef {
     api: string;
     type: ApiTransport;
+    /**
+     * ONLY on a `uses` ref: the service the call site aims at, read from the client config literal
+     * (`createRpcClient(XxxApi, new ClientConfig('helper-fsdb'))` → `helper-fsdb`). It is matched
+     * against a project's DECLARED `serviceName` to pick the ONE runtime edge target, instead of
+     * fanning the edge out to every implementer of the api — which is catastrophically wrong for a
+     * company-wide contract registered in a shared library and therefore implemented by every server.
+     *
+     * Absent when the config argument is not a `new <Xxx>ClientConfig('<literal>')` (a variable, a
+     * computed name, ...). Absent means "unknown target", NOT "no target" — the runtime graph then
+     * falls back to the old fan-out and says so out loud.
+     */
+    targetService?: string;
+}
+
+/**
+ * Identity of a ref for de-duplication: an api used twice against DIFFERENT services is two distinct
+ * relations (two distinct runtime edges), so the api name alone is not the key.
+ */
+// webpieces-disable no-function-outside-class -- pure data helper for these serialization DTOs
+export function apiRefKey(ref: ApiRef): string {
+    return `${ref.api} ${ref.targetService ?? ''}`;
 }
 
 /**
@@ -60,8 +81,14 @@ export function deriveApiRelationKind(implementsRefs: ApiRef[], usesRefs: ApiRef
     return 'uses';
 }
 
-/** Stable-sort a ref list by api name so the committed JSON is deterministic. */
+/**
+ * Stable-sort a ref list by api name, then by target service, so the committed JSON is
+ * deterministic even when one api is used against two different services.
+ */
 // webpieces-disable no-function-outside-class -- pure data helper for these serialization DTOs
 export function sortApiRefs(refs: ApiRef[]): ApiRef[] {
-    return [...refs].sort((a: ApiRef, b: ApiRef) => a.api.localeCompare(b.api));
+    return [...refs].sort(
+        (a: ApiRef, b: ApiRef) =>
+            a.api.localeCompare(b.api) || (a.targetService ?? '').localeCompare(b.targetService ?? ''),
+    );
 }

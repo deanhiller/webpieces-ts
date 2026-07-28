@@ -11,6 +11,16 @@
  * The runtime edge Z -> X (Z depends on X at runtime) is INFERRED: Z `uses` api
  * Y and X `implements` api Y. This edge does not exist in the compile-time
  * dependencies.json (both Z and X only compile-depend on the api library Y).
+ *
+ * WHICH X is decided by the call site, not by "everyone who implements Y":
+ * `createRpcClient(Y, new ClientConfig('helper-fsdb'))` names its target, kept as
+ * `ApiRef.targetService`, and matched against each node's DECLARED `serviceName`
+ * (project.json metadata.webpieces.serviceName). Fanning an edge out to every
+ * implementer instead is catastrophic for a company-wide contract registered in a
+ * shared library — it manufactures calls that cannot happen, and cycles that do
+ * not exist. When a target cannot be resolved the old fan-out still happens, but
+ * a warning names the call site (see RuntimeGraphReport.warnings): a wrong-but-
+ * green graph is worse than a failing one, so it must never degrade silently.
  */
 
 import * as fs from 'fs';
@@ -18,14 +28,26 @@ import * as path from 'path';
 import { sortGraphTopologically } from './graph-sorter';
 import type { EnhancedGraph } from './graph-sorter';
 import type { ApiRef, ApiTransport } from './api-usage/api-relations';
-import { sortApiRefs } from './api-usage/api-relations';
+import { apiRefKey, sortApiRefs } from './api-usage/api-relations';
 import { toError } from '../toError';
 
 export const DEFAULT_RUNTIME_GRAPH_PATH = 'architecture/runtime-dependencies.json';
 
 export interface RuntimeService {
     level: number;
+    /**
+     * The name clients address this service by (`new ClientConfig('helper-fsdb')`), declared in its
+     * project.json. Absent for a service nothing calls by name (e.g. a browser app).
+     */
+    serviceName?: string;
     implements: string[];
+    /**
+     * apiClassName -> the LIBRARY project whose apiRelations declared that implements, for the apis
+     * this service serves through an embedded library rather than its own source (e.g. a shared
+     * route-registration lib). Answers "who implements WarmupApi, and where did that come from?",
+     * which previously required walking the dependsOn closure by hand.
+     */
+    implementsVia?: Record<string, string>;
     uses: string[];
     dependsOn: string[];
     /**
@@ -43,6 +65,12 @@ export interface RuntimeApi {
     usedBy: string[];
     /** Transport of this API — 'rpc' (direct call) or 'pubsub' (delivered through a queue). */
     type?: ApiTransport;
+    /**
+     * The api-lib project that OWNS this contract. For a contract nothing in-repo implements, this
+     * is the external library the calls leave the repo through (`lib-firestore`, `lib-gmail`), which
+     * is what the runtime viz labels its terminal external nodes with.
+     */
+    owner?: string;
 }
 
 export interface RuntimeEdge {
@@ -72,6 +100,19 @@ export interface RuntimeGraph {
 interface EdgeResult {
     edges: RuntimeEdge[];
     unresolved: RuntimeUnresolved[];
+}
+
+/**
+ * The derived graph PLUS everything the derivation had to guess at. `warnings` is deliberately not
+ * part of RuntimeGraph: it is not committed data, it is the report that stops a guessed edge from
+ * passing for a derived one. Executors print it.
+ */
+export class RuntimeGraphReport {
+    constructor(
+        public readonly graph: RuntimeGraph,
+        /** Human-readable lines naming every call site whose target the graph could not pin down. */
+        public readonly warnings: string[],
+    ) {}
 }
 
 /** Adjacency (service -> [targets]) used for leveling + cycle checks. */
@@ -110,6 +151,35 @@ interface ScanDecl {
     name: string;
     implementsApis: ApiRef[];
     usesApis: ApiRef[];
+    /** apiClassName -> the embedded LIBRARY project that declared the implements (never the node itself). */
+    implementsVia: Map<string, string>;
+}
+
+/**
+ * Accumulates one node's effective relations while its dependsOn closure is walked, keeping the
+ * PROVENANCE the walk would otherwise throw away: which library contributed an implements, and
+ * which api-lib owns each contract.
+ */
+class RelationSink {
+    readonly implementsApis: ApiRef[] = [];
+    readonly usesApis: ApiRef[] = [];
+    readonly implementsVia = new Map<string, string>();
+
+    constructor(
+        /** The runtime node these relations are attributed to. */
+        private readonly node: string,
+    ) {}
+
+    /** `from` is the project whose apiRelations declared this — the node itself, or a lib it embeds. */
+    addImplements(ref: ApiRef, from: string): void {
+        this.implementsApis.push(ref);
+        // First contributor wins, matching dedupApiRefs' keep-the-first rule on the ref list.
+        if (from !== this.node && !this.implementsVia.has(ref.api)) this.implementsVia.set(ref.api, from);
+    }
+
+    addUses(ref: ApiRef): void {
+        this.usesApis.push(ref);
+    }
 }
 
 /**
@@ -122,20 +192,41 @@ interface ScanDecl {
  * servers/clients that embed it, walked transitively over dependsOn (see collectDecls).
  */
 class RuntimeGraphDeriver {
+    /** apiClassName -> the api-lib project that owns the contract (from the apiRelations key). */
+    private readonly apiOwners = new Map<string, string>();
+    /** Declared serviceName -> the runtime node declaring it; how a targeted call resolves. */
+    private readonly nodeByServiceName = new Map<string, string>();
+    private readonly warnings: string[] = [];
+
     constructor(
         private readonly projects: EnhancedGraph,
         /** Project names tagged drawOnGraph:false — kept in the JSON but flagged so the viz omits them. */
         private readonly hiddenProjects: Set<string>
-    ) {}
+    ) {
+        for (const name of Object.keys(projects).sort()) {
+            const declared = projects[name].serviceName;
+            // A duplicate is already a metadata-validation failure at generate time; first (sorted)
+            // wins here purely so derivation stays deterministic rather than order-dependent.
+            if (this.isNode(name) && declared !== undefined && !this.nodeByServiceName.has(declared)) {
+                this.nodeByServiceName.set(declared, name);
+            }
+        }
+    }
 
-    assemble(): RuntimeGraph {
+    assemble(): RuntimeGraphReport {
         const decls = this.collectDecls();
         const apis = this.buildApis(decls);
         const edgeResult = this.buildEdges(decls, apis);
         const services = this.buildServices(decls, edgeResult.edges);
         const apisObj: Record<string, RuntimeApi> = {};
         for (const api of Array.from(apis.keys()).sort()) apisObj[api] = apis.get(api)!;
-        return { services, apis: apisObj, runtimeEdges: edgeResult.edges, unresolvedUses: edgeResult.unresolved };
+        const graph: RuntimeGraph = {
+            services,
+            apis: apisObj,
+            runtimeEdges: edgeResult.edges,
+            unresolvedUses: edgeResult.unresolved,
+        };
+        return new RuntimeGraphReport(graph, this.warnings);
     }
 
     /**
@@ -152,14 +243,14 @@ class RuntimeGraphDeriver {
         const decls: ScanDecl[] = [];
         for (const name of Object.keys(this.projects).sort()) {
             if (!this.isNode(name)) continue;
-            const implementsApis: ApiRef[] = [];
-            const usesApis: ApiRef[] = [];
-            this.collectEffectiveRelations(name, implementsApis, usesApis, new Set<string>([name]));
-            if (implementsApis.length > 0 || usesApis.length > 0) {
+            const sink = new RelationSink(name);
+            this.collectEffectiveRelations(name, sink, new Set<string>([name]));
+            if (sink.implementsApis.length > 0 || sink.usesApis.length > 0) {
                 decls.push({
                     name,
-                    implementsApis: dedupApiRefs(sortApiRefs(implementsApis)),
-                    usesApis: dedupApiRefs(sortApiRefs(usesApis)),
+                    implementsApis: dedupApiRefs(sortApiRefs(sink.implementsApis)),
+                    usesApis: dedupApiRefs(sortApiRefs(sink.usesApis)),
+                    implementsVia: sink.implementsVia,
                 });
             }
         }
@@ -177,21 +268,27 @@ class RuntimeGraphDeriver {
      * (skipping other nodes, which own their own relations). `visited` guards against
      * re-walking a lib reachable by more than one path (and any cycle).
      */
-    private collectEffectiveRelations(name: string, impl: ApiRef[], uses: ApiRef[], visited: Set<string>): void {
+    private collectEffectiveRelations(name: string, sink: RelationSink, visited: Set<string>): void {
         const entry = this.projects[name];
         if (entry === undefined) return;
         const relations = entry.apiRelations;
         if (relations !== undefined) {
-            for (const owner of Object.keys(relations)) {
-                impl.push(...relations[owner].implements);
-                uses.push(...relations[owner].uses);
+            for (const owner of Object.keys(relations).sort()) {
+                for (const ref of relations[owner].implements) {
+                    this.apiOwners.set(ref.api, owner);
+                    sink.addImplements(ref, name);
+                }
+                for (const ref of relations[owner].uses) {
+                    this.apiOwners.set(ref.api, owner);
+                    sink.addUses(ref);
+                }
             }
         }
         for (const dep of entry.dependsOn) {
             if (visited.has(dep)) continue;
             visited.add(dep);
             if (this.isNode(dep)) continue; // another server/client owns its own relations
-            this.collectEffectiveRelations(dep, impl, uses, visited);
+            this.collectEffectiveRelations(dep, sink, visited);
         }
     }
 
@@ -210,9 +307,12 @@ class RuntimeGraphDeriver {
             for (const ref of decl.implementsApis) ensure(ref.api, ref.type).implementedBy.push(decl.name);
             for (const ref of decl.usesApis) ensure(ref.api, ref.type).usedBy.push(decl.name);
         }
-        for (const entry of apis.values()) {
+        for (const api of apis.keys()) {
+            const entry = apis.get(api)!;
             entry.implementedBy.sort();
-            entry.usedBy.sort();
+            entry.usedBy = Array.from(new Set(entry.usedBy)).sort();
+            const owner = this.apiOwners.get(api);
+            if (owner !== undefined) entry.owner = owner;
         }
         return apis;
     }
@@ -228,9 +328,9 @@ class RuntimeGraphDeriver {
                     unresolved.push({ service: decl.name, api: ref.api });
                     continue;
                 }
-                for (const target of implementers) {
+                for (const target of this.targetsFor(decl.name, ref, implementers)) {
                     if (target === decl.name) continue;
-                    const key = `${decl.name} ${target} ${ref.type}`;
+                    const key = `${decl.name} ${target} ${ref.type}`;
                     if (!viaByKey.has(key)) viaByKey.set(key, new Set());
                     viaByKey.get(key)!.add(ref.api);
                 }
@@ -239,10 +339,55 @@ class RuntimeGraphDeriver {
         return { edges: this.edgesFromKeys(viaByKey), unresolved: sortUnresolved(unresolved) };
     }
 
+    /**
+     * WHICH implementers this one `uses` reaches. A call site naming its target resolves to exactly
+     * ONE node; anything else falls back to the historical fan-out — the only safe superset — and
+     * records WHY, so a fanned-out (i.e. possibly fictional) edge can never pass for a derived one.
+     */
+    private targetsFor(user: string, ref: ApiRef, implementers: string[]): string[] {
+        const wanted = ref.targetService;
+        if (wanted === undefined) return this.untargetedFanOut(user, ref, implementers);
+
+        const node = this.nodeByServiceName.get(wanted);
+        if (node === undefined) {
+            this.warnings.push(
+                `${user} uses "${ref.api}" against service '${wanted}', which NO project declares — ` +
+                    `falling back to one edge per implementer (${implementers.join(', ')}). Declare it as ` +
+                    `metadata.webpieces.serviceName in the serving project's project.json.`,
+            );
+            return implementers;
+        }
+        if (!implementers.includes(node)) {
+            this.warnings.push(
+                `${user} uses "${ref.api}" against service '${wanted}' (${node}), but ${node} does NOT ` +
+                    `implement it — implementers are ${implementers.join(', ')}. Falling back to one edge per ` +
+                    `implementer; at runtime that call has nothing to answer it.`,
+            );
+            return implementers;
+        }
+        return [node];
+    }
+
+    /**
+     * A use with no literal client config. One implementer is unambiguous, so it stays silent; more
+     * than one means every edge but one is fiction — exactly the failure this mechanism exists to
+     * stop — so it is reported even though the graph still (conservatively) draws them all.
+     */
+    private untargetedFanOut(user: string, ref: ApiRef, implementers: string[]): string[] {
+        if (implementers.length > 1) {
+            this.warnings.push(
+                `${user} uses "${ref.api}" with no literal client config, and ${implementers.length} services ` +
+                    `implement it (${implementers.join(', ')}) — an edge is drawn to EVERY one, so all but one ` +
+                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>')).`,
+            );
+        }
+        return implementers;
+    }
+
     private edgesFromKeys(viaByKey: Map<string, Set<string>>): RuntimeEdge[] {
         const edges: RuntimeEdge[] = [];
         for (const key of viaByKey.keys()) {
-            const parts = key.split(' ');
+            const parts = key.split(' ');
             edges.push({ from: parts[0], to: parts[1], via: Array.from(viaByKey.get(key)!).sort(), type: parts[2] as ApiTransport });
         }
         edges.sort(
@@ -258,12 +403,18 @@ class RuntimeGraphDeriver {
             const dependsOn = Array.from(
                 new Set(edges.filter((e: RuntimeEdge) => e.from === decl.name).map((e: RuntimeEdge) => e.to)),
             ).sort();
-            services[decl.name] = {
+            // Keys are written in this order; an undefined value is omitted by JSON.stringify, so
+            // the committed JSON stays clean AND deterministic without conditional assembly.
+            const service: RuntimeService = {
                 level: 0,
+                serviceName: this.projects[decl.name]?.serviceName,
                 implements: decl.implementsApis.map((r: ApiRef) => r.api),
-                uses: decl.usesApis.map((r: ApiRef) => r.api),
+                implementsVia: decl.implementsVia.size > 0 ? sortedRecord(decl.implementsVia) : undefined,
+                // One api used against two services is two refs but ONE api in this list.
+                uses: Array.from(new Set(decl.usesApis.map((r: ApiRef) => r.api))),
                 dependsOn,
             };
+            services[decl.name] = service;
             if (this.hiddenProjects.has(decl.name)) services[decl.name].drawOnGraph = false;
         }
         const levels = assignLevels(adjacencyFromEdges(Object.keys(services), edges));
@@ -283,27 +434,54 @@ export function deriveRuntimeGraph(
     projects: EnhancedGraph,
     hiddenProjects: Set<string> = new Set<string>()
 ): RuntimeGraph {
+    return deriveRuntimeGraphReport(projects, hiddenProjects).graph;
+}
+
+/**
+ * The same derivation, plus the warnings it produced (every edge it had to GUESS at). Executors use
+ * this form and print the warnings; `deriveRuntimeGraph` is the convenience form for callers that
+ * only want the data. The warnings are deliberately kept OUT of runtime-dependencies.json — a graph
+ * file that records its own doubts would just get committed and stop being read.
+ */
+// webpieces-disable no-function-outside-class -- module entry point for the runtime graph derivation
+export function deriveRuntimeGraphReport(
+    projects: EnhancedGraph,
+    hiddenProjects: Set<string> = new Set<string>()
+): RuntimeGraphReport {
     return new RuntimeGraphDeriver(projects, hiddenProjects).assemble();
 }
 
-/** Drop duplicate api refs (same api class), keeping the first — needed after a node absorbs the
- * same api from both its own relations and an embedded lib's. Input is pre-sorted, so output stays
- * deterministic. */
+/** Drop duplicate api refs, keeping the first — needed after a node absorbs the same api from both
+ * its own relations and an embedded lib's. Keyed by api AND target service: the same contract aimed
+ * at two different services is two distinct relations (two distinct edges), not a duplicate. Input
+ * is pre-sorted, so output stays deterministic. */
 // webpieces-disable no-function-outside-class -- pure list helper, matches the sibling helpers in this file
 function dedupApiRefs(refs: ApiRef[]): ApiRef[] {
     const seen = new Set<string>();
     const out: ApiRef[] = [];
     for (const ref of refs) {
-        if (seen.has(ref.api)) continue;
-        seen.add(ref.api);
+        const key = apiRefKey(ref);
+        if (seen.has(key)) continue;
+        seen.add(key);
         out.push(ref);
     }
     return out;
 }
 
+/** Sort a Map into a plain object with sorted keys, so the committed JSON is deterministic. */
+// webpieces-disable no-function-outside-class -- pure data helper, matches the sibling helpers in this file
+function sortedRecord(map: Map<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const key of [...map.keys()].sort()) out[key] = map.get(key)!;
+    return out;
+}
+
+/** Sort AND de-duplicate: one api used against two targets must not be reported unresolved twice. */
 // webpieces-disable no-function-outside-class -- pure sort helper, matches the sibling helpers in this file
 function sortUnresolved(unresolved: RuntimeUnresolved[]): RuntimeUnresolved[] {
-    return [...unresolved].sort(
+    const byKey = new Map<string, RuntimeUnresolved>();
+    for (const entry of unresolved) byKey.set(`${entry.service} ${entry.api}`, entry);
+    return [...byKey.values()].sort(
         (a: RuntimeUnresolved, b: RuntimeUnresolved) => a.service.localeCompare(b.service) || a.api.localeCompare(b.api),
     );
 }
