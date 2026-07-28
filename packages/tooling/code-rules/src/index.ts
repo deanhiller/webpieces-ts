@@ -12,6 +12,8 @@ export { NoUnmanagedExceptionsValidator } from './validate-no-unmanaged-exceptio
 export { NoDestructureValidator } from './validate-no-destructure';
 export { NoDirectApiResolverValidator } from './validate-no-direct-api-resolver';
 export { NoSymbolDiTokensValidator } from './validate-no-symbol-di-tokens';
+export { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
+export { ProjectRoleResolver } from './project-role-resolver';
 export { NoProcessExitOutsideMainValidator } from './validate-no-process-exit-outside-main';
 export { NoFunctionOutsideClassValidator } from './validate-no-function-outside-class';
 export { InjectAnnotationNotNeededForConcreteClassValidator, findRedundantInjectInSource } from './validate-inject-annotation-not-needed-for-concrete-class';

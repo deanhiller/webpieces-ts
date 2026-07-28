@@ -27,6 +27,10 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'prisma-converter': {},
     'angular-no-direct-api-in-resolver': {},
     'no-symbol-di-tokens': {},
+    // Ships OFF: a repo opts in per webpieces.config.json once it is ready to migrate any
+    // client-in-a-lib sites (severity defaults to "warn" so even when enabled it reports without
+    // failing until a repo flips it to "error").
+    'no-client-creation-outside-server-or-client': { mode: 'OFF' },
     'no-custom-css': { allowGlobs: [] },
     'no-process-exit-outside-main': {},
     'inject-annotation-not-needed-for-concrete-class': {},

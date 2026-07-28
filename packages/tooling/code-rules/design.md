@@ -29,6 +29,8 @@ graph TD
     MaxMethodLinesValidator["MaxMethodLinesValidator"]
     NoAnyUnknownConfig["NoAnyUnknownConfig"]:::many
     NoAnyUnknownValidator["NoAnyUnknownValidator"]
+    NoClientCreationOutsideServerOrClientConfig["NoClientCreationOutsideServerOrClientConfig"]:::many
+    NoClientCreationOutsideServerOrClientValidator["NoClientCreationOutsideServerOrClientValidator"]
     NoCustomCssConfig["NoCustomCssConfig"]:::many
     NoCustomCssValidator["NoCustomCssValidator"]
     NoDestructureConfig["NoDestructureConfig"]:::many
@@ -50,6 +52,7 @@ graph TD
     PrismaConverterValidator["PrismaConverterValidator"]
     PrismaValidateDtosConfig["PrismaValidateDtosConfig"]:::many
     PrismaValidateDtosValidator["PrismaValidateDtosValidator"]
+    ProjectRoleResolver["ProjectRoleResolver"]
     RequireReturnTypeConfig["RequireReturnTypeConfig"]:::many
     RequireReturnTypeValidator["RequireReturnTypeValidator"]
     RoleTagConfig["RoleTagConfig"]:::many
@@ -68,6 +71,7 @@ graph TD
     CodeRulesEngine --> MaxFileLinesValidator
     CodeRulesEngine --> MaxMethodLinesValidator
     CodeRulesEngine --> NoAnyUnknownValidator
+    CodeRulesEngine --> NoClientCreationOutsideServerOrClientValidator
     CodeRulesEngine --> NoCustomCssValidator
     CodeRulesEngine --> NoDestructureValidator
     CodeRulesEngine --> NoDirectApiResolverValidator
@@ -89,6 +93,8 @@ graph TD
     MaxFileLinesValidator --> MaxFileLinesConfig
     MaxMethodLinesValidator --> MaxMethodLinesConfig
     NoAnyUnknownValidator --> NoAnyUnknownConfig
+    NoClientCreationOutsideServerOrClientValidator --> NoClientCreationOutsideServerOrClientConfig
+    NoClientCreationOutsideServerOrClientValidator --> ProjectRoleResolver
     NoCustomCssValidator --> NoCustomCssConfig
     NoDestructureValidator --> NoDestructureConfig
     NoDirectApiResolverValidator --> AngularNoDirectApiInResolverConfig

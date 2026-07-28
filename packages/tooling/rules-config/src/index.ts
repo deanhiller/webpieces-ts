@@ -120,6 +120,11 @@ export {
     STRUCTURAL_MODES,
     VALIDATE_TS_MODES,
 } from './rule-configs';
+export {
+    NoClientCreationOutsideServerOrClientConfig,
+    CLIENT_CREATION_SEVERITIES,
+} from './no-client-creation-config';
+export type { ClientCreationSeverity } from './no-client-creation-config';
 export type {
     MethodLimitMode,
     FileLimitMode,

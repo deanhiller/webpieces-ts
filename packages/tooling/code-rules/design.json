@@ -145,6 +145,22 @@
                     "level": 2
                 },
                 {
+                    "id": "NoClientCreationOutsideServerOrClientConfig",
+                    "className": "NoClientCreationOutsideServerOrClientConfig",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/tooling/rules-config/src/no-client-creation-config.ts",
+                    "level": 3
+                },
+                {
+                    "id": "NoClientCreationOutsideServerOrClientValidator",
+                    "className": "NoClientCreationOutsideServerOrClientValidator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/validate-no-client-creation-outside-server-or-client.ts",
+                    "level": 2
+                },
+                {
                     "id": "NoCustomCssConfig",
                     "className": "NoCustomCssConfig",
                     "kind": "class",
@@ -313,6 +329,14 @@
                     "level": 2
                 },
                 {
+                    "id": "ProjectRoleResolver",
+                    "className": "ProjectRoleResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/code-rules/src/project-role-resolver.ts",
+                    "level": 3
+                },
+                {
                     "id": "RequireReturnTypeConfig",
                     "className": "RequireReturnTypeConfig",
                     "kind": "class",
@@ -467,6 +491,15 @@
                     "tokenKey": "class:packages/tooling/code-rules/src/validate-no-any-unknown.ts#NoAnyUnknownValidator",
                     "paramName": "noAnyUnknown",
                     "paramType": "NoAnyUnknownValidator"
+                },
+                {
+                    "from": "CodeRulesEngine",
+                    "to": "NoClientCreationOutsideServerOrClientValidator",
+                    "injection": "type",
+                    "token": "NoClientCreationOutsideServerOrClientValidator",
+                    "tokenKey": "class:packages/tooling/code-rules/src/validate-no-client-creation-outside-server-or-client.ts#NoClientCreationOutsideServerOrClientValidator",
+                    "paramName": "noClientCreationOutsideServerOrClient",
+                    "paramType": "NoClientCreationOutsideServerOrClientValidator"
                 },
                 {
                     "from": "CodeRulesEngine",
@@ -656,6 +689,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/rule-configs.ts#NoAnyUnknownConfig",
                     "paramName": "config",
                     "paramType": "NoAnyUnknownConfig"
+                },
+                {
+                    "from": "NoClientCreationOutsideServerOrClientValidator",
+                    "to": "NoClientCreationOutsideServerOrClientConfig",
+                    "injection": "type",
+                    "token": "NoClientCreationOutsideServerOrClientConfig",
+                    "tokenKey": "class:packages/tooling/rules-config/src/no-client-creation-config.ts#NoClientCreationOutsideServerOrClientConfig",
+                    "paramName": "config",
+                    "paramType": "NoClientCreationOutsideServerOrClientConfig"
+                },
+                {
+                    "from": "NoClientCreationOutsideServerOrClientValidator",
+                    "to": "ProjectRoleResolver",
+                    "injection": "type",
+                    "token": "ProjectRoleResolver",
+                    "tokenKey": "class:packages/tooling/code-rules/src/project-role-resolver.ts#ProjectRoleResolver",
+                    "paramName": "roleResolver",
+                    "paramType": "ProjectRoleResolver"
                 },
                 {
                     "from": "NoCustomCssValidator",

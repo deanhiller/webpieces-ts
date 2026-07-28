@@ -20,6 +20,7 @@ export const RULE_NAMES = {
     THROW_CAUSE_REQUIRED: 'throw-cause-required',
     REQUIRE_RETURN_TYPE: 'require-return-type',
     NO_SYMBOL_DI_TOKENS: 'no-symbol-di-tokens',
+    NO_CLIENT_CREATION_OUTSIDE_SERVER_OR_CLIENT: 'no-client-creation-outside-server-or-client',
     NO_PROCESS_EXIT_OUTSIDE_MAIN: 'no-process-exit-outside-main',
     NO_FUNCTION_OUTSIDE_CLASS: 'no-function-outside-class',
     INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS: 'inject-annotation-not-needed-for-concrete-class',
