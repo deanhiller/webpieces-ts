@@ -32,6 +32,49 @@ export interface ExecutorResult {
     success: boolean;
 }
 
+/**
+ * Console reporting for the validation result.
+ *
+ * Extracted from `runExecutor` purely to keep that method under the max-method-lines
+ * limit: it crossed 70 lines when the config gate (this branch) and the test-vs-prod
+ * dependency classification (main, #481) both landed in it.
+ */
+class ValidationReporter {
+    reportWarnings(warnings: string[]): void {
+        // Warnings never fail the build (e.g. runtime-only / peer deps).
+        if (warnings.length === 0) {
+            return;
+        }
+        console.warn('\n⚠️  Package.json notices (non-fatal):');
+        for (const warning of warnings) {
+            console.warn(`  ${warning}`);
+        }
+    }
+
+    reportErrors(errors: string[]): void {
+        console.error('\n❌ Package.json validation failed!');
+        console.error('\nErrors:');
+        for (const error of errors) {
+            console.error(`  ${error}`);
+        }
+        console.error('\nTo fix:');
+        console.error('  1. Review each error above — it names the SECTION the dependency belongs in');
+        console.error('  2. Imported by production source → package.json "dependencies"');
+        console.error('  3. Imported only by *.spec.ts / __tests__ / test configs → "devDependencies"');
+        console.error('     (devDependencies are excluded from `pnpm deploy --prod`, so test-only');
+        console.error('      packages never reach the production image)');
+    }
+
+    reportSummary(projectResults: { valid: boolean }[]): void {
+        const validProjects = projectResults.filter(r => r.valid).length;
+        const totalProjects = projectResults.length;
+        console.log(`\n📈 Validation Summary:`);
+        console.log(`   Projects validated: ${totalProjects}`);
+        console.log(`   Valid: ${validProjects}`);
+        console.log(`   Invalid: ${totalProjects - validProjects}`);
+    }
+}
+
 export default async function runExecutor(
     options: ValidatePackageJsonOptions,
     context: ExecutorContext
@@ -64,38 +107,16 @@ export default async function runExecutor(
             validatorOptions
         );
 
-        // Warnings never fail the build (e.g. runtime-only / peer deps).
-        if (packageValidation.warnings.length > 0) {
-            console.warn('\n⚠️  Package.json notices (non-fatal):');
-            for (const warning of packageValidation.warnings) {
-                console.warn(`  ${warning}`);
-            }
-        }
+        const reporter = new ValidationReporter();
+        reporter.reportWarnings(packageValidation.warnings);
 
         if (!packageValidation.valid) {
-            console.error('\n❌ Package.json validation failed!');
-            console.error('\nErrors:');
-            for (const error of packageValidation.errors) {
-                console.error(`  ${error}`);
-            }
-            console.error('\nTo fix:');
-            console.error('  1. Review each error above — it names the SECTION the dependency belongs in');
-            console.error('  2. Imported by production source → package.json "dependencies"');
-            console.error('  3. Imported only by *.spec.ts / __tests__ / test configs → "devDependencies"');
-            console.error('     (devDependencies are excluded from `pnpm deploy --prod`, so test-only');
-            console.error('      packages never reach the production image)');
+            reporter.reportErrors(packageValidation.errors);
             return { success: false };
         }
 
         console.log('✅ Package.json dependencies cover the architecture graph');
-
-        // Print summary
-        const validProjects = packageValidation.projectResults.filter(r => r.valid).length;
-        const totalProjects = packageValidation.projectResults.length;
-        console.log(`\n📈 Validation Summary:`);
-        console.log(`   Projects validated: ${totalProjects}`);
-        console.log(`   Valid: ${validProjects}`);
-        console.log(`   Invalid: ${totalProjects - validProjects}`);
+        reporter.reportSummary(packageValidation.projectResults);
 
         return { success: true };
     } catch (err: unknown) {
