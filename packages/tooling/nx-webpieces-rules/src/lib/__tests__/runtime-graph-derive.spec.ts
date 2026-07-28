@@ -384,7 +384,16 @@ describe('the runtime node says what it implements and where that came from', ()
         expect(dot).toContain('implements: HelperFsdbApi, WarmupApi (via svc-core)');
         expect(dot).toContain('uses: HelperFsdbApi, WarmupApi');
         // The declared runtime name is on the node too, so the ClientConfig string is discoverable.
-        expect(dot).toContain(', "helper-portal")');
+        // The quotes around it are ESCAPED — a bare `"` here ends the label and kills the graph.
+        expect(dot).toContain(', \\"helper-portal\\")');
+    });
+
+    it('keeps a service name containing DOT-special characters from breaking the graph', () => {
+        const withQuote = deriveRuntimeGraph(companyWideApiGraph());
+        withQuote.services['helper-svr'].serviceName = 'odd"name\\path';
+        const dot = generateRuntimeDot(withQuote);
+        // Escaped, not merely assumed harmless — and generateRuntimeDot parse-checks what it emits.
+        expect(dot).toContain('odd\\"name\\\\path');
     });
 
     it('shows an api that a server serves and NOTHING in-repo calls', () => {

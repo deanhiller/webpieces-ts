@@ -20,6 +20,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { RuntimeGraph, RuntimeEdge, RuntimeService } from './runtime-graph';
+import { dotValue, assertValidDot } from './dot-syntax';
 
 const LEVEL_COLORS: Record<number, string> = {
     0: '#E8F5E9',
@@ -60,8 +61,9 @@ function getShortName(name: string): string {
 // webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
 function labelList(entries: string[]): string {
     const lines: string[] = [];
-    for (let i = 0; i < entries.length; i += APIS_PER_LABEL_LINE) {
-        lines.push(entries.slice(i, i + APIS_PER_LABEL_LINE).join(', '));
+    const safe = entries.map((entry: string) => dotValue(entry));
+    for (let i = 0; i < safe.length; i += APIS_PER_LABEL_LINE) {
+        lines.push(safe.slice(i, i + APIS_PER_LABEL_LINE).join(', '));
     }
     return lines.join('\\n');
 }
@@ -86,8 +88,10 @@ function implementsEntries(svc: RuntimeService): string[] {
 // webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
 function nodeLabel(name: string, svc: RuntimeService): string {
     const role = svc.implements.length > 0 ? 'server' : 'client';
-    const declared = svc.serviceName === undefined ? '' : `, "${svc.serviceName}"`;
-    let label = `${getShortName(name)}\\n(${role}, L${svc.level}${declared})`;
+    // The declared name is quoted for the reader — those quotes MUST be DOT-escaped, or they end
+    // the label string and the whole graph stops parsing.
+    const declared = svc.serviceName === undefined ? '' : `, \\"${dotValue(svc.serviceName)}\\"`;
+    let label = `${dotValue(getShortName(name))}\\n(${role}, L${svc.level}${declared})`;
     if (svc.implements.length > 0) label += `\\nimplements: ${labelList(implementsEntries(svc))}`;
     if (svc.uses.length > 0) label += `\\nuses: ${labelList(svc.uses)}`;
     return label;
@@ -100,9 +104,9 @@ function nodeLabel(name: string, svc: RuntimeService): string {
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
 function edgeDot(edge: RuntimeEdge): string {
-    const from = getShortName(edge.from);
-    const to = getShortName(edge.to);
-    const via = edge.via.map((v: string) => getShortName(v)).join(', ');
+    const from = dotValue(getShortName(edge.from));
+    const to = dotValue(getShortName(edge.to));
+    const via = edge.via.map((v: string) => dotValue(getShortName(v))).join(', ');
     if (edge.type !== 'pubsub') {
         return `  "${from}" -> "${to}" [label="${via}"];\n`;
     }
@@ -129,7 +133,7 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
     const apisByPair = new Map<string, string[]>();
     for (const use of graph.unresolvedUses) {
         if (hidden.has(use.service)) continue;
-        const external = getShortName(graph.apis[use.api]?.owner ?? use.api);
+        const external = dotValue(getShortName(graph.apis[use.api]?.owner ?? use.api));
         const key = `${use.service}${PAIR_SEP}${external}`;
         if (!apisByPair.has(key)) apisByPair.set(key, []);
         apisByPair.get(key)!.push(use.api);
@@ -151,7 +155,7 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
         const external = parts[1];
         const via = labelList(apisByPair.get(key)!.sort());
         dot +=
-            `  "${getShortName(service)}" -> "external__${external}" ` +
+            `  "${dotValue(getShortName(service))}" -> "external__${external}" ` +
             `[label="${via}", style=dashed, color="${EXTERNAL_BORDER}"];\n`;
     }
     return dot;
@@ -179,7 +183,7 @@ export function generateRuntimeDot(
         if (hidden.has(name)) continue;
         const svc = graph.services[name];
         const color = LEVEL_COLORS[svc.level] || '#F5F5F5';
-        dot += `  "${getShortName(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`;
+        dot += `  "${dotValue(getShortName(name))}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`;
     }
 
     dot += '\n';
@@ -192,9 +196,12 @@ export function generateRuntimeDot(
     if (options.showExternalNodes) dot += externalDot(graph, hidden);
 
     dot += '\n  labelloc="t";\n';
-    dot += `  label="${title}\\n(from architecture/runtime-dependencies.json)";\n`;
+    dot += `  label="${dotValue(title)}\\n(from architecture/runtime-dependencies.json)";\n`;
     dot += '  fontsize=20;\n';
     dot += '}\n';
+    // Nothing downstream parses this DOT until a human opens the page, so parse-shape is checked
+    // HERE — a graph that cannot render is a generation failure, not a blank page to discover later.
+    assertValidDot(dot, 'runtime-architecture.dot');
     return dot;
 }
 
