@@ -35,6 +35,21 @@ export class ValidationTargets {
         };
     }
 
+    // Validate the pr-gate checklists[] block in isolation (docs exist, patterns compile, ids unique,
+    // blockMessage on BLOCK) so a bad checklist config fails as ITS OWN check rather than as an
+    // unrelated validator's banner. Depends only on webpieces.config.json + the docs it references.
+    checklistDocs(): TargetConfiguration {
+        return {
+            executor: '@webpieces/nx-webpieces-rules:validate-checklist-docs',
+            cache: false, // depends on files on disk (docs paths) that project.json inputs can't express
+            inputs: ['{workspaceRoot}/webpieces.config.json'],
+            metadata: {
+                technologies: ['nx'],
+                description: 'Validate the pr-gate checklists[] block (docs exist, patterns compile, ids unique)',
+            },
+        };
+    }
+
     /**
      * Combined validate-code target. Options come from webpieces.config.json at the
      * workspace root (loaded by the executor via @webpieces/rules-config — the same

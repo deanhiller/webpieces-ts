@@ -55,6 +55,11 @@
             "schema": "./src/executors/validate-ts-in-src/schema.json",
             "description": "Validate all .ts files in projects are inside the src/ directory"
         },
+        "validate-checklist-docs": {
+            "implementation": "./src/executors/validate-checklist-docs/executor",
+            "schema": "./src/executors/validate-checklist-docs/schema.json",
+            "description": "Validate the pr-gate checklists[] block: docs exist, patterns compile, ids unique, blockMessage on BLOCK"
+        },
         "validate-no-any-unknown": {
             "implementation": "./src/executors/validate-no-any-unknown/executor",
             "schema": "./src/executors/validate-no-any-unknown/schema.json",

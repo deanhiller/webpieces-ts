@@ -403,6 +403,9 @@ function createWorkspaceTargetsWithoutPrefix(
     if (validations.validatePackageJson) {
         targets['validate-packagejson'] = targetFactory.packageJson();
     }
+    // Always available (cheap; success when a repo has no checklists). Kept out of the validate-complete /
+    // ci aggregate so it does not change existing gate behavior — consumers point a required check at it.
+    targets['validate-checklist-docs'] = targetFactory.checklistDocs();
     // Use combined validate-code instead of 3 separate targets
     // Options come from webpieces.config.json at the workspace root
     // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)

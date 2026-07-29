@@ -56,14 +56,28 @@ export class PrGateConfig {
     // Diff-triggered company review checklists (the extension point). Defaults to [] — an absent
     // `checklists` key produces byte-identical behavior to before this field existed.
     checklists: ChecklistDefinition[];
+    /**
+     * Shared secret used to mint the server-verifiable gate token. `wp-finish-upsert-pr` writes
+     * `HMAC(gateSalt, HEAD_sha)` as a hidden marker into the PR body (and REFUSES to mint it unless
+     * every BLOCK checklist passed), so a valid token IS proof the local gate ran and passed. A CI
+     * check (`wp-check-pr` + the scaffolded workflow) recomputes it from the PR head sha and this salt.
+     *
+     * Optional, defaults to '' — empty means "no token minted, no CI enforcement" (byte-identical to
+     * before this field existed). This is COMMITTED, obscurity-grade: it stops unhooked teammates who
+     * push + open a PR in the web UI, but is readable in-repo and therefore forgeable by a determined
+     * reader. It is deliberately NOT cryptographically sound; nothing local can stop a filesystem-reading
+     * agent. See RESPONSE-pr-gate-ci-enforcement / the design memo for the full tradeoff.
+     */
+    gateSalt: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = []) {
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = [], gateSalt = '') {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
         this.mergeMode = mergeMode;
         this.checklists = checklists;
+        this.gateSalt = gateSalt;
     }
 }
 
@@ -96,6 +110,7 @@ interface RawPrGateSection {
     gates?: RawGate[];
     mergeMode?: string;
     checklists?: RawChecklist[];
+    gateSalt?: string;
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -122,5 +137,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
     // Optional extension point — omitted ⇒ [] ⇒ no checklists computed anywhere downstream.
     const checklists = raw.checklists !== undefined ? raw.checklists.map(toChecklist) : defaults.checklists;
-    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists);
+    // Optional — omitted ⇒ '' ⇒ no gate token minted and CI enforcement is a no-op (back-compat).
+    const gateSalt = raw.gateSalt ?? defaults.gateSalt;
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt);
 }

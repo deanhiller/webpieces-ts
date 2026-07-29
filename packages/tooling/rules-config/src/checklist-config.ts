@@ -25,6 +25,16 @@ export class ChecklistDefinition {
     severity: string;           // 'BLOCK' | 'WARN'
     blockMessage: string;       // consumer-owned wording shown when it blocks
     disabled: boolean;          // example/inactive checklist kept in the file (JSON has no comments)
+    // Expected agentType (e.g. "morpheus-reviewer") that must have run on this branch for the checklist
+    // to be considered independently reviewed. When set, wp-finish-upsert-pr reads the Claude Code
+    // harness's own subagent artifacts (agent-*.meta.json agentType + spawnDepth, sibling jsonl
+    // isSidechain/gitBranch) to VERIFY such a subagent actually ran — provenance is READ from harness
+    // artifacts, never asserted in review.json. '' = no provenance requirement.
+    //
+    // NOT tamper-proof: a determined agent can hand-write a fake agent-*.meta.json. This raises the bar
+    // from "trust the model's word" to "deliberate, auditable forgery"; it is not cryptographic proof.
+    // Absent CLAUDE_CODE_SESSION_ID (plain terminal / CI) the check warns + skips rather than failing.
+    subagent: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -36,6 +46,7 @@ export class ChecklistDefinition {
         severity: string,
         blockMessage: string,
         disabled = false,
+        subagent = '',
     ) {
         this.id = id;
         this.title = title;
@@ -45,6 +56,7 @@ export class ChecklistDefinition {
         this.severity = severity;
         this.blockMessage = blockMessage;
         this.disabled = disabled;
+        this.subagent = subagent;
     }
 }
 
@@ -58,6 +70,7 @@ export interface RawChecklist {
     severity?: string;
     blockMessage?: string;
     disabled?: boolean;
+    subagent?: string;
 }
 
 // Mirror of pr-gate-config's toGate: build a ChecklistDefinition from an omitting-friendly raw entry.
@@ -72,5 +85,6 @@ export function toChecklist(raw: RawChecklist): ChecklistDefinition {
         raw.severity ?? CHECKLIST_WARN,
         raw.blockMessage ?? '',
         raw.disabled ?? false,
+        raw.subagent ?? '',
     );
 }

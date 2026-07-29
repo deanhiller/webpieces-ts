@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, ReviewJson } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow } from './dashboard';
+import { CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
 
 const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
@@ -161,24 +162,24 @@ describe('renderDashboard checklists', () => {
         expect(renderDashboard(input)).not.toContain('Checklist —');
     });
 
-    it('renders one row per triggered checklist with severity + ack state', () => {
+    it('renders one row per triggered checklist with its resolved verdict', () => {
         const rows = [
-            new ChecklistRow('DB migrations', 'WARN', true),
-            new ChecklistRow('Hasura metadata', 'BLOCK', true),
+            new ChecklistRow('DB migrations', 'WARN', CK_PASS),
+            new ChecklistRow('Hasura metadata', 'BLOCK', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
         ];
         const input = new DashboardInput(
             'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
         );
         const md = renderDashboard(input);
-        expect(md).toContain('**Checklist — DB migrations:** 🟡 WARN — acknowledged');
-        expect(md).toContain('**Checklist — Hasura metadata:** 🔴 BLOCK — acknowledged');
+        expect(md).toContain('**Checklist — DB migrations:** 🟢 WARN — passed');
+        expect(md).toContain('**Checklist — Hasura metadata:** 🟡 BLOCK — OVERRIDDEN — override: behind a flag; ONE-2210');
     });
 
     it('carries triggered checklists into the compact commit body', () => {
-        const rows = [new ChecklistRow('Hasura metadata', 'BLOCK', true)];
+        const rows = [new ChecklistRow('Hasura metadata', 'BLOCK', CK_PASS)];
         const input = new DashboardInput(
             'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
         );
-        expect(renderCommitBody(input, '')).toContain('Checklist — Hasura metadata: 🔴 BLOCK — acknowledged');
+        expect(renderCommitBody(input, '')).toContain('Checklist — Hasura metadata: 🟢 BLOCK — passed');
     });
 });
