@@ -53,20 +53,53 @@ export class SubagentProvenanceService {
             return new ProvenanceResult(PROVENANCE_MISSING,
                 `No subagents recorded for this session — the "${expectedAgentType}" reviewer subagent must run on this branch before the PR can open.`);
         }
+        const agentId = this.findMatchingAgentId(dir, expectedAgentType, branch);
+        return agentId !== ''
+            ? new ProvenanceResult(PROVENANCE_OK, `verified "${expectedAgentType}" reviewer subagent ran (agent ${agentId}).`)
+            : new ProvenanceResult(PROVENANCE_MISSING,
+                `No "${expectedAgentType}" reviewer subagent ran on this branch — a separate reviewer of that type must review this checklist.`);
+    }
+
+    // Verify EVERY expected reviewer subagent ran on `branch` as a DISTINCT run — the coding agent may not
+    // self-certify, and one reviewer may not stand in for several. SKIPPED (pass) without a session id.
+    verifyDistinct(expectedAgentTypes: readonly string[], branch: string): ProvenanceResult {
+        if (expectedAgentTypes.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required');
+        const sessionId = process.env['CLAUDE_CODE_SESSION_ID'] ?? '';
+        if (sessionId.trim() === '') {
+            return new ProvenanceResult(PROVENANCE_SKIPPED,
+                `CLAUDE_CODE_SESSION_ID not set — cannot verify reviewer subagents ran (plain terminal / CI). Skipping the provenance check.`);
+        }
+        const dir = this.findSubagentsDir(sessionId);
+        if (dir === '') {
+            return new ProvenanceResult(PROVENANCE_MISSING,
+                `No subagents recorded for this session — each checklist must be reviewed by its own subagent: ${expectedAgentTypes.join(', ')}.`);
+        }
+        const missing: string[] = [];
+        const usedAgentIds = new Set<string>();
+        for (const type of expectedAgentTypes) {
+            const agentId = this.findMatchingAgentId(dir, type, branch, usedAgentIds);
+            if (agentId === '') missing.push(type);
+            else usedAgentIds.add(agentId);
+        }
+        return missing.length === 0
+            ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`)
+            : new ProvenanceResult(PROVENANCE_MISSING,
+                `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${missing.join(', ')}`);
+    }
+
+    // The agentId of a matching subagent run for `agentType` on `branch`, or '' if none. `exclude` skips
+    // agentIds already credited to another checklist so one run can't satisfy two.
+    private findMatchingAgentId(dir: string, agentType: string, branch: string, exclude: ReadonlySet<string> = new Set()): string {
         for (const metaFile of this.metaFiles(dir)) {
+            const agentId = this.agentIdOf(metaFile);
+            if (exclude.has(agentId)) continue;
             const meta = this.readJson(path.join(dir, metaFile));
-            if (!meta) continue;
-            if (meta['agentType'] !== expectedAgentType) continue;
+            if (!meta || meta['agentType'] !== agentType) continue;
             const spawnDepth = meta['spawnDepth'];
             if (typeof spawnDepth !== 'number' || spawnDepth < 1) continue;
-            const agentId = this.agentIdOf(metaFile);
-            if (this.sidechainOnBranch(dir, agentId, branch)) {
-                return new ProvenanceResult(PROVENANCE_OK,
-                    `verified "${expectedAgentType}" reviewer subagent ran (agent ${agentId}).`);
-            }
+            if (this.sidechainOnBranch(dir, agentId, branch)) return agentId;
         }
-        return new ProvenanceResult(PROVENANCE_MISSING,
-            `No "${expectedAgentType}" reviewer subagent ran on this branch — a separate reviewer of that type must review this checklist.`);
+        return '';
     }
 
     // Find the subagents dir for `sessionId` by its UNIQUE id, so the cwd-slug never has to be guessed.

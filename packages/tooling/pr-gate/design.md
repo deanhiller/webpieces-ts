@@ -19,6 +19,7 @@ graph TD
     BuildAffected["BuildAffected"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistDetector["ChecklistDetector"]
+    ChecklistManifestService["ChecklistManifestService"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
@@ -61,6 +62,7 @@ graph TD
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
     FinishUpsertPrCommand --> ChecklistDetector
+    FinishUpsertPrCommand --> ChecklistManifestService
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GitExec
@@ -111,6 +113,7 @@ graph TD
     StartUpsertPrCommand --> BranchNaming
     StartUpsertPrCommand --> BuildAffected
     StartUpsertPrCommand --> ChecklistDetector
+    StartUpsertPrCommand --> ChecklistManifestService
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate

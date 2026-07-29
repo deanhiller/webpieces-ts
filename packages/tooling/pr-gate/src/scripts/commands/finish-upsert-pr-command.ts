@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist,
-    writeTemplate, RepoRootFinder, ReviewJsonService,
+    writeTemplate, RepoRootFinder, ReviewJsonService, ChecklistManifestService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     InformAiError,
 } from '@webpieces/rules-config';
@@ -61,6 +61,7 @@ export class FinishUpsertPrCommand {
         private readonly prMerger: PrMerger,
         private readonly dashboard: Dashboard,
         private readonly checklistDetector: ChecklistDetector,
+        private readonly manifestService: ChecklistManifestService,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly gateTokenService: GateTokenService,
         private readonly provenance: SubagentProvenanceService,
@@ -86,8 +87,8 @@ export class FinishUpsertPrCommand {
         // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
-        const checklists = loadAndValidate(repoRoot).prGate.checklists;
-        const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, checklists));
+        const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklistDoc);
+        const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, defs));
         // review-<id>.json files persist locally between runs, so a re-run after a push re-validates the
         // EXISTING verdicts against the (possibly changed) triggered set for free: an unchanged checklist
         // needs no re-review, a newly-triggered one refuses until its file is written. That is the
@@ -162,12 +163,12 @@ export class FinishUpsertPrCommand {
         return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows);
     }
 
-    // Pair each triggered checklist with its resolved verdict for the dashboard. (A BLOCK reaching this
-    // point is always PASS/OVERRIDDEN/ACKED — loadReviewJson already threw on FAIL/MISSING.)
+    // Pair each matched checklist with its resolved verdict for the dashboard. (A checklist reaching this
+    // point is always PASS/OVERRIDDEN — loadReviewJson already threw on FAIL/MISSING.)
     private checklistRows(required: readonly RequiredChecklist[], review: ReviewJson): ChecklistRow[] {
         return required.map((req: RequiredChecklist): ChecklistRow => {
-            const verdict = this.reviewJsonService.resolveVerdict(req, review.checklists, review.results);
-            return new ChecklistRow(req.title, req.severity, verdict.status, verdict.detail);
+            const verdict = this.reviewJsonService.resolveVerdict(req, review.results);
+            return new ChecklistRow(req.id, verdict.status, verdict.detail);
         });
     }
 
@@ -200,20 +201,18 @@ export class FinishUpsertPrCommand {
         }
     }
 
-    // Enforce every BLOCK checklist's `subagent:` provenance requirement. A verified run passes silently;
-    // a skipped check (no session id) prints a warning but passes; a missing reviewer subagent throws an
-    // InformAiError so the PR does not open until an independent reviewer of that type has run.
+    // Enforce that EACH matched checklist was reviewed by its OWN named subagent, as a DISTINCT run —
+    // the coding agent may not self-certify, and one reviewer may not stand in for several. A verified set
+    // passes silently; no session id warns but passes; any missing reviewer throws so the PR does not open.
     private enforceProvenance(required: readonly RequiredChecklist[], branch: string): void {
         const errors: string[] = [];
-        for (const req of required) {
-            if (req.severity !== 'BLOCK' || req.subagent.trim() === '') continue;
-            // A FAIL/MISSING BLOCK already threw in loadReviewJson, so every BLOCK here PASSED review — now
-            // additionally require that the independent reviewer subagent actually ran.
-            const result = this.provenance.verify(req.subagent.trim(), branch);
+        const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
+        if (subagents.length > 0) {
+            const result = this.provenance.verifyDistinct(subagents, branch);
             if (result.status === PROVENANCE_MISSING) {
-                errors.push(`Checklist "${req.id}" (${req.title}): ${result.detail}`);
+                errors.push(result.detail);
             } else if (result.status === PROVENANCE_SKIPPED) {
-                process.stderr.write(`⚠️  Checklist "${req.id}": ${result.detail}\n`);
+                process.stderr.write(`⚠️  ${result.detail}\n`);
             }
         }
         if (errors.length > 0) {

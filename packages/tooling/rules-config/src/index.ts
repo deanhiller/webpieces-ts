@@ -14,7 +14,7 @@ export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
-export { validateWebpiecesConfig, validatePrGateSection, validateChecklists, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
 export { validateChecklistDocs } from './checklist-docs-validator';
 export {
     MatchRuleConfig,
@@ -154,11 +154,9 @@ export {
 export {
     ChecklistDefinition,
     toChecklist,
-    CHECKLIST_BLOCK,
-    CHECKLIST_WARN,
-    CHECKLIST_SEVERITIES,
 } from './checklist-config';
-export type { RawChecklist } from './checklist-config';
+export type { RawChecklistItem } from './checklist-config';
+export { ChecklistManifestService } from './checklist-manifest';
 export {
     GateTokenService,
     computeGateToken,
@@ -175,14 +173,12 @@ export {
 } from './subagent-provenance';
 export {
     ReviewJson,
-    ChecklistAck,
     ChecklistResult,
     ChecklistVerdict,
     CK_PASS,
     CK_OVERRIDDEN,
     CK_FAIL,
     CK_MISSING,
-    CK_ACKED,
     RequiredChecklist,
     ReviewJsonService,
     loadReviewJson,

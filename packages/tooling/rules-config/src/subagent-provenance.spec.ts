@@ -68,3 +68,41 @@ describe('SubagentProvenanceService', () => {
         expect(svc.verify('morpheus-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
     });
 });
+
+// A harness dir with N distinct agents (each its own agentType + agentId) on one branch.
+function fakeHarnessMulti(sessionId: string, agentTypes: string[], branch: string): string {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-multi-'));
+    const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    agentTypes.forEach((t: string, i: number): void => {
+        fs.writeFileSync(path.join(dir, `agent-a${i}.meta.json`), JSON.stringify({ agentType: t, spawnDepth: 1 }));
+        fs.writeFileSync(path.join(dir, `agent-a${i}.jsonl`), JSON.stringify({ isSidechain: true, gitBranch: branch }) + '\n');
+    });
+    return home;
+}
+
+describe('SubagentProvenanceService.verifyDistinct', () => {
+    it('OK when every expected subagent ran as a distinct run', () => {
+        process.env['HOME'] = fakeHarnessMulti('sess-d1', ['envvars-reviewer', 'migrations-reviewer'], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d1';
+        expect(svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], 'dean/feat').status).toBe(PROVENANCE_OK);
+    });
+
+    it('MISSING (naming the culprit) when one expected subagent never ran', () => {
+        process.env['HOME'] = fakeHarnessMulti('sess-d2', ['envvars-reviewer'], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-d2';
+        const res = svc.verifyDistinct(['envvars-reviewer', 'migrations-reviewer'], 'dean/feat');
+        expect(res.status).toBe(PROVENANCE_MISSING);
+        expect(res.detail).toMatch(/migrations-reviewer/);
+    });
+
+    it('OK immediately for an empty expected set', () => {
+        delete process.env['CLAUDE_CODE_SESSION_ID'];
+        expect(svc.verifyDistinct([], 'dean/feat').status).toBe(PROVENANCE_OK);
+    });
+
+    it('SKIPPED without a session id', () => {
+        delete process.env['CLAUDE_CODE_SESSION_ID'];
+        expect(svc.verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_SKIPPED);
+    });
+});

@@ -2,36 +2,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
-import { CHECKLIST_BLOCK } from './checklist-config';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 
-// One entry the AI writes into review.json's `checklists[]`: "I read the doc for <id> and walked it".
-// acknowledged: true is the AI attesting it did the walk — a SURFACING/AUDIT signal, not authorization.
-export class ChecklistAck {
-    id: string;
-    acknowledged: boolean;
-    notes: string[]; // per-item findings the AI chose to record (optional; [] when none)
-
-    constructor(id: string, acknowledged: boolean, notes: string[]) {
-        this.id = id;
-        this.acknowledged = acknowledged;
-        this.notes = notes;
-    }
-}
-
-// The verdict a reviewer wrote into a PER-CHECKLIST file `.webpieces/pr-review/<branch>/review-<id>.json`,
-// one per triggered checklist. Replaces the single shared `checklists[]` array so concurrent reviewer
-// subagents never clobber one file. Unlike ChecklistAck's bare boolean, this records the OUTCOME:
+// The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<branch>/review-<id>.json`, one per
+// matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
+// file. It records the OUTCOME:
 //   success:true                       → PASS
 //   success:false + override non-empty → OVERRIDDEN (pass; the free-text justification reaches the PR)
 //   success:false + no override        → FAIL (refuse; `output` is printed verbatim)
-// `override` is deliberately free text, not a boolean — it forces the bypass to be stated in words and
-// surfaces it on the dashboard, where a human sees it. Data-only (per CLAUDE.md).
+// `override` is deliberately free text, not a boolean — it forces the ship-anyway decision to be stated
+// in words and surfaces it on the dashboard, where a human sees it. Data-only (per CLAUDE.md).
 export class ChecklistResult {
     id: string;
     success: boolean;
-    output: string;   // what the reviewer found; printed verbatim when a BLOCK checklist fails
+    output: string;   // what the reviewer found; printed verbatim when the checklist fails
     override: string;  // '' = no override; non-empty = ship-anyway justification (renders 🟡 overridden)
 
     constructor(id: string, success: boolean, output: string, override: string) {
@@ -42,32 +27,26 @@ export class ChecklistResult {
     }
 }
 
-// What the CALLER (the pr-gate command) computed from the diff: the checklists this branch triggered.
-// Drives BOTH review.json validation (BLOCK must be acknowledged) AND the printed schema hint (so the
-// AI is told, at the moment it writes review.json, exactly which docs to read). Data-only.
+// What the pr-gate command computed from the diff: a checklist this branch MATCHED (its patterns hit the
+// diff, so its reviewer subagent must run). Drives review-<id>.json enforcement, provenance, the schema
+// hint, and the dashboard. Data-only.
 export class RequiredChecklist {
-    id: string;
-    title: string;
-    severity: string; // 'BLOCK' | 'WARN'
-    docs: string[];
-    blockMessage: string;
-    matchedFiles: string[]; // the changed files that triggered it (for the dashboard + hint)
-    subagent: string; // expected reviewer agentType ('' = no provenance requirement); enforced by finish
+    id: string;             // = subagent name; keys review-<id>.json
+    subagent: string;       // reviewer agent that must run (agentType the harness stamps)
+    doc: string;            // guidance doc the reviewer reads ('' → it reads the manifest doc)
+    matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
 
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, title: string, severity: string, docs: string[], blockMessage: string, matchedFiles: string[], subagent = '') {
+    constructor(id: string, subagent: string, doc: string, matchedFiles: string[]) {
         this.id = id;
-        this.title = title;
-        this.severity = severity;
-        this.docs = docs;
-        this.blockMessage = blockMessage;
-        this.matchedFiles = matchedFiles;
         this.subagent = subagent;
+        this.doc = doc;
+        this.matchedFiles = matchedFiles;
     }
 }
 
-// The AI-authored review for a PR. The AI writes this file itself between `wp-start-upsert-pr` (which
-// prints the schema) and `wp-finish-upsert-pr` (which reads it). Data-only (per CLAUDE.md).
+// The AI-authored review for a PR. The AI writes review.json itself between `wp-start-upsert-pr` (which
+// prints the schema) and `wp-finish-upsert-pr` (which reads it); reviewer subagents write the per-checklist
+// review-<id>.json files. Data-only (per CLAUDE.md).
 export class ReviewJson {
     title: string; // human PR title describing the change; used as the `gh pr` title (empty → caller falls back)
     riskScore: number; // 0–100, drives the risk bar
@@ -77,7 +56,6 @@ export class ReviewJson {
     violations: string[]; // pattern/architecture violations; length = the Pattern Violations count
     risks: string[];
     filesToReview: string[];
-    checklists: ChecklistAck[]; // legacy inline acknowledgments (back-compat); [] when none written
     results: ChecklistResult[]; // resolved per-checklist verdicts (from review-<id>.json); [] when none
 
     // eslint-disable-next-line @typescript-eslint/max-params
@@ -90,7 +68,6 @@ export class ReviewJson {
         violations: string[],
         risks: string[],
         filesToReview: string[],
-        checklists: ChecklistAck[] = [],
         results: ChecklistResult[] = [],
     ) {
         this.title = title;
@@ -101,7 +78,6 @@ export class ReviewJson {
         this.violations = violations;
         this.risks = risks;
         this.filesToReview = filesToReview;
-        this.checklists = checklists;
         this.results = results;
     }
 }
@@ -110,13 +86,12 @@ export class ReviewJson {
 export const CK_PASS = 'pass';               // review-<id>.json success:true
 export const CK_OVERRIDDEN = 'overridden';   // review-<id>.json success:false + non-empty override → 🟡
 export const CK_FAIL = 'fail';               // review-<id>.json success:false + no override → refuse
-export const CK_MISSING = 'missing';         // no verdict file and no inline ack → refuse (BLOCK)
-export const CK_ACKED = 'acknowledged';      // legacy inline checklists[] ack satisfied (back-compat)
+export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
 
 export class ChecklistVerdict {
     id: string;
-    status: string; // one of CK_PASS | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_ACKED
-    detail: string; // reviewer output / override justification / ack notes (for the dashboard + errors)
+    status: string; // one of CK_PASS | CK_OVERRIDDEN | CK_FAIL | CK_MISSING
+    detail: string; // reviewer output / override justification (for the dashboard + errors)
 
     constructor(id: string, status: string, detail: string) {
         this.id = id;
@@ -141,11 +116,9 @@ export class ReviewJsonService {
         return path.join(this.prDirFor(repoRoot, featureName), 'review.json');
     }
 
-    // Copy-paste schema both commands print (write it / fix it). `required` is the set of consumer
-    // checklists the diff triggered; when it is empty the output is byte-identical to before this
-    // feature existed (non-adopting repos see no change). When non-empty it grows a `checklists` line
-    // in the JSON shape PLUS an instruction block naming the docs to read — diff-derived instructions
-    // injected at exactly the moment the AI writes review.json.
+    // Copy-paste schema both commands print. `required` is the set of checklists the diff MATCHED; empty
+    // ⇒ output identical to a repo with no checklists. Non-empty ⇒ appends per-checklist instructions
+    // naming the reviewer subagent + doc + the review-<id>.json to write.
     reviewJsonSchemaHint(filePath: string, required: readonly RequiredChecklist[] = []): string {
         return (
             `Write your PR review to:\n  ${filePath}\n\n` +
@@ -168,41 +141,31 @@ export class ReviewJsonService {
         return path.join(path.dirname(reviewJsonFilePath), `review-${checklistId}.json`);
     }
 
-    // The diff-triggered instruction block, appended ONLY when the branch triggered a checklist. This is
-    // the consumer's review process, re-injected: read doc Y because the diff touched X, then write ONE
-    // file per checklist — `review-<id>.json` — so concurrent reviewer subagents never clobber a shared
-    // file. A BLOCK checklist with success:false and no override refuses to open the PR.
+    // The matched-checklist instruction block, appended ONLY when the diff matched a checklist. Each matched
+    // checklist must be reviewed by its OWN subagent (a distinct one), which writes review-<id>.json.
     private requiredChecklistHint(reviewJsonFilePath: string, required: readonly RequiredChecklist[]): string {
         if (required.length === 0) return '';
-        const lines: string[] = ['', '', 'This branch triggered company review checklist(s). For EACH one below: READ its docs, walk'];
-        lines.push('the items against your diff, then write a SEPARATE file `review-<id>.json` beside review.json');
-        lines.push('with this shape (override optional — a free-text ship-anyway justification):');
+        const lines: string[] = ['', '', 'This diff MATCHED company review checklist(s). Spawn EACH named subagent as a SEPARATE'];
+        lines.push('subagent (a different one per checklist — the coding agent may NOT self-certify). Each reads its');
+        lines.push('doc + the diff and writes its own review-<id>.json with this shape:');
         lines.push('');
-        lines.push('  { "success": true, "output": "what you checked / what you found", "override": "" }');
+        lines.push('  { "id": "<id>", "success": true, "output": "what you checked / found", "override": "" }');
+        lines.push('  (success:false with no non-empty "override" refuses the PR; a non-empty override ships it 🟡.)');
         lines.push('');
         for (const req of required) {
-            const gate = req.severity === CHECKLIST_BLOCK
-                ? 'BLOCK — success:false with no "override" will NOT open the PR'
-                : 'WARN — recorded on the dashboard; never blocks';
-            lines.push(`  • [${req.id}] ${req.title} (${gate})`);
+            lines.push(`  • [${req.id}] reviewer subagent: ${req.subagent}`);
             lines.push(`      write: ${this.checklistResultPath(reviewJsonFilePath, req.id)}`);
-            lines.push(`      docs to read: ${req.docs.join(', ')}`);
-            if (req.subagent.trim() !== '') lines.push(`      must be reviewed by the "${req.subagent.trim()}" subagent (its independent run is verified from the harness).`);
-            if (req.blockMessage.trim() !== '') lines.push(`      ${req.blockMessage.trim()}`);
-            if (req.matchedFiles.length > 0) lines.push(`      triggered by: ${req.matchedFiles.slice(0, 5).join(', ')}`);
+            if (req.doc.trim() !== '') lines.push(`      doc to read: ${req.doc}`);
+            if (req.matchedFiles.length > 0) lines.push(`      matched: ${req.matchedFiles.slice(0, 5).join(', ')}`);
         }
         return lines.join('\n');
     }
 
     /**
      * Load + validate the AI-authored review.json. Throws InformAiError (with the schema) when missing,
-     * unparseable, or structurally wrong. Returns a fully-populated ReviewJson on success.
-     *
-     * `required` is the set of consumer checklists the diff triggered (empty for non-adopting repos, in
-     * which case this behaves byte-identically to before the feature). Every BLOCK entry must appear in
-     * review.json's `checklists[]` with `acknowledged: true`, or a validation error is raised alongside
-     * the usual ones so the AI gets ONE message. WARN entries are never validated; unknown ids in
-     * `checklists[]` are ignored (forward-compat).
+     * unparseable, or structurally wrong. `required` is the set of checklists the diff matched: every one
+     * must have a well-formed, passing (or overridden) review-<id>.json or a validation error is raised
+     * alongside the usual ones so the AI gets ONE message.
      */
     // webpieces-disable max-lines-new-methods -- one cohesive load+validate pass over the review fields
     loadReviewJson(filePath: string, required: readonly RequiredChecklist[] = []): ReviewJson {
@@ -235,9 +198,8 @@ export class ReviewJsonService {
             errors.push('"title" must be a non-empty, imperative PR title describing the change (no branch names).');
         }
 
-        const acks = this.parseChecklistAcks(raw['checklists']);
         const results = this.loadChecklistResults(filePath, required);
-        for (const err of this.requiredChecklistErrors(required, acks, results)) errors.push(err);
+        for (const err of this.requiredChecklistErrors(required, results)) errors.push(err);
 
         if (errors.length > 0) {
             throw new InformAiError(
@@ -262,33 +224,13 @@ export class ReviewJsonService {
             this.asStringArray(raw['violations']),
             this.asStringArray(raw['risks']),
             this.asStringArray(raw['filesToReview']),
-            acks,
             results,
         );
     }
 
-    // Parse the AI-authored `checklists[]` into typed ChecklistAck[]. Tolerant of a missing/garbage
-    // field (→ []) and of non-object entries (skipped) — malformed acks simply fail to satisfy a BLOCK
-    // requirement rather than crashing the load.
-    // webpieces-disable no-any-unknown -- opaque parsed JSON value, narrowed here
-    private parseChecklistAcks(value: unknown): ChecklistAck[] {
-        if (!Array.isArray(value)) return [];
-        const acks: ChecklistAck[] = [];
-        for (const entry of value) {
-            if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
-            // webpieces-disable no-any-unknown -- one opaque ack entry, narrowed field-by-field
-            const e = entry as Record<string, unknown>;
-            const id = typeof e['id'] === 'string' ? (e['id'] as string) : '';
-            if (id === '') continue;
-            acks.push(new ChecklistAck(id, e['acknowledged'] === true, this.asStringArray(e['notes'])));
-        }
-        return acks;
-    }
-
-    // Read the per-checklist verdict files `review-<id>.json` that sit beside review.json — one per
-    // triggered checklist. Tolerant like parseChecklistAcks: a missing file is simply absent from the
-    // result (→ falls back to the inline ack / counts as unmet for a BLOCK), and a malformed one is
-    // skipped (an unknown/stale review-<id>.json never wedges the branch).
+    // Read the per-checklist verdict files `review-<id>.json` beside review.json — one per matched checklist.
+    // A missing file is simply absent from the result (→ counts as MISSING for that checklist); a malformed
+    // one is skipped (a stale review-<id>.json never wedges the branch).
     loadChecklistResults(reviewJsonFilePath: string, required: readonly RequiredChecklist[]): ChecklistResult[] {
         const results: ChecklistResult[] = [];
         for (const req of required) {
@@ -300,41 +242,33 @@ export class ReviewJsonService {
         return results;
     }
 
-    // Resolve ONE checklist's verdict from its per-file result (preferred) or its legacy inline ack.
-    // Central so review.json enforcement AND the finish-command dashboard agree on the outcome.
-    resolveVerdict(req: RequiredChecklist, acks: readonly ChecklistAck[], results: readonly ChecklistResult[]): ChecklistVerdict {
+    // Resolve ONE checklist's verdict from its review-<id>.json. Central so review.json enforcement AND the
+    // finish-command dashboard agree on the outcome.
+    resolveVerdict(req: RequiredChecklist, results: readonly ChecklistResult[]): ChecklistVerdict {
         const result = results.find((r: ChecklistResult): boolean => r.id === req.id);
-        if (result) {
-            if (result.success) return new ChecklistVerdict(req.id, CK_PASS, result.output);
-            if (result.override.trim() !== '') return new ChecklistVerdict(req.id, CK_OVERRIDDEN, result.override.trim());
-            return new ChecklistVerdict(req.id, CK_FAIL, result.output);
-        }
-        const ack = acks.find((a: ChecklistAck): boolean => a.id === req.id);
-        if (ack && ack.acknowledged) return new ChecklistVerdict(req.id, CK_ACKED, ack.notes.join('; '));
-        return new ChecklistVerdict(req.id, CK_MISSING, '');
+        if (!result) return new ChecklistVerdict(req.id, CK_MISSING, '');
+        if (result.success) return new ChecklistVerdict(req.id, CK_PASS, result.output);
+        if (result.override.trim() !== '') return new ChecklistVerdict(req.id, CK_OVERRIDDEN, result.override.trim());
+        return new ChecklistVerdict(req.id, CK_FAIL, result.output);
     }
 
-    // BLOCK requirements whose verdict is FAIL (reviewed, found a problem, no override) or MISSING (no
-    // verdict written at all) → one error each. WARN never blocks. Uses the consumer's blockMessage /
-    // the reviewer's `output` verbatim so the consumer owns the wording and webpieces owns the mechanism.
-    private requiredChecklistErrors(required: readonly RequiredChecklist[], acks: readonly ChecklistAck[], results: readonly ChecklistResult[]): string[] {
+    // Every matched checklist whose verdict is FAIL (reviewed, found a problem, no override) or MISSING (no
+    // review-<id>.json written) → one error each, printing the reviewer's `output` verbatim.
+    private requiredChecklistErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): string[] {
         const errors: string[] = [];
         for (const req of required) {
-            if (req.severity !== CHECKLIST_BLOCK) continue;
-            const verdict = this.resolveVerdict(req, acks, results);
+            const verdict = this.resolveVerdict(req, results);
             if (verdict.status === CK_FAIL) {
-                const msg = req.blockMessage.trim() !== '' ? `${req.blockMessage.trim()} ` : '';
                 errors.push(
-                    `Checklist "${req.id}" (${req.title}) FAILED review. ${msg}` +
-                    `The reviewer wrote:\n      ${verdict.detail.split('\n').join('\n      ')}\n` +
+                    `Checklist "${req.id}" FAILED review. The reviewer (${req.subagent}) wrote:\n      ` +
+                    `${verdict.detail.split('\n').join('\n      ')}\n` +
                     `      Fix it, then re-run; or set a non-empty "override" in ${this.checklistFileName(req.id)} to ship anyway with a stated justification.`,
                 );
             } else if (verdict.status === CK_MISSING) {
-                const docs = req.docs.length > 0 ? ` Read: ${req.docs.join(', ')}.` : '';
-                const msg = req.blockMessage.trim() !== '' ? `${req.blockMessage.trim()} ` : '';
+                const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
                 errors.push(
-                    `Checklist "${req.id}" (${req.title}) is REQUIRED for this diff but has no verdict. ${msg}` +
-                    `Write ${this.checklistFileName(req.id)} with {"success":true,"output":"…"} once you have walked it.${docs}`,
+                    `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.subagent}" subagent to review it, ` +
+                    `then write ${this.checklistFileName(req.id)} with {"id":"${req.id}","success":true,"output":"…"}.${doc}`,
                 );
             }
         }
@@ -374,8 +308,7 @@ export class ReviewJsonService {
     }
 
     // Parse opaque AI-authored JSON, converting a SyntaxError into a readable InformAiError. `required`
-    // is threaded through so a JSON syntax error still prints the checklist instructions the AI needs —
-    // exactly when it most needs them — rather than the bare schema.
+    // is threaded through so a JSON syntax error still prints the checklist instructions the AI needs.
     // webpieces-disable no-any-unknown -- returns the opaque parsed object; loadReviewJson narrows each field
     private parseReviewJson(raw: string, filePath: string, required: readonly RequiredChecklist[]): Record<string, unknown> {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: convert JSON.parse SyntaxError to an InformAiError for the AI

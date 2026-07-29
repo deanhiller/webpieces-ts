@@ -162,24 +162,24 @@ describe('renderDashboard checklists', () => {
         expect(renderDashboard(input)).not.toContain('Checklist —');
     });
 
-    it('renders one row per triggered checklist with its resolved verdict', () => {
+    it('renders one row per matched checklist with its resolved verdict', () => {
         const rows = [
-            new ChecklistRow('DB migrations', 'WARN', CK_PASS),
-            new ChecklistRow('Hasura metadata', 'BLOCK', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
+            new ChecklistRow('migrations-reviewer', CK_PASS),
+            new ChecklistRow('hasura-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
         ];
         const input = new DashboardInput(
             'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
         );
         const md = renderDashboard(input);
-        expect(md).toContain('**Checklist — DB migrations:** 🟢 WARN — passed');
-        expect(md).toContain('**Checklist — Hasura metadata:** 🟡 BLOCK — OVERRIDDEN — override: behind a flag; ONE-2210');
+        expect(md).toContain('**Checklist — migrations-reviewer:** 🟢 passed');
+        expect(md).toContain('**Checklist — hasura-reviewer:** 🟡 OVERRIDDEN — override: behind a flag; ONE-2210');
     });
 
-    it('carries triggered checklists into the compact commit body', () => {
-        const rows = [new ChecklistRow('Hasura metadata', 'BLOCK', CK_PASS)];
+    it('carries matched checklists into the compact commit body', () => {
+        const rows = [new ChecklistRow('hasura-reviewer', CK_PASS)];
         const input = new DashboardInput(
             'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
         );
-        expect(renderCommitBody(input, '')).toContain('Checklist — Hasura metadata: 🟢 BLOCK — passed');
+        expect(renderCommitBody(input, '')).toContain('Checklist — hasura-reviewer: 🟢 passed');
     });
 });

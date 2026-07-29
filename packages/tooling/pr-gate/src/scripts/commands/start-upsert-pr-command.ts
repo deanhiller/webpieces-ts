@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService } from '@webpieces/rules-config';
+import { TriggeredChecklist } from '../workflow/checklist-detector';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -23,6 +24,7 @@ export class StartUpsertPrCommand {
         private readonly gitExec: GitExec,
         private readonly runUpdate: RunUpdate,
         private readonly checklistDetector: ChecklistDetector,
+        private readonly manifestService: ChecklistManifestService,
     ) {}
 
     async run(): Promise<void> {
@@ -51,11 +53,15 @@ export class StartUpsertPrCommand {
         ));
 
         // Hand the AI its next step: write review.json, then run finish (which posts the PR). Compute the
-        // consumer checklists this diff triggered so the schema hint names the exact docs to read BEFORE
-        // review.json is written (empty for repos with no checklists ⇒ the hint is unchanged).
-        const checklists = loadAndValidate(repoRoot).prGate.checklists;
-        const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, checklists));
+        // checklists this diff MATCHED (from the manifest doc) so the hint names each reviewer subagent to
+        // spawn BEFORE review.json is written (empty for repos with no checklist doc ⇒ the hint is unchanged).
+        const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklistDoc);
+        const triggered = this.checklistDetector.detectForRepo(repoRoot, defs);
+        const required = this.checklistDetector.toRequired(triggered);
         const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
+        // Persist the review-format + process instructions where any failure message can cite them.
+        writeTemplate(repoRoot, 'webpieces.review-checklists.md');
+        this.printChecklistPlan(defs.length, triggered);
         process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated, pushed, and the build gate passed. Now review your own changes and\n` +
@@ -63,6 +69,24 @@ export class StartUpsertPrCommand {
             `Then run:  pnpm wp-finish-upsert-pr\n` +
             `(It re-validates the build, renders the dashboard with your risk/violations, and creates/updates the PR.)\n\n`,
         );
+    }
+
+    // Show which review checklists the diff matched (spawn a SEPARATE subagent for each) and which were
+    // skipped because their patterns did not match — so it is visible WHY fewer than all of them ran.
+    private printChecklistPlan(total: number, triggered: readonly TriggeredChecklist[]): void {
+        if (total === 0) return;
+        process.stdout.write('\n' + SEP + '📋 Review checklists\n' + SEP + '\n');
+        if (triggered.length === 0) {
+            process.stdout.write('No checklist patterns matched this diff — no reviewer subagents needed.\n');
+            return;
+        }
+        process.stdout.write('Spawn EACH of these as a SEPARATE subagent (a different one per checklist — do not self-certify):\n');
+        for (const t of triggered) {
+            process.stdout.write(`  • subagent "${t.def.subagent}"`);
+            if (t.def.doc.trim() !== '') process.stdout.write(` — reads ${t.def.doc}`);
+            process.stdout.write(`  (matched: ${t.matchedFiles.slice(0, 4).join(', ')})\n`);
+        }
+        process.stdout.write('See .webpieces/instruct-ai/webpieces.review-checklists.md for the review-<id>.json format each must write.\n');
     }
 
     // Scaffold the server-side CI check when (and only when) this repo set a gateSalt. Written to the

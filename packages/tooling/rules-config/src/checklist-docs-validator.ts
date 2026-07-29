@@ -1,16 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { findConfigFile } from './config-file';
-import { validateChecklists } from './validate-config';
+import { validateChecklistsSection } from './validate-config';
 import { toError } from './to-error';
 
 /**
- * Validate ONLY the pr-gate `checklists[]` block, in isolation — docs paths exist, contentPatterns
- * compile, ids are unique, blockMessage present on BLOCK entries. This is the same logic
- * loadAndValidate runs (validateChecklists), but callable directly so a missing/typo'd `docs:` path
- * fails as its OWN `validate-checklist-docs` check (with a clear owner) instead of surfacing as an
- * unrelated validator's banner because it rode along inside loadAndValidate. Returns human-readable
- * errors; never throws.
+ * Validate ONLY the pr-gate `checklists` config + its manifest doc, in isolation — the `{ doc }` shape,
+ * that the doc exists and carries a valid `<!-- webpieces:checklists [...] -->` block, each entry's
+ * subagent is present + distinct, each item doc exists, patterns are string[]. Same logic loadAndValidate
+ * runs, but callable directly so a broken review manifest fails as its OWN `validate-checklist-docs` check
+ * (clear owner) instead of surfacing as an unrelated validator's banner. Returns errors; never throws.
  */
 // webpieces-disable no-function-outside-class -- module-level config validator, matches validate-config.ts
 export function validateChecklistDocs(cwd: string): string[] {
@@ -28,11 +27,11 @@ export function validateChecklistDocs(cwd: string): string[] {
         return [`[pr-gate] ${path.basename(configPath)} is not valid JSON: ${error.message}`];
     }
     const repoRoot = path.dirname(configPath);
-    // Checklists live under commands["pr-gate"].checklists (current) or the legacy top-level pr-gate.
+    // The pr-gate section lives under commands["pr-gate"] (current) or a legacy top-level pr-gate.
     // webpieces-disable no-any-unknown -- narrowing the opaque command section
     const commands = raw['commands'] as Record<string, unknown> | undefined;
     // webpieces-disable no-any-unknown -- narrowing the opaque pr-gate section
     const prGate = (commands?.['pr-gate'] ?? raw['pr-gate']) as Record<string, unknown> | undefined;
     if (!prGate || !('checklists' in prGate)) return [];
-    return validateChecklists(prGate['checklists'], repoRoot);
+    return validateChecklistsSection(prGate['checklists'], repoRoot);
 }
