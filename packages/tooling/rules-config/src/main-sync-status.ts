@@ -190,6 +190,64 @@ export class MainSyncStatusService {
         return this.isProcessAlive(lock.pid);
     }
 
+    /**
+     * ATOMICALLY take the refresher lock. Returns the held lock, or null when someone else holds it.
+     *
+     * Replaces the check-then-write pair (`isRefreshInProgress` then `writeMainSyncLock`), whose gap
+     * let two detached refreshers both pass the check and then both run `git fetch` at once — the
+     * concurrency this lock exists to prevent. The create uses the `wx` flag (O_CREAT|O_EXCL), so of
+     * N racing refreshers exactly one creates the file.
+     *
+     * A lock file left behind by a FINISHED, hung, or killed refresher is reclaimed: we only unlink
+     * and re-take it once `isRefreshInProgress` says the holder is provably not running, and we
+     * re-read afterwards to confirm the entry we see is ours before claiming the lock.
+     */
+    tryAcquireMainSyncLock(
+        repoRoot: string,
+        hangTimeoutMinutes: number,
+        now: number = Date.now(),
+        pid: number = process.pid,
+    ): MainSyncLock | null {
+        const lockPath = this.mainSyncLockPath(repoRoot);
+        this.ensureDir(lockPath);
+        const lock = this.inProcessLock(now, pid);
+        const payload = JSON.stringify(lock, null, 2) + '\n';
+
+        if (this.createExclusive(lockPath, payload)) return lock;
+
+        // The file already exists. Leave it alone while a live refresher owns it.
+        if (this.isRefreshInProgress(repoRoot, hangTimeoutMinutes, now)) return null;
+
+        // Reclaim it: remove the dead entry, then re-take it exclusively so only one reclaimer wins.
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            fs.unlinkSync(lockPath);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;  // someone else reclaimed it first — the exclusive create below decides
+        }
+        if (!this.createExclusive(lockPath, payload)) return null;
+
+        // Confirm the lock on disk is OURS (a simultaneous reclaimer could have unlinked ours and
+        // written its own between the two calls above).
+        const held = this.readMainSyncLock(repoRoot);
+        if (!held || held.pid !== pid || held.started !== lock.started) return null;
+        return lock;
+    }
+
+    // O_CREAT|O_EXCL write: true when THIS call created the file, false when it already existed.
+    private createExclusive(lockPath: string, payload: string): boolean {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            fs.writeFileSync(lockPath, payload, { flag: 'wx' });
+            return true;
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return false;
+        }
+    }
+
     inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock {
         return new MainSyncLock(LOCK_STATE_INPROCESS, now, pid);
     }
@@ -209,7 +267,7 @@ export class MainSyncStatusService {
         const openPr = this.detectOpenPr(repoRoot, branch);
 
         // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
-        spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+        this.fetchOriginMain(repoRoot);
 
         const head = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
         const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
@@ -287,6 +345,36 @@ export class MainSyncStatusService {
             const error = toError(err);
             void error;
         }
+    }
+
+    /**
+     * Refresh `origin/main` WITHOUT writing `.git/FETCH_HEAD`.
+     *
+     * WHY the flag is not optional: this runs in a DETACHED background process while the agent is
+     * running its own foreground `git fetch` / `git pull` in the very same repo. `.git/FETCH_HEAD` is
+     * a single file that git takes no lock on, so two overlapping fetches interleave their writes and
+     * can leave the SAME `for-merge` line twice. `git pull` then reads two for-merge entries and dies
+     * with `fatal: Cannot fast-forward to multiple branches` — wedging the exact command the
+     * read-stale-guard tells the agent to run. `--no-write-fetch-head` (git >= 2.29) still updates the
+     * remote-tracking ref, which is all anything downstream reads (`origin/main`, merge-base), so
+     * nothing here needs FETCH_HEAD written at all.
+     *
+     * Older git rejects the flag; only then do we retry the plain form, accepting the old behaviour
+     * rather than losing the refresh entirely on a pre-2020 git.
+     */
+    private fetchOriginMain(repoRoot: string): void {
+        const safe = spawnSync('git', ['fetch', '--no-write-fetch-head', 'origin', 'main'], {
+            cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'],
+        });
+        if (safe.status === 0) return;
+        if (!this.isUnknownGitOption(safe.stderr)) return;  // a real failure (offline, auth) — not our business
+        spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+    }
+
+    // Did git reject the flag itself (too old), as opposed to failing the network refresh?
+    private isUnknownGitOption(stderr: string | null): boolean {
+        const text = (stderr ?? '').toLowerCase();
+        return text.includes('unknown option') || text.includes('unknown switch') || text.includes('unrecognized option');
     }
 
     private ensureDir(filePath: string): void {
@@ -390,6 +478,8 @@ export function writeMainSyncLock(repoRoot: string, lock: MainSyncLock): void { 
 export function isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now: number = Date.now()): boolean { return mainSyncSvc.isLockStale(lock, hangTimeoutMinutes, now); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean { return mainSyncSvc.isRefreshInProgress(repoRoot, hangTimeoutMinutes, now); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function tryAcquireMainSyncLock(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now(), pid: number = process.pid): MainSyncLock | null { return mainSyncSvc.tryAcquireMainSyncLock(repoRoot, hangTimeoutMinutes, now, pid); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock { return mainSyncSvc.inProcessLock(now, pid); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it

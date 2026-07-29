@@ -13,6 +13,7 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
+import { toError } from '../to-error';
 
 // Defaults used when the rule has no explicit value in webpieces.config.json.
 // branchFormat is a human sentence telling the AI how to name a branch created off main; it is
@@ -107,10 +108,21 @@ function truncate(s: string): string {
 }
 
 function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly Violation[] {
-    execSync('git fetch origin main --quiet', {
-        cwd: ctx.workspaceRoot,
-        encoding: 'utf8',
-    });
+    // `--no-write-fetch-head` for the same reason as the background refresher (see
+    // MainSyncStatusService.fetchOriginMain): this refresh can run while the agent is mid
+    // `git fetch`/`git pull`, and two overlapping writers of the unlocked `.git/FETCH_HEAD` can leave
+    // a duplicate for-merge line that makes the agent's `git pull` fatal with "multiple branches". We
+    // read `origin/main` below, never FETCH_HEAD. On a git too old for the flag, retry the plain form.
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        execSync('git fetch --no-write-fetch-head origin main --quiet', { cwd: ctx.workspaceRoot, encoding: 'utf8' });
+    } catch (err: unknown) {
+        const error = toError(err);
+        const text = error.message.toLowerCase();
+        const tooOld = text.includes('unknown option') || text.includes('unknown switch') || text.includes('unrecognized option');
+        if (!tooOld) throw error;
+        execSync('git fetch origin main --quiet', { cwd: ctx.workspaceRoot, encoding: 'utf8' });
+    }
     const countStr = execSync('git rev-list HEAD..origin/main --count', {
         cwd: ctx.workspaceRoot,
         encoding: 'utf8',
