@@ -49,4 +49,15 @@ describe('gate-token', () => {
     it('verify is always false when salt is empty (enforcement disabled cannot pass)', () => {
         expect(verifyGateToken(`x ${gateTokenMarker('', SHA)}`, '', SHA)).toBe(false);
     });
+
+    it('a body holding the PARENT-sha token does not validate against the child HEAD sha (the race)', () => {
+        // This is the exact shape of the push-fires-synchronize-before-the-body-edit race: the PR body
+        // still carries HMAC(salt, PARENT) when CI reads it for the new HEAD. The fix is ordering (a
+        // commit status posted after the edit), not the crypto — this asserts the crypto is unforgiving.
+        const parent = 'c'.repeat(40);
+        const head = 'd'.repeat(40);
+        const staleBody = `dashboard\n${gateTokenMarker('s3cr3t', parent)}`;
+        expect(verifyGateToken(staleBody, 's3cr3t', head)).toBe(false);
+        expect(verifyGateToken(staleBody, 's3cr3t', parent)).toBe(true);
+    });
 });
