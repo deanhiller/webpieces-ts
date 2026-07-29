@@ -203,6 +203,7 @@ export {
     writeMainSyncLock,
     isLockStale,
     isRefreshInProgress,
+    tryAcquireMainSyncLock,
     inProcessLock,
     finishedLock,
     computeMainSyncStatus,

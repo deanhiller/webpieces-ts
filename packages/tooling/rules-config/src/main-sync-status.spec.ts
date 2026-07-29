@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -10,6 +10,8 @@ import {
     readMainSyncStatus,
     writeMainSyncStatus,
     writeMainSyncLock,
+    readMainSyncLock,
+    tryAcquireMainSyncLock,
     isLockStale,
     isRefreshInProgress,
     inProcessLock,
@@ -68,6 +70,48 @@ describe('main-sync lock state machine', () => {
         expect(inProcessLock(123).started).toBe(123);
         expect(inProcessLock(123).pid).toBe(process.pid);
         expect(finishedLock(123).state).toBe('finished');
+    });
+});
+
+// The lock's whole job is stopping two detached refreshers from running `git fetch` at once. The old
+// check-then-write pair could not do that: both children passed `isRefreshInProgress` before either
+// wrote. Acquisition must be ONE atomic step.
+describe('main-sync lock acquisition (atomic)', () => {
+    let root: string;
+    beforeEach(() => { root = tmpRepoRoot(); });
+    afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
+
+    it('tryAcquireMainSyncLock: exactly ONE of two racing refreshers gets the lock', () => {
+        const now = 10 * 60 * 1000;
+        // Both children reach the acquire with no lock on disk — the exact window the old
+        // check-then-write pair left open, in which BOTH went on to run `git fetch`.
+        const first = tryAcquireMainSyncLock(root, 5, now, process.pid);
+        const second = tryAcquireMainSyncLock(root, 5, now, process.pid);
+        expect(first).not.toBeNull();
+        expect(second).toBeNull();
+    });
+
+    it('tryAcquireMainSyncLock: reclaims a finished, hung, or dead-pid lock', () => {
+        const now = 10 * 60 * 1000;
+        const deadPid = 2147483646;
+
+        writeMainSyncLock(root, finishedLock(now - 60 * 1000));
+        expect(tryAcquireMainSyncLock(root, 5, now, process.pid)).not.toBeNull();   // finished
+
+        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 6 * 60 * 1000, 0));
+        expect(tryAcquireMainSyncLock(root, 5, now, process.pid)).not.toBeNull();   // hung past timeout
+
+        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, deadPid));
+        expect(tryAcquireMainSyncLock(root, 5, now, process.pid)).not.toBeNull();   // killed refresher
+    });
+
+    it('tryAcquireMainSyncLock: records holder state/started/pid so the next caller can judge it', () => {
+        const now = 10 * 60 * 1000;
+        const lock = tryAcquireMainSyncLock(root, 5, now, process.pid);
+        expect(lock?.state).toBe('inprocess');
+        expect(lock?.started).toBe(now);
+        expect(readMainSyncLock(root)?.pid).toBe(process.pid);
+        expect(isRefreshInProgress(root, 5, now)).toBe(true);
     });
 });
 
@@ -269,6 +313,88 @@ describe('computeMainSyncStatus (integration)', () => {
         const status = computeMainSyncStatus(work);
         expect(status.hasForkPoint).toBe(false);
         expect(status.forkPoint).toBeNull();
+    });
+});
+
+// Does this git understand `--no-write-fetch-head` (2.29+)? On an older git the refresher knowingly
+// falls back to the plain form, so the FETCH_HEAD assertion below does not apply.
+function gitSupportsNoWriteFetchHead(): boolean {
+    const probe = spawnSync('git', ['fetch', '--no-write-fetch-head', '--help'], { encoding: 'utf8' });
+    return !(probe.stderr ?? '').toLowerCase().includes('unknown option');
+}
+
+// Build a repo with a REAL (local path) `origin`, so the refresher's network refresh actually runs.
+// The no-remote template repos above cannot exercise this: their fetch fails before touching anything.
+function buildRepoWithRemote(origin: string, work: string): void {
+    const steps = [
+        'set -e',
+        `git init -q --bare -b main ${origin}`,
+        `git init -q ${work}`,
+        `cd ${work}`,
+        'git config core.hooksPath /dev/null',
+        'git config user.email t@t.t',
+        'git config user.name t',
+        'git config commit.gpgsign false',
+        "printf 'base\\n' > shared.txt",
+        'git add -A',
+        'git commit -q -m base',
+        'git branch -M main',
+        `git remote add origin ${origin}`,
+        'git push -q origin main',
+        'git checkout -q -b feature',
+    ];
+    execSync(steps.join('\n'), { shell: '/bin/sh', stdio: 'pipe' });
+}
+
+// THE bug this file's fix is about: the DETACHED refresher's `git fetch` used to rewrite
+// `.git/FETCH_HEAD` while the agent was running its own foreground fetch/pull in the same repo. The
+// two unlocked writers could interleave into a duplicate `for-merge` line, and `git pull` then died
+// with "Cannot fast-forward to multiple branches" — killing the very command the guards prescribe.
+describe('computeMainSyncStatus — must not write .git/FETCH_HEAD', () => {
+    let origin: string;
+    let work: string;
+
+    beforeEach(() => {
+        origin = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-origin-'));
+        work = fs.mkdtempSync(path.join(os.tmpdir(), 'mss-fh-'));
+        fs.rmSync(work, { recursive: true, force: true });  // git init makes it
+        buildRepoWithRemote(origin, work);
+    });
+
+    afterEach(() => {
+        fs.rmSync(origin, { recursive: true, force: true });
+        fs.rmSync(work, { recursive: true, force: true });
+    });
+
+    it('leaves a foreground fetch\'s FETCH_HEAD byte-for-byte untouched', () => {
+        if (!gitSupportsNoWriteFetchHead()) return;
+        // Stand in for the agent's foreground `git fetch origin main`: one for-merge line.
+        git(work, 'fetch origin main');
+        const fetchHead = path.join(work, '.git', 'FETCH_HEAD');
+        const before = fs.readFileSync(fetchHead, 'utf8');
+        expect(before.split('\n').filter((l: string): boolean => l.trim().length > 0)).toHaveLength(1);
+
+        computeMainSyncStatus(work);
+
+        expect(fs.readFileSync(fetchHead, 'utf8')).toBe(before);
+    });
+
+    it('still refreshes the origin/main remote-tracking ref (what the status actually reads)', () => {
+        if (!gitSupportsNoWriteFetchHead()) return;
+        // A new commit lands on the remote's main after our clone was made.
+        execSync(
+            ['set -e', `cd ${work}`, 'git checkout -q main', "printf 'newer\\n' > shared.txt",
+                'git commit -q -am newer', 'git push -q origin main',
+                'git update-ref refs/remotes/origin/main HEAD~1',  // pretend we never saw it
+                'git checkout -q feature'].join('\n'),
+            { shell: '/bin/sh', stdio: 'pipe' },
+        );
+        const remoteHead = execSync('git rev-parse main', { cwd: work, encoding: 'utf8' }).trim();
+
+        const status = computeMainSyncStatus(work);
+
+        expect(status.originMain).toBe(remoteHead);
+        expect(fs.existsSync(path.join(work, '.git', 'FETCH_HEAD'))).toBe(false);
     });
 });
 

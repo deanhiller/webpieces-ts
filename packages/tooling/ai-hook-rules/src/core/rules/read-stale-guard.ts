@@ -80,6 +80,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         'Get onto current code before reading anything else:',
         [
             new Option('On main, behind origin/main → git pull origin main. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main. Then retry the read.', true),
+            new Option("If that pull dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then retry the pull."),
             new Option('Still allowed right now: EVERY Bash command (installs, upgrades, builds), all Write/Edit, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → read-stale-guard (mode OFF) if intentional.'),
         ],

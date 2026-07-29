@@ -8,8 +8,7 @@ import {
     computeMainSyncStatus,
     writeMainSyncStatus,
     writeMainSyncLock,
-    isRefreshInProgress,
-    inProcessLock,
+    tryAcquireMainSyncLock,
     finishedLock,
 } from '@webpieces/rules-config';
 
@@ -23,9 +22,9 @@ import { logSyncEvent, SyncLogEvent } from './main-sync-log';
  * instantly. Nobody reads our exit code or output — we run after the spawning hook has returned.
  *
  * Concurrency: a lock file (`.webpieces/main-sync.lock.json`) holds `inprocess`/`finished` + a start
- * epoch. If another refresher is already `inprocess` and younger than hangTimeoutMinutes, we exit
- * immediately (don't pile up `git fetch`es). If it's `inprocess` but older than hangTimeoutMinutes,
- * we assume it hung and proceed anyway.
+ * epoch + the holder's pid, taken with an ATOMIC exclusive create. If another refresher already holds
+ * it and is alive, we exit immediately (don't pile up `git fetch`es). If the holder is finished, dead,
+ * or older than hangTimeoutMinutes, the lock is reclaimed and we proceed.
  *
  * argv: [, , repoRoot, hangTimeoutMinutes]
  */
@@ -40,13 +39,13 @@ export function main(): void {
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        if (isRefreshInProgress(repoRoot, hangTimeoutMinutes)) {
+        // ONE atomic acquire — not a check followed by a write. The old check-then-write pair had a
+        // gap in which two detached children could both pass the check and then both run `git fetch`.
+        const lock = tryAcquireMainSyncLock(repoRoot, hangTimeoutMinutes);
+        if (!lock) {
             logSyncEvent(repoRoot, new SyncLogEvent('SKIP_INPROGRESS', process.pid, '-', 'another refresh is in progress'));
             return;
         }
-
-        const lock = inProcessLock();
-        writeMainSyncLock(repoRoot, lock);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const status = computeMainSyncStatus(repoRoot);

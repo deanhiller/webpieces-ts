@@ -7,6 +7,15 @@ import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 import { toError } from './to-error';
 import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
 
+// Per-process latch for the spawn below. A hook process handles exactly one tool call, so this makes
+// the refresher at-most-once per tool call. Exported reset is test-only.
+let alreadyTriggered = false;
+
+// webpieces-disable no-function-outside-class -- test-only latch reset, matching this module's function shape
+export function resetMainSyncRefreshLatchForTest(): void {
+    alreadyTriggered = false;
+}
+
 /**
  * Fire-and-forget spawn of the detached refresher (sync-main.js in this same dir — spawned by path,
  * not a bin). The child outlives this hook process (`detached` + `unref`), does the slow
@@ -19,6 +28,14 @@ import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
  * SPAWN_ATTEMPT but never START, the detached child was killed before it ran.
  */
 export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes: number = DEFAULT_HANG_TIMEOUT_MINUTES): void {
+    // ONE refresher per hook process. Several call sites fire this on a single tool call — the Read
+    // fast path in hook-core AND read-stale-guard's own check(), for one — which is why the log showed
+    // two SPAWN_ATTEMPTs ~20ms apart from the same pid on every cycle. The loser only ever reached the
+    // lock and exited, so the second child was pure waste (and one more `git fetch` racing the
+    // agent's). The child's lock still guards against refreshers from OTHER hook processes.
+    if (alreadyTriggered) return;
+    alreadyTriggered = true;
+
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const refresher = path.join(__dirname, 'sync-main.js');
