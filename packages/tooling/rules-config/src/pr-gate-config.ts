@@ -54,6 +54,9 @@ export class PrGateConfig {
     // Repo-relative path of the ONE doc carrying the checklist manifest (a <!-- webpieces:checklists [...] -->
     // JSON block). '' = no checklists. The checklist SET lives in that doc (content), never here (config).
     checklistDoc: string;
+    // Whether wp-finish-upsert-pr publishes each reviewer's full `output` as ONE combined PR comment
+    // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
+    checklistComments: boolean;
     /**
      * Shared secret used to mint the server-verifiable gate token. `wp-finish-upsert-pr` writes
      * `HMAC(gateSalt, HEAD_sha)` as a hidden marker into the PR body (and REFUSES to mint it unless
@@ -69,13 +72,14 @@ export class PrGateConfig {
     gateSalt: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklistDoc = '', gateSalt = '') {
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklistDoc = '', gateSalt = '', checklistComments = true) {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
         this.mergeMode = mergeMode;
         this.checklistDoc = checklistDoc;
         this.gateSalt = gateSalt;
+        this.checklistComments = checklistComments;
     }
 }
 
@@ -109,6 +113,7 @@ interface RawPrGateSection {
     mergeMode?: string;
     checklists?: { doc?: string };
     gateSalt?: string;
+    checklistComments?: boolean;
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -137,5 +142,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const checklistDoc = raw.checklists?.doc ?? defaults.checklistDoc;
     // Optional — omitted ⇒ '' ⇒ no gate token minted and CI enforcement is a no-op (back-compat).
     const gateSalt = raw.gateSalt ?? defaults.gateSalt;
-    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklistDoc, gateSalt);
+    // Optional — omitted ⇒ true ⇒ reviewer output published as a PR comment.
+    const checklistComments = raw.checklistComments ?? defaults.checklistComments;
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklistDoc, gateSalt, checklistComments);
 }

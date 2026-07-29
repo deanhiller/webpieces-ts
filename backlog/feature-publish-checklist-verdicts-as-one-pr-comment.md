@@ -1,7 +1,18 @@
-# FEATURE: post one PR comment per triggered checklist — the reviewer's verdict currently reaches nobody
+# FEATURE: publish checklist verdicts as ONE PR comment — the reviewer's verdict currently reaches nobody
+
+> **REVISED 2026-07-29 after running this end-to-end on `monorepo-nx2` #740 against `0.4.475`.**
+> The original filing proposed one comment **per** checklist. Having watched it run, the
+> recommendation is now **one combined comment** with a section per checklist — see
+> "Suggested design" below. The reasoning is recorded there rather than silently swapped.
+>
+> **There is nothing to check in.** `review.json` is gitignored and `wp-finish-upsert-pr` already reads
+> it and turns it into the PR **title and body**. This asks for exactly the same mechanism applied to
+> every `review-<id>.json`: read the local file, publish it as a comment. No artifact enters git
+> history, and the earlier "commit review.json so CI can re-read it" idea — correctly rejected in #484
+> — is not being revived.
 
 **Package:** `@webpieces/pr-gate` (dashboard + finish-upsert-pr)
-**Version seen:** `0.4.470`
+**Version seen:** `0.4.475` (originally filed against `0.4.470`; still absent)
 **Severity:** High for the feature's purpose. `wp-finish-upsert-pr` already **reads** `review-<id>.json`,
 **enforces** it, and **verifies** the subagent ran — then throws the reviewer's actual findings away. The
 PR shows one word. A review process whose output never reaches a reviewer is a review process that
@@ -69,45 +80,78 @@ see no morpheus here?"* — is the bug report.
 
 ## Suggested design
 
-### 1. One comment per triggered checklist
+### 1. ONE combined comment, with a section per checklist
 
-New renderer beside `Dashboard`, e.g. `packages/tooling/pr-gate/src/dashboard/checklist-comment.ts`:
+New renderer beside `Dashboard`, e.g. `packages/tooling/pr-gate/src/dashboard/checklist-comment.ts`,
+emitting a single comment:
 
 ```markdown
-<!-- webpieces-checklist v1 id=envvars -->
-## 🔍 Env / deploy config — PASSED
-_reviewed by `morpheus-envvars` · independent subagent run verified from the harness_
+<!-- webpieces-checklists v1 -->
+## 🔍 Company review checklists — 🔴 1 of 3 failed
+
+### 🔴 morpheus-migrations — FAILED
+_`morpheus-migrations` · independent run verified from harness_
 
 <output verbatim>
+
+### 🟢 morpheus-envvars — passed
+_`morpheus-envvars` · independent run verified from harness_
+
+<output verbatim>
+
+### 🟢 morpheus-graphql — passed
+…
 ```
 
+Lead with a roll-up status line and **order failures first**, so the one that matters is at the top.
+
 Post from `upsertPr` **after** `prRef` resolves (`finish-upsert-pr-command.ts:238`) — the PR number does
-not exist before that. Include the `subagent` name and the provenance status (`ok` / `skipped`) so a
-reader can distinguish a verified independent run from an unverified one; `PROVENANCE_SKIPPED` is
-returned whenever `CLAUDE_CODE_SESSION_ID` is unset, and that distinction matters to whoever is
-trusting the comment.
+not exist before that. Per section include the `subagent` name and the provenance status (`ok` /
+`skipped`): `PROVENANCE_SKIPPED` is returned whenever `CLAUDE_CODE_SESSION_ID` is unset, and a reader
+trusting the comment needs to tell a harness-verified independent run from an unverified one.
+
+**Why combined, having now run it.** The original filing said one comment per checklist. Four reasons
+to prefer one:
+
+- A single repo can define **six** checklists (monorepo-nx2 does). Six comments per PR, each re-edited
+  on every push, buries the human conversation. One comment keeps a single canonical place to look.
+- These are GitHub **issue** comments, which are not resolvable or threadable like review comments —
+  so the main argument for splitting (independent resolution) does not actually exist.
+- One marker, one find-then-PATCH, one failure mode. Per-checklist means N API calls per push and N
+  chances to orphan a comment when a checklist is renamed or dropped from the manifest — and under the
+  `{ doc }` manifest a checklist's `id` **is** its subagent name, so renaming the reviewer renames the
+  id and orphans its comment.
+- The overall verdict is visible at the top instead of requiring a reader to scan six comments to find
+  the one that failed.
+
+The one real argument the other way is that a failing checklist stands out more as its own comment.
+The roll-up line plus failure-first ordering covers that.
 
 ### 2. Idempotency is mandatory, not a nice-to-have
 
-`wp-finish-upsert-pr` runs on **every push**. Naively appending would leave N comments per checklist per
-push. Find-then-PATCH on the hidden marker:
+`wp-finish-upsert-pr` runs on **every push**. Naively appending would leave a new comment per push.
+Find-then-PATCH on the hidden marker:
 
 ```
 GET   repos/{owner}/{repo}/issues/{n}/comments
-      → find the comment whose body contains `webpieces-checklist v1 id=<id>`
+      → find the comment whose body contains `webpieces-checklists v1`
 PATCH repos/{owner}/{repo}/issues/comments/{commentId}     (exists → update)
 POST  repos/{owner}/{repo}/issues/{n}/comments             (absent → create)
 ```
 
 `gh pr comment --edit-last` is **not** selective enough — it targets the last comment by the author
-regardless of which checklist it belongs to, so with two triggered checklists it would clobber.
+regardless of what it is, so it would clobber an unrelated comment the tool itself posted.
 
-### 3. Blocker: `ChecklistRow` has no id
+With a single combined comment the marker no longer needs an `id`, which also removes the orphaning
+problem above entirely.
+
+### 3. `ChecklistRow` still needs its id (for the section headings, not the marker)
 
 `finish-upsert-pr-command.ts:163-168` builds rows as
-`new ChecklistRow(req.title, req.severity, verdict.status, verdict.detail)` — **title only**. The marker
-must key on the stable `id`, not a title someone may reword. Add `id` to `ChecklistRow` first; it also
-lets the dashboard line and the comment refer to the same thing.
+`new ChecklistRow(req.title, req.severity, verdict.status, verdict.detail)` — **title only**. Under the
+combined-comment design the marker no longer needs an id, but each SECTION still does: the heading
+should name the reviewer (`morpheus-envvars`), which under the `{ doc }` manifest IS the id. Add `id`
+to `ChecklistRow`; it also lets the dashboard line and the comment refer to the same thing.
 
 ### 4. Fix `detail` on CK_FAIL, and correct the doc comment
 
@@ -124,15 +168,19 @@ line-29 comment should say so rather than claiming WARN-FAIL is rendered.
   artifact in git history — which is also what the earlier
   [`bug-pr-gate-checklists-have-no-ci-side-enforcement`](./bug-pr-gate-checklists-have-no-ci-side-enforcement.md)
   report got wrong and #484 correctly rejected.
-- **Comment size limits.** GitHub caps a comment at 65536 characters. A verbose reviewer will exceed it.
-  Truncate with a clear marker rather than failing the whole `wp-finish-upsert-pr` run at the very last
-  step, after the push has already landed.
+- **Comment size limits — sharper with one combined comment.** GitHub caps a comment at 65536
+  characters, and now SIX verbose reviewers share that budget rather than each getting their own. Do not
+  truncate the whole body blindly: truncate the longest sections first so a short FAILED verdict is
+  never cut to make room for a long passing one, and mark each truncation inline. Never fail the whole
+  `wp-finish-upsert-pr` run at the very last step, after the push has already landed.
 - **Failure of the comment post must not fail the gate.** By the time comments are posted the branch is
   pushed and the PR is created/updated; throwing there leaves the user in a confusing half-done state.
   Warn to stderr and continue.
 - **Consider `disabled`/opt-out.** A repo with WARN-only checklists may not want comment noise on every
   push. A `prGate.checklistComments: true|false` switch, defaulting on, costs little.
-- **Regression tests:** (a) two triggered checklists produce two distinct comments; (b) a second run
-  EDITS both rather than creating four; (c) a reworded `title` still updates the same comment (proves the
-  marker keys on `id`); (d) a `CK_FAIL` WARN row renders its `detail` in both the comment and the body;
-  (e) a >65536-char output is truncated and the run still succeeds.
+- **Regression tests:** (a) three triggered checklists produce ONE comment with three sections;
+  (b) a second run EDITS that comment rather than adding another; (c) a mixed pass/fail set puts the
+  failure first and the roll-up line reads `🔴 1 of 3 failed`; (d) a `CK_FAIL` WARN row renders its
+  `detail` in both the comment and the body; (e) combined output >65536 chars truncates the longest
+  section first, keeps every verdict line, and the run still succeeds; (f) a renamed reviewer does not
+  orphan the previous comment.

@@ -4,7 +4,7 @@ import * as path from 'path';
 import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist,
     writeTemplate, RepoRootFinder, ReviewJsonService, ChecklistManifestService,
-    GateTokenService, SubagentProvenanceService, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
+    GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     InformAiError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -17,7 +17,7 @@ import { MergeState } from '../workflow/merge-state';
 import { MergeEnd } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
 import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
-import { Dashboard, DashboardInput, ChecklistRow } from '../../dashboard/dashboard';
+import { Dashboard, DashboardInput, ChecklistRow, CHECKLIST_COMMENT_MARKER } from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -99,7 +99,7 @@ export class FinishUpsertPrCommand {
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        this.enforceProvenance(required, currentBranch);
+        const provenanceVerified = this.enforceProvenance(required, currentBranch);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -123,6 +123,9 @@ export class FinishUpsertPrCommand {
         const result = this.upsertPr(repoRoot, base, body, title, input);
         // Race-free required check: post the commit status on the head sha AFTER the body edit (see method).
         this.postGateStatus(headSha, gateSalt);
+        // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
+        // fatal — the PR is already up by now, so a comment failure only warns.
+        this.postChecklistComment(repoRoot, result.prNumber, input.checklists, provenanceVerified);
         const prNum = result.prNumber;
 
         process.stdout.write(
@@ -204,11 +207,13 @@ export class FinishUpsertPrCommand {
     // Enforce that EACH matched checklist was reviewed by its OWN named subagent, as a DISTINCT run —
     // the coding agent may not self-certify, and one reviewer may not stand in for several. A verified set
     // passes silently; no session id warns but passes; any missing reviewer throws so the PR does not open.
-    private enforceProvenance(required: readonly RequiredChecklist[], branch: string): void {
+    private enforceProvenance(required: readonly RequiredChecklist[], branch: string): boolean {
         const errors: string[] = [];
+        let verified = true; // no reviewers to verify ⇒ vacuously true
         const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
         if (subagents.length > 0) {
             const result = this.provenance.verifyDistinct(subagents, branch);
+            verified = result.status === PROVENANCE_OK;
             if (result.status === PROVENANCE_MISSING) {
                 errors.push(result.detail);
             } else if (result.status === PROVENANCE_SKIPPED) {
@@ -222,6 +227,40 @@ export class FinishUpsertPrCommand {
                 `\n\nSpawn the named reviewer subagent to review the checklist on THIS branch, then re-run.`,
             );
         }
+        return verified;
+    }
+
+    // Publish every reviewer's full `output` as ONE combined PR comment, idempotently (find the marker
+    // comment → PATCH it, else POST). No-op when there is no PR number or no matched checklists. Never
+    // fatal: by here the PR is already created/updated, so a `gh` failure only warns.
+    private postChecklistComment(repoRoot: string, prNumber: string, rows: readonly ChecklistRow[], provenanceVerified: boolean): void {
+        if (prNumber === '' || rows.length === 0) return;
+        if (!loadAndValidate(repoRoot).prGate.checklistComments) return;
+        const body = this.dashboard.renderChecklistComment(rows, provenanceVerified);
+        const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        fs.mkdirSync(prDir, { recursive: true });
+        const payload = path.join(prDir, 'checklist-comment.json');
+        fs.writeFileSync(payload, JSON.stringify({ body }));
+        const commentId = this.findChecklistCommentId(prNumber);
+        const args = commentId !== ''
+            ? ['api', '--method', 'PATCH', `repos/{owner}/{repo}/issues/comments/${commentId}`, '--input', payload]
+            : ['api', '--method', 'POST', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--input', payload];
+        const res = spawnSync('gh', args, { encoding: 'utf8' });
+        if (res.status !== 0) {
+            process.stderr.write('⚠️  Could not post the checklist review comment (non-fatal — the PR is already up).\n');
+        } else {
+            process.stdout.write(`   ${commentId !== '' ? 'updated' : 'posted'} the checklist review comment ✓\n`);
+        }
+    }
+
+    // The id of THIS tool's existing checklist comment on the PR (by the hidden marker), or '' if none.
+    private findChecklistCommentId(prNumber: string): string {
+        const res = spawnSync('gh', [
+            'api', '--paginate', `repos/{owner}/{repo}/issues/${prNumber}/comments`,
+            '--jq', `.[] | select(.body | contains("${CHECKLIST_COMMENT_MARKER}")) | .id`,
+        ], { encoding: 'utf8' });
+        if (res.status !== 0) return '';
+        return (res.stdout ?? '').trim().split('\n')[0] ?? '';
     }
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /
