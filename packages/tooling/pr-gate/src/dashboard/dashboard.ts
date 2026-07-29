@@ -1,4 +1,7 @@
-import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson } from '@webpieces/rules-config';
+import {
+    GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson,
+    CK_PASS, CK_OVERRIDDEN, CK_FAIL, CK_MISSING, CK_ACKED,
+} from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 export class GateResult {
@@ -13,20 +16,23 @@ export class GateResult {
     }
 }
 
-// One row for a consumer review checklist the branch triggered. `acknowledged` reflects the AI's
-// review.json ack (a BLOCK row is always acknowledged by the time it renders — an unacknowledged BLOCK
-// throws before the dashboard is built; a WARN row may render un-acknowledged). Rendered into the PR
-// body so the acknowledgment reaches the server — `.webpieces/` is gitignored, so the PR body is the
-// only artifact of the local flow that ever leaves the checkout.
+// One row for a consumer review checklist the branch triggered. `status` is the resolved verdict (one of
+// CK_PASS | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_ACKED); `detail` is the reviewer output / override
+// justification. A BLOCK row is always PASS/OVERRIDDEN/ACKED by the time it renders — a failed or missing
+// BLOCK throws before the dashboard is built; a WARN row may render in any state. Rendered into the PR
+// body so the verdict reaches the server — the PR body is the artifact of the local flow that leaves the
+// checkout (alongside the HMAC gate token that proves the flow ran).
 export class ChecklistRow {
     title: string;
     severity: string; // 'BLOCK' | 'WARN'
-    acknowledged: boolean;
+    status: string;   // CK_* verdict
+    detail: string;   // reviewer output / override justification (surfaced for OVERRIDDEN + WARN-FAIL)
 
-    constructor(title: string, severity: string, acknowledged: boolean) {
+    constructor(title: string, severity: string, status: string, detail = '') {
         this.title = title;
         this.severity = severity;
-        this.acknowledged = acknowledged;
+        this.status = status;
+        this.detail = detail;
     }
 }
 
@@ -178,11 +184,22 @@ export class Dashboard {
         if (input.disables.eslintCount > 0) flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
         // A triggered checklist is noteworthy in main's history — carry each into the commit body.
         for (const row of input.checklists) {
-            const emoji = row.severity === 'BLOCK' ? '🔴' : '🟡';
-            const ack = row.acknowledged ? 'acknowledged' : 'NOT acknowledged';
-            flags.push(`Checklist — ${row.title}: ${emoji} ${row.severity} — ${ack}`);
+            flags.push(`Checklist — ${row.title}: ${this.checklistStatusText(row)}`);
         }
         return flags;
+    }
+
+    // Emoji + words for a checklist verdict, shared by the dashboard row and the commit-body flag.
+    private checklistStatusText(row: ChecklistRow): string {
+        const sev = row.severity;
+        if (row.status === CK_OVERRIDDEN) {
+            const why = row.detail.trim() !== '' ? ` — override: ${row.detail.trim()}` : '';
+            return `🟡 ${sev} — OVERRIDDEN${why}`;
+        }
+        if (row.status === CK_FAIL) return `🔴 ${sev} — FAILED review`;
+        if (row.status === CK_MISSING) return `⚪ ${sev} — not reviewed`;
+        if (row.status === CK_ACKED) return `🟢 ${sev} — acknowledged`;
+        return `🟢 ${sev} — passed`; // CK_PASS
     }
 
     // First `max` sentences of `text`. A sentence ends at `. ! ?` ONLY when followed by whitespace or
@@ -245,11 +262,9 @@ export class Dashboard {
         return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
     }
 
-    // A triggered consumer checklist: 🔴 for BLOCK (harder flag), 🟡 for WARN, plus the ack state.
+    // A triggered consumer checklist row: the resolved verdict (passed / overridden / failed / …).
     private checklistLine(row: ChecklistRow): string {
-        const emoji = row.severity === 'BLOCK' ? '🔴' : '🟡';
-        const ack = row.acknowledged ? 'acknowledged' : 'NOT acknowledged';
-        return `**Checklist — ${row.title}:** ${emoji} ${row.severity} — ${ack}`;
+        return `**Checklist — ${row.title}:** ${this.checklistStatusText(row)}`;
     }
 
     // 10-cell risk bar colored by band (🟩 ≤25, 🟨 ≤50, 🟧 ≤75, 🟥 >75), at least one filled cell.

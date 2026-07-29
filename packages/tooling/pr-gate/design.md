@@ -17,6 +17,7 @@ graph TD
     BranchNaming["BranchNaming"]
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
+    CheckPrCommand["CheckPrCommand"]
     ChecklistDetector["ChecklistDetector"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
@@ -25,6 +26,7 @@ graph TD
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
     ForkPoint["ForkPoint"]
+    GateTokenService["GateTokenService"]
     GatherInfo["GatherInfo"]
     GitExec["GitExec"]
     LandPrCommand["LandPrCommand"]
@@ -36,13 +38,17 @@ graph TD
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
     RepoRootFinder["RepoRootFinder"]
+    ReviewJsonService["ReviewJsonService"]
     RunUpdate["RunUpdate"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
+    SubagentProvenanceService["SubagentProvenanceService"]
     WorktreeService["WorktreeService"]
     AiBranchName --> BranchNaming
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
+    CheckPrCommand --> GateTokenService
+    CheckPrCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchReaper
@@ -56,11 +62,14 @@ graph TD
     FinishUpsertPrCommand --> BuildAffected
     FinishUpsertPrCommand --> ChecklistDetector
     FinishUpsertPrCommand --> Dashboard
+    FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GitExec
     FinishUpsertPrCommand --> MergeEnd
     FinishUpsertPrCommand --> MergeState
     FinishUpsertPrCommand --> PrMerger
     FinishUpsertPrCommand --> RepoRootFinder
+    FinishUpsertPrCommand --> ReviewJsonService
+    FinishUpsertPrCommand --> SubagentProvenanceService
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
     ForkPoint --> RepoRootFinder
@@ -84,6 +93,7 @@ graph TD
     MergeStart --> MergeState
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
+    PrGateApp --> CheckPrCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand

@@ -1,0 +1,40 @@
+# Webpieces PR gate — the SERVER-SIDE half of the gate.
+#
+# WHY: locally, pr-creation-or-push-guard blocks `gh pr create` / manual `git push`, so wp-finish-upsert-pr
+# is the sole PR opener FOR HOOKED developers. The gap is UNHOOKED teammates who push + open a PR in the
+# GitHub web UI — nothing local stops them. This required check closes that gap: wp-finish-upsert-pr writes
+# HMAC(prGate.gateSalt, HEAD_sha) into the PR body, and this job recomputes it from the committed salt and
+# the PR head sha. A PR opened outside the gated flow carries no valid token and fails here.
+#
+# TO ENABLE (client repo):
+#   1. Copy this file to .github/workflows/webpieces-pr-gate.yml and commit it.
+#   2. Set a committed "gateSalt" under the pr-gate section of webpieces.config.json (any non-empty string).
+#   3. In branch-protection for `main`, mark the "webpieces-pr-gate" check REQUIRED. (Only a repo admin can
+#      do this — webpieces cannot set branch protection for you.)
+#
+# NOTE: the salt is committed/obscurity-grade — it stops unhooked teammates, but a determined reader can
+# read it and forge. It is deliberately not cryptographically sound; see RESPONSE-pr-gate-ci-enforcement.
+
+name: Webpieces PR Gate
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  webpieces-pr-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify webpieces gate token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WP_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm wp-check-pr

@@ -49,6 +49,14 @@
                     "level": 2
                 },
                 {
+                    "id": "CheckPrCommand",
+                    "className": "CheckPrCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/check-pr-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "ChecklistDetector",
                     "className": "ChecklistDetector",
                     "kind": "class",
@@ -111,6 +119,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts",
                     "level": 5
+                },
+                {
+                    "id": "GateTokenService",
+                    "className": "GateTokenService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/gate-token.ts",
+                    "level": 2
                 },
                 {
                     "id": "GatherInfo",
@@ -201,6 +217,14 @@
                     "level": 6
                 },
                 {
+                    "id": "ReviewJsonService",
+                    "className": "ReviewJsonService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/review-json.ts",
+                    "level": 2
+                },
+                {
                     "id": "RunUpdate",
                     "className": "RunUpdate",
                     "kind": "class",
@@ -223,6 +247,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts",
                     "level": 1
+                },
+                {
+                    "id": "SubagentProvenanceService",
+                    "className": "SubagentProvenanceService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/subagent-provenance.ts",
+                    "level": 2
                 },
                 {
                     "id": "WorktreeService",
@@ -260,6 +292,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
                     "paramName": "mergedBranches",
                     "paramType": "MergedBranchesService"
+                },
+                {
+                    "from": "CheckPrCommand",
+                    "to": "GateTokenService",
+                    "injection": "type",
+                    "token": "GateTokenService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/gate-token.ts#GateTokenService",
+                    "paramName": "gateTokenService",
+                    "paramType": "GateTokenService"
+                },
+                {
+                    "from": "CheckPrCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "ChecklistDetector",
@@ -380,6 +430,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "GateTokenService",
+                    "injection": "type",
+                    "token": "GateTokenService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/gate-token.ts#GateTokenService",
+                    "paramName": "gateTokenService",
+                    "paramType": "GateTokenService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "GitExec",
                     "injection": "type",
                     "token": "GitExec",
@@ -422,6 +481,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "SubagentProvenanceService",
+                    "injection": "type",
+                    "token": "SubagentProvenanceService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/subagent-provenance.ts#SubagentProvenanceService",
+                    "paramName": "provenance",
+                    "paramType": "SubagentProvenanceService"
                 },
                 {
                     "from": "ForkPoint",
@@ -629,6 +706,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "CheckPrCommand",
+                    "injection": "type",
+                    "token": "CheckPrCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/check-pr-command.ts#CheckPrCommand",
+                    "paramName": "checkPrCommand",
+                    "paramType": "CheckPrCommand"
                 },
                 {
                     "from": "PrGateApp",

@@ -2,8 +2,10 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    loadAndValidate, loadReviewJson, prDirFor, reviewJsonPath, ReviewJson, ChecklistAck, RequiredChecklist,
-    writeTemplate, RepoRootFinder,
+    loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist,
+    writeTemplate, RepoRootFinder, ReviewJsonService,
+    GateTokenService, SubagentProvenanceService, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
+    InformAiError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -59,6 +61,9 @@ export class FinishUpsertPrCommand {
         private readonly prMerger: PrMerger,
         private readonly dashboard: Dashboard,
         private readonly checklistDetector: ChecklistDetector,
+        private readonly reviewJsonService: ReviewJsonService,
+        private readonly gateTokenService: GateTokenService,
+        private readonly provenance: SubagentProvenanceService,
     ) {}
 
     async run(): Promise<void> {
@@ -83,7 +88,17 @@ export class FinishUpsertPrCommand {
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
         const checklists = loadAndValidate(repoRoot).prGate.checklists;
         const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, checklists));
-        const review = loadReviewJson(reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName()), required);
+        // review-<id>.json files persist locally between runs, so a re-run after a push re-validates the
+        // EXISTING verdicts against the (possibly changed) triggered set for free: an unchanged checklist
+        // needs no re-review, a newly-triggered one refuses until its file is written. That is the
+        // "full review only when the checklist surface changes" behavior — no special-casing here.
+        const review = this.reviewJsonService.loadReviewJson(reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName()), required);
+
+        // 2c. For any BLOCK checklist that names a reviewer `subagent`, VERIFY (from the harness's own
+        //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
+        //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
+        const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+        this.enforceProvenance(required, currentBranch);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -98,7 +113,10 @@ export class FinishUpsertPrCommand {
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
         const input = this.computeDashboardInput(repoRoot, true, review, title, required);
-        const body = this.dashboard.renderDashboard(input);
+        // Append the hidden HMAC gate token bound to the pushed HEAD sha. A valid token in the PR body is
+        // proof this gated flow ran + passed on this exact commit — CI (`wp-check-pr`) recomputes it. We
+        // reach here only after the build gate + every BLOCK checklist passed, so minting is legitimate.
+        const body = this.dashboard.renderDashboard(input) + this.gateTokenBody(repoRoot);
         const result = this.upsertPr(repoRoot, base, body, title, input);
         const prNum = result.prNumber;
 
@@ -140,13 +158,47 @@ export class FinishUpsertPrCommand {
         return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows);
     }
 
-    // Pair each triggered checklist with the AI's acknowledgment from review.json for the dashboard.
-    // (A BLOCK reaching this point is always acknowledged — loadReviewJson already threw otherwise.)
+    // Pair each triggered checklist with its resolved verdict for the dashboard. (A BLOCK reaching this
+    // point is always PASS/OVERRIDDEN/ACKED — loadReviewJson already threw on FAIL/MISSING.)
     private checklistRows(required: readonly RequiredChecklist[], review: ReviewJson): ChecklistRow[] {
         return required.map((req: RequiredChecklist): ChecklistRow => {
-            const ack = review.checklists.find((a: ChecklistAck): boolean => a.id === req.id);
-            return new ChecklistRow(req.title, req.severity, ack ? ack.acknowledged : false);
+            const verdict = this.reviewJsonService.resolveVerdict(req, review.checklists, review.results);
+            return new ChecklistRow(req.title, req.severity, verdict.status, verdict.detail);
         });
+    }
+
+    // Hidden HMAC gate-token marker (with a leading blank line) to append to the PR body, or '' when the
+    // repo sets no gateSalt (byte-identical body to before this feature). Bound to the pushed HEAD sha.
+    private gateTokenBody(repoRoot: string): string {
+        const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
+        const headSha = this.gitOut(['rev-parse', 'HEAD']);
+        const marker = this.gateTokenService.gateTokenMarker(gateSalt, headSha);
+        return marker === '' ? '' : `\n\n${marker}\n`;
+    }
+
+    // Enforce every BLOCK checklist's `subagent:` provenance requirement. A verified run passes silently;
+    // a skipped check (no session id) prints a warning but passes; a missing reviewer subagent throws an
+    // InformAiError so the PR does not open until an independent reviewer of that type has run.
+    private enforceProvenance(required: readonly RequiredChecklist[], branch: string): void {
+        const errors: string[] = [];
+        for (const req of required) {
+            if (req.severity !== 'BLOCK' || req.subagent.trim() === '') continue;
+            // A FAIL/MISSING BLOCK already threw in loadReviewJson, so every BLOCK here PASSED review — now
+            // additionally require that the independent reviewer subagent actually ran.
+            const result = this.provenance.verify(req.subagent.trim(), branch);
+            if (result.status === PROVENANCE_MISSING) {
+                errors.push(`Checklist "${req.id}" (${req.title}): ${result.detail}`);
+            } else if (result.status === PROVENANCE_SKIPPED) {
+                process.stderr.write(`⚠️  Checklist "${req.id}": ${result.detail}\n`);
+            }
+        }
+        if (errors.length > 0) {
+            throw new InformAiError(
+                `${errors.length} checklist(s) require an independent reviewer subagent that did not run — fix, then re-run pnpm wp-finish-upsert-pr:\n\n` +
+                errors.map((e: string): string => `  • ${e}`).join('\n') +
+                `\n\nSpawn the named reviewer subagent to review the checklist on THIS branch, then re-run.`,
+            );
+        }
     }
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /

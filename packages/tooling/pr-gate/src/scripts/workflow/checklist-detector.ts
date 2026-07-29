@@ -84,19 +84,26 @@ export class ChecklistDetector {
     detectForRepo(repoRoot: string, defs: readonly ChecklistDefinition[]): TriggeredChecklist[] {
         if (defs.length === 0) return [];
         const range = this.diffScope.resolveBase(repoRoot);
-        const base = range.base;
-        if (!base) return [];
+        if (!range.base) return [];
+        return this.detectForRange(repoRoot, defs, range.base, range.head);
+    }
+
+    // Same detection against an EXPLICIT (base, head) — used by CI (`wp-check-pr`), where the useful
+    // range is the PR's merge base .. head rather than the local branch's inferred base. Keep tsOnly=false
+    // (see below) so a re-implementation in CI never silently drops the very files a checklist keys on.
+    detectForRange(repoRoot: string, defs: readonly ChecklistDefinition[], base: string, head?: string): TriggeredChecklist[] {
+        if (defs.length === 0 || !base) return [];
 
         // tsOnly:false is REQUIRED and load-bearing — the default (true) restricts to *.ts/*.tsx AND
         // drops test files, silently discarding every *.sql / *.gql / Dockerfile / .env* / metadata file
         // a checklist most wants to key on. The default would produce "no checklists triggered".
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
-        const changedFiles = this.diffScope.getChangedFiles(repoRoot, base, range.head, opts);
+        const changedFiles = this.diffScope.getChangedFiles(repoRoot, base, head, opts);
 
         const addedLinesByFile = new Map<string, string[]>();
         for (const file of changedFiles) {
-            const diff = this.diffScope.getFileDiff(repoRoot, file, base, range.head);
+            const diff = this.diffScope.getFileDiff(repoRoot, file, base, head);
             addedLinesByFile.set(file, this.addedLines(diff));
         }
         return this.detect(defs, changedFiles, addedLinesByFile);
@@ -116,6 +123,6 @@ export class ChecklistDetector {
     // schema hint consume.
     toRequired(triggered: readonly TriggeredChecklist[]): RequiredChecklist[] {
         return triggered.map((t: TriggeredChecklist): RequiredChecklist =>
-            new RequiredChecklist(t.def.id, t.def.title, t.def.severity, t.def.docs, t.def.blockMessage, t.matchedFiles));
+            new RequiredChecklist(t.def.id, t.def.title, t.def.severity, t.def.docs, t.def.blockMessage, t.matchedFiles, t.def.subagent));
     }
 }

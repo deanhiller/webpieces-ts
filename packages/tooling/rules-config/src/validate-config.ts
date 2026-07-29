@@ -352,6 +352,8 @@ function validateChecklist(entry: unknown, index: number, repoRoot?: string): st
         errors.push(`[pr-gate] ${label}.blockMessage must be a string.`);
     if (c['disabled'] !== undefined && typeof c['disabled'] !== 'boolean')
         errors.push(`[pr-gate] ${label}.disabled must be a boolean (example/inactive checklist kept in the file).`);
+    if (c['subagent'] !== undefined && typeof c['subagent'] !== 'string')
+        errors.push(`[pr-gate] ${label}.subagent must be a string (the expected reviewer agentType, e.g. "morpheus-reviewer"; omit for no provenance requirement).`);
 
     return errors;
 }
@@ -419,13 +421,23 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
     // behavior change. Present ⇒ every entry validated field-by-field, ids unique across the array.
     if ('checklists' in s) errors.push(...validateChecklists(s['checklists'], repoRoot));
 
+    // Optional server-token salt. Absent ⇒ no token minted, CI enforcement is a no-op. Present ⇒ must be
+    // a non-empty string (an empty salt would mint a token anyone can forge from a known-empty secret).
+    if ('gateSalt' in s) {
+        const salt = s['gateSalt'];
+        if (typeof salt !== 'string' || salt.trim() === '') {
+            errors.push(`[pr-gate] "gateSalt" must be a non-empty string — it is the shared secret the gate token is HMAC'd with. Omit the key entirely to disable server-side token enforcement.`);
+        }
+    }
+
     return errors;
 }
 
 // The `checklists` array of a pr-gate section: each entry validated field-by-field, ids unique.
+// Exported so the isolated validate-checklist-docs target (checklist-docs-validator.ts) reuses it.
 // webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed below
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
-function validateChecklists(value: unknown, repoRoot?: string): string[] {
+export function validateChecklists(value: unknown, repoRoot?: string): string[] {
     if (!Array.isArray(value)) {
         return [`[pr-gate] "checklists" must be an array of { id, title, patterns, contentPatterns, docs, severity, blockMessage, disabled? }.`];
     }

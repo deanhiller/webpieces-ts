@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Checklist Docs Executor",
+    "description": "Validates the pr-gate checklists[] block of webpieces.config.json in isolation: docs paths exist, contentPatterns compile, ids are unique, blockMessage present on BLOCK entries.",
+    "type": "object",
+    "properties": {},
+    "required": []
+}
