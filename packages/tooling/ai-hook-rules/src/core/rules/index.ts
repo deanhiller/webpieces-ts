@@ -20,4 +20,5 @@ export const builtInRuleNames: readonly string[] = [
     'feature-branch-guard',
     'read-stale-guard',
     'merged-branch-bash-guard',
+    'stale-main-bash-guard',
 ];

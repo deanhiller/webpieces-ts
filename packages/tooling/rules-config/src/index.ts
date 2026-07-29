@@ -89,9 +89,6 @@ export {
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
-    FeatureBranchGuardConfig,
-    ReadStaleGuardConfig,
-    MergedBranchBashGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
@@ -141,6 +138,12 @@ export type {
     StructuralMode,
     ValidateTsMode,
 } from './rule-configs';
+export {
+    FeatureBranchGuardConfig,
+    ReadStaleGuardConfig,
+    MergedBranchBashGuardConfig,
+    StaleMainBashGuardConfig,
+} from './main-sync-guard-configs';
 export {
     GateDefinition,
     PrGateConfig,

@@ -3,6 +3,12 @@ import * as path from 'path';
 import { FieldDef } from './field-def';
 import { sectionForRule, isHookGuard } from './sections';
 import { MODIFIED_CODE_MODES } from './rule-configs';
+import {
+    FeatureBranchGuardConfig,
+    ReadStaleGuardConfig,
+    MergedBranchBashGuardConfig,
+    StaleMainBashGuardConfig,
+} from './main-sync-guard-configs';
 import { ChecklistManifestService } from './checklist-manifest';
 import { DEFAULT_MATCH_RULES } from './match-rules-config';
 import { toError } from './to-error';
@@ -32,9 +38,6 @@ import {
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
-    FeatureBranchGuardConfig,
-    ReadStaleGuardConfig,
-    MergedBranchBashGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     NxWiringConfig,
@@ -82,6 +85,7 @@ const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
     'feature-branch-guard': FeatureBranchGuardConfig.SCHEMA,
     'read-stale-guard': ReadStaleGuardConfig.SCHEMA,
     'merged-branch-bash-guard': MergedBranchBashGuardConfig.SCHEMA,
+    'stale-main-bash-guard': StaleMainBashGuardConfig.SCHEMA,
     'no-file-import-cycles': NoFileImportCyclesConfig.SCHEMA,
     'runtime-architecture': RuntimeArchitectureConfig.SCHEMA,
     'nx-wiring': NxWiringConfig.SCHEMA,

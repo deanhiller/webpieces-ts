@@ -27,6 +27,24 @@ const GIT_FLAGS_WITH_VALUE: ReadonlySet<string> = new Set([
 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
+/**
+ * One invoked segment of a command, plus whether a PIPE fed it.
+ *
+ * `pipedInto` is what separates `git log | grep foo` (grep consumes the pipe — reads no file) from
+ * `grep foo src/` (grep reads the working tree). A guard that cares about which FILES a command
+ * reads cannot tell those apart from the segment text alone, because splitting on `|` throws exactly
+ * that fact away. Data-only, so a class (per CLAUDE.md).
+ */
+export class CommandSegment {
+    text: string;
+    pipedInto: boolean;
+
+    constructor(text: string, pipedInto: boolean) {
+        this.text = text;
+        this.pipedInto = pipedInto;
+    }
+}
+
 export class CommandScanner {
     /**
      * Split a raw command into individually-invoked segments.
@@ -40,9 +58,19 @@ export class CommandScanner {
      * quotes is not split out. Bash would expand it; we do not scan it. Contrived enough to accept.)
      */
     commandSegments(command: string): readonly string[] {
-        const segments: string[] = [];
+        return this.segmentsWithPipes(command).map((s: CommandSegment): string => s.text);
+    }
+
+    /**
+     * commandSegments, but each segment also carries whether the separator BEFORE it was a pipe.
+     * Only a guard reasoning about which files a segment reads needs that; everything else uses
+     * commandSegments, which is this method with the flag dropped.
+     */
+    segmentsWithPipes(command: string): readonly CommandSegment[] {
+        const segments: CommandSegment[] = [];
         let current = '';
         let quote: string | null = null;
+        let piped = false;      // was the separator that ENDED the previous segment a pipe?
 
         for (let i = 0; i < command.length; i++) {
             const ch = command[i];
@@ -62,17 +90,32 @@ export class CommandScanner {
 
             if (ch === '\n' || ch === ';' || ch === '|' || ch === '&' || ch === '(' || ch === ')') {
                 // Consume the second char of `&&` / `||` so it does not start an empty segment.
-                if ((ch === '|' || ch === '&') && command[i + 1] === ch) i++;
-                segments.push(current);
+                const doubled = (ch === '|' || ch === '&') && command[i + 1] === ch;
+                if (doubled) i++;
+                segments.push(new CommandSegment(current, piped));
+                // `|` pipes into the next segment; `||` is a separator, not a pipe.
+                piped = ch === '|' && !doubled;
                 current = '';
                 continue;
             }
 
             current += ch;
         }
-        segments.push(current);
+        segments.push(new CommandSegment(current, piped));
 
-        return segments.map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+        return segments
+            .map((s: CommandSegment): CommandSegment => new CommandSegment(s.text.trim(), s.pipedInto))
+            .filter((s: CommandSegment): boolean => s.text.length > 0);
+    }
+
+    /**
+     * One segment's shell words, with wrappers/env-assignments stripped, so `words('sudo cat a b')`
+     * is `['cat', 'a', 'b']`. The public view of the same tokenizer gitSubcommand uses — a guard that
+     * must inspect a NON-git command's arguments (which paths does this `grep` actually read?) needs
+     * the tokens, and re-splitting on whitespace in the guard would get quoting wrong.
+     */
+    words(segment: string): readonly string[] {
+        return this.stripPrefixes(this.tokenize(segment));
     }
 
     /**
