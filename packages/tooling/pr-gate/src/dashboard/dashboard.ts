@@ -1,6 +1,6 @@
 import {
     GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson,
-    CK_PASS, CK_OVERRIDDEN, CK_FAIL, CK_MISSING, CK_ACKED,
+    CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -23,14 +23,12 @@ export class GateResult {
 // body so the verdict reaches the server — the PR body is the artifact of the local flow that leaves the
 // checkout (alongside the HMAC gate token that proves the flow ran).
 export class ChecklistRow {
-    title: string;
-    severity: string; // 'BLOCK' | 'WARN'
-    status: string;   // CK_* verdict
-    detail: string;   // reviewer output / override justification (surfaced for OVERRIDDEN + WARN-FAIL)
+    title: string;  // the checklist id (= reviewer subagent name)
+    status: string; // CK_* verdict
+    detail: string; // reviewer output / override justification (surfaced for OVERRIDDEN)
 
-    constructor(title: string, severity: string, status: string, detail = '') {
+    constructor(title: string, status: string, detail = '') {
         this.title = title;
-        this.severity = severity;
         this.status = status;
         this.detail = detail;
     }
@@ -191,15 +189,13 @@ export class Dashboard {
 
     // Emoji + words for a checklist verdict, shared by the dashboard row and the commit-body flag.
     private checklistStatusText(row: ChecklistRow): string {
-        const sev = row.severity;
         if (row.status === CK_OVERRIDDEN) {
             const why = row.detail.trim() !== '' ? ` — override: ${row.detail.trim()}` : '';
-            return `🟡 ${sev} — OVERRIDDEN${why}`;
+            return `🟡 OVERRIDDEN${why}`;
         }
-        if (row.status === CK_FAIL) return `🔴 ${sev} — FAILED review`;
-        if (row.status === CK_MISSING) return `⚪ ${sev} — not reviewed`;
-        if (row.status === CK_ACKED) return `🟢 ${sev} — acknowledged`;
-        return `🟢 ${sev} — passed`; // CK_PASS
+        if (row.status === CK_FAIL) return '🔴 FAILED review';
+        if (row.status === CK_MISSING) return '⚪ not reviewed';
+        return '🟢 passed'; // CK_PASS
     }
 
     // First `max` sentences of `text`. A sentence ends at `. ! ?` ONLY when followed by whitespace or

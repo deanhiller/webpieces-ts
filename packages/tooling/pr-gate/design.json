@@ -65,6 +65,14 @@
                     "level": 2
                 },
                 {
+                    "id": "ChecklistManifestService",
+                    "className": "ChecklistManifestService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/checklist-manifest.ts",
+                    "level": 2
+                },
+                {
                     "id": "CleanTmp",
                     "className": "CleanTmp",
                     "kind": "class",
@@ -418,6 +426,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
                     "paramName": "checklistDetector",
                     "paramType": "ChecklistDetector"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ChecklistManifestService",
+                    "injection": "type",
+                    "token": "ChecklistManifestService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
+                    "paramName": "manifestService",
+                    "paramType": "ChecklistManifestService"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -868,6 +885,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
                     "paramName": "checklistDetector",
                     "paramType": "ChecklistDetector"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "ChecklistManifestService",
+                    "injection": "type",
+                    "token": "ChecklistManifestService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
+                    "paramName": "manifestService",
+                    "paramType": "ChecklistManifestService"
                 },
                 {
                     "from": "StartUpsertPrCommand",

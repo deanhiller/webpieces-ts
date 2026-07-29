@@ -71,99 +71,44 @@ function validReview(overrides: Record<string, unknown> = {}): string {
     });
 }
 
-const BLOCK = (id: string): RequiredChecklist =>
-    new RequiredChecklist(id, `${id} title`, 'BLOCK', [`.claude/${id}.md`], `Walk ${id}.`, ['x.sql']);
-const WARN = (id: string): RequiredChecklist =>
-    new RequiredChecklist(id, `${id} title`, 'WARN', [`.claude/${id}.md`], '', ['x.sql']);
+const REQ = (id: string): RequiredChecklist =>
+    new RequiredChecklist(id, id, `.claude/review/${id}.md`, ['x.sql']);
 
-describe('loadReviewJson checklists', () => {
-    it('throws when a BLOCK checklist has no verdict, quoting the consumer blockMessage', () => {
-        const file = tmpFile(validReview());
-        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/Walk migrations\./);
-        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/has no verdict/);
-    });
-
-    it('passes when the BLOCK checklist is acknowledged: true', () => {
-        const file = tmpFile(validReview({ checklists: [{ id: 'migrations', acknowledged: true, notes: ['walked it'] }] }));
-        const review = loadReviewJson(file, [BLOCK('migrations')]);
-        expect(review.checklists[0].id).toBe('migrations');
-        expect(review.checklists[0].acknowledged).toBe(true);
-        expect(review.checklists[0].notes).toEqual(['walked it']);
-    });
-
-    it('throws when the ack exists but acknowledged is false', () => {
-        const file = tmpFile(validReview({ checklists: [{ id: 'migrations', acknowledged: false, notes: [] }] }));
-        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/has no verdict/);
-    });
-
-    it('never validates WARN checklists — an absent ack still passes', () => {
-        const file = tmpFile(validReview());
-        const review = loadReviewJson(file, [WARN('hasura')]);
-        expect(review.title).toBe('Fix the thing');
-        expect(review.checklists).toEqual([]);
-    });
-
-    it('ignores unknown ids in checklists[] (forward-compat)', () => {
-        const file = tmpFile(validReview({ checklists: [
-            { id: 'migrations', acknowledged: true, notes: [] },
-            { id: 'some-future-id', acknowledged: true, notes: [] },
-        ] }));
-        const review = loadReviewJson(file, [BLOCK('migrations')]);
-        expect(review.checklists.map((a): string => a.id)).toEqual(['migrations', 'some-future-id']);
-    });
-
-    it('required:[] produces a schema hint byte-identical to the no-argument call', () => {
-        const p = '/repo/.webpieces/pr-review/feat/review.json';
-        expect(reviewJsonSchemaHint(p, [])).toBe(reviewJsonSchemaHint(p));
-        expect(reviewJsonSchemaHint(p)).not.toContain('checklists');
-    });
-
-    it('a non-empty required set injects the per-file instructions + docs into the schema hint', () => {
-        const hint = reviewJsonSchemaHint('/repo/review.json', [BLOCK('migrations')]);
-        expect(hint).toContain('review-migrations.json');
-        expect(hint).toContain('.claude/migrations.md');
-        expect(hint).toContain('BLOCK');
-    });
-});
-
-describe('loadReviewJson per-checklist verdicts (review-<id>.json)', () => {
-    // Write review.json + optional per-checklist files into one shared dir; return the review.json path.
-    function tmpReviewWith(results: Record<string, unknown>): string {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-pf-'));
-        const file = path.join(dir, 'review.json');
-        fs.writeFileSync(file, validReview());
-        for (const [id, body] of Object.entries(results)) {
-            fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify(body));
-        }
-        return file;
+// Write review.json + optional per-checklist files into one shared dir; return the review.json path.
+function tmpReviewWith(results: Record<string, unknown>): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-pf-'));
+    const file = path.join(dir, 'review.json');
+    fs.writeFileSync(file, validReview());
+    for (const [id, body] of Object.entries(results)) {
+        fs.writeFileSync(path.join(dir, `review-${id}.json`), JSON.stringify(body));
     }
+    return file;
+}
 
-    it('passes a BLOCK when review-<id>.json has success:true', () => {
-        const file = tmpReviewWith({ migrations: { success: true, output: 'no NOT NULL added' } });
-        const review = loadReviewJson(file, [BLOCK('migrations')]);
+describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
+    it('throws when a matched checklist has no verdict, naming the reviewer subagent', () => {
+        const file = tmpFile(validReview());
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/"migrations" subagent/);
+    });
+
+    it('passes when review-<id>.json has success:true', () => {
+        const file = tmpReviewWith({ migrations: { id: 'migrations', success: true, output: 'no NOT NULL added' } });
+        const review = loadReviewJson(file, [REQ('migrations')]);
         expect(review.results[0].id).toBe('migrations');
         expect(review.results[0].success).toBe(true);
     });
 
-    it('refuses a BLOCK when success:false with no override, printing the reviewer output', () => {
+    it('refuses success:false with no override, printing the reviewer output', () => {
         const file = tmpReviewWith({ migrations: { success: false, output: 'NOT NULL without backfill' } });
-        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/FAILED review/);
-        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/NOT NULL without backfill/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/FAILED review/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/NOT NULL without backfill/);
     });
 
-    it('passes a BLOCK when success:false but a non-empty override justification is given', () => {
+    it('passes success:false when a non-empty override justification is given', () => {
         const file = tmpReviewWith({ migrations: { success: false, output: 'locks writes', override: 'behind a flag; ONE-2210' } });
-        const review = loadReviewJson(file, [BLOCK('migrations')]);
+        const review = loadReviewJson(file, [REQ('migrations')]);
         expect(review.results[0].override).toBe('behind a flag; ONE-2210');
-    });
-
-    it('prefers review-<id>.json over an inline ack when both exist', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-pref-'));
-        const file = path.join(dir, 'review.json');
-        fs.writeFileSync(file, validReview({ checklists: [{ id: 'migrations', acknowledged: true, notes: [] }] }));
-        fs.writeFileSync(path.join(dir, 'review-migrations.json'), JSON.stringify({ success: false, output: 'bad' }));
-        // The per-file FAIL wins over the inline ack:true → refuse.
-        expect(() => loadReviewJson(file, [BLOCK('migrations')])).toThrowError(/FAILED review/);
     });
 
     it('two concurrent per-file writes both survive (no shared-file clobber)', () => {
@@ -171,13 +116,20 @@ describe('loadReviewJson per-checklist verdicts (review-<id>.json)', () => {
             migrations: { success: true, output: 'ok' },
             dockerfiles: { success: true, output: 'ok' },
         });
-        const review = loadReviewJson(file, [BLOCK('migrations'), BLOCK('dockerfiles')]);
+        const review = loadReviewJson(file, [REQ('migrations'), REQ('dockerfiles')]);
         expect(review.results.map((r): string => r.id).sort()).toEqual(['dockerfiles', 'migrations']);
     });
 
-    it('a WARN with a failing per-file verdict never blocks', () => {
-        const file = tmpReviewWith({ hasura: { success: false, output: 'meh' } });
-        const review = loadReviewJson(file, [WARN('hasura')]);
-        expect(review.title).toBe('Fix the thing');
+    it('required:[] produces a schema hint byte-identical to the no-argument call', () => {
+        const p = '/repo/.webpieces/pr-review/feat/review.json';
+        expect(reviewJsonSchemaHint(p, [])).toBe(reviewJsonSchemaHint(p));
+        expect(reviewJsonSchemaHint(p)).not.toContain('checklist');
+    });
+
+    it('a non-empty required set injects the per-file instructions + subagent + doc into the schema hint', () => {
+        const hint = reviewJsonSchemaHint('/repo/review.json', [REQ('migrations')]);
+        expect(hint).toContain('review-migrations.json');
+        expect(hint).toContain('.claude/review/migrations.md');
+        expect(hint).toContain('subagent: migrations');
     });
 });

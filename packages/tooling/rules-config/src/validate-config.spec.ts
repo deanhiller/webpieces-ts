@@ -508,56 +508,69 @@ describe('rule registry consistency', () => {
     });
 });
 
-// webpieces-disable no-any-unknown -- a raw checklist entry from a test, mirrors consumer JSON
-function validChecklist(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-    return {
-        id: 'migrations', title: 'DB migrations', patterns: ['**/*.sql'], contentPatterns: [],
-        docs: ['.claude/migrations.md'], severity: 'WARN', blockMessage: '', disabled: false, ...overrides,
-    };
-}
-
 // webpieces-disable no-any-unknown -- a raw pr-gate section from a test
-function validPrGate(checklists: unknown[]): Record<string, unknown> {
+function validPrGate(checklists: unknown): Record<string, unknown> {
     return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
 }
 
-describe('validatePrGateSection checklists', () => {
-    it('accepts a well-formed checklist (no repoRoot ⇒ docs existence is not checked)', () => {
-        const errors = validatePrGateSection(validPrGate([validChecklist()]));
-        expect(errors.filter((e: string): boolean => e.includes('checklist') || e.includes('.docs'))).toEqual([]);
+// Write an index doc with a webpieces:checklists manifest under a temp repo; return the repo root.
+function repoWithManifest(items: unknown[], extraDocs: string[] = []): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
+    fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
+    for (const d of extraDocs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
+    fs.writeFileSync(
+        path.join(dir, '.claude', 'review', 'index.md'),
+        `# review\n<!-- webpieces:checklists\n${JSON.stringify(items)}\n-->\n`,
+    );
+    return dir;
+}
+
+describe('validatePrGateSection checklists ({ doc } manifest)', () => {
+    it('rejects checklists that is not an object with a doc', () => {
+        const errors = validatePrGateSection(validPrGate([{ subagent: 'x' }]));
+        expect(errors.some((e: string): boolean => /"checklists" must be an object \{ "doc"/.test(e))).toBe(true);
     });
 
-    it('rejects a duplicate checklist id', () => {
-        const errors = validatePrGateSection(validPrGate([validChecklist(), validChecklist()]));
-        expect(errors.some((e: string): boolean => /duplicate checklist id "migrations"/.test(e))).toBe(true);
+    it('rejects an empty checklists.doc', () => {
+        const errors = validatePrGateSection(validPrGate({ doc: '' }));
+        expect(errors.some((e: string): boolean => /"checklists.doc" must be a non-empty string/.test(e))).toBe(true);
     });
 
-    it('rejects a severity outside BLOCK|WARN', () => {
-        const errors = validatePrGateSection(validPrGate([validChecklist({ severity: 'HIGH' })]));
-        expect(errors.some((e: string): boolean => /\.severity must be one of/.test(e))).toBe(true);
-    });
-
-    it('requires blockMessage on a BLOCK checklist', () => {
-        const errors = validatePrGateSection(validPrGate([validChecklist({ severity: 'BLOCK', blockMessage: '' })]));
-        expect(errors.some((e: string): boolean => /\.blockMessage is required for a BLOCK/.test(e))).toBe(true);
-    });
-
-    it('rejects a contentPattern that does not compile as a regex', () => {
-        const errors = validatePrGateSection(validPrGate([validChecklist({ contentPatterns: ['('] })]));
-        expect(errors.some((e: string): boolean => /\.contentPatterns\[0\] is not a valid regex/.test(e))).toBe(true);
-    });
-
-    it('rejects a docs path that does not exist under repoRoot (silent no-op guard)', () => {
+    it('rejects a doc path that does not exist', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
-        const errors = validatePrGateSection(validPrGate([validChecklist({ docs: ['.claude/gone.md'] })]), dir);
-        expect(errors.some((e: string): boolean => /references ".claude\/gone.md", which does not exist/.test(e))).toBe(true);
+        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
+        expect(errors.some((e: string): boolean => /checklists.doc ".claude\/review\/index.md" does not exist/.test(e))).toBe(true);
     });
 
-    it('accepts a docs path that exists under repoRoot', () => {
+    it('accepts a well-formed manifest', () => {
+        const dir = repoWithManifest([{ subagent: 'morpheus-envvars-reviewer', doc: 'envvars.md', patterns: ['**/.env*'] }], ['envvars.md']);
+        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
+        expect(errors).toEqual([]);
+    });
+
+    it('rejects a duplicate subagent (each checklist must use a distinct reviewer)', () => {
+        const dir = repoWithManifest([{ subagent: 'r' }, { subagent: 'r' }]);
+        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
+        expect(errors.some((e: string): boolean => /duplicate subagent "r"/.test(e))).toBe(true);
+    });
+
+    it('rejects a missing subagent', () => {
+        const dir = repoWithManifest([{ doc: 'x.md' }]);
+        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
+        expect(errors.some((e: string): boolean => /checklists\[0\].subagent must be a non-empty string/.test(e))).toBe(true);
+    });
+
+    it('rejects an item doc that does not exist', () => {
+        const dir = repoWithManifest([{ subagent: 'r', doc: 'gone.md' }]);
+        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
+        expect(errors.some((e: string): boolean => /\.doc "gone.md" does not exist/.test(e))).toBe(true);
+    });
+
+    it('rejects a doc with no manifest block', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
-        fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
-        fs.writeFileSync(path.join(dir, '.claude', 'migrations.md'), '# checklist');
-        const errors = validatePrGateSection(validPrGate([validChecklist()]), dir);
-        expect(errors.filter((e: string): boolean => e.includes('does not exist'))).toEqual([]);
+        fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
+        fs.writeFileSync(path.join(dir, '.claude', 'review', 'index.md'), '# just prose, no manifest');
+        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
+        expect(errors.some((e: string): boolean => /has no <!-- webpieces:checklists/.test(e))).toBe(true);
     });
 });

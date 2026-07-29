@@ -3,8 +3,6 @@
 // top-level `pr-gate` key in webpieces.config.json. It is built and validated by
 // loadAndValidate (load-config.ts); this module holds only the data classes + defaults + toGate.
 
-import { ChecklistDefinition, RawChecklist, toChecklist } from './checklist-config';
-
 export class GateDefinition {
     name: string;
     patterns: string[];
@@ -53,9 +51,9 @@ export class PrGateConfig {
      *   commits land as the internal "Squash merge of <branch>" subject.
      */
     mergeMode: string;
-    // Diff-triggered company review checklists (the extension point). Defaults to [] — an absent
-    // `checklists` key produces byte-identical behavior to before this field existed.
-    checklists: ChecklistDefinition[];
+    // Repo-relative path of the ONE doc carrying the checklist manifest (a <!-- webpieces:checklists [...] -->
+    // JSON block). '' = no checklists. The checklist SET lives in that doc (content), never here (config).
+    checklistDoc: string;
     /**
      * Shared secret used to mint the server-verifiable gate token. `wp-finish-upsert-pr` writes
      * `HMAC(gateSalt, HEAD_sha)` as a hidden marker into the PR body (and REFUSES to mint it unless
@@ -71,12 +69,12 @@ export class PrGateConfig {
     gateSalt: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = [], gateSalt = '') {
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklistDoc = '', gateSalt = '') {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
         this.mergeMode = mergeMode;
-        this.checklists = checklists;
+        this.checklistDoc = checklistDoc;
         this.gateSalt = gateSalt;
     }
 }
@@ -93,8 +91,8 @@ export function defaultGates(): GateDefinition[] {
 }
 
 export function defaultPrGateConfig(): PrGateConfig {
-    // No default checklists — the extension point is opt-in; the default monorepo ships none.
-    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO, []);
+    // No default checklist doc — the extension point is opt-in; the default monorepo ships none.
+    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO, '');
 }
 
 interface RawGate {
@@ -109,7 +107,7 @@ interface RawPrGateSection {
     buildCommand?: string;
     gates?: RawGate[];
     mergeMode?: string;
-    checklists?: RawChecklist[];
+    checklists?: { doc?: string };
     gateSalt?: string;
 }
 
@@ -135,9 +133,9 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     // REQUIRED — validatePrGateSection rejects an omitted/unknown value, so this fallback only ever
     // applies to the no-config-file path that defaultPrGateConfig() serves.
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
-    // Optional extension point — omitted ⇒ [] ⇒ no checklists computed anywhere downstream.
-    const checklists = raw.checklists !== undefined ? raw.checklists.map(toChecklist) : defaults.checklists;
+    // Optional extension point — omitted ⇒ '' ⇒ no checklists computed anywhere downstream.
+    const checklistDoc = raw.checklists?.doc ?? defaults.checklistDoc;
     // Optional — omitted ⇒ '' ⇒ no gate token minted and CI enforcement is a no-op (back-compat).
     const gateSalt = raw.gateSalt ?? defaults.gateSalt;
-    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt);
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklistDoc, gateSalt);
 }
