@@ -101,6 +101,13 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
         expect(svc.verifyDistinct([], 'dean/feat').status).toBe(PROVENANCE_OK);
     });
 
+    it('is branch-scoped: a run recorded under a DIFFERENT session still counts (review once per branch)', () => {
+        // The reviewer ran in session "old-session"; we are now in a NEW session "new-session".
+        process.env['HOME'] = fakeHarnessMulti('old-session', ['morpheus-migrations'], 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'new-session';
+        expect(svc.verifyDistinct(['morpheus-migrations'], 'dean/feat').status).toBe(PROVENANCE_OK);
+    });
+
     it('SKIPPED without a session id', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
         expect(svc.verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_SKIPPED);
