@@ -9,19 +9,30 @@
 # TO ENABLE (client repo):
 #   1. Copy this file to .github/workflows/webpieces-pr-gate.yml and commit it.
 #   2. Set a committed "gateSalt" under the pr-gate section of webpieces.config.json (any non-empty string).
-#   3. In branch-protection for `main`, mark the "webpieces-pr-gate" check REQUIRED. (Only a repo admin can
-#      do this — webpieces cannot set branch protection for you.)
+#   3. In branch-protection for `main`, mark the "webpieces/pr-gate" COMMIT STATUS required (NOT this
+#      workflow's job). wp-finish-upsert-pr posts that status directly on the head sha AFTER editing the
+#      PR body, so it is race-free: the push fires `synchronize` before the body edit, and a check that
+#      read the body alone would see the previous head's token and flap. The status is attached to the
+#      sha and simply does not exist until the gated flow (or this workflow) posts it. (Only a repo admin
+#      can set required checks — webpieces cannot do it for you.)
 #
 # NOTE: the salt is committed/obscurity-grade — it stops unhooked teammates, but a determined reader can
 # read it and forge. It is deliberately not cryptographically sound; see RESPONSE-pr-gate-ci-enforcement.
+#
+# CONCURRENCY: do NOT add `concurrency: cancel-in-progress: true` scoped only to the PR — two runs a few
+# seconds apart would let the cancellation policy decide pass/fail. If you scope concurrency, include the
+# event name in the group.
 
 name: Webpieces PR Gate
 on:
   pull_request:
+    # `edited` matters: it re-runs after wp-finish-upsert-pr rewrites the PR body, a fallback for the
+    # push-before-edit ordering. The authoritative signal is the webpieces/pr-gate commit status, though.
     types: [opened, edited, synchronize, reopened]
 permissions:
   contents: read
   pull-requests: read
+  statuses: write   # wp-check-pr posts the webpieces/pr-gate commit status
 jobs:
   webpieces-pr-gate:
     runs-on: ubuntu-latest

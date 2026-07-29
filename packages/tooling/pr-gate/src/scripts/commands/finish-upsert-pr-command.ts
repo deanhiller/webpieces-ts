@@ -116,8 +116,12 @@ export class FinishUpsertPrCommand {
         // Append the hidden HMAC gate token bound to the pushed HEAD sha. A valid token in the PR body is
         // proof this gated flow ran + passed on this exact commit — CI (`wp-check-pr`) recomputes it. We
         // reach here only after the build gate + every BLOCK checklist passed, so minting is legitimate.
-        const body = this.dashboard.renderDashboard(input) + this.gateTokenBody(repoRoot);
+        const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
+        const headSha = this.gitOut(['rev-parse', 'HEAD']);
+        const body = this.dashboard.renderDashboard(input) + this.gateTokenBody(gateSalt, headSha);
         const result = this.upsertPr(repoRoot, base, body, title, input);
+        // Race-free required check: post the commit status on the head sha AFTER the body edit (see method).
+        this.postGateStatus(headSha, gateSalt);
         const prNum = result.prNumber;
 
         process.stdout.write(
@@ -169,11 +173,31 @@ export class FinishUpsertPrCommand {
 
     // Hidden HMAC gate-token marker (with a leading blank line) to append to the PR body, or '' when the
     // repo sets no gateSalt (byte-identical body to before this feature). Bound to the pushed HEAD sha.
-    private gateTokenBody(repoRoot: string): string {
-        const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
-        const headSha = this.gitOut(['rev-parse', 'HEAD']);
+    private gateTokenBody(gateSalt: string, headSha: string): string {
         const marker = this.gateTokenService.gateTokenMarker(gateSalt, headSha);
         return marker === '' ? '' : `\n\n${marker}\n`;
+    }
+
+    // Post `webpieces/pr-gate = success` as a commit status on the head sha. This is the authoritative,
+    // race-free required check: it is attached to the sha, so unlike the PR body it cannot be read before
+    // it exists. No-op when the repo sets no gateSalt. A failure to post (missing statuses:write) is only
+    // a warning — the CI wp-check-pr workflow still enforces the gate.
+    private postGateStatus(headSha: string, gateSalt: string): void {
+        if (gateSalt.trim() === '' || headSha === '') return;
+        const res = spawnSync('gh', [
+            'api', '--method', 'POST', `repos/{owner}/{repo}/statuses/${headSha}`,
+            '-f', 'state=success',
+            '-f', 'context=webpieces/pr-gate',
+            '-f', 'description=gated flow ran and passed',
+        ], { encoding: 'utf8' });
+        if (res.status !== 0) {
+            process.stderr.write(
+                '⚠️  Could not post the webpieces/pr-gate commit status (needs a token with statuses:write). ' +
+                'The CI wp-check-pr workflow still enforces the gate.\n',
+            );
+        } else {
+            process.stdout.write(`   posted webpieces/pr-gate ✓ status on ${headSha.slice(0, 12)}\n`);
+        }
     }
 
     // Enforce every BLOCK checklist's `subagent:` provenance requirement. A verified run passes silently;

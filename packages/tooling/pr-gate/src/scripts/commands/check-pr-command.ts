@@ -39,7 +39,6 @@ export class CheckPrCommand {
         private readonly gateTokenService: GateTokenService,
     ) {}
 
-    // eslint-disable-next-line @typescript-eslint/require-await
     async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
@@ -49,19 +48,56 @@ export class CheckPrCommand {
                 'Add a committed "gateSalt" under the pr-gate section of webpieces.config.json to enable it.');
         }
 
-        const pr = this.resolvePr();
+        let pr = this.resolvePr();
         if (pr.headSha === '') {
             throw new CliExitError(1,
                 '❌ wp-check-pr: could not resolve the PR head sha via `gh`. Ensure the workflow runs on a pull_request ' +
                 'event with `gh` authenticated (GH_TOKEN) and the PR number available (WP_PR_NUMBER or GITHUB_REF).');
         }
 
+        pr = await this.verifyWithRetry(pr, gateSalt);
         if (this.gateTokenService.verifyGateToken(pr.body, gateSalt, pr.headSha)) {
+            this.postStatus(pr.headSha, 'success', 'gated flow verified');
             process.stdout.write(`✅ wp-check-pr: valid webpieces gate token for PR #${pr.number} @ ${pr.headSha.slice(0, 12)} — created through the gated flow.\n`);
             return;
         }
 
+        // An UNHOOKED push never reaches wp-finish-upsert-pr, so no status ever appears — mark it failed
+        // with an actionable status (attached to this sha) and fail the job so the PR shows red with a reason.
+        this.postStatus(pr.headSha, 'failure', 'Not created through the webpieces gated flow — run pnpm wp-start-upsert-pr');
         throw new CliExitError(1, this.failureMessage(pr));
+    }
+
+    // Re-read the PR ONCE after a short delay if the token looks stale. `wp-finish-upsert-pr` posts the
+    // authoritative commit status directly, but this workflow can be triggered by the `synchronize` push a
+    // beat BEFORE the body edit lands — so a first stale read is re-checked rather than red-flagging a
+    // correctly-gated PR on a timing coin-flip (see the gate-token-race bug). Returns the freshest PR.
+    private async verifyWithRetry(pr: PrUnderCheck, gateSalt: string): Promise<PrUnderCheck> {
+        if (this.gateTokenService.verifyGateToken(pr.body, gateSalt, pr.headSha)) return pr;
+        process.stdout.write('… no valid token yet — waiting for the PR body edit to land, then re-checking once…\n');
+        await this.delay(15000);
+        const refreshed = this.resolvePr();
+        return refreshed.headSha !== '' ? refreshed : pr;
+    }
+
+    private delay(ms: number): Promise<void> {
+        return new Promise((resolve: () => void): void => {
+            setTimeout(resolve, ms);
+        });
+    }
+
+    // Post the webpieces/pr-gate commit status on `sha`. Best-effort: a missing statuses:write scope is a
+    // warning, not a hard failure (the job's own exit code still reflects pass/fail).
+    private postStatus(sha: string, state: string, description: string): void {
+        const res = spawnSync('gh', [
+            'api', '--method', 'POST', `repos/{owner}/{repo}/statuses/${sha}`,
+            '-f', `state=${state}`,
+            '-f', 'context=webpieces/pr-gate',
+            '-f', `description=${description}`,
+        ], { encoding: 'utf8' });
+        if (res.status !== 0) {
+            process.stderr.write('⚠️  wp-check-pr could not post the webpieces/pr-gate commit status (needs statuses:write).\n');
+        }
     }
 
     // The actionable red-check message: this PR did not come through the gated flow (or hooks are missing).
