@@ -17,6 +17,7 @@ import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
 import { MergedBranchMessage } from './merged-branch-message';
+import { StaleMainMessage } from './stale-main-message';
 import { TreeRecovery } from './tree-recovery';
 
 /**
@@ -43,6 +44,12 @@ import { TreeRecovery } from './tree-recovery';
  * So there is no command allowlist to maintain and no way to lock the agent out of its own fix.
  * (`git pull origin main` is explicitly permitted on main by redirect-how-to-merge-main, which
  * returns null when the branch IS main — the two guards are complementary, not stacked.)
+ *
+ * That scoping is also this guard's HOLE, and it is closed elsewhere rather than here: leaving Bash
+ * entirely alone let a session `cat`/`grep`/`ls` the same stale tree the Read block was rejecting,
+ * for a whole session, while the logs read "read-stale-guard handled". stale-main-bash-guard is the
+ * State-A Bash counterpart (as merged-branch-bash-guard is State B's) and blocks only CONTENT-reading
+ * commands, never the cure — which is why this guard can stay simple and Read-only.
  *
  * Everything here is FAIL-OPEN. A guard that blocks reads on bad data is far worse than one that
  * misses; every unknown resolves to "allow". The four deliberate escape valves:
@@ -81,7 +88,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         [
             new Option('On main, behind origin/main → git pull origin main. On an already-merged branch → git fetch origin main && git checkout -b <new-branch> origin/main. Then retry the read.', true),
             new Option("If that pull dies with 'fatal: Cannot fast-forward to multiple branches', .git/FETCH_HEAD holds a duplicate line — run 'git fetch --prune origin main' to rewrite it cleanly, then retry the pull."),
-            new Option('Still allowed right now: EVERY Bash command (installs, upgrades, builds), all Write/Edit, and reading webpieces.config.json.'),
+            new Option('Still allowed right now: Bash that does not read repo files (installs, upgrades, builds, tests, the pull itself, git/gh metadata), all Write/Edit, and reading webpieces.config.json. Content-reading Bash (cat/grep/ls/…) is blocked too on a stale main — see stale-main-bash-guard.'),
             new Option('Disable in webpieces.config.json under hookGuards → read-stale-guard (mode OFF) if intentional.'),
         ],
     );
@@ -235,20 +242,11 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
         }
     }
 
+    // Shared with stale-main-bash-guard (StaleMainMessage) so the two halves of the State-A block can
+    // never prescribe different cures. Its "still allowed" tail no longer promises EVERY Bash command:
+    // content-reading Bash is now blocked too, which is the whole point of the Bash counterpart.
     private staleMainMessage(workspaceRoot: string): string {
-        return [
-            `You are on main and main is ${this.behindCount(workspaceRoot)} commit(s) behind origin/main.`,
-            'Reading files right now would give you STALE content and everything you plan from it',
-            'would be built on code that no longer exists upstream. Reads are blocked until you update.',
-            '',
-            'Run exactly this, then retry the read:',
-            '  git pull origin main',
-            '',
-            'Still allowed while this block is up:',
-            '  - EVERY Bash command (pnpm install, any webpieces upgrade, builds, all git/gh)',
-            '  - All Write/Edit (feature-branch-guard governs those separately)',
-            '  - Reading and editing webpieces.config.json (set read-stale-guard mode OFF to disable)',
-        ].join('\n');
+        return new StaleMainMessage().forReads(this.behindCount(workspaceRoot));
     }
 
     private cacheSummary(status: MainSyncStatus): string {

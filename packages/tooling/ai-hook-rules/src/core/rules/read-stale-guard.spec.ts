@@ -145,12 +145,17 @@ describe('read-stale-guard — blocking', () => {
     it('blocks a read on a clean main that is behind origin/main', () => {
         const violations = rule().check(ctx());
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('git pull origin main');
+        // `--ff-only`: a plain pull on a stale main can start a MERGE, the one thing
+        // redirect-how-to-merge-main exists to keep an AI away from.
+        expect(violations[0].message).toContain('git pull --ff-only origin main');
     });
 
     it('names what is still allowed in the block message, so the agent is never stuck', () => {
         const message = rule().check(ctx())[0].message ?? '';
-        expect(message).toContain('EVERY Bash command');
+        // NOT 'EVERY Bash command' any more: stale-main-bash-guard now blocks content-reading Bash
+        // on this same state, so promising the whole shell would be a lie the agent acts on.
+        expect(message).not.toContain('EVERY Bash command');
+        expect(message).toContain('Bash that does not read repo files');
         expect(message).toContain('webpieces.config.json');
     });
 

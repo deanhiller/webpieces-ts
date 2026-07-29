@@ -24,8 +24,6 @@ import {
     MergeInProgressGuardConfig,
     PrMergeGuardConfig,
     RedirectHowToMergeMainConfig,
-    FeatureBranchGuardConfig,
-    ReadStaleGuardConfig,
     NoFileImportCyclesConfig,
     RuntimeArchitectureConfig,
     DiGraphConfig,
@@ -33,6 +31,7 @@ import {
     NoJsFilesConfig,
     ValidateTsInSrcConfig,
 } from './rule-configs';
+import { FeatureBranchGuardConfig, ReadStaleGuardConfig } from './main-sync-guard-configs';
 import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
 
 export class WebpiecesRulesConfig {

@@ -20,6 +20,7 @@ function mktmp(contents: Record<string, string>): string {
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
     'redirect-how-to-merge-main', 'feature-branch-guard', 'read-stale-guard', 'merged-branch-bash-guard',
+    'stale-main-bash-guard',
 ];
 const CODE_RULE_NAMES = [
     'max-method-lines', 'max-file-lines', 'require-return-type', 'no-inline-type-literals',
