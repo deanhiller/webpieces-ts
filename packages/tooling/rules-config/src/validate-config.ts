@@ -381,6 +381,11 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
         }
     }
 
+    // Optional: publish reviewer output as a PR comment (defaults true). Must be a boolean when present.
+    if ('checklistComments' in s && typeof s['checklistComments'] !== 'boolean') {
+        errors.push(`[pr-gate] "checklistComments" must be a boolean (defaults to true; set false to keep the PR body-only).`);
+    }
+
     return errors;
 }
 

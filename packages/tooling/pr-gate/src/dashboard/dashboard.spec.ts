@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, ReviewJson } from '@webpieces/rules-config';
-import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow } from './dashboard';
+import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow, CHECKLIST_COMMENT_MARKER } from './dashboard';
 import { CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
 
 const dash = new Dashboard();
@@ -13,6 +13,55 @@ function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
     const base = new ReviewJson('A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
     return Object.assign(base, overrides);
 }
+
+const renderChecklistComment = (rows: ChecklistRow[], verified: boolean): string => dash.renderChecklistComment(rows, verified);
+
+describe('renderChecklistComment', () => {
+    it('emits ONE comment with the marker and a section per checklist, output verbatim', () => {
+        const rows = [
+            new ChecklistRow('morpheus-envvars', CK_PASS, 'verified .npmrc cannot reach any final image'),
+            new ChecklistRow('morpheus-graphql', CK_PASS, 'no breaking schema changes'),
+        ];
+        const md = renderChecklistComment(rows, true);
+        expect(md).toContain(CHECKLIST_COMMENT_MARKER);
+        expect(md).toContain('🟢 2 reviewed, all passed');
+        expect(md).toContain('### 🟢 morpheus-envvars — passed');
+        expect(md).toContain('verified .npmrc cannot reach any final image');
+        expect(md).toContain('### 🟢 morpheus-graphql — passed');
+    });
+
+    it('orders overridden sections first and rolls them up', () => {
+        const rows = [
+            new ChecklistRow('morpheus-envvars', CK_PASS, 'ok'),
+            new ChecklistRow('morpheus-migrations', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
+        ];
+        const md = renderChecklistComment(rows, true);
+        expect(md).toContain('2 reviewed, 🟡 1 overridden');
+        expect(md.indexOf('morpheus-migrations')).toBeLessThan(md.indexOf('morpheus-envvars'));
+        expect(md).toContain('### 🟡 morpheus-migrations — OVERRIDDEN');
+        expect(md).toContain('behind a flag; ONE-2210');
+    });
+
+    it('reflects provenance: verified vs unverified', () => {
+        const rows = [new ChecklistRow('morpheus-envvars', CK_PASS, 'ok')];
+        expect(renderChecklistComment(rows, true)).toContain('verified from the Claude Code harness');
+        expect(renderChecklistComment(rows, false)).toContain('provenance was NOT verified');
+    });
+
+    it('truncates the LONGEST body first to fit the size cap, keeping every verdict heading', () => {
+        const big = 'x'.repeat(70000);
+        const rows = [
+            new ChecklistRow('short-reviewer', CK_PASS, 'tiny note'),
+            new ChecklistRow('huge-reviewer', CK_PASS, big),
+        ];
+        const md = renderChecklistComment(rows, true);
+        expect(md.length).toBeLessThanOrEqual(65000);
+        expect(md).toContain('### 🟢 short-reviewer — passed');
+        expect(md).toContain('tiny note');           // short body untouched
+        expect(md).toContain('### 🟢 huge-reviewer — passed');
+        expect(md).toContain('truncated to fit');     // long body was cut
+    });
+});
 
 describe('computeGateResults', () => {
     it('matches glob patterns and reports matched files', () => {
