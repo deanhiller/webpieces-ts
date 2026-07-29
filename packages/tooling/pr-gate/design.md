@@ -114,8 +114,10 @@ graph TD
     StartUpsertPrCommand --> BuildAffected
     StartUpsertPrCommand --> ChecklistDetector
     StartUpsertPrCommand --> ChecklistManifestService
+    StartUpsertPrCommand --> DiffScope
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> RepoRootFinder
+    StartUpsertPrCommand --> ReviewJsonService
     StartUpsertPrCommand --> RunUpdate
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e

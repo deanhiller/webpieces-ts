@@ -4,12 +4,25 @@ Your repo defines company review checklists in ONE manifest doc (pointed at by
 `pr-gate.checklists.doc` in `webpieces.config.json`). Each checklist names a reviewer **subagent**
 (a `.claude/agents/<subagent>.md`) and, optionally, a detail doc and path `patterns`.
 
-`wp-start-upsert-pr` printed which checklists your diff **matched**. For EACH matched checklist you must:
+`wp-start-upsert-pr` printed which checklists your diff **matched** (by path). Matching is deliberately
+**coarse** — the reviewer subagent makes the fine, content-level judgment by reading the actual diff.
+
+The changed files + the exact base sha the gate uses are in
+`.webpieces/pr-review/<branch>/pr-context.json`:
+
+```json
+{ "base": "<merge-base sha>", "head": "<HEAD sha>", "changedFiles": ["path/a.ts", "db/003.sql", ...] }
+```
+
+For EACH matched checklist you must:
 
 1. **Spawn its named subagent as a SEPARATE subagent** — a *different* one per checklist. The coding
    agent may **not** review its own work, and one reviewer may **not** stand in for several. `wp-finish`
    verifies from the harness's own records that each distinct reviewer actually ran on this branch.
-2. Have that subagent **read its doc + your diff** and decide whether the change satisfies the checklist.
+2. Have that subagent **read its doc, then inspect the real diff** of the changed files it cares about —
+   `git diff <base> HEAD -- <file>` (base is in `pr-context.json`) — and decide whether the change
+   satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
+   `success: true` when the diffs add no new route/queue.)
 3. Have it **write its verdict** to `.webpieces/pr-review/<branch>/review-<id>.json` (one file per
    checklist, so concurrent reviewers never clobber each other). `<id>` is the subagent name.
 
