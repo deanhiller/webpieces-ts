@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext } from '@webpieces/rules-config';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext, RequiredChecklist, ChecklistResult, CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -61,16 +61,21 @@ export class StartUpsertPrCommand {
         const triggered = this.checklistDetector.detectForRepo(repoRoot, defs);
         const required = this.checklistDetector.toRequired(triggered);
         const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
+        // REVIEW ONCE PER BRANCH: a checklist that already has a passing/overridden review-<id>.json from an
+        // earlier cycle is NOT re-reviewed — only the ones still needing a verdict are handed to the AI. The
+        // review files persist in .webpieces, so a second wp-start/wp-finish cycle re-instructs nothing.
+        const results = this.reviewJsonService.loadChecklistResults(reviewPath, required);
+        const toReview = required.filter((req: RequiredChecklist): boolean => !this.alreadyReviewed(req, results));
         // Persist the review-format + process instructions where any failure message can cite them.
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         // Persist the PR diff context (base sha + changed files) so reviewer subagents can `git diff` for
         // content instead of the tooling matching on regexes. Written whenever a base resolves.
         this.writePrContext(repoRoot);
-        this.printChecklistPlan(defs.length, triggered);
+        this.printChecklistPlan(triggered, toReview);
         process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated, pushed, and the build gate passed. Now review your own changes and\n` +
-            `${reviewJsonSchemaHint(reviewPath, required)}\n\n` +
+            `${reviewJsonSchemaHint(reviewPath, toReview)}\n\n` +
             `Then run:  pnpm wp-finish-upsert-pr\n` +
             `(It re-validates the build, renders the dashboard with your risk/violations, and creates/updates the PR.)\n\n`,
         );
@@ -91,17 +96,29 @@ export class StartUpsertPrCommand {
         process.stdout.write(`\n📂 Wrote PR diff context (${changed.length} changed file(s)) → ${p}\n`);
     }
 
-    // Show which review checklists the diff matched (spawn a SEPARATE subagent for each) and which were
-    // skipped because their patterns did not match — so it is visible WHY fewer than all of them ran.
-    private printChecklistPlan(total: number, triggered: readonly TriggeredChecklist[]): void {
-        if (total === 0) return;
+    // A checklist already reviewed on this branch — its review-<id>.json resolves to PASS or OVERRIDDEN —
+    // so it is NOT handed back to the AI to re-review (review once per branch).
+    private alreadyReviewed(req: RequiredChecklist, results: readonly ChecklistResult[]): boolean {
+        const status = this.reviewJsonService.resolveVerdict(req, results).status;
+        return status === CK_PASS || status === CK_OVERRIDDEN;
+    }
+
+    // Show which matched checklists still need a reviewer subagent (spawn each as a distinct one) and which
+    // are already reviewed (reused, not re-run) — so a second cycle re-instructs nothing.
+    private printChecklistPlan(triggered: readonly TriggeredChecklist[], toReview: readonly RequiredChecklist[]): void {
+        if (triggered.length === 0) return;
         process.stdout.write('\n' + SEP + '📋 Review checklists\n' + SEP + '\n');
-        if (triggered.length === 0) {
-            process.stdout.write('No checklist patterns matched this diff — no reviewer subagents needed.\n');
+        const toReviewIds = new Set(toReview.map((r: RequiredChecklist): string => r.id));
+        const reused = triggered.filter((t: TriggeredChecklist): boolean => !toReviewIds.has(t.def.id));
+        for (const t of reused) {
+            process.stdout.write(`  ✓ ${t.def.subagent} — already reviewed on this branch (reusing its review-${t.def.id}.json)\n`);
+        }
+        if (toReview.length === 0) {
+            process.stdout.write('All matched checklists are already reviewed — nothing to re-run. Just write review.json and finish.\n');
             return;
         }
         process.stdout.write('Spawn EACH of these as a SEPARATE subagent (a different one per checklist — do not self-certify):\n');
-        for (const t of triggered) {
+        for (const t of triggered.filter((x: TriggeredChecklist): boolean => toReviewIds.has(x.def.id))) {
             process.stdout.write(`  • subagent "${t.def.subagent}"`);
             if (t.def.doc.trim() !== '') process.stdout.write(` — reads ${t.def.doc}`);
             process.stdout.write(`  (matched: ${t.matchedFiles.slice(0, 4).join(', ')})\n`);

@@ -43,17 +43,9 @@ export class SubagentProvenanceService {
     // Verify a subagent of `expectedAgentType` ran on `branch`. Absent CLAUDE_CODE_SESSION_ID (plain
     // terminal / CI) returns SKIPPED — the feature must not break non-Claude-Code consumers.
     verify(expectedAgentType: string, branch: string): ProvenanceResult {
-        const sessionId = process.env['CLAUDE_CODE_SESSION_ID'] ?? '';
-        if (sessionId.trim() === '') {
-            return new ProvenanceResult(PROVENANCE_SKIPPED,
-                `CLAUDE_CODE_SESSION_ID not set — cannot verify the "${expectedAgentType}" reviewer subagent (plain terminal / CI). Skipping the provenance check.`);
-        }
-        const dir = this.findSubagentsDir(sessionId);
-        if (dir === '') {
-            return new ProvenanceResult(PROVENANCE_MISSING,
-                `No subagents recorded for this session — the "${expectedAgentType}" reviewer subagent must run on this branch before the PR can open.`);
-        }
-        const agentId = this.findMatchingAgentId(dir, expectedAgentType, branch);
+        if (!this.inClaudeSession()) return this.skipped(`the "${expectedAgentType}" reviewer subagent`);
+        const dirs = this.allSubagentsDirs();
+        const agentId = this.findMatchingAgentId(dirs, expectedAgentType, branch);
         return agentId !== ''
             ? new ProvenanceResult(PROVENANCE_OK, `verified "${expectedAgentType}" reviewer subagent ran (agent ${agentId}).`)
             : new ProvenanceResult(PROVENANCE_MISSING,
@@ -62,22 +54,19 @@ export class SubagentProvenanceService {
 
     // Verify EVERY expected reviewer subagent ran on `branch` as a DISTINCT run — the coding agent may not
     // self-certify, and one reviewer may not stand in for several. SKIPPED (pass) without a session id.
+    //
+    // Scoped by BRANCH across ALL sessions (not the current session): once a reviewer ran on this branch in
+    // any session, a later re-push in a NEW session still finds it, so the review is NOT forced to re-run.
+    // That is what keeps "review once per branch" true across sessions. A PR opened outside the gated flow
+    // still has no review-<id>.json, so wp-finish forces the review regardless of provenance.
     verifyDistinct(expectedAgentTypes: readonly string[], branch: string): ProvenanceResult {
         if (expectedAgentTypes.length === 0) return new ProvenanceResult(PROVENANCE_OK, 'no reviewer subagents required');
-        const sessionId = process.env['CLAUDE_CODE_SESSION_ID'] ?? '';
-        if (sessionId.trim() === '') {
-            return new ProvenanceResult(PROVENANCE_SKIPPED,
-                `CLAUDE_CODE_SESSION_ID not set — cannot verify reviewer subagents ran (plain terminal / CI). Skipping the provenance check.`);
-        }
-        const dir = this.findSubagentsDir(sessionId);
-        if (dir === '') {
-            return new ProvenanceResult(PROVENANCE_MISSING,
-                `No subagents recorded for this session — each checklist must be reviewed by its own subagent: ${expectedAgentTypes.join(', ')}.`);
-        }
+        if (!this.inClaudeSession()) return this.skipped('reviewer subagents');
+        const dirs = this.allSubagentsDirs();
         const missing: string[] = [];
         const usedAgentIds = new Set<string>();
         for (const type of expectedAgentTypes) {
-            const agentId = this.findMatchingAgentId(dir, type, branch, usedAgentIds);
+            const agentId = this.findMatchingAgentId(dirs, type, branch, usedAgentIds);
             if (agentId === '') missing.push(type);
             else usedAgentIds.add(agentId);
         }
@@ -87,30 +76,48 @@ export class SubagentProvenanceService {
                 `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${missing.join(', ')}`);
     }
 
-    // The agentId of a matching subagent run for `agentType` on `branch`, or '' if none. `exclude` skips
-    // agentIds already credited to another checklist so one run can't satisfy two.
-    private findMatchingAgentId(dir: string, agentType: string, branch: string, exclude: ReadonlySet<string> = new Set()): string {
-        for (const metaFile of this.metaFiles(dir)) {
-            const agentId = this.agentIdOf(metaFile);
-            if (exclude.has(agentId)) continue;
-            const meta = this.readJson(path.join(dir, metaFile));
-            if (!meta || meta['agentType'] !== agentType) continue;
-            const spawnDepth = meta['spawnDepth'];
-            if (typeof spawnDepth !== 'number' || spawnDepth < 1) continue;
-            if (this.sidechainOnBranch(dir, agentId, branch)) return agentId;
+    // Are we running under Claude Code at all? (CI / plain terminal → provenance is unverifiable → SKIP.)
+    private inClaudeSession(): boolean {
+        return (process.env['CLAUDE_CODE_SESSION_ID'] ?? '').trim() !== '';
+    }
+
+    private skipped(what: string): ProvenanceResult {
+        return new ProvenanceResult(PROVENANCE_SKIPPED,
+            `CLAUDE_CODE_SESSION_ID not set — cannot verify ${what} ran (plain terminal / CI). Skipping the provenance check.`);
+    }
+
+    // The agentId of a matching subagent run for `agentType` on `branch`, searched across ALL sessions'
+    // subagent dirs (branch-scoped, so a run from a prior session still counts). '' if none. `exclude`
+    // skips agentIds already credited to another checklist so one run can't satisfy two.
+    private findMatchingAgentId(dirs: readonly string[], agentType: string, branch: string, exclude: ReadonlySet<string> = new Set()): string {
+        for (const dir of dirs) {
+            for (const metaFile of this.metaFiles(dir)) {
+                const agentId = this.agentIdOf(metaFile);
+                if (exclude.has(agentId)) continue;
+                const meta = this.readJson(path.join(dir, metaFile));
+                if (!meta || meta['agentType'] !== agentType) continue;
+                const spawnDepth = meta['spawnDepth'];
+                if (typeof spawnDepth !== 'number' || spawnDepth < 1) continue;
+                if (this.sidechainOnBranch(dir, agentId, branch)) return agentId;
+            }
         }
         return '';
     }
 
-    // Find the subagents dir for `sessionId` by its UNIQUE id, so the cwd-slug never has to be guessed.
-    private findSubagentsDir(sessionId: string): string {
+    // Every `projects/*/<session>/subagents` dir that exists — matching by the recorded gitBranch (not by
+    // session id) is what makes provenance survive across sessions.
+    private allSubagentsDirs(): string[] {
         const projects = path.join(os.homedir(), '.claude', 'projects');
-        if (!fs.existsSync(projects)) return '';
+        if (!fs.existsSync(projects)) return [];
+        const out: string[] = [];
         for (const proj of this.readDir(projects)) {
-            const candidate = path.join(projects, proj, sessionId, 'subagents');
-            if (fs.existsSync(candidate)) return candidate;
+            const projDir = path.join(projects, proj);
+            for (const session of this.readDir(projDir)) {
+                const candidate = path.join(projDir, session, 'subagents');
+                if (fs.existsSync(candidate)) out.push(candidate);
+            }
         }
-        return '';
+        return out;
     }
 
     private metaFiles(dir: string): string[] {
