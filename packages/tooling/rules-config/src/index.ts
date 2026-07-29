@@ -176,6 +176,7 @@ export {
 } from './subagent-provenance';
 export {
     ReviewJson,
+    PrContext,
     ChecklistResult,
     ChecklistVerdict,
     CK_PASS,

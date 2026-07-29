@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService } from '@webpieces/rules-config';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext } from '@webpieces/rules-config';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -25,6 +25,8 @@ export class StartUpsertPrCommand {
         private readonly runUpdate: RunUpdate,
         private readonly checklistDetector: ChecklistDetector,
         private readonly manifestService: ChecklistManifestService,
+        private readonly reviewJsonService: ReviewJsonService,
+        private readonly diffScope: DiffScope,
     ) {}
 
     async run(): Promise<void> {
@@ -61,6 +63,9 @@ export class StartUpsertPrCommand {
         const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
         // Persist the review-format + process instructions where any failure message can cite them.
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
+        // Persist the PR diff context (base sha + changed files) so reviewer subagents can `git diff` for
+        // content instead of the tooling matching on regexes. Written whenever a base resolves.
+        this.writePrContext(repoRoot);
         this.printChecklistPlan(defs.length, triggered);
         process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
@@ -69,6 +74,21 @@ export class StartUpsertPrCommand {
             `Then run:  pnpm wp-finish-upsert-pr\n` +
             `(It re-validates the build, renders the dashboard with your risk/violations, and creates/updates the PR.)\n\n`,
         );
+    }
+
+    // Write pr-context.json (base/head sha + the full changed-file set, tsOnly:false) so a reviewer
+    // subagent knows the exact base the gate uses and can `git diff <base> HEAD -- <file>` for content.
+    private writePrContext(repoRoot: string): void {
+        const range = this.diffScope.resolveBase(repoRoot);
+        if (!range.base) return;
+        const opts = new ChangedFilesOptions();
+        opts.tsOnly = false;
+        const changed = this.diffScope.getChangedFiles(repoRoot, range.base, range.head, opts);
+        const head = range.head && range.head.trim() !== '' ? range.head : 'HEAD';
+        const p = this.reviewJsonService.writePrContext(
+            repoRoot, this.aiBranchName.getFeatureName(), new PrContext(range.base, head, changed),
+        );
+        process.stdout.write(`\n📂 Wrote PR diff context (${changed.length} changed file(s)) → ${p}\n`);
     }
 
     // Show which review checklists the diff matched (spawn a SEPARATE subagent for each) and which were

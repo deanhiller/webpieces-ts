@@ -100,6 +100,22 @@ export class ChecklistVerdict {
     }
 }
 
+// The PR's diff context, written by wp-start-upsert-pr into `.webpieces/pr-review/<branch>/pr-context.json`
+// so a reviewer subagent knows the exact 3-point base the gate used and the full changed-file set — then
+// reads any file's actual diff with `git diff <base> HEAD -- <file>`. This is what lets a checklist match
+// coarsely by path (in the manifest) while the subagent makes the fine, content-level judgment. Data-only.
+export class PrContext {
+    base: string;          // the 3-point merge-base sha the gate diffs against
+    head: string;          // HEAD sha
+    changedFiles: string[]; // every file changed base..head (NOT tsOnly — includes .sql/.gql/Dockerfile/…)
+
+    constructor(base: string, head: string, changedFiles: string[]) {
+        this.base = base;
+        this.head = head;
+        this.changedFiles = changedFiles;
+    }
+}
+
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
@@ -114,6 +130,21 @@ export class ReviewJsonService {
     // Absolute path of the review.json for a feature — beside pr-body.md, keyed by branch name.
     reviewJsonPath(repoRoot: string, featureName: string): string {
         return path.join(this.prDirFor(repoRoot, featureName), 'review.json');
+    }
+
+    // Absolute path of the pr-context.json for a feature (the diff base/head + changed files).
+    prContextPath(repoRoot: string, featureName: string): string {
+        return path.join(this.prDirFor(repoRoot, featureName), 'pr-context.json');
+    }
+
+    // Persist the PR's diff context so reviewer subagents can read the changed-file set + the exact base
+    // sha (then `git diff <base> HEAD -- <file>` for content). Returns the file path written.
+    writePrContext(repoRoot: string, featureName: string, context: PrContext): string {
+        const dir = this.prDirFor(repoRoot, featureName);
+        fs.mkdirSync(dir, { recursive: true });
+        const p = this.prContextPath(repoRoot, featureName);
+        fs.writeFileSync(p, JSON.stringify(context, null, 2) + '\n');
+        return p;
     }
 
     // Copy-paste schema both commands print. `required` is the set of checklists the diff MATCHED; empty

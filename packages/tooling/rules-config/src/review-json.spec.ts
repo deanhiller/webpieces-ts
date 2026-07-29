@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist } from './review-json';
+import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ReviewJsonService, PrContext } from './review-json';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 
@@ -84,6 +84,17 @@ function tmpReviewWith(results: Record<string, unknown>): string {
     }
     return file;
 }
+
+describe('writePrContext', () => {
+    it('writes base/head/changedFiles JSON to pr-context.json and round-trips', () => {
+        const svc = new ReviewJsonService();
+        const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prctx-'));
+        const p = svc.writePrContext(repo, 'feat', new PrContext('base123', 'head456', ['a.ts', 'db/1.sql']));
+        expect(p).toBe(svc.prContextPath(repo, 'feat'));
+        const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+        expect(parsed).toEqual({ base: 'base123', head: 'head456', changedFiles: ['a.ts', 'db/1.sql'] });
+    });
+});
 
 describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
     it('throws when a matched checklist has no verdict, naming the reviewer subagent', () => {
