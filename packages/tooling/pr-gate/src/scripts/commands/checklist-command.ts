@@ -1,33 +1,25 @@
-import {
-    loadAndValidate, reviewJsonPath, writeTemplate, RepoRootFinder,
-    ChecklistDefinition, ChecklistInstructionsService, ReviewJsonService, RequiredChecklist,
-} from '@webpieces/rules-config';
+import { loadAndValidate, writeTemplate, RepoRootFinder, ChecklistInstructionsService, RequiredChecklist } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
-import { AiBranchName } from '../workflow/git-readAiBranchName';
-import { ChecklistDetector, TriggeredChecklist } from '../workflow/checklist-detector';
 import { ChecklistNotice } from '../workflow/checklist-notice';
+import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * `wp-checklist` — READ-ONLY. Answers the one question the coding agent has at review time: *which reviewer
- * subagents do I owe on THIS diff, and what exactly do I tell them?*
+ * `wp-checklist` — ALWAYS SUCCEEDS, always just lists. It answers the one question the coding agent has at
+ * review time: *which reviewer subagents do I owe on this branch, and what exactly do I tell them?*
  *
- * It exists because that answer used to be smeared across `wp-start-upsert-pr`'s output in two partly
- * duplicated blocks, which made the instruction long, drift-prone, and easy to skim past. Now `wp-start`
- * points here, `wp-finish` fails fast against the same computation, and this command is the single place
- * that renders it — via {@link ChecklistInstructionsService}, shared with both.
- *
- * It NEVER mutates the repo beyond refreshing the AI-facing template, and never blocks: a diff owing no
- * review says so and exits 0. Safe to run any number of times.
+ * Safe to run at any time, including mid-work with a dirty tree — uncommitted and untracked files are part
+ * of the diff it matches against (see {@link ChecklistScanner}). It exits 0 in every case: zero checklists
+ * configured, zero matched, or several still outstanding. Reporting is not gating; `wp-finish-upsert-pr` is
+ * the only command that refuses, and it re-uses this exact scan with `filterAlreadyReviewed: true`, so the
+ * two can never disagree about what is owed.
  */
 @injectable(bindingScopeValues.Singleton)
 export class ChecklistCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
-        private readonly aiBranchName: AiBranchName,
-        private readonly checklistDetector: ChecklistDetector,
-        private readonly reviewJsonService: ReviewJsonService,
+        private readonly checklistScanner: ChecklistScanner,
         private readonly instructions: ChecklistInstructionsService,
         private readonly checklistNotice: ChecklistNotice,
     ) {}
@@ -36,52 +28,54 @@ export class ChecklistCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the long-form doc so the block below can cite a file that is present and current.
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
-        process.stdout.write('\n' + SEP + '📋 Review checklists for this diff\n' + SEP + '\n');
-        process.stdout.write(this.report(repoRoot));
+        process.stdout.write('\n' + SEP + '📋 Review checklists for this branch\n' + SEP + '\n');
+        // filterAlreadyReviewed:false — LIST everything that applies, marking what is already done. Hiding the
+        // done ones would make a second run look like it found fewer checklists than the first.
+        const defined = loadAndValidate(repoRoot).prGate.checklists;
+        process.stdout.write(this.report(this.checklistScanner.scan(repoRoot, defined, new ChecklistScanOptions(false))));
         return Promise.resolve();
     }
 
-    /**
-     * The whole report. Computed in the same order wp-finish-upsert-pr computes it, from the same services,
-     * so "wp-checklist said I was done" and "wp-finish let me through" can never disagree.
-     */
-    private report(repoRoot: string): string {
-        // loadAndValidate is the ONE gate: it rejects a structurally bad `checklists` (including the removed
-        // { doc } manifest shape) AND checks that every guidance doc + reviewer agent file exists. So reaching
-        // here means the set is valid — there is no "configured but silently broken" state left to report.
-        const defs = loadAndValidate(repoRoot).prGate.checklists;
-        const triggered = this.checklistDetector.detectForRepo(repoRoot, defs);
-        if (triggered.length === 0) {
+    private report(scan: ChecklistScan): string {
+        if (scan.applicable.length === 0) {
             // Zero is a SUPPORTED state, never a blocker (see ChecklistNotice).
-            return this.checklistNotice.build(defs.length, 'wp-finish-upsert-pr');
+            return this.checklistNotice.build(scan.defined.length, 'wp-finish-upsert-pr');
         }
-        return this.plan(repoRoot, defs, triggered);
-    }
-
-    // The triggered set split into "already reviewed on this branch" (reused, not re-run) and "still owed".
-    private plan(repoRoot: string, defs: readonly ChecklistDefinition[], triggered: readonly TriggeredChecklist[]): string {
-        const featureName = this.aiBranchName.getFeatureName();
-        const reviewPath = reviewJsonPath(repoRoot, featureName);
-        const required = this.checklistDetector.toRequired(triggered);
-        const results = this.reviewJsonService.loadChecklistResults(reviewPath, required);
-        const pending = this.reviewJsonService.pendingChecklists(required, results);
-        const done = required.filter((r: RequiredChecklist): boolean => !pending.includes(r));
-        const context = this.reviewJsonService.reviewContextFor(repoRoot, featureName);
+        const reviewedIds = new Set(scan.reviewed.map((r: RequiredChecklist): string => r.id));
+        const owed = scan.applicable.filter((r: RequiredChecklist): boolean => !reviewedIds.has(r.id));
         return (
-            `${defs.length} checklist(s) configured, ${required.length} apply to this diff.\n` +
-            this.doneLines(done) +
-            (pending.length === 0 ? this.allDone() : `\n${this.instructions.render(pending, reviewPath, context)}\n`)
+            this.header(scan) +
+            this.rosterLines(scan, owed) +
+            (owed.length === 0 ? this.allDone() : `\n${this.instructions.render(owed, scan.reviewPath, scan.context)}\n`)
         );
     }
 
-    // REVIEW ONCE PER BRANCH: verdict files persist in .webpieces, so a second cycle re-instructs nothing.
-    private doneLines(done: readonly RequiredChecklist[]): string {
-        if (done.length === 0) return '';
-        return done.map((r: RequiredChecklist): string =>
-            `  ✓ ${r.subagent} — already reviewed on this branch (reusing its review-${r.id}.json)\n`).join('');
+    // State the base out loud: a reader (and a reviewer) needs to know the diff was taken from the fork point
+    // of main and that uncommitted work counted, because both change which checklists fired.
+    private header(scan: ChecklistScan): string {
+        const base = scan.forkPoint === '' ? 'no fork point resolved' : `fork point ${scan.forkPoint.slice(0, 8)}`;
+        return `${scan.defined.length} checklist(s) configured, ${scan.applicable.length} apply to this branch\n` +
+            `(${base}, including uncommitted + untracked work).\n\n`;
+    }
+
+    // REVIEW ONCE, PER SUBAGENT: a checklist with a passing verdict is reused, not re-run. 2 of 4 done means
+    // the other 2 still need running, so both groups are shown and only the owed ones become instructions.
+    private rosterLines(scan: ChecklistScan, owed: readonly RequiredChecklist[]): string {
+        const lines = scan.reviewed.map((r: RequiredChecklist): string =>
+            `  ✓ ${r.subagent} — already reviewed on this branch (reusing its review-${r.id}.json)\n`);
+        for (const r of owed) lines.push(`  ▶ ${r.subagent} — ${this.why(r)}\n`);
+        return lines.join('');
+    }
+
+    // Why this one is in scope. A patternless checklist is NOT "matched" — it always runs, over the whole diff.
+    private why(req: RequiredChecklist): string {
+        if (req.matchedPatterns.length === 0) return 'ALWAYS RUNS (no patterns), whole diff in scope';
+        const globs = req.matchedPatterns.map((p: string): string => `"${p}"`).join(', ');
+        return `${req.matchedFiles.length} file(s) matched ${globs}`;
     }
 
     private allDone(): string {
-        return '\n✅ Every checklist that applies is already reviewed — nothing to run.\n   Write review.json and run:  pnpm wp-finish-upsert-pr\n';
+        return '\n✅ Every checklist that applies is already reviewed — nothing to run.\n' +
+            '   Write review.json and run:  pnpm wp-finish-upsert-pr\n';
     }
 }

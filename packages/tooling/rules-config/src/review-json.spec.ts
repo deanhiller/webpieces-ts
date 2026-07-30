@@ -174,7 +174,7 @@ describe('ReviewJsonService.pendingChecklists', () => {
 
 // The ONE renderer behind wp-checklist, wp-finish's fail-fast, and review.json validation errors.
 describe('ChecklistInstructionsService', () => {
-    const inst = new ChecklistInstructionsService();
+    const inst = new ChecklistInstructionsService(new ReviewJsonService());
     const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json');
     const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
 
@@ -199,6 +199,16 @@ describe('ChecklistInstructionsService', () => {
         expect(text.split('"override": ""').length - 1).toBe(1);
     });
 
+    // The block must never get quietly SHORTER. It used to omit the diff lines entirely when no base
+    // resolved, leaving a reviewer with filenames and no way to read the change — indistinguishable from a
+    // complete instruction. An unresolvable base is now stated as the problem it is.
+    it('states an unresolvable base out loud instead of omitting the diff instruction', () => {
+        const req = new RequiredChecklist('a', 'a', '', ['x.ts'], ['**']);
+        const text = inst.render([req], REVIEW, new ChecklistReviewContext());
+        expect(text).toContain('No diff base resolved');
+        expect(text).toContain('merge-base origin/main HEAD');
+    });
+
     it('inlines the diff command with the real base sha and the authoritative full-file-set path', () => {
         const req = new RequiredChecklist('a', 'a', '', ['x'], ['**']);
         const text = inst.render([req], REVIEW, CTX);
@@ -207,6 +217,14 @@ describe('ChecklistInstructionsService', () => {
     });
 
     // A truncated list that looks complete is how a reviewer reviews 6 of 40 files and reports success.
+});
+
+// Split out to keep each describe inside the method-length limit.
+describe('ChecklistInstructionsService — scope wording and lossless lists', () => {
+    const inst = new ChecklistInstructionsService(new ReviewJsonService());
+    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json');
+    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+
     it('never truncates the matched list silently — it states how many were dropped', () => {
         const many = Array.from({ length: 40 }, (_v: unknown, i: number): string => `db/${i}.sql`);
         const req = new RequiredChecklist('a', 'a', '', many, ['**/*.sql']);

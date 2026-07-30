@@ -25,6 +25,29 @@ export class ForkPoint {
         return workflow === 'review' ? prDirFor(repoRoot, featureName) : this.mergeState.mergeDirFor(repoRoot, featureName);
     }
 
+    /**
+     * The 3-point FORK POINT: where this branch diverged from main. `git merge-base origin/main HEAD`,
+     * falling back to a local `main`, and '' when neither ref resolves.
+     *
+     * Deliberately does NOT fetch. The fork point is ABSOLUTE — advancing main cannot move it, because
+     * merge-base is the most recent common ancestor and main's new commits are not on this branch. (Verified
+     * on this repo: main went f415456 → ba8f674 → 61432d6 while merge-base with one branch stayed f415456
+     * throughout.) So a caller that needs only the fork point — see ChecklistScanner — pays no network cost
+     * and works offline. `findForkPoint` below still fetches, because the MERGE flow additionally needs
+     * main's CURRENT head as hash point C, which genuinely does require a fetch.
+     *
+     * Also writes no files and runs no merge-commit scan, so it cannot throw: `wp-checklist` must always
+     * succeed, and a raw merge-from-main is the merge flow's problem to report, not the checklist's.
+     */
+    resolveForkPoint(repoRoot: string): string {
+        for (const ref of ['origin/main', 'main']) {
+            const result = spawnSync('git', ['merge-base', ref, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
+            const sha = (result.stdout ?? '').trim();
+            if (result.status === 0 && sha !== '') return sha;
+        }
+        return '';
+    }
+
     async findForkPoint(workflow: string): Promise<void> {
         if (workflow !== 'review' && workflow !== 'merge') {
             throw new CliExitError(1,
@@ -49,10 +72,11 @@ export class ForkPoint {
 
         process.stderr.write('Finding fork point using git merge-base...\n');
 
-        const forkPointResult = spawnSync('git', ['merge-base', 'origin/main', 'HEAD'], { encoding: 'utf8' });
-        const forkPoint = (forkPointResult.stdout ?? '').trim();
+        // ONE implementation of the fork-point computation, shared with ChecklistScanner. The fetch above is
+        // what this flow needs beyond it (hash point C = main's current head), not the fork point itself.
+        const forkPoint = this.resolveForkPoint(repoRoot);
 
-        if (!forkPoint || forkPointResult.status !== 0) {
+        if (!forkPoint) {
             throw new CliExitError(1, 'ERROR: Could not find common ancestor with origin/main');
         }
 

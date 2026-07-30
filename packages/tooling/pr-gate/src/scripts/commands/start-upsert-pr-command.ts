@@ -1,9 +1,11 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext, ChecklistReviewContext } from '@webpieces/rules-config';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { GitExec } from '../workflow/git-exec';
+import { ForkPoint } from '../workflow/git-findForkPoint';
+import { PrContextWriter } from '../workflow/pr-context-writer';
 import { RunUpdate } from '../workflow/run-update';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -22,8 +24,8 @@ export class StartUpsertPrCommand {
         private readonly branchNaming: BranchNaming,
         private readonly gitExec: GitExec,
         private readonly runUpdate: RunUpdate,
-        private readonly reviewJsonService: ReviewJsonService,
-        private readonly diffScope: DiffScope,
+        private readonly forkPoint: ForkPoint,
+        private readonly prContextWriter: PrContextWriter,
     ) {}
 
     async run(): Promise<void> {
@@ -66,7 +68,7 @@ export class StartUpsertPrCommand {
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         // Persist the PR diff context (base sha + the full changed-file set) — wp-checklist and every reviewer
         // subagent read it, so it must exist before either runs.
-        const context = this.writePrContext(repoRoot);
+        const context = this.prContextWriter.ensure(repoRoot, this.aiBranchName.getFeatureName(), this.forkPoint.resolveForkPoint(repoRoot));
         process.stdout.write('\n' + SEP + '② Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +
@@ -94,22 +96,6 @@ export class StartUpsertPrCommand {
             '   subagents you must spawn, plus the exact review-<id>.json each must write. Do that BEFORE\n' +
             '   finishing — wp-finish-upsert-pr refuses to open the PR until every one of them has run.\n'
         );
-    }
-
-    // Write pr-context.json (base/head sha + the full changed-file set, tsOnly:false) so a reviewer
-    // subagent knows the exact base the gate uses and can `git diff <base> HEAD -- <file>` for content.
-    // Returns what every printed instruction needs to inline; an empty context when no base resolves.
-    private writePrContext(repoRoot: string): ChecklistReviewContext {
-        const range = this.diffScope.resolveBase(repoRoot);
-        if (!range.base) return new ChecklistReviewContext();
-        const opts = new ChangedFilesOptions();
-        opts.tsOnly = false;
-        const changed = this.diffScope.getChangedFiles(repoRoot, range.base, range.head, opts);
-        const head = range.head && range.head.trim() !== '' ? range.head : 'HEAD';
-        const p = this.reviewJsonService.writePrContext(
-            repoRoot, this.aiBranchName.getFeatureName(), new PrContext(range.base, head, changed),
-        );
-        return new ChecklistReviewContext(range.base, p);
     }
 
     // The diff facts, stated where the instruction to use them is — not in a separate block above it.

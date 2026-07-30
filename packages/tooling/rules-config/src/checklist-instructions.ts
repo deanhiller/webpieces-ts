@@ -1,6 +1,6 @@
 import { injectable, bindingScopeValues } from 'inversify';
 import { formatFileList } from './checklist-config';
-import { ChecklistReviewContext, RequiredChecklist } from './review-json';
+import { ChecklistReviewContext, RequiredChecklist, ReviewJsonService } from './review-json';
 
 /**
  * Renders the ONE block that tells the coding agent which reviewer subagents it must run and exactly what
@@ -19,6 +19,12 @@ import { ChecklistReviewContext, RequiredChecklist } from './review-json';
  */
 @injectable(bindingScopeValues.Singleton)
 export class ChecklistInstructionsService {
+    // Injected so the verdict path comes from the ONE place that knows it. This class used to hand-roll
+    // dirname with a regex and a hardcoded '/', a second implementation of ReviewJsonService's
+    // checklistResultPath that agreed on POSIX and disagreed on Windows — the same duplicate-logic trap as
+    // the two different matched-file truncation caps.
+    constructor(private readonly reviewJsonService: ReviewJsonService) {}
+
     /**
      * The full instruction block, or '' when nothing is pending (so a caller can concatenate it blindly).
      * `reviewPath` is the branch's review.json — each verdict file sits beside it as review-<id>.json.
@@ -48,7 +54,7 @@ export class ChecklistInstructionsService {
         // handed this string can actually open it. Printing the raw config value would not resolve.
         if (req.doc.trim() !== '') lines.push(`      doc to read:  ${req.doc}`);
         for (const scopeLine of this.scope(req)) lines.push(`      ${scopeLine}`);
-        lines.push(`      must write:   ${this.verdictPath(reviewPath, req.id)}`);
+        lines.push(`      must write:   ${this.reviewJsonService.checklistResultPath(reviewPath, req.id)}`);
         return lines;
     }
 
@@ -85,7 +91,16 @@ export class ChecklistInstructionsService {
     // The diff every reviewer judges. Stated once, here, because path matching is deliberately coarse and a
     // reviewer that only sees filenames cannot make the content-level call the checklist is asking for.
     private diffLines(context: ChecklistReviewContext): string[] {
-        if (context.baseSha.trim() === '') return ['Also tell each one that path matching is COARSE — judge the real change, not the path.'];
+        // NEVER omit these lines quietly. A reviewer given filenames but no way to read the change cannot make
+        // the content-level judgment the checklist asks for, and a silently shorter instruction block is
+        // indistinguishable from a complete one — so an unresolvable base is stated as the problem it is.
+        if (context.baseSha.trim() === '') {
+            return [
+                '⚠️  No diff base resolved for this branch, so the exact `git diff` command could not be given.',
+                '    Tell each reviewer to diff against main itself (`git diff $(git merge-base origin/main HEAD) HEAD -- <file>`)',
+                '    and note that path matching is COARSE — judge the real change, not the path.',
+            ];
+        }
         const lines = [
             'Also give EACH one the real diff — path matching is COARSE, so judge the change, not the path:',
             `  git diff ${context.baseSha} HEAD -- <file>`,
@@ -96,10 +111,4 @@ export class ChecklistInstructionsService {
         return lines;
     }
 
-    // review-<id>.json beside the branch's review.json — one file per checklist so N concurrent reviewer
-    // subagents never clobber a shared file.
-    private verdictPath(reviewPath: string, checklistId: string): string {
-        const dir = reviewPath.replace(/[/\\][^/\\]*$/, '');
-        return `${dir}/review-${checklistId}.json`;
-    }
 }
