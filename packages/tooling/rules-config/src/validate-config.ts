@@ -110,10 +110,10 @@ export function allRuleNames(): readonly string[] {
 }
 
 function valueHint(def: FieldDef, key?: string): string {
-    // The time-box hatch (either name): 0 keeps the rule active (epoch in the past), a future unix
-    // epoch (seconds) temporarily disables it. Spell that out for the AI. turnOffRuleUntilEpoch is the
-    // preferred, self-describing name; ignoreModifiedUntilEpoch is the still-accepted original.
-    if (key === 'ignoreModifiedUntilEpoch' || key === 'turnOffRuleUntilEpoch') return '0  (0 = active; future unix-epoch seconds = temporarily off)';
+    // The two universal escape hatches, REQUIRED on every rule so they're always visible. Spell out the
+    // "off" value so a fresh config seeds them in the active/no-op state (0 / null), not a placeholder.
+    if (key === 'turnOffRuleUntilEpoch') return '0  (0 = active; future unix-epoch seconds = temporarily off)';
+    if (key === 'turnOffRuleWhileOnBranch') return 'null  (null = always on; a branch name disables the rule while that branch is checked out)';
     return def.enumValues
         ? `"${def.enumValues.join(' | ')}"`
         : def.type === 'string[]' ? '["<string>", ...]'
@@ -148,9 +148,9 @@ function rolloutTip(schema: Record<string, FieldDef>): string {
 }
 
 function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>): string {
-    // Only required fields go in the copy-paste entry. Optional fields (e.g. the
-    // universal escape hatches ignoreRuleWhileOnBranch / ignoreModifiedUntilEpoch)
-    // are listed separately so the snippet doesn't over-state what's mandatory.
+    // Required fields go in the copy-paste entry. The two universal escape hatches
+    // (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) are now REQUIRED, so they land in that block —
+    // which is the whole point: every seeded rule shows both hatches. Optional fields are listed separately.
     const fields = Object.keys(schema);
     const required = fields.filter(f => !schema[f].optional);
     const optional = fields.filter(f => schema[f].optional);
@@ -204,6 +204,20 @@ const RETIRED_FIELD_HINTS: Record<string, string> = {
         'enumerate api libs and do not replace it with a glob).',
 };
 
+// Universal field renames (apply to EVERY rule/guard AND every match-rule, unlike the per-rule
+// RETIRED_FIELD_HINTS). When an entry still uses the old escape-hatch name, the generic unknown-field
+// error is replaced with a precise "renamed to X — rename it" instruction so the fix is mechanical.
+const RENAMED_FIELD_ALIASES: Record<string, string> = {
+    ignoreModifiedUntilEpoch: 'turnOffRuleUntilEpoch',
+    ignoreRuleWhileOnBranch: 'turnOffRuleWhileOnBranch',
+};
+
+// The renamed-field message shared by keyed rules and match-rules.
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function renamedFieldError(scope: string, oldKey: string, newKey: string): string {
+    return `${scope} Unknown field "${oldKey}" — it was renamed to "${newKey}". Rename it (the value carries over unchanged; for the branch hatch, use null when there is no branch).`;
+}
+
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually
 export function validateWebpiecesConfig(
     rawRules: Record<string, Record<string, unknown>>,
@@ -224,11 +238,18 @@ export function validateWebpiecesConfig(
         for (const [key, value] of Object.entries(entry)) {
             const fieldDef = schema[key];
             if (!fieldDef) {
+                const renamedTo = RENAMED_FIELD_ALIASES[key];
+                if (renamedTo) {
+                    errors.push(renamedFieldError(`[${ruleName}]`, key, renamedTo));
+                    continue;
+                }
                 const retiredHint = RETIRED_FIELD_HINTS[`${ruleName}.${key}`];
                 const suffix = retiredHint ? ` ${retiredHint}` : '';
                 errors.push(`[${ruleName}] Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}].${suffix}`);
                 continue;
             }
+            // A nullable field (e.g. turnOffRuleWhileOnBranch) accepts JSON null in addition to its type.
+            if (value === null && fieldDef.nullable) continue;
             if (fieldDef.type === 'string[]') {
                 if (!Array.isArray(value) || !value.every(v => typeof v === 'string'))
                     errors.push(`[${ruleName}] "${key}" must be string[], got ${typeof value}.`);
@@ -240,7 +261,7 @@ export function validateWebpiecesConfig(
         }
         // Required fields must actually be present. Until now the loop above only checked
         // fields that WERE present, so an entry like `{}` (or one missing `mode` /
-        // `ignoreModifiedUntilEpoch`) slipped through. Every non-optional schema field is mandatory.
+        // `turnOffRuleUntilEpoch`) slipped through. Every non-optional schema field is mandatory.
         for (const [key, fieldDef] of Object.entries(schema)) {
             if (!fieldDef.optional && !(key in entry)) {
                 errors.push(`[${ruleName}] Missing required field "${key}". Add ${key}: ${valueHint(fieldDef, key)}.`);
@@ -477,7 +498,7 @@ function regexError(pattern: string): string | undefined {
 // webpieces-disable no-any-unknown -- one match-rule entry from opaque consumer JSON, validated field-by-field
 function validateMatchRule(entry: unknown, index: number): string[] {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-        return [`[match-rules] entry[${index}] must be an object { name, patterns, mainMessage, mode, ignoreModifiedUntilEpoch, ... }.`];
+        return [`[match-rules] entry[${index}] must be an object { name, patterns, mainMessage, mode, turnOffRuleUntilEpoch, turnOffRuleWhileOnBranch, ... }.`];
     }
     // webpieces-disable no-any-unknown -- narrowing one opaque match-rule entry from consumer JSON
     const e = entry as Record<string, unknown>;
@@ -502,12 +523,19 @@ function validateMatchRule(entry: unknown, index: number): string[] {
     if (typeof e['mode'] !== 'string' || !MODIFIED_CODE_MODES.includes(e['mode'] as typeof MODIFIED_CODE_MODES[number]))
         errors.push(`[match-rules] ${label}.mode must be one of: ${MODIFIED_CODE_MODES.join(', ')}.`);
 
-    // Time-box hatch — optional, either name; each must be a number when present (0 = active; a future
-    // unix-epoch in seconds = temporarily off). turnOffRuleUntilEpoch supersedes ignoreModifiedUntilEpoch.
-    if (e['ignoreModifiedUntilEpoch'] !== undefined && typeof e['ignoreModifiedUntilEpoch'] !== 'number')
-        errors.push(`[match-rules] ${label}.ignoreModifiedUntilEpoch must be a number (0 = active; future unix-epoch seconds = temporarily off).`);
-    if (e['turnOffRuleUntilEpoch'] !== undefined && typeof e['turnOffRuleUntilEpoch'] !== 'number')
+    // Both escape hatches are REQUIRED on every match-rule too (same as keyed rules), so they are always
+    // visible. turnOffRuleUntilEpoch: number (0 = active; a future unix-epoch in seconds = temporarily
+    // off). turnOffRuleWhileOnBranch: string | null (null = always on; a branch name disables the rule
+    // while that branch is checked out).
+    if (typeof e['turnOffRuleUntilEpoch'] !== 'number')
         errors.push(`[match-rules] ${label}.turnOffRuleUntilEpoch must be a number (0 = active; future unix-epoch seconds = temporarily off).`);
+    if (!(e['turnOffRuleWhileOnBranch'] === null || typeof e['turnOffRuleWhileOnBranch'] === 'string'))
+        errors.push(`[match-rules] ${label}.turnOffRuleWhileOnBranch must be a string or null (null = no branch / always on).`);
+
+    // The old escape-hatch names were renamed — flag them precisely.
+    for (const oldKey of Object.keys(RENAMED_FIELD_ALIASES)) {
+        if (oldKey in e) errors.push(renamedFieldError(`[match-rules] ${label}`, oldKey, RENAMED_FIELD_ALIASES[oldKey]));
+    }
 
     if (e['options'] !== undefined && !isStringArray(e['options']))
         errors.push(`[match-rules] ${label}.options must be a string[] (omit if not needed).`);
@@ -515,12 +543,6 @@ function validateMatchRule(entry: unknown, index: number): string[] {
         errors.push(`[match-rules] ${label}.allowedPaths must be a string[] of globs (omit if not needed).`);
     if (e['disableAllowed'] !== undefined && typeof e['disableAllowed'] !== 'boolean')
         errors.push(`[match-rules] ${label}.disableAllowed must be a boolean.`);
-    // Branch hatch — optional, either name; each must be a string when present.
-    // turnOffRuleWhileOnBranch supersedes ignoreRuleWhileOnBranch.
-    if (e['ignoreRuleWhileOnBranch'] !== undefined && typeof e['ignoreRuleWhileOnBranch'] !== 'string')
-        errors.push(`[match-rules] ${label}.ignoreRuleWhileOnBranch must be a string.`);
-    if (e['turnOffRuleWhileOnBranch'] !== undefined && typeof e['turnOffRuleWhileOnBranch'] !== 'string')
-        errors.push(`[match-rules] ${label}.turnOffRuleWhileOnBranch must be a string.`);
 
     return errors;
 }

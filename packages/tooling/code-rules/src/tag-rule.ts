@@ -69,8 +69,8 @@ export class TagRuleSpec {
 export interface TagRuleConfig {
     mode?: ProjectMode;
     knownTypes?: string[];
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
+    turnOffRuleUntilEpoch?: number;
+    turnOffRuleWhileOnBranch?: string | null;
 }
 
 type RawProjectJson = { name?: string; tags?: string[] };
@@ -215,8 +215,8 @@ export async function runTagValidator(
 ): Promise<ExecutorResult> {
     const mode: ProjectMode = resolveMode(
         options.mode ?? 'OFF',
-        options.ignoreModifiedUntilEpoch,
-        options.ignoreRuleWhileOnBranch,
+        options.turnOffRuleUntilEpoch,
+        (options.turnOffRuleWhileOnBranch ?? undefined),
         spec.ruleName
     );
     const knownTypes = options.knownTypes && options.knownTypes.length > 0 ? options.knownTypes : spec.defaultKnownTypes;

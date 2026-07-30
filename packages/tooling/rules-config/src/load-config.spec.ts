@@ -15,7 +15,7 @@ function mktmp(contents: Record<string, string>): string {
 }
 
 // Minimal valid config — every built-in present in its correct section, all OFF with an explicit
-// ignoreModifiedUntilEpoch (0 = active; the hatch is optional now but kept here for realism), plus a
+// turnOffRuleUntilEpoch (0 = active; the hatch is optional now but kept here for realism), plus a
 // valid commands.pr-gate block. Code rules go under `rules`; the bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
@@ -44,7 +44,7 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {
     const base: Record<string, unknown> = {};
-    for (const name of names) base[name] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0, ...EXTRA_REQUIRED[name] };
+    for (const name of names) base[name] = { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null, ...EXTRA_REQUIRED[name] };
     return { ...base, ...overrides };
 }
 
@@ -93,8 +93,8 @@ describe('loadAndValidate', () => {
 
     it('merges defaults with overrides and honors mode:OFF; exposes all three views', () => {
         const dir = writeConfig(allRulesOff({
-            'max-file-lines': { limit: 500, mode: 'NEW_AND_MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
-            'no-any-unknown': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
+            'max-file-lines': { limit: 500, mode: 'NEW_AND_MODIFIED_FILES', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+            'no-any-unknown': { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
         }));
         const loaded = loadAndValidate(dir);
 
@@ -111,11 +111,11 @@ describe('loadAndValidate', () => {
 
     it('preserves unknown option keys for consumers that understand them', () => {
         const dir = writeConfig(allRulesOff({
-            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', disableAllowed: false, ignoreModifiedUntilEpoch: 12345 },
+            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', disableAllowed: false, turnOffRuleUntilEpoch: 12345, turnOffRuleWhileOnBranch: null },
         }));
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         expect(rule.options['disableAllowed']).toBe(false);
-        expect(rule.options['ignoreModifiedUntilEpoch']).toBe(12345);
+        expect(rule.options['turnOffRuleUntilEpoch']).toBe(12345);
     });
 
     it('throws InformAiError on malformed JSON', () => {
@@ -150,24 +150,23 @@ describe('loadAndValidate', () => {
     });
 });
 
-describe('loadAndValidate — escape-hatch field aliases', () => {
-    it('canonicalizes turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch onto the ignore* pair', () => {
+describe('loadAndValidate — escape-hatch fields', () => {
+    it('surfaces turnOffRuleUntilEpoch + turnOffRuleWhileOnBranch on the resolved rule (read directly)', () => {
         const dir = writeConfig(allRulesOff({
             'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' },
         }));
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
-        // Downstream readers (RuleGate, AbstractRule.shouldRun) read only the original names, so the
-        // new field values must land there.
-        expect(rule.options['ignoreModifiedUntilEpoch']).toBe(1771931925);
-        expect(rule.options['ignoreRuleWhileOnBranch']).toBe('deanhiller/foo');
+        // RuleGate + AbstractRule.shouldRun read these names directly — no aliasing/normalization anymore.
+        expect(rule.options['turnOffRuleUntilEpoch']).toBe(1771931925);
+        expect(rule.options['turnOffRuleWhileOnBranch']).toBe('deanhiller/foo');
     });
 
-    it('lets the new turnOffRuleUntilEpoch win when both names are present on a rule', () => {
+    it('preserves a null branch hatch (the always-on / no-branch value)', () => {
         const dir = writeConfig(allRulesOff({
-            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0, turnOffRuleUntilEpoch: 999 },
+            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
         }));
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
-        expect(rule.options['ignoreModifiedUntilEpoch']).toBe(999);
+        expect(rule.options['turnOffRuleWhileOnBranch']).toBeNull();
     });
 });
 
@@ -175,7 +174,7 @@ describe('loadAndValidate — sections & commands', () => {
     it('errors when a guard is left in the rules section (placement)', () => {
         const sections = allRulesOff();
         // Misplace a guard into rules.
-        (sections['rules'] as Record<string, unknown>)['pr-creation-or-push-guard'] = { mode: 'ON', ignoreModifiedUntilEpoch: 0 };
+        (sections['rules'] as Record<string, unknown>)['pr-creation-or-push-guard'] = { mode: 'ON', turnOffRuleUntilEpoch: 0 };
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...sections, commands: { 'pr-gate': validPrGate() } }) });
         expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
     });
@@ -238,7 +237,7 @@ describe('loadAndValidate — sections & commands', () => {
 describe('loadAndValidate — config-error banner (unblock instructions)', () => {
     function bannerFor(unknownRuleKey: string): string {
         const sections = allRulesOff();
-        (sections['rules'] as Record<string, unknown>)[unknownRuleKey] = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+        (sections['rules'] as Record<string, unknown>)[unknownRuleKey] = { mode: 'OFF', turnOffRuleUntilEpoch: 0 };
         const dir = writeConfig(sections);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {

@@ -674,7 +674,7 @@ function validateChangedFiles(
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolvePrismaConverterMode(
@@ -698,7 +698,7 @@ async function runValidatorImpl(
     options: PrismaConverterConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping prisma-converter validation (mode: OFF)');

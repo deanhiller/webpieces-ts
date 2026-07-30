@@ -279,7 +279,7 @@ function reportViolations(violations: MethodViolation[], mode: ReturnTypeMode): 
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolveMode(normalMode: ReturnTypeMode, epoch: number | undefined, branchPattern: string | undefined): ReturnTypeMode {
@@ -299,7 +299,7 @@ async function runValidatorImpl(
     options: RequireReturnTypeConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ReturnTypeMode = resolveMode(options.mode ?? 'NEW_METHODS', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ReturnTypeMode = resolveMode(options.mode ?? 'NEW_METHODS', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

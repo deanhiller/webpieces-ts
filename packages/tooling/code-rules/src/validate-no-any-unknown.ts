@@ -323,7 +323,7 @@ function reportViolations(violations: AnyUnknownViolation[], mode: ModifiedCodeM
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
@@ -343,7 +343,7 @@ async function runValidatorImpl(
     options: NoAnyUnknownConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

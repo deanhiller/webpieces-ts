@@ -12,13 +12,11 @@
  *  - rule entry ABSENT (or no webpieces.config.json at all) → RUN. Fail-safe: an older config, or a
  *    repo that has not adopted the keys yet, behaves exactly as it did before this gate existed.
  *  - `"mode": "OFF"` → skip with a reason.
- *  - the time-box / branch escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch, and their
- *    ignoreModifiedUntilEpoch / ignoreRuleWhileOnBranch aliases) → honored when the caller passes
- *    `honorEpoch: true`. All five executors now pass true: a schedule ("do not enforce until <epoch>
- *    / off <branch>") is coherent for any of them, baseline or not (see the comment block above
- *    ValidateArchitectureUnchangedConfig in rules-config/src/rule-configs.ts). The param is retained
- *    so a future caller can still opt a rule out of time-boxing. loadAndValidate has already
- *    canonicalized the new field names onto the ignore* pair, so this reads only the originals.
+ *  - the time-box / branch escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) → honored
+ *    when the caller passes `honorEpoch: true`. All five executors now pass true: a schedule ("do not
+ *    enforce until <epoch> / off <branch>") is coherent for any of them, baseline or not (see the
+ *    comment block above ValidateArchitectureUnchangedConfig in rules-config/src/rule-configs.ts). The
+ *    param is retained so a future caller can still opt a rule out of time-boxing.
  */
 
 import { loadAndValidate, shouldSkipRule } from '@webpieces/rules-config';
@@ -37,8 +35,8 @@ export class RuleGate {
         if (rule.isOff) return 'mode: OFF';
         if (!honorEpoch) return null;
 
-        const epoch = rule.options['ignoreModifiedUntilEpoch'] as number | undefined;
-        const branch = rule.options['ignoreRuleWhileOnBranch'] as string | undefined;
+        const epoch = rule.options['turnOffRuleUntilEpoch'] as number | undefined;
+        const branch = rule.options['turnOffRuleWhileOnBranch'] as string | null | undefined;
         const skip = shouldSkipRule(epoch, branch);
         return skip.skip ? (skip.reason ?? 'temporarily disabled') : null;
     }

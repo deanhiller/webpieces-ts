@@ -236,7 +236,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
 async function runValidatorImpl(options: InjectAnnotationNotNeededForConcreteClassConfig, workspaceRoot: string): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [];
 

@@ -96,12 +96,6 @@ export class ConfigLoader {
         if (errors.length > 0) {
             throw new InformAiError(this.formatConfigErrorsBanner(errors));
         }
-        // Canonicalize the new escape-hatch field names (turnOffRuleUntilEpoch /
-        // turnOffRuleWhileOnBranch) onto their originals on every rule/guard bag, AFTER validation
-        // (so errors name the field the user actually wrote) and BEFORE any typed config / merged
-        // rule is built. overrideRules' per-rule objects are the SAME references as rulesSection /
-        // hookGuardsSection, so this normalizes those too. Match-rules are normalized in parseMatchRules.
-        for (const bag of Object.values(overrideRules)) this.normalizeTurnOffAliases(bag);
 
         const commands = buildCommandsConfig(consumerConfig.commands, legacyPrGate);
         this.applyCommandDefaults(overrideRules, commands);
@@ -170,32 +164,13 @@ export class ConfigLoader {
         return new ExcludePaths(rules, guards);
     }
 
-    // Parse the (already-validated) raw match-rules array into typed MatchRuleConfig[]. Each entry's
-    // new escape-hatch field names are canonicalized onto their originals so the match-rules engine
-    // (which reads config.ignoreModifiedUntilEpoch / config.ignoreRuleWhileOnBranch) needs no change.
+    // Parse the (already-validated) raw match-rules array into typed MatchRuleConfig[]. The entries use
+    // the canonical field names (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) that the match-rules
+    // engine reads directly, so no normalization is needed.
     // webpieces-disable no-any-unknown -- validated array; each entry cast to the typed MatchRuleConfig
     private parseMatchRules(raw: unknown): MatchRuleConfig[] {
         if (!Array.isArray(raw)) return [];
-        // webpieces-disable no-any-unknown -- opaque validated match-rule entry bags from consumer JSON
-        for (const entry of raw as Record<string, unknown>[]) this.normalizeTurnOffAliases(entry);
         return raw as MatchRuleConfig[];
-    }
-
-    /**
-     * Canonicalize the new self-describing escape-hatch names onto the original ones, in place, on one
-     * rule/guard/match-rule option bag: turnOffRuleUntilEpoch → ignoreModifiedUntilEpoch and
-     * turnOffRuleWhileOnBranch → ignoreRuleWhileOnBranch. The new name wins when both are present. So
-     * every downstream reader (AbstractRule.shouldRun, RuleGate, the match-rules engine) keeps reading
-     * the single original pair. Sibling to normalizeDeprecatedKeys, which does this for renamed RULE names.
-     */
-    // webpieces-disable no-any-unknown -- opaque per-rule option bag from consumer JSON
-    private normalizeTurnOffAliases(options: Record<string, unknown>): void {
-        if (options['turnOffRuleUntilEpoch'] !== undefined) {
-            options['ignoreModifiedUntilEpoch'] = options['turnOffRuleUntilEpoch'];
-        }
-        if (options['turnOffRuleWhileOnBranch'] !== undefined) {
-            options['ignoreRuleWhileOnBranch'] = options['turnOffRuleWhileOnBranch'];
-        }
     }
 
     private buildWebpiecesRulesConfig(

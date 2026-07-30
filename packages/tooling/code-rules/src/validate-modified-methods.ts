@@ -403,11 +403,11 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
         console.error('   This rule must be met and cannot be disabled since nx.json disableAllowed is set to false.');
         console.error('   You MUST refactor to reduce method size.');
         console.error('');
-        console.error('   For a major refactor, a human can add "ignoreModifiedUntilEpoch" to nx.json validate-code options.');
+        console.error('   For a major refactor, a human can add "turnOffRuleUntilEpoch" to nx.json validate-code options.');
         console.error('   This is an expiry timestamp (epoch ms) for when we start forcing everyone to meet size rules again.');
         console.error('   Sometimes for speed, we allow methods to expand during a refactor and over time,');
         console.error('   each PR reduces methods as they get touched.');
-        console.error('   AI agents should NOT add ignoreModifiedUntilEpoch - ask a human to do it.');
+        console.error('   AI agents should NOT add turnOffRuleUntilEpoch - ask a human to do it.');
         console.error('');
     }
 }
@@ -420,7 +420,7 @@ export async function runModifiedMethods(
     const disableAllowed = options.disableAllowed ?? true;
 
     const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : { skip: false };
     const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF

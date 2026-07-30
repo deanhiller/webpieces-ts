@@ -7,7 +7,7 @@ import { WEBPIECES_DISABLE } from './constants';
 // Unlike the keyed `rules` (each a framework class with a fixed regex + message),
 // a match-rule is authored ENTIRELY in webpieces.config.json: a `name`, a list of
 // raw-regex `patterns` to flag, a `mainMessage` + `options[]` shown to the AI, and
-// per-entry scoping (`mode`, `allowedPaths`, `disableAllowed`, `ignoreModifiedUntilEpoch`).
+// per-entry scoping (`mode`, `allowedPaths`, `disableAllowed`, `turnOffRuleUntilEpoch`).
 // The framework ships ONE default example — the `no-fetch` guard (see DEFAULT_MATCH_RULES)
 // — and clients add more (no-moment, no-lodash-chain, …) without a framework release.
 //
@@ -36,17 +36,19 @@ export class MatchRuleConfig extends BaseRuleConfig {
         patterns: string[],
         mainMessage: string,
         mode: ModifiedCodeMode,
-        ignoreModifiedUntilEpoch: number,
+        turnOffRuleUntilEpoch: number,
         options: string[] = [],
         disableAllowed: boolean = true,
         allowedPaths: string[] = [],
+        turnOffRuleWhileOnBranch: string | null = null,
     ) {
         super();
         this.name = name;
         this.patterns = patterns;
         this.mainMessage = mainMessage;
         this.mode = mode;
-        this.ignoreModifiedUntilEpoch = ignoreModifiedUntilEpoch;
+        this.turnOffRuleUntilEpoch = turnOffRuleUntilEpoch;
+        this.turnOffRuleWhileOnBranch = turnOffRuleWhileOnBranch;
         this.options = options;
         this.disableAllowed = disableAllowed;
         this.allowedPaths = allowedPaths;

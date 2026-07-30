@@ -27,7 +27,7 @@ export default async function runExecutor(
     context: ExecutorContext
 ): Promise<ExecutorResult> {
     // Epoch-gateable: the existing cycle set can be grandfathered while a refactor lands, so this
-    // rule honors ignoreModifiedUntilEpoch / ignoreRuleWhileOnBranch in addition to mode: OFF.
+    // rule honors turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch in addition to mode: OFF.
     if (new RuleGate().isDisabled(context.root, 'validate-no-architecture-cycles', true)) {
         return { success: true };
     }

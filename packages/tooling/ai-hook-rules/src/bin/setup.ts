@@ -141,7 +141,9 @@ interface MigrateResult {
 }
 
 function seedRule(): RuleEntry {
-    return { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+    // Both escape hatches are seeded (and REQUIRED) so every rule block shows them: 0 = active,
+    // null = no branch scoping. A human/AI edits these to time-box or branch-scope a rule off.
+    return { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
 }
 
 function seedCommands(): Json {

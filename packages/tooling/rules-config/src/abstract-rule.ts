@@ -16,7 +16,7 @@ export abstract class AbstractRule<C extends BaseRuleConfig> {
     /** True unless the rule is `mode: "OFF"` or skipped by a branch/epoch escape hatch. */
     shouldRun(): boolean {
         if (this.config.mode === 'OFF') return false;
-        const skip = shouldSkipRule(this.config.ignoreModifiedUntilEpoch, this.config.ignoreRuleWhileOnBranch);
+        const skip = shouldSkipRule(this.config.turnOffRuleUntilEpoch, this.config.turnOffRuleWhileOnBranch);
         return !skip.skip;
     }
 }

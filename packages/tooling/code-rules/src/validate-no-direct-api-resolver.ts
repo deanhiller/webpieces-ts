@@ -483,7 +483,7 @@ function reportViolations(violations: Violation[], mode: DirectApiResolverMode, 
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolveMode(normalMode: DirectApiResolverMode, epoch: number | undefined, branchPattern: string | undefined): DirectApiResolverMode {
@@ -524,7 +524,7 @@ async function runValidatorImpl(
     options: AngularNoDirectApiInResolverConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: DirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: DirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

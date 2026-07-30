@@ -14,11 +14,13 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
     const hookGuards: Record<string, unknown> = {};
     for (const name of allRuleNames()) {
         // webpieces-disable no-any-unknown -- one rule's opaque option bag
-        const entry: Record<string, unknown> = { mode: 'OFF', ignoreModifiedUntilEpoch: 0 };
+        const entry: Record<string, unknown> = { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
         // Schema-required on this guard only (see rule-configs.ts) — unattended deletion is never a default.
         if (name === 'branch-creation-guard') entry['autoReapMergedBranches'] = false;
         const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
-        target[name] = overrides[name] ?? entry;
+        // Overrides are merged OVER the base entry so a test that only tweaks mode/epoch still carries the
+        // required turnOffRuleWhileOnBranch (and autoReapMergedBranches) from the base.
+        target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
     }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-rule-gate-'));
     fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
@@ -36,7 +38,7 @@ const FUTURE_EPOCH = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
 describe('RuleGate', () => {
     it('runs the rule when it is RUN_EVERY_TIME (the shipped default)', () => {
         const dir = writeConfig({
-            'validate-packagejson': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: 0 },
+            'validate-packagejson': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: 0 },
         });
         expect(new RuleGate().skipReason(dir, 'validate-packagejson', false)).toBeNull();
     });
@@ -47,39 +49,39 @@ describe('RuleGate', () => {
         expect(new RuleGate().isDisabled(dir, 'validate-packagejson', false)).toBe(true);
     });
 
-    it('honors ignoreModifiedUntilEpoch for a baseline rule (honorEpoch = true)', () => {
+    it('honors turnOffRuleUntilEpoch for a baseline rule (honorEpoch = true)', () => {
         const dir = writeConfig({
-            'validate-architecture-unchanged': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: FUTURE_EPOCH },
+            'validate-architecture-unchanged': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
         });
         const reason = new RuleGate().skipReason(dir, 'validate-architecture-unchanged', true);
-        expect(reason).toContain('ignoreModifiedUntilEpoch');
+        expect(reason).toContain('turnOffRuleUntilEpoch');
     });
 
     it('IGNORES the time-box hatch when the caller opts out with honorEpoch = false', () => {
         const dir = writeConfig({
-            'validate-versions-locked': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: FUTURE_EPOCH },
+            'validate-versions-locked': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
         });
         expect(new RuleGate().skipReason(dir, 'validate-versions-locked', false)).toBeNull();
     });
 
     it('honors validate-packagejson time-box now that its executor passes honorEpoch = true', () => {
         const dir = writeConfig({
-            'validate-packagejson': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: FUTURE_EPOCH },
+            'validate-packagejson': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
         });
         expect(new RuleGate().isDisabled(dir, 'validate-packagejson', true)).toBe(true);
     });
 
-    it('honors the new turnOffRuleUntilEpoch field name end-to-end (loadAndValidate canonicalizes it)', () => {
+    it('honors the new turnOffRuleUntilEpoch field name end-to-end (read directly)', () => {
         const dir = writeConfig({
             'validate-packagejson': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
         });
         const reason = new RuleGate().skipReason(dir, 'validate-packagejson', true);
-        expect(reason).toContain('ignoreModifiedUntilEpoch');
+        expect(reason).toContain('turnOffRuleUntilEpoch');
     });
 
     it('a past epoch leaves an epoch-gated rule active', () => {
         const dir = writeConfig({
-            'validate-no-architecture-cycles': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: 0 },
+            'validate-no-architecture-cycles': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: 0 },
         });
         expect(new RuleGate().skipReason(dir, 'validate-no-architecture-cycles', true)).toBeNull();
     });

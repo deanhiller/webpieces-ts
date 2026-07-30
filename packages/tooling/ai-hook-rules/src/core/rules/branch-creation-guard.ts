@@ -189,7 +189,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
     // Mode-aware fix hints. Branches off main follow branchFormat — never the sub-branch
     // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
-    // hard-blocks it and points instead at the ignoreModifiedUntilEpoch escape hatch.
+    // hard-blocks it and points instead at the turnOffRuleUntilEpoch escape hatch.
     get fixHint(): FixHint {
         if (this.worktreeCapCache) return this.worktreeCapFixHint(this.worktreeCapCache);
         if (this.capCache) return this.capFixHint(this.capCache);
@@ -205,7 +205,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
             options.push(new Option(
                 'Sub-branches (branching off another feature branch) are disabled. To temporarily allow one, set ' +
-                "branch-creation-guard.ignoreModifiedUntilEpoch to a future epoch in webpieces.config.json",
+                "branch-creation-guard.turnOffRuleUntilEpoch to a future epoch in webpieces.config.json",
             ));
         } else {
             options.push(new Option(
@@ -285,7 +285,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
                 `stacking it on this branch: ${this.freshMainCommand(requestedName)} ` +
                 `(works here and inside a worktree). ${this.branchFormat}. ` +
                 `You can temporarily turn this off if you truly need a sub-branch by setting ` +
-                `branch-creation-guard.ignoreModifiedUntilEpoch (a future epoch) in webpieces.config.json.`,
+                `branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) in webpieces.config.json.`,
             )];
         }
 
@@ -466,7 +466,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             'in webpieces.config.json.',
         ));
         options.push(new Option(
-            'To bypass this once, set branch-creation-guard.ignoreModifiedUntilEpoch (a future epoch) ' +
+            'To bypass this once, set branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) ' +
             'in webpieces.config.json.',
         ));
 
@@ -523,7 +523,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             'in webpieces.config.json.',
         ));
         options.push(new Option(
-            'To bypass this once, set branch-creation-guard.ignoreModifiedUntilEpoch (a future epoch) ' +
+            'To bypass this once, set branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) ' +
             'in webpieces.config.json.',
         ));
 

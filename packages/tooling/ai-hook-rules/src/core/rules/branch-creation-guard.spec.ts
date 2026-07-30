@@ -141,7 +141,7 @@ describe('branch-creation-guard', () => {
         const msg = violations[0].message;
         expect(msg).toContain('git fetch origin main && git checkout -b dean/another origin/main');
         expect(msg).toContain('instead of stacking it on this branch');
-        expect(msg).toContain('ignoreModifiedUntilEpoch');
+        expect(msg).toContain('turnOffRuleUntilEpoch');
         // The strict mode must NOT dangle the sub-branch naming convention.
         expect(msg).not.toContain('subBranchNaming');
     });
@@ -158,7 +158,7 @@ describe('branch-creation-guard', () => {
             [fh.mainMessage, ...fh.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
 
         const strict = flatten(rule('ON_NO_SUBBRANCHES').fixHint);
-        expect(strict).toContain('ignoreModifiedUntilEpoch');
+        expect(strict).toContain('turnOffRuleUntilEpoch');
         expect(strict).not.toContain('subBranchNaming');
 
         const normal = flatten(rule('ON').fixHint);
@@ -322,7 +322,7 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
         expect(flat).not.toContain('git branch -D');
         expect(flat).toContain('maxLocalBranches');
-        expect(flat).toContain('ignoreModifiedUntilEpoch');
+        expect(flat).toContain('turnOffRuleUntilEpoch');
         expect(flat).toContain('5 unmerged branch(es) with real commits were deliberately SPARED');
     });
 

@@ -161,7 +161,7 @@ function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, br
 }
 
 async function runValidatorImpl(options: NoProcessExitOutsideMainConfig, workspaceRoot: string): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {
