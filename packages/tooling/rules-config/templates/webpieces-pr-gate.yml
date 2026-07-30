@@ -9,12 +9,17 @@
 # TO ENABLE (client repo):
 #   1. Copy this file to .github/workflows/webpieces-pr-gate.yml and commit it.
 #   2. Set a committed "gateSalt" under the pr-gate section of webpieces.config.json (any non-empty string).
-#   3. In branch-protection for `main`, mark the "webpieces/pr-gate" COMMIT STATUS required (NOT this
-#      workflow's job). wp-finish-upsert-pr posts that status directly on the head sha AFTER editing the
-#      PR body, so it is race-free: the push fires `synchronize` before the body edit, and a check that
-#      read the body alone would see the previous head's token and flap. The status is attached to the
-#      sha and simply does not exist until the gated flow (or this workflow) posts it. (Only a repo admin
-#      can set required checks — webpieces cannot do it for you.)
+#   3. In branch-protection for `main`, mark THIS WORKFLOW'S JOB required:
+#        Webpieces PR Gate / Verify webpieces gate token
+#      That is the ONE required check — there is deliberately nothing else to pick. (Only a repo admin
+#      can set required checks; webpieces cannot do it for you.)
+#
+# NOTE if you are upgrading: earlier versions ALSO posted a `webpieces/pr-gate` commit status, and told
+# you to require THAT instead of the job. It is gone. It only existed to recover from a race where
+# wp-finish-upsert-pr pushed before writing the PR body — the body is now written FIRST, so the race
+# cannot happen and the job is safe to require on its own. If you had `webpieces/pr-gate` marked required
+# in branch protection, REPOINT it at the job above, or that context sits Pending forever and blocks
+# every PR.
 #
 # NOTE: the salt is committed/obscurity-grade — it stops unhooked teammates, but a determined reader can
 # read it and forge. It is deliberately not cryptographically sound; see RESPONSE-pr-gate-ci-enforcement.
@@ -26,13 +31,16 @@
 name: Webpieces PR Gate
 on:
   pull_request:
-    # `edited` matters: it re-runs after wp-finish-upsert-pr rewrites the PR body, a fallback for the
-    # push-before-edit ordering. The authoritative signal is the webpieces/pr-gate commit status, though.
+    # `edited` is LOAD-BEARING, not a fallback — do NOT remove it. wp-start-upsert-pr pushes too, and that
+    # push fires `synchronize` while the PR body still carries the PREVIOUS run's token, so the check goes
+    # red. By the time wp-finish-upsert-pr runs, HEAD usually has not moved, so its push is a no-op that
+    # fires NO event — the only thing that re-triggers this job and clears the red is the `edited` event
+    # from finish writing the new body. Drop `edited` and every iteration leaves a stale red.
+    # `synchronize` is equally required: it is what catches an unhooked teammate pushing over a gated PR.
     types: [opened, edited, synchronize, reopened]
 permissions:
   contents: read
   pull-requests: read
-  statuses: write   # wp-check-pr posts the webpieces/pr-gate commit status
 jobs:
   webpieces-pr-gate:
     runs-on: ubuntu-latest

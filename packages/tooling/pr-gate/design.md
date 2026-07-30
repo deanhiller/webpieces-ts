@@ -28,6 +28,7 @@ graph TD
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
     ForkPoint["ForkPoint"]
     GateTokenService["GateTokenService"]
+    GatedPrPublisher["GatedPrPublisher"]
     GatherInfo["GatherInfo"]
     GitExec["GitExec"]
     LandPrCommand["LandPrCommand"]
@@ -65,6 +66,7 @@ graph TD
     FinishUpsertPrCommand --> ChecklistManifestService
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> GateTokenService
+    FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
     FinishUpsertPrCommand --> MergeEnd
     FinishUpsertPrCommand --> MergeState
@@ -75,6 +77,7 @@ graph TD
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
     ForkPoint --> RepoRootFinder
+    GatedPrPublisher --> GitExec
     GatherInfo --> AiBranchName
     GatherInfo --> ForkPoint
     GatherInfo --> GitExec

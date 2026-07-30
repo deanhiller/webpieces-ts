@@ -17,6 +17,7 @@ import { MergeState } from '../workflow/merge-state';
 import { MergeEnd } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
 import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
+import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { Dashboard, DashboardInput, ChecklistRow, CHECKLIST_COMMENT_MARKER } from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -59,6 +60,7 @@ export class FinishUpsertPrCommand {
         private readonly mergeState: MergeState,
         private readonly mergeEnd: MergeEnd,
         private readonly prMerger: PrMerger,
+        private readonly publisher: GatedPrPublisher,
         private readonly dashboard: Dashboard,
         private readonly checklistDetector: ChecklistDetector,
         private readonly manifestService: ChecklistManifestService,
@@ -104,25 +106,24 @@ export class FinishUpsertPrCommand {
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
 
-        // 3. Authoritative build gate, then push, then post.
+        // 3. Authoritative build gate, then post the gated body, then push (that ORDER — see GatedPrPublisher).
         this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
             '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
         ));
         const base = this.branchNaming.baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
-        this.gitExec.ensurePushed(base);
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
         const input = this.computeDashboardInput(repoRoot, true, review, title, required);
-        // Append the hidden HMAC gate token bound to the pushed HEAD sha. A valid token in the PR body is
-        // proof this gated flow ran + passed on this exact commit — CI (`wp-check-pr`) recomputes it. We
-        // reach here only after the build gate + every BLOCK checklist passed, so minting is legitimate.
+        // Append the hidden HMAC gate token bound to the LOCAL HEAD sha — computed BEFORE the push, because
+        // GatedPrPublisher writes the body first so CI's `synchronize` read can never see a stale token. A
+        // valid token in the PR body is proof this gated flow ran + passed on this exact commit, which CI
+        // (`wp-check-pr`) recomputes. We reach here only after the build gate + every BLOCK checklist
+        // passed, so minting is legitimate. Nothing about HMAC(salt, HEAD) needs the remote to have it.
         const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
         const headSha = this.gitOut(['rev-parse', 'HEAD']);
         const body = this.dashboard.renderDashboard(input) + this.gateTokenBody(gateSalt, headSha);
         const result = this.upsertPr(repoRoot, base, body, title, input);
-        // Race-free required check: post the commit status on the head sha AFTER the body edit (see method).
-        this.postGateStatus(headSha, gateSalt);
         // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
         // fatal — the PR is already up by now, so a comment failure only warns.
         this.postChecklistComment(repoRoot, result.prNumber, input.checklists, provenanceVerified);
@@ -131,8 +132,8 @@ export class FinishUpsertPrCommand {
         process.stdout.write(
             '\n' + SEP + '✅ PR finished — here is exactly what I did\n' + SEP + '\n' +
             `   1. validated the build gate (authoritative)\n` +
-            `   2. force-pushed your work to origin/${base}\n` +
-            `   3. ${prNum ? `updated/created PR #${prNum}` : 'created the PR'} titled: "${title}"\n` +
+            `   2. ${prNum ? `wrote the gated body to PR #${prNum}` : 'composed the gated PR body'} titled: "${title}"\n` +
+            `   3. force-pushed your work to origin/${base} (after the body, so CI reads the right token)\n` +
             `   4. ${result.merge.message}\n` +
             `   You are on  ${base}  — same name as the remote branch and the PR head.\n\n`,
         );
@@ -180,28 +181,6 @@ export class FinishUpsertPrCommand {
     private gateTokenBody(gateSalt: string, headSha: string): string {
         const marker = this.gateTokenService.gateTokenMarker(gateSalt, headSha);
         return marker === '' ? '' : `\n\n${marker}\n`;
-    }
-
-    // Post `webpieces/pr-gate = success` as a commit status on the head sha. This is the authoritative,
-    // race-free required check: it is attached to the sha, so unlike the PR body it cannot be read before
-    // it exists. No-op when the repo sets no gateSalt. A failure to post (missing statuses:write) is only
-    // a warning — the CI wp-check-pr workflow still enforces the gate.
-    private postGateStatus(headSha: string, gateSalt: string): void {
-        if (gateSalt.trim() === '' || headSha === '') return;
-        const res = spawnSync('gh', [
-            'api', '--method', 'POST', `repos/{owner}/{repo}/statuses/${headSha}`,
-            '-f', 'state=success',
-            '-f', 'context=webpieces/pr-gate',
-            '-f', 'description=gated flow ran and passed',
-        ], { encoding: 'utf8' });
-        if (res.status !== 0) {
-            process.stderr.write(
-                '⚠️  Could not post the webpieces/pr-gate commit status (needs a token with statuses:write). ' +
-                'The CI wp-check-pr workflow still enforces the gate.\n',
-            );
-        } else {
-            process.stdout.write(`   posted webpieces/pr-gate ✓ status on ${headSha.slice(0, 12)}\n`);
-        }
     }
 
     // Enforce that EACH matched checklist was reviewed by its OWN named subagent, as a DISTINCT run —
@@ -265,33 +244,21 @@ export class FinishUpsertPrCommand {
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /
     // create / merge against `baseBranch` (baseBranchName tolerates a leftover `…wpN` mid-transition).
+    // GatedPrPublisher owns the edit/push/create half and its ORDERING — the gated body goes up before
+    // the push, so CI's `synchronize` read cannot see the previous run's token.
     private upsertPr(repoRoot: string, baseBranch: string, body: string, title: string, input: DashboardInput): UpsertResult {
         const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         fs.mkdirSync(prDir, { recursive: true });
         const bodyFile = path.join(prDir, 'pr-body.md');
         fs.writeFileSync(bodyFile, body + '\n');
 
-        const prNumber = spawnSync(
-            'gh', ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
-            { encoding: 'utf8' },
-        );
-        const num = prNumber.status === 0 ? (prNumber.stdout ?? '').trim() : '';
-
-        if (num === '') {
-            process.stdout.write('Creating PR...\n');
-            const create = spawnSync('gh', ['pr', 'create', '--head', baseBranch, '--base', 'main', '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
-            if (create.status !== 0) {
-                process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
-                return new UpsertResult('', new MergeOutcome(false, false,
-                    '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)'));
-            }
-        } else {
-            process.stdout.write(`Updating PR #${num}...\n`);
-            const edit = spawnSync('gh', ['pr', 'edit', num, '--title', title, '--body-file', bodyFile], { stdio: 'inherit' });
-            if (edit.status !== 0) {
-                process.stderr.write(`⚠️  gh pr edit failed — PR #${num} still shows its OLD title/body. The new body is in:\n  ` + bodyFile + '\n');
-            }
+        const published = this.publisher.publish(baseBranch, title, bodyFile);
+        if (published.createFailed) {
+            process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
+            return new UpsertResult('', new MergeOutcome(false, false,
+                '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)'));
         }
+        const num = published.number;
 
         // Set the squash-merge SUBJECT to the PR title (+ the `(#N)` GitHub normally appends, which an
         // explicit --subject would otherwise drop) and the BODY to the compact commit summary, so main's

@@ -137,6 +137,14 @@
                     "level": 2
                 },
                 {
+                    "id": "GatedPrPublisher",
+                    "className": "GatedPrPublisher",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/gated-pr-publisher.ts",
+                    "level": 2
+                },
+                {
                     "id": "GatherInfo",
                     "className": "GatherInfo",
                     "kind": "class",
@@ -456,6 +464,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "GatedPrPublisher",
+                    "injection": "type",
+                    "token": "GatedPrPublisher",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/gated-pr-publisher.ts#GatedPrPublisher",
+                    "paramName": "publisher",
+                    "paramType": "GatedPrPublisher"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "GitExec",
                     "injection": "type",
                     "token": "GitExec",
@@ -543,6 +560,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "GatedPrPublisher",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
                 },
                 {
                     "from": "GatherInfo",
