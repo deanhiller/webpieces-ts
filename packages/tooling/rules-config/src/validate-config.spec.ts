@@ -525,10 +525,58 @@ function repoWithManifest(items: unknown[], extraDocs: string[] = []): string {
     return dir;
 }
 
+// The PRIMARY shape: the checklist array right in webpieces.config.json, where a tool can read it.
+// webpieces.config.json is the first file a coding agent reads, so a rationale note beside gateSalt is a
+// bypass how-to in the most-read file in the repo. It is the ONE *Why key that is rejected outright.
+describe('validatePrGateSection rejects gateSaltWhy', () => {
+    it('tells the consumer to delete it, so the next validate on upgrade forces removal', () => {
+        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gateSalt: 's', gateSaltWhy: 'it works like this...' };
+        const errors = validatePrGateSection(section);
+        expect(errors.some((e: string): boolean => /DELETE the "gateSaltWhy" key/.test(e))).toBe(true);
+    });
+
+    it('leaves every other *Why rationale key alone', () => {
+        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', buildCommandWhy: 'because', gatesWhy: 'because' };
+        expect(validatePrGateSection(section)).toEqual([]);
+    });
+});
+
+describe('validatePrGateSection checklists (array in webpieces.config.json)', () => {
+    it('accepts a well-formed array with repo-relative docs', () => {
+        const dir = repoWithManifest([], ['db.md']);
+        const errors = validatePrGateSection(validPrGate([
+            { subagent: 'db-reviewer', doc: '.claude/review/db.md', patterns: ['**/*.sql'] },
+        ]), dir);
+        expect(errors).toEqual([]);
+    });
+
+    it('resolves item docs REPO-relative, not relative to any manifest doc', () => {
+        const dir = repoWithManifest([], ['db.md']);
+        const errors = validatePrGateSection(validPrGate([{ subagent: 'db-reviewer', doc: 'db.md' }]), dir);
+        expect(errors.some((e: string): boolean => /\.doc "db\.md" does not exist/.test(e))).toBe(true);
+    });
+
+    it('rejects a non-object entry, a non-string doc, and non-string patterns', () => {
+        expect(validatePrGateSection(validPrGate(['nope'])).some((e: string): boolean => /checklists\[0\] must be an object/.test(e))).toBe(true);
+        expect(validatePrGateSection(validPrGate([{ subagent: 'r', doc: 7 }])).some((e: string): boolean => /checklists\[0\]\.doc must be a string/.test(e))).toBe(true);
+        expect(validatePrGateSection(validPrGate([{ subagent: 'r', patterns: [1] }])).some((e: string): boolean => /checklists\[0\]\.patterns must be a string\[\]/.test(e))).toBe(true);
+    });
+
+    it('rejects a duplicate subagent in the array shape too', () => {
+        const dir = repoWithManifest([]);
+        const errors = validatePrGateSection(validPrGate([{ subagent: 'r' }, { subagent: 'r' }]), dir);
+        expect(errors.some((e: string): boolean => /duplicate subagent "r"/.test(e))).toBe(true);
+    });
+
+    it('an empty array is valid — it means "no checklists"', () => {
+        expect(validatePrGateSection(validPrGate([]), repoWithManifest([]))).toEqual([]);
+    });
+});
+
 describe('validatePrGateSection checklists ({ doc } manifest)', () => {
-    it('rejects checklists that is not an object with a doc', () => {
-        const errors = validatePrGateSection(validPrGate([{ subagent: 'x' }]));
-        expect(errors.some((e: string): boolean => /"checklists" must be an object \{ "doc"/.test(e))).toBe(true);
+    it('rejects checklists that is neither an array nor an object with a doc', () => {
+        const errors = validatePrGateSection(validPrGate('nope'));
+        expect(errors.some((e: string): boolean => /"checklists" must be an array/.test(e))).toBe(true);
     });
 
     it('rejects an empty checklists.doc', () => {
@@ -560,10 +608,10 @@ describe('validatePrGateSection checklists ({ doc } manifest)', () => {
         expect(errors.some((e: string): boolean => /checklists\[0\].subagent must be a non-empty string/.test(e))).toBe(true);
     });
 
-    it('rejects an item doc that does not exist', () => {
+    it('rejects an item doc that does not exist, naming its resolved repo-relative path', () => {
         const dir = repoWithManifest([{ subagent: 'r', doc: 'gone.md' }]);
         const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors.some((e: string): boolean => /\.doc "gone.md" does not exist/.test(e))).toBe(true);
+        expect(errors.some((e: string): boolean => /\.doc "\.claude\/review\/gone\.md" does not exist/.test(e))).toBe(true);
     });
 
     it('rejects a doc with no manifest block', () => {

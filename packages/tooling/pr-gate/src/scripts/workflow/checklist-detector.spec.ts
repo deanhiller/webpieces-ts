@@ -38,6 +38,19 @@ describe('ChecklistDetector.detect', () => {
         expect(triggered[0].matchedFiles).toEqual(['ops/Dockerfile', '.env.prod']);
     });
 
+    // The printed instruction says WHAT matched, so a reviewer can weigh a precise glob against a blanket
+    // one. Only the globs that actually fired are reported — not the checklist's whole pattern list.
+    it('records only the patterns that actually hit a changed file', () => {
+        const d = def('deploy-reviewer', ['**/*.sql', 'terraform/**', '**/Dockerfile']);
+        const triggered = detector.detect([d], ['db/1.sql', 'terraform/main.tf']);
+        expect(triggered[0].matchedPatterns).toEqual(['**/*.sql', 'terraform/**']);
+    });
+
+    it('reports NO matched patterns for a patternless checklist (it runs on every PR)', () => {
+        const triggered = detector.detect([def('always-reviewer', [])], ['a.ts']);
+        expect(triggered[0].matchedPatterns).toEqual([]);
+    });
+
     it('toRequired maps every matched checklist to the RequiredChecklist shape', () => {
         const required = detector.toRequired(detector.detect([def()], ['db/001.sql']));
         expect(required).toHaveLength(1);
@@ -45,6 +58,7 @@ describe('ChecklistDetector.detect', () => {
         expect(required[0].subagent).toBe('migrations-reviewer');
         expect(required[0].doc).toBe('.claude/review/migrations-reviewer.md');
         expect(required[0].matchedFiles).toEqual(['db/001.sql']);
+        expect(required[0].matchedPatterns).toEqual(['**/*.sql']);
     });
 });
 

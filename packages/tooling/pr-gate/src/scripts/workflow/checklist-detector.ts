@@ -8,10 +8,14 @@ import { injectable, bindingScopeValues } from 'inversify';
 export class TriggeredChecklist {
     def: ChecklistDefinition;
     matchedFiles: string[];
+    // Which of `def.patterns` actually hit a changed file. Carried so the printed instruction can say WHAT
+    // matched, not just which files: a reviewer judges a `db/migrations/**` hit differently from a `**` one.
+    matchedPatterns: string[];
 
-    constructor(def: ChecklistDefinition, matchedFiles: string[]) {
+    constructor(def: ChecklistDefinition, matchedFiles: string[], matchedPatterns: string[] = []) {
         this.def = def;
         this.matchedFiles = matchedFiles;
+        this.matchedPatterns = matchedPatterns;
     }
 }
 
@@ -35,9 +39,15 @@ export class ChecklistDetector {
             const matched = def.patterns.length === 0
                 ? [...changedFiles]
                 : changedFiles.filter((f: string): boolean => isPathExcluded(f, def.patterns));
-            if (matched.length > 0) triggered.push(new TriggeredChecklist(def, matched));
+            if (matched.length > 0) triggered.push(new TriggeredChecklist(def, matched, this.firedPatterns(def, changedFiles)));
         }
         return triggered;
+    }
+
+    // Which of a checklist's globs hit at least one changed file. [] for a patternless checklist (it matches
+    // every PR, and saying "matched by nothing" would read as a bug).
+    private firedPatterns(def: ChecklistDefinition, changedFiles: readonly string[]): string[] {
+        return def.patterns.filter((p: string): boolean => changedFiles.some((f: string): boolean => isPathExcluded(f, [p])));
     }
 
     // Resolve the diff base for the local branch, then detect. Returns [] when there is no base to diff.
@@ -63,6 +73,6 @@ export class ChecklistDetector {
     // consume.
     toRequired(triggered: readonly TriggeredChecklist[]): RequiredChecklist[] {
         return triggered.map((t: TriggeredChecklist): RequiredChecklist =>
-            new RequiredChecklist(t.def.id, t.def.subagent, t.def.doc, t.matchedFiles));
+            new RequiredChecklist(t.def.id, t.def.subagent, t.def.doc, t.matchedFiles, t.matchedPatterns));
     }
 }

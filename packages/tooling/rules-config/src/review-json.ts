@@ -33,14 +33,36 @@ export class ChecklistResult {
 export class RequiredChecklist {
     id: string;             // = subagent name; keys review-<id>.json
     subagent: string;       // reviewer agent that must run (agentType the harness stamps)
-    doc: string;            // guidance doc the reviewer reads ('' → it reads the manifest doc)
+    doc: string;            // REPO-RELATIVE guidance doc the reviewer reads ('' → it reads the manifest doc)
     matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
+    // Which of the checklist's OWN globs actually fired. Printed so a reviewer can judge how coarse the
+    // match was — a precise `db/migrations/**` hit means something different from a blanket `**` — and the
+    // template tells reviewers that matching IS deliberately coarse. [] = no patterns (matches every PR).
+    matchedPatterns: string[];
 
-    constructor(id: string, subagent: string, doc: string, matchedFiles: string[]) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(id: string, subagent: string, doc: string, matchedFiles: string[], matchedPatterns: string[] = []) {
         this.id = id;
         this.subagent = subagent;
         this.doc = doc;
         this.matchedFiles = matchedFiles;
+        this.matchedPatterns = matchedPatterns;
+    }
+}
+
+/**
+ * The per-PR facts every reviewer subagent needs GIVEN to it, alongside its own checklist: the exact base
+ * sha the gate diffs against and the file holding the complete changed-file set. Both used to live only in
+ * a doc the printed instruction told the AI to go read, one indirection away from the instruction to hand
+ * them over — so the printed block could not stand on its own. Data-only; empty = omit those lines.
+ */
+export class ChecklistReviewContext {
+    baseSha: string;        // the 3-point merge-base sha; `git diff <baseSha> HEAD -- <file>`
+    prContextPath: string;  // path of pr-context.json — the AUTHORITATIVE full changed-file set
+
+    constructor(baseSha = '', prContextPath = '') {
+        this.baseSha = baseSha;
+        this.prContextPath = prContextPath;
     }
 }
 
@@ -147,10 +169,33 @@ export class ReviewJsonService {
         return p;
     }
 
+    /**
+     * The review context for a feature, recovered from the pr-context.json wp-start-upsert-pr already wrote.
+     * Lets wp-finish-upsert-pr's "you still owe me review-<id>.json" message inline the SAME self-sufficient
+     * per-reviewer block start printed, instead of a checklist name and an indirection. Empty when the file
+     * is absent or unreadable — the block then just omits those lines.
+     */
+    reviewContextFor(repoRoot: string, featureName: string): ChecklistReviewContext {
+        const p = this.prContextPath(repoRoot, featureName);
+        if (!fs.existsSync(p)) return new ChecklistReviewContext();
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable context file degrades to fewer printed lines, never a crash
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            // webpieces-disable no-any-unknown -- parsed JSON is opaque until narrowed on the next line
+            const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>;
+            const base = typeof raw['base'] === 'string' ? (raw['base'] as string) : '';
+            return new ChecklistReviewContext(base, p);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return new ChecklistReviewContext('', p);
+        }
+    }
+
     // Copy-paste schema both commands print. `required` is the set of checklists the diff MATCHED; empty
     // ⇒ output identical to a repo with no checklists. Non-empty ⇒ appends per-checklist instructions
     // naming the reviewer subagent + doc + the review-<id>.json to write.
-    reviewJsonSchemaHint(filePath: string, required: readonly RequiredChecklist[] = []): string {
+    reviewJsonSchemaHint(filePath: string): string {
         return (
             `Write your PR review to:\n  ${filePath}\n\n` +
             `with this exact JSON shape (riskEmoji optional — derived from riskLevel):\n\n` +
@@ -162,34 +207,13 @@ export class ReviewJsonService {
             `  "violations": ["pattern/architecture violations you found (empty array if none)"],\n` +
             `  "risks": ["notable risks (empty array if none)"],\n` +
             `  "filesToReview": ["paths a human should look at (empty array if none)"]\n` +
-            `}` +
-            this.requiredChecklistHint(filePath, required)
+            `}`
         );
     }
 
     // The per-checklist review file path that sits beside review.json: review-<id>.json.
     checklistResultPath(reviewJsonFilePath: string, checklistId: string): string {
         return path.join(path.dirname(reviewJsonFilePath), `review-${checklistId}.json`);
-    }
-
-    // The matched-checklist instruction block, appended ONLY when the diff matched a checklist. Each matched
-    // checklist must be reviewed by its OWN subagent (a distinct one), which writes review-<id>.json.
-    private requiredChecklistHint(reviewJsonFilePath: string, required: readonly RequiredChecklist[]): string {
-        if (required.length === 0) return '';
-        const lines: string[] = ['', '', 'This diff MATCHED company review checklist(s). Spawn EACH named subagent as a SEPARATE'];
-        lines.push('subagent (a different one per checklist — the coding agent may NOT self-certify). Each reads its');
-        lines.push('doc + the diff and writes its own review-<id>.json with this shape:');
-        lines.push('');
-        lines.push('  { "id": "<id>", "success": true, "output": "what you checked / found", "override": "" }');
-        lines.push('  (success:false with no non-empty "override" refuses the PR; a non-empty override ships it 🟡.)');
-        lines.push('');
-        for (const req of required) {
-            lines.push(`  • [${req.id}] reviewer subagent: ${req.subagent}`);
-            lines.push(`      write: ${this.checklistResultPath(reviewJsonFilePath, req.id)}`);
-            if (req.doc.trim() !== '') lines.push(`      doc to read: ${req.doc}`);
-            if (req.matchedFiles.length > 0) lines.push(`      matched: ${req.matchedFiles.slice(0, 5).join(', ')}`);
-        }
-        return lines.join('\n');
     }
 
     /**
@@ -202,14 +226,14 @@ export class ReviewJsonService {
     loadReviewJson(filePath: string, required: readonly RequiredChecklist[] = []): ReviewJson {
         if (!fs.existsSync(filePath)) {
             throw new InformAiError(
-                `Required review.json not found.\n\n${this.reviewJsonSchemaHint(filePath, required)}\n\n` +
+                `Required review.json not found.\n\n${this.reviewJsonSchemaHint(filePath)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }
 
-        const raw = this.parseReviewJson(fs.readFileSync(filePath, 'utf8'), filePath, required);
+        const raw = this.parseReviewJson(fs.readFileSync(filePath, 'utf8'), filePath);
         if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-            throw new InformAiError(`review.json must be a JSON object.\n\n${this.reviewJsonSchemaHint(filePath, required)}`);
+            throw new InformAiError(`review.json must be a JSON object.\n\n${this.reviewJsonSchemaHint(filePath)}`);
         }
 
         const errors: string[] = [];
@@ -236,7 +260,7 @@ export class ReviewJsonService {
             throw new InformAiError(
                 `review.json has ${errors.length} error(s) — fix ALL, then re-run pnpm wp-finish-upsert-pr:\n\n` +
                 errors.map((e: string): string => `  • ${e}`).join('\n') +
-                `\n\n${this.reviewJsonSchemaHint(filePath, required)}`,
+                `\n\n${this.reviewJsonSchemaHint(filePath)}`,
             );
         }
 
@@ -257,6 +281,19 @@ export class ReviewJsonService {
             this.asStringArray(raw['filesToReview']),
             results,
         );
+    }
+
+    /**
+     * The checklists that still OWE a verdict: no review-<id>.json at all, a malformed one, or one whose
+     * verdict is an un-overridden FAIL. This is the set every message lists — a checklist already PASSed or
+     * OVERRIDDEN on this branch is deliberately NOT re-listed, because re-instructing it invites a redundant
+     * second run and reads as though the earlier verdict did not count.
+     */
+    pendingChecklists(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): RequiredChecklist[] {
+        return required.filter((req: RequiredChecklist): boolean => {
+            const status = this.resolveVerdict(req, results).status;
+            return status !== CK_PASS && status !== CK_OVERRIDDEN;
+        });
     }
 
     // Read the per-checklist verdict files `review-<id>.json` beside review.json — one per matched checklist.
@@ -338,10 +375,9 @@ export class ReviewJsonService {
         return value.filter((v: unknown): v is string => typeof v === 'string');
     }
 
-    // Parse opaque AI-authored JSON, converting a SyntaxError into a readable InformAiError. `required`
-    // is threaded through so a JSON syntax error still prints the checklist instructions the AI needs.
+    // Parse opaque AI-authored JSON, converting a SyntaxError into a readable InformAiError.
     // webpieces-disable no-any-unknown -- returns the opaque parsed object; loadReviewJson narrows each field
-    private parseReviewJson(raw: string, filePath: string, required: readonly RequiredChecklist[]): Record<string, unknown> {
+    private parseReviewJson(raw: string, filePath: string): Record<string, unknown> {
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: convert JSON.parse SyntaxError to an InformAiError for the AI
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -350,7 +386,7 @@ export class ReviewJsonService {
         } catch (err: unknown) {
             const error = toError(err);
             throw new InformAiError(
-                `review.json is not valid JSON (${error.message}).\n\n${this.reviewJsonSchemaHint(filePath, required)}\n\n` +
+                `review.json is not valid JSON (${error.message}).\n\n${this.reviewJsonSchemaHint(filePath)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }
@@ -371,8 +407,8 @@ export function reviewJsonPath(repoRoot: string, featureName: string): string {
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to ReviewJsonService; removed once consumers inject it
-export function reviewJsonSchemaHint(filePath: string, required: readonly RequiredChecklist[] = []): string {
-    return reviewJsonSvc.reviewJsonSchemaHint(filePath, required);
+export function reviewJsonSchemaHint(filePath: string): string {
+    return reviewJsonSvc.reviewJsonSchemaHint(filePath);
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to ReviewJsonService; removed once consumers inject it

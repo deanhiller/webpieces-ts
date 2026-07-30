@@ -156,10 +156,14 @@ export {
 } from './pr-gate-config';
 export {
     ChecklistDefinition,
+    ChecklistSource,
     toChecklist,
+    resolveChecklistDoc,
+    formatFileList,
 } from './checklist-config';
 export type { RawChecklistItem } from './checklist-config';
 export { ChecklistManifestService } from './checklist-manifest';
+export { ChecklistInstructionsService } from './checklist-instructions';
 export {
     GateTokenService,
     computeGateToken,
@@ -184,6 +188,7 @@ export {
     CK_FAIL,
     CK_MISSING,
     RequiredChecklist,
+    ChecklistReviewContext,
     ReviewJsonService,
     loadReviewJson,
     prDirFor,

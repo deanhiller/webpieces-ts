@@ -1,12 +1,9 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService, ChecklistDefinition, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext, RequiredChecklist, ChecklistResult, CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
-import { ChecklistNotice } from '../workflow/checklist-notice';
-import { TriggeredChecklist } from '../workflow/checklist-detector';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext, ChecklistReviewContext } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
-import { ChecklistDetector } from '../workflow/checklist-detector';
 import { GitExec } from '../workflow/git-exec';
 import { RunUpdate } from '../workflow/run-update';
 
@@ -25,11 +22,8 @@ export class StartUpsertPrCommand {
         private readonly buildAffected: BuildAffected,
         private readonly gitExec: GitExec,
         private readonly runUpdate: RunUpdate,
-        private readonly checklistDetector: ChecklistDetector,
-        private readonly manifestService: ChecklistManifestService,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly diffScope: DiffScope,
-        private readonly checklistNotice: ChecklistNotice,
     ) {}
 
     async run(): Promise<void> {
@@ -61,41 +55,57 @@ export class StartUpsertPrCommand {
         this.handOffToReview(repoRoot);
     }
 
-    // Hand the AI its next step: write review.json, then run finish (which posts the PR). Computes the
-    // checklists this diff MATCHED (from the manifest doc) so the hint names each reviewer subagent to
-    // spawn BEFORE review.json is written — and, when NOTHING matched, says so instead of staying silent
-    // (zero checklists is a supported state, never a blocker — see ChecklistNotice).
+    /**
+     * Hand the AI its next step: run `wp-checklist`, write review.json, then run finish (which posts the PR).
+     *
+     * This USED to compute the matched checklists and print every reviewer's full instructions inline — twice,
+     * in two blocks that could drift. That detail now lives in ONE command, `wp-checklist`, which wp-finish
+     * validates against; here we only point at it. Keeping this section short is the point: it is the block
+     * the AI must actually act on, and burying the three steps in forty lines of reviewer detail is how a
+     * step gets skipped.
+     */
     private handOffToReview(repoRoot: string): void {
-        const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklistDoc);
-        const triggered = this.checklistDetector.detectForRepo(repoRoot, defs);
-        const required = this.checklistDetector.toRequired(triggered);
         const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
-        // REVIEW ONCE PER BRANCH: a checklist that already has a passing/overridden review-<id>.json from an
-        // earlier cycle is NOT re-reviewed — only the ones still needing a verdict are handed to the AI. The
-        // review files persist in .webpieces, so a second wp-start/wp-finish cycle re-instructs nothing.
-        const results = this.reviewJsonService.loadChecklistResults(reviewPath, required);
-        const toReview = required.filter((req: RequiredChecklist): boolean => !this.alreadyReviewed(req, results));
         // Persist the review-format + process instructions where any failure message can cite them.
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
-        // Persist the PR diff context (base sha + changed files) so reviewer subagents can `git diff` for
-        // content instead of the tooling matching on regexes. Written whenever a base resolves.
-        this.writePrContext(repoRoot);
-        this.printChecklistPlan(repoRoot, defs, triggered, toReview);
+        // Persist the PR diff context (base sha + the full changed-file set) — wp-checklist and every reviewer
+        // subagent read it, so it must exist before either runs.
+        const context = this.writePrContext(repoRoot);
         process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated and the build gate passed (nothing pushed yet — finish does the one push).\n` +
-            `Now review your own changes and\n` +
-            `${reviewJsonSchemaHint(reviewPath, toReview)}\n\n` +
-            `Then run:  pnpm wp-finish-upsert-pr\n` +
-            `(It re-validates the build, renders the dashboard with your risk/violations, and creates/updates the PR.)\n\n`,
+            `${this.contextLines(context)}\n` +
+            `${this.checklistPointer(repoRoot)}\n` +
+            `Then review your own changes and\n` +
+            `${reviewJsonSchemaHint(reviewPath)}\n\n` +
+            `Finally run:  pnpm wp-finish-upsert-pr\n` +
+            `(It re-validates the build, re-checks every checklist, renders the dashboard, and creates/updates the PR.)\n\n`,
+        );
+    }
+
+    /**
+     * Step 1 of the review: find out what review this diff owes. A repo with checklists gets pointed at
+     * `wp-checklist`; a repo with none is told plainly that it has none, because printing "run wp-checklist"
+     * forever at a repo that will never have one is noise, and silence reads as "a checklist passed".
+     */
+    private checklistPointer(repoRoot: string): string {
+        if (loadAndValidate(repoRoot).prGate.checklists.isEmpty()) {
+            return '📋 Review checklists: NONE CONFIGURED for this repo — nothing to run, and that is fine.\n';
+        }
+        return (
+            '📋 FIRST run:  pnpm wp-checklist\n' +
+            '   It validates this repo\'s checklist patterns against your diff and prints WHICH reviewer\n' +
+            '   subagents you must spawn, plus the exact review-<id>.json each must write. Do that BEFORE\n' +
+            '   finishing — wp-finish-upsert-pr refuses to open the PR until every one of them has run.\n'
         );
     }
 
     // Write pr-context.json (base/head sha + the full changed-file set, tsOnly:false) so a reviewer
     // subagent knows the exact base the gate uses and can `git diff <base> HEAD -- <file>` for content.
-    private writePrContext(repoRoot: string): void {
+    // Returns what every printed instruction needs to inline; an empty context when no base resolves.
+    private writePrContext(repoRoot: string): ChecklistReviewContext {
         const range = this.diffScope.resolveBase(repoRoot);
-        if (!range.base) return;
+        if (!range.base) return new ChecklistReviewContext();
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
         const changed = this.diffScope.getChangedFiles(repoRoot, range.base, range.head, opts);
@@ -103,51 +113,16 @@ export class StartUpsertPrCommand {
         const p = this.reviewJsonService.writePrContext(
             repoRoot, this.aiBranchName.getFeatureName(), new PrContext(range.base, head, changed),
         );
-        process.stdout.write(`\n📂 Wrote PR diff context (${changed.length} changed file(s)) → ${p}\n`);
+        return new ChecklistReviewContext(range.base, p);
     }
 
-    // A checklist already reviewed on this branch — its review-<id>.json resolves to PASS or OVERRIDDEN —
-    // so it is NOT handed back to the AI to re-review (review once per branch).
-    private alreadyReviewed(req: RequiredChecklist, results: readonly ChecklistResult[]): boolean {
-        const status = this.reviewJsonService.resolveVerdict(req, results).status;
-        return status === CK_PASS || status === CK_OVERRIDDEN;
-    }
-
-    // Show which matched checklists still need a reviewer subagent (spawn each as a distinct one) and which
-    // are already reviewed (reused, not re-run) — so a second cycle re-instructs nothing.
-    private printChecklistPlan(repoRoot: string, defs: readonly ChecklistDefinition[], triggered: readonly TriggeredChecklist[], toReview: readonly RequiredChecklist[]): void {
-        if (triggered.length === 0) {
-            this.printEmptyChecklistNotice(repoRoot, defs);
-            return;
-        }
-        process.stdout.write('\n' + SEP + '📋 Review checklists\n' + SEP + '\n');
-        const toReviewIds = new Set(toReview.map((r: RequiredChecklist): string => r.id));
-        const reused = triggered.filter((t: TriggeredChecklist): boolean => !toReviewIds.has(t.def.id));
-        for (const t of reused) {
-            process.stdout.write(`  ✓ ${t.def.subagent} — already reviewed on this branch (reusing its review-${t.def.id}.json)\n`);
-        }
-        if (toReview.length === 0) {
-            process.stdout.write('All matched checklists are already reviewed — nothing to re-run. Just write review.json and finish.\n');
-            return;
-        }
-        process.stdout.write('Spawn EACH of these as a SEPARATE subagent (a different one per checklist — do not self-certify):\n');
-        for (const t of triggered.filter((x: TriggeredChecklist): boolean => toReviewIds.has(x.def.id))) {
-            process.stdout.write(`  • subagent "${t.def.subagent}"`);
-            if (t.def.doc.trim() !== '') process.stdout.write(` — reads ${t.def.doc}`);
-            process.stdout.write(`  (matched: ${t.matchedFiles.slice(0, 4).join(', ')})\n`);
-        }
-        process.stdout.write('See .webpieces/instruct-ai/webpieces.review-checklists.md for the review-<id>.json format each must write.\n');
-    }
-
-    // ZERO checklists matched. Say so — this used to print nothing at all, which reads exactly like "the
-    // checklist ran and passed". Purely informational: 0 is a supported state and never blocks finishing.
-    // validate() is called ONLY here (the runtime load() is deliberately tolerant), so a missing/malformed
-    // checklist doc stops being a silent no-op and gets reported.
-    private printEmptyChecklistNotice(repoRoot: string, defs: readonly ChecklistDefinition[]): void {
-        const docRel = loadAndValidate(repoRoot).prGate.checklistDoc;
-        const errors = this.manifestService.validate(repoRoot, docRel);
-        process.stdout.write('\n' + SEP + '📋 Review checklists\n' + SEP + '\n');
-        process.stdout.write(this.checklistNotice.build(docRel, errors, defs.length, 'wp-finish-upsert-pr'));
+    // The diff facts, stated where the instruction to use them is — not in a separate block above it.
+    private contextLines(context: ChecklistReviewContext): string {
+        if (context.baseSha.trim() === '') return '';
+        return (
+            `Your diff:  git diff ${context.baseSha} HEAD\n` +
+            `Full changed-file set + base/head sha:  ${context.prContextPath}\n`
+        );
     }
 
     // Scaffold the server-side CI check when (and only when) this repo set a gateSalt. Written to the

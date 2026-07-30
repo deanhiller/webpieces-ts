@@ -1,13 +1,19 @@
 import { describe, it, expect } from 'vitest';
+import { ChecklistDefinition, ChecklistSource } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 
 const notice = new ChecklistNotice();
 const FINISH = 'wp-finish-upsert-pr';
 
-const noneConfigured = (): string => notice.build('', [], 0, FINISH);
-const misconfigured = (errors: string[]): string => notice.build('.claude/review/index.md', errors, 0, FINISH);
-const emptyManifest = (): string => notice.build('.claude/review/index.md', [], 0, FINISH);
-const noneMatched = (count: number): string => notice.build('.claude/review/index.md', [], count, FINISH);
+// The legacy manifest-doc source and the primary array-in-config source, so every variant is exercised
+// against both — the notice must name whichever one the repo actually used.
+const DOC_SOURCE = new ChecklistSource([], '.claude/review/index.md');
+const ARRAY_SOURCE = new ChecklistSource([new ChecklistDefinition('r', 'r', '', ['**/*.sql'])], '');
+
+const noneConfigured = (): string => notice.build(new ChecklistSource(), [], 0, FINISH);
+const misconfigured = (errors: string[], source = DOC_SOURCE): string => notice.build(source, errors, 0, FINISH);
+const emptyManifest = (): string => notice.build(DOC_SOURCE, [], 0, FINISH);
+const noneMatched = (count: number, source = DOC_SOURCE): string => notice.build(source, [], count, FINISH);
 
 // The whole point of this class: 0 checklists is a SUPPORTED state, not a failure to be argued with.
 describe('zero checklists is never presented as a blocker', () => {
@@ -45,12 +51,19 @@ describe('no checklists configured at all', () => {
         expect(text).not.toContain('⚠️');
     });
 
-    it('tells the human HOW to add checklists if they want them — config key, manifest, and *.md docs', () => {
+    it('tells the human HOW to add checklists if they want them — the config array, patterns, and *.md docs', () => {
         const text = noneConfigured();
         expect(text).toContain('checklists');
         expect(text).toContain('.md');
-        expect(text).toContain('webpieces:checklists');
+        expect(text).toContain('webpieces.config.json');
+        expect(text).toContain('patterns');
         expect(text).toContain('subagent');
+    });
+
+    // The how-to must teach the PRIMARY shape (the array in config), not the HTML-comment manifest a reader
+    // can no longer schema, grep, or edit with tooling.
+    it('teaches the array-in-config shape, not the HTML-comment manifest', () => {
+        expect(noneConfigured()).not.toContain('webpieces:checklists');
     });
 });
 
@@ -74,6 +87,12 @@ describe('configured but broken — the case that used to enforce nothing, silen
     it('takes precedence over the none-configured wording when a doc is set', () => {
         expect(misconfigured(['[pr-gate] boom'])).not.toContain('NONE CONFIGURED');
     });
+
+    // A reader has to know WHICH file to open, and that differs by shape.
+    it('names the source that is broken — the doc path, or the config key for the array shape', () => {
+        expect(misconfigured(['[pr-gate] boom'])).toContain('.claude/review/index.md');
+        expect(misconfigured(['[pr-gate] boom'], ARRAY_SOURCE)).toContain('pr-gate.checklists in webpieces.config.json');
+    });
 });
 
 describe('configured and valid, but nothing matched this diff', () => {
@@ -88,5 +107,9 @@ describe('configured and valid, but nothing matched this diff', () => {
     it('a readable doc that defines nothing usable is distinguished from one that matched nothing', () => {
         expect(emptyManifest()).toContain('0 defined');
         expect(emptyManifest()).not.toContain('0 matched');
+    });
+
+    it('names the array-in-config source when that is where the checklists came from', () => {
+        expect(noneMatched(2, ARRAY_SOURCE)).toContain('pr-gate.checklists in webpieces.config.json');
     });
 });

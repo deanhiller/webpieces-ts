@@ -8,11 +8,20 @@
             "executor": "nx:run-commands",
             "options": {
                 "command": "vitest run packages/tooling/rules-config/"
-            }
+            },
+            "inputs": [
+                "default",
+                "^default",
+                {
+                    "runtime": "git ls-files '*.ts' '*.md' | sort | shasum"
+                }
+            ]
         },
         "build": {
             "executor": "@nx/js:tsc",
-            "outputs": ["{options.outputPath}"],
+            "outputs": [
+                "{options.outputPath}"
+            ],
             "options": {
                 "outputPath": "dist/packages/tooling/rules-config",
                 "main": "packages/tooling/rules-config/src/index.ts",
@@ -29,5 +38,9 @@
             }
         }
     },
-    "tags": ["type:tooling", "framework:node", "role:designed-lib"]
+    "tags": [
+        "type:tooling",
+        "framework:node",
+        "role:designed-lib"
+    ]
 }

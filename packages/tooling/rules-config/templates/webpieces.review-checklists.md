@@ -1,11 +1,46 @@
 # Webpieces review checklists — how to satisfy them
 
-Your repo defines company review checklists in ONE manifest doc (pointed at by
-`pr-gate.checklists.doc` in `webpieces.config.json`). Each checklist names a reviewer **subagent**
-(a `.claude/agents/<subagent>.md`) and, optionally, a detail doc and path `patterns`.
+Your repo defines company review checklists in `pr-gate.checklists` in `webpieces.config.json` — an
+array of `{ subagent, doc?, patterns? }`. Each names a reviewer **subagent** (a
+`.claude/agents/<subagent>.md`, which webpieces verifies exists) and, optionally, a **repo-relative**
+detail doc and path `patterns`:
 
-`wp-start-upsert-pr` printed which checklists your diff **matched** (by path). Matching is deliberately
-**coarse** — the reviewer subagent makes the fine, content-level judgment by reading the actual diff.
+```jsonc
+"commands": { "pr-gate": { "checklists": [
+  { "subagent": "db-migration-reviewer",
+    "doc": ".claude/review/db-migrations.md",
+    "patterns": ["**/migrations/**", "**/*.sql"] }
+] } }
+```
+
+> Older repos instead set `checklists: { "doc": ".claude/review/index.md" }` and keep the same array in a
+> `<!-- webpieces:checklists [...] -->` HTML comment inside that doc. Still supported; in that shape each
+> entry's `doc` resolves relative to the index doc. Prefer the array in config — it is greppable and
+> schemable, and every path webpieces prints back to you is repo-relative either way.
+
+## The one command you run
+
+```bash
+pnpm wp-checklist
+```
+
+It validates the checklist config against **your** diff and prints which reviewer subagents you owe, and
+exactly what to tell each — its doc, what put it in scope, the `git diff` command with the real base sha,
+and the `review-<id>.json` it must write. That block is **self-sufficient**: hand a reviewer those lines
+verbatim. It is safe to run any number of times and never blocks.
+
+Checklists already reviewed on this branch are **not** re-listed — verdict files persist, so a second
+wp-start/wp-finish cycle re-instructs nothing.
+
+`wp-finish-upsert-pr` recomputes the same set and **refuses to open the PR** while any reviewer still owes
+a passing verdict, naming only the ones still missing.
+
+Note that **not every checklist is pattern-matched**: one with no `patterns` runs on EVERY PR, and the
+whole diff is in its scope. `wp-checklist` says `ALWAYS RUNS` for those rather than calling the whole diff
+a "match".
+
+Where patterns DO apply, matching is deliberately **coarse** — the reviewer subagent makes the fine,
+content-level judgment by reading the actual diff.
 
 The changed files + the exact base sha the gate uses are in
 `.webpieces/pr-review/<branch>/pr-context.json`:
@@ -25,6 +60,10 @@ For EACH matched checklist you must:
    `success: true` when the diffs add no new route/queue.)
 3. Have it **write its verdict** to `.webpieces/pr-review/<branch>/review-<id>.json` (one file per
    checklist, so concurrent reviewers never clobber each other). `<id>` is the subagent name.
+
+**You may never write a reviewer's `review-<id>.json` yourself.** If a named subagent cannot be spawned,
+that is a config bug, not your cue to self-certify — say so and stop. (webpieces now rejects a checklist
+whose `subagent` has no `.claude/agents/<subagent>.md`, so this should surface as a config error instead.)
 
 ## `review-<id>.json` (each reviewer subagent writes its own)
 

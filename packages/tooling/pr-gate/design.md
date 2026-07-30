@@ -18,7 +18,9 @@ graph TD
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
     CheckPrCommand["CheckPrCommand"]
+    ChecklistCommand["ChecklistCommand"]
     ChecklistDetector["ChecklistDetector"]
+    ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistManifestService["ChecklistManifestService"]
     ChecklistNotice["ChecklistNotice"]
     CleanTmp["CleanTmp"]
@@ -52,6 +54,13 @@ graph TD
     BranchReaper --> MergedBranchesService
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
+    ChecklistCommand --> AiBranchName
+    ChecklistCommand --> ChecklistDetector
+    ChecklistCommand --> ChecklistInstructionsService
+    ChecklistCommand --> ChecklistManifestService
+    ChecklistCommand --> ChecklistNotice
+    ChecklistCommand --> RepoRootFinder
+    ChecklistCommand --> ReviewJsonService
     ChecklistDetector --> DiffScope
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchReaper
@@ -64,6 +73,7 @@ graph TD
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
     FinishUpsertPrCommand --> ChecklistDetector
+    FinishUpsertPrCommand --> ChecklistInstructionsService
     FinishUpsertPrCommand --> ChecklistManifestService
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> GateTokenService
@@ -100,6 +110,7 @@ graph TD
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
     PrGateApp --> CheckPrCommand
+    PrGateApp --> ChecklistCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
@@ -116,9 +127,6 @@ graph TD
     StartUpsertPrCommand --> AiBranchName
     StartUpsertPrCommand --> BranchNaming
     StartUpsertPrCommand --> BuildAffected
-    StartUpsertPrCommand --> ChecklistDetector
-    StartUpsertPrCommand --> ChecklistManifestService
-    StartUpsertPrCommand --> ChecklistNotice
     StartUpsertPrCommand --> DiffScope
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> RepoRootFinder
