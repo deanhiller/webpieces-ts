@@ -55,11 +55,26 @@ describe('RuleGate', () => {
         expect(reason).toContain('ignoreModifiedUntilEpoch');
     });
 
-    it('IGNORES ignoreModifiedUntilEpoch for an all-or-nothing rule (honorEpoch = false)', () => {
+    it('IGNORES the time-box hatch when the caller opts out with honorEpoch = false', () => {
         const dir = writeConfig({
             'validate-versions-locked': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: FUTURE_EPOCH },
         });
         expect(new RuleGate().skipReason(dir, 'validate-versions-locked', false)).toBeNull();
+    });
+
+    it('honors validate-packagejson time-box now that its executor passes honorEpoch = true', () => {
+        const dir = writeConfig({
+            'validate-packagejson': { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: FUTURE_EPOCH },
+        });
+        expect(new RuleGate().isDisabled(dir, 'validate-packagejson', true)).toBe(true);
+    });
+
+    it('honors the new turnOffRuleUntilEpoch field name end-to-end (loadAndValidate canonicalizes it)', () => {
+        const dir = writeConfig({
+            'validate-packagejson': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
+        });
+        const reason = new RuleGate().skipReason(dir, 'validate-packagejson', true);
+        expect(reason).toContain('ignoreModifiedUntilEpoch');
     });
 
     it('a past epoch leaves an epoch-gated rule active', () => {

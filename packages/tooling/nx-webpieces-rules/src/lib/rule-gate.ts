@@ -12,10 +12,13 @@
  *  - rule entry ABSENT (or no webpieces.config.json at all) → RUN. Fail-safe: an older config, or a
  *    repo that has not adopted the keys yet, behaves exactly as it did before this gate existed.
  *  - `"mode": "OFF"` → skip with a reason.
- *  - `ignoreModifiedUntilEpoch` / `ignoreRuleWhileOnBranch` → honored ONLY when the caller passes
- *    `honorEpoch: true`, i.e. only for the two rules that compare against a blessed baseline and can
- *    therefore meaningfully grandfather today's state. The other three are all-or-nothing (see the
- *    comment block above ValidateArchitectureUnchangedConfig in rules-config/src/rule-configs.ts).
+ *  - the time-box / branch escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch, and their
+ *    ignoreModifiedUntilEpoch / ignoreRuleWhileOnBranch aliases) → honored when the caller passes
+ *    `honorEpoch: true`. All five executors now pass true: a schedule ("do not enforce until <epoch>
+ *    / off <branch>") is coherent for any of them, baseline or not (see the comment block above
+ *    ValidateArchitectureUnchangedConfig in rules-config/src/rule-configs.ts). The param is retained
+ *    so a future caller can still opt a rule out of time-boxing. loadAndValidate has already
+ *    canonicalized the new field names onto the ignore* pair, so this reads only the originals.
  */
 
 import { loadAndValidate, shouldSkipRule } from '@webpieces/rules-config';
@@ -24,7 +27,7 @@ export class RuleGate {
     /**
      * @param workspaceRoot the Nx `context.root` — where webpieces.config.json is looked up from.
      * @param ruleName the webpieces.config.json key, identical to the Nx target name.
-     * @param honorEpoch true only for the baseline-comparing rules (see class doc).
+     * @param honorEpoch true to honor the time-box/branch escape hatches (all five executors pass true).
      * @returns a human-readable reason when the executor must SKIP, or null when it must RUN.
      */
     skipReason(workspaceRoot: string, ruleName: string, honorEpoch: boolean): string | null {

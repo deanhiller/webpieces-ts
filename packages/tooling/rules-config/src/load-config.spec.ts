@@ -14,9 +14,9 @@ function mktmp(contents: Record<string, string>): string {
     return dir;
 }
 
-// Minimal valid config — every built-in present in its correct section, all OFF with the
-// now-required ignoreModifiedUntilEpoch (0 = active), plus a valid commands.pr-gate block.
-// Code rules go under `rules`; the bash guards go under `hookGuards`.
+// Minimal valid config — every built-in present in its correct section, all OFF with an explicit
+// ignoreModifiedUntilEpoch (0 = active; the hatch is optional now but kept here for realism), plus a
+// valid commands.pr-gate block. Code rules go under `rules`; the bash guards go under `hookGuards`.
 const HOOK_GUARD_NAMES = [
     'branch-creation-guard', 'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard',
     'redirect-how-to-merge-main', 'feature-branch-guard', 'read-stale-guard', 'merged-branch-bash-guard',
@@ -35,7 +35,7 @@ const CODE_RULE_NAMES = [
     'validate-packagejson', 'validate-versions-locked', 'validate-eslint-sync',
 ];
 
-// Required fields beyond the universal mode/ignoreModifiedUntilEpoch pair. Kept as data so adding
+// Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
 // another required field is a one-line fixture change rather than a hunt through every test.
 const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
@@ -147,6 +147,27 @@ describe('loadAndValidate', () => {
         const loaded = loadAndValidate(dir);
         expect(loaded.excludePaths.rules).toEqual(['repositories/**']);
         expect(loaded.excludePaths.guards).toEqual(['vendor/**']);
+    });
+});
+
+describe('loadAndValidate — escape-hatch field aliases', () => {
+    it('canonicalizes turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch onto the ignore* pair', () => {
+        const dir = writeConfig(allRulesOff({
+            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' },
+        }));
+        const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
+        // Downstream readers (RuleGate, AbstractRule.shouldRun) read only the original names, so the
+        // new field values must land there.
+        expect(rule.options['ignoreModifiedUntilEpoch']).toBe(1771931925);
+        expect(rule.options['ignoreRuleWhileOnBranch']).toBe('deanhiller/foo');
+    });
+
+    it('lets the new turnOffRuleUntilEpoch win when both names are present on a rule', () => {
+        const dir = writeConfig(allRulesOff({
+            'no-destructure': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0, turnOffRuleUntilEpoch: 999 },
+        }));
+        const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
+        expect(rule.options['ignoreModifiedUntilEpoch']).toBe(999);
     });
 });
 

@@ -25,8 +25,9 @@ export default async function validateEslintSyncExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
 
-    // All-or-nothing (honorEpoch = false): the two files either match or they do not.
-    if (new RuleGate().isDisabled(workspaceRoot, 'validate-eslint-sync', false)) {
+    // Time-boxable (honorEpoch = true): a schedule is not a baseline — "do not enforce until <epoch>
+    // / off <branch>" is coherent even though the two files simply match or not. See rule-configs.ts.
+    if (new RuleGate().isDisabled(workspaceRoot, 'validate-eslint-sync', true)) {
         return { success: true };
     }
 
