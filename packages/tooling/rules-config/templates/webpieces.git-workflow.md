@@ -253,8 +253,10 @@ you: pnpm wp-start-update
 Who does what on the conflict path:
 - **You/the AI** supply the *judgment*: how to combine the conflicting changes. You edit the files,
   `git add` them, and write each `merge-explanation.md`.
-- **The tool** still makes the *commit*. You are BLOCKED from `git commit` / `git push` / `gh pr`
-  while the merge is in progress (the `merge-in-progress-guard`); your flow's finish command
+- **The tool** still makes the *commit*. You are BLOCKED from `git commit` / `git push` / `git merge` /
+  `git rebase` / `gh pr create|edit|merge` while the merge is in progress (the
+  `merge-in-progress-guard`). `git add` is **not** blocked — staging your resolutions is your job, and
+  the gate refuses to finish while git still reports unmerged files. Your flow's finish command
   (`wp-finish-update`, or `wp-finish-upsert-pr` in the PR flow) is what validates and commits. `git add -u` stages only your tracked resolutions and **refuses** if any
   untracked file is present — commit or delete those first, the tool will not sweep them in.
 
