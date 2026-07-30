@@ -167,6 +167,18 @@ describe('effectiveBashCwd (resolves the post-`cd` directory the command runs fr
     it('ignores a bare cd with no directory argument', () => {
         expect(effectiveBashCwd('cd && git push', '/repo')).toBe('/repo');
     });
+
+    it('does NOT honour a TRAILING cd — a command before it already ran at the shell cwd', () => {
+        // The bypass fix: `git push && cd <exempt>` must NOT resolve to the exempt tree, or the leading
+        // root-level push would ride the exempt allow. The first non-cd segment stops the scan.
+        expect(effectiveBashCwd('git push origin main && cd repositories/x', '/repo')).toBe('/repo');
+        expect(effectiveBashCwd('git status && cd repositories/x && git push', '/repo')).toBe('/repo');
+    });
+
+    it('stops at the first non-cd segment even mid-chain', () => {
+        // `cd a` counts (leading), but the `echo` breaks the run so the later `cd b` is ignored.
+        expect(effectiveBashCwd('cd a && echo hi && cd b', '/repo')).toBe(nodePath.resolve('/repo', 'a'));
+    });
 });
 
 function gitIn(cwd: string, ...args: string[]): void {
@@ -265,5 +277,95 @@ describe('runBash — foreign-repo boundary and excludePaths on the bash path (d
         writeGuardConfig(outer, ['repositories/**']);
         expect(effectiveBashCwd('echo "cd repositories/plain && git push"', outer)).toBe(outer);
         expect(runBash('echo "cd repositories/plain && git push"', outer, 'guards')).toBeNull();
+    });
+
+});
+
+// Fix A at the gate: a trailing cd into an exempt tree must not exempt a command that already ran at
+// the governed root.
+describe('runBash — trailing-cd does not bypass the guards (defect A)', () => {
+    let outer: string;
+
+    beforeAll(() => {
+        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-a-')));
+        initRepo(outer);
+        fs.mkdirSync(nodePath.join(outer, 'repositories', 'plain'), { recursive: true });
+        writeGuardConfig(outer, ['repositories/**']);
+    });
+
+    afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
+
+    it('`git push && cd repositories/plain` → BLOCK (push ran at root before the cd)', () => {
+        const result = runBash('git push origin HEAD && cd repositories/plain', outer, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
+        expect((result as BlockedResult).report).toContain('gated flow');
+    });
+});
+
+// Fix C: force-to-root must judge where the command ENDS UP, not only the pre-`cd` shell cwd, so a
+// `cd <root> && git …` from a nested clone is not blocked with self-contradicting "cd to root" advice.
+describe('runBash — force-to-root uses the effective cwd (defect C)', () => {
+    let outer: string;
+    let nestedClone: string;
+    let governedSubdir: string;
+
+    beforeAll(() => {
+        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-c-')));
+        initRepo(outer);
+        nestedClone = nodePath.join(outer, 'repositories', 'clone');
+        initRepo(nestedClone);
+        governedSubdir = nodePath.join(outer, 'src');
+        fs.mkdirSync(governedSubdir, { recursive: true });
+        writeGuardConfig(outer, ['repositories/**']);
+    });
+
+    afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
+
+    it('shell in a nested clone, `cd <root> && git push` → blocked by the PUSH guard, not force-to-root', () => {
+        const result = runBash(`cd ${outer} && git push origin HEAD`, nestedClone, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
+        const report = (result as BlockedResult).report;
+        expect(report).toContain('gated flow');              // the right guard
+        expect(report).not.toContain('Run git/gh commands from the repo root');  // NOT force-to-root
+    });
+
+    it('at the root, `cd src && git status` (governed subdir) → ALLOW (no new force-to-root block)', () => {
+        // The regression the naive one-line fix would cause: an in-command cd into a governed subdir
+        // must not trip force-to-root when the shell itself is at the root.
+        expect(runBash(`cd ${governedSubdir} && git status`, outer, 'guards')).toBeNull();
+    });
+
+    it('shell PERSISTED in a governed subdir, bare `git status` (no cd) → force-to-root BLOCK (kept)', () => {
+        const result = runBash('git status', governedSubdir, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
+        expect((result as BlockedResult).report).toContain('Run git/gh commands from the repo root');
+    });
+});
+
+// Fix B: a push/PR block tells the AI about the exempt-tree escape hatch, but only when such trees are
+// configured — and never on other guards.
+describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', () => {
+    let outer: string;
+
+    beforeAll(() => {
+        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-b-')));
+        initRepo(outer);
+    });
+
+    afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
+
+    it('appends the exempt trees when excludePaths.guards is non-empty', () => {
+        writeGuardConfig(outer, ['repositories/**', 'tools/**']);
+        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('cd into it first');
+        expect(report).toContain('repositories/**');
+        expect(report).toContain('tools/**');
+    });
+
+    it('omits the hint when no trees are exempt (no noise for repos without exemptions)', () => {
+        writeGuardConfig(outer, []);
+        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('gated flow');           // still the push block
+        expect(report).not.toContain('cd into it first');  // but no exempt-tree hint
     });
 });
