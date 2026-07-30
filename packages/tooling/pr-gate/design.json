@@ -145,6 +145,14 @@
                     "level": 4
                 },
                 {
+                    "id": "FinishBanner",
+                    "className": "FinishBanner",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/finish-banner.ts",
+                    "level": 2
+                },
+                {
                     "id": "FinishUpdateCommand",
                     "className": "FinishUpdateCommand",
                     "kind": "class",
@@ -664,6 +672,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/dashboard/dashboard.ts#Dashboard",
                     "paramName": "dashboard",
                     "paramType": "Dashboard"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "FinishBanner",
+                    "injection": "type",
+                    "token": "FinishBanner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/finish-banner.ts#FinishBanner",
+                    "paramName": "banner",
+                    "paramType": "FinishBanner"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
