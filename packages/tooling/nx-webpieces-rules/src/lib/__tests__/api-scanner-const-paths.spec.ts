@@ -21,12 +21,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
+import { ApiUsageScanner, buildApiContracts, describeNonLiteralDecoratorArgs } from '../api-usage/api-scanner';
 import {
-    ApiUsageScanner,
+    EmptiedApiContractError,
     MissingBasePathError,
-    buildApiContracts,
-    describeNonLiteralDecoratorArgs,
-} from '../api-usage/api-scanner';
+    UnresolvedEndpointPathError,
+} from '../api-usage/api-contract-errors';
 import { ApiMethodMeta } from '../api-usage/api-relations';
 
 let root = '';
@@ -129,6 +129,96 @@ export abstract class CrossApi {
 }
 
 /**
+ * THREE unreadable endpoint paths across TWO classes. The point is aggregation: an author who moved
+ * a paths module out of the contract's file broke all of them at once and must see all of them at
+ * once, not one per re-run.
+ */
+function writeMultiOffenderApiLib(): void {
+    write(
+        'libraries/multi-api/src/paths.ts',
+        `export const A_PATH = '/a';
+export const B_PATH = '/b';
+export const C_PATH = '/c';
+`,
+    );
+    write(
+        'libraries/multi-api/src/decorators.ts',
+        `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+`,
+    );
+    write(
+        'libraries/multi-api/src/index.ts',
+        `import { ApiPath, Endpoint } from './decorators';
+import { A_PATH, B_PATH, C_PATH } from './paths';
+
+@ApiPath('/one')
+export abstract class OneApi {
+    @Endpoint(A_PATH, 'rpc')
+    abstract a(): Promise<void>;
+
+    @Endpoint(B_PATH, 'rpc')
+    abstract b(): Promise<void>;
+}
+
+@ApiPath('/two')
+export abstract class TwoApi {
+    @Endpoint(C_PATH, 'rpc')
+    abstract c(): Promise<void>;
+}
+`,
+    );
+    write(
+        'libraries/multi-api/tsconfig.json',
+        JSON.stringify({
+            compilerOptions: { moduleResolution: 'node', experimentalDecorators: true },
+            include: ['src/**/*.ts'],
+        }),
+    );
+}
+
+/**
+ * A contract emptied by its KIND arguments rather than its paths — the paths are literals and read
+ * perfectly. This is the mechanism, isolated: every method is skipped, the class reaches
+ * buildApiContracts with zero methods, and the zero-method skip would drop it without a word.
+ */
+function writeEmptiedApiLib(): void {
+    write(
+        'libraries/badkind-api/src/kinds.ts',
+        `export const RPC_KIND = 'rpc';
+`,
+    );
+    write(
+        'libraries/badkind-api/src/decorators.ts',
+        `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+`,
+    );
+    write(
+        'libraries/badkind-api/src/index.ts',
+        `import { ApiPath, Endpoint } from './decorators';
+import { RPC_KIND } from './kinds';
+
+@ApiPath('/badkind')
+export abstract class BadKindApi {
+    @Endpoint('/one', RPC_KIND)
+    abstract one(): Promise<void>;
+
+    @Endpoint('/two', RPC_KIND)
+    abstract two(): Promise<void>;
+}
+`,
+    );
+    write(
+        'libraries/badkind-api/tsconfig.json',
+        JSON.stringify({
+            compilerOptions: { moduleResolution: 'node', experimentalDecorators: true },
+            include: ['src/**/*.ts'],
+        }),
+    );
+}
+
+/**
  * The exact shape that shipped a present-but-WRONG entry: an unreadable `@ApiPath` (its constant
  * lives in another module) but perfectly readable literal endpoint paths. The contract survives with
  * methods and no basePath, so `basePath + path` computes `/test` where the route is `/hidden/test`.
@@ -166,10 +256,32 @@ export abstract class HiddenApi {
     );
 }
 
+/**
+ * ONLY the good lib. cross-api now lives in its own map because an unreadable @Endpoint path FAILS
+ * generation — mixing it in would make every "the good class still works" assertion below throw for
+ * a reason that has nothing to do with what it is testing.
+ */
 function projects(): Map<string, ProjectInfo> {
     const infos = new Map<string, ProjectInfo>();
     infos.set('whatsapp-api', new ProjectInfo('whatsapp-api', 'libraries/whatsapp-api', ['role:lib']));
+    return infos;
+}
+
+function crossProjects(): Map<string, ProjectInfo> {
+    const infos = new Map<string, ProjectInfo>();
     infos.set('cross-api', new ProjectInfo('cross-api', 'libraries/cross-api', ['role:lib']));
+    return infos;
+}
+
+function multiProjects(): Map<string, ProjectInfo> {
+    const infos = new Map<string, ProjectInfo>();
+    infos.set('multi-api', new ProjectInfo('multi-api', 'libraries/multi-api', ['role:lib']));
+    return infos;
+}
+
+function badKindProjects(): Map<string, ProjectInfo> {
+    const infos = new Map<string, ProjectInfo>();
+    infos.set('badkind-api', new ProjectInfo('badkind-api', 'libraries/badkind-api', ['role:lib']));
     return infos;
 }
 
@@ -188,6 +300,8 @@ beforeAll(() => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-api-const-')));
     writeApiLib();
     writeCrossModuleApiLib();
+    writeMultiOffenderApiLib();
+    writeEmptiedApiLib();
     writeNoBasePathApiLib();
 });
 
@@ -240,7 +354,7 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
     });
 
     it('warns about the cross-module const it genuinely cannot resolve', () => {
-        const result = new ApiUsageScanner(root, projects()).scan();
+        const result = new ApiUsageScanner(root, crossProjects()).scan();
         const cross = result.nonLiteralDecoratorArgs.filter((a: { api: string }) => a.api === 'CrossApi');
         expect(cross).toHaveLength(1);
         expect(cross[0].decorator).toBe('Endpoint');
@@ -276,5 +390,85 @@ describe('apiContracts schema — basePath is required', () => {
         const report = describeNonLiteralDecoratorArgs(scan.nonLiteralDecoratorArgs);
         expect(report).toContain('@ApiPath(HIDDEN_API_PATH)');
         expect(report).toContain('HiddenApi');
+    });
+});
+
+/**
+ * The other half of the URL. PR #507 made `basePath` required and fatal; a method `path` is the same
+ * kind of data for the same reason — a client computes `basePath + path` — so an unreadable one must
+ * fail generation rather than delete the method (and, when it takes every method, the whole class).
+ */
+describe('apiContracts schema — an @Endpoint path is required', () => {
+    it('FAILS generation for a cross-module const path, naming the class AND the method', () => {
+        const scan = new ApiUsageScanner(root, crossProjects()).scan();
+        expect(() => buildApiContracts(scan)).toThrow(UnresolvedEndpointPathError);
+        expect(() => buildApiContracts(scan)).toThrow(/CrossApi\.go/);
+        expect(() => buildApiContracts(scan)).toThrow(/CROSS_PATH/);
+        expect(() => buildApiContracts(scan)).toThrow(/path is REQUIRED/);
+    });
+
+    it('spells out the non-obvious fix: same-module consts resolve, imported ones do not', () => {
+        const scan = new ApiUsageScanner(root, crossProjects()).scan();
+        expect(() => buildApiContracts(scan)).toThrow(/SAME module/);
+        expect(() => buildApiContracts(scan)).toThrow(/string literal/);
+    });
+
+    it('records the offender on the scan with its file and line, not just in the message', () => {
+        const scan = new ApiUsageScanner(root, crossProjects()).scan();
+        expect(scan.unresolvedEndpointPaths).toHaveLength(1);
+        expect(scan.unresolvedEndpointPaths[0].api).toBe('CrossApi');
+        expect(scan.unresolvedEndpointPaths[0].method).toBe('go');
+        expect(scan.unresolvedEndpointPaths[0].argument).toBe('CROSS_PATH');
+        expect(scan.unresolvedEndpointPaths[0].at).toContain('libraries/cross-api/src/index.ts:');
+    });
+
+    it('reports EVERY offender in ONE error, not just the first', () => {
+        const scan = new ApiUsageScanner(root, multiProjects()).scan();
+        expect(scan.unresolvedEndpointPaths).toHaveLength(3);
+        // One error, three names: an author who moved a paths module fixes all three in one run.
+        expect(() => buildApiContracts(scan)).toThrow(/3 @Endpoint path\(s\)/);
+        expect(() => buildApiContracts(scan)).toThrow(/OneApi\.a/);
+        expect(() => buildApiContracts(scan)).toThrow(/OneApi\.b/);
+        expect(() => buildApiContracts(scan)).toThrow(/TwoApi\.c/);
+    });
+
+    it('does NOT regress same-module const paths — those still resolve and generate', () => {
+        const scan = new ApiUsageScanner(root, projects()).scan();
+        expect(scan.unresolvedEndpointPaths).toEqual([]);
+        expect(() => buildApiContracts(scan)).not.toThrow();
+        expect(buildApiContracts(scan)['WhatsAppApi'].methods).toHaveLength(3);
+    });
+});
+
+/**
+ * The mechanism that hid WhatsAppApi: buildApiContracts skips a zero-method class, so a contract
+ * gutted by unreadable decorator arguments left by the same door a routeless vendor seam uses.
+ */
+describe('apiContracts schema — a contract emptied of its methods cannot vanish silently', () => {
+    it('FAILS generation when a class declared @Endpoint methods and kept none', () => {
+        const scan = new ApiUsageScanner(root, badKindProjects()).scan();
+        // Paths are literals here — it is the required `kind` that is unreadable, so every method is
+        // (deliberately) skipped and the class arrives at buildApiContracts empty.
+        expect(scan.apiIndex.get('BadKindApi')?.methods).toEqual([]);
+        expect(scan.unresolvedEndpointPaths).toEqual([]);
+
+        expect(() => buildApiContracts(scan)).toThrow(EmptiedApiContractError);
+        expect(() => buildApiContracts(scan)).toThrow(/BadKindApi/);
+        expect(() => buildApiContracts(scan)).toThrow(/2 @Endpoint method\(s\) declared, 0 usable/);
+    });
+
+    it('records the emptied contract on the scan with its location', () => {
+        const scan = new ApiUsageScanner(root, badKindProjects()).scan();
+        expect(scan.emptiedApiContracts).toHaveLength(1);
+        expect(scan.emptiedApiContracts[0].api).toBe('BadKindApi');
+        expect(scan.emptiedApiContracts[0].declared).toBe(2);
+        expect(scan.emptiedApiContracts[0].at).toContain('libraries/badkind-api/src/index.ts:');
+    });
+
+    it('leaves a genuinely routeless contract alone — nothing was declared, so nothing was dropped', () => {
+        // A vendor seam (and a marker contract with no @Endpoint at all) still emits no entry and no
+        // error: the rule is "declared endpoints and kept none", not "has no endpoints".
+        const scan = new ApiUsageScanner(root, projects()).scan();
+        expect(scan.emptiedApiContracts).toEqual([]);
     });
 });

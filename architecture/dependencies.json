@@ -16,8 +16,7 @@
                 {
                     "name": "getInfo",
                     "path": "/info",
-                    "kind": "rpc",
-                    "queueName": "PublicApi-getInfo"
+                    "kind": "rpc"
                 }
             ]
         },
@@ -29,8 +28,7 @@
                 {
                     "name": "save",
                     "path": "/item",
-                    "kind": "rpc",
-                    "queueName": "SaveApi-save"
+                    "kind": "rpc"
                 }
             ]
         },
@@ -42,32 +40,27 @@
                 {
                     "name": "userOp",
                     "path": "/user",
-                    "kind": "rpc",
-                    "queueName": "SecureApi-userOp"
+                    "kind": "rpc"
                 },
                 {
                     "name": "adminOp",
                     "path": "/admin",
-                    "kind": "rpc",
-                    "queueName": "SecureApi-adminOp"
+                    "kind": "rpc"
                 },
                 {
                     "name": "orgOp",
                     "path": "/org",
-                    "kind": "rpc",
-                    "queueName": "SecureApi-orgOp"
+                    "kind": "rpc"
                 },
                 {
                     "name": "internalOp",
                     "path": "/internal",
-                    "kind": "rpc",
-                    "queueName": "SecureApi-internalOp"
+                    "kind": "rpc"
                 },
                 {
                     "name": "serviceOp",
                     "path": "/service",
-                    "kind": "rpc",
-                    "queueName": "SecureApi-serviceOp"
+                    "kind": "rpc"
                 }
             ]
         },
@@ -79,8 +72,7 @@
                 {
                     "name": "fetchValue",
                     "path": "/fetchValue",
-                    "kind": "rpc",
-                    "queueName": "Server2Api-fetchValue"
+                    "kind": "rpc"
                 }
             ]
         }

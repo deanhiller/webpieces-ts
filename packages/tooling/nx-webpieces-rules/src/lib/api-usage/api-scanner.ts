@@ -42,13 +42,20 @@ import {
     ApiContracts,
     ApiRef,
     ApiRelation,
+    EmptiedApiContract,
     EndpointKind,
     NonLiteralDecoratorArg,
     ProjectApiRelations,
+    UnresolvedEndpointPath,
     apiRefKey,
     deriveApiRelationKind,
     sortApiRefs,
 } from './api-relations';
+import {
+    EmptiedApiContractError,
+    MissingBasePathError,
+    UnresolvedEndpointPathError,
+} from './api-contract-errors';
 import {
     DecoratorArgDiagnostics,
     apiClassInfoFrom,
@@ -112,6 +119,17 @@ export interface ApiScanResult {
      * takes out every method of a class — the whole contract, so they must be surfaced.
      */
     nonLiteralDecoratorArgs: NonLiteralDecoratorArg[];
+    /**
+     * The subset of the above that is FATAL: an `@Endpoint` path that could not be read. Every client
+     * builds its URL as `basePath + path`, so this is missing routing, not missing metadata —
+     * buildApiContracts throws on a non-empty list rather than shipping a contract without it.
+     */
+    unresolvedEndpointPaths: UnresolvedEndpointPath[];
+    /**
+     * Contract classes that declared `@Endpoint` methods and kept none — the exact shape that used to
+     * slip out through buildApiContracts' zero-method skip, taking a whole service's queues with it.
+     */
+    emptiedApiContracts: EmptiedApiContract[];
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -301,6 +319,8 @@ export class ApiUsageScanner {
             scannedProjects: this.scannedProjects,
             unresolvedApiCalls: this.unresolvedApiCalls,
             nonLiteralDecoratorArgs: this.decoratorArgDiagnostics.all(),
+            unresolvedEndpointPaths: this.decoratorArgDiagnostics.unresolvedEndpointPaths(),
+            emptiedApiContracts: this.decoratorArgDiagnostics.emptiedContracts(),
         };
     }
 
@@ -474,12 +494,22 @@ export function scanAndAttachApiRelations(
  * would be an empty shell, and its identity is already carried by the `external` refs in
  * apiRelations. Sorted by api name, methods left in declaration order, so the file is deterministic.
  *
- * THROWS when a routed contract has no basePath. `basePath` is required on ApiContract, and an entry
- * missing it is worse than an absent entry: a consumer joining `basePath + path` computes a
- * confidently wrong URL with no signal that anything is off, because every other entry has the field.
+ * THROWS on the three ways an entry can be wrong-but-green, checked root cause first:
+ *   1. an `@Endpoint` path the scan could not read (UnresolvedEndpointPathError) — the other half of
+ *      the URL a consumer computes, and the cause of most emptied contracts;
+ *   2. a class that declared endpoints and kept none (EmptiedApiContractError), which would otherwise
+ *      leave silently through the zero-method skip above;
+ *   3. a routed contract with no basePath (MissingBasePathError).
+ * All three are worse than an absent entry: a consumer joining `basePath + path` computes a
+ * confidently wrong URL with no signal that anything is off, because every other entry is complete.
+ * Each error aggregates EVERY offender, so a developer fixing five constants sees five in one run.
  */
 // webpieces-disable no-function-outside-class -- module entry point, mirrors scanAndAttachApiRelations
 export function buildApiContracts(scan: ApiScanResult): ApiContracts {
+    // Root cause before symptom: an unreadable path is what empties a contract, so naming the paths
+    // is what the author can actually act on.
+    if (scan.unresolvedEndpointPaths.length > 0) throw new UnresolvedEndpointPathError(scan.unresolvedEndpointPaths);
+    if (scan.emptiedApiContracts.length > 0) throw new EmptiedApiContractError(scan.emptiedApiContracts);
     const contracts: ApiContracts = {};
     const missing: string[] = [];
     for (const api of [...scan.apiIndex.keys()].sort()) {
@@ -499,23 +529,6 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     }
     if (missing.length > 0) throw new MissingBasePathError(missing);
     return contracts;
-}
-
-/**
- * A routed contract whose `@ApiPath` argument the scan could not read. Fatal on purpose: shipping the
- * entry without its basePath is what made `/whatsapp/test` render as `/test` in a downstream runbook.
- */
-export class MissingBasePathError extends Error {
-    constructor(public readonly contracts: readonly string[]) {
-        super(
-            `${contracts.length} API contract(s) have @Endpoint methods but no readable @ApiPath basePath:\n` +
-                contracts.map((c: string) => `     • ${c}`).join('\n') +
-                `\n   basePath is REQUIRED in apiContracts — an entry without it makes every consumer\n` +
-                `   compute basePath + path as just path, silently. Inline the @ApiPath string literal,\n` +
-                `   or move the constant into the same module as the contract class.`,
-        );
-        this.name = 'MissingBasePathError';
-    }
 }
 
 /**

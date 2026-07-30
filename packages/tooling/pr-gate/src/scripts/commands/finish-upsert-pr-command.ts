@@ -16,7 +16,8 @@ import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
-import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
+import { PrMerger, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
+import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import {
@@ -93,6 +94,7 @@ export class FinishUpsertPrCommand {
         private readonly provenance: SubagentProvenanceService,
         private readonly instructions: ChecklistInstructionsService,
         private readonly receipts: ReviewStageReceiptService,
+        private readonly banner: FinishBanner,
     ) {}
 
     async run(): Promise<void> {
@@ -149,31 +151,13 @@ export class FinishUpsertPrCommand {
         // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
         // fatal — the PR is already up by now, so a comment failure only warns.
         this.postChecklistComment(repoRoot, result.prNumber, scan, review, provenance);
-        const prNum = result.prNumber;
 
-        process.stdout.write(
-            '\n' + SEP + '✅ PR finished — here is exactly what I did\n' + SEP + '\n' +
-            `   1. validated the build gate (authoritative)\n` +
-            `   2. ${prNum ? `wrote the gated body to PR #${prNum}` : 'composed the gated PR body'} titled: "${title}"\n` +
-            `   3. force-pushed your work to origin/${base} (after the body, so CI reads the right token)\n` +
-            `   4. ${result.merge.message}\n` +
-            `   You are on  ${base}  — same name as the remote branch and the PR head.\n\n`,
-        );
-        // Close by handing the AI a clickable link + directive to end its summary with it (see helper).
-        this.emitClickableLinkDirective(prNum, result.prUrl, title);
-    }
-
-    // Print the closing AI directive: the resolved PR's number/title/URL and an instruction to end the
-    // user-facing summary with EXACTLY `[#N title](url)` as the final line, nothing after it. No-op when
-    // the PR could not be resolved — better to say nothing than to point the user at a link that isn't real.
-    private emitClickableLinkDirective(prNum: string, prUrl: string, title: string): void {
-        if (prNum === '' || prUrl === '') return;
-        process.stdout.write(
-            SEP + `🔗 PR #${prNum}: ${title}\n   ${prUrl}\n\n` + SEP +
-            `AI — the LAST line of your summary to the user MUST be EXACTLY this clickable link, with\n` +
-            `NOTHING printed after it (no sign-off, no next steps, no blank commentary):\n\n` +
-            `   [#${prNum} ${title}](${prUrl})\n\n`,
-        );
+        // The closing recap + the clickable-link directive, BOTH derived from the real merge outcome.
+        // Nothing here may hard-code success: a stranded PR under a green checkmark is how PRs got
+        // abandoned (see FinishBanner).
+        const bannerInput = new FinishBannerInput(result.prNumber, result.prUrl, title, base, result.merge);
+        process.stdout.write(this.banner.render(bannerInput));
+        process.stdout.write(this.banner.linkDirective(bannerInput));
     }
 
     // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
@@ -484,7 +468,7 @@ export class FinishUpsertPrCommand {
         if (published.createFailed) {
             process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
             return new UpsertResult('', '', new MergeOutcome(false, false,
-                '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)'));
+                '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)', MERGE_RESULT_FAILED));
         }
         const num = published.number;
 

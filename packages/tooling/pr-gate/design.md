@@ -29,6 +29,7 @@ graph TD
     DiffBasisResolver["DiffBasisResolver"]
     DiffMaterializer["DiffMaterializer"]
     DiffScope["DiffScope"]
+    FinishBanner["FinishBanner"]
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
     ForkPoint["ForkPoint"]
@@ -90,6 +91,7 @@ graph TD
     FinishUpsertPrCommand --> ChecklistInstructionsService
     FinishUpsertPrCommand --> ChecklistScanner
     FinishUpsertPrCommand --> Dashboard
+    FinishUpsertPrCommand --> FinishBanner
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
