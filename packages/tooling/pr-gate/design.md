@@ -22,6 +22,7 @@ graph TD
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
+    ChecklistScanner["ChecklistScanner"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
@@ -39,6 +40,7 @@ graph TD
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
     OpenPrCheck["OpenPrCheck"]
+    PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
     RepoRootFinder["RepoRootFinder"]
@@ -53,13 +55,18 @@ graph TD
     BranchReaper --> MergedBranchesService
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
-    ChecklistCommand --> AiBranchName
-    ChecklistCommand --> ChecklistDetector
     ChecklistCommand --> ChecklistInstructionsService
     ChecklistCommand --> ChecklistNotice
+    ChecklistCommand --> ChecklistScanner
     ChecklistCommand --> RepoRootFinder
-    ChecklistCommand --> ReviewJsonService
     ChecklistDetector --> DiffScope
+    ChecklistInstructionsService --> ReviewJsonService
+    ChecklistScanner --> AiBranchName
+    ChecklistScanner --> ChecklistDetector
+    ChecklistScanner --> DiffScope
+    ChecklistScanner --> ForkPoint
+    ChecklistScanner --> PrContextWriter
+    ChecklistScanner --> ReviewJsonService
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
@@ -70,8 +77,8 @@ graph TD
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
-    FinishUpsertPrCommand --> ChecklistDetector
     FinishUpsertPrCommand --> ChecklistInstructionsService
+    FinishUpsertPrCommand --> ChecklistScanner
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
@@ -106,6 +113,8 @@ graph TD
     MergeStart --> MergeState
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
+    PrContextWriter --> DiffScope
+    PrContextWriter --> ReviewJsonService
     PrGateApp --> CheckPrCommand
     PrGateApp --> ChecklistCommand
     PrGateApp --> CleanupCommand
@@ -123,10 +132,10 @@ graph TD
     StartUpdateCommand --> RunUpdate
     StartUpsertPrCommand --> AiBranchName
     StartUpsertPrCommand --> BranchNaming
-    StartUpsertPrCommand --> DiffScope
+    StartUpsertPrCommand --> ForkPoint
     StartUpsertPrCommand --> GitExec
+    StartUpsertPrCommand --> PrContextWriter
     StartUpsertPrCommand --> RepoRootFinder
-    StartUpsertPrCommand --> ReviewJsonService
     StartUpsertPrCommand --> RunUpdate
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e

@@ -70,7 +70,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "ChecklistInstructionsService",
@@ -86,6 +86,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ChecklistScanner",
+                    "className": "ChecklistScanner",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts",
                     "level": 2
                 },
                 {
@@ -118,7 +126,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/diff-scope.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "FinishUpdateCommand",
@@ -225,6 +233,14 @@
                     "level": 2
                 },
                 {
+                    "id": "PrContextWriter",
+                    "className": "PrContextWriter",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts",
+                    "level": 3
+                },
+                {
                     "id": "PrGateApp",
                     "className": "PrGateApp",
                     "kind": "controller",
@@ -254,7 +270,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-json.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "RunUpdate",
@@ -345,24 +361,6 @@
                 },
                 {
                     "from": "ChecklistCommand",
-                    "to": "AiBranchName",
-                    "injection": "type",
-                    "token": "AiBranchName",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
-                    "paramName": "aiBranchName",
-                    "paramType": "AiBranchName"
-                },
-                {
-                    "from": "ChecklistCommand",
-                    "to": "ChecklistDetector",
-                    "injection": "type",
-                    "token": "ChecklistDetector",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
-                    "paramName": "checklistDetector",
-                    "paramType": "ChecklistDetector"
-                },
-                {
-                    "from": "ChecklistCommand",
                     "to": "ChecklistInstructionsService",
                     "injection": "type",
                     "token": "ChecklistInstructionsService",
@@ -381,21 +379,21 @@
                 },
                 {
                     "from": "ChecklistCommand",
+                    "to": "ChecklistScanner",
+                    "injection": "type",
+                    "token": "ChecklistScanner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
+                    "paramName": "checklistScanner",
+                    "paramType": "ChecklistScanner"
+                },
+                {
+                    "from": "ChecklistCommand",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
-                },
-                {
-                    "from": "ChecklistCommand",
-                    "to": "ReviewJsonService",
-                    "injection": "type",
-                    "token": "ReviewJsonService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
-                    "paramName": "reviewJsonService",
-                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "ChecklistDetector",
@@ -405,6 +403,69 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
                     "paramName": "diffScope",
                     "paramType": "DiffScope"
+                },
+                {
+                    "from": "ChecklistInstructionsService",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "ChecklistDetector",
+                    "injection": "type",
+                    "token": "ChecklistDetector",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
+                    "paramName": "checklistDetector",
+                    "paramType": "ChecklistDetector"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "ForkPoint",
+                    "injection": "type",
+                    "token": "ForkPoint",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts#ForkPoint",
+                    "paramName": "forkPoint",
+                    "paramType": "ForkPoint"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "PrContextWriter",
+                    "injection": "type",
+                    "token": "PrContextWriter",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts#PrContextWriter",
+                    "paramName": "prContextWriter",
+                    "paramType": "PrContextWriter"
+                },
+                {
+                    "from": "ChecklistScanner",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "CleanTmp",
@@ -498,21 +559,21 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
-                    "to": "ChecklistDetector",
-                    "injection": "type",
-                    "token": "ChecklistDetector",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
-                    "paramName": "checklistDetector",
-                    "paramType": "ChecklistDetector"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
                     "to": "ChecklistInstructionsService",
                     "injection": "type",
                     "token": "ChecklistInstructionsService",
                     "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
                     "paramName": "instructions",
                     "paramType": "ChecklistInstructionsService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ChecklistScanner",
+                    "injection": "type",
+                    "token": "ChecklistScanner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
+                    "paramName": "checklistScanner",
+                    "paramType": "ChecklistScanner"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -821,6 +882,24 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "PrContextWriter",
+                    "to": "DiffScope",
+                    "injection": "type",
+                    "token": "DiffScope",
+                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
+                    "paramName": "diffScope",
+                    "paramType": "DiffScope"
+                },
+                {
+                    "from": "PrContextWriter",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
                     "from": "PrGateApp",
                     "to": "CheckPrCommand",
                     "injection": "type",
@@ -975,12 +1054,12 @@
                 },
                 {
                     "from": "StartUpsertPrCommand",
-                    "to": "DiffScope",
+                    "to": "ForkPoint",
                     "injection": "type",
-                    "token": "DiffScope",
-                    "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
-                    "paramName": "diffScope",
-                    "paramType": "DiffScope"
+                    "token": "ForkPoint",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts#ForkPoint",
+                    "paramName": "forkPoint",
+                    "paramType": "ForkPoint"
                 },
                 {
                     "from": "StartUpsertPrCommand",
@@ -993,21 +1072,21 @@
                 },
                 {
                     "from": "StartUpsertPrCommand",
+                    "to": "PrContextWriter",
+                    "injection": "type",
+                    "token": "PrContextWriter",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts#PrContextWriter",
+                    "paramName": "prContextWriter",
+                    "paramType": "PrContextWriter"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
-                },
-                {
-                    "from": "StartUpsertPrCommand",
-                    "to": "ReviewJsonService",
-                    "injection": "type",
-                    "token": "ReviewJsonService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
-                    "paramName": "reviewJsonService",
-                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "StartUpsertPrCommand",

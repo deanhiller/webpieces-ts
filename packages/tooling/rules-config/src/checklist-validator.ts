@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistDefinition } from './checklist-config';
 
 // Where a reviewer subagent's definition must live for Claude Code to be able to spawn it.
@@ -17,9 +16,11 @@ const SOURCE = 'pr-gate.checklists in webpieces.config.json';
  * old shape gets a hard config error naming the exact edit — which an AI applies in one pass — and that is
  * strictly better than carrying two code paths forever so that nobody has to read an error message.
  *
- * `@injectable(bindingScopeValues.Singleton)` so it is injected by type + drawn in the DI design.
+ * Deliberately NOT `@injectable`: config validation runs from module-level functions in validate-config.ts,
+ * before any container exists, so this is constructed directly. It previously carried an @injectable
+ * decorator plus a comment claiming it was "injected by type and drawn in the DI design" — while nothing
+ * injected it and it appeared nowhere in design.json. A false claim the next reader would have trusted.
  */
-@injectable(bindingScopeValues.Singleton)
 export class ChecklistValidator {
     /**
      * Human-readable errors for the configured checklists, or [] when they are valid. Never throws.
