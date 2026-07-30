@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext, RequiredChecklist, ChecklistResult, CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
+import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistManifestService, ChecklistDefinition, ReviewJsonService, DiffScope, ChangedFilesOptions, PrContext, RequiredChecklist, ChecklistResult, CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
+import { ChecklistNotice } from '../workflow/checklist-notice';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -11,9 +12,10 @@ import { RunUpdate } from '../workflow/run-update';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-// START of the AI-first PR flow: the deterministic setup — update from main, push, run the advisory
-// build gate — then hand the AI instructions to WRITE review.json and run `wp-finish-upsert-pr` (which
-// reads it and posts the PR). This command NEVER creates/updates a PR; all `gh` posting lives in finish.
+// START of the AI-first PR flow: the deterministic setup — update from main, run the advisory build gate
+// — then hand the AI instructions to WRITE review.json and run `wp-finish-upsert-pr` (which reads it and
+// posts the PR). This command NEVER creates/updates a PR and NEVER pushes: all `gh` posting and the ONE
+// push live in finish, behind review.json + the checklists + the authoritative build gate.
 @injectable(bindingScopeValues.Singleton)
 export class StartUpsertPrCommand {
     constructor(
@@ -27,6 +29,7 @@ export class StartUpsertPrCommand {
         private readonly manifestService: ChecklistManifestService,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly diffScope: DiffScope,
+        private readonly checklistNotice: ChecklistNotice,
     ) {}
 
     async run(): Promise<void> {
@@ -39,14 +42,15 @@ export class StartUpsertPrCommand {
         // once and never clobbers a customized copy.
         this.scaffoldCiWorkflow(repoRoot);
 
-        // Precondition: a fully-committed tree. This flow updates, pushes HEAD, and builds — the tooling
-        // must not commit your work for you, and pushing HEAD while building the working tree would let
-        // an uncommitted change build green yet push a stale commit. Fail early if dirty.
+        // Precondition: a fully-committed tree. This flow squash-updates the branch and builds it — the
+        // tooling must not commit your work for you, and building a dirty working tree would let an
+        // uncommitted change build green over a different commit than the one that ships. Fail if dirty.
         this.gitExec.assertCleanTree(repoRoot);
 
+        // Nothing here pushes. This command reviews; wp-finish-upsert-pr pushes ONCE, after review.json,
+        // every BLOCK checklist, and the authoritative build gate — so no unreviewed commit reaches the
+        // remote, and there is no early `synchronize` firing against a PR body with a stale gate token.
         await this.updateBranchFromMain(repoRoot);
-        // Local branch, remote branch, and PR share the one stable feature name.
-        this.gitExec.ensurePushed(this.branchNaming.baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim()));
 
         // Advisory build gate — early feedback before the AI writes review.json. wp-finish-upsert-pr
         // runs the authoritative one. Both go through the same runBuildGate (only the framing differs).
@@ -54,9 +58,14 @@ export class StartUpsertPrCommand {
             '② Build gate (nx affected)', 'pnpm wp-start-upsert-pr', 'Build failed — fix it before reviewing.',
         ));
 
-        // Hand the AI its next step: write review.json, then run finish (which posts the PR). Compute the
-        // checklists this diff MATCHED (from the manifest doc) so the hint names each reviewer subagent to
-        // spawn BEFORE review.json is written (empty for repos with no checklist doc ⇒ the hint is unchanged).
+        this.handOffToReview(repoRoot);
+    }
+
+    // Hand the AI its next step: write review.json, then run finish (which posts the PR). Computes the
+    // checklists this diff MATCHED (from the manifest doc) so the hint names each reviewer subagent to
+    // spawn BEFORE review.json is written — and, when NOTHING matched, says so instead of staying silent
+    // (zero checklists is a supported state, never a blocker — see ChecklistNotice).
+    private handOffToReview(repoRoot: string): void {
         const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklistDoc);
         const triggered = this.checklistDetector.detectForRepo(repoRoot, defs);
         const required = this.checklistDetector.toRequired(triggered);
@@ -71,10 +80,11 @@ export class StartUpsertPrCommand {
         // Persist the PR diff context (base sha + changed files) so reviewer subagents can `git diff` for
         // content instead of the tooling matching on regexes. Written whenever a base resolves.
         this.writePrContext(repoRoot);
-        this.printChecklistPlan(triggered, toReview);
+        this.printChecklistPlan(repoRoot, defs, triggered, toReview);
         process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
-            `Branch is updated, pushed, and the build gate passed. Now review your own changes and\n` +
+            `Branch is updated and the build gate passed (nothing pushed yet — finish does the one push).\n` +
+            `Now review your own changes and\n` +
             `${reviewJsonSchemaHint(reviewPath, toReview)}\n\n` +
             `Then run:  pnpm wp-finish-upsert-pr\n` +
             `(It re-validates the build, renders the dashboard with your risk/violations, and creates/updates the PR.)\n\n`,
@@ -105,8 +115,11 @@ export class StartUpsertPrCommand {
 
     // Show which matched checklists still need a reviewer subagent (spawn each as a distinct one) and which
     // are already reviewed (reused, not re-run) — so a second cycle re-instructs nothing.
-    private printChecklistPlan(triggered: readonly TriggeredChecklist[], toReview: readonly RequiredChecklist[]): void {
-        if (triggered.length === 0) return;
+    private printChecklistPlan(repoRoot: string, defs: readonly ChecklistDefinition[], triggered: readonly TriggeredChecklist[], toReview: readonly RequiredChecklist[]): void {
+        if (triggered.length === 0) {
+            this.printEmptyChecklistNotice(repoRoot, defs);
+            return;
+        }
         process.stdout.write('\n' + SEP + '📋 Review checklists\n' + SEP + '\n');
         const toReviewIds = new Set(toReview.map((r: RequiredChecklist): string => r.id));
         const reused = triggered.filter((t: TriggeredChecklist): boolean => !toReviewIds.has(t.def.id));
@@ -126,6 +139,17 @@ export class StartUpsertPrCommand {
         process.stdout.write('See .webpieces/instruct-ai/webpieces.review-checklists.md for the review-<id>.json format each must write.\n');
     }
 
+    // ZERO checklists matched. Say so — this used to print nothing at all, which reads exactly like "the
+    // checklist ran and passed". Purely informational: 0 is a supported state and never blocks finishing.
+    // validate() is called ONLY here (the runtime load() is deliberately tolerant), so a missing/malformed
+    // checklist doc stops being a silent no-op and gets reported.
+    private printEmptyChecklistNotice(repoRoot: string, defs: readonly ChecklistDefinition[]): void {
+        const docRel = loadAndValidate(repoRoot).prGate.checklistDoc;
+        const errors = this.manifestService.validate(repoRoot, docRel);
+        process.stdout.write('\n' + SEP + '📋 Review checklists\n' + SEP + '\n');
+        process.stdout.write(this.checklistNotice.build(docRel, errors, defs.length, 'wp-finish-upsert-pr'));
+    }
+
     // Scaffold the server-side CI check when (and only when) this repo set a gateSalt. Written to the
     // gitignored instruct-ai dir so it never dirties the tree; the human copies it to .github/workflows
     // and marks it required (webpieces can't set branch protection). No-op for repos with no gateSalt.
@@ -143,7 +167,8 @@ export class StartUpsertPrCommand {
     // merge process doc it writes names `wp-finish-upsert-pr` as the finish command.
     private async updateBranchFromMain(repoRoot: string): Promise<void> {
         process.stdout.write('\n' + SEP + '① Updating branch from main\n' + SEP + '\n');
-        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', 'wp-finish-upsert-pr');
+        // pushRemote=false — finish owns the single push (see MergeEndOptions).
+        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', 'wp-finish-upsert-pr', false);
         if (outcome === 'conflict' || outcome === 'unvalidatedResume') {
             throw new CliExitError(2,
                 '\n⏸️  Conflicts — resolve them, then run pnpm wp-finish-upsert-pr (it validates the merge AND finishes the PR).',

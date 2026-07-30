@@ -32,12 +32,12 @@ export class PublishedPr {
  * right token. A brand-new PR is unaffected either way — `gh pr create` composes the body after the push,
  * so the `opened` event already sees the final body.
  *
- * NOTE this is not the whole story: `wp-start-upsert-pr` also pushes, so on iteration 2+ the red usually
- * comes from THAT push, and by the time finish runs its own `ensurePushed` is a no-op firing no event.
- * What clears it is the `edited` event from the body write, which is why `edited` must stay in the
- * scaffolded workflow's trigger list. The ordering here covers the remaining case where finish's push
- * really does move the remote head (its 3-point merge finalize rewrote the branch, or the developer
- * committed between start and finish).
+ * THIS IS THE ONLY PUSH IN THE PR FLOW. `wp-start-upsert-pr` used to push twice (its own `ensurePushed`,
+ * and the force-push inside the 3-point merge finalize), which put code on the remote before review.json
+ * and the checklists had even run, and fired `synchronize` against a PR body still carrying the previous
+ * run's token. Both are gone — the merge finalize now takes `MergeEndOptions.pushRemote=false` in the PR
+ * flow. So the single `synchronize` of a cycle arrives strictly after the body edit below, and can only
+ * ever read the correct token.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is drawn in the DI design and injected by type.
  */

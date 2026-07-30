@@ -14,6 +14,49 @@ import { MergeState } from './merge-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
+// What finalizing actually did, for the recap. Data-only. `pushed` and `pushDeferred` are distinct on
+// purpose: "we chose not to push yet" must not be reported like "there was no remote to push to".
+class SyncRecap {
+    pushed: boolean;
+    pushDeferred: boolean;
+    hadConflict: boolean;
+    backupKept: boolean;
+
+    constructor(pushed: boolean, pushDeferred: boolean, hadConflict: boolean, backupKept: boolean) {
+        this.pushed = pushed;
+        this.pushDeferred = pushDeferred;
+        this.hadConflict = hadConflict;
+        this.backupKept = backupKept;
+    }
+}
+
+// How a merge should be finalized. Data-only (per CLAUDE.md, classes for data) — bundled rather than
+// added as more positional params, which mergeEnd already has enough of.
+export class MergeEndOptions {
+    // Non-null means the AI resolved a conflict and it must be validated + committed before finalizing.
+    // Null means merge-START already committed a clean merge, so finalize only.
+    conflictedFiles: string[] | null;
+
+    /**
+     * Whether finalizing may push the squashed branch to origin.
+     *
+     * FALSE for the PR flow (`wp-start-upsert-pr` / `wp-finish-upsert-pr`), which pushes EXACTLY ONCE,
+     * from GatedPrPublisher, after review.json + every BLOCK checklist + the authoritative build gate
+     * have passed and the gated PR body is already up. Code must not reach the remote ahead of its
+     * review, and an early push here is also what fires `pull_request:synchronize` against a PR body
+     * still carrying the previous run's gate token — the flap the whole gate redesign is removing.
+     *
+     * TRUE for the update-only flow (`wp-start-update` / `wp-finish-update`), which has no later push;
+     * finalizing IS the end of that flow, so not pushing would silently strand the rewrite locally.
+     */
+    pushRemote: boolean;
+
+    constructor(conflictedFiles: string[] | null, pushRemote: boolean) {
+        this.conflictedFiles = conflictedFiles;
+        this.pushRemote = pushRemote;
+    }
+}
+
 // merge-END: the second half of the 3-point squash-merge lifecycle, symmetric with merge-START. Given
 // the branch context, it (optionally) validates + commits the AI's conflict resolution, then ALWAYS
 // finalizes — force-pushes `<branch>Squash` to the stable feature branch and renames it BACK to that
@@ -30,13 +73,13 @@ export class MergeEnd {
     ) {}
 
     /**
-     * Complete a 3-point squash merge. `conflictedFiles` non-null means a conflict was resolved by the
-     * AI and must be validated + committed before finalizing; null means a clean merge that merge-START
-     * already committed (finalize only). Either way the merge ends fully finalized on the feature branch.
+     * Complete a 3-point squash merge. See {@link MergeEndOptions} for what `conflictedFiles` and
+     * `pushRemote` mean. Either way the merge ends fully finalized on the feature branch.
      */
     async mergeEnd(
-        repoRoot: string, verb: MutationVerb, mergeDir: string, ctx: MergeContext, conflictedFiles: string[] | null,
+        repoRoot: string, verb: MutationVerb, mergeDir: string, ctx: MergeContext, options: MergeEndOptions,
     ): Promise<void> {
+        const conflictedFiles = options.conflictedFiles;
         if (conflictedFiles !== null) {
             process.stdout.write('\n' + SEP + '🔎 Validating Merge Resolution\n' + SEP + '\n');
             this.validateResolution(repoRoot, verb, mergeDir, conflictedFiles);
@@ -60,7 +103,7 @@ export class MergeEnd {
         // A marker in THIS run dir means the sync hit conflicts (marker is written only on hand-back).
         // Read it BEFORE clearMergeMarker so finalize knows whether to keep the pre-merge snapshot.
         const hadConflict = this.mergeState.readMergeMarker(mergeDir) !== null;
-        this.finalizeBranch(repoRoot, verb, ctx, hadConflict);
+        this.finalizeBranch(repoRoot, verb, ctx, hadConflict, options.pushRemote);
         this.mergeState.clearMergeMarker(mergeDir);
         await this.cleanTmpService.cleanTmp();
     }
@@ -109,25 +152,22 @@ export class MergeEnd {
         process.stdout.write('✅ Merge explanations present for all resolved files.\n');
     }
 
-    private localBranchExists(name: string): boolean {
+    // Seam: overridden in the spec so the push/backup decisions are testable with no git and no repo.
+    protected localBranchExists(name: string): boolean {
         return spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0;
     }
 
-    // Force-push the squash branch to the stable feature branch (where the single PR lives), then RENAME
-    // the local squash branch back to that SAME feature name. On a CLEAN sync the pre-merge snapshot is
-    // disposable, so it's deleted at the very end; a CONFLICT sync keeps it.
-    private finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext, hadConflict: boolean): void {
+    // Force-push the squash branch to the stable feature branch (where the single PR lives) — unless the
+    // caller owns the push (see MergeEndOptions.pushRemote) — then RENAME the local squash branch back to
+    // that SAME feature name. On a CLEAN sync the pre-merge snapshot is disposable, so it's deleted at the
+    // very end; a CONFLICT sync — or a sync we did not push — keeps it.
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext, hadConflict: boolean, pushRemote: boolean): void {
         process.stdout.write('\n' + SEP + '🗑️  Finalizing\n' + SEP + '\n');
         const base = this.branchNaming.baseBranchName(ctx.currentBranch);
         this.gitExec.runGitChecked(['branch', '-D', ctx.currentBranch], 'Failed to delete old feature branch');
 
-        const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', base]).status === 0;
-        if (remoteExists) {
-            process.stdout.write(ctx.prNumber ? `Updating PR #${ctx.prNumber} (force-with-lease)...\n` : 'Updating remote branch (force-with-lease)...\n');
-            this.gitExec.runGitChecked(['push', '-u', '--force-with-lease', 'origin', `${ctx.squashBranch}:${base}`], 'Failed to push to origin');
-        } else {
-            process.stdout.write('No remote branch — local only.\n');
-        }
+        const pushed = pushRemote ? this.pushFinalized(ctx, base) : this.explainNoPush();
         this.gitExec.runGitChecked(['checkout', ctx.squashBranch], 'Failed to checkout squash branch');
         // Free the rename target: `base` is normally the branch we just deleted, but a backward-compat
         // sync from a leftover `…wpN` can leave a separate stale `base` lingering — drop it too.
@@ -145,7 +185,10 @@ export class MergeEnd {
         stampCleanMainSyncStatus(repoRoot);
 
         // Clean sync → the pre-merge snapshot was never needed; delete it LAST. Conflict sync → keep it.
-        const backupKept = hadConflict;
+        // ALSO keep it when we did not push: the squash rewrite then exists ONLY in this working copy, so
+        // deleting the snapshot would leave a history rewrite with no copy anywhere. It is disposable only
+        // once origin has the result, and in the PR flow that does not happen until wp-finish-upsert-pr.
+        const backupKept = hadConflict || !pushed;
         if (!backupKept && this.localBranchExists(ctx.backupBranch)) {
             this.gitExec.runGitChecked(['branch', '-D', ctx.backupBranch], 'Failed to delete clean-merge backup');
         }
@@ -157,16 +200,53 @@ export class MergeEnd {
         finalizeEvent.artifacts = [backupKept ? `backup=${ctx.backupBranch}` : `backupDeleted=${ctx.backupBranch}`, `remotePR=${base}`];
         logBranchMutation(repoRoot, finalizeEvent);
 
-        this.printSyncRecap(base, ctx.backupBranch, ctx.prNumber, remoteExists, backupKept);
+        this.printSyncRecap(base, ctx.backupBranch, ctx.prNumber, new SyncRecap(pushed, !pushRemote, hadConflict, backupKept));
+    }
+
+    // Say WHY nothing was pushed, so an unpushed branch never looks like a failure. Always returns false
+    // (nothing was pushed), which also keeps the pre-merge snapshot alive — see the backupKept comment.
+    private explainNoPush(): boolean {
+        process.stdout.write(
+            'Not pushing — the PR flow pushes exactly ONCE, from pnpm wp-finish-upsert-pr, after review.json\n' +
+            'and the build gate pass and the gated PR body is written. Your work stays local until then\n' +
+            '(the pre-merge snapshot below is kept as well, so nothing is only in one place).\n',
+        );
+        return false;
+    }
+
+    // Push the finalized squash branch to the stable feature branch. Returns whether a push actually
+    // happened — false when there is no remote branch yet (a brand-new branch is local until something
+    // creates it, which in the PR flow is `gh pr create` after GatedPrPublisher's push).
+    protected pushFinalized(ctx: MergeContext, base: string): boolean {
+        const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', base]).status === 0;
+        if (!remoteExists) {
+            process.stdout.write('No remote branch — local only.\n');
+            return false;
+        }
+        process.stdout.write(ctx.prNumber ? `Updating PR #${ctx.prNumber} (force-with-lease)...\n` : 'Updating remote branch (force-with-lease)...\n');
+        this.gitExec.runGitChecked(['push', '-u', '--force-with-lease', 'origin', `${ctx.squashBranch}:${base}`], 'Failed to push to origin');
+        return true;
+    }
+
+    // Where the branch ended up, in the recap's own words. Three distinct outcomes, and "deferred" must
+    // never read like the failure the other two could be mistaken for.
+    private remoteRecapLine(feature: string, prNumber: string, recap: SyncRecap): string {
+        if (recap.pushed) {
+            return `landed back on  ${feature}   (== origin/${feature}${prNumber ? ` == PR #${prNumber}` : ''} — names match)`;
+        }
+        if (recap.pushDeferred) {
+            return `landed back on  ${feature}   (local — by design; pnpm wp-finish-upsert-pr does the one push)`;
+        }
+        return `landed back on  ${feature}   (local only — no remote branch yet)`;
     }
 
     // The explicit, numbered "here is exactly what I did" recap the AI (and human) reads after a sync.
-    private printSyncRecap(feature: string, backupBranch: string, prNumber: string, pushed: boolean, backupKept: boolean): void {
-        const remoteLine = pushed
-            ? `landed back on  ${feature}   (== origin/${feature}${prNumber ? ` == PR #${prNumber}` : ''} — names match)`
-            : `landed back on  ${feature}   (local only — no remote branch yet)`;
+    private printSyncRecap(feature: string, backupBranch: string, prNumber: string, recap: SyncRecap): void {
+        const backupKept = recap.backupKept;
+        const remoteLine = this.remoteRecapLine(feature, prNumber, recap);
+        const keptReason = recap.hadConflict ? 'this merge had conflicts' : 'not pushed yet — wp-finish-upsert-pr will push';
         const step1 = backupKept
-            ? `snapshotted your pre-merge state → ${backupBranch} (kept — this merge had conflicts)`
+            ? `snapshotted your pre-merge state → ${backupBranch} (kept — ${keptReason})`
             : `snapshotted your pre-merge state → ${backupBranch} (auto-removed — clean merge, no undo needed)`;
         const trailer = backupKept
             ? `   Pre-merge snapshot trail:  git branch --list '${feature}PreMerge*'\n` +
