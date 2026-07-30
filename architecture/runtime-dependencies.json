@@ -129,5 +129,7 @@
             "type": "rpc"
         }
     ],
-    "unresolvedUses": []
+    "unresolvedUses": [],
+    "queues": {},
+    "triggers": []
 }
