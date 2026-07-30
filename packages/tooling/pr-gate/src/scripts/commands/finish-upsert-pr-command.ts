@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist,
-    writeTemplate, RepoRootFinder, ReviewJsonService, ChecklistManifestService,
+    writeTemplate, RepoRootFinder, ReviewJsonService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ChecklistInstructionsService, InformAiError,
 } from '@webpieces/rules-config';
@@ -63,7 +63,6 @@ export class FinishUpsertPrCommand {
         private readonly publisher: GatedPrPublisher,
         private readonly dashboard: Dashboard,
         private readonly checklistDetector: ChecklistDetector,
-        private readonly manifestService: ChecklistManifestService,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly gateTokenService: GateTokenService,
         private readonly provenance: SubagentProvenanceService,
@@ -80,7 +79,7 @@ export class FinishUpsertPrCommand {
         // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
-        const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklists);
+        const defs = loadAndValidate(repoRoot).prGate.checklists;
         const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, defs));
         // review-<id>.json files persist locally between runs, so a re-run after a push re-validates the
         // EXISTING verdicts against the (possibly changed) triggered set for free: an unchanged checklist

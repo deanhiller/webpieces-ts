@@ -1,4 +1,3 @@
-import { ChecklistSource } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**
@@ -8,14 +7,16 @@ import { injectable, bindingScopeValues } from 'inversify';
  * because the previous behavior was to print nothing at all, which is indistinguishable from "the
  * checklist ran and passed". Silence is the bug; refusing would be a worse one.
  *
- * The three empty cases need different fixes, so they get different text:
+ * The two empty cases need different fixes, so they get different text:
  *   - NONE CONFIGURED  — the repo configured no checklists at all. Perfectly fine; mention that a human
  *                        MAY add checklist *.md docs if they want reviews, and move on.
- *   - MISCONFIGURED    — checklists IS configured but broken. This one is worth shouting about:
- *                        the tolerant loader returns [] for it, so a broken doc silently enforces
- *                        NOTHING while looking configured.
- *   - NONE MATCHED     — checklists exist and are valid, but none of their patterns hit this diff.
- *                        Also fine; report the count so a human can judge whether that is expected.
+ *   - NONE MATCHED     — checklists exist, but none of their patterns hit this diff. Also fine; report the
+ *                        count so a human can judge whether that is expected.
+ *
+ * There is deliberately NO "misconfigured" case. Checklists live only in `pr-gate.checklists`, which
+ * loadAndValidate validates — including that every doc and reviewer agent file exists — so a broken set
+ * throws before any command reaches this class. The old tolerant manifest loader that returned [] for a
+ * malformed doc (and thus enforced NOTHING while looking configured) is gone, and with it that failure mode.
  *
  * Pure string building, no I/O, so it is unit-testable without git or a repo.
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
@@ -23,21 +24,16 @@ import { injectable, bindingScopeValues } from 'inversify';
 @injectable(bindingScopeValues.Singleton)
 export class ChecklistNotice {
     /**
-     * @param source          `prGate.checklists` — where this repo's checklists come from (empty = none)
-     * @param manifestErrors  `ChecklistManifestService.validate()` output ([] when valid or unconfigured)
-     * @param definedCount    how many checklists that source defines
-     * @param finishCommand   the command to continue with, named in every branch
+     * @param definedCount   how many checklists `pr-gate.checklists` defines (0 = the repo configured none)
+     * @param finishCommand  the command to continue with, named in every branch
      */
-    // eslint-disable-next-line @typescript-eslint/max-params
-    build(source: ChecklistSource, manifestErrors: readonly string[], definedCount: number, finishCommand: string): string {
-        return `${this.reason(source, manifestErrors, definedCount)}\n${this.continueLine(finishCommand)}`;
+    build(definedCount: number, finishCommand: string): string {
+        return `${this.reason(definedCount)}\n${this.continueLine(finishCommand)}`;
     }
 
-    private reason(source: ChecklistSource, manifestErrors: readonly string[], definedCount: number): string {
-        if (manifestErrors.length > 0) return this.misconfigured(source.describe(), manifestErrors);
-        if (source.isEmpty()) return this.noneConfigured();
-        if (definedCount === 0) return this.emptyManifest(source.describe());
-        return this.noneMatched(source.describe(), definedCount);
+    private reason(definedCount: number): string {
+        if (definedCount === 0) return this.noneConfigured();
+        return this.noneMatched(definedCount);
     }
 
     // Every branch ends here: 0 checklists is OK, keep going. Stated plainly so neither the AI nor the
@@ -65,27 +61,9 @@ export class ChecklistNotice {
         );
     }
 
-    private emptyManifest(sourceLabel: string): string {
+    private noneMatched(definedCount: number): string {
         return (
-            `📋 Review checklists: 0 defined — ${sourceLabel} is readable but lists no usable\n` +
-            '   checklists (every entry needs a non-empty "subagent"). Fine to proceed; worth a look if\n' +
-            '   you expected some to run.'
-        );
-    }
-
-    // The one case that deserves volume: it LOOKS configured but enforces nothing.
-    private misconfigured(sourceLabel: string, manifestErrors: readonly string[]): string {
-        return (
-            `⚠️  Review checklists: 0 ran because ${sourceLabel} is MISCONFIGURED — so this PR is getting NO\n` +
-            '   checklist review even though this repo asked for one. Not fatal, but almost certainly not\n' +
-            '   what you want:\n\n' +
-            manifestErrors.map((e: string): string => `     • ${e}`).join('\n')
-        );
-    }
-
-    private noneMatched(sourceLabel: string, definedCount: number): string {
-        return (
-            `📋 Review checklists: ${definedCount} defined in ${sourceLabel}, 0 matched this diff — none of their\n` +
+            `📋 Review checklists: ${definedCount} defined in pr-gate.checklists, 0 matched this diff — none of their\n` +
             '   path patterns hit a changed file. Expected for changes outside those areas; if you thought\n' +
             '   one should have run, check its "patterns" against the changed-file list above.'
         );

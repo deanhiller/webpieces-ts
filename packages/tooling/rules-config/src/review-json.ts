@@ -33,7 +33,7 @@ export class ChecklistResult {
 export class RequiredChecklist {
     id: string;             // = subagent name; keys review-<id>.json
     subagent: string;       // reviewer agent that must run (agentType the harness stamps)
-    doc: string;            // REPO-RELATIVE guidance doc the reviewer reads ('' → it reads the manifest doc)
+    doc: string;            // REPO-RELATIVE guidance doc the reviewer reads ('' → it just reads the diff)
     matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
     // Which of the checklist's OWN globs actually fired. Printed so a reviewer can judge how coarse the
     // match was — a precise `db/migrations/**` hit means something different from a blanket `**` — and the
@@ -125,7 +125,7 @@ export class ChecklistVerdict {
 // The PR's diff context, written by wp-start-upsert-pr into `.webpieces/pr-review/<branch>/pr-context.json`
 // so a reviewer subagent knows the exact 3-point base the gate used and the full changed-file set — then
 // reads any file's actual diff with `git diff <base> HEAD -- <file>`. This is what lets a checklist match
-// coarsely by path (in the manifest) while the subagent makes the fine, content-level judgment. Data-only.
+// coarsely by path (in the config) while the subagent makes the fine, content-level judgment. Data-only.
 export class PrContext {
     base: string;          // the 3-point merge-base sha the gate diffs against
     head: string;          // HEAD sha

@@ -1,9 +1,9 @@
-import { ChecklistManifestService } from './checklist-manifest';
-import { ChecklistDefinition, ChecklistSource, RawChecklistItem, toChecklist } from './checklist-config';
+import { ChecklistValidator } from './checklist-validator';
+import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
 
 // The two `pr-gate` sub-sections whose validation is bulky enough to own a file: the review `checklists`
-// (two accepted shapes) and the one rationale key that is rejected outright. Split out of validate-config.ts
-// only for size; loadAndValidate still reaches both through validatePrGateSection.
+// and the one rationale key that is rejected outright. Split out of validate-config.ts only for size;
+// loadAndValidate still reaches both through validatePrGateSection.
 
 // The `*Why` convention (buildCommandWhy, mergeModeWhy, gatesWhy…) is free-form rationale a consumer keeps
 // beside a field, and pr-gate tolerates any of them — EXCEPT this one. See validateNoGateSaltRationale.
@@ -32,35 +32,63 @@ export function validateNoGateSaltRationale(s: Record<string, unknown>): string[
     ];
 }
 
+const CHECKLIST_EXAMPLE = (
+    'Example:\n' +
+    '    "checklists": [\n' +
+    '      { "subagent": "db-migration-reviewer",\n' +
+    '        "doc": ".claude/review/db-migrations.md",\n' +
+    '        "patterns": ["**/migrations/**", "**/*.sql"] }\n' +
+    '    ]\n' +
+    '  Each entry needs its OWN reviewer subagent (a .claude/agents/<subagent>.md) — that is how independent\n' +
+    '  review is enforced. "doc" is REPO-relative. Omit "patterns" (or use []) to run on every PR.'
+);
+
 /**
- * The `checklists` section of a pr-gate config. TWO shapes are accepted:
- *   - an ARRAY of { subagent, doc?, patterns? } — the PRIMARY form, right here in webpieces.config.json
- *     where it is greppable, schemable and readable by any tool. Each `doc` resolves REPO-relative.
- *   - `{ "doc": "..." }` — the LEGACY form, where the same array lives in an HTML comment inside that doc
- *     and each entry's `doc` resolves relative to it. Still accepted; not recommended for new repos.
- * Either way the entries themselves are validated by ChecklistManifestService, so both shapes get the
- * identical subagent/doc/patterns checks. Exported so the isolated validate-checklist-docs target reuses
- * it. `repoRoot` (when known) lets the doc + reviewer-agent existence checks run.
+ * The `checklists` section of a pr-gate config: an ARRAY of { subagent, doc?, patterns? }, and nothing else.
+ *
+ * The previous `{ "doc": "..." }` shape — which hid the same array in a `<!-- webpieces:checklists -->` HTML
+ * comment inside a markdown doc — is REMOVED, not deprecated. It is rejected with the exact edit to make.
+ * There is deliberately no back-compat branch: two accepted shapes means two code paths, two doc-resolution
+ * rules and two sets of error messages to keep honest forever, while the migration itself is a mechanical
+ * config edit that the coding agent reading this error applies in one pass. A hard failure naming the fix is
+ * cheaper than permanent duality.
+ *
+ * Exported so the isolated validate-checklist-docs target reuses it. `repoRoot` (when known) lets the doc +
+ * reviewer-agent existence checks run.
  */
 // webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed below
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 export function validateChecklistsSection(value: unknown, repoRoot?: string): string[] {
     if (Array.isArray(value)) return validateChecklistArray(value, repoRoot);
-    if (typeof value !== 'object' || value === null) {
-        return [`[pr-gate] "checklists" must be an array of { "subagent", "doc"?, "patterns"? }, or the legacy object { "doc": "<path to the review manifest doc>" }.`];
-    }
-    // webpieces-disable no-any-unknown -- narrowing the opaque checklists section
-    const doc = (value as Record<string, unknown>)['doc'];
-    if (typeof doc !== 'string' || doc.trim() === '') {
-        return [`[pr-gate] "checklists.doc" must be a non-empty string — the repo-relative markdown doc carrying the <!-- webpieces:checklists [...] --> manifest. (Preferred alternative: drop the object and put the checklist ARRAY directly in "checklists".)`];
-    }
-    if (repoRoot === undefined) return [];
-    return new ChecklistManifestService().validate(repoRoot, new ChecklistSource([], doc));
+    if (typeof value === 'object' && value !== null && 'doc' in value) return [legacyManifestError(value)];
+    return [`[pr-gate] "checklists" must be an ARRAY of { "subagent", "doc"?, "patterns"? }. ${CHECKLIST_EXAMPLE}`];
 }
 
-// The array (primary) shape: structurally check each entry HERE — a bad `patterns` or a non-object entry is
-// a config-file typo and deserves a `checklists[i]` message — then hand the narrowed defs to the one
-// validator both shapes share.
+/**
+ * The migration message for the removed `{ doc }` manifest shape. It names the doc the consumer pointed at,
+ * because that is the file holding the array they must move, and spells out the one non-obvious part of the
+ * move: entry `doc` paths used to resolve relative to that manifest doc and are now REPO-relative.
+ */
+// webpieces-disable no-any-unknown -- narrowing the opaque checklists section to read the old `doc` key
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function legacyManifestError(value: object): string {
+    const doc = (value as Record<string, unknown>)['doc'];
+    const docRel = typeof doc === 'string' && doc.trim() !== '' ? doc : '<your review index doc>';
+    return (
+        `[pr-gate] "checklists" is the REMOVED { "doc": "${docRel}" } shape. The checklist array no longer lives in\n` +
+        `  an HTML comment inside a markdown doc — put it directly in webpieces.config.json:\n` +
+        `    1. Open "${docRel}" and copy the JSON array out of its <!-- webpieces:checklists [...] --> comment.\n` +
+        `    2. Replace  "checklists": { "doc": "${docRel}" }  with  "checklists": <that array>.\n` +
+        `    3. Rewrite each entry's "doc" to be REPO-relative — they used to resolve relative to\n` +
+        `       "${docRel}", so a bare "db-migrations.md" becomes e.g. ".claude/review/db-migrations.md".\n` +
+        `    4. Delete the <!-- webpieces:checklists ... --> comment from "${docRel}"; keep the prose.\n` +
+        `  ${CHECKLIST_EXAMPLE}`
+    );
+}
+
+// Structurally check each entry HERE — a bad `patterns` or a non-object entry is a config-file typo and
+// deserves a `checklists[i]` message — then hand the narrowed defs to ChecklistValidator for the checks only
+// the filesystem can answer (the guidance doc exists, the reviewer agent exists).
 // webpieces-disable no-any-unknown -- opaque consumer JSON entries, narrowed per-field below
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 function validateChecklistArray(value: readonly unknown[], repoRoot?: string): string[] {
@@ -84,7 +112,6 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
         items.push(e as RawChecklistItem);
     });
     if (repoRoot === undefined) return errors;
-    const defs = items.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, ''));
-    return [...errors, ...new ChecklistManifestService().validate(repoRoot, new ChecklistSource(defs, ''))];
+    const defs = items.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item));
+    return [...errors, ...new ChecklistValidator().validate(repoRoot, defs)];
 }
-

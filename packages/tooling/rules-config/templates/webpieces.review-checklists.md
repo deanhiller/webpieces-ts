@@ -1,9 +1,9 @@
 # Webpieces review checklists — how to satisfy them
 
 Your repo defines company review checklists in `pr-gate.checklists` in `webpieces.config.json` — an
-array of `{ subagent, doc?, patterns? }`. Each names a reviewer **subagent** (a
-`.claude/agents/<subagent>.md`, which webpieces verifies exists) and, optionally, a **repo-relative**
-detail doc and path `patterns`:
+array of `{ subagent, doc?, patterns? }`, and that is the **only** accepted shape. Each names a reviewer
+**subagent** (a `.claude/agents/<subagent>.md`, which webpieces verifies exists) and, optionally, a
+**repo-relative** detail doc and path `patterns`:
 
 ```jsonc
 "commands": { "pr-gate": { "checklists": [
@@ -13,10 +13,11 @@ detail doc and path `patterns`:
 ] } }
 ```
 
-> Older repos instead set `checklists: { "doc": ".claude/review/index.md" }` and keep the same array in a
-> `<!-- webpieces:checklists [...] -->` HTML comment inside that doc. Still supported; in that shape each
-> entry's `doc` resolves relative to the index doc. Prefer the array in config — it is greppable and
-> schemable, and every path webpieces prints back to you is repo-relative either way.
+> **The old `checklists: { "doc": "..." }` shape is REMOVED.** It hid this array in a
+> `<!-- webpieces:checklists [...] -->` HTML comment inside a markdown doc, where no schema, editor, or `jq`
+> could reach it. If your config still has it, **config validation fails** and prints the exact edit: move
+> the array into `webpieces.config.json` and make each entry's `doc` repo-relative (they used to resolve
+> relative to the index doc). There is no compatibility mode — fix the config and move on.
 
 ## The one command you run
 
