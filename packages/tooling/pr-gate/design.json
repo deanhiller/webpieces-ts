@@ -73,6 +73,14 @@
                     "level": 2
                 },
                 {
+                    "id": "ChecklistNotice",
+                    "className": "ChecklistNotice",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts",
+                    "level": 2
+                },
+                {
                     "id": "CleanTmp",
                     "className": "CleanTmp",
                     "kind": "class",
@@ -920,6 +928,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
                     "paramName": "manifestService",
                     "paramType": "ChecklistManifestService"
+                },
+                {
+                    "from": "StartUpsertPrCommand",
+                    "to": "ChecklistNotice",
+                    "injection": "type",
+                    "token": "ChecklistNotice",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
+                    "paramName": "checklistNotice",
+                    "paramType": "ChecklistNotice"
                 },
                 {
                     "from": "StartUpsertPrCommand",

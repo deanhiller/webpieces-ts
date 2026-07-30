@@ -27,7 +27,9 @@ export class StartUpdateCommand {
         // branch generation. Fails fast if GitHub can't be reached (never guesses "no PR").
         this.assertNoOpenPr(repoRoot);
 
-        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-update', 'wp-finish-update');
+        // pushRemote=true: this is the END of the update-only flow — no later command pushes, so not
+        // pushing here would silently strand the squash rewrite locally. (The PR flow passes false.)
+        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-update', 'wp-finish-update', true);
         if (outcome === 'conflict') {
             // Context + marker + merge process doc already written by merge-start; hand back to the AI.
             throw new CliExitError(2, '');

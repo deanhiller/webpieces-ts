@@ -2,7 +2,7 @@ import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { MergeState } from '../workflow/merge-state';
-import { MergeEnd } from '../workflow/merge-end';
+import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
 
 // wp-finish-update — the finalize half of the 3-point squash-merge lifecycle. Run AFTER wp-start-update
@@ -35,10 +35,11 @@ export class FinishUpdateCommand {
         // Not yet validated => a conflict resolution the AI owns, so validate + commit it first;
         // already validated => clean merge (or previously validated) => finalize only.
         const conflictedFiles = marker.validated ? null : marker.conflictedFiles;
+        // pushRemote=true: terminal command of the update-only flow — nothing pushes after this.
         await this.mergeEnd.mergeEnd(
             repoRoot, 'wp-finish-update', activeDir,
             new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
-            conflictedFiles,
+            new MergeEndOptions(conflictedFiles, true),
         );
         process.stdout.write('\n✅ Merge finalized on ' + marker.currentBranch + '.\n');
     }

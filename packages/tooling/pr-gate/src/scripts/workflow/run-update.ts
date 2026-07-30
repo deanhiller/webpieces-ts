@@ -3,7 +3,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { MergeState } from './merge-state';
 import { MergeStart, MergeContext } from './merge-start';
-import { MergeEnd } from './merge-end';
+import { MergeEnd, MergeEndOptions } from './merge-end';
 
 export type UpdateOutcome = 'finalized' | 'conflict' | 'unvalidatedResume';
 
@@ -22,17 +22,20 @@ export class RunUpdate {
 
     // `finishCommand` is the command the AI is told to run after resolving conflicts (standalone passes
     // `wp-finish-update`, PR flow passes `wp-finish-upsert-pr`). `verb` is the invoking bin, threaded so
-    // every branch mutation is recorded in `.webpieces/hooks/branch-mutations.log`.
-    async runUpdateFromMain(repoRoot: string, verb: MutationVerb, finishCommand: string): Promise<UpdateOutcome> {
+    // every branch mutation is recorded in `.webpieces/hooks/branch-mutations.log`. `pushRemote` is false
+    // for the PR flow, which pushes exactly once from wp-finish-upsert-pr (see MergeEndOptions).
+    // eslint-disable-next-line @typescript-eslint/max-params
+    async runUpdateFromMain(repoRoot: string, verb: MutationVerb, finishCommand: string, pushRemote: boolean): Promise<UpdateOutcome> {
         logBranchMutation(repoRoot, new BranchMutationEvent(verb, 'START'));
-        const outcome = await this.runUpdate(repoRoot, verb, finishCommand);
+        const outcome = await this.runUpdate(repoRoot, verb, finishCommand, pushRemote);
         const end = new BranchMutationEvent(verb, 'END');
         end.outcome = outcome;
         logBranchMutation(repoRoot, end);
         return outcome;
     }
 
-    private async runUpdate(repoRoot: string, verb: MutationVerb, finishCommand: string): Promise<UpdateOutcome> {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private async runUpdate(repoRoot: string, verb: MutationVerb, finishCommand: string, pushRemote: boolean): Promise<UpdateOutcome> {
         const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
 
         // Resume path: an in-progress merge is the `merge-<n>/` run dir that holds a marker.
@@ -44,7 +47,7 @@ export class RunUpdate {
             await this.mergeEnd.mergeEnd(
                 repoRoot, verb, activeDir,
                 new MergeContext(existing.currentBranch, existing.squashBranch, existing.backupBranch, existing.prNumber),
-                null,
+                new MergeEndOptions(null, pushRemote),
             );
             return 'finalized';
         }
@@ -55,7 +58,7 @@ export class RunUpdate {
         if (result.status === 'conflict' || result.context === null) {
             return 'conflict';
         }
-        await this.mergeEnd.mergeEnd(repoRoot, verb, result.runDir, result.context, null);
+        await this.mergeEnd.mergeEnd(repoRoot, verb, result.runDir, result.context, new MergeEndOptions(null, pushRemote));
         return 'finalized';
     }
 }

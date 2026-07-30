@@ -20,6 +20,7 @@ graph TD
     CheckPrCommand["CheckPrCommand"]
     ChecklistDetector["ChecklistDetector"]
     ChecklistManifestService["ChecklistManifestService"]
+    ChecklistNotice["ChecklistNotice"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
@@ -117,6 +118,7 @@ graph TD
     StartUpsertPrCommand --> BuildAffected
     StartUpsertPrCommand --> ChecklistDetector
     StartUpsertPrCommand --> ChecklistManifestService
+    StartUpsertPrCommand --> ChecklistNotice
     StartUpsertPrCommand --> DiffScope
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> RepoRootFinder

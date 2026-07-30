@@ -31,12 +31,15 @@
 name: Webpieces PR Gate
 on:
   pull_request:
-    # `edited` is LOAD-BEARING, not a fallback — do NOT remove it. wp-start-upsert-pr pushes too, and that
-    # push fires `synchronize` while the PR body still carries the PREVIOUS run's token, so the check goes
-    # red. By the time wp-finish-upsert-pr runs, HEAD usually has not moved, so its push is a no-op that
-    # fires NO event — the only thing that re-triggers this job and clears the red is the `edited` event
-    # from finish writing the new body. Drop `edited` and every iteration leaves a stale red.
-    # `synchronize` is equally required: it is what catches an unhooked teammate pushing over a gated PR.
+    # `synchronize` is the primary trigger and catches an unhooked teammate pushing over a gated PR. The
+    # gated flow pushes exactly ONCE per cycle (from wp-finish-upsert-pr, after the PR body is written),
+    # so the synchronize run always reads the correct token.
+    #
+    # `edited` is the BODY-TAMPER guard: the token lives in the PR body, so an edit that strips it must
+    # re-run this check rather than leave a stale green. Keep it. Note it fires on wp-finish's body write,
+    # a beat BEFORE that push — so its run can briefly resolve the OLD head sha and go red. Harmless: that
+    # red is keyed to a sha that is no longer the PR head, and branch protection evaluates the current
+    # head, where the synchronize run lands green.
     types: [opened, edited, synchronize, reopened]
 permissions:
   contents: read

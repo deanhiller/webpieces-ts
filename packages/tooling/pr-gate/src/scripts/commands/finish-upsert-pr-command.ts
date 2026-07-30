@@ -14,7 +14,7 @@ import { ChecklistDetector } from '../workflow/checklist-detector';
 import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
-import { MergeEnd } from '../workflow/merge-end';
+import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
 import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
@@ -73,18 +73,8 @@ export class FinishUpsertPrCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
-        const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
-
         // 1. Finish any in-progress conflict resolution: validate + commit + finalize the branch swap.
-        const activeDir = this.mergeState.findActiveMergeRunDir(home);
-        const marker = activeDir ? this.mergeState.readMergeMarker(activeDir) : null;
-        if (activeDir && marker && !marker.validated) {
-            await this.mergeEnd.mergeEnd(
-                repoRoot, 'wp-finish-upsert-pr', activeDir,
-                new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
-                marker.conflictedFiles,
-            );
-        }
+        await this.finalizeAnyInProgressMerge(repoRoot);
 
         // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
@@ -136,6 +126,21 @@ export class FinishUpsertPrCommand {
             `   3. force-pushed your work to origin/${base} (after the body, so CI reads the right token)\n` +
             `   4. ${result.merge.message}\n` +
             `   You are on  ${base}  — same name as the remote branch and the PR head.\n\n`,
+        );
+    }
+
+    // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
+    // does NOT push (pushRemote=false): this command pushes exactly ONCE, from GatedPrPublisher, and only
+    // after review.json + every BLOCK checklist + the build gate pass and the gated PR body is written.
+    private async finalizeAnyInProgressMerge(repoRoot: string): Promise<void> {
+        const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        const activeDir = this.mergeState.findActiveMergeRunDir(home);
+        const marker = activeDir ? this.mergeState.readMergeMarker(activeDir) : null;
+        if (!activeDir || !marker || marker.validated) return;
+        await this.mergeEnd.mergeEnd(
+            repoRoot, 'wp-finish-upsert-pr', activeDir,
+            new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
+            new MergeEndOptions(marker.conflictedFiles, false),
         );
     }
 
