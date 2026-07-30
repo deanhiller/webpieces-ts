@@ -396,6 +396,23 @@ describe('branch-creation-guard worktree cap', () => {
             'git worktree prune && git worktree remove /tmp/wt1 && git worktree remove /tmp/wt2 && git branch -D feat1 feat2');
         expect(flat).toContain('maxWorktrees');
         expect(flat).toContain('1 worktree(s) were deliberately SPARED');
+        // The PREFERRED remedy is now a command that DELETES something. A guard whose only actionable
+        // options loosen its own cap is what taught an agent to edit webpieces.config.json.
+        expect(hint.fixOptions[0].text).toContain('pnpm wp-cleanup');
+    });
+
+    /**
+     * With nothing PROVABLY dead the guard used to have only two options left, and both loosened the
+     * rule (raise maxWorktrees / set turnOffRuleUntilEpoch). wp-cleanup also PROMPTS about the
+     * probably-dead worktrees, so there is always a remedy that can remove something.
+     */
+    it('still offers wp-cleanup when no worktree is provably dead', () => {
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = cacheWith([], [], [tree('/tmp/wt1', 'feat1', false)]);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
+        expect(r.check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(1);
+        expect(r.fixHint.fixOptions[0].text).toContain('pnpm wp-cleanup');
     });
 
     it('defaults the worktree cap to 5, and fails OPEN with no cache on disk', () => {

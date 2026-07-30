@@ -22,7 +22,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-archiver.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "BranchMutationLog",
@@ -30,7 +30,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "BranchNaming",
@@ -321,6 +321,22 @@
                     "level": 2
                 },
                 {
+                    "id": "WorktreeCleanupSection",
+                    "className": "WorktreeCleanupSection",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts",
+                    "level": 2
+                },
+                {
+                    "id": "WorktreeReaper",
+                    "className": "WorktreeReaper",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/worktree-reaper.ts",
+                    "level": 3
+                },
+                {
                     "id": "WorktreeService",
                     "className": "WorktreeService",
                     "kind": "class",
@@ -527,6 +543,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "CleanupCommand",
+                    "to": "WorktreeCleanupSection",
+                    "injection": "type",
+                    "token": "WorktreeCleanupSection",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts#WorktreeCleanupSection",
+                    "paramName": "worktreeSection",
+                    "paramType": "WorktreeCleanupSection"
                 },
                 {
                     "from": "FinishUpdateCommand",
@@ -844,6 +869,15 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
+                    "from": "LandPrCommand",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktrees",
+                    "paramType": "WorktreeService"
+                },
+                {
                     "from": "MergeEnd",
                     "to": "BranchNaming",
                     "injection": "type",
@@ -1157,6 +1191,51 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/run-update.ts#RunUpdate",
                     "paramName": "runUpdate",
                     "paramType": "RunUpdate"
+                },
+                {
+                    "from": "WorktreeCleanupSection",
+                    "to": "MergedBranchesService",
+                    "injection": "type",
+                    "token": "MergedBranchesService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
+                    "paramName": "mergedBranches",
+                    "paramType": "MergedBranchesService"
+                },
+                {
+                    "from": "WorktreeCleanupSection",
+                    "to": "WorktreeReaper",
+                    "injection": "type",
+                    "token": "WorktreeReaper",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktree-reaper.ts#WorktreeReaper",
+                    "paramName": "reaper",
+                    "paramType": "WorktreeReaper"
+                },
+                {
+                    "from": "WorktreeReaper",
+                    "to": "BranchArchiver",
+                    "injection": "type",
+                    "token": "BranchArchiver",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "paramName": "archiver",
+                    "paramType": "BranchArchiver"
+                },
+                {
+                    "from": "WorktreeReaper",
+                    "to": "BranchMutationLog",
+                    "injection": "type",
+                    "token": "BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "paramName": "mutationLog",
+                    "paramType": "BranchMutationLog"
+                },
+                {
+                    "from": "WorktreeReaper",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktrees",
+                    "paramType": "WorktreeService"
                 }
             ],
             "unresolved": []

@@ -236,6 +236,10 @@ export {
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
     CLASSIFICATION_IN_USE,
+    CLASSIFICATION_PRUNABLE,
+    CLASSIFICATION_LOCKED,
+    CLASSIFICATION_CURRENT,
+    CLASSIFICATION_DETACHED,
     PROMPTABLE_CLASSIFICATIONS,
 } from './merged-branches';
 export {
@@ -256,6 +260,11 @@ export {
     ReapResult,
     BranchReaper,
 } from './branch-reaper';
+export {
+    ReapedWorktree,
+    WorktreeReapResult,
+    WorktreeReaper,
+} from './worktree-reaper';
 export type { MutationVerb, MutationPhase } from './branch-mutation-log';
 export {
     BranchMutationEvent,

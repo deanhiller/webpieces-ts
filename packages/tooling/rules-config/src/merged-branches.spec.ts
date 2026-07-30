@@ -61,6 +61,9 @@ import {
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
+    CLASSIFICATION_PRUNABLE,
+    CLASSIFICATION_LOCKED,
+    CLASSIFICATION_CURRENT,
 } from './merged-branches';
 
 function names(list: DeletableBranch[]): string[] {
@@ -239,6 +242,67 @@ describe('MergedBranchesService worktree verdicts', () => {
         world.localBranches = ['main', 'dean/a'];
         expect(svc.localBranches('/repo')).toEqual(['dean/a']);
     });
+});
+
+// The worktree verdicts' CLASSIFICATION half, kept in its own block: `deletable` answers "may the
+// tooling reap this unattended?", the token answers "how dead is it, and how is it reaped?" — and
+// wp-cleanup needs the second one to prompt, and WorktreeReaper needs it to choose prune vs remove.
+describe('MergedBranchesService worktree classifications', () => {
+    /**
+     * The verdict data has to CLASSIFY a worktree, not merely flag it deletable — otherwise wp-cleanup
+     * can auto-reap the provable ones but has nothing to prompt about, and every spared worktree
+     * collapses into one undifferentiated "a human must decide" (the exact regression #509 fixed for
+     * branches). The token is the branch's own, because the branch is what is being judged.
+     */
+    it('carries the branch classification through to the worktree verdict', () => {
+        world.mergedPrs = [{ number: 400, headRefName: 'dean/held' }];
+        world.allPrs = [{ number: 12, headRefName: 'dean/abandoned', state: 'CLOSED' }];
+        world.localBranches = ['main', 'dean/held', 'dean/abandoned'];
+        world.commitsAhead = { 'dean/abandoned': 2 };
+        world.worktrees = [
+            { path: '/work/held', branch: 'dean/held' },
+            { path: '/work/abandoned', branch: 'dean/abandoned' },
+        ];
+
+        const cache = svc.computeMergedBranches('/repo');
+        const byPath = new Map(cache.worktrees.map(
+            (tree: { path: string; classification: string }): [string, string] => [tree.path, tree.classification]));
+
+        expect(byPath.get('/work/held')).toBe(CLASSIFICATION_MERGED_PR);
+        // Closed unmerged, with later PRs merged: promptable, not auto-reapable.
+        expect(byPath.get('/work/abandoned')).toBe(CLASSIFICATION_SUPERSEDED);
+    });
+
+    // The three worktree-only outcomes have no branch analogue, and each needs its own token: PRUNABLE
+    // is reaped with `git worktree prune` (remove FAILS on it), LOCKED and CURRENT are never promptable.
+    it('gives the worktree-only outcomes their own classifications', () => {
+        world.localBranches = ['main', 'dean/gone', 'dean/locked'];
+        world.currentBranch = 'dean/here';
+        world.worktrees = [
+            { path: '/work/gone', branch: 'dean/gone', extra: 'prunable gitdir file points to nowhere' },
+            { path: '/work/locked', branch: 'dean/locked', extra: 'locked because I said so' },
+        ];
+
+        const cache = svc.computeMergedBranches('/repo');
+
+        expect(cache.worktrees[0].classification).toBe(CLASSIFICATION_PRUNABLE);
+        expect(cache.worktrees[1].classification).toBe(CLASSIFICATION_LOCKED);
+    });
+
+    // The tree the refresher itself is running in is spared with its own token — nothing may ever offer
+    // to remove the directory the process is standing in.
+    it('classifies the worktree at repoRoot as the current one', () => {
+        world.localBranches = ['main'];
+        world.worktrees = [{ path: '/repo', branch: 'main' }];
+
+        const cache = svc.computeMergedBranches('/repo');
+        const here = cache.worktrees.find(
+            (tree: { path: string }): boolean => tree.path === '/repo');
+
+        expect(here?.classification).toBe(CLASSIFICATION_CURRENT);
+        expect(here?.deletable).toBe(false);
+    });
+
 });
 
 /**
