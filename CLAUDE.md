@@ -324,6 +324,44 @@ pnpm run build-all
 of those greens mean the work is ready for review. When the feature is actually complete, proceed to
 "Finishing a Feature" — do not stop at a green build.
 
+### Published vs local source (the one-release lag)
+
+This repo **dogfoods the published `@webpieces/*` packages**. `node_modules/@webpieces/*` are real
+published copies (verified: real directories, not symlinks into local `dist/`), and they are always
+**one release behind** the local source in `packages/tooling/**` — published `0.4.x` vs a local
+`0.0.0-dev`.
+
+TypeScript and vitest do NOT see it that way. `tsconfig.base.json` maps `@webpieces/*` to
+`packages/tooling/**/src/index.ts`, so type-checking and unit tests exercise your **local** changes.
+Almost everything else runs the **published** copy:
+
+| Runs the PUBLISHED copy | Consequence |
+|---|---|
+| nx executors (`architecture:generate`, `di-graph-generate`, `validate-*-unchanged`) | local `nx-webpieces-rules` changes are invisible to `pnpm arch:generate` and to the build's `validate-*-unchanged` gates |
+| `wp-*` bins (`wp-ci`, `wp-checklist`, `wp-start-upsert-pr`, `wp-finish-upsert-pr`, `wp-cleanup`) | running one is **not** an end-to-end test of unreleased `pr-gate` / `code-rules` changes |
+| PreToolUse hooks (`wp-ai-rules-hook`, `wp-ai-guards-hook`) | guard changes take effect only after publish + `pnpm install` |
+| the ESLint `@webpieces` plugin | a rule named in the live config before publish fails the graph load |
+
+**What this means in practice:**
+
+- **Verify plugin/rule changes with the package's own vitest suite** (tsconfig paths → local src), NOT
+  by regenerating artifacts. Regenerated `architecture/*`, `design.json` and `design.html` have to wait
+  until after publish.
+- **Do not add a new `webpieces.config.json` key in the same PR that adds the rule.** The published
+  validator does not know the key, rejects it as an unknown rule, and that blocks every Bash/Edit —
+  a deadlocked session. Ship the source, publish, then a follow-up PR adds the live config entry.
+- **A green `build-all` does not prove your plugin change took effect.** If
+  `validate-architecture-unchanged` stays green after you changed graph-producing code, the likely
+  reason is that the executors ran the OLD published plugin — not that your change was a no-op. Look at
+  `node_modules/@webpieces/<pkg>` before concluding anything.
+- If a validator rejects config keys that look correct, the fix is **`pnpm install`** (the validator is
+  stale), not deleting the keys.
+
+**Corollary for instructions generally:** webpieces owns the `wp-*` workflow, and this file must POINT
+AT it rather than restate it. Any path, filename or command output hand-copied into CLAUDE.md drifts
+out from under us silently on the next release — a copied `review.json` path did exactly that and sent
+agents writing to a file nothing reads. Name the tool; let the tool print the details.
+
 ## Finishing a Feature (CRITICAL)
 
 **RULE: Finishing a feature MEANS posting the PR. They are the same step, not two.**
@@ -334,7 +372,6 @@ always.** Commit your work (the tooling never commits for you), then run the gat
 
 ```bash
 pnpm wp-start-upsert-pr        # updates from main, pushes, runs the build gate, tells you to write review.json
-# → write .webpieces/review.json (its `title` becomes the PR title)
 pnpm wp-finish-upsert-pr       # authoritative build gate, then creates/updates the PR
 ```
 

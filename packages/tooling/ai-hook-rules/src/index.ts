@@ -38,4 +38,4 @@ export { FeatureBranchGuardRule } from './core/rules/feature-branch-guard';
 export { run } from './core/runner';
 export { stripTsNoise } from './core/strip-ts-noise';
 export { parseDirectives, DirectiveIndex, createIsLineDisabled } from './core/disable-directives';
-export { formatReport } from './core/report';
+export { formatReport, ReportSubject, WRITE_SUBJECT, READ_SUBJECT, BASH_SUBJECT } from './core/report';

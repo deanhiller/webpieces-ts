@@ -88,6 +88,16 @@ export class CommandScanner {
                 continue;
             }
 
+            // The `&` of a REDIRECTION (`2>&1`, `1>&2`, `&>log`) is not a separator. Splitting on it
+            // tore `git fetch origin main 2>&1 | tail -5` into THREE segments — `git fetch … 2>`, `1`
+            // and `tail -5` — and the bare `1` is not an allowlisted command, so every guard that
+            // requires all segments to pass denied the command. That is `2>&1`, the single most common
+            // decoration an agent appends.
+            if (ch === '&' && command[i + 1] !== '&' && (current.trimEnd().endsWith('>') || command[i + 1] === '>')) {
+                current += ch;
+                continue;
+            }
+
             if (ch === '\n' || ch === ';' || ch === '|' || ch === '&' || ch === '(' || ch === ')') {
                 // Consume the second char of `&&` / `||` so it does not start an empty segment.
                 const doubled = (ch === '|' || ch === '&') && command[i + 1] === ch;
@@ -125,7 +135,16 @@ export class CommandScanner {
      * Returns the subcommand as an EXACT token: `git merge-base …` yields `'merge-base'`, never `'merge'`.
      */
     gitSubcommand(segment: string): string | null {
-        const tokens = this.stripPrefixes(this.tokenize(segment));
+        return this.gitSubcommandOf(this.stripPrefixes(this.tokenize(segment)));
+    }
+
+    /**
+     * gitSubcommand, for a caller that already holds the segment's effective words (ShellSegmentScan
+     * strips leading shell keywords, so `do git status` must be resolved from ITS words, not from the
+     * raw segment text where `do` is the command).
+     */
+    gitSubcommandOf(words: readonly string[]): string | null {
+        const tokens = this.stripPrefixes(words);
         if (tokens.length === 0 || tokens[0] !== 'git') return null;
 
         let i = 1;

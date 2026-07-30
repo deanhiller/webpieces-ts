@@ -10,7 +10,7 @@ import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
-import { formatReport } from './report';
+import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { INSTALLER_ALLOW_JS } from '../bin/shim';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
@@ -206,7 +206,7 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
     const groups = runFileRules(rules, ctx);
     if (groups.length === 0) return null;
 
-    return new BlockedResult(formatReport(relativePath, groups));
+    return new BlockedResult(formatReport(relativePath, groups, READ_SUBJECT));
 }
 
 // Installer bypass — package-manager install commands ALWAYS pass, ahead of any config load. A
@@ -307,8 +307,18 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
     logGuardDecision(workspaceRoot, new GuardDecision(ruleNames, 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'bash-guard block'));
-    const report = formatReport('<bash>', groups) + exemptTreesHint(groups, loaded.excludePaths.guards);
+    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.guards);
     return new BlockedResult(report);
+}
+
+// The bash report's subject line. It used to be the literal string `<bash>`, which told the agent
+// nothing; the command itself is what was blocked, so name it — truncated, because a heredoc-bearing
+// command can run to thousands of characters and the violation lines already carry the detail.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function commandLabel(command: string): string {
+    const oneLine = command.replace(/\s+/g, ' ').trim();
+    const MAX = 100;
+    return oneLine.length <= MAX ? oneLine : oneLine.slice(0, MAX) + '…';
 }
 
 // When a push/PR block fires AND the config exempts vendored/nested trees, surface the escape hatch the

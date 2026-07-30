@@ -1,4 +1,4 @@
-import { formatReport } from './report';
+import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { RuleGroup, Violation } from './types';
 import { FixHint, Option, DisableEscape } from './fix-hint';
 
@@ -83,5 +83,34 @@ describe('formatReport — disable escape', () => {
         const out = report(new FixHint('what', 'fix it'), new Violation(1, 'x'));
         expect(out).not.toContain('Escape (if truly needed)');
         expect(out).not.toContain('must be followed');
+    });
+});
+
+/**
+ * Observed live: a blocked READ printed "❌ webpieces ai-hooks blocked this write:" and closed with
+ * "This is a pre-write check. Fix and retry the Write/Edit." — the report named a tool the agent had
+ * not used and told it to retry that one. The bash path printed the same header against `<bash>`.
+ */
+describe('formatReport — names the tool that was actually blocked', () => {
+    const group = new RuleGroup('demo-rule', 'demo description', new FixHint('what', 'fix it'), [new Violation(1, 'bad line')]);
+
+    it('defaults to the write wording', () => {
+        const out = formatReport('src/x.ts', [group]);
+        expect(out).toContain('blocked this write: src/x.ts');
+        expect(out).toContain('This is a pre-write check. Fix and retry the Write/Edit.');
+    });
+
+    it('names a READ as a read, in both header and footer', () => {
+        const out = formatReport('src/x.ts', [group], READ_SUBJECT);
+        expect(out).toContain('blocked this read: src/x.ts');
+        expect(out).toContain('retry the Read.');
+        expect(out).not.toContain('Write/Edit');
+    });
+
+    it('names a BASH command as a command', () => {
+        const out = formatReport('git push --force', [group], BASH_SUBJECT);
+        expect(out).toContain('blocked this command: git push --force');
+        expect(out).toContain('retry the command.');
+        expect(out).not.toContain('Write/Edit');
     });
 });

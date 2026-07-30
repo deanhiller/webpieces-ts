@@ -82,3 +82,37 @@ describe('invokesGit / commandInvokesGit', () => {
         expect(invokesGit('git log --oneline -5', 'merge')).toBe(false);
     });
 });
+
+/**
+ * `2>&1` is the single most common decoration an agent appends to a command. Splitting on its `&`
+ * tore `git fetch origin main 2>&1 | tail -5` into THREE segments — `git fetch … 2>`, a bare `1`, and
+ * `tail -5` — and a bare `1` is on nobody's allowlist, so every guard that requires ALL segments to
+ * pass denied a command whose own remedy block had printed it.
+ */
+describe('commandSegments — redirections are not separators', () => {
+    it('keeps `2>&1` inside its segment', () => {
+        expect(commandSegments('git fetch origin main 2>&1'))
+            .toEqual(['git fetch origin main 2>&1']);
+        expect(commandSegments('git fetch origin main 2>&1 | tail -5'))
+            .toEqual(['git fetch origin main 2>&1', 'tail -5']);
+        expect(commandSegments('pnpm wp-cleanup 2>&1 | tail -40'))
+            .toEqual(['pnpm wp-cleanup 2>&1', 'tail -40']);
+        expect(commandSegments('cmd 1>&2')).toEqual(['cmd 1>&2']);
+        expect(commandSegments('cmd &> out.log')).toEqual(['cmd &> out.log']);
+    });
+
+    it('still splits a real background `&` and a real `&&`', () => {
+        expect(commandSegments('server start & tail -f log')).toEqual(['server start', 'tail -f log']);
+        expect(commandSegments('git fetch origin main && git status'))
+            .toEqual(['git fetch origin main', 'git status']);
+    });
+});
+
+describe('gitSubcommandOf — words already extracted by a caller', () => {
+    it('resolves the subcommand from a words array', () => {
+        expect(scanner.gitSubcommandOf(['git', 'status'])).toBe('status');
+        expect(scanner.gitSubcommandOf(['git', '-C', '/repo', 'merge', 'main'])).toBe('merge');
+        expect(scanner.gitSubcommandOf(['pnpm', 'build'])).toBe(null);
+        expect(scanner.gitSubcommandOf([])).toBe(null);
+    });
+});

@@ -1,9 +1,42 @@
 import type { RuleGroup, Violation } from './types';
 import type { Option } from './fix-hint';
 
-export function formatReport(relativePath: string, ruleGroups: readonly RuleGroup[]): string {
+/**
+ * How the report names the tool it just blocked. Data-only, so a class (per CLAUDE.md).
+ *
+ * WHY it is a parameter: the header and footer used to be hard-coded to "write". A blocked READ
+ * therefore printed "\u274c webpieces ai-hooks blocked this write:" and closed with "This is a pre-write
+ * check. Fix and retry the Write/Edit." \u2014 observed live, and actively misleading, because the agent is
+ * told to fix and retry the one tool it did not use. A blocked Bash command printed the same thing
+ * against the path `<bash>`.
+ */
+export class ReportSubject {
+    /** Fills "blocked this ___". */
+    noun: string;
+    /** The closing line: what kind of check this was and which tool to retry. */
+    footer: string;
+
+    constructor(noun: string, footer: string) {
+        this.noun = noun;
+        this.footer = footer;
+    }
+}
+
+export const WRITE_SUBJECT = new ReportSubject(
+    'write', 'This is a pre-write check. Fix and retry the Write/Edit.');
+export const READ_SUBJECT = new ReportSubject(
+    'read', 'This is a pre-read check. Follow the fix above, then retry the Read.');
+export const BASH_SUBJECT = new ReportSubject(
+    'command', 'This is a pre-run check. Follow the fix above, then retry the command.');
+
+// webpieces-disable no-function-outside-class -- pre-existing shape: this whole module is the report formatter as module-scope functions, and a lone class here would break it
+export function formatReport(
+    relativePath: string,
+    ruleGroups: readonly RuleGroup[],
+    subject: ReportSubject = WRITE_SUBJECT,
+): string {
     const lines: string[] = [];
-    lines.push(`\u274c webpieces ai-hooks blocked this write: ${relativePath}`);
+    lines.push(`\u274c webpieces ai-hooks blocked this ${subject.noun}: ${relativePath}`);
     lines.push('');
 
     for (const group of ruleGroups) {
@@ -36,7 +69,7 @@ export function formatReport(relativePath: string, ruleGroups: readonly RuleGrou
         lines.push('');
     }
 
-    lines.push('This is a pre-write check. Fix and retry the Write/Edit.');
+    lines.push(subject.footer);
     lines.push('');
     return lines.join('\n');
 }

@@ -64,6 +64,27 @@ describe('TreeRecovery.freshStartSteps', () => {
         }
     });
 
+    /**
+     * The parenthetical "never `git checkout main`" is a WORKTREE-only truth (main is checked out in
+     * the primary clone, so the checkout fatals there). It had leaked into the `branch` arm — the
+     * primary clone, where that command is not merely safe but the shortest exit off a merged branch.
+     * An agent read the prohibition literally, concluded its only way out was a new branch, hit the
+     * branch cap, and escaped by editing webpieces.config.json. A human ended it with the one command
+     * the guard had told the agent never to run.
+     */
+    it('does NOT forbid `git checkout main` in the primary clone', () => {
+        const text = new TreeRecovery().freshStartSteps('branch', 'dean/x').join('\n');
+        expect(text).not.toContain('never `git checkout main`');
+        expect(text).not.toContain('git checkout main');
+    });
+
+    it('still warns a WORKTREE that `git checkout main` fatals there', () => {
+        const worktree = new TreeRecovery().freshStartSteps('worktree', 'dean/x').join('\n');
+        expect(worktree).toContain('`git checkout main` fatals here');
+        const unknown = new TreeRecovery().freshStartSteps('unknown', 'dean/x').join('\n');
+        expect(unknown).toContain('in a linked worktree (`git checkout main` fatals there)');
+    });
+
     // The worktree DIRECTORY cannot contain the branch's slashes.
     it('flattens a slashed branch name into a sibling directory name', () => {
         const text = new TreeRecovery().freshStartSteps('worktree', 'dean/some/deep/name').join('\n');

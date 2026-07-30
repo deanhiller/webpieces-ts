@@ -44,16 +44,45 @@ export class MergedBranch {
     }
 }
 
-// A local branch and the verdict on it. `pr` is 0 when no merged PR backs the verdict (a `keep`).
+/**
+ * A local branch and the verdict on it. `pr` is 0 when no merged PR backs the verdict (a `keep`).
+ *
+ * `sha`, `commits` and `prState` exist for the SPARED branches specifically. When nothing is
+ * auto-reapable the branch cap has nothing safe to offer, and its only remaining advice was "raise
+ * maxLocalBranches" / "set turnOffRuleUntilEpoch" — both of which loosen the rule. An agent with no
+ * human present took the config edit, which is the exact failure the cap exists to prevent. To ask a
+ * human "may I delete these?" instead, the guard has to be able to SHOW what it would delete: tip SHA
+ * (so the delete is recoverable), PR state (closed? never opened?) and how much unique work is on it.
+ *
+ * All three are computed in the DETACHED refresher and read straight off merged-branches.json — the
+ * blocking hook path never recomputes them. Defaulted so a cache written by an older release (and
+ * every existing call site) revives without them.
+ */
 export class DeletableBranch {
     branch: string;
     reason: string;
     pr: number;
+    /** Short tip SHA — what makes the delete undoable (`git branch <name> <sha>`). '' when unknown. */
+    sha: string;
+    /** Commits on this branch that are not on origin/main. -1 when it could not be established. */
+    commits: number;
+    /** GitHub's state for the PR whose head is this branch: MERGED / CLOSED / OPEN, or '' for none. */
+    prState: string;
 
-    constructor(branch: string, reason: string, pr: number) {
+    constructor(
+        branch: string,
+        reason: string,
+        pr: number,
+        sha: string = '',
+        commits: number = -1,
+        prState: string = '',
+    ) {
         this.branch = branch;
         this.reason = reason;
         this.pr = pr;
+        this.sha = sha;
+        this.commits = commits;
+        this.prState = prState;
     }
 }
 
@@ -105,6 +134,34 @@ export class MergedBranchesCache {
     }
 }
 
+/**
+ * Internal: the bulk PR lookup, indexed.
+ *
+ * `merged` drives the DELETE verdicts and comes from the `--state merged` call, unchanged — the
+ * reaping logic must not get looser or tighter here. `state` is display-only, from a second
+ * `--state all` call, and answers the question a human needs in order to say "yes, delete it":
+ * was there a PR at all, and did it close without merging? It fails soft to an empty map.
+ */
+class PrRef {
+    number: number;
+    state: string;
+
+    constructor(prNumber: number, state: string) {
+        this.number = prNumber;
+        this.state = state;
+    }
+}
+
+class PrLookup {
+    merged: Map<string, number>;
+    state: Map<string, PrRef>;
+
+    constructor(merged: Map<string, number>, state: Map<string, PrRef>) {
+        this.merged = merged;
+        this.state = state;
+    }
+}
+
 // Internal: a classification result. `deletable` is the decision; `entry` carries the branch + reason
 // either way (a spared branch still needs its reason recorded, and it has no PR to key off).
 class Verdict {
@@ -122,6 +179,10 @@ interface RawDeletable {
     branch?: string;
     reason?: string;
     pr?: number;
+    // Absent in caches written before the "ask the human which of these to delete" remedy existed.
+    sha?: string;
+    commits?: number;
+    prState?: string;
 }
 
 interface RawWorktree {
@@ -144,6 +205,8 @@ interface RawCache {
 interface RawMergedPr {
     number?: number;
     headRefName?: string;
+    // Only requested by the display-only fetchPrStates call.
+    state?: string;
 }
 
 // Result of a captured git/gh invocation: ok=false on spawn failure or non-zero exit.
@@ -210,6 +273,7 @@ export class MergedBranchesService {
         const merged = this.fetchMergedPrs(repoRoot);
         const byBranch = new Map<string, number>();
         for (const entry of merged) byBranch.set(entry.branch, entry.pr);
+        const prs = new PrLookup(byBranch, this.fetchPrStates(repoRoot));
 
         const trees = this.worktrees.listWorktrees(repoRoot);
         const holder = new Map<string, string>();
@@ -221,7 +285,7 @@ export class MergedBranchesService {
         const keep: DeletableBranch[] = [];
 
         for (const branch of this.localBranches(repoRoot)) {
-            const verdict = this.classify(repoRoot, branch, byBranch);
+            const verdict = this.classify(repoRoot, branch, prs);
 
             // A branch checked out in ANY worktree (including the branch we are standing on right here)
             // cannot be deleted — git refuses, and since the reap is ONE `git branch -D a b c`, a single
@@ -234,6 +298,9 @@ export class MergedBranchesService {
                     branch,
                     `checked out in worktree '${heldAt}' — remove that worktree before deleting the branch`,
                     verdict.entry.pr,
+                    verdict.entry.sha,
+                    verdict.entry.commits,
+                    verdict.entry.prState,
                 ));
                 continue;
             }
@@ -242,7 +309,7 @@ export class MergedBranchesService {
             else keep.push(verdict.entry);
         }
 
-        const worktrees = this.classifyWorktrees(repoRoot, trees, byBranch);
+        const worktrees = this.classifyWorktrees(repoRoot, trees, prs);
         return new MergedBranchesCache(new Date().toISOString(), deletable, keep, worktrees);
     }
 
@@ -259,7 +326,7 @@ export class MergedBranchesService {
     private classifyWorktrees(
         repoRoot: string,
         trees: Worktree[],
-        byBranch: Map<string, number>,
+        prs: PrLookup,
     ): DeletableWorktree[] {
         const out: DeletableWorktree[] = [];
 
@@ -287,7 +354,7 @@ export class MergedBranchesService {
                 continue;
             }
 
-            const verdict = this.classify(repoRoot, tree.branch, byBranch);
+            const verdict = this.classify(repoRoot, tree.branch, prs);
             out.push(new DeletableWorktree(
                 tree.path, tree.branch, verdict.entry.reason, verdict.entry.pr, verdict.deletable));
         }
@@ -295,21 +362,34 @@ export class MergedBranchesService {
         return out;
     }
 
-    // Verdict for one branch: its own merged PR, else the base it was backed up from, else empty.
-    private classify(repoRoot: string, branch: string, byBranch: Map<string, number>): Verdict {
-        const own = byBranch.get(branch);
+    /**
+     * Verdict for one branch: its own merged PR, else the base it was backed up from, else empty.
+     *
+     * The verdict itself is unchanged. What is new is that EVERY entry now carries its tip SHA, its
+     * unique-commit count and its PR state, so a `keep` can be shown to a human as a delete candidate
+     * rather than just counted. This runs only in the detached refresher, so the two extra local git
+     * calls per branch cost the blocking hook path nothing.
+     */
+    private classify(repoRoot: string, branch: string, prs: PrLookup): Verdict {
+        const sha = this.tipSha(repoRoot, branch);
+        const commits = this.commitsAheadOfMain(repoRoot, branch);
+        const known = prs.state.get(branch);
+        const prState = known ? known.state : '';
+
+        const own = prs.merged.get(branch);
         if (own !== undefined) {
-            return new Verdict(true, new DeletableBranch(branch, `PR #${String(own)} merged`, own));
+            return new Verdict(true, new DeletableBranch(
+                branch, `PR #${String(own)} merged`, own, sha, commits, prState || 'MERGED'));
         }
 
         const base = branch.replace(BACKUP_SUFFIX, '');
         if (base !== branch && base.length > 0) {
-            const basePr = byBranch.get(base);
+            const basePr = prs.merged.get(base);
             if (basePr !== undefined) {
                 return new Verdict(true, new DeletableBranch(
                     branch,
                     `squash-merge backup of '${base}' (PR #${String(basePr)} merged) — its job is done`,
-                    basePr,
+                    basePr, sha, commits, prState,
                 ));
             }
         }
@@ -318,11 +398,21 @@ export class MergedBranchesService {
         // own holds no work, so deleting it can lose nothing. (Squash breaks patch-id and ancestry, so
         // "are these commits in main?" is unanswerable from git — but "are there any commits at all?"
         // is exact.) These are the husks left behind by branching and then never committing.
-        if (this.commitsAheadOfMain(repoRoot, branch) === 0) {
-            return new Verdict(true, new DeletableBranch(branch, 'no commits of its own — identical to origin/main', 0));
+        if (commits === 0) {
+            return new Verdict(true, new DeletableBranch(
+                branch, 'no commits of its own — identical to origin/main', 0, sha, 0, prState));
         }
 
-        return new Verdict(false, new DeletableBranch(branch, 'no merged PR found — a human must decide', 0));
+        const why = known
+            ? `PR #${String(known.number)} is ${known.state} (not merged) — a human must decide`
+            : 'no merged PR found — a human must decide';
+        return new Verdict(false, new DeletableBranch(branch, why, 0, sha, commits, prState));
+    }
+
+    // Short tip SHA — the value that makes any delete of this branch reversible.
+    private tipSha(repoRoot: string, branch: string): string {
+        const result = this.capture(repoRoot, 'git', ['rev-parse', '--short', branch]);
+        return result.ok ? result.out : '';
     }
 
     /**
@@ -367,10 +457,52 @@ export class MergedBranchesService {
         }
     }
 
+    /**
+     * The DISPLAY-only second lookup: every PR (any state) keyed by head branch, so a spared branch can
+     * be shown to a human as "PR #12 CLOSED (not merged)" or "no PR" instead of an opaque name. Kept
+     * SEPARATE from fetchMergedPrs on purpose — folding both into one `--state all` call would let a
+     * flood of open/closed PRs push older MERGED ones out of the limit and silently stop reaping real
+     * dead branches. Fails soft to an empty map: the verdicts do not depend on it.
+     */
+    private fetchPrStates(repoRoot: string): Map<string, PrRef> {
+        const out = new Map<string, PrRef>();
+        const result = this.capture(repoRoot, 'gh', [
+            'pr', 'list',
+            '--state', 'all',
+            '--limit', String(MERGED_PR_LOOKUP_LIMIT),
+            '--json', 'number,headRefName,state',
+        ]);
+        if (!result.ok || result.out === '') return out;
+
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const raw = JSON.parse(result.out) as RawMergedPr[];
+            for (const entry of raw) {
+                const branch = entry.headRefName ?? '';
+                const pr = entry.number ?? 0;
+                // `gh` lists newest-first, so the FIRST entry for a branch is its latest PR — keep it.
+                if (branch !== '' && pr > 0 && !out.has(branch)) {
+                    out.set(branch, new PrRef(pr, entry.state ?? ''));
+                }
+            }
+            return out;
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return out;
+        }
+    }
+
     private reviveList(raw: RawDeletable[] | undefined): DeletableBranch[] {
         if (!raw) return [];
-        return raw.map((entry: RawDeletable): DeletableBranch =>
-            new DeletableBranch(entry.branch ?? '', entry.reason ?? '', entry.pr ?? 0));
+        return raw.map((entry: RawDeletable): DeletableBranch => new DeletableBranch(
+            entry.branch ?? '',
+            entry.reason ?? '',
+            entry.pr ?? 0,
+            entry.sha ?? '',
+            entry.commits ?? -1,
+            entry.prState ?? '',
+        ));
     }
 
     private reviveWorktrees(raw: RawWorktree[] | undefined): DeletableWorktree[] {

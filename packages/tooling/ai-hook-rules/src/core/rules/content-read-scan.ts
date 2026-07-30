@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { CommandScanner, CommandSegment } from '../command-scan';
+import { ShellSegmentScan } from './shell-segment-scan';
 
 /**
  * Decides the one question stale-main-bash-guard asks of a command: does this segment put stale
@@ -20,20 +21,28 @@ import { CommandScanner, CommandSegment } from '../command-scan';
  *      are nothing to do with this repo's staleness.
  */
 export class ContentReadScan {
+    private readonly shell: ShellSegmentScan;
+
     constructor(
         private readonly scanner: CommandScanner,
         private readonly workspaceRoot: string,
-    ) {}
+    ) {
+        this.shell = new ShellSegmentScan(scanner);
+    }
 
     /**
      * The command word that reads stale workspace content, or null when this segment does not.
      * The returned string is only a log/diagnostic label.
+     *
+     * Judged on the segment's EFFECTIVE words: `for f in a b; do cat $f; done` splits into segments
+     * whose middle one is literally `do cat $f`, and taking `do` as the command name let every loop
+     * body read the stale tree unseen.
      */
     readsStaleContent(segment: CommandSegment): string | null {
-        const words = this.scanner.words(segment.text);
+        const words = this.shell.effectiveWords(segment.text);
         if (words.length === 0) return null;
 
-        const gitSub = this.scanner.gitSubcommand(segment.text);
+        const gitSub = this.scanner.gitSubcommandOf(words);
         if (gitSub !== null) return this.gitContentRead(gitSub, words);
 
         const command = this.baseName(words[0]);

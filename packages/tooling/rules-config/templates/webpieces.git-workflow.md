@@ -16,7 +16,8 @@ That question is already answered: **yes, always.** Run the flow:
 
 ```bash
 pnpm wp-start-upsert-pr        # updates from main, pushes, runs the build gate, tells you to write review.json
-# → write .webpieces/review.json (its `title` becomes the PR title)
+# → write the review.json at the exact path wp-start-upsert-pr prints
+#   (.webpieces/pr-review/<feature>/review.json — its `title` becomes the PR title)
 pnpm wp-finish-upsert-pr       # authoritative build gate, then creates/updates the PR
 ```
 

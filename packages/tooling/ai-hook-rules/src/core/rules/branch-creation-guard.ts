@@ -7,6 +7,7 @@ import {
     MergedBranchesCache,
     MergedBranchesService,
     WorktreeService,
+    readMainSyncStatus,
 } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
@@ -384,7 +385,8 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         const parked = this.mergedBranches.localBranches(ctx.workspaceRoot)
             .filter((branch: string): boolean => !held.has(branch));
         const count = parked.length;
-        if (count < this.maxLocalBranches) return null;
+        const cap = this.effectiveBranchCap(ctx);
+        if (count < cap) return null;
 
         const cache = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
         if (!cache) return null;
@@ -402,6 +404,41 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             `the cap (branch-creation-guard.maxLocalBranches) is ${String(this.maxLocalBranches)}. ` +
             `${detail} Clean up before creating another.`,
         );
+    }
+
+    /**
+     * The branch cap, yielding by ONE when the agent is standing on an already-merged branch.
+     *
+     * Two individually-correct guards were composing into a trap: merged-branch-bash-guard blocks
+     * almost all Bash until you get off a merged branch, and the ONLY way off it that guard advertises
+     * is creating a fresh branch — which this cap then refused. Every printed exit led to editing
+     * webpieces.config.json, and that is what an unsupervised agent did.
+     *
+     * One over cap, and only while a merged branch is what is pushing you: the branch about to be
+     * created replaces a branch that is already dead, so the steady-state count does not grow. The cap
+     * still fires on the NEXT creation, so this defers the cleanup by exactly one branch, never skips it.
+     *
+     * Fails toward the strict cap: no cache, a cache for another branch, or a clean branch → no yield.
+     */
+    private effectiveBranchCap(ctx: BashContext): number {
+        const status = readMainSyncStatus(ctx.workspaceRoot);
+        if (status === null || !status.branchAlreadyMerged) return this.maxLocalBranches;
+        const current = this.currentBranchOrNull(ctx.workspaceRoot);
+        if (current === null || status.branch !== current) return this.maxLocalBranches;
+        return this.maxLocalBranches + 1;
+    }
+
+    private currentBranchOrNull(workspaceRoot: string): string | null {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return execSync('git rev-parse --abbrev-ref HEAD', {
+                cwd: workspaceRoot, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+            }).trim();
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
     }
 
     /**
@@ -449,6 +486,11 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
      */
     private capFixHint(cache: MergedBranchesCache): FixHint {
         const options: Option[] = [];
+        // Nothing auto-reapable → the ASK is the preferred move, and it comes FIRST. This is the whole
+        // point of the option: with an empty `deletable` list the only advice left used to be "raise
+        // maxLocalBranches" / "set turnOffRuleUntilEpoch", and an agent with no human in the loop
+        // edited webpieces.config.json to escape — loosening the very rule that was working correctly.
+        const askFirst = cache.deletable.length === 0;
 
         if (cache.deletable.length > 0) {
             const names = cache.deletable.map((entry: DeletableBranch): string => entry.branch);
@@ -461,13 +503,17 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             ));
         }
 
+        const ask = this.askHumanOption(cache, askFirst);
+        if (ask) options.push(ask);
+
         options.push(new Option(
-            'If you genuinely need more branches in flight, raise branch-creation-guard.maxLocalBranches ' +
-            'in webpieces.config.json.',
+            'ONLY IF A HUMAN SAYS SO: raise branch-creation-guard.maxLocalBranches in ' +
+            'webpieces.config.json. Editing this config to get past a guard is not a fix you may make on ' +
+            'your own — ask first (use the option above).',
         ));
         options.push(new Option(
-            'To bypass this once, set branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) ' +
-            'in webpieces.config.json.',
+            'ONLY IF A HUMAN SAYS SO: set branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) ' +
+            'in webpieces.config.json to bypass this once. Same rule — ask, do not self-approve.',
         ));
 
         const kept = cache.keep.length > 0
@@ -480,6 +526,43 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             'Full detail (deletable + spared, with per-branch reasons) is in .webpieces/merged-branches.json, ' +
             `refreshed ${cache.timestamp || 'never'}.${kept} Pick one:`,
             options,
+        );
+    }
+
+    /**
+     * The remedy that actually deletes something without loosening anything: SHOW the spared branches
+     * and ASK the human which may go.
+     *
+     * `keep` is the list the tooling refuses to touch on its own — no merged PR, so no proof the work
+     * is safe. That is exactly the list a human can adjudicate in five seconds and the tooling never
+     * can, and it was never printed: the cap said "N branches were SPARED, do not delete those" and
+     * then offered only config edits. So the agent edited the config.
+     *
+     * Every column is read straight off `.webpieces/merged-branches.json` (written by the detached
+     * refresher) — nothing is recomputed on this blocking path. The SHA is there so the human can see
+     * the delete is reversible; the commit count is there so "0 commits" branches are obvious yeses.
+     */
+    private askHumanOption(cache: MergedBranchesCache, preferred: boolean): Option | null {
+        if (cache.keep.length === 0) return null;
+
+        const rows = cache.keep.map((entry: DeletableBranch): string => {
+            const sha = entry.sha !== '' ? entry.sha : '???????';
+            const pr = entry.pr > 0
+                ? `PR #${String(entry.pr)} ${entry.prState || 'MERGED'}`
+                : (entry.prState !== '' ? `PR ${entry.prState}` : 'no PR');
+            const commits = entry.commits >= 0 ? `${String(entry.commits)} commit(s) of its own` : 'commit count unknown';
+            return `    ${entry.branch}  [${sha}]  ${pr}  ${commits}  — ${entry.reason}`;
+        });
+
+        return new Option(
+            `ASK THE HUMAN which of these ${String(cache.keep.length)} branches may be deleted. They are ` +
+            'not provably dead, so the tooling will not reap them — but a human can decide in seconds, ' +
+            'and deleting one is the correct fix for "too many branches". Paste this list and ask:\n' +
+            rows.join('\n') + '\n' +
+            'Then delete ONLY the ones approved: git branch -D <approved-branch>\n' +
+            '(each is recoverable — `git branch <name> <sha>` restores it at the SHA shown above).\n' +
+            'Do NOT delete any of these without an explicit yes, and do NOT edit webpieces.config.json instead.',
+            preferred,
         );
     }
 
