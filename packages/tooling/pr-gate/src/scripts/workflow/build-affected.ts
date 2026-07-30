@@ -2,20 +2,20 @@ import { spawnSync } from 'child_process';
 import { loadAndValidate, CliExitError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
-// Single source of truth for the build gate. The PR flow's advisory gate (`wp-start-upsert-pr`) and
-// authoritative merge gate (`wp-finish-upsert-pr`) both run THIS, so the two can never drift. nx
-// `affected` only rebuilds changed projects. `--base=$(git merge-base origin/main HEAD)` (the fork
-// point) instead of `--base=origin/main`: origin/main rebuilds projects touched by OTHER people's
-// merged PRs. The fork point scopes affected to only YOUR branch's changes. The `$(...)` resolves
-// because runBuildAffected runs with shell: true.
+// Single source of truth for the build gate. Only `wp-finish-upsert-pr` runs it (authoritatively,
+// before the one push) — `wp-start-upsert-pr` deliberately runs NO build gate, so `pr-gate.buildCommand`
+// is a finish-only knob. nx `affected` only rebuilds changed projects.
+// `--base=$(git merge-base origin/main HEAD)` (the fork point) instead of `--base=origin/main`:
+// origin/main rebuilds projects touched by OTHER people's merged PRs. The fork point scopes affected to
+// only YOUR branch's changes. The `$(...)` resolves because runBuildAffected runs with shell: true.
 export const DEFAULT_BUILD_COMMAND = 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * The two facts that differ between the wp-start (advisory) and wp-finish (authoritative) build gates.
- * Everything else is identical, so it lives once in runBuildGate and the difference is passed in here.
- * A class (not an object literal) per the codebase's data-structure convention.
+ * The caller-supplied framing for the build gate (label, re-run command, failure headline). Kept as a
+ * parameter object so runBuildGate stays agnostic of who invokes it; today the sole caller is
+ * wp-finish-upsert-pr. A class (not an object literal) per the codebase's data-structure convention.
  */
 export class BuildGateOptions {
     label: string;            // section header shown above the gate
@@ -29,7 +29,7 @@ export class BuildGateOptions {
     }
 }
 
-/** Runs the nx-affected build gate the same way for the advisory and authoritative PR gates. */
+/** Runs the authoritative nx-affected build gate for wp-finish-upsert-pr (the only PR-flow build gate). */
 @injectable(bindingScopeValues.Singleton)
 export class BuildAffected {
     /**

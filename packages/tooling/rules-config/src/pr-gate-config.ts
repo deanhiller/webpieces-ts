@@ -36,6 +36,9 @@ export const MERGE_MODES = [MERGE_MODE_AUTO, MERGE_MODE_NONE];
 
 export class PrGateConfig {
     mode: string;
+    // The nx-affected build gate command. FINISH-ONLY: only wp-finish-upsert-pr runs it (authoritatively,
+    // before the one push). wp-start-upsert-pr runs no build gate — it only syncs the branch from main.
+    // Empty string => BuildAffected falls back to DEFAULT_BUILD_COMMAND.
     buildCommand: string;
     gates: GateDefinition[];
     /**

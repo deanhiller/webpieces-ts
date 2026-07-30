@@ -123,7 +123,6 @@ graph TD
     StartUpdateCommand --> RunUpdate
     StartUpsertPrCommand --> AiBranchName
     StartUpsertPrCommand --> BranchNaming
-    StartUpsertPrCommand --> BuildAffected
     StartUpsertPrCommand --> DiffScope
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> RepoRootFinder
