@@ -33,14 +33,17 @@ class PrRef {
     }
 }
 
-// The outcome of the whole upsert: the PR number ('' when it could not be resolved) plus what actually
-// happened to the merge, so the final summary reports the REAL result rather than assuming success.
+// The outcome of the whole upsert: the PR number + web URL ('' each when unresolved) plus what actually
+// happened to the merge, so the final summary reports the REAL result rather than assuming success. The
+// URL is carried so the closing block can hand the AI a clickable link to relay to the user verbatim.
 class UpsertResult {
     prNumber: string;
+    prUrl: string;
     merge: MergeOutcome;
 
-    constructor(prNumber: string, merge: MergeOutcome) {
+    constructor(prNumber: string, prUrl: string, merge: MergeOutcome) {
         this.prNumber = prNumber;
+        this.prUrl = prUrl;
         this.merge = merge;
     }
 }
@@ -132,6 +135,21 @@ export class FinishUpsertPrCommand {
             `   3. force-pushed your work to origin/${base} (after the body, so CI reads the right token)\n` +
             `   4. ${result.merge.message}\n` +
             `   You are on  ${base}  — same name as the remote branch and the PR head.\n\n`,
+        );
+        // Close by handing the AI a clickable link + directive to end its summary with it (see helper).
+        this.emitClickableLinkDirective(prNum, result.prUrl, title);
+    }
+
+    // Print the closing AI directive: the resolved PR's number/title/URL and an instruction to end the
+    // user-facing summary with EXACTLY `[#N title](url)` as the final line, nothing after it. No-op when
+    // the PR could not be resolved — better to say nothing than to point the user at a link that isn't real.
+    private emitClickableLinkDirective(prNum: string, prUrl: string, title: string): void {
+        if (prNum === '' || prUrl === '') return;
+        process.stdout.write(
+            SEP + `🔗 PR #${prNum}: ${title}\n   ${prUrl}\n\n` + SEP +
+            `AI — the LAST line of your summary to the user MUST be EXACTLY this clickable link, with\n` +
+            `NOTHING printed after it (no sign-off, no next steps, no blank commentary):\n\n` +
+            `   [#${prNum} ${title}](${prUrl})\n\n`,
         );
     }
 
@@ -286,7 +304,7 @@ export class FinishUpsertPrCommand {
         const published = this.publisher.publish(baseBranch, title, bodyFile);
         if (published.createFailed) {
             process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
-            return new UpsertResult('', new MergeOutcome(false, false,
+            return new UpsertResult('', '', new MergeOutcome(false, false,
                 '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)'));
         }
         const num = published.number;
@@ -305,7 +323,7 @@ export class FinishUpsertPrCommand {
         // rules-config that has no such field) reaches PrMerger as '' and is treated as "do not merge".
         const mergeMode = loadAndValidate(repoRoot).prGate.mergeMode ?? '';
         const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile, mergeMode);
-        return new UpsertResult(ref.number !== '' ? ref.number : num, outcome);
+        return new UpsertResult(ref.number !== '' ? ref.number : num, ref.url, outcome);
     }
 
     // The PR's number + web URL (for the merge subject `(#N)` and the commit-body back-link). Both ''
