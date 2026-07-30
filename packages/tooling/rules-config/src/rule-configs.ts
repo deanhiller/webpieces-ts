@@ -502,11 +502,25 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
      * RENDER switch: levels, cycle detection and runtime-dependencies.json are identical either way.
      */
     showExternalNodes?: boolean;
+    /**
+     * Project roots whose exported `*Api` types are contracts for systems OUTSIDE this repo
+     * (firestore, gmail, gcp-storage, ...), e.g. `["libraries/apis/external/**"]`. Globs, matched
+     * against the nx project root.
+     *
+     * Needed because an external contract does NOT look like an in-repo one: it is a plain
+     * `interface` bound to a Symbol token and injected, never an `abstract class` carrying @ApiPath
+     * reached through `createRpcClient`. Without this list the scanner has no way to tell a vendor
+     * seam from any other library, so every call leaving the repo is invisible to the runtime graph.
+     *
+     * Defaults to none, which is correct for a repo with no vendor wrapper libraries.
+     */
+    externalApiPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<RuntimeArchitectureConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         allowedCycles: FieldDef.optional('string[]'),
         showExternalNodes: FieldDef.optional('boolean'),
+        externalApiPaths: FieldDef.optional('string[]'),
         ...BASE_RULE_SCHEMA,
     };
 }

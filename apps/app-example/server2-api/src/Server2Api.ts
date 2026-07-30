@@ -31,7 +31,7 @@ export interface FetchValueResponse {
 @Authentication(new AuthenticationConfig(false))
 @ApiPath('/server2')
 export abstract class Server2Api {
-    @Endpoint('/fetchValue')
+    @Endpoint('/fetchValue', 'rpc')
     fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
         throw new Error('Method fetchValue() must be implemented by subclass');
     }

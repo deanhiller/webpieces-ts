@@ -26,7 +26,7 @@ class SaveRequest {
 @Rpc()
 @ApiPath('/public')
 abstract class PublicApi {
-    @Endpoint('/save')
+    @Endpoint('/save', 'rpc')
     @Public()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     save(_request: SaveRequest): Promise<void> {
@@ -37,7 +37,7 @@ abstract class PublicApi {
 @Rpc()
 @ApiPath('/secure')
 abstract class OidcApi {
-    @Endpoint('/internalOp')
+    @Endpoint('/internalOp', 'rpc')
     @AuthOidc()
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
@@ -48,7 +48,7 @@ abstract class OidcApi {
 @Rpc()
 @ApiPath('/secret')
 abstract class SharedSecretApi {
-    @Endpoint('/internalOp')
+    @Endpoint('/internalOp', 'rpc')
     @AuthSharedSecret('INTERNAL_API_SECRET')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {

@@ -31,31 +31,40 @@
 import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
+import { matchesAnyGlob } from '@webpieces/rules-config';
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import { findProjectTsconfig } from '../di-graph/program';
-import { resolveClassDeclaration, classDecorators, decoratorName } from '../di-graph/bindings';
+import { resolveClassDeclaration } from '../di-graph/bindings';
 import {
     ApiClassInfo,
+    ApiContract,
+    ApiContracts,
     ApiRef,
-    ApiTransport,
     ApiRelation,
+    EndpointKind,
     ProjectApiRelations,
     apiRefKey,
     deriveApiRelationKind,
     sortApiRefs,
 } from './api-relations';
+import {
+    apiClassInfoFrom,
+    apiClassInfoFromNode,
+    calleeMethodName,
+    collectTsFiles,
+    constructorParamsOf,
+    externalApiInfoFrom,
+    implementedTypeNames,
+    isAbstractClass,
+    isTestFile,
+    targetServiceOf,
+    typeReferenceName,
+} from './api-ast';
 
 const RPC_CLIENT_METHOD = 'createRpcClient';
 const PUBSUB_CLIENT_METHOD = 'createPubSubClient';
 const ADD_ROUTES_METHOD = 'addRoutes';
-
-/**
- * Client-config class-name suffix whose FIRST constructor argument is the target service name —
- * `ClientConfig('helper-fsdb')` (rpc) and `TaskClientConfig('helper-fsdb')` (pubsub) both take
- * `svcName` first, and a consumer's own `XxxClientConfig` follows the same shape.
- */
-const CLIENT_CONFIG_SUFFIX = 'ClientConfig';
 
 /**
  * An `addRoutes`/`createRpcClient`/`createPubSubClient` first argument that resolved to an
@@ -159,6 +168,8 @@ class ApiSourceIndexBuilder {
     constructor(
         private readonly workspaceRoot: string,
         private readonly projectInfos: Map<string, ProjectInfo>,
+        /** Globs of project roots holding vendor contracts — see ExternalApiIndex. */
+        private readonly externalApiPaths: readonly string[],
     ) {}
 
     build(): ApiSourceIndex {
@@ -172,26 +183,24 @@ class ApiSourceIndexBuilder {
     private indexProject(info: ProjectInfo): void {
         const srcDir = path.join(path.resolve(this.workspaceRoot, info.root), 'src');
         if (!fs.existsSync(srcDir)) return;
+        const external = matchesAnyGlob(info.root, this.externalApiPaths);
         for (const file of collectTsFiles(srcDir)) {
             if (isTestFile(file)) continue; // tests are not production topology
             const text = fs.readFileSync(file, 'utf8');
             const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-            this.indexNode(sourceFile, info.name);
+            this.indexNode(sourceFile, info.name, external);
         }
     }
 
-    private indexNode(node: ts.Node, project: string): void {
-        if (ts.isClassDeclaration(node)) {
-            const info = apiClassInfoFrom(node, project);
-            if (info) {
-                this.owners.add(project);
-                this.byName.set(info.api, info);
-            }
+    private indexNode(node: ts.Node, project: string, external: boolean): void {
+        const info = external ? externalApiInfoFrom(node, project) : apiClassInfoFromNode(node, project);
+        if (info) {
+            this.owners.add(project);
+            this.byName.set(info.api, info);
         }
-        ts.forEachChild(node, (child: ts.Node) => this.indexNode(child, project));
+        ts.forEachChild(node, (child: ts.Node) => this.indexNode(child, project, external));
     }
 }
-
 /** Per-owner accumulator that dedupes API refs while a single project is scanned. */
 class RelationAccumulator {
     private readonly implementsByOwner = new Map<string, Map<string, ApiRef>>();
@@ -252,6 +261,8 @@ export class ApiUsageScanner {
     constructor(
         private readonly workspaceRoot: string,
         private readonly projectInfos: Map<string, ProjectInfo>,
+        /** Globs of project roots whose exported `*Api` types are contracts for outside systems. */
+        private readonly externalApiPaths: readonly string[] = [],
     ) {
         this.locator = new ProjectLocator(workspaceRoot, projectInfos);
     }
@@ -259,7 +270,11 @@ export class ApiUsageScanner {
     scan(): ApiScanResult {
         // Pre-pass: every contract, from source, BEFORE any call site is resolved — a call site in
         // one project routinely names a contract owned by a project we have not walked yet.
-        this.sourceIndex = new ApiSourceIndexBuilder(this.workspaceRoot, this.projectInfos).build();
+        this.sourceIndex = new ApiSourceIndexBuilder(
+            this.workspaceRoot,
+            this.projectInfos,
+            this.externalApiPaths,
+        ).build();
         for (const info of this.projectInfos.values()) {
             if (info.root === '' || info.root === '.') continue;
             this.scanProject(info);
@@ -296,9 +311,37 @@ export class ApiUsageScanner {
     }
 
     private visit(node: ts.Node, checker: ts.TypeChecker, project: string, acc: RelationAccumulator): void {
-        // Contract classes are indexed by the source pre-pass, so only calls matter here.
+        // In-repo contract classes are indexed by the source pre-pass, so only calls matter for them.
         if (ts.isCallExpression(node)) this.recordCall(node, checker, project, acc);
+        // A VENDOR contract has no client-factory call site to key off — it arrives by injection —
+        // so classes have to be inspected too.
+        if (ts.isClassDeclaration(node)) this.recordExternalUses(node, acc);
         ts.forEachChild(node, (child: ts.Node) => this.visit(child, checker, project, acc));
+    }
+
+    /**
+     * Record a `uses` for every vendor contract this class receives by CONSTRUCTOR INJECTION —
+     * `constructor(@inject(GMAIL_TYPES.GmailApi) private readonly gmail: GmailApi)`.
+     *
+     * The parameter TYPE is the signal, not the token: a token is an opaque Symbol whose name we
+     * would have to guess at, while the type is written right there and is what the class actually
+     * calls. Matching happens by name against the external index, so an import that resolves to a
+     * built `.d.ts` works exactly as well as one resolving to source.
+     *
+     * A class that IMPLEMENTS the contract is skipped — that is the vendor adapter (`GmailClient`)
+     * or a test double (`InMemoryFirestore`, `MockTts`), which IS the seam rather than a caller of
+     * it. Counting those would draw an edge from every service embedding a fake to a vendor it never
+     * actually reaches.
+     */
+    private recordExternalUses(cls: ts.ClassDeclaration, acc: RelationAccumulator): void {
+        const implemented = implementedTypeNames(cls);
+        for (const param of constructorParamsOf(cls)) {
+            const typeName = typeReferenceName(param.type);
+            if (typeName === null || implemented.has(typeName)) continue;
+            const info = this.sourceIndex.lookup(typeName);
+            if (info === null || info.type !== 'external') continue;
+            acc.addUses(info.owner, { api: info.api, type: 'external' });
+        }
     }
 
     private recordCall(
@@ -373,12 +416,16 @@ export class ApiUsageScanner {
         return path.relative(this.workspaceRoot, absFile);
     }
 
-    /** {api, owner, type} when `cls` is an `abstract class` carrying `@ApiPath` IN SOURCE, else null. */
+    /**
+     * {api, owner, type, methods} when `cls` is an `abstract class` carrying `@ApiPath` IN SOURCE,
+     * else null. Only the OWNER differs from the index pre-pass — here it comes from the file's
+     * location rather than from the project being walked — so the contract test itself is delegated
+     * to apiClassInfoFrom, keeping one definition of "this is a contract".
+     */
     private apiClassInfoFor(cls: ts.ClassDeclaration): ApiClassInfo | null {
-        if (!isAbstractClass(cls) || !hasClassDecorator(cls, 'ApiPath') || !cls.name) return null;
         const owner = this.locator.projectOf(cls.getSourceFile().fileName);
         if (owner === null) return null;
-        return { api: cls.name.text, owner, type: apiTransport(cls) };
+        return apiClassInfoFrom(cls, owner);
     }
 }
 
@@ -394,13 +441,66 @@ export function scanAndAttachApiRelations(
     workspaceRoot: string,
     graph: EnhancedGraph,
     projectInfos: Map<string, ProjectInfo>,
+    externalApiPaths: readonly string[] = [],
 ): ApiScanResult {
-    const result = new ApiUsageScanner(workspaceRoot, projectInfos).scan();
+    const result = new ApiUsageScanner(workspaceRoot, projectInfos, externalApiPaths).scan();
     for (const projectName of result.relationsByProject.keys()) {
         const entry = graph[projectName];
         if (entry) entry.apiRelations = result.relationsByProject.get(projectName);
     }
     return result;
+}
+
+/**
+ * The committed `apiContracts` table for architecture/dependencies.json, from a completed scan.
+ *
+ * Only contracts with ≥1 endpoint are emitted: a vendor seam has no routes, so a table entry for it
+ * would be an empty shell, and its identity is already carried by the `external` refs in
+ * apiRelations. Sorted by api name, methods left in declaration order, so the file is deterministic.
+ */
+// webpieces-disable no-function-outside-class -- module entry point, mirrors scanAndAttachApiRelations
+export function buildApiContracts(scan: ApiScanResult): ApiContracts {
+    const contracts: ApiContracts = {};
+    for (const api of [...scan.apiIndex.keys()].sort()) {
+        const info = scan.apiIndex.get(api)!;
+        if (info.methods.length === 0) continue;
+        const contract: ApiContract = {
+            owner: info.owner,
+            apiKind: info.type,
+            basePath: info.basePath,
+            methods: info.methods,
+        };
+        contracts[api] = contract;
+    }
+    return contracts;
+}
+
+/**
+ * Every contract method whose declared @Endpoint kind its api kind cannot deliver — an rpc method on
+ * a @PubSub contract (nothing calls a queue synchronously), or a cloudtasks/cron method on an @Rpc
+ * contract (naming a queue or schedule nothing could deliver to). Mirrors core-util's
+ * ENDPOINT_KINDS_BY_API_KIND at BUILD time, where it can name the file instead of throwing at wiring.
+ */
+// webpieces-disable no-function-outside-class -- pure formatter, mirrors describeUnresolvedApiCalls
+export function describeMismatchedEndpointKinds(contracts: ApiContracts): string[] {
+    const allowedByKind: Record<string, readonly EndpointKind[]> = {
+        rpc: ['rpc', 'external'],
+        pubsub: ['cloudtasks', 'cron', 'external'],
+    };
+    const problems: string[] = [];
+    for (const api of Object.keys(contracts)) {
+        const contract = contracts[api];
+        const allowed = allowedByKind[contract.apiKind];
+        if (allowed === undefined) continue;
+        for (const method of contract.methods) {
+            if (allowed.includes(method.kind)) continue;
+            problems.push(
+                `${api}.${method.name} declares @Endpoint('${method.path}', '${method.kind}') but ${api} is ` +
+                    `@${contract.apiKind === 'pubsub' ? 'PubSub' : 'Rpc'} — allowed kinds are ${allowed.join(' | ')}.`,
+            );
+        }
+    }
+    return problems;
 }
 
 /**
@@ -454,76 +554,4 @@ function buildProgramFromSrc(projectRootAbs: string, options: ts.CompilerOptions
     if (!fs.existsSync(srcDir)) return null;
     const files = collectTsFiles(srcDir);
     return files.length > 0 ? ts.createProgram(files, options) : null;
-}
-
-// webpieces-disable no-function-outside-class -- recursive fs walker, matching the AST-helper style here
-function collectTsFiles(dir: string): string[] {
-    const out: string[] = [];
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            if (entry.name !== 'node_modules') out.push(...collectTsFiles(full));
-        } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-            out.push(full);
-        }
-    }
-    return out;
-}
-
-/** {api, owner: `project`, type} when `cls` is an `abstract class` carrying `@ApiPath`, else null. */
-// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-function apiClassInfoFrom(cls: ts.ClassDeclaration, project: string): ApiClassInfo | null {
-    if (!isAbstractClass(cls) || !hasClassDecorator(cls, 'ApiPath') || !cls.name) return null;
-    return { api: cls.name.text, owner: project, type: apiTransport(cls) };
-}
-
-// webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
-function apiTransport(cls: ts.ClassDeclaration): ApiTransport {
-    return hasClassDecorator(cls, 'PubSub') ? 'pubsub' : 'rpc';
-}
-
-// webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
-function isAbstractClass(cls: ts.ClassDeclaration): boolean {
-    return (ts.getModifiers(cls) ?? []).some((m: ts.Modifier) => m.kind === ts.SyntaxKind.AbstractKeyword);
-}
-
-// webpieces-disable no-function-outside-class -- pure AST predicate, matching the sibling helpers in di-graph/bindings.ts
-function hasClassDecorator(cls: ts.ClassDeclaration, name: string): boolean {
-    return classDecorators(cls).some((d: ts.Decorator) => decoratorName(d) === name);
-}
-
-/**
- * The service a client-factory call aims at, from its config argument:
- * `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb'))` → `'helper-fsdb'`.
- *
- * Only a `new <Xxx>ClientConfig('<string literal>')` yields a name. A variable, a template string
- * or a computed expression yields null — the target is genuinely unknown at scan time, and the
- * runtime graph must fall back to fan-out (loudly) rather than guess.
- */
-// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-function targetServiceOf(call: ts.CallExpression): string | null {
-    if (call.arguments.length < 2) return null;
-    const config = call.arguments[1];
-    if (!ts.isNewExpression(config) || !ts.isIdentifier(config.expression)) return null;
-    if (!config.expression.text.endsWith(CLIENT_CONFIG_SUFFIX)) return null;
-    const first = config.arguments?.[0];
-    if (first === undefined || !ts.isStringLiteral(first)) return null;
-    return first.text.length > 0 ? first.text : null;
-}
-
-// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-function calleeMethodName(call: ts.CallExpression): string | null {
-    const callee = call.expression;
-    if (ts.isPropertyAccessExpression(callee)) return callee.name.text;
-    if (ts.isIdentifier(callee)) return callee.text;
-    return null;
-}
-
-// webpieces-disable no-function-outside-class -- pure path predicate, matching the sibling helpers in di-graph/bindings.ts
-function isTestFile(fileName: string): boolean {
-    return (
-        fileName.includes('/__tests__/') ||
-        fileName.includes('.spec.') ||
-        fileName.includes('.test.')
-    );
 }

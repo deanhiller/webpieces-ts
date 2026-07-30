@@ -38,7 +38,7 @@ class SendEmailRequest {
 @AuthOidc()
 @ApiPath('/email')
 abstract class EmailApi {
-    @Endpoint('/send')
+    @Endpoint('/send', 'cloudtasks')
     @Queue('email-send-queue')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     sendEmail(_request: SendEmailRequest): Promise<void> {

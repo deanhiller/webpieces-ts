@@ -100,7 +100,9 @@ export default async function runExecutor(
     for (const name of Object.keys(depsFile.projects)) {
         if (depsFile.projects[name].drawOnGraph === false) hiddenProjects.add(name);
     }
-    const report = deriveRuntimeGraphReport(depsFile.projects, hiddenProjects);
+    // apiContracts comes from the SAME loaded file, so the queue/trigger data the derivation sees
+    // here is byte-identical to what generate saw in memory.
+    const report = deriveRuntimeGraphReport(depsFile.projects, hiddenProjects, depsFile.apiContracts);
     const graph = report.graph;
     for (const warning of report.warnings) console.warn(`⚠️  ${warning}`);
 

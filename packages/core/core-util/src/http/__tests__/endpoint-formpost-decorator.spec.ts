@@ -12,13 +12,13 @@ import {
 @ApiPath('/webhook')
 abstract class SampleWebhookApi {
     // Default: JSON.
-    @Endpoint('/rpc')
+    @Endpoint('/rpc', 'rpc')
     rpc(_req: object): Promise<object> {
         throw new Error('subclass');
     }
 
-    // Explicit form-urlencoded (e.g. Twilio inbound).
-    @Endpoint('/hook', { formPost: true })
+    // Explicit form-urlencoded (e.g. Twilio inbound) — driven by a system outside this repo.
+    @Endpoint('/hook', 'external', { formPost: true })
     inbound(_req: object): Promise<object> {
         throw new Error('subclass');
     }

@@ -15,6 +15,7 @@ import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { collectProjectInfo } from '../../lib/graph-metadata';
 import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
+import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { findUnclassifiedApiDeps, describeUnclassifiedApiDep } from '../../lib/api-usage/api-relations-validator';
 import { toError } from '../../toError';
 
@@ -42,7 +43,11 @@ export default async function runExecutor(
         const rawGraph = await generateGraph();
         const graph = sortGraphTopologically(rawGraph);
         const projectInfos = await collectProjectInfo();
-        const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos);
+        // Same externalApiPaths as generate: a vendor lib must be classified by the SAME rules here,
+        // or a server depending on one would be reported unclassified purely because this scan was
+        // configured differently from the one that wrote the graph.
+        const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
+        const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
 
         const violations = findUnclassifiedApiDeps(graph, projectInfos, scan);
         if (violations.length === 0) {

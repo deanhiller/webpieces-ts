@@ -7,8 +7,8 @@
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 import { ProjectInfo } from '../project-info';
-import { ApiUsageScanner } from '../api-usage/api-scanner';
-import { ApiRelation } from '../api-usage/api-relations';
+import { ApiUsageScanner, buildApiContracts } from '../api-usage/api-scanner';
+import { ApiMethodMeta, ApiRelation } from '../api-usage/api-relations';
 
 const WORKSPACE_ROOT = path.resolve(__dirname, '../../../../../..');
 
@@ -118,5 +118,35 @@ describe('ApiUsageScanner — project-coverage edge cases', () => {
     it('does NOT mark an all-test project (app-example-e2e) as scanned', () => {
         expect(result.scannedProjects.has('app-example-e2e')).toBe(false);
         expect(result.relationsByProject.has('app-example-e2e')).toBe(false);
+    });
+});
+
+describe('buildApiContracts — the per-method trigger table committed to dependencies.json', () => {
+    const contracts = buildApiContracts(new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan());
+
+    it('records each contract with its owner, api kind and @ApiPath basePath', () => {
+        expect(contracts['SecureApi'].owner).toBe('client-server-api');
+        expect(contracts['SecureApi'].apiKind).toBe('rpc');
+        expect(contracts['SecureApi'].basePath).toBe('/secure');
+    });
+
+    it('reads every @Endpoint path + kind, and derives the Terraform-matched queue name', () => {
+        // The queue name is defined for every method (a cron schedule needs a name too), defaulting
+        // to `${Api}-${method}` exactly as core-util's getQueueName does.
+        expect(contracts['Server2Api'].methods).toEqual([
+            { name: 'fetchValue', path: '/fetchValue', kind: 'rpc', queueName: 'Server2Api-fetchValue' },
+        ]);
+    });
+
+    it('is deterministic: contracts sorted by name, methods left in declaration order', () => {
+        const names = Object.keys(contracts);
+        expect(names).toEqual([...names].sort());
+        expect(contracts['SecureApi'].methods.map((m: ApiMethodMeta) => m.name)).toEqual([
+            'userOp',
+            'adminOp',
+            'orgOp',
+            'internalOp',
+            'serviceOp',
+        ]);
     });
 });

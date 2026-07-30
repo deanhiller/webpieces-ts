@@ -15,11 +15,16 @@
  * gmail, ...) are drawn as dashed terminal nodes, so the vendor systems that
  * actually page you at 3am stop being missing from the picture. They are
  * RENDER-ONLY: derivation, levels and cycle detection never see them.
+ *
+ * The same is true in the other direction for endpoints nothing in-repo CALLS: a
+ * `cron` method hangs off a clock and an `external` method off a dashed inbound
+ * box. Those are the entry points that wake a service up at 3am, and a graph
+ * built only from in-repo callers cannot show them at all.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { RuntimeGraph, RuntimeEdge, RuntimeService } from './runtime-graph';
+import type { RuntimeGraph, RuntimeEdge, RuntimeQueue, RuntimeService, RuntimeTrigger } from './runtime-graph';
 import { dotValue, assertValidDot } from './dot-syntax';
 
 const LEVEL_COLORS: Record<number, string> = {
@@ -34,6 +39,10 @@ const QUEUE_FILL = '#FFF3E0';
 /** Fill + border for the dashed terminal node standing for a system outside this repo. */
 const EXTERNAL_FILL = '#FAFAFA';
 const EXTERNAL_BORDER = '#9E9E9E';
+
+/** Fill + border for the clock node standing for a scheduler-driven endpoint. */
+const CRON_FILL = '#FFF9C4';
+const CRON_BORDER = '#F9A825';
 
 /** Apis per line inside a node label — beyond this the box grows wider than it is readable. */
 const APIS_PER_LABEL_LINE = 3;
@@ -103,19 +112,69 @@ function nodeLabel(name: string, svc: RuntimeService): string {
  * with a cylinder queue node and dashed enqueue/deliver arrows.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function edgeDot(edge: RuntimeEdge): string {
+function edgeDot(edge: RuntimeEdge, queues: Record<string, RuntimeQueue>): string {
     const from = dotValue(getShortName(edge.from));
     const to = dotValue(getShortName(edge.to));
     const via = edge.via.map((v: string) => dotValue(getShortName(v))).join(', ');
     if (edge.type !== 'pubsub') {
         return `  "${from}" -> "${to}" [label="${via}"];\n`;
     }
-    const queueId = `queue__${from}__${to}`;
+    // The queue node is identified by the METHOD, not by the (from,to) pair, so every producer and
+    // consumer of one queue converges on ONE box — including a service that enqueues to itself,
+    // which then renders as a visible loop through its queue instead of vanishing.
+    const queueId = edge.queue === undefined ? `queue__${from}__${to}` : `queue__${dotId(edge.queue)}`;
+    const queueName = edge.queue === undefined ? undefined : queues[edge.queue]?.queueName;
+    const label =
+        edge.queue === undefined
+            ? `${via}\\nqueue`
+            : `${dotValue(edge.queue)}\\nqueue: ${dotValue(queueName ?? edge.queue)}`;
     return (
-        `  "${queueId}" [shape=cylinder, style="filled", fillcolor="${QUEUE_FILL}", label="${via}\\nqueue"];\n` +
+        `  "${queueId}" [shape=cylinder, style="filled", fillcolor="${QUEUE_FILL}", label="${label}"];\n` +
         `  "${from}" -> "${queueId}" [label="enqueue", style=dashed];\n` +
         `  "${queueId}" -> "${to}" [label="deliver", style=dashed];\n`
     );
+}
+
+/** A DOT-safe node-id fragment: anything but letters, digits and `_` becomes `_`. */
+// webpieces-disable no-function-outside-class -- DOT id builder, matching getShortName in this file
+function dotId(raw: string): string {
+    return raw.replace(/[^A-Za-z0-9_]/g, '_');
+}
+
+/**
+ * The clock and outside-system nodes for endpoints NOTHING in-repo calls.
+ *
+ * A cron sweep and a GCP push subscription are real runtime entry points with real Terraform behind
+ * them, but they produce no runtime EDGE (there is no in-repo caller), so until now they were simply
+ * absent — a server's most operationally interesting endpoint could be invisible on its own graph.
+ * Both are drawn pointing INTO the service that serves them, the opposite direction from
+ * {@link externalDot}'s outbound vendor calls.
+ */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function triggerDot(graph: RuntimeGraph, hidden: Set<string>): string {
+    const triggers = graph.triggers.filter((t: RuntimeTrigger) => !hidden.has(t.service));
+    if (triggers.length === 0) return '';
+
+    let dot = '\n  // Entry points nothing in this repo calls: a clock, or a system outside the repo.\n';
+    for (const trigger of triggers) {
+        const service = dotValue(getShortName(trigger.service));
+        const label = dotValue(`${trigger.api}.${trigger.method}`);
+        if (trigger.kind === 'cron') {
+            const id = `cron__${dotId(`${trigger.api}_${trigger.method}`)}`;
+            const schedule = dotValue(trigger.queueName ?? `${trigger.api}-${trigger.method}`);
+            dot +=
+                `  "${id}" [shape=circle, style="filled", fillcolor="${CRON_FILL}", ` +
+                `color="${CRON_BORDER}", label="⏰\\ncron"];\n` +
+                `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`;
+            continue;
+        }
+        const id = `inbound__${dotId(trigger.api)}`;
+        dot +=
+            `  "${id}" [shape=box, style="dashed,filled", fillcolor="${EXTERNAL_FILL}", ` +
+            `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n(external caller)"];\n` +
+            `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`;
+    }
+    return dot;
 }
 
 /**
@@ -190,8 +249,10 @@ export function generateRuntimeDot(
 
     for (const edge of graph.runtimeEdges) {
         if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
-        dot += edgeDot(edge);
+        dot += edgeDot(edge, graph.queues);
     }
+
+    dot += triggerDot(graph, hidden);
 
     if (options.showExternalNodes) dot += externalDot(graph, hidden);
 
@@ -228,8 +289,9 @@ function generateRuntimeHtml(dot: string, title: string): string {
 </head>
 <body>
     <h1>${title}</h1>
-    <div class="note">Runtime calls between services. <strong>rpc</strong> = a direct arrow (synchronous call, labeled with the api). <strong>pubsub</strong> = producer &rarr; <em>queue</em> (cylinder) &rarr; consumer: the producer enqueues a Cloud Task and the consumer is delivered it later.</div>
-    <div class="note">Each box lists the contracts it <strong>implements</strong> (serves) and <strong>uses</strong> (calls) — so an api a service serves is visible even when nothing in this repo calls it. <em>(via &lt;lib&gt;)</em> means the service serves that contract through an embedded library rather than its own source. A <strong>dashed box</strong> is a system OUTSIDE this repo (firestore, gmail, ...): a contract this repo calls and nothing here implements.</div>
+    <div class="note">Runtime calls between services. <strong>rpc</strong> = a direct arrow (synchronous call, labeled with the api). <strong>cloudtasks</strong> = producer &rarr; <em>queue</em> (cylinder) &rarr; consumer: the producer enqueues a Cloud Task and the consumer is delivered it later. There is one queue box <em>per method</em> (the unit Cloud Tasks and Terraform actually create), so a service that enqueues to <em>itself</em> correctly shows a loop through its own queue — a queue decouples the two sides, so it is not a dependency cycle.</div>
+    <div class="note">Each box lists the contracts it <strong>implements</strong> (serves) and <strong>uses</strong> (calls) — so an api a service serves is visible even when nothing in this repo calls it. <em>(via &lt;lib&gt;)</em> means the service serves that contract through an embedded library rather than its own source.</div>
+    <div class="note">Entry points nothing in this repo calls: a <strong>&#9200; clock</strong> is a <em>cron</em> endpoint fired by a scheduler, and a <strong>dashed box pointing IN</strong> is an <em>external</em> endpoint driven from outside (a Pub/Sub push subscription, a Gmail or Twilio webhook). A <strong>dashed box pointing OUT</strong> is the reverse: a system OUTSIDE this repo (firestore, gmail, ...) that this repo calls and nothing here implements.</div>
     <div id="graph"></div>
     <script>${script}</script>
 </body>

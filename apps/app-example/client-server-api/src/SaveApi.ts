@@ -99,7 +99,7 @@ export interface SaveResponse {
 @Authentication(new AuthenticationConfig(true))
 @ApiPath('/search')
 export abstract class SaveApi {
-    @Endpoint('/item')
+    @Endpoint('/item', 'rpc')
     save(request: SaveRequest): Promise<SaveResponse> {
         throw new Error('Method save() must be implemented by subclass');
     }

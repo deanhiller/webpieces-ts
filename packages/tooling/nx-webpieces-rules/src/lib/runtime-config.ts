@@ -8,7 +8,8 @@
  *     "mode": "ON",                          // "OFF" disables the whole feature
  *     "ignoreModifiedUntilEpoch": 0,         // whole-rule punt (epoch seconds)
  *     "allowedCycles": [ { "services": ["a","b"], "reason": "...", "until": 1771931925 } ],
- *     "showExternalNodes": true               // draw firestore/gmail/... as terminal nodes
+ *     "showExternalNodes": true,              // draw firestore/gmail/... as terminal nodes
+ *     "externalApiPaths": ["libraries/apis/external/**"]  // where those vendor contracts live
  *   }
  */
 
@@ -29,6 +30,11 @@ export interface RuntimeRuleConfig {
     allowedCycles: AllowedCycle[];
     /** Render the dashed external terminal nodes in the runtime viz (default true). */
     showExternalNodes: boolean;
+    /**
+     * Globs of project roots whose exported `*Api` types are contracts for systems OUTSIDE this repo.
+     * Empty (the default) means the scan looks for no vendor seams at all.
+     */
+    externalApiPaths: string[];
 }
 
 /**
@@ -41,6 +47,7 @@ interface RuntimeRuleRaw {
     ignoreRuleWhileOnBranch?: string;
     allowedCycles?: AllowedCycle[];
     showExternalNodes?: boolean;
+    externalApiPaths?: string[];
 }
 
 function isUsableCycle(cycle: AllowedCycle): boolean {
@@ -62,6 +69,11 @@ export function loadRuntimeConfig(workspaceRoot: string): RuntimeRuleConfig {
         // Opt-OUT: the external systems are the ones that page you at 3am, so they are drawn unless
         // a repo explicitly says its external surface is too noisy to be useful.
         showExternalNodes: raw.showExternalNodes !== false,
+        // Opt-IN: there is no safe guess for where a repo keeps its vendor wrappers, and guessing
+        // wrong would classify ordinary libraries as systems outside the repo.
+        externalApiPaths: Array.isArray(raw.externalApiPaths)
+            ? raw.externalApiPaths.filter((entry: string) => typeof entry === 'string' && entry.length > 0)
+            : [],
     };
 }
 

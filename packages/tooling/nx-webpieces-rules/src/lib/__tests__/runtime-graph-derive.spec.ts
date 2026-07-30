@@ -6,7 +6,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deriveRuntimeGraph, deriveRuntimeGraphReport, serializeRuntimeGraph } from '../runtime-graph';
+import {
+    deriveRuntimeGraph,
+    deriveRuntimeGraphReport,
+    serializeRuntimeGraph,
+} from '../runtime-graph';
 import type { RuntimeEdge } from '../runtime-graph';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { ApiRef } from '../api-usage/api-relations';
