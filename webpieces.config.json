@@ -4,90 +4,107 @@
             "limit": 80,
             "mode": "NEW_AND_MODIFIED_METHODS",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "max-file-lines": {
             "limit": 902,
             "mode": "NEW_AND_MODIFIED_FILES",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "require-return-type": {
             "mode": "NEW_AND_MODIFIED_METHODS",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-inline-type-literals": {
             "mode": "NEW_AND_MODIFIED_METHODS",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-any-unknown": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 1783409251
+            "turnOffRuleUntilEpoch": 1783409251,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-implicit-any": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "prisma-validate-dtos": {
             "mode": "MODIFIED_CLASS",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "prisma-converter": {
             "mode": "NEW_AND_MODIFIED_METHODS",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-destructure": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-unmanaged-exceptions": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "catch-error-pattern": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "throw-cause-required": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": false,
-            "ignoreModifiedUntilEpoch": 1771931925
+            "turnOffRuleUntilEpoch": 1771931925,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-process-exit-outside-main": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "angular-no-direct-api-in-resolver": {
             "mode": "OFF",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-symbol-di-tokens": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 1771931925,
+            "turnOffRuleUntilEpoch": 1771931925,
             "allowedPaths": [
                 "libraries/apis/**",
                 "packages/core/core-util/src/http/**"
-            ]
+            ],
+            "turnOffRuleWhileOnBranch": null
         },
         "missing-design-annotation": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "framework-tag": {
             "mode": "MODIFIED_PROJECTS",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "role-tag": {
             "mode": "MODIFIED_PROJECTS",
@@ -100,21 +117,25 @@
                 "client",
                 "api-lib"
             ],
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "di-graph": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-file-import-cycles": {
             "mode": "RUN_EVERY_TIME",
             "ignoreTypeOnly": false,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "runtime-architecture": {
             "mode": "RUN_EVERY_TIME",
             "allowedCycles": [],
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
@@ -122,21 +143,24 @@
                 "packages/tooling/nx-webpieces-rules/src/lib/*.client.js",
                 "packages/tooling/ai-hook-rules/bin/*.js"
             ],
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-function-outside-class": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "inject-annotation-not-needed-for-concrete-class": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "validate-ts-in-src": {
             "mode": "NEW_AND_MODIFIED_FILES",
-            "ignoreModifiedUntilEpoch": 1771931925,
+            "turnOffRuleUntilEpoch": 1771931925,
             "allowedRootFiles": [
                 "jest.setup.ts"
             ],
@@ -149,41 +173,50 @@
                 "**/*.d.ts",
                 "**/jest.config.ts",
                 "**/codegen.ts"
-            ]
+            ],
+            "turnOffRuleWhileOnBranch": null
         },
         "nx-wiring": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-custom-css": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "no-client-creation-outside-server-or-client": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "validate-architecture-unchanged": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "validate-no-architecture-cycles": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "validate-packagejson": {
-            "mode": "OFF",
-            "ignoreModifiedUntilEpoch": 0
+            "mode": "RUN_EVERY_TIME",
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "validate-versions-locked": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "validate-eslint-sync": {
             "mode": "RUN_EVERY_TIME",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         }
     },
     "hookGuards": {
@@ -191,41 +224,50 @@
             "mode": "ON_NO_SUBBRANCHES",
             "subBranchNaming": "feature/<ticket>/<short-description>",
             "autoReapMergedBranches": true,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "read-stale-guard": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "merge-in-progress-guard": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "redirect-how-to-merge-main": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "feature-branch-guard": {
             "mode": "ON",
             "branchNamingConvention": "{whoami}/{featurename}",
             "hangTimeoutMinutes": 5,
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "pr-creation-or-push-guard": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "pr-merge-guard": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "merged-branch-bash-guard": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         },
         "stale-main-bash-guard": {
             "mode": "ON",
-            "ignoreModifiedUntilEpoch": 0
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
         }
     },
     "commands": {
@@ -336,7 +378,7 @@
     "match-rules": [
         {
             "mode": "NEW_AND_MODIFIED_CODE",
-            "ignoreModifiedUntilEpoch": 0,
+            "turnOffRuleUntilEpoch": 0,
             "name": "no-fetch",
             "patterns": [
                 "(?<![.\\w])fetch\\s*\\(",
@@ -357,11 +399,12 @@
                 "packages/cloud/cloudtasks-client/**",
                 "libraries/apis-external/**",
                 "libraries/apis/external/**"
-            ]
+            ],
+            "turnOffRuleWhileOnBranch": null
         },
         {
             "mode": "NEW_AND_MODIFIED_CODE",
-            "ignoreModifiedUntilEpoch": 0,
+            "turnOffRuleUntilEpoch": 0,
             "name": "no-global-providesingleton-in-packages",
             "patterns": [
                 "@provideSingleton\\s*\\(",
@@ -378,7 +421,8 @@
                 "libraries/**",
                 "packages/tooling/**",
                 "packages/core/core-context/src/provide.ts"
-            ]
+            ],
+            "turnOffRuleWhileOnBranch": null
         }
     ],
     "rulesDir": []

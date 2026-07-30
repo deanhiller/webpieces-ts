@@ -7,6 +7,84 @@
         "regenerateDesigns": "pnpm nx run-many --target=di-graph-generate — rewrites every project's design.json/design.md (also runs automatically on every build)",
         "visualizeDesign": "pnpm wp-design-visualize <project> — opens a project's DI designs (its designFile) as HTML, one graph per controller with the controller at the top; no args = interactive picker"
     },
+    "apiContracts": {
+        "PublicApi": {
+            "owner": "client-server-api",
+            "apiKind": "rpc",
+            "basePath": "/public",
+            "methods": [
+                {
+                    "name": "getInfo",
+                    "path": "/info",
+                    "kind": "rpc",
+                    "queueName": "PublicApi-getInfo"
+                }
+            ]
+        },
+        "SaveApi": {
+            "owner": "client-server-api",
+            "apiKind": "rpc",
+            "basePath": "/search",
+            "methods": [
+                {
+                    "name": "save",
+                    "path": "/item",
+                    "kind": "rpc",
+                    "queueName": "SaveApi-save"
+                }
+            ]
+        },
+        "SecureApi": {
+            "owner": "client-server-api",
+            "apiKind": "rpc",
+            "basePath": "/secure",
+            "methods": [
+                {
+                    "name": "userOp",
+                    "path": "/user",
+                    "kind": "rpc",
+                    "queueName": "SecureApi-userOp"
+                },
+                {
+                    "name": "adminOp",
+                    "path": "/admin",
+                    "kind": "rpc",
+                    "queueName": "SecureApi-adminOp"
+                },
+                {
+                    "name": "orgOp",
+                    "path": "/org",
+                    "kind": "rpc",
+                    "queueName": "SecureApi-orgOp"
+                },
+                {
+                    "name": "internalOp",
+                    "path": "/internal",
+                    "kind": "rpc",
+                    "queueName": "SecureApi-internalOp"
+                },
+                {
+                    "name": "serviceOp",
+                    "path": "/service",
+                    "kind": "rpc",
+                    "queueName": "SecureApi-serviceOp"
+                }
+            ]
+        },
+        "Server2Api": {
+            "owner": "server2-api",
+            "apiKind": "rpc",
+            "basePath": "/server2",
+            "methods": [
+                {
+                    "name": "fetchValue",
+                    "path": "/fetchValue",
+                    "kind": "rpc",
+                    "queueName": "Server2Api-fetchValue"
+                }
+            ]
+        }
+    },
     "projects": {
         "ai-hook-rules": {
             "level": 1,
