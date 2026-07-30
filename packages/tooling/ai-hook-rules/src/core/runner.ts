@@ -55,25 +55,28 @@ function isForeignGitRepo(cwd: string, workspaceRoot: string): boolean {
     return gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot);
 }
 
-// The cwd a command actually runs from, resolving any leading `cd`/`pushd` in the command itself.
+// The cwd a command actually runs from, resolving a LEADING run of `cd`/`pushd` in the command itself.
 // PreToolUse fires BEFORE the command runs, so the shell's `cwd` is the pre-`cd` directory; a command
 // like `cd repositories/clone && git push` really executes in `repositories/clone`. Every git-boundary
 // and excludePaths decision must key off THIS directory, not the pre-`cd` one, or a nested clone is
-// judged against the outer repo (the two defects this repairs).
+// judged against the outer repo.
+//
+// ONLY a leading run of cd/pushd counts. Once a non-cd command appears it has ALREADY run in the
+// current dir, so a later cd must not retroactively pull it out of scope — otherwise a trailing
+// `... && cd <exempt-tree>` would exempt the WHOLE line, smuggling a root-level `git push` past the
+// guards. `cd a && cd b && git …` (leading run) resolves left to right, matching the shell.
 //
 // Reuses CommandScanner so quoting is handled exactly as the guards handle it: `echo "cd sub && git
 // push"` is ONE opaque segment whose first word is `echo`, so the quoted `cd` is never picked up —
-// the prose/quoted `cd` cannot be weaponised into a scope escape. `cd a && cd b` resolves left to
-// right (last wins), matching the shell.
+// the prose/quoted `cd` cannot be weaponised into a scope escape.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 export function effectiveBashCwd(command: string, cwd: string): string {
     const scanner = new CommandScanner();
     let effective = cwd;
     for (const segment of scanner.commandSegments(command)) {
         const words = scanner.words(segment);
-        if ((words[0] === 'cd' || words[0] === 'pushd') && words[1] !== undefined) {
-            effective = path.resolve(effective, words[1]);
-        }
+        if (words[0] !== 'cd' && words[0] !== 'pushd') break;
+        if (words[1] !== undefined) effective = path.resolve(effective, words[1]);
     }
     return effective;
 }
@@ -217,11 +220,17 @@ function isInstallerCommand(command: string): boolean {
 }
 
 // Force-to-root: git/gh commands must run from the repo root, where the guards can reason about git
-// state coherently. From a subdir, BLOCK with an actionable cd message — never silently skip. Returns
-// null when the command is not a subdir git/gh invocation (nothing to block).
+// state coherently. Fires ONLY when the shell is STUCK in a governed subdir — the shell persists in a
+// subdir (raw `cwd`) AND the command does not `cd` back to the root (`effectiveCwd`). A command that
+// explicitly cd's to the root runs at the root, so it is judged by the normal guards, never here:
+// without the effectiveCwd condition, `cd <root> && git push` from a nested clone was force-to-root
+// blocked while advising the very `cd <root>` it just ran (the self-contradicting dead-end this fixes).
+// Returns null when there is nothing to block.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function gitFromSubdirBlock(command: string, cwd: string, workspaceRoot: string): BlockedResult | null {
-    if (!isGitOrGhCommand(command) || path.resolve(cwd) === path.resolve(workspaceRoot)) return null;
+function gitFromSubdirBlock(command: string, cwd: string, effectiveCwd: string, workspaceRoot: string): BlockedResult | null {
+    const atRoot = path.resolve(cwd) === path.resolve(workspaceRoot);
+    const cdsToRoot = path.resolve(effectiveCwd) === path.resolve(workspaceRoot);
+    if (!isGitOrGhCommand(command) || atRoot || cdsToRoot) return null;
     const report =
         `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
         `   You are in: ${cwd}\n` +
@@ -274,7 +283,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
-    const subdirBlock = gitFromSubdirBlock(command, cwd, workspaceRoot);
+    const subdirBlock = gitFromSubdirBlock(command, cwd, effectiveCwd, workspaceRoot);
     if (subdirBlock) return subdirBlock;
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs
@@ -298,8 +307,21 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
     logGuardDecision(workspaceRoot, new GuardDecision(ruleNames, 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'bash-guard block'));
-    const report = formatReport('<bash>', groups);
+    const report = formatReport('<bash>', groups) + exemptTreesHint(groups, loaded.excludePaths.guards);
     return new BlockedResult(report);
+}
+
+// When a push/PR block fires AND the config exempts vendored/nested trees, surface the escape hatch the
+// AI cannot otherwise discover: git/gh run UNGUARDED inside those trees if it cd's there first (each is
+// governed by its own repo, not this one). Scoped to pr-creation-or-push-guard — for the other guards
+// "cd into an exempt tree" is not the remedy — and emitted only when such trees are actually configured,
+// so a repo without exemptions never sees the noise.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly string[]): string {
+    if (exemptGuards.length === 0) return '';
+    if (!groups.some((g: RuleGroup): boolean => g.ruleName === 'pr-creation-or-push-guard')) return '';
+    return `\n\nℹ️  Working in a nested repo under one of these exempt trees? cd into it first and run git/gh `
+        + `normally there — the webpieces guards do NOT govern them (each is its own repo): ${exemptGuards.join(', ')}.`;
 }
 
 // The set of rule names explicitly present in webpieces.config.json (every key except rulesDir).
