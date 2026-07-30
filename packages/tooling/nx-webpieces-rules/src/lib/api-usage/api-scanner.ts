@@ -43,12 +43,14 @@ import {
     ApiRef,
     ApiRelation,
     EndpointKind,
+    NonLiteralDecoratorArg,
     ProjectApiRelations,
     apiRefKey,
     deriveApiRelationKind,
     sortApiRefs,
 } from './api-relations';
 import {
+    DecoratorArgDiagnostics,
     apiClassInfoFrom,
     apiClassInfoFromNode,
     calleeMethodName,
@@ -104,6 +106,12 @@ export interface ApiScanResult {
      * graph is INCOMPLETE — callers must surface these rather than emit a green, wrong graph.
      */
     unresolvedApiCalls: UnresolvedApiCall[];
+    /**
+     * Decorator arguments that were present but could not be reduced to a string (a cross-module
+     * constant, a computed expression). Each one costs the graph a basePath, a method, or — when it
+     * takes out every method of a class — the whole contract, so they must be surfaced.
+     */
+    nonLiteralDecoratorArgs: NonLiteralDecoratorArg[];
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -170,6 +178,8 @@ class ApiSourceIndexBuilder {
         private readonly projectInfos: Map<string, ProjectInfo>,
         /** Globs of project roots holding vendor contracts — see ExternalApiIndex. */
         private readonly externalApiPaths: readonly string[],
+        /** Sink for decorator arguments this parser-only pass cannot reduce to a string. */
+        private readonly diagnostics: DecoratorArgDiagnostics,
     ) {}
 
     build(): ApiSourceIndex {
@@ -193,7 +203,9 @@ class ApiSourceIndexBuilder {
     }
 
     private indexNode(node: ts.Node, project: string, external: boolean): void {
-        const info = external ? externalApiInfoFrom(node, project) : apiClassInfoFromNode(node, project);
+        const info = external
+            ? externalApiInfoFrom(node, project)
+            : apiClassInfoFromNode(node, project, this.diagnostics);
         if (info) {
             this.owners.add(project);
             this.byName.set(info.api, info);
@@ -256,6 +268,7 @@ export class ApiUsageScanner {
     private readonly relationsByProject = new Map<string, ProjectApiRelations>();
     private readonly scannedProjects = new Set<string>();
     private readonly unresolvedApiCalls: UnresolvedApiCall[] = [];
+    private readonly decoratorArgDiagnostics: DecoratorArgDiagnostics;
     private sourceIndex = new ApiSourceIndex(new Map<string, ApiClassInfo>(), new Set<string>());
 
     constructor(
@@ -265,6 +278,7 @@ export class ApiUsageScanner {
         private readonly externalApiPaths: readonly string[] = [],
     ) {
         this.locator = new ProjectLocator(workspaceRoot, projectInfos);
+        this.decoratorArgDiagnostics = new DecoratorArgDiagnostics(workspaceRoot);
     }
 
     scan(): ApiScanResult {
@@ -274,6 +288,7 @@ export class ApiUsageScanner {
             this.workspaceRoot,
             this.projectInfos,
             this.externalApiPaths,
+            this.decoratorArgDiagnostics,
         ).build();
         for (const info of this.projectInfos.values()) {
             if (info.root === '' || info.root === '.') continue;
@@ -285,6 +300,7 @@ export class ApiUsageScanner {
             apiIndex: this.sourceIndex.byName,
             scannedProjects: this.scannedProjects,
             unresolvedApiCalls: this.unresolvedApiCalls,
+            nonLiteralDecoratorArgs: this.decoratorArgDiagnostics.all(),
         };
     }
 
@@ -457,13 +473,22 @@ export function scanAndAttachApiRelations(
  * Only contracts with ≥1 endpoint are emitted: a vendor seam has no routes, so a table entry for it
  * would be an empty shell, and its identity is already carried by the `external` refs in
  * apiRelations. Sorted by api name, methods left in declaration order, so the file is deterministic.
+ *
+ * THROWS when a routed contract has no basePath. `basePath` is required on ApiContract, and an entry
+ * missing it is worse than an absent entry: a consumer joining `basePath + path` computes a
+ * confidently wrong URL with no signal that anything is off, because every other entry has the field.
  */
 // webpieces-disable no-function-outside-class -- module entry point, mirrors scanAndAttachApiRelations
 export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     const contracts: ApiContracts = {};
+    const missing: string[] = [];
     for (const api of [...scan.apiIndex.keys()].sort()) {
         const info = scan.apiIndex.get(api)!;
         if (info.methods.length === 0) continue;
+        if (info.basePath === undefined) {
+            missing.push(`${api} (owner ${info.owner})`);
+            continue;
+        }
         const contract: ApiContract = {
             owner: info.owner,
             apiKind: info.type,
@@ -472,7 +497,51 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
         };
         contracts[api] = contract;
     }
+    if (missing.length > 0) throw new MissingBasePathError(missing);
     return contracts;
+}
+
+/**
+ * A routed contract whose `@ApiPath` argument the scan could not read. Fatal on purpose: shipping the
+ * entry without its basePath is what made `/whatsapp/test` render as `/test` in a downstream runbook.
+ */
+export class MissingBasePathError extends Error {
+    constructor(public readonly contracts: readonly string[]) {
+        super(
+            `${contracts.length} API contract(s) have @Endpoint methods but no readable @ApiPath basePath:\n` +
+                contracts.map((c: string) => `     • ${c}`).join('\n') +
+                `\n   basePath is REQUIRED in apiContracts — an entry without it makes every consumer\n` +
+                `   compute basePath + path as just path, silently. Inline the @ApiPath string literal,\n` +
+                `   or move the constant into the same module as the contract class.`,
+        );
+        this.name = 'MissingBasePathError';
+    }
+}
+
+/**
+ * Loud, actionable report for decorator arguments the scan could not reduce to a string.
+ *
+ * Same-module constants resolve, so anything reaching here is genuinely out of reach of a
+ * parser-only pass — and every one of them silently shrinks the graph. Empty string when there is
+ * nothing to say, so callers can test it without special-casing.
+ */
+// webpieces-disable no-function-outside-class -- pure formatter, mirrors describeUnresolvedApiCalls
+export function describeNonLiteralDecoratorArgs(args: readonly NonLiteralDecoratorArg[]): string {
+    if (args.length === 0) return '';
+    const lines = [
+        `⚠️  ${args.length} decorator argument(s) are not string literals and could not be resolved.`,
+        `   Each one drops data from the graph: a missing basePath, a missing method, or a whole contract:`,
+    ];
+    for (const arg of args) {
+        const where = arg.method === null ? arg.api : `${arg.api}.${arg.method}`;
+        lines.push(`     • @${arg.decorator}(${arg.argument}) on ${where} at ${arg.at}`);
+    }
+    lines.push(
+        `   A constant declared in the SAME module resolves. One imported from another module does not —`,
+        `   this scan is parser-only by design (module resolution can land on a decorator-erased .d.ts).`,
+        `   Fix by inlining the string literal, or by moving the constant into the contract's own module.`,
+    );
+    return lines.join('\n');
 }
 
 /**

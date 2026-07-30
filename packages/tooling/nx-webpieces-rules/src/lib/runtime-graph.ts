@@ -434,7 +434,9 @@ class RuntimeGraphDeriver {
                 queue = {
                     api,
                     method: method.name,
-                    queueName: method.queueName,
+                    // Every cloudtasks method carries a queueName; the fallback covers a
+                    // dependencies.json written before queueName became kind-specific.
+                    queueName: method.queueName ?? `${api}-${method.name}`,
                     producedBy: [],
                     consumedBy: [],
                 };

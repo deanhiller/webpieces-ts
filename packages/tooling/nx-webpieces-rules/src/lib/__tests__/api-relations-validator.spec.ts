@@ -9,6 +9,7 @@ import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import type { ApiScanResult } from '../api-usage/api-scanner';
 import { UnresolvedApiCall } from '../api-usage/api-scanner';
+import type { ApiClassInfo } from '../api-usage/api-relations';
 import { findUnclassifiedApiDeps, describeUnclassifiedApiDep } from '../api-usage/api-relations-validator';
 import type { UnclassifiedApiDep } from '../api-usage/api-relations-validator';
 
@@ -21,8 +22,8 @@ function infos(entries: [string, string[]][]): Map<string, ProjectInfo> {
 }
 
 function scanResult(apiLibs: string[]): ApiScanResult {
-    const apiIndex = new Map<string, { api: string; owner: string; type: 'rpc' | 'pubsub' }>();
-    apiIndex.set('SaveApi', { api: 'SaveApi', owner: 'client-server-api', type: 'rpc' });
+    const apiIndex = new Map<string, ApiClassInfo>();
+    apiIndex.set('SaveApi', { api: 'SaveApi', owner: 'client-server-api', type: 'rpc', basePath: '/save', methods: [] });
     return {
         relationsByProject: new Map(),
         apiLibProjects: new Set(apiLibs),
@@ -30,6 +31,7 @@ function scanResult(apiLibs: string[]): ApiScanResult {
         // Every server/client in these tests has real production source.
         scannedProjects: new Set(['client-server', 'some-lib']),
         unresolvedApiCalls: [],
+        nonLiteralDecoratorArgs: [],
     };
 }
 

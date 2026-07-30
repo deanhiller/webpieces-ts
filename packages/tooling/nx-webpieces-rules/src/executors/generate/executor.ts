@@ -17,6 +17,7 @@ import { ProjectInfo } from '../../lib/project-info';
 import {
     scanAndAttachApiRelations,
     describeUnresolvedApiCalls,
+    describeNonLiteralDecoratorArgs,
     buildApiContracts,
     describeMismatchedEndpointKinds,
 } from '../../lib/api-usage/api-scanner';
@@ -92,6 +93,11 @@ function scanApiRelations(
     const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
     const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
     if (scan.unresolvedApiCalls.length > 0) console.warn(describeUnresolvedApiCalls(scan.unresolvedApiCalls));
+    // A decorator argument we could not read costs the graph a basePath, a method, or a whole
+    // contract — none of which leaves a trace in the output. Name them before anything is written.
+    if (scan.nonLiteralDecoratorArgs.length > 0) {
+        console.warn(describeNonLiteralDecoratorArgs(scan.nonLiteralDecoratorArgs));
+    }
     const contracts = buildApiContracts(scan);
     // An endpoint whose declared trigger its api kind cannot deliver would silently draw a queue or a
     // clock that nothing could ever fire — name it here, where the fix is one decorator away.
