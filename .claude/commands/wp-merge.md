@@ -27,5 +27,10 @@ list, so it can never drift from the real layout. **Read it and follow it exactl
    the branch and the PR must be re-pointed in the same run) to start (or re-start) the squash-merge
    from main; it will generate the file if conflicts occur.
 
-Do NOT run `git add` / `git commit` / `git push` / `gh pr` yourself while a merge is in progress —
-the `merge-in-progress-guard` hook blocks them until your flow's finish command validates.
+DO `git add` each conflicted file you resolve — that is your job, and `git add` is not blocked by any
+guard. The finish command stages with `git add -u` (tracked paths only) and refuses to finish while
+git still reports unmerged files.
+
+Do NOT run `git commit` / `git push` / `git merge` / `git rebase` / `gh pr create|edit|merge` yourself
+while a merge is in progress — the `merge-in-progress-guard` hook blocks exactly those until your
+flow's finish command validates, and that command makes the commit.

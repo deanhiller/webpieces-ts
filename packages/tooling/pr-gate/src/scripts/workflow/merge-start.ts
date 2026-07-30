@@ -81,8 +81,14 @@ You are on branch \`{{SQUASH_BRANCH}}\` with conflict markers in the working tre
   (\`wp-start-update\` pairs with \`wp-finish-update\`; \`wp-start-upsert-pr\` pairs with
   \`wp-finish-upsert-pr\`, which additionally runs the \`nx affected\` build, renders the dashboard,
   and creates/updates the PR).
-- **Do NOT run \`git add\` / \`git commit\` / \`git push\` / \`gh pr\` yourself.** They are blocked by
-  the \`merge-in-progress-guard\` hook until the gate validates. The gate does the commit.
+- **DO \`git add\` each file you resolve.** Staging your resolutions is your job, not the gate's, and
+  \`git add\` is **not** blocked by any guard. The gate stages with \`git add -u\`, which only re-stages
+  already-tracked paths — leave a resolution unstaged and the gate stops with "Git still reports
+  unmerged files" and sends you back to \`git add\` it.
+- **Do NOT run \`git commit\` / \`git push\` / \`gh pr create|edit|merge\` yourself** (nor \`git merge\` /
+  \`git rebase\`). The \`merge-in-progress-guard\` hook blocks exactly those until the gate validates.
+  The gate does the commit. See \`webpieces.git-workflow.md\` → "Outcome B — CONFLICT merge" for the
+  full who-does-what; this file does not restate it.
 
 ## STEP 1 — Load the merge context
 
@@ -314,8 +320,8 @@ export class MergeStart {
         process.stdout.write('What you need to do:\n');
         process.stdout.write(`   1. read the merge process doc:  ${docPath}\n`);
         process.stdout.write(`   2. resolve each conflicted file below (its 3-point A/B/C context + diffs are in\n`);
-        process.stdout.write(`      ${mergeDir}/updatemain-<file>/), and write that file's merge-explanation.md\n`);
-        process.stdout.write(`   3. run  pnpm ${finishCommand}  — it validates, commits, and finalizes (do NOT git add/commit/push yourself)\n\n`);
+        process.stdout.write(`      ${mergeDir}/updatemain-<file>/), \`git add\` it, and write that file's merge-explanation.md\n`);
+        process.stdout.write(`   3. run  pnpm ${finishCommand}  — it validates, commits, and finalizes (do NOT git commit/push yourself)\n\n`);
         process.stdout.write('Conflicted files:\n');
         for (const file of conflictedFiles) process.stdout.write(`  - ${file}\n`);
         process.stdout.write('\n' + SEP);
