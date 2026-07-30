@@ -1,3 +1,4 @@
+import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from './branch-archiver';
 import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
 
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
@@ -33,6 +34,28 @@ export class GateDefinition {
 export const MERGE_MODE_AUTO = 'AUTO';
 export const MERGE_MODE_NONE = 'NONE';
 export const MERGE_MODES = [MERGE_MODE_AUTO, MERGE_MODE_NONE];
+
+/**
+ * `pr-gate.landPr` — what happens to the LOCAL branch once its PR has landed.
+ *
+ * A rich object rather than a bare string (the `commands.pr-gate` precedent) so the next knob about
+ * landing has a home, and so the rationale can sit beside the setting as a `*Why` sibling: JSON has no
+ * comments, and `<key>Why` is how this repo documents non-obvious config.
+ */
+export class LandPrConfig {
+    // One of BRANCH_RETENTIONS. Defaults to 'archive-tag' — see BranchArchiver for why a tag beats
+    // keeping the branch, storing a patch, or trusting the reflog.
+    branchRetention: string;
+
+    constructor(branchRetention: string = BRANCH_RETENTION_ARCHIVE_TAG) {
+        this.branchRetention = branchRetention;
+    }
+}
+
+// webpieces-disable no-function-outside-class -- module-level config default, matches defaultGates/defaultPrGateConfig in this file
+export function defaultLandPrConfig(): LandPrConfig {
+    return new LandPrConfig(BRANCH_RETENTION_ARCHIVE_TAG);
+}
 
 export class PrGateConfig {
     mode: string;
@@ -77,6 +100,13 @@ export class PrGateConfig {
      * agent. See RESPONSE-pr-gate-ci-enforcement / the design memo for the full tradeoff.
      */
     gateSalt: string;
+    /**
+     * What `wp-land-pr` (and `wp-cleanup`, which reaps the same branches) does with the LOCAL branch
+     * once its PR is in main. Field-with-default rather than another positional constructor param —
+     * this constructor is already at the max-params limit, and every existing `new PrGateConfig(...)`
+     * call site correctly wants the default.
+     */
+    landPr: LandPrConfig = defaultLandPrConfig();
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = [], gateSalt = '', checklistComments = true) {
@@ -122,6 +152,11 @@ interface RawPrGateSection {
     checklists?: RawChecklistItem[];
     gateSalt?: string;
     checklistComments?: boolean;
+    landPr?: RawLandPr;
+}
+
+interface RawLandPr {
+    branchRetention?: string;
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -155,6 +190,22 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const gateSalt = raw.gateSalt ?? defaults.gateSalt;
     // Optional — omitted ⇒ true ⇒ reviewer output published as a PR comment.
     const checklistComments = raw.checklistComments ?? defaults.checklistComments;
-    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
+    const built = new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
+    built.landPr = buildLandPrConfig(raw.landPr);
+    return built;
+}
+
+/**
+ * Build the `pr-gate.landPr` block. Omitted (the current state of every consumer's config) ⇒ the
+ * 'archive-tag' default, which is what makes this feature work with NO config edit at all. An invalid
+ * value cannot reach here — validatePrGateSection has already failed the load.
+ */
+// webpieces-disable no-function-outside-class -- module-level config transform, matches buildPrGateConfig above
+export function buildLandPrConfig(raw: RawLandPr | undefined): LandPrConfig {
+    const defaults = defaultLandPrConfig();
+    if (raw === undefined || raw === null || typeof raw !== 'object') return defaults;
+    const retention = raw.branchRetention;
+    if (typeof retention !== 'string' || !BRANCH_RETENTIONS.includes(retention)) return defaults;
+    return new LandPrConfig(retention);
 }
 

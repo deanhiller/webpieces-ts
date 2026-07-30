@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { MergeMarker, NO_CONFLICT_MARKER_FILE, MergeState } from './merge-state';
+import { CONFLICTS_FILE, MERGED_DIR, MergeMarker, MergeState, STAGED_DIR } from './merge-state';
 import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 
 const ms = new MergeState();
@@ -16,7 +16,7 @@ const mergeDirFor = (r: string, f: string): string => ms.mergeDirFor(r, f);
 const mergeRunDirFor = (h: string, n: number): string => ms.mergeRunDirFor(h, n);
 const findActiveMergeRunDir = (h: string): string | null => ms.findActiveMergeRunDir(h);
 const nextMergeSlotNumber = (h: string): number => ms.nextMergeSlotNumber(h);
-const writeCleanMergeMarker = (d: string, a: string, b: string, c: string): void => ms.writeCleanMergeMarker(d, a, b, c);
+const recordCleanMerge = (d: string, a: string, b: string, c: string): void => ms.recordCleanMerge(d, a, b, c);
 
 function tmp(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-merge-'));
@@ -138,24 +138,101 @@ describe('nextMergeSlotNumber — monotonic, never recycled', () => {
     });
 });
 
-describe('writeCleanMergeMarker', () => {
-    it('records a durable no-conflict marker + per-slot hashes with the A/B/C shas', () => {
+describe('recordCleanMerge — absence is the signal (Part 2)', () => {
+    it('keeps the A/B/C shas in updatemain-hashes.json', () => {
         const home = tmp();
         const mergeDir = mergeRunDirFor(home, 2);
-        writeCleanMergeMarker(mergeDir, 'aaa111', 'bbb222', 'ccc333');
-
-        const marker = fs.readFileSync(path.join(mergeDir, NO_CONFLICT_MARKER_FILE), 'utf8');
-        expect(marker).toContain('no 3-point conflict resolution needed');
-        expect(marker).toContain('A(fork)=aaa111');
-        expect(marker).toContain('B(feature)=bbb222');
-        expect(marker).toContain('C(main)=ccc333');
+        recordCleanMerge(mergeDir, 'aaa111', 'bbb222', 'ccc333');
 
         const hashes = JSON.parse(fs.readFileSync(path.join(mergeDir, 'updatemain-hashes.json'), 'utf8'));
         expect(hashes.hashForkPoint).toBe('aaa111');
         expect(hashes.hashFeatureHead).toBe('bbb222');
         expect(hashes.hashMainHead).toBe('ccc333');
     });
+
+    /**
+     * The Part 2 decision, pinned. `no-3point-merge.md` said "nothing interesting happened here" and
+     * repeated the three shas that updatemain-hashes.json carries one line later in machine-readable
+     * form — noise in every clean directory a human opens, with no consumer anywhere. It is gone, and
+     * the ABSENCE of conflicts.md is now what says "this merge was clean".
+     */
+    it('writes NO placeholder file, and no conflicts.md, for a clean merge', () => {
+        const mergeDir = mergeRunDirFor(tmp(), 1);
+        recordCleanMerge(mergeDir, 'a', 'b', 'c');
+
+        expect(fs.readdirSync(mergeDir)).toEqual(['updatemain-hashes.json']);
+        expect(fs.existsSync(path.join(mergeDir, 'no-3point-merge.md'))).toBe(false);
+        expect(ms.wasThreeWay(mergeDir)).toBe(false);
+    });
+
+    it('a 3-point merge writes conflicts.md, and it round-trips the file list', () => {
+        const mergeDir = mergeRunDirFor(tmp(), 1);
+        ms.writeConflicts(mergeDir, ['src/a.ts', 'src/b.ts']);
+
+        expect(ms.wasThreeWay(mergeDir)).toBe(true);
+        expect(fs.existsSync(path.join(mergeDir, CONFLICTS_FILE))).toBe(true);
+        expect(ms.readConflictedFiles(mergeDir)).toEqual(['src/a.ts', 'src/b.ts']);
+    });
 });
+
+describe('staged/ vs merged/ layout + legacy migration (Parts 1 & 3)', () => {
+    it('the in-flight home is merge-info/staged/<feature>', () => {
+        expect(ms.stagedDirFor('/repo', 'feat')).toBe(path.join('/repo', '.webpieces', 'merge-info', STAGED_DIR, 'feat'));
+        expect(ms.mergedDirFor('/repo', 'feat')).toBe(path.join('/repo', '.webpieces', 'merge-info', MERGED_DIR, 'feat'));
+    });
+
+    /**
+     * MIGRATION, with no data loss: a legacy `merge-info/<feature>/merge-N/` tree is MOVED under
+     * `staged/` the first time anything asks for the feature's home. It has to move rather than be
+     * tolerated in place, because that dir can hold an UNVALIDATED marker for a merge in progress right
+     * now — left behind, it would be invisible to the finish gate.
+     */
+    it('moves a legacy merge-info/<feature>/ tree into staged/ with its contents intact', () => {
+        const root = tmp();
+        const legacy = path.join(root, '.webpieces', 'merge-info', 'feat', 'merge-1');
+        fs.mkdirSync(legacy, { recursive: true });
+        fs.writeFileSync(path.join(legacy, 'updatemain-hashes.json'), '{"hashForkPoint":"old"}');
+        writeExplanationIn(legacy, 'src/foo.ts', 'legacy explanation\n');
+
+        const home = mergeDirFor(root, 'feat');
+
+        expect(home).toBe(ms.stagedDirFor(root, 'feat'));
+        expect(fs.existsSync(path.join(root, '.webpieces', 'merge-info', 'feat'))).toBe(false);
+        expect(JSON.parse(fs.readFileSync(path.join(home, 'merge-1', 'updatemain-hashes.json'), 'utf8')).hashForkPoint).toBe('old');
+        expect(fs.readFileSync(
+            path.join(perFileContextDir(path.join(home, 'merge-1'), 'src/foo.ts'), MERGE_EXPLANATION_FILE), 'utf8',
+        )).toContain('legacy explanation');
+    });
+
+    // Two homes for one feature is an ambiguity only a human can resolve, so the legacy dir is left
+    // strictly alone rather than merged into or deleted.
+    it('leaves the legacy dir untouched when staged/<feature> already exists', () => {
+        const root = tmp();
+        fs.mkdirSync(path.join(root, '.webpieces', 'merge-info', 'feat'), { recursive: true });
+        fs.mkdirSync(ms.stagedDirFor(root, 'feat'), { recursive: true });
+
+        mergeDirFor(root, 'feat');
+
+        expect(fs.existsSync(path.join(root, '.webpieces', 'merge-info', 'feat'))).toBe(true);
+    });
+
+    // Every intermediate pre-merge tip, not just the last: a branch synced five times has five
+    // genuinely different tips, and the fifth says nothing about what the second looked like.
+    it('records one preMerge<n>.hash per sync and reads them back in slot order', () => {
+        const home = tmp();
+        ms.writePreMergeHash(home, 1, 'aaa');
+        ms.writePreMergeHash(home, 2, 'bbb');
+        ms.writePreMergeHash(home, 10, 'ccc');
+
+        expect(ms.readPreMergeHashes(home)).toEqual(['aaa', 'bbb', 'ccc']);
+    });
+});
+
+function writeExplanationIn(mergeDir: string, file: string, body: string): void {
+    const dir = perFileContextDir(mergeDir, file);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, MERGE_EXPLANATION_FILE), body);
+}
 
 describe('audit durability — the regression this fixes', () => {
     function writeExplanation(mergeDir: string, file: string, body: string): void {
@@ -174,7 +251,7 @@ describe('audit durability — the regression this fixes', () => {
         // The next sync picks merge-2 (monotonic) and does NOT touch merge-1/.
         const second = mergeRunDirFor(home, nextMergeSlotNumber(home));
         expect(second).toBe(mergeRunDirFor(home, 2));
-        writeCleanMergeMarker(second, 'a', 'b', 'c');
+        recordCleanMerge(second, 'a', 'b', 'c');
 
         const explanation = fs.readFileSync(
             path.join(perFileContextDir(first, 'src/foo.ts'), MERGE_EXPLANATION_FILE), 'utf8',

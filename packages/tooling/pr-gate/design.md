@@ -13,6 +13,7 @@ appears in each root's tree.
 ```mermaid
 graph TD
     AiBranchName["AiBranchName"]
+    BranchArchiver["BranchArchiver"]
     BranchMutationLog["BranchMutationLog"]
     BranchNaming["BranchNaming"]
     BranchReaper["BranchReaper"]
@@ -36,6 +37,7 @@ graph TD
     GitExec["GitExec"]
     LandPrCommand["LandPrCommand"]
     MergeEnd["MergeEnd"]
+    MergeInfoIndex["MergeInfoIndex"]
     MergeStart["MergeStart"]
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
@@ -51,6 +53,7 @@ graph TD
     SubagentProvenanceService["SubagentProvenanceService"]
     WorktreeService["WorktreeService"]
     AiBranchName --> BranchNaming
+    BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
     CheckPrCommand --> GateTokenService
@@ -68,6 +71,7 @@ graph TD
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
     CleanTmp --> RepoRootFinder
+    CleanupCommand --> BranchArchiver
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     FinishUpdateCommand --> AiBranchName
@@ -100,13 +104,16 @@ graph TD
     GatherInfo --> RepoRootFinder
     GitExec --> RepoRootFinder
     LandPrCommand --> AiBranchName
+    LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
+    LandPrCommand --> MergeInfoIndex
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
     MergeEnd --> MergeState
+    MergeInfoIndex --> MergeState
     MergeStart --> BranchNaming
     MergeStart --> GatherInfo
     MergeStart --> GitExec

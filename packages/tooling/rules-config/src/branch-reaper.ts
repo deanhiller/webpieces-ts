@@ -1,6 +1,12 @@
 import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
 
+import {
+    ArchiveResult,
+    BranchArchiver,
+    BRANCH_RETENTION_ARCHIVE_TAG,
+    BRANCH_RETENTION_KEEP,
+} from './branch-archiver';
 import { BranchMutationEvent, BranchMutationLog, MutationVerb } from './branch-mutation-log';
 import { DeletableBranch, MergedBranchesCache, MergedBranchesService } from './merged-branches';
 
@@ -32,7 +38,15 @@ export class ReapedBranch {
     ok: boolean;
     // git's own stderr when ok=false. Kept verbatim: a failed delete is a thing a human must read.
     error: string;
+    /**
+     * The `archive/<date>/<branch>` tag written immediately BEFORE the delete, or '' when the retention
+     * policy is 'delete'. Non-empty means the branch is restorable by NAME rather than by remembering a
+     * sha — `git checkout -b <branch> <tag>` restores the exact objects, and the tag survives `gc` and
+     * reflog expiry. Field-with-default so every existing `new ReapedBranch(...)` call site still builds.
+     */
+    archiveTag: string = '';
 
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(branch: string, sha: string, reason: string, pr: number, ok: boolean, error: string) {
         this.branch = branch;
         this.sha = sha;
@@ -75,6 +89,7 @@ export class BranchReaper {
     constructor(
         private readonly mergedBranches: MergedBranchesService = new MergedBranchesService(),
         private readonly mutationLog: BranchMutationLog = new BranchMutationLog(),
+        private readonly archiver: BranchArchiver = new BranchArchiver(),
     ) {}
 
     /**
@@ -86,13 +101,55 @@ export class BranchReaper {
      * to go stale, which is fine for blocking a branch creation but is not fine for deleting, since a
      * branch may have gained commits since it was written. Deleting never reads the stale file.
      */
-    reap(repoRoot: string, verb: MutationVerb, cache: MergedBranchesCache | null = null): ReapResult {
+    reap(
+        repoRoot: string,
+        verb: MutationVerb,
+        cache: MergedBranchesCache | null = null,
+        retention: string = BRANCH_RETENTION_ARCHIVE_TAG,
+    ): ReapResult {
         const verdicts = cache ?? this.mergedBranches.computeMergedBranches(repoRoot);
+        // 'keep' means "never delete anything" — the reap becomes a pure report. Everything still lands
+        // in `spared` so the human sees exactly what WOULD have been reaped under the other policies.
+        if (retention === BRANCH_RETENTION_KEEP) {
+            return new ReapResult([], [], [...verdicts.deletable, ...verdicts.keep]);
+        }
+        return this.reapBranches(repoRoot, verb, verdicts.deletable, retention, verdicts);
+    }
 
+    /**
+     * Delete a CALLER-SUPPLIED list of branches — the branches a human just said yes to at wp-cleanup's
+     * classification prompt. Separate from `reap` because these are NOT provably dead: they earned their
+     * deletion from an explicit human answer, not from a verdict, so nothing here may ever run unattended.
+     * Archiving still happens first, which is precisely what makes that yes low-stakes.
+     */
+    reapApproved(
+        repoRoot: string,
+        verb: MutationVerb,
+        approved: DeletableBranch[],
+        retention: string = BRANCH_RETENTION_ARCHIVE_TAG,
+    ): ReapResult {
+        if (retention === BRANCH_RETENTION_KEEP) return new ReapResult([], [], approved);
         const reaped: ReapedBranch[] = [];
         const failed: ReapedBranch[] = [];
-        for (const entry of verdicts.deletable) {
-            const outcome = this.deleteOne(repoRoot, verb, entry);
+        for (const entry of approved) {
+            const outcome = this.deleteOne(repoRoot, verb, entry, retention);
+            if (outcome.ok) reaped.push(outcome);
+            else failed.push(outcome);
+        }
+        return new ReapResult(reaped, failed, []);
+    }
+
+    private reapBranches(
+        repoRoot: string,
+        verb: MutationVerb,
+        targets: DeletableBranch[],
+        retention: string,
+        verdicts: MergedBranchesCache,
+    ): ReapResult {
+        const reaped: ReapedBranch[] = [];
+        const failed: ReapedBranch[] = [];
+        for (const entry of targets) {
+            const outcome = this.deleteOne(repoRoot, verb, entry, retention);
             if (outcome.ok) reaped.push(outcome);
             else failed.push(outcome);
         }
@@ -102,27 +159,58 @@ export class BranchReaper {
     }
 
     /**
-     * One branch, one `git branch -D`. NEVER the multi-name form the old fix hint used: git aborts
-     * the whole command on the first branch it refuses, which would strand every branch after it in
-     * the list. One invocation each means one failure costs exactly one branch.
+     * One branch: ARCHIVE the tip as a tag, then one `git branch -D`. Never the multi-name form the old
+     * fix hint used: git aborts the whole command on the first branch it refuses, which would strand
+     * every branch after it in the list. One invocation each means one failure costs exactly one branch.
+     *
+     * The archive comes FIRST and, when it fails, the delete does NOT happen. A branch we could not
+     * archive is a branch whose only remaining copy is the reflog, and the entire point of this change is
+     * to stop relying on the reflog. Refusing to delete is the fail-safe direction: the worst case is a
+     * branch that survives one more cleanup cycle.
      */
-    private deleteOne(repoRoot: string, verb: MutationVerb, entry: DeletableBranch): ReapedBranch {
+    private deleteOne(
+        repoRoot: string,
+        verb: MutationVerb,
+        entry: DeletableBranch,
+        retention: string,
+    ): ReapedBranch {
         // SHA first — after the delete there is no branch left to resolve, and the whole point of the
         // audit line is that it records what was destroyed while it still exists.
         const resolved = this.capture(repoRoot, ['rev-parse', entry.branch]);
         const sha = resolved.ok ? resolved.out : '';
 
+        const archive = retention === BRANCH_RETENTION_ARCHIVE_TAG
+            ? this.archiver.archive(repoRoot, entry.branch)
+            : new ArchiveResult('', sha, true, '');
+        if (!archive.ok) return this.archiveFailed(repoRoot, verb, entry, sha, archive);
+
         const deleted = this.capture(repoRoot, ['branch', '-D', entry.branch]);
         const result = new ReapedBranch(
             entry.branch, sha, entry.reason, entry.pr, deleted.ok, deleted.ok ? '' : deleted.err);
+        result.archiveTag = archive.tag;
 
         const event = new BranchMutationEvent(verb, 'REAP');
         event.fromBranch = entry.branch;
         event.sha = sha;
+        event.archiveTag = archive.tag;
         event.outcome = deleted.ok ? `deleted (${entry.reason})` : `FAILED (${deleted.err})`;
         this.mutationLog.logBranchMutation(repoRoot, event);
 
         return result;
+    }
+
+    // Archiving failed ⇒ the branch is NOT deleted. Reported as a failure with git's own words, so the
+    // human sees a branch that survived and why, rather than a silent skip.
+    private archiveFailed(
+        repoRoot: string, verb: MutationVerb, entry: DeletableBranch, sha: string, archive: ArchiveResult,
+    ): ReapedBranch {
+        const error = `not deleted — could not archive it first: ${archive.error}`;
+        const event = new BranchMutationEvent(verb, 'REAP');
+        event.fromBranch = entry.branch;
+        event.sha = sha;
+        event.outcome = `SKIPPED (${error})`;
+        this.mutationLog.logBranchMutation(repoRoot, event);
+        return new ReapedBranch(entry.branch, sha, entry.reason, entry.pr, false, error);
     }
 
     /**

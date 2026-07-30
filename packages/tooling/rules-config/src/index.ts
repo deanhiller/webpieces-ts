@@ -147,9 +147,12 @@ export {
 export {
     GateDefinition,
     PrGateConfig,
+    LandPrConfig,
     defaultGates,
     defaultPrGateConfig,
+    defaultLandPrConfig,
     buildPrGateConfig,
+    buildLandPrConfig,
     MERGE_MODE_AUTO,
     MERGE_MODE_NONE,
     MERGE_MODES,
@@ -226,7 +229,24 @@ export {
     DeletableWorktree,
     MergedBranchesCache,
     MergedBranchesService,
+    CLASSIFICATION_MERGED_PR,
+    CLASSIFICATION_BACKUP_OF_MERGED,
+    CLASSIFICATION_NO_COMMITS,
+    CLASSIFICATION_SUPERSEDED,
+    CLASSIFICATION_CONTENT_IN_MAIN,
+    CLASSIFICATION_NEVER_PROPOSED,
+    CLASSIFICATION_IN_USE,
+    PROMPTABLE_CLASSIFICATIONS,
 } from './merged-branches';
+export {
+    BranchArchiver,
+    ArchiveResult,
+    ARCHIVE_TAG_PREFIX,
+    BRANCH_RETENTIONS,
+    BRANCH_RETENTION_DELETE,
+    BRANCH_RETENTION_ARCHIVE_TAG,
+    BRANCH_RETENTION_KEEP,
+} from './branch-archiver';
 export {
     Worktree,
     WorktreeService,

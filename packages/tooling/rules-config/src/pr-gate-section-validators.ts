@@ -1,3 +1,9 @@
+import {
+    BRANCH_RETENTIONS,
+    BRANCH_RETENTION_ARCHIVE_TAG,
+    BRANCH_RETENTION_DELETE,
+    BRANCH_RETENTION_KEEP,
+} from './branch-archiver';
 import { ChecklistValidator } from './checklist-validator';
 import { ChecklistDefinition, RawChecklistItem, toChecklist } from './checklist-config';
 
@@ -114,4 +120,30 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
     if (repoRoot === undefined) return errors;
     const defs = items.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item));
     return [...errors, ...new ChecklistValidator().validate(repoRoot, defs)];
+}
+
+// The `landPr` block: what happens to the LOCAL branch once its PR is in main. Optional — omitted
+// means "archive-tag", which is deliberately the DEFAULT so a consumer gets the branch-accumulation
+// fix without editing config at all. `branchRetentionWhy` (and any other `*Why` sibling) is free-form
+// rationale prose and is tolerated, per the repo's convention for documenting comment-less JSON.
+// webpieces-disable no-any-unknown -- `value` is the opaque consumer `landPr` value until narrowed here
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+export function validateLandPrSection(value: unknown): string[] {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return [`[pr-gate] "landPr" must be an object, e.g. { "branchRetention": "${BRANCH_RETENTION_ARCHIVE_TAG}" }.`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing the opaque landPr object from consumer JSON
+    const s = value as Record<string, unknown>;
+    if (!('branchRetention' in s)) return [];
+    const retention = s['branchRetention'];
+    if (typeof retention === 'string' && BRANCH_RETENTIONS.includes(retention)) return [];
+    return [
+        `[pr-gate] "landPr.branchRetention" = "${String(retention)}" is not valid. ` +
+        `Must be one of: ${BRANCH_RETENTIONS.join(', ')}.\n` +
+        `  "${BRANCH_RETENTION_ARCHIVE_TAG}" — (default) tag the branch tip as archive/<date>/<branch>, THEN delete it. The\n` +
+        `                 history stays byte-identical and restorable, but the branch stops counting\n` +
+        `                 toward the branch cap and cannot be committed onto by accident.\n` +
+        `  "${BRANCH_RETENTION_DELETE}"      — delete outright; recoverable only from the reflog, which expires.\n` +
+        `  "${BRANCH_RETENTION_KEEP}"        — do not delete. Branches then accumulate until branch-creation-guard trips.`,
+    ];
 }

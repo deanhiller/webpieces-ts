@@ -25,17 +25,36 @@ function fixHintFor(mergeCompleteCommand: string): FixHint {
 
 // Returns the path of the first UNVALIDATED merge marker found, or null. We detect validation
 // by a raw substring (no JSON.parse) so a malformed marker can never crash the guard.
-function findUnvalidatedMerge(workspaceRoot: string): string | null {
-    // Per-feature merge dirs live under `.webpieces/merge-info/<feature>/`; scan that home's subdirs.
-    const mergeInfoDir = path.join(workspaceRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR);
-    if (!fs.existsSync(mergeInfoDir)) return null;
-    for (const entry of fs.readdirSync(mergeInfoDir)) {
-        const marker = path.join(mergeInfoDir, entry, MERGE_IN_PROGRESS_FILE);
-        if (!fs.existsSync(marker)) continue;
+/**
+ * DEPTH-BOUNDED SCAN, not a fixed level. The marker's home has moved twice: it was
+ * `merge-info/<feature>/`, then `merge-info/<feature>/merge-<n>/` once each sync got its own run dir,
+ * and is now `merge-info/staged/<feature>/merge-<n>/` since merge-info split into staged/merged. This
+ * guard was still looking only at the FIRST layout's depth, so it silently found nothing and stopped
+ * blocking — a guard failing open without saying so. A bounded walk covers every layout, legacy
+ * included, and stops long before it could descend into anything large.
+ */
+const MARKER_SCAN_MAX_DEPTH = 3;
+
+// webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
+function findMarkerUnder(dir: string, depth: number): string | null {
+    if (depth < 0 || !fs.existsSync(dir)) return null;
+    const marker = path.join(dir, MERGE_IN_PROGRESS_FILE);
+    if (fs.existsSync(marker)) {
         const raw = fs.readFileSync(marker, 'utf8');
         if (!/"validated"\s*:\s*true/.test(raw)) return marker;
     }
+    if (depth === 0) return null;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const found = findMarkerUnder(path.join(dir, entry.name), depth - 1);
+        if (found !== null) return found;
+    }
     return null;
+}
+
+// webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
+function findUnvalidatedMerge(workspaceRoot: string): string | null {
+    return findMarkerUnder(path.join(workspaceRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR), MARKER_SCAN_MAX_DEPTH);
 }
 
 const BLOCKED_GIT_SUBCOMMANDS: readonly string[] = ['commit', 'push', 'merge', 'rebase'];

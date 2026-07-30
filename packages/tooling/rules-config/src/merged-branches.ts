@@ -45,6 +45,36 @@ export class MergedBranch {
 }
 
 /**
+ * WHY a branch is dead, or why it was spared — as a STABLE token, alongside the English prose.
+ *
+ * `sha`/`commits`/`prState` (below) let a human SEE a spared branch. This adds the other half: a token
+ * saying WHICH KIND of spared it is. Every spared branch used to report the identical string
+ * `no merged PR found — a human must decide`, and in one observed repo that one string covered three
+ * genuinely different situations — a PR CLOSED UNMERGED whose work landed under a later number, a
+ * branch that NEVER had a PR and holds the only copy of its commits, and content already in main.
+ * Reporting all three identically is why nobody ever decided, and why the pile grew to 6 branches
+ * against a cap of 5. A token lets wp-cleanup GROUP them and ask a question that can be answered.
+ */
+// Dead by proof — these are auto-deletable.
+export const CLASSIFICATION_MERGED_PR = 'merged-pr';
+export const CLASSIFICATION_BACKUP_OF_MERGED = 'backup-of-merged';
+export const CLASSIFICATION_NO_COMMITS = 'no-commits';
+// Spared, but a human should be ASKED — in descending order of "obviously fine to delete".
+export const CLASSIFICATION_SUPERSEDED = 'superseded';
+export const CLASSIFICATION_CONTENT_IN_MAIN = 'content-already-in-main';
+export const CLASSIFICATION_NEVER_PROPOSED = 'never-proposed';
+// Spared for a mechanical reason, not a judgement call (checked out somewhere).
+export const CLASSIFICATION_IN_USE = 'in-use';
+
+// Spared classifications a human can meaningfully rule on, most-safe first. wp-cleanup prompts in
+// exactly this order so the easy yeses come before the ones that need thought.
+export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
+    CLASSIFICATION_SUPERSEDED,
+    CLASSIFICATION_CONTENT_IN_MAIN,
+    CLASSIFICATION_NEVER_PROPOSED,
+];
+
+/**
  * A local branch and the verdict on it. `pr` is 0 when no merged PR backs the verdict (a `keep`).
  *
  * `sha`, `commits` and `prState` exist for the SPARED branches specifically. When nothing is
@@ -68,7 +98,14 @@ export class DeletableBranch {
     commits: number;
     /** GitHub's state for the PR whose head is this branch: MERGED / CLOSED / OPEN, or '' for none. */
     prState: string;
+    /**
+     * One of the CLASSIFICATION_* tokens. Defaulted like the fields above so every pre-existing call
+     * site — and every cache written by an older release — still constructs; an unclassified revived
+     * entry reads as 'never-proposed', the most conservative of the spared verdicts.
+     */
+    classification: string;
 
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         branch: string,
         reason: string,
@@ -76,6 +113,7 @@ export class DeletableBranch {
         sha: string = '',
         commits: number = -1,
         prState: string = '',
+        classification: string = CLASSIFICATION_NEVER_PROPOSED,
     ) {
         this.branch = branch;
         this.reason = reason;
@@ -83,6 +121,7 @@ export class DeletableBranch {
         this.sha = sha;
         this.commits = commits;
         this.prState = prState;
+        this.classification = classification;
     }
 }
 
@@ -155,10 +194,17 @@ class PrRef {
 class PrLookup {
     merged: Map<string, number>;
     state: Map<string, PrRef>;
+    /**
+     * Highest merged PR number seen. A branch whose own PR CLOSED UNMERGED below this number means work
+     * kept landing after it was abandoned — the "superseded by a later PR" signal, obtained without
+     * having to guess WHICH PR superseded it.
+     */
+    latestMergedPr: number;
 
-    constructor(merged: Map<string, number>, state: Map<string, PrRef>) {
+    constructor(merged: Map<string, number>, state: Map<string, PrRef>, latestMergedPr: number = 0) {
         this.merged = merged;
         this.state = state;
+        this.latestMergedPr = latestMergedPr;
     }
 }
 
@@ -183,6 +229,8 @@ interface RawDeletable {
     sha?: string;
     commits?: number;
     prState?: string;
+    // Absent before classification existed — revives to the conservative 'never-proposed'.
+    classification?: string;
 }
 
 interface RawWorktree {
@@ -273,7 +321,11 @@ export class MergedBranchesService {
         const merged = this.fetchMergedPrs(repoRoot);
         const byBranch = new Map<string, number>();
         for (const entry of merged) byBranch.set(entry.branch, entry.pr);
-        const prs = new PrLookup(byBranch, this.fetchPrStates(repoRoot));
+        let latestMergedPr = 0;
+        for (const entry of merged) {
+            if (entry.pr > latestMergedPr) latestMergedPr = entry.pr;
+        }
+        const prs = new PrLookup(byBranch, this.fetchPrStates(repoRoot), latestMergedPr);
 
         const trees = this.worktrees.listWorktrees(repoRoot);
         const holder = new Map<string, string>();
@@ -301,6 +353,7 @@ export class MergedBranchesService {
                     verdict.entry.sha,
                     verdict.entry.commits,
                     verdict.entry.prState,
+                    CLASSIFICATION_IN_USE,
                 ));
                 continue;
             }
@@ -379,7 +432,8 @@ export class MergedBranchesService {
         const own = prs.merged.get(branch);
         if (own !== undefined) {
             return new Verdict(true, new DeletableBranch(
-                branch, `PR #${String(own)} merged`, own, sha, commits, prState || 'MERGED'));
+                branch, `PR #${String(own)} merged`, own, sha, commits, prState || 'MERGED',
+                CLASSIFICATION_MERGED_PR));
         }
 
         const base = branch.replace(BACKUP_SUFFIX, '');
@@ -389,7 +443,7 @@ export class MergedBranchesService {
                 return new Verdict(true, new DeletableBranch(
                     branch,
                     `squash-merge backup of '${base}' (PR #${String(basePr)} merged) — its job is done`,
-                    basePr, sha, commits, prState,
+                    basePr, sha, commits, prState, CLASSIFICATION_BACKUP_OF_MERGED,
                 ));
             }
         }
@@ -400,13 +454,72 @@ export class MergedBranchesService {
         // is exact.) These are the husks left behind by branching and then never committing.
         if (commits === 0) {
             return new Verdict(true, new DeletableBranch(
-                branch, 'no commits of its own — identical to origin/main', 0, sha, 0, prState));
+                branch, 'no commits of its own — identical to origin/main', 0, sha, 0, prState,
+                CLASSIFICATION_NO_COMMITS));
+        }
+
+        return new Verdict(false, this.classifySpared(repoRoot, branch, prs, sha, commits, prState));
+    }
+
+    /**
+     * The three genuinely different reasons a branch survives the deletable proofs, ordered by how
+     * confidently a human can say yes to deleting it.
+     *
+     * The safety posture is UNCHANGED: all three are still SPARED, never auto-deleted. The only thing
+     * that changed is that wp-cleanup can now ask a question whose answer is knowable.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private classifySpared(
+        repoRoot: string, branch: string, prs: PrLookup, sha: string, commits: number, prState: string,
+    ): DeletableBranch {
+        const known = prs.state.get(branch);
+
+        // A PR that CLOSED without merging, in a repo that has merged later PRs, is near-certainly the
+        // abandoned first attempt at work that landed under a different number.
+        if (known !== undefined && known.state === 'CLOSED' && prs.latestMergedPr > known.number) {
+            return new DeletableBranch(
+                branch,
+                `PR #${String(known.number)} was CLOSED UNMERGED and later PRs (through ` +
+                `#${String(prs.latestMergedPr)}) have merged — near-certainly superseded`,
+                known.number, sha, commits, prState, CLASSIFICATION_SUPERSEDED,
+            );
+        }
+
+        // `git cherry` compares by PATCH-ID, so it survives cherry-picks and rebases. It does NOT
+        // survive a squash — which is exactly why this is a spared verdict and not a deletable proof.
+        if (this.contentAlreadyInMain(repoRoot, branch)) {
+            return new DeletableBranch(
+                branch,
+                `all ${String(commits)} commit(s) already have an equivalent in origin/main ` +
+                `(git cherry) — content is not unique`,
+                known ? known.number : 0, sha, commits, prState, CLASSIFICATION_CONTENT_IN_MAIN,
+            );
         }
 
         const why = known
-            ? `PR #${String(known.number)} is ${known.state} (not merged) — a human must decide`
-            : 'no merged PR found — a human must decide';
-        return new Verdict(false, new DeletableBranch(branch, why, 0, sha, commits, prState));
+            ? `PR #${String(known.number)} is ${known.state} (not merged); holds ` +
+              `${String(commits)} unique commit(s) — a human must decide`
+            : `never had a PR; holds ${String(commits)} unique commit(s) that may be the only copy in existence`;
+        return new DeletableBranch(
+            branch, why, 0, sha, commits, prState, CLASSIFICATION_NEVER_PROPOSED);
+    }
+
+    /**
+     * True when EVERY commit on the branch has a patch-equivalent already in origin/main.
+     *
+     * `git cherry origin/main <branch>` prints one line per commit: `+ <sha>` = not upstream,
+     * `- <sha>` = an equivalent change IS upstream. All-minus means the content landed (typically by
+     * cherry-pick or rebase-merge) even though the SHAs differ. Any failure returns false — "cannot
+     * prove the content is in main" must never read as "safe".
+     */
+    private contentAlreadyInMain(repoRoot: string, branch: string): boolean {
+        const result = this.capture(repoRoot, 'git', ['cherry', 'origin/main', branch]);
+        if (!result.ok || result.out === '') return false;
+        const lines = result.out.split('\n')
+            .map((line: string): string => line.trim())
+            .filter((line: string): boolean => line !== '');
+        if (lines.length === 0) return false;
+        return lines.every((line: string): boolean => line.startsWith('-'));
     }
 
     // Short tip SHA — the value that makes any delete of this branch reversible.
@@ -502,6 +615,7 @@ export class MergedBranchesService {
             entry.sha ?? '',
             entry.commits ?? -1,
             entry.prState ?? '',
+            entry.classification ?? CLASSIFICATION_NEVER_PROPOSED,
         ));
     }
 

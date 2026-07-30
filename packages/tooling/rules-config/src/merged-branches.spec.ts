@@ -3,6 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // What the mocked `gh pr list --state merged` returns, and what `git for-each-ref` sees locally.
 const world = vi.hoisted(() => ({
     mergedPrs: [] as { number: number; headRefName: string }[],
+    // `gh pr list --state all` — every PR with its state, the DISPLAY-only lookup main added in #509.
+    // Our `superseded` signal reads CLOSED entries off this same call rather than adding a third one.
+    allPrs: [] as { number: number; headRefName: string; state: string }[],
+    // Branch → what `git cherry origin/main <branch>` prints. A `- <sha>` line means an equivalent
+    // change is ALREADY upstream; `+ <sha>` means it is not.
+    cherry: {} as Record<string, string>,
     localBranches: [] as string[],
     currentBranch: 'main',
     ghOk: true,
@@ -16,7 +22,16 @@ vi.mock('child_process', () => ({
     spawnSync: (cmd: string, args: string[]): { status: number; stdout: string } => {
         if (cmd === 'gh') {
             if (!world.ghOk) return { status: 1, stdout: '' };
-            return { status: 0, stdout: JSON.stringify(world.mergedPrs) };
+            const state = args[args.indexOf('--state') + 1];
+            return { status: 0, stdout: JSON.stringify(state === 'all' ? world.allPrs : world.mergedPrs) };
+        }
+        if (cmd === 'git' && args[0] === 'rev-parse') {
+            return { status: 0, stdout: `sha-${String(args[args.length - 1])}` };
+        }
+        if (cmd === 'git' && args[0] === 'cherry') {
+            const listing = world.cherry[String(args[2])];
+            if (listing === undefined) return { status: 1, stdout: '' };
+            return { status: 0, stdout: listing };
         }
         if (cmd === 'git' && args[0] === 'for-each-ref') {
             return { status: 0, stdout: world.localBranches.join('\n') + '\n' };
@@ -37,7 +52,16 @@ vi.mock('child_process', () => ({
     },
 }));
 
-import { MergedBranchesService, DeletableBranch } from './merged-branches';
+import {
+    MergedBranchesService,
+    DeletableBranch,
+    CLASSIFICATION_MERGED_PR,
+    CLASSIFICATION_BACKUP_OF_MERGED,
+    CLASSIFICATION_NO_COMMITS,
+    CLASSIFICATION_SUPERSEDED,
+    CLASSIFICATION_CONTENT_IN_MAIN,
+    CLASSIFICATION_NEVER_PROPOSED,
+} from './merged-branches';
 
 function names(list: DeletableBranch[]): string[] {
     return list.map((entry: DeletableBranch): string => entry.branch).sort();
@@ -47,6 +71,8 @@ const svc = new MergedBranchesService();
 
 beforeEach(() => {
     world.mergedPrs = [];
+    world.allPrs = [];
+    world.cherry = {};
     world.localBranches = [];
     world.currentBranch = 'main';
     world.ghOk = true;
@@ -212,5 +238,126 @@ describe('MergedBranchesService worktree verdicts', () => {
     it('excludes main from the local branch list', () => {
         world.localBranches = ['main', 'dean/a'];
         expect(svc.localBranches('/repo')).toEqual(['dean/a']);
+    });
+});
+
+/**
+ * PART 5 — the spared branches used to ALL report the identical string
+ * `no merged PR found — a human must decide`. In one observed repo that one string covered a PR closed
+ * unmerged and superseded by a later one, a branch that never had a PR and held the only copy of three
+ * commits, and content that was already in main. Reporting them identically — then sparing rather than
+ * asking — is what let the pile grow to 6 branches against a cap of 5 and wedge a session.
+ *
+ * Each must now produce a DISTINCT classification, and carry its unique-commit count.
+ */
+describe('spared-branch classification (Part 5)', () => {
+    function spared(branch: string): DeletableBranch {
+        const found = svc.computeMergedBranches('/repo').keep
+            .find((entry: DeletableBranch): boolean => entry.branch === branch);
+        if (found === undefined) throw new Error(`${branch} was not spared`);
+        return found;
+    }
+
+    it('SUPERSEDED — PR closed unmerged, later PRs have merged since', () => {
+        world.localBranches = ['main', 'feature/ONE-2209-morpheus-gate'];
+        world.allPrs = [{ number: 752, headRefName: 'feature/ONE-2209-morpheus-gate', state: 'CLOSED' }];
+        world.mergedPrs = [{ number: 754, headRefName: 'feature/ONE-2209-morpheus-final' }];
+        world.commitsAhead = { 'feature/ONE-2209-morpheus-gate': 4 };
+
+        const entry = spared('feature/ONE-2209-morpheus-gate');
+
+        expect(entry.classification).toBe(CLASSIFICATION_SUPERSEDED);
+        expect(entry.commits).toBe(4);
+        expect(entry.pr).toBe(752);
+        expect(entry.reason).toContain('CLOSED UNMERGED');
+        expect(entry.reason).toContain('#754');
+    });
+
+    it('NEVER-PROPOSED — no PR ever, and the unique-commit count is reported', () => {
+        world.localBranches = ['main', 'dean/webpieces-0-3-322'];
+        world.commitsAhead = { 'dean/webpieces-0-3-322': 3 };
+        world.cherry = { 'dean/webpieces-0-3-322': '+ aaa\n+ bbb\n+ ccc\n' };
+
+        const entry = spared('dean/webpieces-0-3-322');
+
+        expect(entry.classification).toBe(CLASSIFICATION_NEVER_PROPOSED);
+        expect(entry.commits).toBe(3);
+        expect(entry.reason).toContain('never had a PR');
+        expect(entry.reason).toContain('3 unique commit(s)');
+    });
+
+    it('CONTENT-ALREADY-IN-MAIN — every commit has a patch-equivalent upstream', () => {
+        world.localBranches = ['main', 'dean/cherry-picked'];
+        world.commitsAhead = { 'dean/cherry-picked': 2 };
+        world.cherry = { 'dean/cherry-picked': '- aaa\n- bbb\n' };
+
+        const entry = spared('dean/cherry-picked');
+
+        expect(entry.classification).toBe(CLASSIFICATION_CONTENT_IN_MAIN);
+        expect(entry.commits).toBe(2);
+        expect(entry.reason).toContain('already have an equivalent in origin/main');
+    });
+
+});
+
+describe('classification keeps the situations distinct, and still deletes nothing', () => {
+    function spared(branch: string): DeletableBranch {
+        const found = svc.computeMergedBranches('/repo').keep
+            .find((entry: DeletableBranch): boolean => entry.branch === branch);
+        if (found === undefined) throw new Error(`${branch} was not spared`);
+        return found;
+    }
+
+    // The three genuinely different situations must not collapse back into one string.
+    it('gives the three situations three DIFFERENT classifications and reasons', () => {
+        world.localBranches = ['main', 'a/superseded', 'b/never', 'c/in-main'];
+        world.allPrs = [{ number: 10, headRefName: 'a/superseded', state: 'CLOSED' }];
+        world.mergedPrs = [{ number: 20, headRefName: 'z/other' }];
+        world.commitsAhead = { 'a/superseded': 1, 'b/never': 3, 'c/in-main': 2 };
+        world.cherry = { 'b/never': '+ aaa\n', 'c/in-main': '- aaa\n- bbb\n' };
+
+        const classes = svc.computeMergedBranches('/repo').keep
+            .map((entry: DeletableBranch): string => entry.classification);
+        const reasons = new Set(svc.computeMergedBranches('/repo').keep
+            .map((entry: DeletableBranch): string => entry.reason));
+
+        expect(new Set(classes).size).toBe(3);
+        expect(reasons.size).toBe(3);
+    });
+
+    // The safety posture is UNCHANGED: classifying is not deleting. All three stay in `keep`.
+    it('classifies but never auto-deletes — all three remain spared', () => {
+        world.localBranches = ['main', 'a/superseded', 'b/never', 'c/in-main'];
+        world.allPrs = [{ number: 10, headRefName: 'a/superseded', state: 'CLOSED' }];
+        world.mergedPrs = [{ number: 20, headRefName: 'z/other' }];
+        world.commitsAhead = { 'a/superseded': 1, 'b/never': 3, 'c/in-main': 2 };
+        world.cherry = { 'c/in-main': '- aaa\n- bbb\n' };
+
+        expect(svc.computeMergedBranches('/repo').deletable).toEqual([]);
+    });
+
+    // A closed PR with NOTHING merged after it is not evidence of supersession — it may simply be work
+    // someone abandoned and will come back to.
+    it('does not call a branch superseded when no later PR has merged', () => {
+        world.localBranches = ['main', 'dean/abandoned'];
+        world.allPrs = [{ number: 99, headRefName: 'dean/abandoned', state: 'CLOSED' }];
+        world.mergedPrs = [{ number: 50, headRefName: 'z/older' }];
+        world.commitsAhead = { 'dean/abandoned': 2 };
+
+        expect(spared('dean/abandoned').classification).toBe(CLASSIFICATION_NEVER_PROPOSED);
+    });
+
+    // Proven-dead branches keep their own classifications, so a report can group everything.
+    it('classifies the deletable branches too', () => {
+        world.mergedPrs = [{ number: 1, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged', 'dean/mergedPreMerge1', 'dean/husk'];
+        world.commitsAhead = { 'dean/husk': 0 };
+
+        const byBranch = new Map(svc.computeMergedBranches('/repo').deletable
+            .map((entry: DeletableBranch): [string, string] => [entry.branch, entry.classification]));
+
+        expect(byBranch.get('dean/merged')).toBe(CLASSIFICATION_MERGED_PR);
+        expect(byBranch.get('dean/mergedPreMerge1')).toBe(CLASSIFICATION_BACKUP_OF_MERGED);
+        expect(byBranch.get('dean/husk')).toBe(CLASSIFICATION_NO_COMMITS);
     });
 });

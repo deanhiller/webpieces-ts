@@ -1,10 +1,14 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { prDirFor, InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate } from '@webpieces/rules-config';
+import {
+    prDirFor, InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate,
+    BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP,
+} from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { ArchiveRecord, MergeInfoIndex } from '../workflow/merge-info-index';
 import { PrMerger } from '../workflow/pr-merger';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -31,6 +35,8 @@ export class LandPrCommand {
         private readonly aiBranchName: AiBranchName,
         private readonly branchNaming: BranchNaming,
         private readonly prMerger: PrMerger,
+        private readonly archiver: BranchArchiver,
+        private readonly mergeInfoIndex: MergeInfoIndex,
     ) {}
 
     async run(): Promise<void> {
@@ -69,16 +75,63 @@ export class LandPrCommand {
         // not gated on pr-gate.mergeMode (a NONE repo runs this precisely to land one PR by hand).
         const outcome = this.prMerger.merge(base, `${ref.title} (#${ref.number})`, mergeBodyFile, MERGE_MODE_AUTO);
 
-        const policy = loadAndValidate(repoRoot).prGate.mergeMode;
+        const config = loadAndValidate(repoRoot).prGate;
+        const policy = config.mergeMode;
+        const archived = outcome.merged
+            ? this.archiveAndPromote(repoRoot, base, ref, config.landPr.branchRetention)
+            : '';
         process.stdout.write(
             '\n' + SEP + (outcome.merged ? '✅ Landed\n' : 'ℹ️  Not landed yet\n') + SEP + '\n' +
             `   ${outcome.message}\n` +
+            archived +
             (outcome.merged ? '   Next: `pnpm wp-cleanup` to delete the merged branch.\n' : '') +
             (policy === MERGE_MODE_AUTO
                 ? ''
                 : `   (pr-gate.mergeMode is ${policy} — wp-finish-upsert-pr will keep leaving PRs for a human.)\n`) +
             '\n',
         );
+    }
+
+    /**
+     * The landed branch's post-merge bookkeeping, in one place:
+     *  1. ARCHIVE the pre-squash tip as `archive/<date>/<branch>` — the tag makes the original history
+     *     permanently restorable (`git checkout -b <branch> <tag>` gives back the exact objects) while
+     *     costing one ref, so the branch itself no longer has to survive as a `*PreMerge` husk that
+     *     counts toward the branch cap. See BranchArchiver for why a tag beats a patch or the reflog.
+     *  2. PROMOTE `merge-info/staged/<feature>/` to `merge-info/merged/<feature>/` and rebuild
+     *     `index.json`, so `staged/` holds only branches that are still in flight.
+     *
+     * Never throws: the PR is already merged by the time we get here, and failing the command after a
+     * successful merge would report a landed PR as a failure. Problems are reported in the recap.
+     */
+    private archiveAndPromote(repoRoot: string, base: string, ref: PrIdentity, retention: string): string {
+        if (retention === BRANCH_RETENTION_KEEP) return '   Branch retention is "keep" — nothing archived.\n';
+
+        let line = '';
+        let tag = '';
+        if (retention === BRANCH_RETENTION_ARCHIVE_TAG) {
+            const archive = this.archiver.archive(repoRoot, base);
+            tag = archive.tag;
+            line = archive.ok
+                ? `   Archived ${base} → ${archive.tag}   (restore: ${this.archiver.restoreCommand(base, archive.tag)})\n`
+                : `   ⚠️  Could not archive ${base}: ${archive.error} — the branch was left alone.\n`;
+        }
+
+        const feature = this.aiBranchName.getFeatureName();
+        const record = new ArchiveRecord(
+            tag, this.revParse(repoRoot, base), this.revParse(repoRoot, 'origin/main'),
+            Number(ref.number), new Date().toISOString(),
+        );
+        if (this.mergeInfoIndex.promoteToMerged(repoRoot, feature, record)) {
+            line += `   merge-info: staged/${feature} → merged/${feature} (index.json rebuilt)\n`;
+        }
+        return line;
+    }
+
+    // Best-effort sha of a ref — '' when it cannot resolve. Recorded in archive.json for provenance.
+    private revParse(repoRoot: string, ref: string): string {
+        const result = spawnSync('git', ['rev-parse', ref], { cwd: repoRoot, encoding: 'utf8' });
+        return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 
     // The open PR's number + title for this head branch, or null when there is none. The TITLE comes

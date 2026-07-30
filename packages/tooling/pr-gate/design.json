@@ -17,6 +17,14 @@
                     "level": 6
                 },
                 {
+                    "id": "BranchArchiver",
+                    "className": "BranchArchiver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/branch-archiver.ts",
+                    "level": 3
+                },
+                {
                     "id": "BranchMutationLog",
                     "className": "BranchMutationLog",
                     "kind": "class",
@@ -201,6 +209,14 @@
                     "level": 3
                 },
                 {
+                    "id": "MergeInfoIndex",
+                    "className": "MergeInfoIndex",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/merge-info-index.ts",
+                    "level": 2
+                },
+                {
                     "id": "MergeStart",
                     "className": "MergeStart",
                     "kind": "class",
@@ -322,6 +338,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "BranchReaper",
+                    "to": "BranchArchiver",
+                    "injection": "type",
+                    "token": "BranchArchiver",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "paramName": "archiver",
+                    "paramType": "BranchArchiver"
                 },
                 {
                     "from": "BranchReaper",
@@ -475,6 +500,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "CleanupCommand",
+                    "to": "BranchArchiver",
+                    "injection": "type",
+                    "token": "BranchArchiver",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "paramName": "archiver",
+                    "paramType": "BranchArchiver"
                 },
                 {
                     "from": "CleanupCommand",
@@ -766,12 +800,30 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "BranchArchiver",
+                    "injection": "type",
+                    "token": "BranchArchiver",
+                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "paramName": "archiver",
+                    "paramType": "BranchArchiver"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "BranchNaming",
                     "injection": "type",
                     "token": "BranchNaming",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "LandPrCommand",
+                    "to": "MergeInfoIndex",
+                    "injection": "type",
+                    "token": "MergeInfoIndex",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-info-index.ts#MergeInfoIndex",
+                    "paramName": "mergeInfoIndex",
+                    "paramType": "MergeInfoIndex"
                 },
                 {
                     "from": "LandPrCommand",
@@ -820,6 +872,15 @@
                 },
                 {
                     "from": "MergeEnd",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "MergeInfoIndex",
                     "to": "MergeState",
                     "injection": "type",
                     "token": "MergeState",

@@ -48,15 +48,17 @@ export class MergeStartResult {
     }
 }
 
-// The one number `n` for a sync and the two things it names: the pre-merge backup branch and its
-// paired conflict-context run dir.
+// The one number `n` for a sync and the things it names: the pre-merge backup branch, its paired
+// conflict-context run dir, and (via `n`) the `preMerge<n>.hash` record of the tip it snapshotted.
 class SyncSlot {
     backupBranch: string;
     runDir: string;
+    n: number;
 
-    constructor(backupBranch: string, runDir: string) {
+    constructor(backupBranch: string, runDir: string, n: number) {
         this.backupBranch = backupBranch;
         this.runDir = runDir;
+        this.n = n;
     }
 }
 
@@ -183,6 +185,11 @@ export class MergeStart {
         process.stdout.write(prNumber ? `Existing PR #${prNumber} will be updated.\n` : 'No existing PR (one can be created later).\n');
 
         this.createBackup(currentBranch, backupBranch);
+        // Record THIS sync's pre-merge tip as `staged/<feature>/preMerge<n>.hash` — every intermediate
+        // state, not just the last one. It is what lets the `<feature>PreMerge<n>` snapshot BRANCH be
+        // disposable (branches count toward the branch cap; a written-down hash does not), and it is the
+        // ref the archive tag is cut from when the PR lands.
+        this.mergeState.writePreMergeHash(home, slot.n, this.fullSha(currentBranch));
         const backupEvent = new BranchMutationEvent(verb, 'BACKUP');
         backupEvent.fromBranch = currentBranch;
         backupEvent.toBranch = backupBranch;
@@ -219,7 +226,8 @@ export class MergeStart {
             // reaches main's history: finish-upsert-pr squash-merges the PR with an explicit
             // `gh pr merge --subject <PR title> --body-file <commit summary>`, so main carries the PR title.
             this.gitExec.runGitChecked(['commit', '-m', `Squash merge of ${currentBranch}`], 'Failed to commit squash merge');
-            this.mergeState.writeCleanMergeMarker(mergeDir, hashes.hashForkPoint, hashes.hashFeatureHead, hashes.hashMainHead);
+            // Clean merge ⇒ hashes only, no conflicts.md. Its ABSENCE is what marks this merge clean.
+            this.mergeState.recordCleanMerge(mergeDir, hashes.hashForkPoint, hashes.hashFeatureHead, hashes.hashMainHead);
         }
         return new MergeStartResult('clean', new MergeContext(currentBranch, squashBranch, backupBranch, prNumber), mergeDir);
     }
@@ -241,7 +249,7 @@ export class MergeStart {
             spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0;
         let n = this.mergeState.nextMergeSlotNumber(home);
         while (branchExists(this.branchNaming.preMergeBackupName(currentBranch, n))) n += 1;
-        return new SyncSlot(this.branchNaming.preMergeBackupName(currentBranch, n), this.mergeState.mergeRunDirFor(home, n));
+        return new SyncSlot(this.branchNaming.preMergeBackupName(currentBranch, n), this.mergeState.mergeRunDirFor(home, n), n);
     }
 
     // Snapshot the pre-merge state onto the caller-chosen `backupBranch`, never overwriting.
@@ -321,7 +329,10 @@ export class MergeStart {
         const raw = execSync('git diff --name-only --diff-filter=U', { encoding: 'utf8' }).trim();
         const conflictedFiles = raw.split('\n').filter((f: string): boolean => f.trim() !== '');
         fs.mkdirSync(mergeDir, { recursive: true });
-        fs.writeFileSync(path.join(mergeDir, 'updatemain-conflicted-files.txt'), raw + '\n');
+        // `conflicts.md` replaces the old `updatemain-conflicted-files.txt` (which nothing read) AND is
+        // the 3-point signal itself: this file exists in a run dir if and only if that merge conflicted,
+        // which is what lets the index classify each merge without a per-branch directory-name scheme.
+        this.mergeState.writeConflicts(mergeDir, conflictedFiles);
         fs.writeFileSync(path.join(mergeDir, 'updatemain-hashes.json'), JSON.stringify(hashes, null, 2) + '\n');
         this.saveConflictContext(conflictedFiles, mergeDir, hashes.hashForkPoint, hashes.hashFeatureHead, hashes.hashMainHead);
 
@@ -337,6 +348,14 @@ export class MergeStart {
     // Short sha of a ref (best-effort — '' if it can't resolve).
     private shortSha(ref: string): string {
         const result = spawnSync('git', ['rev-parse', '--short', ref], { encoding: 'utf8' });
+        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+    }
+
+    // FULL sha of a ref (best-effort — '' if it can't resolve). Recorded for the pre-merge tips because
+    // those hashes are meant to be used later to restore state, and an abbreviated sha can go ambiguous
+    // as the repo grows.
+    private fullSha(ref: string): string {
+        const result = spawnSync('git', ['rev-parse', ref], { encoding: 'utf8' });
         return result.status === 0 ? (result.stdout ?? '').trim() : '';
     }
 

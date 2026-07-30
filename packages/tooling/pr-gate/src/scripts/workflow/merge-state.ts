@@ -73,11 +73,35 @@ export class MergeHashRecord {
 
 const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
 
-// Marker written for a CLEAN (no-conflict) sync so every merge — not just conflicted ones — leaves a
-// durable, self-describing record under `merge-info/<feature>/merge-<n>/`. A clean merge produces no
-// per-file `merge-explanation.md`; this file is the "yes, a merge happened here, and it needed no
-// 3-point resolution" proof, with the A/B/C shas kept so it stays auditable.
-export const NO_CONFLICT_MARKER_FILE = 'no-3point-merge.md';
+/**
+ * The two halves of `.webpieces/merge-info/`.
+ *
+ * `staged/` mirrors branches that STILL EXIST — it answers "what am I working on right now", and it
+ * self-cleans when a PR lands (the whole dir is MOVED to `merged/`) instead of growing forever.
+ * `merged/` is the post-mortem record, and is where the archive-tag reference lives.
+ *
+ * Both are reserved names: a feature branch slugifies `/`→`-`, so no feature can ever be called
+ * `staged` or `merged` and collide with them.
+ */
+export const STAGED_DIR = 'staged';
+export const MERGED_DIR = 'merged';
+
+/**
+ * The 3-point conflict record. PRESENT ONLY WHEN THE MERGE ACTUALLY CONFLICTED.
+ *
+ * This replaces the old `no-3point-merge.md`, which was written into EVERY clean merge dir and whose
+ * entire content was "nothing interesting happened here" plus the same A/B/C shas that
+ * `updatemain-hashes.json` already carries, one line below, in machine-readable form. Nothing read it.
+ * So ABSENCE is now the signal: "does this directory contain conflicts.md?" is the whole question, and
+ * the shas a human might have wanted from the marker are still on disk in updatemain-hashes.json.
+ */
+export const CONFLICTS_FILE = 'conflicts.md';
+
+// `{ archiveTag, tipSha, baseSha, pr, mergedAt }` written into `merged/<feature>/` when the PR lands.
+export const ARCHIVE_RECORD_FILE = 'archive.json';
+
+// The one index that answers "which merges across ALL branches were 3-point?" — see MergeInfoIndex.
+export const MERGE_INDEX_FILE = 'index.json';
 
 /** Filesystem layout + read/write of the per-feature merge run dirs and their conflict markers. */
 @injectable(bindingScopeValues.Singleton)
@@ -87,7 +111,74 @@ export class MergeState {
     // paired with the sync's `<feature>PreMerge<n>` backup branch. This keeps merge N from ever reusing
     // merge N-1's stale per-file context / merge-explanation.md.
     mergeDirFor(repoRoot: string, featureName: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, featureName);
+        const staged = this.stagedDirFor(repoRoot, featureName);
+        this.migrateLegacyHome(repoRoot, featureName, staged);
+        return staged;
+    }
+
+    /** `.webpieces/merge-info/staged/<feature>/` — the in-flight home. */
+    stagedDirFor(repoRoot: string, featureName: string): string {
+        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, STAGED_DIR, featureName);
+    }
+
+    /** `.webpieces/merge-info/merged/<feature>/` — the landed home. */
+    mergedDirFor(repoRoot: string, featureName: string): string {
+        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGED_DIR, featureName);
+    }
+
+    /** `.webpieces/merge-info/` itself — the home holding `staged/`, `merged/` and `index.json`. */
+    mergeInfoRoot(repoRoot: string): string {
+        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR);
+    }
+
+    /**
+     * MIGRATION for the pre-`staged/` layout, done IN PLACE and lazily.
+     *
+     * Old layout put the feature home directly at `merge-info/<feature>/`. That dir is real, live state
+     * (it can hold an UNVALIDATED merge marker for a merge that is in progress RIGHT NOW), so leaving
+     * legacy dirs alone was not an option: the in-flight merge would become invisible to the finish
+     * gate, which now looks under `staged/`. Tolerating both layouts on read was the other candidate and
+     * was rejected — two homes means every reader, the guard included, needs two lookups forever.
+     *
+     * So: the first time anything asks for a feature's home, an existing legacy dir is MOVED to
+     * `staged/<feature>/`. `fs.renameSync` is atomic within a filesystem and moves the whole tree with no
+     * copying, so no merge record can be half-migrated. If `staged/<feature>` already exists the legacy
+     * dir is left untouched — never merged, never deleted — because two homes for one feature is exactly
+     * the ambiguity a human must resolve. `.webpieces/` is gitignored local state, so nothing here is
+     * ever part of a commit.
+     */
+    private migrateLegacyHome(repoRoot: string, featureName: string, staged: string): void {
+        const legacy = path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, featureName);
+        if (featureName === STAGED_DIR || featureName === MERGED_DIR) return;
+        if (!fs.existsSync(legacy) || fs.existsSync(staged)) return;
+        fs.mkdirSync(path.dirname(staged), { recursive: true });
+        fs.renameSync(legacy, staged);
+    }
+
+    /**
+     * Record THIS sync's pre-merge tip as `staged/<feature>/preMerge<n>.hash`.
+     *
+     * Every intermediate state, not just the last: a branch updated from main five times has five
+     * genuinely different pre-merge tips, and the fifth tells you nothing about what the second looked
+     * like. The hashes are what make the `<feature>PreMerge<n>` snapshot BRANCHES disposable — once the
+     * tip is written down (and, at land time, tagged), the branch itself is pure branch-cap pressure.
+     */
+    writePreMergeHash(home: string, n: number, sha: string): void {
+        fs.mkdirSync(home, { recursive: true });
+        fs.writeFileSync(path.join(home, `preMerge${String(n)}.hash`), sha + '\n');
+    }
+
+    /** Every recorded pre-merge tip for a feature, in slot order. [] when none were recorded. */
+    readPreMergeHashes(home: string): string[] {
+        if (!fs.existsSync(home)) return [];
+        const found = new Map<number, string>();
+        for (const entry of fs.readdirSync(home)) {
+            const match = entry.match(/^preMerge(\d+)\.hash$/);
+            if (match === null) continue;
+            found.set(parseInt(match[1], 10), fs.readFileSync(path.join(home, entry), 'utf8').trim());
+        }
+        return [...found.keys()].sort((a: number, b: number): number => a - b)
+            .map((n: number): string => found.get(n) ?? '');
     }
 
     // The run dir for sync number `n`: `<home>/merge-<n>/`. Holds this sync's marker + per-file
@@ -111,20 +202,63 @@ export class MergeState {
         return max + 1;
     }
 
-    // Write the clean-merge marker + a per-slot `updatemain-hashes.json` copy into the slot's own dir.
-    writeCleanMergeMarker(mergeDir: string, forkPoint: string, featureHead: string, mainHead: string): void {
+    /**
+     * Record a CLEAN (no-conflict) sync: the A/B/C shas in `updatemain-hashes.json`, and NOTHING ELSE.
+     *
+     * The `no-3point-merge.md` placeholder this used to also write is gone. Its whole content was a
+     * sentence saying nothing interesting happened plus the same three shas being written on the very
+     * next line in machine-readable form — a file that appeared in every clean directory a human opens,
+     * carried no information the JSON did not, and had no consumer anywhere in the codebase. Absence is
+     * now the signal instead: a run dir with no {@link CONFLICTS_FILE} was a clean merge.
+     */
+    recordCleanMerge(mergeDir: string, forkPoint: string, featureHead: string, mainHead: string): void {
         fs.mkdirSync(mergeDir, { recursive: true });
-        const body =
-            '# Clean squash-merge — no 3-point conflict resolution needed\n\n' +
-            'This sync merged main into the feature with no conflicts, so the AI wrote no per-file\n' +
-            'merge-explanation.md. The 3-point shas below are kept so the merge is still auditable.\n\n' +
-            `3-point shas:  A(fork)=${forkPoint}  B(feature)=${featureHead}  C(main)=${mainHead}\n\n` +
-            'Reconstruct what each side changed:\n' +
-            `  feature (B−A):  git diff ${forkPoint} ${featureHead}\n` +
-            `  main    (C−A):  git diff ${forkPoint} ${mainHead}\n`;
-        fs.writeFileSync(path.join(mergeDir, NO_CONFLICT_MARKER_FILE), body);
         const record = new MergeHashRecord(forkPoint, featureHead, mainHead, new Date().toISOString());
         fs.writeFileSync(path.join(mergeDir, 'updatemain-hashes.json'), JSON.stringify(record, null, 2) + '\n');
+    }
+
+    /** Path of a run dir's conflict record. Its EXISTENCE is what makes the merge "3-point". */
+    conflictsPath(mergeDir: string): string {
+        return path.join(mergeDir, CONFLICTS_FILE);
+    }
+
+    /** True when this run dir records a 3-point merge — i.e. `conflicts.md` is there. */
+    wasThreeWay(mergeDir: string): boolean {
+        return fs.existsSync(this.conflictsPath(mergeDir));
+    }
+
+    /** Write the 3-point conflict record. Only ever called on the conflict path. */
+    writeConflicts(mergeDir: string, files: string[]): void {
+        fs.mkdirSync(mergeDir, { recursive: true });
+        const body =
+            '# 3-point squash-merge — conflicts\n\n' +
+            'This sync needed a 3-point resolution. Each file below has its A/B/C context and the AI\'s\n' +
+            `${MERGE_EXPLANATION_FILE} under \`updatemain-<path with / → __>/\`, and the A/B/C commit shas\n` +
+            'are in `updatemain-hashes.json` next to this file.\n\n' +
+            files.map((file: string): string => `- ${file}`).join('\n') + '\n';
+        fs.writeFileSync(this.conflictsPath(mergeDir), body);
+    }
+
+    /** The conflicted-file list back out of `conflicts.md`. [] when the merge was clean. */
+    readConflictedFiles(mergeDir: string): string[] {
+        const filePath = this.conflictsPath(mergeDir);
+        if (!fs.existsSync(filePath)) return [];
+        return fs.readFileSync(filePath, 'utf8')
+            .split('\n')
+            .filter((line: string): boolean => line.startsWith('- '))
+            .map((line: string): string => line.slice(2).trim())
+            .filter((line: string): boolean => line !== '');
+    }
+
+    /** Every `merge-<n>/` run dir under a feature home, in slot order. [] when the home does not exist. */
+    listMergeRunDirs(home: string): number[] {
+        if (!fs.existsSync(home)) return [];
+        const slots: number[] = [];
+        for (const entry of fs.readdirSync(home)) {
+            const match = entry.match(/^merge-(\d+)$/);
+            if (match !== null) slots.push(parseInt(match[1], 10));
+        }
+        return slots.sort((a: number, b: number): number => a - b);
     }
 
     // Locate the in-progress merge's run dir: the `<home>/merge-*/` subdir holding a marker. There is

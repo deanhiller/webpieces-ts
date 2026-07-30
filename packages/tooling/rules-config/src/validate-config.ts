@@ -9,7 +9,7 @@ import {
     MergedBranchBashGuardConfig,
     StaleMainBashGuardConfig,
 } from './main-sync-guard-configs';
-import { validateChecklistsSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
+import { validateChecklistsSection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
 
 // Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
 export { validateChecklistsSection };
@@ -414,6 +414,9 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
             errors.push(`[pr-gate] "gateSalt" must be a non-empty string — it is the shared secret the gate token is HMAC'd with. Omit the key entirely to disable server-side token enforcement.`);
         }
     }
+
+    // Optional: what happens to the LOCAL branch once its PR lands. Absent ⇒ "archive-tag".
+    if ('landPr' in s) errors.push(...validateLandPrSection(s['landPr']));
 
     errors.push(...validateNoGateSaltRationale(s));
 
