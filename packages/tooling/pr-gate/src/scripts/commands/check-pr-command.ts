@@ -27,6 +27,12 @@ class PrUnderCheck {
  * This is what catches a PR opened OUTSIDE the gated flow — an unhooked teammate who `git push`ed and
  * clicked "Create pull request" in the web UI carries no valid token for its head sha and fails here.
  *
+ * This job is THE required check — the ONE thing a consumer marks required in branch protection. It used
+ * to also post a `webpieces/pr-gate` commit status, because `wp-finish-upsert-pr` pushed BEFORE writing
+ * the PR body and a status (newest post wins for a context) could supersede the failure that race caused.
+ * GatedPrPublisher now writes the body first, so there is no race to recover from and no second entry to
+ * confuse anyone about which one to require. This job's exit code is the whole verdict.
+ *
  * A repo with no `gateSalt` configured has not opted in → this is a no-op success (exit 0), so it is safe
  * to add the workflow before turning enforcement on.
  *
@@ -57,21 +63,19 @@ export class CheckPrCommand {
 
         pr = await this.verifyWithRetry(pr, gateSalt);
         if (this.gateTokenService.verifyGateToken(pr.body, gateSalt, pr.headSha)) {
-            this.postStatus(pr.headSha, 'success', 'gated flow verified');
             process.stdout.write(`✅ wp-check-pr: valid webpieces gate token for PR #${pr.number} @ ${pr.headSha.slice(0, 12)} — created through the gated flow.\n`);
             return;
         }
 
-        // An UNHOOKED push never reaches wp-finish-upsert-pr, so no status ever appears — mark it failed
-        // with an actionable status (attached to this sha) and fail the job so the PR shows red with a reason.
-        this.postStatus(pr.headSha, 'failure', 'Not created through the webpieces gated flow — run pnpm wp-start-upsert-pr');
+        // An UNHOOKED push never reaches wp-finish-upsert-pr, so it carries no valid token — fail the job.
+        // THIS EXIT CODE IS THE WHOLE SIGNAL: there is no companion commit status any more (see the JSDoc).
         throw new CliExitError(1, this.failureMessage(pr));
     }
 
-    // Re-read the PR ONCE after a short delay if the token looks stale. `wp-finish-upsert-pr` posts the
-    // authoritative commit status directly, but this workflow can be triggered by the `synchronize` push a
-    // beat BEFORE the body edit lands — so a first stale read is re-checked rather than red-flagging a
-    // correctly-gated PR on a timing coin-flip (see the gate-token-race bug). Returns the freshest PR.
+    // Re-read the PR ONCE after a short delay if the token looks stale. The push-before-body-edit RACE is
+    // gone (GatedPrPublisher writes the body first), so this no longer backstops a known ordering bug —
+    // it absorbs GitHub's own event/read replication jitter, which matters more now that this job is the
+    // single required check. It costs nothing on the success path. Returns the freshest PR.
     private async verifyWithRetry(pr: PrUnderCheck, gateSalt: string): Promise<PrUnderCheck> {
         if (this.gateTokenService.verifyGateToken(pr.body, gateSalt, pr.headSha)) return pr;
         process.stdout.write('… no valid token yet — waiting for the PR body edit to land, then re-checking once…\n');
@@ -84,20 +88,6 @@ export class CheckPrCommand {
         return new Promise((resolve: () => void): void => {
             setTimeout(resolve, ms);
         });
-    }
-
-    // Post the webpieces/pr-gate commit status on `sha`. Best-effort: a missing statuses:write scope is a
-    // warning, not a hard failure (the job's own exit code still reflects pass/fail).
-    private postStatus(sha: string, state: string, description: string): void {
-        const res = spawnSync('gh', [
-            'api', '--method', 'POST', `repos/{owner}/{repo}/statuses/${sha}`,
-            '-f', `state=${state}`,
-            '-f', 'context=webpieces/pr-gate',
-            '-f', `description=${description}`,
-        ], { encoding: 'utf8' });
-        if (res.status !== 0) {
-            process.stderr.write('⚠️  wp-check-pr could not post the webpieces/pr-gate commit status (needs statuses:write).\n');
-        }
     }
 
     // The actionable red-check message: this PR did not come through the gated flow (or hooks are missing).
