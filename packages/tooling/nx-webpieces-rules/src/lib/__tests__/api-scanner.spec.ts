@@ -130,11 +130,13 @@ describe('buildApiContracts — the per-method trigger table committed to depend
         expect(contracts['SecureApi'].basePath).toBe('/secure');
     });
 
-    it('reads every @Endpoint path + kind, and derives the Terraform-matched queue name', () => {
-        // The queue name is defined for every method (a cron schedule needs a name too), defaulting
-        // to `${Api}-${method}` exactly as core-util's getQueueName does.
+    it('reads every @Endpoint path + kind, and names NO queue for a synchronous rpc method', () => {
+        // A queue name belongs only to a `cloudtasks` or `cron` method — those are the kinds actually
+        // delivered through one, and Terraform matches on the string. Emitting a plausible-looking
+        // `Server2Api-fetchValue` for a synchronous endpoint put it one naive
+        // `methods.map(m => m.queueName)` away from being provisioned as a real Cloud Tasks queue.
         expect(contracts['Server2Api'].methods).toEqual([
-            { name: 'fetchValue', path: '/fetchValue', kind: 'rpc', queueName: 'Server2Api-fetchValue' },
+            { name: 'fetchValue', path: '/fetchValue', kind: 'rpc' },
         ]);
     });
 

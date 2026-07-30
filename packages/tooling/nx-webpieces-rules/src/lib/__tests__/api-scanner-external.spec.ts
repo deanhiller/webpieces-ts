@@ -173,11 +173,13 @@ describe('describeMismatchedEndpointKinds', () => {
             TaskApi: {
                 owner: 'task-api',
                 apiKind: 'pubsub',
-                methods: [{ name: 'nope', path: '/nope', kind: 'rpc', queueName: 'TaskApi-nope' }],
+                basePath: '/task',
+                methods: [{ name: 'nope', path: '/nope', kind: 'rpc' }],
             },
             WebApi: {
                 owner: 'web-api',
                 apiKind: 'rpc',
+                basePath: '/web',
                 methods: [{ name: 'sweep', path: '/sweep', kind: 'cron', queueName: 'WebApi-sweep' }],
             },
         });
@@ -194,12 +196,14 @@ describe('describeMismatchedEndpointKinds', () => {
                 Hook: {
                     owner: 'a',
                     apiKind: 'rpc',
-                    methods: [{ name: 'inbound', path: '/in', kind: 'external', queueName: 'Hook-inbound' }],
+                    basePath: '/a',
+                    methods: [{ name: 'inbound', path: '/in', kind: 'external' }],
                 },
                 Push: {
                     owner: 'b',
                     apiKind: 'pubsub',
-                    methods: [{ name: 'notify', path: '/n', kind: 'external', queueName: 'Push-notify' }],
+                    basePath: '/b',
+                    methods: [{ name: 'notify', path: '/n', kind: 'external' }],
                 },
             }),
         ).toEqual([]);

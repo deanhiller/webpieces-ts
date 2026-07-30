@@ -14,7 +14,7 @@ import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
 import { classDecorators, decoratorName } from '../di-graph/bindings';
-import { ApiClassInfo, ApiMethodMeta, ApiTransport, EndpointKind } from './api-relations';
+import { ApiClassInfo, ApiMethodMeta, ApiTransport, EndpointKind, NonLiteralDecoratorArg } from './api-relations';
 
 /** Legal `@Endpoint(path, kind)` values; anything else is a source error, not a kind we invent. */
 const ENDPOINT_KINDS: readonly EndpointKind[] = ['rpc', 'cloudtasks', 'cron', 'external'];
@@ -33,19 +33,138 @@ const EXTERNAL_CONTRACT_SUFFIX = 'Api';
  */
 const CLIENT_CONFIG_SUFFIX = 'ClientConfig';
 
+/**
+ * The module-scope `const NAME = '<string literal>'` bindings of ONE source file.
+ *
+ * A contract that hoists its route to a constant (`@ApiPath(WHATSAPP_API_PATH)`) is good practice —
+ * it lets a sibling contract and its callers share the symbol — but a decorator argument is read as
+ * TEXT here, with no checker to constant-fold it. Without this table such an argument resolved to
+ * nothing: the class lost its basePath, and a class whose every @Endpoint path was a constant
+ * resolved to zero methods and was dropped from the graph entirely.
+ *
+ * Deliberately SAME-MODULE only. Following an import would mean resolving modules, which is exactly
+ * what the source pre-pass avoids (it can be diverted to a decorator-erased `.d.ts`). A cross-module
+ * constant is therefore still unresolvable — and is REPORTED rather than silently dropped, see
+ * DecoratorArgDiagnostics.
+ */
+export class ModuleStringConstants {
+    constructor(private readonly byName: Map<string, string>) {}
+
+    lookup(name: string): string | null {
+        return this.byName.get(name) ?? null;
+    }
+}
+
+/** Parsed constants per source file — every class in a file shares one table. */
+const CONSTANTS_BY_FILE = new WeakMap<ts.SourceFile, ModuleStringConstants>();
+
+/** The module-scope string constants of `sourceFile`, parsed once per file. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function stringConstantsOf(sourceFile: ts.SourceFile): ModuleStringConstants {
+    const cached = CONSTANTS_BY_FILE.get(sourceFile);
+    if (cached !== undefined) return cached;
+    const byName = new Map<string, string>();
+    for (const statement of sourceFile.statements) {
+        if (!ts.isVariableStatement(statement)) continue;
+        if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+        for (const declaration of statement.declarationList.declarations) {
+            if (!ts.isIdentifier(declaration.name)) continue;
+            const text = stringValueOf(declaration.initializer);
+            if (text !== null) byName.set(declaration.name.text, text);
+        }
+    }
+    const constants = new ModuleStringConstants(byName);
+    CONSTANTS_BY_FILE.set(sourceFile, constants);
+    return constants;
+}
+
+/** The string an initializer denotes, unwrapping `as const` / parentheses, else null. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function stringValueOf(expr: ts.Expression | undefined): string | null {
+    if (expr === undefined) return null;
+    if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return expr.text;
+    if (ts.isAsExpression(expr) || ts.isParenthesizedExpression(expr)) return stringValueOf(expr.expression);
+    return null;
+}
+
+/**
+ * ONE decorator argument that had to be a string, and what came of it.
+ *
+ * `value` is the string when it was a literal or resolved through a same-module constant.
+ * `unresolvedName` is the argument as written (`WHATSAPP_API_PATH`) when it is present but could not
+ * be reduced — the case that must be reported, never silently dropped. Both are null when the
+ * argument is simply absent.
+ */
+export class DecoratorArgValue {
+    constructor(
+        public readonly value: string | null,
+        public readonly unresolvedName: string | null,
+    ) {}
+}
+
+/** Read one decorator argument as a string, resolving same-module constants. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function decoratorArgValue(
+    expr: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+): DecoratorArgValue {
+    if (expr === undefined) return new DecoratorArgValue(null, null);
+    const literal = stringValueOf(expr);
+    if (literal !== null) return new DecoratorArgValue(literal, null);
+    if (ts.isIdentifier(expr)) {
+        const resolved = constants.lookup(expr.text);
+        if (resolved !== null) return new DecoratorArgValue(resolved, null);
+        return new DecoratorArgValue(null, expr.text);
+    }
+    return new DecoratorArgValue(null, expr.getText());
+}
+
+/**
+ * Collects every decorator argument the scan could not reduce to a string.
+ *
+ * A same-module constant now resolves, but a cross-module one (`import { PATH } from './paths'`)
+ * genuinely cannot — the source pre-pass has no checker by design. That gap used to be invisible:
+ * the contract simply came out with no basePath, or with fewer methods, or not at all. Recording it
+ * turns a silent drop into a named one, pointing at the exact file, line and identifier.
+ */
+export class DecoratorArgDiagnostics {
+    private readonly found: NonLiteralDecoratorArg[] = [];
+
+    constructor(private readonly workspaceRoot: string) {}
+
+    /** Record `argument` (as written) as unresolvable at `node`'s location. */
+    record(api: string, decorator: string, method: string | null, argument: string, node: ts.Node): void {
+        this.found.push(new NonLiteralDecoratorArg(api, decorator, method, argument, this.locate(node)));
+    }
+
+    all(): NonLiteralDecoratorArg[] {
+        return this.found;
+    }
+
+    private locate(node: ts.Node): string {
+        const sourceFile = node.getSourceFile();
+        const position = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        return `${path.relative(this.workspaceRoot, sourceFile.fileName)}:${position.line + 1}`;
+    }
+}
 
 /** {api, owner: `project`, type} when `cls` is an `abstract class` carrying `@ApiPath`, else null. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function apiClassInfoFrom(cls: ts.ClassDeclaration, project: string): ApiClassInfo | null {
+export function apiClassInfoFrom(
+    cls: ts.ClassDeclaration,
+    project: string,
+    diagnostics: DecoratorArgDiagnostics | null = null,
+): ApiClassInfo | null {
     if (!isAbstractClass(cls) || !hasClassDecorator(cls, 'ApiPath') || !cls.name) return null;
     const api = cls.name.text;
+    const constants = stringConstantsOf(cls.getSourceFile());
     const info: ApiClassInfo = {
         api,
         owner: project,
         type: apiTransport(cls),
-        methods: endpointMethodsOf(cls, api),
+        methods: endpointMethodsOf(cls, api, constants, diagnostics),
     };
-    const basePath = decoratorStringArg(cls, 'ApiPath');
+    const basePath = decoratorStringArg(cls, 'ApiPath', constants, diagnostics, api);
     if (basePath !== null) info.basePath = basePath;
     return info;
 }
@@ -55,6 +174,9 @@ export function apiTransport(cls: ts.ClassDeclaration): ApiTransport {
     return hasClassDecorator(cls, 'PubSub') ? 'pubsub' : 'rpc';
 }
 
+/** The @Endpoint kinds that are actually DELIVERED through a named queue or schedule. */
+const QUEUED_KINDS: readonly EndpointKind[] = ['cloudtasks', 'cron'];
+
 /**
  * Every `@Endpoint(path, kind)` method on a contract class, in declaration order.
  *
@@ -62,26 +184,70 @@ export function apiTransport(cls: ts.ClassDeclaration): ApiTransport {
  * source does not compile (or is mid-edit) — we skip the method rather than defaulting it. Defaulting
  * would put an undeclared cron or webhook into the graph as an ordinary rpc call, which is precisely
  * the blindness the required argument exists to remove.
+ *
+ * `path` may be a same-module constant; an argument that still cannot be reduced is recorded on
+ * `diagnostics` before the method is skipped, so the hole is named rather than merely absent.
  */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function endpointMethodsOf(cls: ts.ClassDeclaration, api: string): ApiMethodMeta[] {
+export function endpointMethodsOf(
+    cls: ts.ClassDeclaration,
+    api: string,
+    constants: ModuleStringConstants = new ModuleStringConstants(new Map<string, string>()),
+    diagnostics: DecoratorArgDiagnostics | null = null,
+): ApiMethodMeta[] {
     const methods: ApiMethodMeta[] = [];
     for (const member of cls.members) {
         if (!ts.isMethodDeclaration(member) || !ts.isIdentifier(member.name)) continue;
         const endpoint = memberDecorator(member, 'Endpoint');
         if (endpoint === null) continue;
-        const args = decoratorArgs(endpoint);
-        const path = args[0] !== undefined && ts.isStringLiteral(args[0]) ? args[0].text : null;
-        const kind = args[1] !== undefined && ts.isStringLiteral(args[1]) ? args[1].text : null;
-        if (path === null || kind === null || !ENDPOINT_KINDS.includes(kind as EndpointKind)) continue;
         const name = member.name.text;
-        const override = memberDecorator(member, 'Queue');
-        const queueArg = override === null ? undefined : decoratorArgs(override)[0];
-        const queueName =
-            queueArg !== undefined && ts.isStringLiteral(queueArg) ? queueArg.text : `${api}-${name}`;
-        methods.push({ name, path, kind: kind as EndpointKind, queueName });
+        const args = decoratorArgs(endpoint);
+        const pathArg = decoratorArgValue(args[0], constants);
+        const kindArg = decoratorArgValue(args[1], constants);
+        reportUnresolved(diagnostics, api, 'Endpoint', name, pathArg, endpoint);
+        reportUnresolved(diagnostics, api, 'Endpoint', name, kindArg, endpoint);
+        const kind = kindArg.value;
+        if (pathArg.value === null || kind === null || !ENDPOINT_KINDS.includes(kind as EndpointKind)) continue;
+        const method: ApiMethodMeta = { name, path: pathArg.value, kind: kind as EndpointKind };
+        // Only a queued or scheduled endpoint HAS a queue. Naming one for a synchronous rpc invited a
+        // tool to read `methods.map(m => m.queueName)` as a provisioning list and create queues that
+        // nothing will ever deliver to.
+        if (QUEUED_KINDS.includes(method.kind)) {
+            method.queueName = queueNameOf(member, api, name, constants, diagnostics);
+        }
+        methods.push(method);
     }
     return methods;
+}
+
+/** `@Queue('...')` override when present and resolvable, else the derived `${Api}-${method}`. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function queueNameOf(
+    member: ts.MethodDeclaration,
+    api: string,
+    name: string,
+    constants: ModuleStringConstants,
+    diagnostics: DecoratorArgDiagnostics | null,
+): string {
+    const override = memberDecorator(member, 'Queue');
+    if (override === null) return `${api}-${name}`;
+    const queueArg = decoratorArgValue(decoratorArgs(override)[0], constants);
+    reportUnresolved(diagnostics, api, 'Queue', name, queueArg, override);
+    return queueArg.value ?? `${api}-${name}`;
+}
+
+/** Record an argument that is present but unresolvable; a resolved or absent one is silent. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function reportUnresolved(
+    diagnostics: DecoratorArgDiagnostics | null,
+    api: string,
+    decorator: string,
+    method: string | null,
+    arg: DecoratorArgValue,
+    node: ts.Node,
+): void {
+    if (diagnostics === null || arg.unresolvedName === null) return;
+    diagnostics.record(api, decorator, method, arg.unresolvedName, node);
 }
 
 /** The arguments of a decorator's call expression, or [] when it is a bare `@Foo` reference. */
@@ -97,13 +263,23 @@ export function memberDecorator(member: ts.ClassElement, name: string): ts.Decor
     return decorators.find((d: ts.Decorator) => decoratorName(d) === name) ?? null;
 }
 
-/** The first argument of a class decorator when it is a string literal (`@ApiPath('/x')`), else null. */
+/**
+ * The first argument of a class decorator as a string (`@ApiPath('/x')`, `@ApiPath(X_PATH)`), else
+ * null. A same-module constant resolves; anything else is recorded on `diagnostics`.
+ */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function decoratorStringArg(cls: ts.ClassDeclaration, name: string): string | null {
+export function decoratorStringArg(
+    cls: ts.ClassDeclaration,
+    name: string,
+    constants: ModuleStringConstants = new ModuleStringConstants(new Map<string, string>()),
+    diagnostics: DecoratorArgDiagnostics | null = null,
+    api: string = name,
+): string | null {
     const decorator = classDecorators(cls).find((d: ts.Decorator) => decoratorName(d) === name);
     if (decorator === undefined) return null;
-    const first = decoratorArgs(decorator)[0];
-    return first !== undefined && ts.isStringLiteral(first) ? first.text : null;
+    const arg = decoratorArgValue(decoratorArgs(decorator)[0], constants);
+    reportUnresolved(diagnostics, api, name, null, arg, decorator);
+    return arg.value;
 }
 
 /** The constructor's parameters, or [] when the class declares no constructor. */
@@ -191,8 +367,12 @@ export function isTestFile(fileName: string): boolean {
 
 /** {api, owner, type:'rpc'|'pubsub'} for an in-repo contract class, else null. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
-export function apiClassInfoFromNode(node: ts.Node, project: string): ApiClassInfo | null {
-    return ts.isClassDeclaration(node) ? apiClassInfoFrom(node, project) : null;
+export function apiClassInfoFromNode(
+    node: ts.Node,
+    project: string,
+    diagnostics: DecoratorArgDiagnostics | null = null,
+): ApiClassInfo | null {
+    return ts.isClassDeclaration(node) ? apiClassInfoFrom(node, project, diagnostics) : null;
 }
 
 /**
