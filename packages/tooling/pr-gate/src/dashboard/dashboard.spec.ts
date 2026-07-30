@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, ReviewJson } from '@webpieces/rules-config';
-import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow, CHECKLIST_COMMENT_MARKER } from './dashboard';
-import { CK_PASS, CK_OVERRIDDEN } from '@webpieces/rules-config';
+import {
+    Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow, ChecklistCommentRow,
+    CHECKLIST_COMMENT_MARKER,
+} from './dashboard';
+import { CK_PASS, CK_WARN, CK_OVERRIDDEN } from '@webpieces/rules-config';
 
 const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
@@ -14,52 +17,124 @@ function review(overrides: Partial<ReviewJson> = {}): ReviewJson {
     return Object.assign(base, overrides);
 }
 
-const renderChecklistComment = (rows: ChecklistRow[], verified: boolean): string => dash.renderChecklistComment(rows, verified);
+const renderChecklistComment = (rows: ChecklistCommentRow[], verified: boolean, based = true): string =>
+    dash.renderChecklistComment(rows, verified, based);
 
-describe('renderChecklistComment', () => {
-    it('emits ONE comment with the marker and a section per checklist, output verbatim', () => {
+// The four files every fixture roster was matched against, so "x of 4" is always honest.
+const FOUR_FILES = ['db/003.sql', 'src/a.ts', 'src/b.ts', 'README.md'];
+
+// A reviewer that RAN because one of its two configured globs hit one of the 4 changed files.
+function ranRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
+    return new ChecklistCommentRow(
+        subagent, status, detail, true, ['db/**', '**/*.sql'], ['**/*.sql'], ['db/003.sql'], FOUR_FILES.length);
+}
+
+// A checklist that WAS evaluated and did not apply — its globs hit none of the 4 changed files.
+function skippedRow(subagent: string): ChecklistCommentRow {
+    return new ChecklistCommentRow(
+        subagent, '', '', false, ['apps/web/**', '**/*.tsx'], [], [], FOUR_FILES.length);
+}
+
+// A PATTERNLESS checklist: always runs, whole diff in scope. Note it also has NO fired patterns — the same
+// empty list a skipped checklist has, which is why the renderer must key off the configured list instead.
+function alwaysRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
+    return new ChecklistCommentRow(subagent, status, detail, true, [], [], FOUR_FILES, FOUR_FILES.length);
+}
+
+describe('renderChecklistComment — roll-up + full roster', () => {
+    it('rolls up X defined / N ran / colors / skipped, and lists EVERY checklist as a checkbox', () => {
         const rows = [
-            new ChecklistRow('morpheus-envvars', CK_PASS, 'verified .npmrc cannot reach any final image'),
-            new ChecklistRow('morpheus-graphql', CK_PASS, 'no breaking schema changes'),
+            ranRow('db-reviewer', CK_PASS, 'migrations are reversible'),
+            alwaysRow('api-reviewer', CK_WARN, 'adds a route with no rate limit'),
+            ranRow('secrets-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
+            skippedRow('a11y-reviewer'),
+            skippedRow('i18n-reviewer'),
         ];
         const md = renderChecklistComment(rows, true);
         expect(md).toContain(CHECKLIST_COMMENT_MARKER);
-        expect(md).toContain('🟢 2 reviewed, all passed');
-        expect(md).toContain('### 🟢 morpheus-envvars — passed');
-        expect(md).toContain('verified .npmrc cannot reach any final image');
-        expect(md).toContain('### 🟢 morpheus-graphql — passed');
+        expect(md).toContain('— 5 defined · 3 ran (🟢 1 · 🟡 1 · 🟠 1) · 2 skipped ✅');
+        expect(md).toContain('### Checklists (all 5)');
+        expect(md).toContain('- [x] 🟢 **db-reviewer** — passed');
+        expect(md).toContain('- [x] 🟡 **api-reviewer** — passed with concerns');
+        expect(md).toContain('- [x] 🟠 **secrets-reviewer** — OVERRIDDEN');
+        expect(md).toContain('- [ ] ⚪ **a11y-reviewer** — skipped, not applicable to this diff (expected ✅)');
+        expect(md).toContain('- [ ] ⚪ **i18n-reviewer** — skipped');
     });
 
-    it('orders overridden sections first and rolls them up', () => {
+    it('says WHY each one matched — the fired globs and the files they hit', () => {
+        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok')], true);
+        expect(md).toContain('matched `**/*.sql` → 1 of 4 changed file(s): db/003.sql');
+    });
+
+    it('says why a SKIPPED one did not match, and never claims the whole diff was in its scope', () => {
+        const md = renderChecklistComment([skippedRow('a11y-reviewer')], true);
+        expect(md).toContain('`apps/web/**`, `**/*.tsx` matched 0 of 4 changed file(s)');
+        expect(md).not.toContain('ALWAYS RUNS');
+    });
+
+    it('distinguishes a PATTERNLESS checklist from a skipped one (both fired zero globs)', () => {
+        const md = renderChecklistComment([alwaysRow('api-reviewer', CK_PASS, 'ok')], true);
+        expect(md).toContain('ALWAYS RUNS (no patterns) — whole diff in scope, 4 changed file(s)');
+        expect(md).not.toContain('matched 0 of');
+    });
+
+    it('refuses to report an unresolvable diff base as an all-clear', () => {
+        const md = renderChecklistComment([skippedRow('a11y-reviewer'), skippedRow('i18n-reviewer')], true, false);
+        expect(md).toContain('⚠️ NOT EVALUATED (2 defined)');
+        expect(md).toContain('not** an all-clear');
+        expect(md).not.toContain('skipped ✅');
+        expect(md).not.toContain('all passed');
+    });
+});
+
+describe('renderChecklistComment — reviewer sections', () => {
+    it('gives each reviewer that RAN a section with its output verbatim, exceptions first', () => {
         const rows = [
-            new ChecklistRow('morpheus-envvars', CK_PASS, 'ok'),
-            new ChecklistRow('morpheus-migrations', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
+            ranRow('db-reviewer', CK_PASS, 'migrations are reversible'),
+            alwaysRow('api-reviewer', CK_WARN, 'adds a route with no rate limit'),
+            ranRow('secrets-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
         ];
         const md = renderChecklistComment(rows, true);
-        expect(md).toContain('2 reviewed, 🟡 1 overridden');
-        expect(md.indexOf('morpheus-migrations')).toBeLessThan(md.indexOf('morpheus-envvars'));
-        expect(md).toContain('### 🟡 morpheus-migrations — OVERRIDDEN');
-        expect(md).toContain('behind a flag; ONE-2210');
+        expect(md).toContain('### Reviews that ran');
+        expect(md).toContain('#### 🟠 secrets-reviewer — OVERRIDDEN — shipped with a stated justification');
+        expect(md).toContain('#### 🟡 api-reviewer — passed with concerns');
+        expect(md).toContain('#### 🟢 db-reviewer — passed');
+        expect(md).toContain('adds a route with no rate limit');
+        // Overridden → warned → passed: a reader meets what needs attention before the wall of green.
+        const sections = md.slice(md.indexOf('### Reviews that ran'));
+        expect(sections.indexOf('secrets-reviewer')).toBeLessThan(sections.indexOf('api-reviewer'));
+        expect(sections.indexOf('api-reviewer')).toBeLessThan(sections.indexOf('db-reviewer'));
+    });
+
+    it('gives NO section (and makes no provenance claim) when nothing had to run', () => {
+        const md = renderChecklistComment([skippedRow('a11y-reviewer'), skippedRow('i18n-reviewer')], true);
+        expect(md).toContain('— 2 defined · 0 ran · 2 skipped ✅');
+        expect(md).toContain('No reviewer had to run on this diff');
+        expect(md).not.toContain('### Reviews that ran');
+        expect(md).not.toContain('verified from the Claude Code harness');
     });
 
     it('reflects provenance: verified vs unverified', () => {
-        const rows = [new ChecklistRow('morpheus-envvars', CK_PASS, 'ok')];
+        const rows = [ranRow('db-reviewer', CK_PASS, 'ok')];
         expect(renderChecklistComment(rows, true)).toContain('verified from the Claude Code harness');
         expect(renderChecklistComment(rows, false)).toContain('provenance was NOT verified');
     });
 
-    it('truncates the LONGEST body first to fit the size cap, keeping every verdict heading', () => {
-        const big = 'x'.repeat(70000);
+    it('truncates the LONGEST body to fit the cap, keeping every heading AND the whole roster', () => {
         const rows = [
-            new ChecklistRow('short-reviewer', CK_PASS, 'tiny note'),
-            new ChecklistRow('huge-reviewer', CK_PASS, big),
+            ranRow('short-reviewer', CK_PASS, 'tiny note'),
+            ranRow('huge-reviewer', CK_PASS, 'x'.repeat(70000)),
+            skippedRow('a11y-reviewer'),
         ];
         const md = renderChecklistComment(rows, true);
         expect(md.length).toBeLessThanOrEqual(65000);
-        expect(md).toContain('### 🟢 short-reviewer — passed');
+        expect(md).toContain('#### 🟢 short-reviewer — passed');
         expect(md).toContain('tiny note');           // short body untouched
-        expect(md).toContain('### 🟢 huge-reviewer — passed');
+        expect(md).toContain('#### 🟢 huge-reviewer — passed');
         expect(md).toContain('truncated to fit');     // long body was cut
+        // The roster lives in the header, so no roster line can be the thing an oversize comment drops.
+        expect(md).toContain('- [ ] ⚪ **a11y-reviewer** — skipped');
+        expect(md).toContain('- [x] 🟢 **huge-reviewer** — passed');
     });
 });
 
@@ -221,7 +296,16 @@ describe('renderDashboard checklists', () => {
         );
         const md = renderDashboard(input);
         expect(md).toContain('**Checklist — migrations-reviewer:** 🟢 passed');
-        expect(md).toContain('**Checklist — hasura-reviewer:** 🟡 OVERRIDDEN — override: behind a flag; ONE-2210');
+        expect(md).toContain('**Checklist — hasura-reviewer:** 🟠 OVERRIDDEN — override: behind a flag; ONE-2210');
+    });
+
+    it('renders a yellow verdict as passed-with-concerns, never as a plain pass', () => {
+        const rows = [new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit on the new route')];
+        const input = new DashboardInput(
+            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
+        );
+        expect(renderDashboard(input)).toContain('**Checklist — api-reviewer:** 🟡 passed with concerns');
+        expect(renderCommitBody(input, '')).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
     });
 
     it('carries matched checklists into the compact commit body', () => {

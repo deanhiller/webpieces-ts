@@ -62,6 +62,48 @@ describe('ChecklistDetector.detect', () => {
     });
 });
 
+// The roster is what the PR comment publishes: EVERY defined checklist, matched or not. `detect` is defined
+// as the roster minus its empty entries, so the set that GATES and the set that gets REPORTED cannot be
+// computed two different ways and drift.
+describe('ChecklistDetector.roster', () => {
+    it('returns one entry per DEFINED checklist, in config order, including the ones nothing hit', () => {
+        const defs = [def('migrations-reviewer'), def('a11y-reviewer', ['apps/web/**']), def('always-reviewer', [])];
+        const entries = detector.roster(defs, ['db/001.sql', 'src/a.ts']);
+        expect(entries.map((t): string => t.def.id))
+            .toEqual(['migrations-reviewer', 'a11y-reviewer', 'always-reviewer']);
+        expect(entries[0].matchedFiles).toEqual(['db/001.sql']);
+        expect(entries[1].matchedFiles).toEqual([]);                       // evaluated, did not apply
+        expect(entries[2].matchedFiles).toEqual(['db/001.sql', 'src/a.ts']); // patternless ⇒ whole diff
+    });
+
+    // The trap a renderer must not fall into: a SKIPPED checklist and a PATTERNLESS one both fired zero
+    // globs, and they mean opposite things ("nothing in scope" vs "everything in scope"). Only the
+    // CONFIGURED list tells them apart.
+    it('leaves a skipped checklist with no fired patterns even though it HAS configured ones', () => {
+        const entries = detector.roster([def('a11y-reviewer', ['apps/web/**', '**/*.tsx'])], ['db/1.sql']);
+        expect(entries[0].matchedPatterns).toEqual([]);
+        expect(entries[0].matchedFiles).toEqual([]);
+        expect(entries[0].def.patterns).toEqual(['apps/web/**', '**/*.tsx']); // the distinguishing signal
+    });
+
+    it('agrees with detect exactly — detect IS the roster minus its empty entries', () => {
+        const defs = [def('migrations-reviewer'), def('a11y-reviewer', ['apps/web/**']), def('always-reviewer', [])];
+        const files = ['db/001.sql', 'src/a.ts'];
+        const nonEmpty = detector.roster(defs, files).filter((t): boolean => t.matchedFiles.length > 0);
+        expect(detector.detect(defs, files)).toEqual(nonEmpty);
+    });
+
+    // With no fork point the changed-file set is EMPTY, so nothing matches — not even a patternless
+    // ALWAYS-RUNS checklist. The roster still lists it; ChecklistRoster.baseResolved is what stops that
+    // being published as an all-clear.
+    it('lists a patternless checklist as matching nothing when there is no diff at all', () => {
+        const entries = detector.roster([def('always-reviewer', [])], []);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].matchedFiles).toEqual([]);
+        expect(detector.detect([def('always-reviewer', [])], [])).toEqual([]);
+    });
+});
+
 // One end-to-end pass over a real git repo — proves detectForRepo passes tsOnly:false, so a *.sql file is
 // seen at all (the default would silently drop it and report "no checklists matched").
 function git(cwd: string, cmd: string): void {

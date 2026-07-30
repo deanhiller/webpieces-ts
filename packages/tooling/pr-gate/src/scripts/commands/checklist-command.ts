@@ -46,8 +46,17 @@ export class ChecklistCommand {
         return (
             this.header(scan) +
             this.rosterLines(scan, owed) +
+            this.formatWarnings(scan) +
             (owed.length === 0 ? this.allDone() : `\n${this.instructions.render(owed, scan.reviewPath, scan.context)}\n`)
         );
+    }
+
+    // A verdict file that EXISTS but cannot be read as a verdict (almost always one still using the removed
+    // `success` field) is called out here. Without it this command reports the checklist as simply owed, and
+    // the AI re-runs a reviewer that already ran instead of correcting the file sitting right there.
+    private formatWarnings(scan: ChecklistScan): string {
+        if (scan.formatErrors.length === 0) return '';
+        return '\n' + scan.formatErrors.map((e: string): string => `  ⛔ ${e}\n`).join('');
     }
 
     // State the base out loud: a reader (and a reviewer) needs to know the diff was taken from the fork point

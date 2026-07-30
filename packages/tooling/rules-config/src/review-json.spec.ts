@@ -104,38 +104,40 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
         expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/"migrations" subagent/);
     });
 
-    it('passes when review-<id>.json has success:true', () => {
-        const file = tmpReviewWith({ migrations: { id: 'migrations', success: true, output: 'no NOT NULL added' } });
+    it('passes when review-<id>.json has status:green', () => {
+        const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'green', output: 'no NOT NULL added' } });
         const review = loadReviewJson(file, [REQ('migrations')]);
         expect(review.results[0].id).toBe('migrations');
-        expect(review.results[0].success).toBe(true);
+        expect(review.results[0].status).toBe('green');
     });
 
-    it('refuses success:false with no override, printing the reviewer output', () => {
-        const file = tmpReviewWith({ migrations: { success: false, output: 'NOT NULL without backfill' } });
+    it('refuses status:red with no override, printing the reviewer output', () => {
+        const file = tmpReviewWith({ migrations: { status: 'red', output: 'NOT NULL without backfill' } });
         expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/FAILED review/);
         expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/NOT NULL without backfill/);
     });
 
-    it('passes success:false when a non-empty override justification is given', () => {
-        const file = tmpReviewWith({ migrations: { success: false, output: 'locks writes', override: 'behind a flag; ONE-2210' } });
+    it('passes status:red when a non-empty override justification is given', () => {
+        const file = tmpReviewWith({ migrations: { status: 'red', output: 'locks writes', override: 'behind a flag; ONE-2210' } });
         const review = loadReviewJson(file, [REQ('migrations')]);
         expect(review.results[0].override).toBe('behind a flag; ONE-2210');
     });
 
+    // 'yellow' SHIPS. It exists so a reviewer can pass a change and still flag a concern, instead of failing
+    // the PR and overriding its own failure — which reads as a deliberately-accepted defect, not a note.
+    it('passes status:yellow — a concern is published, not a blocker', () => {
+        const file = tmpReviewWith({ migrations: { status: 'yellow', output: 'index added without CONCURRENTLY' } });
+        const review = loadReviewJson(file, [REQ('migrations')]);
+        expect(review.results[0].status).toBe('yellow');
+    });
+
     it('two concurrent per-file writes both survive (no shared-file clobber)', () => {
         const file = tmpReviewWith({
-            migrations: { success: true, output: 'ok' },
-            dockerfiles: { success: true, output: 'ok' },
+            migrations: { status: 'green', output: 'ok' },
+            dockerfiles: { status: 'green', output: 'ok' },
         });
         const review = loadReviewJson(file, [REQ('migrations'), REQ('dockerfiles')]);
         expect(review.results.map((r): string => r.id).sort()).toEqual(['dockerfiles', 'migrations']);
-    });
-
-    it('required:[] produces a schema hint byte-identical to the no-argument call', () => {
-        const p = '/repo/.webpieces/pr-review/feat/review.json';
-        expect(reviewJsonSchemaHint(p, [])).toBe(reviewJsonSchemaHint(p));
-        expect(reviewJsonSchemaHint(p)).not.toContain('checklist');
     });
 
     // The schema hint is now ONLY the review.json shape. Checklist instructions moved to
@@ -149,6 +151,40 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
     });
 });
 
+// `success` was removed outright. The point of these cases is the MESSAGE, not just the refusal: a verdict
+// file that exists must never be reported as one that was never written, or the AI re-runs a reviewer that
+// already ran instead of correcting four characters of JSON.
+describe('loadReviewJson — the removed `success` field', () => {
+    it('names `success` as removed and does NOT claim the verdict is missing', () => {
+        const file = tmpReviewWith({ migrations: { id: 'migrations', success: true, output: 'ok' } });
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/"success"/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/REMOVED/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).not.toThrowError(/has no verdict/);
+    });
+
+    it('prints the replacement shape, so the fix needs no doc lookup', () => {
+        const file = tmpReviewWith({ migrations: { success: false, output: 'bad' } });
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/green \| yellow \| red/);
+    });
+
+    it('reports an INVALID status as invalid — not as a legacy file and not as a missing one', () => {
+        const file = tmpReviewWith({ migrations: { id: 'migrations', status: 'purple', output: 'ok' } });
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/no valid "status"/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).not.toThrowError(/has no verdict/);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).not.toThrowError(/"success"/);
+    });
+
+    // Unparseable bytes stay tolerant: a half-written file degrades to the same message as an absent one,
+    // which is honest — there is nothing readable there — and never wedges the branch.
+    it('still degrades unparseable JSON to the missing-verdict message', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-bad-'));
+        const file = path.join(dir, 'review.json');
+        fs.writeFileSync(file, validReview());
+        fs.writeFileSync(path.join(dir, 'review-migrations.json'), '{ not json');
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+    });
+});
+
 // The set every message lists. An already-reviewed checklist must NOT reappear: re-instructing it invites a
 // redundant second reviewer run and reads as though the earlier verdict did not count.
 describe('ReviewJsonService.pendingChecklists', () => {
@@ -157,18 +193,31 @@ describe('ReviewJsonService.pendingChecklists', () => {
 
     it('drops the ones that passed and keeps the ones with no verdict', () => {
         const required = [req('a'), req('b')];
-        const results = [new ChecklistResult('a', true, 'ok', '')];
+        const results = [new ChecklistResult('a', 'green', 'ok', '')];
         expect(svc2.pendingChecklists(required, results).map((r): string => r.id)).toEqual(['b']);
     });
 
     it('keeps an un-overridden FAIL (it still owes a passing verdict)', () => {
-        const results = [new ChecklistResult('a', false, 'bad', '')];
+        const results = [new ChecklistResult('a', 'red', 'bad', '')];
         expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
     });
 
     it('drops an OVERRIDDEN fail — the ship-anyway decision was stated, so it is resolved', () => {
-        const results = [new ChecklistResult('a', false, 'bad', 'accepted, tracked in JIRA-1')];
+        const results = [new ChecklistResult('a', 'red', 'bad', 'accepted, tracked in JIRA-1')];
         expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
+    });
+
+    // The mis-gate guard. A yellow verdict SHIPS, so it must not be listed as owed — if it were, the
+    // outstanding set would never empty and wp-finish would refuse the PR forever no matter how many times
+    // the reviewer ran.
+    it('drops a YELLOW verdict — it passed, with a concern published rather than a blocker raised', () => {
+        const results = [new ChecklistResult('a', 'yellow', 'no rate limit on the new route', '')];
+        expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
+    });
+
+    it('keeps a verdict whose FORMAT could not be read (it never resolved to an outcome)', () => {
+        const results = [new ChecklistResult('a', '', 'ok', '', 'uses the removed "success" field')];
+        expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
     });
 });
 
