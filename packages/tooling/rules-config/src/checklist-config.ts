@@ -3,7 +3,7 @@ import * as path from 'path';
 // A company review checklist: a diff-triggered extension point that lets a CONSUMER inject its own
 // PR-time review process into the webpieces gated flow WITHOUT forking the tooling. Each checklist names
 // a reviewer SUBAGENT (a `.claude/agents/<subagent>.md`) and the doc that reviewer reads; when the diff
-// matches the checklist's `patterns`, wp-checklist tells the AI to spawn that subagent to review it, and
+// matches the checklist's `patterns`, wp-review-upsert-pr tells the AI to spawn that subagent to review it, and
 // wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json exists AND that
 // named subagent is proven (from the harness's own artifacts) to have actually run.
 //

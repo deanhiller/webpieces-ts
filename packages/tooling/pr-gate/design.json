@@ -65,14 +65,6 @@
                     "level": 1
                 },
                 {
-                    "id": "ChecklistCommand",
-                    "className": "ChecklistCommand",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/pr-gate/src/scripts/commands/checklist-command.ts",
-                    "level": 1
-                },
-                {
                     "id": "ChecklistDetector",
                     "className": "ChecklistDetector",
                     "kind": "class",
@@ -126,6 +118,22 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/dashboard/dashboard.ts",
+                    "level": 2
+                },
+                {
+                    "id": "DiffBasisResolver",
+                    "className": "DiffBasisResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/diff-basis.ts",
+                    "level": 3
+                },
+                {
+                    "id": "DiffMaterializer",
+                    "className": "DiffMaterializer",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts",
                     "level": 2
                 },
                 {
@@ -289,6 +297,38 @@
                     "level": 4
                 },
                 {
+                    "id": "ReviewStageReceiptService",
+                    "className": "ReviewStageReceiptService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ReviewUpsertPrCommand",
+                    "className": "ReviewUpsertPrCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/review-upsert-pr-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "ReviewerBriefingBuilder",
+                    "className": "ReviewerBriefingBuilder",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/reviewer-briefing-builder.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ReviewerInstructionsService",
+                    "className": "ReviewerInstructionsService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/reviewer-instructions.ts",
+                    "level": 2
+                },
+                {
                     "id": "RunUpdate",
                     "className": "RunUpdate",
                     "kind": "class",
@@ -401,42 +441,6 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
-                    "from": "ChecklistCommand",
-                    "to": "ChecklistInstructionsService",
-                    "injection": "type",
-                    "token": "ChecklistInstructionsService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
-                    "paramName": "instructions",
-                    "paramType": "ChecklistInstructionsService"
-                },
-                {
-                    "from": "ChecklistCommand",
-                    "to": "ChecklistNotice",
-                    "injection": "type",
-                    "token": "ChecklistNotice",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
-                    "paramName": "checklistNotice",
-                    "paramType": "ChecklistNotice"
-                },
-                {
-                    "from": "ChecklistCommand",
-                    "to": "ChecklistScanner",
-                    "injection": "type",
-                    "token": "ChecklistScanner",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
-                    "paramName": "checklistScanner",
-                    "paramType": "ChecklistScanner"
-                },
-                {
-                    "from": "ChecklistCommand",
-                    "to": "RepoRootFinder",
-                    "injection": "type",
-                    "token": "RepoRootFinder",
-                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
-                    "paramName": "repoRootFinder",
-                    "paramType": "RepoRootFinder"
-                },
-                {
                     "from": "ChecklistDetector",
                     "to": "DiffScope",
                     "injection": "type",
@@ -474,21 +478,21 @@
                 },
                 {
                     "from": "ChecklistScanner",
+                    "to": "DiffBasisResolver",
+                    "injection": "type",
+                    "token": "DiffBasisResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-basis.ts#DiffBasisResolver",
+                    "paramName": "diffBasisResolver",
+                    "paramType": "DiffBasisResolver"
+                },
+                {
+                    "from": "ChecklistScanner",
                     "to": "DiffScope",
                     "injection": "type",
                     "token": "DiffScope",
                     "tokenKey": "class:packages/tooling/rules-config/src/diff-scope.ts#DiffScope",
                     "paramName": "diffScope",
                     "paramType": "DiffScope"
-                },
-                {
-                    "from": "ChecklistScanner",
-                    "to": "ForkPoint",
-                    "injection": "type",
-                    "token": "ForkPoint",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts#ForkPoint",
-                    "paramName": "forkPoint",
-                    "paramType": "ForkPoint"
                 },
                 {
                     "from": "ChecklistScanner",
@@ -552,6 +556,24 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts#WorktreeCleanupSection",
                     "paramName": "worktreeSection",
                     "paramType": "WorktreeCleanupSection"
+                },
+                {
+                    "from": "DiffBasisResolver",
+                    "to": "ForkPoint",
+                    "injection": "type",
+                    "token": "ForkPoint",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts#ForkPoint",
+                    "paramName": "forkPoint",
+                    "paramType": "ForkPoint"
+                },
+                {
+                    "from": "DiffMaterializer",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "FinishUpdateCommand",
@@ -672,15 +694,6 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
-                    "to": "MergeEnd",
-                    "injection": "type",
-                    "token": "MergeEnd",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts#MergeEnd",
-                    "paramName": "mergeEnd",
-                    "paramType": "MergeEnd"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
                     "to": "MergeState",
                     "injection": "type",
                     "token": "MergeState",
@@ -714,6 +727,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ReviewStageReceiptService",
+                    "injection": "type",
+                    "token": "ReviewStageReceiptService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
+                    "paramName": "receipts",
+                    "paramType": "ReviewStageReceiptService"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1005,15 +1027,6 @@
                 },
                 {
                     "from": "PrGateApp",
-                    "to": "ChecklistCommand",
-                    "injection": "type",
-                    "token": "ChecklistCommand",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/checklist-command.ts#ChecklistCommand",
-                    "paramName": "checklistCommand",
-                    "paramType": "ChecklistCommand"
-                },
-                {
-                    "from": "PrGateApp",
                     "to": "CleanupCommand",
                     "injection": "type",
                     "token": "CleanupCommand",
@@ -1050,6 +1063,15 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "ReviewUpsertPrCommand",
+                    "injection": "type",
+                    "token": "ReviewUpsertPrCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/review-upsert-pr-command.ts#ReviewUpsertPrCommand",
+                    "paramName": "reviewUpsertPrCommand",
+                    "paramType": "ReviewUpsertPrCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "StartUpdateCommand",
                     "injection": "type",
                     "token": "StartUpdateCommand",
@@ -1065,6 +1087,150 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
                     "paramName": "startUpsertPrCommand",
                     "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "ReviewStageReceiptService",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ChecklistInstructionsService",
+                    "injection": "type",
+                    "token": "ChecklistInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
+                    "paramName": "instructions",
+                    "paramType": "ChecklistInstructionsService"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ChecklistNotice",
+                    "injection": "type",
+                    "token": "ChecklistNotice",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
+                    "paramName": "checklistNotice",
+                    "paramType": "ChecklistNotice"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ChecklistScanner",
+                    "injection": "type",
+                    "token": "ChecklistScanner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scanner.ts#ChecklistScanner",
+                    "paramName": "checklistScanner",
+                    "paramType": "ChecklistScanner"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "DiffMaterializer",
+                    "injection": "type",
+                    "token": "DiffMaterializer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts#DiffMaterializer",
+                    "paramName": "materializer",
+                    "paramType": "DiffMaterializer"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "MergeEnd",
+                    "injection": "type",
+                    "token": "MergeEnd",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-end.ts#MergeEnd",
+                    "paramName": "mergeEnd",
+                    "paramType": "MergeEnd"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "MergeState",
+                    "injection": "type",
+                    "token": "MergeState",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
+                    "paramName": "mergeState",
+                    "paramType": "MergeState"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ReviewStageReceiptService",
+                    "injection": "type",
+                    "token": "ReviewStageReceiptService",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
+                    "paramName": "receipts",
+                    "paramType": "ReviewStageReceiptService"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ReviewerBriefingBuilder",
+                    "injection": "type",
+                    "token": "ReviewerBriefingBuilder",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reviewer-briefing-builder.ts#ReviewerBriefingBuilder",
+                    "paramName": "briefingBuilder",
+                    "paramType": "ReviewerBriefingBuilder"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ReviewerInstructionsService",
+                    "injection": "type",
+                    "token": "ReviewerInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/reviewer-instructions.ts#ReviewerInstructionsService",
+                    "paramName": "reviewerInstructions",
+                    "paramType": "ReviewerInstructionsService"
+                },
+                {
+                    "from": "ReviewerBriefingBuilder",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ReviewerInstructionsService",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "RunUpdate",
@@ -1149,12 +1315,12 @@
                 },
                 {
                     "from": "StartUpsertPrCommand",
-                    "to": "ForkPoint",
+                    "to": "DiffBasisResolver",
                     "injection": "type",
-                    "token": "ForkPoint",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-findForkPoint.ts#ForkPoint",
-                    "paramName": "forkPoint",
-                    "paramType": "ForkPoint"
+                    "token": "DiffBasisResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-basis.ts#DiffBasisResolver",
+                    "paramName": "diffBasisResolver",
+                    "paramType": "DiffBasisResolver"
                 },
                 {
                     "from": "StartUpsertPrCommand",

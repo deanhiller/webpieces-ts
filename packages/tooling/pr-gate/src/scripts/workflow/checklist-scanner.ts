@@ -5,13 +5,13 @@ import {
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { ChecklistDetector, ChecklistRoster } from './checklist-detector';
-import { ForkPoint } from './git-findForkPoint';
+import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 
 /** How a caller wants the scan filtered. Data-only (per CLAUDE.md). */
 export class ChecklistScanOptions {
     /**
-     * false — `outstanding` is every applicable checklist (what `wp-checklist` LISTS).
+     * false — `outstanding` is every applicable checklist (what `wp-review-upsert-pr` LISTS).
      * true  — `outstanding` drops the ones already carrying a passing/overridden verdict, leaving only what
      *         still owes review (what `wp-finish-upsert-pr` BLOCKS on).
      */
@@ -45,6 +45,13 @@ export class ChecklistScan {
     // Carried on the SCAN because wp-finish-upsert-pr refuses on missing reviewers before it ever parses
     // review.json — a complaint raised only in there would never reach the AI.
     formatErrors: string[];
+    /**
+     * The basis the matching ACTUALLY ran against. Carried out so a caller that materializes the diff
+     * (stage ②) reuses the identical range instead of resolving its own — two independent resolutions is
+     * exactly how the changed-file set and the printed `git diff` command came to disagree.
+     */
+    basis: DiffBasis;
+    changedFiles: string[];              // the full changed-file set the matching ran against
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -57,6 +64,8 @@ export class ChecklistScan {
         forkPoint: string,
         roster: ChecklistRoster,
         formatErrors: string[],
+        basis: DiffBasis = new DiffBasis(),
+        changedFiles: string[] = [],
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -67,11 +76,13 @@ export class ChecklistScan {
         this.forkPoint = forkPoint;
         this.roster = roster;
         this.formatErrors = formatErrors;
+        this.basis = basis;
+        this.changedFiles = changedFiles;
     }
 }
 
 /**
- * The ONE computation of which reviewer subagents a branch owes, shared by `wp-checklist` (which lists) and
+ * The ONE computation of which reviewer subagents a branch owes, shared by `wp-review-upsert-pr` (which lists) and
  * `wp-finish-upsert-pr` (which blocks). They previously each assembled this from the same parts in slightly
  * different ways, and any divergence means the command that reports and the command that gates disagree.
  *
@@ -79,11 +90,15 @@ export class ChecklistScan {
  *
  * 1. **The base is the FORK POINT of main, computed directly** — never `DiffScope.resolveBase`, which
  *    overlays `NX_BASE`/`NX_HEAD` from the environment. That made review coverage depend on an env var.
+ *    It now arrives via {@link DiffBasisResolver}, which injects ForkPoint; same sha, one resolution.
  * 2. **UNCOMMITTED work counts.** `getChangedFiles` is called with NO head, which is the branch of it that
  *    diffs base → WORKING TREE and unions in untracked files. Passing a head would diff commit-to-commit and
  *    silently miss staged, unstaged and untracked changes — so a checklist matching only uncommitted files
- *    would never fire and its reviewer would never be listed. `wp-checklist` is explicitly callable
- *    mid-work, which is exactly when that matters.
+ *    would never fire and its reviewer would never be listed.
+ * 3. **The range and the command it prints are the SAME basis.** Property 2 used to be true of the file set
+ *    only: reviewers were handed `git diff <base> HEAD`, which on a dirty tree covers a different range and
+ *    prints nothing. Both now derive from one {@link DiffBasis}, carried on the scan so a materializing
+ *    caller cannot re-resolve and drift.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type and drawn in the DI design.
  */
@@ -93,7 +108,7 @@ export class ChecklistScanner {
         private readonly aiBranchName: AiBranchName,
         private readonly checklistDetector: ChecklistDetector,
         private readonly diffScope: DiffScope,
-        private readonly forkPoint: ForkPoint,
+        private readonly diffBasisResolver: DiffBasisResolver,
         private readonly prContextWriter: PrContextWriter,
         private readonly reviewJsonService: ReviewJsonService,
     ) {}
@@ -108,7 +123,10 @@ export class ChecklistScanner {
     scan(repoRoot: string, defined: ChecklistDefinition[], opts: ChecklistScanOptions): ChecklistScan {
         const featureName = this.aiBranchName.getFeatureName();
         const reviewPath = reviewJsonPath(repoRoot, featureName);
-        const base = this.forkPoint.resolveForkPoint(repoRoot);
+        // ONE basis for the file set, the reproduce command and any downstream materialization. The fork
+        // point still comes from ForkPoint (never DiffScope.resolveBase) — DiffBasisResolver injects it.
+        const basis = this.diffBasisResolver.resolve(repoRoot);
+        const base = basis.base;
         // ONE changed-file computation feeds both the roster (all X) and the applicable set (N). `detect` is
         // pure and defined as the roster minus its empty entries, so the two cannot disagree about a match.
         const changedFiles = this.changedFiles(repoRoot, base);
@@ -124,23 +142,31 @@ export class ChecklistScanner {
             applicable,
             reviewed,
             opts.filterAlreadyReviewed ? stillOwed : applicable,
-            this.prContextWriter.ensure(repoRoot, featureName, base),
+            this.prContextWriter.ensure(repoRoot, featureName, basis),
             reviewPath,
             base,
             roster,
             this.reviewJsonService.checklistFormatErrors(applicable, results),
+            basis,
+            changedFiles,
         );
     }
 
     /**
-     * Every file changed since the fork point, INCLUDING uncommitted and untracked ones. `tsOnly:false` is
-     * load-bearing too: the default drops every *.sql / Dockerfile / .env* file a checklist most wants to
-     * key on, which would silently shrink the set a reviewer is pointed at.
+     * Every file changed since the fork point, INCLUDING uncommitted and untracked ones. Two non-default
+     * options, both load-bearing:
+     *
+     * `tsOnly:false`        — the default drops every *.sql / Dockerfile / .env* file a checklist most wants
+     *                         to key on, which would silently shrink the set a reviewer is pointed at.
+     * `includeDeletions:true` — the default is `--diff-filter=d`, so a DELETED file is invisible. A PR that
+     *                         deletes a migration, an auth check or a terraform rule changed exactly what a
+     *                         checklist exists to catch, and under the default no checklist fires at all.
      */
     private changedFiles(repoRoot: string, base: string): string[] {
         if (base === '') return [];
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
+        opts.includeDeletions = true;
         // No head argument — see the class comment. This is what includes the working tree.
         return this.diffScope.getChangedFiles(repoRoot, base, undefined, opts);
     }

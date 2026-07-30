@@ -7,7 +7,7 @@ import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
-import { ChecklistCommand } from './commands/checklist-command';
+import { ReviewUpsertPrCommand } from './commands/review-upsert-pr-command';
 
 /**
  * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the command
@@ -26,7 +26,7 @@ export class PrGateApp {
         private readonly cleanupCommand: CleanupCommand,
         private readonly landPrCommand: LandPrCommand,
         private readonly checkPrCommand: CheckPrCommand,
-        private readonly checklistCommand: ChecklistCommand,
+        private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
     ) {}
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */
@@ -59,9 +59,13 @@ export class PrGateApp {
         return this.landPrCommand.run();
     }
 
-    /** `wp-checklist`: READ-ONLY — which reviewer subagents this diff still owes, and what to tell them. */
-    checklist(): Promise<void> {
-        return this.checklistCommand.run();
+    /**
+     * `wp-review-upsert-pr`: STAGE ② — validate the 3-point merge, run the build gate, extract this
+     * branch's diff, and brief the reviewer subagents. Unlike the report-only command it replaces, this CAN
+     * fail — before any reviewer is spawned, so a broken branch costs no reviewer tokens.
+     */
+    reviewUpsertPr(): Promise<void> {
+        return this.reviewUpsertPrCommand.run();
     }
 
     /** `wp-check-pr`: READ-ONLY CI check — verify the PR body carries a valid HMAC gate token for its head sha. */

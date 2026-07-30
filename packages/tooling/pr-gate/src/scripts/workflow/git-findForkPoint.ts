@@ -36,7 +36,7 @@ export class ForkPoint {
      * and works offline. `findForkPoint` below still fetches, because the MERGE flow additionally needs
      * main's CURRENT head as hash point C, which genuinely does require a fetch.
      *
-     * Also writes no files and runs no merge-commit scan, so it cannot throw: `wp-checklist` must always
+     * Also writes no files and runs no merge-commit scan, so it cannot throw: `wp-review-upsert-pr` must always
      * succeed, and a raw merge-from-main is the merge flow's problem to report, not the checklist's.
      */
     resolveForkPoint(repoRoot: string): string {

@@ -72,6 +72,15 @@ export class ChecklistCommentRow {
     firedPatterns: string[];       // which configured globs actually hit a changed file
     matchedFiles: string[];
     changedFileCount: number;      // how many files were considered at all — "0 of N" needs the N
+    /**
+     * Whether this reviewer's own transcript shows it OPENING the extracted diff.
+     *
+     * '' = not assessed (no Claude Code session, or nothing was materialized) and prints nothing — "no
+     * evidence recorded" and "evidence says it never looked" are different claims, and conflating them
+     * would accuse a reviewer that ran perfectly well in CI. 'yes' | 'no' otherwise. Defaulted, so every
+     * existing construction site is unchanged.
+     */
+    diffRead: string = '';
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -259,8 +268,18 @@ export class Dashboard {
     // checklist was evaluated and did not apply, which the words state as the good news it is.
     private rosterBullet(row: ChecklistCommentRow): string {
         const box = row.ran ? '- [x]' : '- [ ]';
-        return `${box} ${this.verdictEmoji(row)} **${row.subagent}** — ${this.verdictWords(row)}\n` +
+        return `${box} ${this.verdictEmoji(row)} **${row.subagent}** — ${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
             `  - ${this.whyLine(row)}`;
+    }
+
+    /**
+     * Whether the reviewer demonstrably opened the diff, read from its own transcript. A QUALITY signal and
+     * never a blocker (see SubagentProvenanceService.evidenceFor) — but published, because "wrote a verdict
+     * without reading the change" is exactly what a reader of this comment would want to weigh.
+     */
+    private evidenceSuffix(row: ChecklistCommentRow): string {
+        if (!row.ran || row.diffRead === '') return '';
+        return row.diffRead === 'yes' ? ' _(diff read ✓)_' : ' _(⚠️ no diff read recorded)_';
     }
 
     private verdictEmoji(row: ChecklistCommentRow): string {
@@ -293,7 +312,11 @@ export class Dashboard {
     private whyLine(row: ChecklistCommentRow): string {
         const total = row.changedFileCount;
         if (row.configuredPatterns.length === 0) {
-            return `ALWAYS RUNS (no patterns) — whole diff in scope, ${total} changed file(s): ` +
+            // Say what "no patterns" COSTS, not just what it means. Six patternless checklists all firing on
+            // a one-file docs PR is what a missing `patterns` looks like from the outside, and a reader who
+            // is told only "ALWAYS RUNS" has no reason to suspect the config rather than the diff.
+            return `ALWAYS RUNS — no \`patterns\` configured, so this fires on EVERY PR including docs-only ` +
+                `ones; add \`patterns\` if that is not intended. Whole diff in scope, ${total} changed file(s): ` +
                 `${formatFileList(row.matchedFiles)}`;
         }
         const configured = this.asCode(row.configuredPatterns);

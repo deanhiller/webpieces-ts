@@ -12,7 +12,7 @@
         "wp-cleanup": "./src/scripts/wp-cleanup.js",
         "wp-land-pr": "./src/scripts/wp-land-pr.js",
         "wp-check-pr": "./src/scripts/wp-check-pr.js",
-        "wp-checklist": "./src/scripts/wp-checklist.js"
+        "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js"
     },
     "files": [
         "src/**/*"

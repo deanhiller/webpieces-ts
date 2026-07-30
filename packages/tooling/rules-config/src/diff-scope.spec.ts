@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { getChangedFiles } from './diff-scope';
+import { ChangedFilesOptions, getChangedFiles } from './diff-scope';
 
 function git(root: string, cmd: string): string {
     // core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repo.
@@ -88,5 +88,58 @@ describe('getChangedFiles ghost paths (deleted/renamed old paths)', () => {
         expect(changed).toContain('libraries/nested/foo/src/Moved.ts');
         expect(changed).not.toContain('libraries/foo/src/Moved.ts');
         expect(changed).not.toContain('libraries/foo/src/Deleted.ts');
+    });
+
+});
+
+// Split out to keep each describe under the method-length limit.
+describe('getChangedFiles — deletions are opt-in', () => {
+    let root: string;
+    let base: string;
+
+    beforeEach(() => {
+        root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'diff-scope-')));
+        git(root, 'init -q -b main');
+        git(root, 'config user.email test@test.com');
+        git(root, 'config user.name test');
+        writeFile(root, 'libraries/foo/src/Keep.ts', 'export const keep = 1;\n');
+        writeFile(root, 'libraries/foo/src/Moved.ts', 'export const moved = 1;\n');
+        writeFile(root, 'libraries/foo/src/Deleted.ts', 'export const deleted = 1;\n');
+        git(root, 'add -A');
+        git(root, 'commit -q -m base');
+        base = git(root, 'rev-parse HEAD');
+    });
+
+    afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
+
+    /**
+     * Deletions are excluded BY DEFAULT — right for a lint validator (you cannot lint a file that is gone),
+     * and wrong for checklist matching. A PR that DELETES a migration, an auth check or a terraform rule
+     * changed exactly the thing a checklist exists to catch, and under the default the file is invisible,
+     * so no checklist fires and no reviewer is ever asked. `includeDeletions` is how the review flow opts in.
+     */
+    it('includeDeletions:true surfaces a deleted file that the default hides', () => {
+        git(root, 'rm -q libraries/foo/src/Deleted.ts');
+        git(root, 'commit -q -m delete');
+        const head = git(root, 'rev-parse HEAD');
+        const opts = new ChangedFilesOptions();
+        opts.tsOnly = false;
+
+        expect(getChangedFiles(root, base, head, opts)).not.toContain('libraries/foo/src/Deleted.ts');
+
+        opts.includeDeletions = true;
+        expect(getChangedFiles(root, base, head, opts)).toContain('libraries/foo/src/Deleted.ts');
+    });
+
+    // The default must stay byte-identical, so every existing lint-validator caller is unaffected.
+    it('leaves the default untouched when includeDeletions is omitted or false', () => {
+        git(root, 'rm -q libraries/foo/src/Deleted.ts');
+        git(root, 'commit -q -m delete');
+        const head = git(root, 'rev-parse HEAD');
+        const opts = new ChangedFilesOptions();
+        opts.tsOnly = false;
+        opts.includeDeletions = false;
+
+        expect(getChangedFiles(root, base, head, opts)).toEqual(getChangedFiles(root, base, head, { tsOnly: false }));
     });
 });

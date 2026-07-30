@@ -19,7 +19,6 @@ graph TD
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
     CheckPrCommand["CheckPrCommand"]
-    ChecklistCommand["ChecklistCommand"]
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
     ChecklistNotice["ChecklistNotice"]
@@ -27,6 +26,8 @@ graph TD
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
+    DiffBasisResolver["DiffBasisResolver"]
+    DiffMaterializer["DiffMaterializer"]
     DiffScope["DiffScope"]
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
@@ -47,6 +48,10 @@ graph TD
     PrMerger["PrMerger"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
+    ReviewStageReceiptService["ReviewStageReceiptService"]
+    ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
+    ReviewerBriefingBuilder["ReviewerBriefingBuilder"]
+    ReviewerInstructionsService["ReviewerInstructionsService"]
     RunUpdate["RunUpdate"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
@@ -60,16 +65,12 @@ graph TD
     BranchReaper --> MergedBranchesService
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
-    ChecklistCommand --> ChecklistInstructionsService
-    ChecklistCommand --> ChecklistNotice
-    ChecklistCommand --> ChecklistScanner
-    ChecklistCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope
     ChecklistInstructionsService --> ReviewJsonService
     ChecklistScanner --> AiBranchName
     ChecklistScanner --> ChecklistDetector
+    ChecklistScanner --> DiffBasisResolver
     ChecklistScanner --> DiffScope
-    ChecklistScanner --> ForkPoint
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
     CleanTmp --> RepoRootFinder
@@ -77,6 +78,8 @@ graph TD
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
+    DiffBasisResolver --> ForkPoint
+    DiffMaterializer --> ReviewJsonService
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
@@ -90,11 +93,11 @@ graph TD
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
-    FinishUpsertPrCommand --> MergeEnd
     FinishUpsertPrCommand --> MergeState
     FinishUpsertPrCommand --> PrMerger
     FinishUpsertPrCommand --> RepoRootFinder
     FinishUpsertPrCommand --> ReviewJsonService
+    FinishUpsertPrCommand --> ReviewStageReceiptService
     FinishUpsertPrCommand --> SubagentProvenanceService
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
@@ -127,13 +130,29 @@ graph TD
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
     PrGateApp --> CheckPrCommand
-    PrGateApp --> ChecklistCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
     PrGateApp --> LandPrCommand
+    PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
+    ReviewStageReceiptService --> ReviewJsonService
+    ReviewUpsertPrCommand --> AiBranchName
+    ReviewUpsertPrCommand --> BuildAffected
+    ReviewUpsertPrCommand --> ChecklistInstructionsService
+    ReviewUpsertPrCommand --> ChecklistNotice
+    ReviewUpsertPrCommand --> ChecklistScanner
+    ReviewUpsertPrCommand --> DiffMaterializer
+    ReviewUpsertPrCommand --> GitExec
+    ReviewUpsertPrCommand --> MergeEnd
+    ReviewUpsertPrCommand --> MergeState
+    ReviewUpsertPrCommand --> RepoRootFinder
+    ReviewUpsertPrCommand --> ReviewStageReceiptService
+    ReviewUpsertPrCommand --> ReviewerBriefingBuilder
+    ReviewUpsertPrCommand --> ReviewerInstructionsService
+    ReviewerBriefingBuilder --> ReviewJsonService
+    ReviewerInstructionsService --> ReviewJsonService
     RunUpdate --> AiBranchName
     RunUpdate --> MergeEnd
     RunUpdate --> MergeStart
@@ -143,7 +162,7 @@ graph TD
     StartUpdateCommand --> RunUpdate
     StartUpsertPrCommand --> AiBranchName
     StartUpsertPrCommand --> BranchNaming
-    StartUpsertPrCommand --> ForkPoint
+    StartUpsertPrCommand --> DiffBasisResolver
     StartUpsertPrCommand --> GitExec
     StartUpsertPrCommand --> PrContextWriter
     StartUpsertPrCommand --> RepoRootFinder

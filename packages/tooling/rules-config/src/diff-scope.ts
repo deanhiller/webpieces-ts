@@ -23,6 +23,16 @@ export class DiffRange {
 /** Options for getChangedFiles. `tsOnly` (default true) restricts to *.ts/*.tsx and drops test files. */
 export class ChangedFilesOptions {
     tsOnly?: boolean;
+    /**
+     * Include DELETED files in the result. Default false, which is `--diff-filter=d` — the historical
+     * behavior, kept as the default so every existing caller is byte-identical.
+     *
+     * The default is right for lint validators (you cannot lint a file that is gone) and WRONG for checklist
+     * matching: a PR that DELETES a migration, an auth check or a terraform rule changed exactly the thing a
+     * checklist exists to catch, and dropping it from the changed-file set means the checklist never fires
+     * and no reviewer is ever asked. The review flow sets this true.
+     */
+    includeDeletions?: boolean;
 }
 
 @injectable(bindingScopeValues.Singleton)
@@ -65,10 +75,13 @@ export class DiffScope {
         const tsOnly = opts?.tsOnly ?? true;
         const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
         const keep = (f: string): boolean => f.length > 0 && (!tsOnly || !this.isTestFile(f));
+        // Deletions are excluded by default (see ChangedFilesOptions.includeDeletions) — the review flow
+        // opts in, every lint validator keeps the historical filter.
+        const filter = opts?.includeDeletions === true ? '' : ' --diff-filter=d';
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const diffTarget = head ? `${base} ${head}` : base;
-            const output = execSync(`git diff --name-only --diff-filter=d ${diffTarget}${glob}`, {
+            const output = execSync(`git diff --name-only${filter} ${diffTarget}${glob}`, {
                 cwd: workspaceRoot,
                 encoding: 'utf-8',
             });
