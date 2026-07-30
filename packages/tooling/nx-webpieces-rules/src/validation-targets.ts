@@ -35,7 +35,7 @@ export class ValidationTargets {
         };
     }
 
-    // Validate the pr-gate checklists[] block in isolation (docs exist, patterns compile, ids unique,
+    // Validate the pr-gate checklists[] array in isolation (docs exist, reviewer agents exist, subagents
     // blockMessage on BLOCK) so a bad checklist config fails as ITS OWN check rather than as an
     // unrelated validator's banner. Depends only on webpieces.config.json + the docs it references.
     checklistDocs(): TargetConfiguration {

@@ -1,26 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { ChecklistDefinition, ChecklistSource } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 
 const notice = new ChecklistNotice();
 const FINISH = 'wp-finish-upsert-pr';
 
-// The legacy manifest-doc source and the primary array-in-config source, so every variant is exercised
-// against both — the notice must name whichever one the repo actually used.
-const DOC_SOURCE = new ChecklistSource([], '.claude/review/index.md');
-const ARRAY_SOURCE = new ChecklistSource([new ChecklistDefinition('r', 'r', '', ['**/*.sql'])], '');
-
-const noneConfigured = (): string => notice.build(new ChecklistSource(), [], 0, FINISH);
-const misconfigured = (errors: string[], source = DOC_SOURCE): string => notice.build(source, errors, 0, FINISH);
-const emptyManifest = (): string => notice.build(DOC_SOURCE, [], 0, FINISH);
-const noneMatched = (count: number, source = DOC_SOURCE): string => notice.build(source, [], count, FINISH);
+// There is exactly ONE place checklists are configured (the pr-gate.checklists array), so the notice takes a
+// count + the validator's errors — no "which source" to disambiguate any more.
+const noneConfigured = (): string => notice.build(0, FINISH);
+const noneMatched = (count: number): string => notice.build(count, FINISH);
 
 // The whole point of this class: 0 checklists is a SUPPORTED state, not a failure to be argued with.
 describe('zero checklists is never presented as a blocker', () => {
     const all = (): string[] => [
         noneConfigured(),
-        misconfigured(['[pr-gate] checklists.doc "x.md" does not exist']),
-        emptyManifest(),
         noneMatched(3),
     ];
 
@@ -47,8 +39,6 @@ describe('no checklists configured at all', () => {
         const text = noneConfigured();
         expect(text).toContain('NONE CONFIGURED');
         expect(text).toContain('that is fine');
-        expect(text).not.toContain('MISCONFIGURED');
-        expect(text).not.toContain('⚠️');
     });
 
     it('tells the human HOW to add checklists if they want them — the config array, patterns, and *.md docs', () => {
@@ -67,31 +57,16 @@ describe('no checklists configured at all', () => {
     });
 });
 
-describe('configured but broken — the case that used to enforce nothing, silently', () => {
-    it('is the only loud variant, and reproduces each validator error verbatim', () => {
-        const errors = [
-            '[pr-gate] checklists.doc "nope.md" does not exist — it must be a markdown doc carrying a manifest.',
-            '[pr-gate] duplicate subagent "db-reviewer"',
-        ];
-        const text = misconfigured(errors);
-        expect(text).toContain('⚠️');
-        expect(text).toContain('MISCONFIGURED');
-        expect(text).toContain('NO');
-        for (const e of errors) expect(text).toContain(e);
-    });
-
-    it('still does not block — a broken doc is reported, not enforced', () => {
-        expect(misconfigured(['[pr-gate] boom'])).toContain('pnpm wp-finish-upsert-pr');
-    });
-
-    it('takes precedence over the none-configured wording when a doc is set', () => {
-        expect(misconfigured(['[pr-gate] boom'])).not.toContain('NONE CONFIGURED');
-    });
-
-    // A reader has to know WHICH file to open, and that differs by shape.
-    it('names the source that is broken — the doc path, or the config key for the array shape', () => {
-        expect(misconfigured(['[pr-gate] boom'])).toContain('.claude/review/index.md');
-        expect(misconfigured(['[pr-gate] boom'], ARRAY_SOURCE)).toContain('pr-gate.checklists in webpieces.config.json');
+// There is deliberately no "misconfigured" variant left: checklists live only in pr-gate.checklists, and
+// loadAndValidate validates that set (docs + reviewer agent files included), so a broken one throws before
+// any command reaches ChecklistNotice. The tolerant manifest loader that made silent misconfiguration
+// possible is gone.
+describe('the silently-misconfigured state is now impossible, not merely reported', () => {
+    it('has no misconfigured wording, because a broken set never reaches this class', () => {
+        for (const text of [noneConfigured(), noneMatched(3)]) {
+            expect(text).not.toContain('MISCONFIGURED');
+            expect(text).not.toContain('⚠️');
+        }
     });
 });
 
@@ -104,12 +79,7 @@ describe('configured and valid, but nothing matched this diff', () => {
         expect(text).not.toContain('⚠️');
     });
 
-    it('a readable doc that defines nothing usable is distinguished from one that matched nothing', () => {
-        expect(emptyManifest()).toContain('0 defined');
-        expect(emptyManifest()).not.toContain('0 matched');
-    });
-
-    it('names the array-in-config source when that is where the checklists came from', () => {
-        expect(noneMatched(2, ARRAY_SOURCE)).toContain('pr-gate.checklists in webpieces.config.json');
+    it('names the config key so a human can check the patterns that did not fire', () => {
+        expect(noneMatched(2)).toContain('pr-gate.checklists');
     });
 });

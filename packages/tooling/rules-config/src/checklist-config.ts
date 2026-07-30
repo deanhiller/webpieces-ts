@@ -3,24 +3,20 @@ import * as path from 'path';
 // A company review checklist: a diff-triggered extension point that lets a CONSUMER inject its own
 // PR-time review process into the webpieces gated flow WITHOUT forking the tooling. Each checklist names
 // a reviewer SUBAGENT (a `.claude/agents/<subagent>.md`) and the doc that reviewer reads; when the diff
-// matches the checklist's `patterns`, wp-start-upsert-pr tells the AI to spawn that subagent to review
-// it, and wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json exists
-// AND that named subagent is proven (from the harness's own artifacts) to have actually run.
+// matches the checklist's `patterns`, wp-checklist tells the AI to spawn that subagent to review it, and
+// wp-finish-upsert-pr refuses to open the PR until a well-formed, passing review-<id>.json exists AND that
+// named subagent is proven (from the harness's own artifacts) to have actually run.
 //
-// TWO config shapes are supported (see ChecklistSource):
-//   PRIMARY  — `checklists: [ { subagent, doc?, patterns? } ]` in webpieces.config.json. `patterns` is a
-//              path-glob dispatch table and `subagent` is a name binding: both are config, so they live
-//              where every tool that reads webpieces.config.json can see, grep, and schema them.
-//   LEGACY   — `checklists: { "doc": "..." }`, where the array lives in an HTML comment inside that doc.
-//              Still loaded (it is shipped and consumers depend on it), but no longer the recommended form.
+// Checklists are configured as an ARRAY in `pr-gate.checklists` in webpieces.config.json — the ONLY
+// accepted shape. `patterns` is a path-glob dispatch table and `subagent` is a name binding: both are
+// config, so they live where every tool that reads webpieces.config.json can see, grep and schema them.
 // Data-only.
 export class ChecklistDefinition {
     id: string;         // = the subagent name; keys review-<id>.json and the dashboard row
     subagent: string;   // reviewer agent name → .claude/agents/<subagent>.md; the agentType the harness stamps
-    // REPO-RELATIVE guidance doc the reviewer reads (may be '' — then it reads the manifest doc). Always
-    // repo-relative by the time it reaches here, whichever config shape it came from, because this value is
-    // printed verbatim to a reviewer subagent as "the file to open" — a path relative to some other file's
-    // directory is unresolvable from where that subagent stands.
+    // REPO-RELATIVE guidance doc the reviewer reads (may be '' — then it just reads the diff). Repo-relative
+    // because this value is printed verbatim to a reviewer subagent as "the file to open", and a path
+    // relative to anything else is unresolvable from where that subagent stands.
     doc: string;
     patterns: string[]; // path globs (isPathExcluded semantics); [] = matches any changed file (always runs)
 
@@ -32,38 +28,7 @@ export class ChecklistDefinition {
     }
 }
 
-/**
- * WHERE a repo's checklists come from. Exactly one of the two is populated (an array in
- * webpieces.config.json wins when both are present, and validation says so), and both are empty for the
- * common case of a repo with no checklists at all. Data-only.
- */
-export class ChecklistSource {
-    // The array form straight from `pr-gate.checklists` in webpieces.config.json (PRIMARY). Already
-    // narrowed + repo-relative-resolved. [] when the repo uses the legacy `{ doc }` form or has none.
-    inline: ChecklistDefinition[];
-    // Repo-relative path of the ONE doc carrying a `<!-- webpieces:checklists [...] -->` manifest (LEGACY).
-    // '' when the repo uses the array form or has no checklists.
-    doc: string;
-
-    constructor(inline: ChecklistDefinition[] = [], doc = '') {
-        this.inline = inline;
-        this.doc = doc;
-    }
-
-    // True when this repo configured no checklists at all (neither shape).
-    isEmpty(): boolean {
-        return this.inline.length === 0 && this.doc.trim() === '';
-    }
-
-    // How to NAME this source in a message: the config key for the array form, the doc path for the
-    // manifest form. Every checklist error/notice cites one of these so a reader knows what file to open.
-    describe(): string {
-        if (this.doc.trim() !== '') return this.doc;
-        return 'pr-gate.checklists in webpieces.config.json';
-    }
-}
-
-// One manifest/config entry straight from JSON, before it is validated + narrowed into a class.
+// One config entry straight from JSON, before it is validated + narrowed into a class.
 export interface RawChecklistItem {
     subagent?: string;
     doc?: string;
@@ -72,17 +37,23 @@ export interface RawChecklistItem {
 
 /**
  * Build a ChecklistDefinition from an omitting-friendly raw entry. `id` defaults to the subagent name (the
- * only stable, human-meaningful key we have). `docBaseRel` is the repo-relative DIRECTORY that a relative
- * `raw.doc` resolves against: '' for the array-in-config form (repo root), `dirname(manifestDoc)` for the
- * legacy manifest form. The stored `doc` is always repo-relative — see ChecklistDefinition.doc.
+ * only stable, human-meaningful key we have).
  */
 // webpieces-disable no-function-outside-class -- pure config transform beside its data class
-export function toChecklist(raw: RawChecklistItem, docBaseRel = ''): ChecklistDefinition {
+export function toChecklist(raw: RawChecklistItem): ChecklistDefinition {
     const subagent = raw.subagent ?? '';
-    return new ChecklistDefinition(subagent, subagent, resolveChecklistDoc(raw.doc ?? '', docBaseRel), raw.patterns ?? []);
+    return new ChecklistDefinition(subagent, subagent, normalizeChecklistDoc(raw.doc ?? ''), raw.patterns ?? []);
 }
 
-// The ONE cap for every printed matched-file list. Two print sites used to slice to 4 and to 5 — two
+/** Normalize a checklist entry's repo-relative `doc` to a POSIX path, so every printed path matches. */
+// webpieces-disable no-function-outside-class -- pure path transform beside its data class
+export function normalizeChecklistDoc(doc: string): string {
+    const trimmed = doc.trim();
+    if (trimmed === '') return '';
+    return path.posix.normalize(trimmed.split(path.sep).join('/'));
+}
+
+// The ONE cap for every printed matched-file list. Two print sites once used to slice to 4 and to 5 — two
 // different caps for the same list, neither chosen deliberately, and both without an ellipsis.
 export const MATCHED_FILES_CAP = 6;
 
@@ -96,18 +67,4 @@ export function formatFileList(files: readonly string[], cap: number = MATCHED_F
     if (files.length === 0) return '(none)';
     if (files.length <= cap) return files.join(', ');
     return `${files.slice(0, cap).join(', ')}, +${files.length - cap} more (${files.length} total)`;
-}
-
-/**
- * Resolve a checklist entry's `doc` to a repo-relative POSIX path. This is the fix for a reviewer subagent
- * being handed a bare `deploy-infra.md` that exists nowhere relative to its CWD: the resolution against the
- * manifest doc's directory happens ONCE, here, instead of being re-derived (or forgotten) at each print site.
- */
-// webpieces-disable no-function-outside-class -- pure path transform beside its data class
-export function resolveChecklistDoc(doc: string, docBaseRel: string): string {
-    const trimmed = doc.trim();
-    if (trimmed === '') return '';
-    const base = docBaseRel.trim();
-    const joined = base === '' || base === '.' ? trimmed : `${base}/${trimmed}`;
-    return path.posix.normalize(joined.split(path.sep).join('/'));
 }

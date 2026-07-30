@@ -156,13 +156,12 @@ export {
 } from './pr-gate-config';
 export {
     ChecklistDefinition,
-    ChecklistSource,
     toChecklist,
-    resolveChecklistDoc,
+    normalizeChecklistDoc,
     formatFileList,
 } from './checklist-config';
 export type { RawChecklistItem } from './checklist-config';
-export { ChecklistManifestService } from './checklist-manifest';
+export { ChecklistValidator } from './checklist-validator';
 export { ChecklistInstructionsService } from './checklist-instructions';
 export {
     GateTokenService,

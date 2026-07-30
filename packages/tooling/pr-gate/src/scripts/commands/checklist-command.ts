@@ -1,5 +1,5 @@
 import {
-    loadAndValidate, reviewJsonPath, writeTemplate, RepoRootFinder, ChecklistManifestService,
+    loadAndValidate, reviewJsonPath, writeTemplate, RepoRootFinder,
     ChecklistDefinition, ChecklistInstructionsService, ReviewJsonService, RequiredChecklist,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -26,7 +26,6 @@ export class ChecklistCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
-        private readonly manifestService: ChecklistManifestService,
         private readonly checklistDetector: ChecklistDetector,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly instructions: ChecklistInstructionsService,
@@ -47,13 +46,14 @@ export class ChecklistCommand {
      * so "wp-checklist said I was done" and "wp-finish let me through" can never disagree.
      */
     private report(repoRoot: string): string {
-        const source = loadAndValidate(repoRoot).prGate.checklists;
-        const defs = this.manifestService.load(repoRoot, source);
+        // loadAndValidate is the ONE gate: it rejects a structurally bad `checklists` (including the removed
+        // { doc } manifest shape) AND checks that every guidance doc + reviewer agent file exists. So reaching
+        // here means the set is valid — there is no "configured but silently broken" state left to report.
+        const defs = loadAndValidate(repoRoot).prGate.checklists;
         const triggered = this.checklistDetector.detectForRepo(repoRoot, defs);
         if (triggered.length === 0) {
-            // Zero is a SUPPORTED state, never a blocker — and a configured-but-broken source is reported
-            // loudly here rather than silently enforcing nothing (see ChecklistNotice).
-            return this.checklistNotice.build(source, this.manifestService.validate(repoRoot, source), defs.length, 'wp-finish-upsert-pr');
+            // Zero is a SUPPORTED state, never a blocker (see ChecklistNotice).
+            return this.checklistNotice.build(defs.length, 'wp-finish-upsert-pr');
         }
         return this.plan(repoRoot, defs, triggered);
     }

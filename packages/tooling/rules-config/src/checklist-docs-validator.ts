@@ -5,11 +5,12 @@ import { validateChecklistsSection } from './validate-config';
 import { toError } from './to-error';
 
 /**
- * Validate ONLY the pr-gate `checklists` config + its manifest doc, in isolation — the `{ doc }` shape,
- * that the doc exists and carries a valid `<!-- webpieces:checklists [...] -->` block, each entry's
- * subagent is present + distinct, each item doc exists, patterns are string[]. Same logic loadAndValidate
- * runs, but callable directly so a broken review manifest fails as its OWN `validate-checklist-docs` check
- * (clear owner) instead of surfacing as an unrelated validator's banner. Returns errors; never throws.
+ * Validate ONLY the pr-gate `checklists` array, in isolation — that it IS an array (the removed `{ doc }`
+ * manifest shape is rejected with its migration steps), each entry's subagent is present, distinct, and
+ * names a real `.claude/agents/<subagent>.md`, each entry's repo-relative doc exists, and patterns are
+ * string[]. Same logic loadAndValidate runs, but callable directly so broken checklists fail as their OWN
+ * `validate-checklist-docs` check (clear owner) instead of surfacing as an unrelated validator's banner.
+ * Returns errors; never throws.
  */
 // webpieces-disable no-function-outside-class -- module-level config validator, matches validate-config.ts
 export function validateChecklistDocs(cwd: string): string[] {

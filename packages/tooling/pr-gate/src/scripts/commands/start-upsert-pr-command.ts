@@ -89,7 +89,7 @@ export class StartUpsertPrCommand {
      * forever at a repo that will never have one is noise, and silence reads as "a checklist passed".
      */
     private checklistPointer(repoRoot: string): string {
-        if (loadAndValidate(repoRoot).prGate.checklists.isEmpty()) {
+        if (loadAndValidate(repoRoot).prGate.checklists.length === 0) {
             return '📋 Review checklists: NONE CONFIGURED for this repo — nothing to run, and that is fine.\n';
         }
         return (

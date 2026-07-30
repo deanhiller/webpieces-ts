@@ -81,14 +81,6 @@
                     "level": 2
                 },
                 {
-                    "id": "ChecklistManifestService",
-                    "className": "ChecklistManifestService",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/checklist-manifest.ts",
-                    "level": 2
-                },
-                {
                     "id": "ChecklistNotice",
                     "className": "ChecklistNotice",
                     "kind": "class",
@@ -380,15 +372,6 @@
                 },
                 {
                     "from": "ChecklistCommand",
-                    "to": "ChecklistManifestService",
-                    "injection": "type",
-                    "token": "ChecklistManifestService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
-                    "paramName": "manifestService",
-                    "paramType": "ChecklistManifestService"
-                },
-                {
-                    "from": "ChecklistCommand",
                     "to": "ChecklistNotice",
                     "injection": "type",
                     "token": "ChecklistNotice",
@@ -530,15 +513,6 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
                     "paramName": "instructions",
                     "paramType": "ChecklistInstructionsService"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
-                    "to": "ChecklistManifestService",
-                    "injection": "type",
-                    "token": "ChecklistManifestService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
-                    "paramName": "manifestService",
-                    "paramType": "ChecklistManifestService"
                 },
                 {
                     "from": "FinishUpsertPrCommand",

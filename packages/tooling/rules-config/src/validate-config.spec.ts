@@ -513,21 +513,18 @@ function validPrGate(checklists: unknown): Record<string, unknown> {
     return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gates: [], checklists };
 }
 
-// Write an index doc with a webpieces:checklists manifest under a temp repo; return the repo root.
-function repoWithManifest(items: unknown[], extraDocs: string[] = []): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
+// A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
+function repoWith(docs: string[] = [], agents: string[] = []): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklists-'));
     fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
-    for (const d of extraDocs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
-    fs.writeFileSync(
-        path.join(dir, '.claude', 'review', 'index.md'),
-        `# review\n<!-- webpieces:checklists\n${JSON.stringify(items)}\n-->\n`,
-    );
+    for (const d of docs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
+    if (agents.length > 0) {
+        fs.mkdirSync(path.join(dir, '.claude', 'agents'), { recursive: true });
+        for (const a of agents) fs.writeFileSync(path.join(dir, '.claude', 'agents', `${a}.md`), '# agent');
+    }
     return dir;
 }
 
-// The PRIMARY shape: the checklist array right in webpieces.config.json, where a tool can read it.
-// webpieces.config.json is the first file a coding agent reads, so a rationale note beside gateSalt is a
-// bypass how-to in the most-read file in the repo. It is the ONE *Why key that is rejected outright.
 describe('validatePrGateSection rejects gateSaltWhy', () => {
     it('tells the consumer to delete it, so the next validate on upgrade forces removal', () => {
         const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', gateSalt: 's', gateSaltWhy: 'it works like this...' };
@@ -541,17 +538,17 @@ describe('validatePrGateSection rejects gateSaltWhy', () => {
     });
 });
 
-describe('validatePrGateSection checklists (array in webpieces.config.json)', () => {
+describe('validatePrGateSection checklists — the array in webpieces.config.json is the ONLY shape', () => {
     it('accepts a well-formed array with repo-relative docs', () => {
-        const dir = repoWithManifest([], ['db.md']);
+        const dir = repoWith(['db.md'], ['db-reviewer']);
         const errors = validatePrGateSection(validPrGate([
             { subagent: 'db-reviewer', doc: '.claude/review/db.md', patterns: ['**/*.sql'] },
         ]), dir);
         expect(errors).toEqual([]);
     });
 
-    it('resolves item docs REPO-relative, not relative to any manifest doc', () => {
-        const dir = repoWithManifest([], ['db.md']);
+    it('resolves item docs REPO-relative — a bare filename is not found', () => {
+        const dir = repoWith(['db.md'], ['db-reviewer']);
         const errors = validatePrGateSection(validPrGate([{ subagent: 'db-reviewer', doc: 'db.md' }]), dir);
         expect(errors.some((e: string): boolean => /\.doc "db\.md" does not exist/.test(e))).toBe(true);
     });
@@ -562,63 +559,69 @@ describe('validatePrGateSection checklists (array in webpieces.config.json)', ()
         expect(validatePrGateSection(validPrGate([{ subagent: 'r', patterns: [1] }])).some((e: string): boolean => /checklists\[0\]\.patterns must be a string\[\]/.test(e))).toBe(true);
     });
 
-    it('rejects a duplicate subagent in the array shape too', () => {
-        const dir = repoWithManifest([]);
+    it('rejects a duplicate subagent', () => {
+        const dir = repoWith([], ['r']);
         const errors = validatePrGateSection(validPrGate([{ subagent: 'r' }, { subagent: 'r' }]), dir);
         expect(errors.some((e: string): boolean => /duplicate subagent "r"/.test(e))).toBe(true);
     });
 
+    it('rejects a subagent with no .claude/agents/<name>.md', () => {
+        const dir = repoWith([], ['db-reviewer']);
+        const errors = validatePrGateSection(validPrGate([{ subagent: 'db-revewer' }]), dir);
+        expect(errors.some((e: string): boolean => /names no reviewer/.test(e))).toBe(true);
+    });
+
+    it('leaves the reviewer-agent check off for a repo with no .claude/agents dir', () => {
+        const dir = repoWith();
+        expect(validatePrGateSection(validPrGate([{ subagent: 'nobody' }]), dir)).toEqual([]);
+    });
+
     it('an empty array is valid — it means "no checklists"', () => {
-        expect(validatePrGateSection(validPrGate([]), repoWithManifest([]))).toEqual([]);
+        expect(validatePrGateSection(validPrGate([]), repoWith())).toEqual([]);
     });
 });
 
-describe('validatePrGateSection checklists ({ doc } manifest)', () => {
-    it('rejects checklists that is neither an array nor an object with a doc', () => {
-        const errors = validatePrGateSection(validPrGate('nope'));
-        expect(errors.some((e: string): boolean => /"checklists" must be an array/.test(e))).toBe(true);
+/**
+ * The `{ doc }` manifest shape is REMOVED, not deprecated. A consumer still on it must FAIL — loudly, with
+ * the exact edit — rather than be quietly carried along by a compatibility branch. This is the whole point:
+ * an AI applies the printed migration in one pass, so permanent duality buys nothing.
+ */
+describe('validatePrGateSection rejects the removed { doc } manifest shape', () => {
+    const legacy = { doc: '.claude/review/index.md' };
+
+    it('fails, and never silently accepts it', () => {
+        expect(validatePrGateSection(validPrGate(legacy)).length).toBeGreaterThan(0);
     });
 
-    it('rejects an empty checklists.doc', () => {
-        const errors = validatePrGateSection(validPrGate({ doc: '' }));
-        expect(errors.some((e: string): boolean => /"checklists.doc" must be a non-empty string/.test(e))).toBe(true);
+    it('names the doc the consumer pointed at, so they know which file holds the array to move', () => {
+        const err = validatePrGateSection(validPrGate(legacy)).join('\n');
+        expect(err).toContain('.claude/review/index.md');
+        expect(err).toContain('REMOVED');
     });
 
-    it('rejects a doc path that does not exist', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
-        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors.some((e: string): boolean => /checklists.doc ".claude\/review\/index.md" does not exist/.test(e))).toBe(true);
+    it('spells out the migration, including that entry docs become REPO-relative', () => {
+        const err = validatePrGateSection(validPrGate(legacy)).join('\n');
+        expect(err).toContain('webpieces:checklists');
+        expect(err).toContain('REPO-relative');
+        expect(err).toContain('"checklists": <that array>');
     });
 
-    it('accepts a well-formed manifest', () => {
-        const dir = repoWithManifest([{ subagent: 'morpheus-envvars-reviewer', doc: 'envvars.md', patterns: ['**/.env*'] }], ['envvars.md']);
-        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors).toEqual([]);
+    // Even with a repoRoot to inspect, there is no path that reads the manifest doc any more.
+    it('fails identically when a repoRoot is available — nothing reads the doc now', () => {
+        const dir = repoWith(['index.md']);
+        expect(validatePrGateSection(validPrGate(legacy), dir).join('\n')).toContain('REMOVED');
     });
 
-    it('rejects a duplicate subagent (each checklist must use a distinct reviewer)', () => {
-        const dir = repoWithManifest([{ subagent: 'r' }, { subagent: 'r' }]);
-        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors.some((e: string): boolean => /duplicate subagent "r"/.test(e))).toBe(true);
+    it('still fails when doc is empty or the object is otherwise empty', () => {
+        expect(validatePrGateSection(validPrGate({ doc: '' })).length).toBeGreaterThan(0);
     });
+});
 
-    it('rejects a missing subagent', () => {
-        const dir = repoWithManifest([{ doc: 'x.md' }]);
-        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors.some((e: string): boolean => /checklists\[0\].subagent must be a non-empty string/.test(e))).toBe(true);
-    });
-
-    it('rejects an item doc that does not exist, naming its resolved repo-relative path', () => {
-        const dir = repoWithManifest([{ subagent: 'r', doc: 'gone.md' }]);
-        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors.some((e: string): boolean => /\.doc "\.claude\/review\/gone\.md" does not exist/.test(e))).toBe(true);
-    });
-
-    it('rejects a doc with no manifest block', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-checklist-'));
-        fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
-        fs.writeFileSync(path.join(dir, '.claude', 'review', 'index.md'), '# just prose, no manifest');
-        const errors = validatePrGateSection(validPrGate({ doc: '.claude/review/index.md' }), dir);
-        expect(errors.some((e: string): boolean => /has no <!-- webpieces:checklists/.test(e))).toBe(true);
+describe('validatePrGateSection rejects every non-array checklists value', () => {
+    it('rejects a string, a number, and null with the array requirement + an example', () => {
+        for (const bad of ['nope', 7, null]) {
+            const errors = validatePrGateSection(validPrGate(bad));
+            expect(errors.some((e: string): boolean => /"checklists" must be an ARRAY/.test(e))).toBe(true);
+        }
     });
 });

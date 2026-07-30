@@ -380,8 +380,8 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
 
     if ('gates' in s) errors.push(...validateGatesSection(s['gates']));
 
-    // Optional extension point: company review checklists. The config only points at ONE manifest doc —
-    // { "doc": "..." } — and the checklist SET lives in that doc. Absent ⇒ no checklists.
+    // Optional extension point: company review checklists, as an ARRAY right here in the config. Absent ⇒
+    // none. The removed { doc } manifest shape is rejected with the exact migration edit.
     if ('checklists' in s) errors.push(...validateChecklistsSection(s['checklists'], repoRoot));
 
     // Optional server-token salt. Absent ⇒ no token minted, CI enforcement is a no-op. Present ⇒ must be

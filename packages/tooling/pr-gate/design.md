@@ -21,7 +21,6 @@ graph TD
     ChecklistCommand["ChecklistCommand"]
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
-    ChecklistManifestService["ChecklistManifestService"]
     ChecklistNotice["ChecklistNotice"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
@@ -57,7 +56,6 @@ graph TD
     ChecklistCommand --> AiBranchName
     ChecklistCommand --> ChecklistDetector
     ChecklistCommand --> ChecklistInstructionsService
-    ChecklistCommand --> ChecklistManifestService
     ChecklistCommand --> ChecklistNotice
     ChecklistCommand --> RepoRootFinder
     ChecklistCommand --> ReviewJsonService
@@ -74,7 +72,6 @@ graph TD
     FinishUpsertPrCommand --> BuildAffected
     FinishUpsertPrCommand --> ChecklistDetector
     FinishUpsertPrCommand --> ChecklistInstructionsService
-    FinishUpsertPrCommand --> ChecklistManifestService
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
