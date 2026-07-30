@@ -378,16 +378,29 @@ pnpm wp-finish-upsert-pr       # authoritative build gate, then creates/updates 
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 
-Once the PR merges, clean up with `pnpm wp-cleanup` — **never `git branch -D`**:
+Once the PR merges, clean up. Pick the form for the tree you are in — `git checkout main` fatals in a
+linked worktree (`main is already checked out at <primary clone>`), so the two forms are not
+interchangeable:
 
-```bash
-gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup
-```
+- in the primary clone:
+  ```bash
+  gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup
+  ```
+- in a linked worktree — merge, then reap the now-dead worktree **from the primary clone**, always
+  prune → remove → delete in that order (git refuses to delete a branch a worktree still holds, so
+  `wp-cleanup` deliberately spares it):
+  ```bash
+  gh pr merge --squash
+  git worktree prune && git worktree remove ../<feature-dir> && git branch -D <branch>
+  ```
+  That `git branch -D` is the one sanctioned use of it: for **branches**, still `pnpm wp-cleanup`,
+  never `git branch -D` by hand.
 
-`wp-cleanup` deletes only provably-dead branches (merged PR, squash-merge backup of one, or no
-commits of their own), spares everything else for a human, and logs each deletion with its
-pre-delete SHA and a `recover=` command. Do not stop to ask whether it is safe to run — it is the
-sanctioned cleanup command, and asking is what let stale branches pile up in the first place.
+Either way `wp-cleanup` deletes only provably-dead branches (merged PR, squash-merge backup of one,
+or no commits of their own), spares everything else for a human, and logs each deletion with its
+pre-delete SHA and a `recover=` command. Do not stop to ask whether it is safe to run, and do not
+treat picking the right form as a reason to deliberate — it is the sanctioned cleanup command, and
+asking is what let stale branches pile up in the first place.
 
 **The ONLY reasons to stop before posting the PR:**
 - The human explicitly said "don't open a PR yet."
