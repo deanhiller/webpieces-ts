@@ -104,9 +104,10 @@ flow are not interchangeable.
 2. **`pnpm wp-finish-update`** — finalize a squash-update after you've resolved its conflicts (validates +
    commits + swaps the branch). Only needed on the conflict path; a clean `wp-start-update` finalizes
    itself. It does NOT build or post a PR.
-3. **`pnpm wp-start-upsert-pr`** — the PR flow: update from main (same 3-point engine), push, run an
-   advisory build gate, then tells you to write `review.json`. Never creates the PR itself. On a merge
-   conflict here, finish with `pnpm wp-finish-upsert-pr` (not `wp-finish-update`).
+3. **`pnpm wp-start-upsert-pr`** — the PR flow: update from main (same 3-point engine), then tells you to
+   run `wp-checklist` + write `review.json`. It runs NO build gate and does NOT push — start only syncs
+   from main; the single (authoritative) build gate and the one push both live in finish. Never creates
+   the PR itself. On a merge conflict here, finish with `pnpm wp-finish-upsert-pr` (not `wp-finish-update`).
 4. **`pnpm wp-finish-upsert-pr`** — validates any in-progress merge, requires your `review.json` (its
    `title` becomes the PR title), runs the **authoritative** build gate, pushes, and creates/updates the PR.
 5. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge

@@ -39,7 +39,7 @@ export class PrGateApp {
         return this.finishUpdateCommand.run();
     }
 
-    /** `wp-start-upsert-pr`: update from main, push, advisory build gate, hand off review.json. */
+    /** `wp-start-upsert-pr`: update from main (3-point merge), hand off review.json. No build gate, no push. */
     startUpsertPr(): Promise<void> {
         return this.startUpsertPrCommand.run();
     }

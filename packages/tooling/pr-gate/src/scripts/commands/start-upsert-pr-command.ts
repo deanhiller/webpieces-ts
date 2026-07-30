@@ -3,23 +3,23 @@ import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, w
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
-import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { GitExec } from '../workflow/git-exec';
 import { RunUpdate } from '../workflow/run-update';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-// START of the AI-first PR flow: the deterministic setup — update from main, run the advisory build gate
-// — then hand the AI instructions to WRITE review.json and run `wp-finish-upsert-pr` (which reads it and
-// posts the PR). This command NEVER creates/updates a PR and NEVER pushes: all `gh` posting and the ONE
-// push live in finish, behind review.json + the checklists + the authoritative build gate.
+// START of the AI-first PR flow: the deterministic setup — update from main — then hand the AI
+// instructions to run `wp-checklist`, WRITE review.json, and run `wp-finish-upsert-pr` (which reads it
+// and posts the PR). It runs NO build gate: start's job is the update / 3-point merge, and the SINGLE
+// build gate is authoritative and lives in wp-finish-upsert-pr (so `pr-gate.buildCommand` is a
+// finish-only knob). This command NEVER creates/updates a PR and NEVER pushes: all `gh` posting and the
+// ONE push live in finish, behind review.json + the checklists + the authoritative build gate.
 @injectable(bindingScopeValues.Singleton)
 export class StartUpsertPrCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly branchNaming: BranchNaming,
-        private readonly buildAffected: BuildAffected,
         private readonly gitExec: GitExec,
         private readonly runUpdate: RunUpdate,
         private readonly reviewJsonService: ReviewJsonService,
@@ -46,12 +46,8 @@ export class StartUpsertPrCommand {
         // remote, and there is no early `synchronize` firing against a PR body with a stale gate token.
         await this.updateBranchFromMain(repoRoot);
 
-        // Advisory build gate — early feedback before the AI writes review.json. wp-finish-upsert-pr
-        // runs the authoritative one. Both go through the same runBuildGate (only the framing differs).
-        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
-            '② Build gate (nx affected)', 'pnpm wp-start-upsert-pr', 'Build failed — fix it before reviewing.',
-        ));
-
+        // No build gate here — start only updates from main / drives the 3-point merge. The one build
+        // gate is authoritative and runs in wp-finish-upsert-pr, after review.json + every checklist.
         this.handOffToReview(repoRoot);
     }
 
@@ -71,9 +67,9 @@ export class StartUpsertPrCommand {
         // Persist the PR diff context (base sha + the full changed-file set) — wp-checklist and every reviewer
         // subagent read it, so it must exist before either runs.
         const context = this.writePrContext(repoRoot);
-        process.stdout.write('\n' + SEP + '③ Review the PR, then finish\n' + SEP + '\n');
+        process.stdout.write('\n' + SEP + '② Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
-            `Branch is updated and the build gate passed (nothing pushed yet — finish does the one push).\n` +
+            `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +
             `${this.contextLines(context)}\n` +
             `${this.checklistPointer(repoRoot)}\n` +
             `Then review your own changes and\n` +

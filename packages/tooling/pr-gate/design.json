@@ -975,15 +975,6 @@
                 },
                 {
                     "from": "StartUpsertPrCommand",
-                    "to": "BuildAffected",
-                    "injection": "type",
-                    "token": "BuildAffected",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
-                    "paramName": "buildAffected",
-                    "paramType": "BuildAffected"
-                },
-                {
-                    "from": "StartUpsertPrCommand",
                     "to": "DiffScope",
                     "injection": "type",
                     "token": "DiffScope",
