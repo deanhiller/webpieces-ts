@@ -27,9 +27,13 @@ export type MutationVerb =
 // A boundary within a verb's execution. START/END bracket the whole run; the middle phases mark each
 // irreversible git step so an interrupt leaves a breadcrumb at the last phase reached.
 // REAP is a whole mutation in one line (a branch delete has no phases) — see BranchReaper.
+// REAP_WORKTREE is its worktree twin: archive → `git worktree remove` → `git branch -D`, all three of
+// which succeed or fail as one act. It is a SEPARATE phase, not just a REAP with a path, so that
+// `grep REAP_WORKTREE` answers "what directories did the tooling delete?" — a strictly scarier
+// question than "what refs did it delete?", since a worktree removal takes real files with it.
 export type MutationPhase =
     | 'START' | 'BACKUP' | 'CHECKOUT_MAIN' | 'PULL' | 'SQUASH' | 'RENAME'
-    | 'FINALIZE' | 'CONFLICT' | 'INTERRUPTED' | 'END' | 'REAP';
+    | 'FINALIZE' | 'CONFLICT' | 'INTERRUPTED' | 'END' | 'REAP' | 'REAP_WORKTREE';
 
 // Data-only record of one branch-mutation event (per CLAUDE.md: classes for data, explicit construction).
 export class BranchMutationEvent {
@@ -53,6 +57,11 @@ export class BranchMutationEvent {
     // survives `gc` and reflog expiry and can be pushed, whereas a bare sha is only recoverable while
     // this clone's reflog still holds it. Empty when nothing was tagged (retention policy 'delete').
     archiveTag: string = '';
+    // The directory a REAP_WORKTREE removed. When set, `recover=` becomes the WORKTREE form
+    // (`git worktree add -b <branch> <path> <ref>`) rather than the bare `git branch` form: putting the
+    // ref back does not put the directory back, and a recover line that restores half of what was
+    // destroyed is worse than none — it reads as done. Empty for every mutation that removes no directory.
+    worktreePath: string = '';
 
     constructor(verb: MutationVerb, phase: MutationPhase) {
         this.verb = verb;
@@ -109,7 +118,9 @@ export class BranchMutationLog {
         if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
         // Emitted as one unit so the hash is never separated from the command that undoes the delete.
         // Prefer the archive TAG as the recover ref when there is one — it does not expire.
-        if (event.sha !== '' && event.archiveTag !== '') {
+        if (event.worktreePath !== '') {
+            parts.push(this.worktreeDetail(event));
+        } else if (event.sha !== '' && event.archiveTag !== '') {
             parts.push(
                 `sha=${event.sha} archiveTag=${event.archiveTag} ` +
                 `recover=git checkout -b ${event.fromBranch || '?'} ${event.archiveTag}`,
@@ -119,6 +130,28 @@ export class BranchMutationLog {
         }
         for (const artifact of event.artifacts) parts.push(`artifact=${artifact}`);
         return parts.join(' ');
+    }
+
+    /**
+     * The worktree flavour of the sha/recover token: path, tip, archive tag and the ONE command that
+     * puts the directory AND the branch back together.
+     *
+     * `git worktree add -b <branch> <path> <ref>` is verified by hand and in worktree-reaper.spec.ts —
+     * plain `git worktree add <path> <tag>` would restore the files at a DETACHED HEAD, silently losing
+     * the branch name the reap destroyed. Falls back to the sha when nothing was archived (retention
+     * 'delete'), and to a bare `git worktree add <path>` when there was no branch at all (detached).
+     */
+    private worktreeDetail(event: BranchMutationEvent): string {
+        const ref = event.archiveTag !== '' ? event.archiveTag : event.sha;
+        const tokens = [`worktree=${event.worktreePath}`];
+        if (event.sha !== '') tokens.push(`sha=${event.sha}`);
+        if (event.archiveTag !== '') tokens.push(`archiveTag=${event.archiveTag}`);
+        if (ref === '') return tokens.join(' ');
+        const recover = event.fromBranch !== ''
+            ? `git worktree add -b ${event.fromBranch} ${event.worktreePath} ${ref}`
+            : `git worktree add ${event.worktreePath} ${ref}`;
+        tokens.push(`recover=${recover}`);
+        return tokens.join(' ');
     }
 
     // Collapse newlines/tabs and cap length so one event is always exactly one log line.

@@ -567,15 +567,21 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     }
 
     /**
-     * The worktree reap instructions.
+     * The worktree reap remedy.
      *
-     * The command ORDER is load-bearing and is the whole reason this is generated rather than described:
-     *   1. `git worktree prune` — clears the admin data of worktrees whose directory is already gone.
-     *      `git worktree remove` FAILS on those, so it cannot be the first step.
-     *   2. `git worktree remove <path>` — one path per invocation; git takes no path list here.
-     *   3. `git branch -D <names>` — only now. git flatly refuses to delete a branch that is still
-     *      checked out in a worktree, so a branch delete placed before the removal fails, and because
-     *      it is one multi-name command it takes every other branch in the list down with it.
+     * It is now ONE command — `pnpm wp-cleanup` — and that is the point of it. The hand-written
+     * sequence this used to print (prune → remove each path → one multi-name `git branch -D`) was
+     * correct git, and it was still never run: an AI agent reads a raw `worktree remove` / `-D` as
+     * destructive, asks permission, and stops. A guard whose only actionable remedies are "raise the
+     * cap" and "set turnOffRuleUntilEpoch" is a guard that teaches config edits, which is the exact
+     * failure the cap exists to prevent. wp-cleanup archives each branch as a tag, removes the
+     * directory, then deletes the branch — in that order, because git refuses to delete a branch a
+     * worktree still holds — and it will not touch the primary clone, the tree you are standing in, or
+     * anything with uncommitted work.
+     *
+     * The explicit git sequence is still printed BELOW the command, as reference rather than as the
+     * instruction: when wp-cleanup declines one of these (typically untracked files), the human needs
+     * to see which directory and what git would have run.
      */
     private worktreeCapFixHint(cache: MergedBranchesCache): FixHint {
         const options: Option[] = [];
@@ -593,10 +599,24 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
             if (branches.length > 0) steps.push(`git branch -D ${branches.join(' ')}`);
 
             options.push(new Option(
-                `Remove these ${String(dead.length)} dead worktrees — each holds a branch backed by a MERGED ` +
-                'PR, a branch with no commits of its own, or a directory that is already gone, so no work ' +
-                'can be lost (see merged-branches.json for the per-worktree reason). Run it in this order ' +
-                `(prune first, branches last — git refuses to delete a branch a worktree still holds): ${steps.join(' && ')}`,
+                `Run: pnpm wp-cleanup — it REMOVES these ${String(dead.length)} dead worktrees for you. Each ` +
+                'holds a branch backed by a MERGED PR, a branch with no commits of its own, or a directory ' +
+                'that is already gone, so no work can be lost (see merged-branches.json for the per-worktree ' +
+                'reason). It archives every branch as an `archive/<date>/<branch>` tag BEFORE removing ' +
+                'anything, logs each removal with a `recover=` command, and refuses to touch the primary ' +
+                'clone, the worktree you are standing in, or any worktree holding uncommitted work. ' +
+                `Equivalent by hand, in this order (prune first, branches last — git refuses to delete a ` +
+                `branch a worktree still holds): ${steps.join(' && ')}`,
+                true,
+            ));
+        } else {
+            // Nothing is PROVABLY dead, but wp-cleanup also prompts about the probably-dead ones, so it
+            // is still the remedy that can delete something — and it is still better advice than a knob.
+            options.push(new Option(
+                'Run: pnpm wp-cleanup — none of these worktrees is provably dead, but it lists the ' +
+                'probably-dead ones (closed-unmerged PR, content already in main, never proposed) with ' +
+                'their branch and reason and asks which to remove. Answer that prompt instead of raising ' +
+                'the cap.',
                 true,
             ));
         }

@@ -51,6 +51,8 @@ graph TD
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
     SubagentProvenanceService["SubagentProvenanceService"]
+    WorktreeCleanupSection["WorktreeCleanupSection"]
+    WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
     AiBranchName --> BranchNaming
     BranchReaper --> BranchArchiver
@@ -74,6 +76,7 @@ graph TD
     CleanupCommand --> BranchArchiver
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
+    CleanupCommand --> WorktreeCleanupSection
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
@@ -109,6 +112,7 @@ graph TD
     LandPrCommand --> MergeInfoIndex
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
+    LandPrCommand --> WorktreeService
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
@@ -144,6 +148,11 @@ graph TD
     StartUpsertPrCommand --> PrContextWriter
     StartUpsertPrCommand --> RepoRootFinder
     StartUpsertPrCommand --> RunUpdate
+    WorktreeCleanupSection --> MergedBranchesService
+    WorktreeCleanupSection --> WorktreeReaper
+    WorktreeReaper --> BranchArchiver
+    WorktreeReaper --> BranchMutationLog
+    WorktreeReaper --> WorktreeService
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

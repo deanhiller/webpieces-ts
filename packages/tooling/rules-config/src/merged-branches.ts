@@ -66,6 +66,21 @@ export const CLASSIFICATION_NEVER_PROPOSED = 'never-proposed';
 // Spared for a mechanical reason, not a judgement call (checked out somewhere).
 export const CLASSIFICATION_IN_USE = 'in-use';
 
+/**
+ * WORKTREE-only classifications. A worktree verdict borrows every token above (its branch is what is
+ * being judged), but three of its outcomes have no branch analogue at all, and lumping them under
+ * `in-use` would tell wp-cleanup to shut up about exactly the ones a human might want to act on.
+ *
+ *  - PRUNABLE   — the directory is already gone; `git worktree prune` is the reap, not `remove`.
+ *  - LOCKED     — a human ran `git worktree lock`. Explicitly "do not touch"; never promptable.
+ *  - CURRENT    — the worktree the command is running IN. Removing your own cwd is a self-destruct.
+ *  - DETACHED   — detached HEAD, so there is no branch to judge and no branch to archive.
+ */
+export const CLASSIFICATION_PRUNABLE = 'prunable-worktree';
+export const CLASSIFICATION_LOCKED = 'locked-worktree';
+export const CLASSIFICATION_CURRENT = 'current-worktree';
+export const CLASSIFICATION_DETACHED = 'detached-worktree';
+
 // Spared classifications a human can meaningfully rule on, most-safe first. wp-cleanup prompts in
 // exactly this order so the easy yeses come before the ones that need thought.
 export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
@@ -129,6 +144,14 @@ export class DeletableBranch {
  * A worktree and the verdict on it. Carries `path` (what `git worktree remove` takes) AND `branch`
  * (what `git branch -D` takes afterwards) because reaping a worktree is always those two steps, in
  * that order — git refuses to delete a branch that is still checked out somewhere.
+ *
+ * `classification` is the same STABLE token the branch verdicts carry, plus the four worktree-only
+ * ones above. It exists for the same reason it does on DeletableBranch: `deletable` answers "may the
+ * tooling reap this unattended?", and everything false used to collapse into one undifferentiated
+ * "spared" that a human could not rule on. With a token, WorktreeReaper knows whether the reap is a
+ * `prune` or a `remove`, and wp-cleanup knows which spared worktrees are worth ASKING about.
+ * Defaulted so every pre-existing call site and every cache written by an older release still builds;
+ * an unclassified revived entry reads as 'never-proposed', the most conservative spared verdict.
  */
 export class DeletableWorktree {
     path: string;
@@ -136,13 +159,23 @@ export class DeletableWorktree {
     reason: string;
     pr: number;
     deletable: boolean;
+    classification: string;
 
-    constructor(path: string, branch: string, reason: string, pr: number, deletable: boolean) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(
+        path: string,
+        branch: string,
+        reason: string,
+        pr: number,
+        deletable: boolean,
+        classification: string = CLASSIFICATION_NEVER_PROPOSED,
+    ) {
         this.path = path;
         this.branch = branch;
         this.reason = reason;
         this.pr = pr;
         this.deletable = deletable;
+        this.classification = classification;
     }
 }
 
@@ -239,6 +272,8 @@ interface RawWorktree {
     reason?: string;
     pr?: number;
     deletable?: boolean;
+    // Absent before worktree verdicts carried a classification — revives to 'never-proposed'.
+    classification?: string;
 }
 
 interface RawCache {
@@ -388,28 +423,35 @@ export class MergedBranchesService {
 
             if (tree.prunable) {
                 out.push(new DeletableWorktree(
-                    tree.path, tree.branch, 'its directory is gone — `git worktree prune` clears it', 0, true));
+                    tree.path, tree.branch, 'its directory is gone — `git worktree prune` clears it', 0, true,
+                    CLASSIFICATION_PRUNABLE));
                 continue;
             }
             if (tree.locked) {
                 out.push(new DeletableWorktree(
-                    tree.path, tree.branch, 'locked by a human — do not touch', 0, false));
+                    tree.path, tree.branch, 'locked by a human — do not touch', 0, false,
+                    CLASSIFICATION_LOCKED));
                 continue;
             }
             if (tree.path === repoRoot) {
                 out.push(new DeletableWorktree(
-                    tree.path, tree.branch, 'you are standing in it', 0, false));
+                    tree.path, tree.branch, 'you are standing in it', 0, false, CLASSIFICATION_CURRENT));
                 continue;
             }
             if (tree.branch === '') {
                 out.push(new DeletableWorktree(
-                    tree.path, '', 'detached HEAD — no branch to check, so a human must decide', 0, false));
+                    tree.path, '', 'detached HEAD — no branch to check, so a human must decide', 0, false,
+                    CLASSIFICATION_DETACHED));
                 continue;
             }
 
+            // The branch's OWN classification token rides along unchanged. That is what lets wp-cleanup
+            // group probably-dead worktrees exactly the way it groups probably-dead branches, instead of
+            // inventing a second, parallel notion of "how dead is this".
             const verdict = this.classify(repoRoot, tree.branch, prs);
             out.push(new DeletableWorktree(
-                tree.path, tree.branch, verdict.entry.reason, verdict.entry.pr, verdict.deletable));
+                tree.path, tree.branch, verdict.entry.reason, verdict.entry.pr, verdict.deletable,
+                verdict.entry.classification));
         }
 
         return out;
@@ -627,6 +669,7 @@ export class MergedBranchesService {
             entry.reason ?? '',
             entry.pr ?? 0,
             entry.deletable ?? false,
+            entry.classification ?? CLASSIFICATION_NEVER_PROPOSED,
         ));
     }
 

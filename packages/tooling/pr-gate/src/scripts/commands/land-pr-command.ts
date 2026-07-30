@@ -4,6 +4,7 @@ import * as path from 'path';
 import {
     prDirFor, InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate,
     BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP,
+    Worktree, WorktreeService,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -37,6 +38,7 @@ export class LandPrCommand {
         private readonly prMerger: PrMerger,
         private readonly archiver: BranchArchiver,
         private readonly mergeInfoIndex: MergeInfoIndex,
+        private readonly worktrees: WorktreeService,
     ) {}
 
     async run(): Promise<void> {
@@ -84,12 +86,39 @@ export class LandPrCommand {
             '\n' + SEP + (outcome.merged ? '✅ Landed\n' : 'ℹ️  Not landed yet\n') + SEP + '\n' +
             `   ${outcome.message}\n` +
             archived +
-            (outcome.merged ? '   Next: `pnpm wp-cleanup` to delete the merged branch.\n' : '') +
+            (outcome.merged ? this.nextStep(repoRoot, base) : '') +
             (policy === MERGE_MODE_AUTO
                 ? ''
                 : `   (pr-gate.mergeMode is ${policy} — wp-finish-upsert-pr will keep leaving PRs for a human.)\n`) +
             '\n',
         );
+    }
+
+    /**
+     * What to run next — which is NOT the same sentence when you landed from a worktree.
+     *
+     * Landing from a linked worktree always used to leave a corpse: the merged branch is checked out
+     * here, so `git branch -D` refuses, `wp-cleanup`'s branch pass spares it as in-use, and nothing
+     * removed the worktree — so the pair sat there until branch-creation-guard hit its cap. wp-cleanup
+     * now reaps dead worktrees, but it cannot reap the one it is RUNNING IN (removing your own cwd
+     * mid-command is a self-destruct), so the instruction has to say where to run it from.
+     *
+     * We deliberately do NOT remove the worktree here. This command is executing inside it, and a
+     * process that deletes the directory underneath itself is exactly the thing every safety rail in
+     * WorktreeReaper exists to refuse.
+     */
+    private nextStep(repoRoot: string, base: string): string {
+        const here = this.worktrees.currentWorktree(repoRoot);
+        if (here === null || here.isMain || here.branch !== base) {
+            return '   Next: `pnpm wp-cleanup` to delete the merged branch.\n';
+        }
+        const main = this.worktrees.listWorktrees(repoRoot)
+            .find((tree: Worktree): boolean => tree.isMain);
+        const from = main ? main.path : '<the primary clone>';
+        return '   Next: this branch is checked out in THIS worktree, so neither it nor the worktree can\n'
+            + `         be removed from in here. Run cleanup from the primary clone instead:\n`
+            + `           cd ${from} && pnpm wp-cleanup\n`
+            + `         It archives ${base} as a tag, removes ${here.path}, then deletes the branch.\n`;
     }
 
     /**

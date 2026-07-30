@@ -3,16 +3,24 @@ import {
     BranchArchiver,
     BranchReaper,
     DeletableBranch,
+    DeletableWorktree,
+    MergedBranchesService,
     ReapResult,
     ReapedBranch,
+    ReapedWorktree,
     RepoRootFinder,
+    WorktreeReapResult,
+    WorktreeReaper,
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
     CLASSIFICATION_IN_USE,
+    CLASSIFICATION_MERGED_PR,
+    CLASSIFICATION_CURRENT,
 } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
+import { WorktreeCleanupSection } from './worktree-cleanup';
 
 /**
  * The behaviour under test is the REPORT and the PROMPT — the half of wp-cleanup that decides what a
@@ -28,13 +36,29 @@ class Harness {
     approved: DeletableBranch[] = [];
     prompts: string[] = [];
     out = '';
+    // The worktree half: the verdicts the section hands back, and every target it was asked to reap.
+    worktrees: DeletableWorktree[] = [];
+    worktreeTargets: DeletableWorktree[] = [];
+    // Set when the (fake) worktree reap removed something, so the branch pass can model the world it
+    // leaves behind: a branch spared only by that worktree is reapable once the worktree is gone.
+    branchesFreedByWorktreeReap: string[] = [];
 }
 
 const harness = new Harness();
 
 class FakeReaper extends BranchReaper {
     reap(): ReapResult {
-        return new ReapResult(harness.reaped, [], harness.spared);
+        // The branch pass runs AFTER the worktree pass and recomputes from scratch, so a branch whose
+        // only jailer was a now-removed worktree is no longer spared — it is reaped.
+        const freed = new Set(harness.branchesFreedByWorktreeReap);
+        const spared = harness.spared.filter(
+            (entry: DeletableBranch): boolean => !freed.has(entry.branch));
+        const reaped = [...harness.reaped, ...harness.spared
+            .filter((entry: DeletableBranch): boolean => freed.has(entry.branch))
+            .map((entry: DeletableBranch): ReapedBranch =>
+                new ReapedBranch(entry.branch, 'sha1234567', 'PR merged (its worktree was just removed)',
+                    entry.pr, true, ''))];
+        return new ReapResult(reaped, [], spared);
     }
 
     reapApproved(_repoRoot: string, _verb: 'wp-cleanup', approved: DeletableBranch[]): ReapResult {
@@ -42,6 +66,26 @@ class FakeReaper extends BranchReaper {
         return new ReapResult(
             approved.map((entry: DeletableBranch): ReapedBranch =>
                 new ReapedBranch(entry.branch, 'sha1234567', entry.reason, entry.pr, true, '')),
+            [], [],
+        );
+    }
+}
+
+// The worktree section with git replaced: `verdicts` hands back the scripted list, and `reap` records
+// what it was asked to remove and reports it removed. WorktreeReaper's own spec covers the real thing.
+class FakeWorktreeSection extends WorktreeCleanupSection {
+    verdicts(): DeletableWorktree[] {
+        return harness.worktrees;
+    }
+
+    reap(_repoRoot: string, _verb: 'wp-cleanup', targets: DeletableWorktree[]): WorktreeReapResult {
+        harness.worktreeTargets = [...harness.worktreeTargets, ...targets];
+        return new WorktreeReapResult(
+            targets.map((tree: DeletableWorktree): ReapedWorktree => {
+                const done = new ReapedWorktree(tree.path, tree.branch, 'sha99', tree.reason, tree.pr, true, '');
+                done.branchDeleted = true;
+                return done;
+            }),
             [], [],
         );
     }
@@ -62,7 +106,9 @@ class TestableCleanup extends CleanupCommand {
 }
 
 function build(): TestableCleanup {
-    return new TestableCleanup(new FakeRepoRootFinder(), new FakeReaper(), new BranchArchiver());
+    return new TestableCleanup(
+        new FakeRepoRootFinder(), new FakeReaper(), new BranchArchiver(),
+        new FakeWorktreeSection(new MergedBranchesService(), new WorktreeReaper()));
 }
 
 function spared(branch: string, classification: string, commits: number, reason: string): DeletableBranch {
@@ -94,6 +140,9 @@ beforeEach(() => {
     harness.approved = [];
     harness.prompts = [];
     harness.out = '';
+    harness.worktrees = [];
+    harness.worktreeTargets = [];
+    harness.branchesFreedByWorktreeReap = [];
     // The prompt path is the thing under test, so present a terminal. Restored per-test where needed.
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
 });
@@ -160,6 +209,91 @@ describe('wp-cleanup classification report (Part 5)', () => {
         expect(out).toContain('restore: git checkout -b dean/merged archive/2026-07-30/dean/merged');
         // The audit-log pointer is printed even on success — an undo nobody can find is not an undo.
         expect(out).toContain('branch-mutations.log');
+    });
+});
+
+describe('wp-cleanup worktree reaping (the half that never ran)', () => {
+    // The provably-dead worktrees go without being asked about — same posture as a merged branch.
+    it('auto-removes a provably dead worktree and reports the restore command', async () => {
+        harness.worktrees = [new DeletableWorktree(
+            '/work/wt-merged', 'dean/merged', 'PR #430 merged', 430, true, CLASSIFICATION_MERGED_PR)];
+
+        const out = await run();
+
+        expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path))
+            .toEqual(['/work/wt-merged']);
+        expect(out).toContain('Removed 1 dead worktree(s)');
+        expect(out).toContain('/work/wt-merged');
+        expect(out).toContain('restore: git worktree add');
+        expect(out).toContain('REAP_WORKTREE');
+    });
+
+    /**
+     * THE DEADLOCK, end to end. `dean/held` is spared only because a worktree holds it. The worktree
+     * pass runs FIRST, removes that worktree, and the branch pass — which recomputes — then reaps the
+     * branch. Before this change both survived every cleanup, forever.
+     */
+    it('makes a branch spared only by a dead worktree reapable', async () => {
+        harness.worktrees = [new DeletableWorktree(
+            '/work/wt-merged', 'dean/held', 'PR #430 merged', 430, true, CLASSIFICATION_MERGED_PR)];
+        harness.spared = [spared(
+            'dean/held', CLASSIFICATION_IN_USE, 2,
+            "checked out in worktree '/work/wt-merged' — remove that worktree before deleting the branch")];
+        harness.branchesFreedByWorktreeReap = ['dean/held'];
+
+        const out = await run();
+
+        expect(out.indexOf('Removed 1 dead worktree(s)')).toBeLessThan(out.indexOf('Cleaned up'));
+        expect(out).toContain('✓ dean/held');
+        expect(harness.prompts).toEqual([]);
+    });
+
+    // The worktree the command is running in is never a target — merged-branches never marks it
+    // deletable, and WorktreeReaper refuses it a second time regardless of what it is handed.
+    it('never offers the worktree it is standing in', async () => {
+        harness.worktrees = [new DeletableWorktree(
+            '/repo', 'dean/here', 'you are standing in it', 0, false, CLASSIFICATION_CURRENT)];
+
+        const out = await run();
+
+        expect(harness.worktreeTargets).toEqual([]);
+        expect(harness.prompts).toEqual([]);
+        expect(out).toContain('Worktrees deliberately left alone');
+        expect(out).toContain('you are standing in it');
+    });
+
+});
+
+// The worktree PROMPT — same posture as the branch prompt, because it is the same verdict on the same
+// branch: nothing in this group is removed without an explicit typed answer.
+describe('wp-cleanup worktree prompt', () => {
+    // Probably-dead worktrees are ASKED about, exactly like probably-dead branches — and the answer is
+    // per-number, so "remove that one but not that one" is expressible.
+    it('prompts about a probably-dead worktree and removes only the chosen one', async () => {
+        harness.worktrees = [
+            new DeletableWorktree('/work/a', 'dean/a', 'PR #1 CLOSED UNMERGED', 1, false, CLASSIFICATION_SUPERSEDED),
+            new DeletableWorktree('/work/b', 'dean/b', 'never had a PR', 0, false, CLASSIFICATION_NEVER_PROPOSED),
+        ];
+        harness.answer = '1';
+
+        const out = await run();
+
+        expect(out).toContain('worktree(s) are probably dead');
+        expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path)).toEqual(['/work/a']);
+    });
+
+    // Same posture as the branch prompt: no terminal means no consent, and it says so.
+    it('removes no worktree when there is no TTY', async () => {
+        Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
+        harness.worktrees = [new DeletableWorktree(
+            '/work/a', 'dean/a', 'PR #1 CLOSED UNMERGED', 1, false, CLASSIFICATION_SUPERSEDED)];
+        harness.answer = 'all';
+
+        const out = await run();
+
+        expect(harness.worktreeTargets).toEqual([]);
+        expect(out).toContain('Not a terminal');
+        Object.defineProperty(process.stdin, 'isTTY', { value: REAL_TTY, configurable: true });
     });
 });
 

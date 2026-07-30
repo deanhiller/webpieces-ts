@@ -3,6 +3,7 @@ import {
     BranchArchiver,
     BranchReaper,
     DeletableBranch,
+    DeletableWorktree,
     ReapResult,
     ReapedBranch,
     RepoRootFinder,
@@ -13,6 +14,8 @@ import {
     PROMPTABLE_CLASSIFICATIONS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+
+import { WorktreeCleanupSection } from './worktree-cleanup';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -32,8 +35,15 @@ const CLASSIFICATION_HEADINGS: Readonly<Record<string, string>> = {
 };
 
 /**
- * wp-cleanup: delete the local branches whose PR is already merged (or that hold no commits), then ASK
- * about the ones that are merely probably-dead.
+ * wp-cleanup: remove the dead WORKTREES, delete the local branches whose PR is already merged (or that
+ * hold no commits), then ASK about the ones that are merely probably-dead.
+ *
+ * WHY WORKTREES ARE PART OF THIS: they were the half that never got reaped. The verdicts existed —
+ * merged-branches.ts has been writing a full `DeletableWorktree[]` into the cache all along — and their
+ * only consumer used them to BLOCK the next `git worktree add`, never to remove anything. Meanwhile a
+ * live worktree pins its branch, so the branch was spared too. Two things the tooling could PROVE were
+ * dead, accumulating forever, until the guard refused to create the next branch and the only remedy it
+ * could offer was loosening its own cap. See WorktreeCleanupSection and WorktreeReaper.
  *
  * WHY a named command instead of the `git branch -D a b c` the guards used to print: an AI agent
  * reads a raw `-D` as destructive, so it asks permission and stops — which is exactly why branches
@@ -58,11 +68,24 @@ export class CleanupCommand {
         private readonly repoRootFinder: RepoRootFinder,
         private readonly branchReaper: BranchReaper,
         private readonly archiver: BranchArchiver,
+        private readonly worktreeSection: WorktreeCleanupSection,
     ) {}
 
+    /**
+     * WORKTREES FIRST, then branches. The order is the fix, not a detail: a worktree HOLDS its branch,
+     * so that branch is spared `in-use` ("remove that worktree before deleting the branch") and nothing
+     * used to remove the worktree — so both piled up until branch-creation-guard refused to make the
+     * next one. Reaping the worktree takes its branch with it, and the branch pass then recomputes its
+     * verdicts from scratch against the post-removal truth.
+     */
     async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const retention = loadAndValidate(repoRoot).prGate.landPr.branchRetention;
+        await this.cleanUpWorktrees(repoRoot, retention);
+        await this.cleanUpBranches(repoRoot, retention);
+    }
+
+    private async cleanUpBranches(repoRoot: string, retention: string): Promise<void> {
         // No cache argument: wp-cleanup recomputes the verdicts itself. The file on disk is allowed to
         // go stale, and stale evidence is fine for BLOCKING but never for DELETING.
         const result = this.branchReaper.reap(repoRoot, 'wp-cleanup', null, retention);
@@ -71,13 +94,45 @@ export class CleanupCommand {
         const promptable = this.promptable(result.spared);
         if (promptable.length === 0) return;
         process.stdout.write(this.classifiedBlock(promptable));
-        const approved = await this.askWhichToDelete(promptable);
+        const approved = await this.askWhichToDelete(promptable, 'branch');
         if (approved.length === 0) {
             process.stdout.write('\nNothing deleted — the branches above were kept.\n');
             return;
         }
         const second = this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', approved, retention);
         process.stdout.write(this.report(second));
+    }
+
+    /**
+     * Reap the provably-dead worktrees, then ASK about the probably-dead ones — the same two-tier
+     * posture the branch half has, because it is the same verdict on the same branch.
+     *
+     * WorktreeReaper enforces the safety rails regardless of what is passed or answered: never the
+     * primary clone, never the tree this command is running in, and never `--force` (git's refusal to
+     * remove a worktree holding untracked or modified files is a feature, and forcing it is how a
+     * cleanup command becomes a data-loss command).
+     */
+    private async cleanUpWorktrees(repoRoot: string, retention: string): Promise<void> {
+        const verdicts = this.worktreeSection.verdicts(repoRoot);
+        const dead = this.worktreeSection.provablyDead(verdicts);
+        if (dead.length > 0) {
+            process.stdout.write(
+                this.worktreeSection.report(
+                    this.worktreeSection.reap(repoRoot, 'wp-cleanup', dead, retention)));
+        }
+        process.stdout.write(this.worktreeSection.sparedBlock(verdicts, dead));
+
+        const promptable = this.worktreeSection.promptable(verdicts);
+        if (promptable.length === 0) return;
+        process.stdout.write(this.worktreeSection.promptBlock(promptable));
+        const approved = await this.askWhichToDelete(promptable, 'worktree');
+        if (approved.length === 0) {
+            process.stdout.write('\nNothing removed — the worktrees above were kept.\n');
+            return;
+        }
+        process.stdout.write(
+            this.worktreeSection.report(
+                this.worktreeSection.reap(repoRoot, 'wp-cleanup', approved, retention)));
     }
 
     private report(result: ReapResult): string {
@@ -110,9 +165,18 @@ export class CleanupCommand {
         return `  ✓ ${entry.branch}${sha} — ${entry.reason}${archived}\n`;
     }
 
-    // The spared branches a human can meaningfully rule on, grouped and ordered most-safe first.
-    // Branches spared for a MECHANICAL reason (checked out in a worktree) are deliberately excluded:
-    // there is no judgement to make, git would simply refuse.
+    /**
+     * The spared branches a human can meaningfully rule on, grouped and ordered most-safe first.
+     *
+     * Branches spared as IN_USE — checked out in a worktree — are still excluded here, but the reason
+     * is no longer "git would simply refuse". That premise died the moment worktrees became reapable.
+     * The real reason is the ORDER in run(): the worktree pass has already run, so an IN_USE branch is
+     * one of exactly two things. Either its worktree was dead and the reap took the branch with it (so
+     * it is not in this list at all), or its worktree is one we are deliberately keeping — locked, held
+     * open by uncommitted work, or the one we are standing in — and offering to delete the branch out
+     * from under a live checkout is not a question worth asking. The pair is offered TOGETHER by the
+     * worktree prompt, which shows both the path and the branch it holds, or it is not offered at all.
+     */
     private promptable(spared: DeletableBranch[]): DeletableBranch[] {
         const out: DeletableBranch[] = [];
         for (const classification of PROMPTABLE_CLASSIFICATIONS) {
@@ -148,16 +212,18 @@ export class CleanupCommand {
      * nobody can see must never be read as consent, and this is the one place in the tooling where a
      * deletion is not backed by a proof.
      */
-    private async askWhichToDelete(promptable: DeletableBranch[]): Promise<DeletableBranch[]> {
+    private async askWhichToDelete<T extends DeletableBranch | DeletableWorktree>(
+        promptable: T[], kind: string,
+    ): Promise<T[]> {
         if (process.stdin.isTTY !== true) {
             process.stdout.write(
-                '\nNot a terminal — nothing was deleted and nothing was assumed.\n'
+                `\nNot a terminal — no ${kind} was deleted and nothing was assumed.\n`
                 + 'Run `pnpm wp-cleanup` in an interactive shell to answer, or delete individually.\n',
             );
             return [];
         }
         const answer = (await this.question(
-            `\nDelete which? [all / none / e.g. "1,3"] (default none): `)).trim().toLowerCase();
+            `\nDelete which ${kind}(s)? [all / none / e.g. "1,3"] (default none): `)).trim().toLowerCase();
         if (answer === '' || answer === 'none' || answer === 'n') return [];
         if (answer === 'all' || answer === 'a') return promptable;
         return this.pickByNumber(promptable, answer);
@@ -165,8 +231,8 @@ export class CleanupCommand {
 
     // Parse `1,3` / `1 3` into branches, ignoring anything out of range. An unparseable answer selects
     // nothing, which is the fail-safe direction for a question about deleting.
-    private pickByNumber(promptable: DeletableBranch[], answer: string): DeletableBranch[] {
-        const out: DeletableBranch[] = [];
+    private pickByNumber<T extends DeletableBranch | DeletableWorktree>(promptable: T[], answer: string): T[] {
+        const out: T[] = [];
         for (const token of answer.split(/[\s,]+/)) {
             const index = Number(token);
             if (!Number.isInteger(index) || index < 1 || index > promptable.length) continue;
