@@ -12,10 +12,55 @@ export const PROVENANCE_SKIPPED = 'skipped'; // no CLAUDE_CODE_SESSION_ID (plain
 export class ProvenanceResult {
     status: string; // PROVENANCE_OK | PROVENANCE_MISSING | PROVENANCE_SKIPPED
     detail: string; // human-readable explanation for the warning/error/dashboard
+    // agentIds credited, keyed by agentType, so an evidence pass does not re-scan to find them again.
+    agentIds: Record<string, string>;
 
-    constructor(status: string, detail: string) {
+    constructor(status: string, detail: string, agentIds: Record<string, string> = {}) {
         this.status = status;
         this.detail = detail;
+        this.agentIds = agentIds;
+    }
+}
+
+/**
+ * What ONE credited reviewer actually DID, read from its own transcript. Data-only (per CLAUDE.md).
+ *
+ * `verifyDistinct` answers "did a reviewer of this type run?" — an INTEGRITY question, and it blocks. This
+ * answers "did it look at the change?" — a QUALITY question, and it only warns. The distinction is
+ * deliberate; see {@link SubagentProvenanceService.evidenceFor}.
+ */
+export class ReviewerEvidence {
+    agentType: string;
+    agentId: string;
+    readDiff: boolean;       // opened the materialized diff dir (or its own instructions file)
+    readDoc: boolean;        // opened its checklist's guidance doc
+    toolCallCount: number;
+    offRepoSearches: number; // tool calls that reached into node_modules — the archaeology signal
+
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0) {
+        this.agentType = agentType;
+        this.agentId = agentId;
+        this.readDiff = readDiff;
+        this.readDoc = readDoc;
+        this.toolCallCount = toolCallCount;
+        this.offRepoSearches = offRepoSearches;
+    }
+}
+
+/** What to look for when reading reviewer transcripts. Data-only — avoids a 5-param method. */
+export class EvidenceRequest {
+    branch: string;
+    agentIds: Record<string, string>; // agentType → agentId, straight from ProvenanceResult
+    diffDir: string;                  // '' when nothing was materialized
+    docPaths: Record<string, string>; // agentType → its checklist doc path ('' when none)
+
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(branch: string, agentIds: Record<string, string>, diffDir = '', docPaths: Record<string, string> = {}) {
+        this.branch = branch;
+        this.agentIds = agentIds;
+        this.diffDir = diffDir;
+        this.docPaths = docPaths;
     }
 }
 
@@ -65,15 +110,115 @@ export class SubagentProvenanceService {
         const dirs = this.allSubagentsDirs();
         const missing: string[] = [];
         const usedAgentIds = new Set<string>();
+        const credited: Record<string, string> = {};
         for (const type of expectedAgentTypes) {
             const agentId = this.findMatchingAgentId(dirs, type, branch, usedAgentIds);
             if (agentId === '') missing.push(type);
-            else usedAgentIds.add(agentId);
+            else {
+                usedAgentIds.add(agentId);
+                credited[type] = agentId;
+            }
         }
         return missing.length === 0
-            ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`)
+            ? new ProvenanceResult(PROVENANCE_OK, `verified ${expectedAgentTypes.length} distinct reviewer subagent(s) ran`, credited)
             : new ProvenanceResult(PROVENANCE_MISSING,
-                `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${missing.join(', ')}`);
+                `these reviewer subagents did not run on this branch (spawn each as its OWN subagent — do not self-certify): ${missing.join(', ')}`,
+                credited);
+    }
+
+    /**
+     * What each credited reviewer actually READ, from its own transcript.
+     *
+     * `verifyDistinct` proves a reviewer of the right type RAN. It cannot tell a reviewer that read the diff
+     * and thought about it from one that wrote a verdict having opened nothing. This closes that gap — and
+     * the motivating case is real: one reviewer spent 14 of 26 tool calls grepping `node_modules` because
+     * nothing had told it where anything was, which `offRepoSearches` now makes visible.
+     *
+     * WARNING-ONLY by default, for three reasons, and `requireDiffEvidence` must stay opt-in until at least
+     * one repo has watched it:
+     *   1. The transcript layout is undocumented Claude Code internals. A format change would wedge every
+     *      consumer's PR with no self-service recovery — `sidechainOnBranch` is already lenient for exactly
+     *      this reason, and blocking on a richer read of the same files would be less safe, not more.
+     *   2. A reviewer can legitimately receive the diff another way (inlined into its prompt, say).
+     *   3. verifyDistinct is the INTEGRITY signal and rightly blocks; this is a QUALITY signal. Conflating
+     *      them would let a transcript-parsing quirk refuse a PR that a real reviewer really did review.
+     *
+     * Returns [] outside a Claude Code session, matching verify/verifyDistinct's SKIP behavior.
+     */
+    evidenceFor(request: EvidenceRequest): ReviewerEvidence[] {
+        if (!this.inClaudeSession()) return [];
+        const dirs = this.allSubagentsDirs();
+        const out: ReviewerEvidence[] = [];
+        for (const agentType of Object.keys(request.agentIds)) {
+            const agentId = request.agentIds[agentType];
+            const jsonl = this.transcriptPath(dirs, agentId);
+            if (jsonl === '') {
+                out.push(new ReviewerEvidence(agentType, agentId));
+                continue;
+            }
+            out.push(this.evidenceFromTranscript(agentType, agentId, jsonl, request));
+        }
+        return out;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private evidenceFromTranscript(agentType: string, agentId: string, jsonl: string, request: EvidenceRequest): ReviewerEvidence {
+        const inputs = this.toolInputsOf(jsonl);
+        const docPath = request.docPaths[agentType] ?? '';
+        // The instructions file counts as "read the diff": it lives in the same per-branch dir, it is what
+        // the reviewer is told to open first, and it inlines the diff paths. A reviewer that opened it and
+        // then its own diff files is the intended path; treating only the diff dir as proof would flag it.
+        const readDiff = request.diffDir !== '' && this.mentions(inputs, request.diffDir);
+        return new ReviewerEvidence(
+            agentType, agentId, readDiff,
+            docPath !== '' && this.mentions(inputs, docPath),
+            inputs.length,
+            inputs.filter((i: string): boolean => i.includes('node_modules')).length,
+        );
+    }
+
+    // The absolute path of agent-<id>.jsonl across all session dirs, or '' if it is not there.
+    private transcriptPath(dirs: readonly string[], agentId: string): string {
+        for (const dir of dirs) {
+            const candidate = path.join(dir, `agent-${agentId}.jsonl`);
+            if (fs.existsSync(candidate)) return candidate;
+        }
+        return '';
+    }
+
+    /**
+     * Every tool_use input in a transcript, JSON-stringified. Stringified rather than walked field-by-field
+     * because the shape differs per tool (Read takes file_path, Bash takes command, Grep takes path) and a
+     * substring test over the serialized input is both simpler and robust to a tool we have not seen.
+     */
+    private toolInputsOf(jsonl: string): string[] {
+        const out: string[] = [];
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable transcript yields no evidence, never a crash
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            for (const line of fs.readFileSync(jsonl, 'utf8').split('\n')) {
+                if (line.trim() === '') continue;
+                const rec = this.parseLine(line);
+                const message = rec?.['message'];
+                if (typeof message !== 'object' || message === null) continue;
+                // webpieces-disable no-any-unknown -- opaque transcript record, narrowed by the guard above
+                const content = (message as Record<string, unknown>)['content'];
+                if (!Array.isArray(content)) continue;
+                for (const block of content) {
+                    // webpieces-disable no-any-unknown -- opaque content block, only `type`/`input` are read
+                    const b = block as Record<string, unknown>;
+                    if (b['type'] === 'tool_use') out.push(JSON.stringify(b['input'] ?? {}));
+                }
+            }
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+        }
+        return out;
+    }
+
+    private mentions(inputs: readonly string[], needle: string): boolean {
+        return inputs.some((i: string): boolean => i.includes(needle));
     }
 
     // Are we running under Claude Code at all? (CI / plain terminal → provenance is unverifiable → SKIP.)

@@ -22,23 +22,34 @@ array of `{ subagent, doc?, patterns? }`, and that is the **only** accepted shap
 ## The one command you run
 
 ```bash
-pnpm wp-checklist
+pnpm wp-review-upsert-pr
 ```
 
-It validates the checklist config against **your** diff and prints which reviewer subagents you owe, and
-exactly what to tell each — its doc, what put it in scope, the `git diff` command with the real base sha,
-and the `review-<id>.json` it must write. That block is **self-sufficient**: hand a reviewer those lines
-verbatim. It is safe to run any number of times and never blocks.
+It validates and commits any in-progress 3-point merge, runs the build gate, then **extracts this branch's
+diff to disk** and writes one instructions file per reviewer under
+`.webpieces/pr-review/<branch>/instructions/`. It prints a copy-paste spawn block per reviewer whose prompt
+is a POINTER to that file and nothing else.
+
+That indirection is the design. Everything volatile — the diff, the matched files, the verdict schema, the
+resolved context paths — is REGENERATED every run, so it cannot go stale. The registered
+`.claude/agents/<subagent>.md` stays a thin stub that says "read the instructions file your caller names".
+When the verdict format last changed, hand-written agent files kept documenting the removed `success`
+field and a real PR had to carry a correction in its spawn prompt to work around it; nothing restated by
+hand can drift out of date if nothing is restated by hand.
+
+Unlike the report-only command it replaces, this one **can fail** — on an unresolved merge or a red build.
+It fails before any reviewer is spawned, which is the point.
 
 Checklists already reviewed on this branch are **not** re-listed — verdict files persist, so a second
-wp-start/wp-finish cycle re-instructs nothing.
+start/review/finish cycle re-instructs nothing.
 
 `wp-finish-upsert-pr` recomputes the same set and **refuses to open the PR** while any reviewer still owes
 a passing verdict, naming only the ones still missing.
 
 Note that **not every checklist is pattern-matched**: one with no `patterns` runs on EVERY PR, and the
-whole diff is in its scope. `wp-checklist` says `ALWAYS RUNS` for those rather than calling the whole diff
-a "match".
+whole diff is in its scope. `wp-review-upsert-pr` says `ALWAYS RUNS` for those rather than calling the
+whole diff a "match" — and says so loudly, because a patternless checklist fires on docs-only PRs too, and
+that is usually a missing `patterns` rather than an intent.
 
 Where patterns DO apply, matching is deliberately **coarse** — the reviewer subagent makes the fine,
 content-level judgment by reading the actual diff.

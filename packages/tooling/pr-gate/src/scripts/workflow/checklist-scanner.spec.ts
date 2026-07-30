@@ -7,6 +7,7 @@ import { ChecklistDefinition, DiffScope, RequiredChecklist, ReviewJsonService, t
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
+import { DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 import { AiBranchName } from './git-readAiBranchName';
 import { BranchNaming } from './branch-naming';
@@ -50,8 +51,11 @@ function newForkPoint(): ForkPoint {
 function scannerFor(): ChecklistScanner {
     const diffScope = new DiffScope();
     const reviewJson = new ReviewJsonService();
+    // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
+    // the basis is now part of that plumbing (it is what makes the printed command match the matched range).
     return new ChecklistScanner(
-        newAiBranchName(), new ChecklistDetector(diffScope), diffScope, newForkPoint(),
+        newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
+        new DiffBasisResolver(newForkPoint()),
         new PrContextWriter(diffScope, reviewJson), reviewJson,
     );
 }
@@ -138,7 +142,7 @@ describe('ChecklistScanner — X / N / Z', () => {
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id).sort()).toEqual(['db-reviewer', 'ops-reviewer']);
     });
 
-    it('filterAlreadyReviewed:false leaves outstanding == applicable, so wp-checklist LISTS them all', () => {
+    it('filterAlreadyReviewed:false leaves outstanding == applicable, so wp-review-upsert-pr LISTS them all', () => {
         const scan = scannerFor().scan(repoWithFour(), FOUR, new ChecklistScanOptions(false));
         expect(scan.outstanding).toHaveLength(2);
         expect(scan.reviewed).toHaveLength(0);
@@ -225,7 +229,7 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
         git(dir, 'git checkout -q feature');
 
         // merge-base is the most recent common ancestor; main's new commit is not on this branch, so
-        // advancing main cannot move it. THIS is why wp-checklist need not fetch.
+        // advancing main cannot move it. THIS is why wp-review-upsert-pr need not fetch.
         expect(forkPoint.resolveForkPoint(dir)).toBe(before);
     });
 
@@ -237,7 +241,7 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
         fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n');
         git(dir, 'git add -A');
         git(dir, 'git commit -qm a');
-        // wp-checklist must ALWAYS succeed, so an unresolvable fork point is a value, never an exception.
+        // wp-review-upsert-pr must ALWAYS succeed, so an unresolvable fork point is a value, never an exception.
         expect(newForkPoint().resolveForkPoint(dir)).toBe('');
     });
 

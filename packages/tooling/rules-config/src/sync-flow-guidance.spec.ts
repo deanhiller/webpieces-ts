@@ -100,30 +100,50 @@ describe('no doc or message names a wp-* command that does not exist', () => {
         expect(bad).toEqual([]);
     });
 
-    // wp-checklist is now the command every review instruction points AT, so a doc that misspells it
-    // (`wp-checklists`, `wp-checklist-review`) sends the AI to a bin that does not exist — the same failure
-    // this describe() block exists to prevent, for a command the flow-bin regex above does not cover.
-    it('every wp-checklist* token in tracked .ts/.md files is exactly the real bin', () => {
-        const pkg = path.join(repoRoot, 'packages/tooling/pr-gate/package.json');
-        // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
-        const parsed = JSON.parse(fs.readFileSync(pkg, 'utf8')) as { bin?: Record<string, string> };
-        expect(Object.keys(parsed.bin ?? {})).toContain('wp-checklist');
+    // `wp-review-upsert-pr` is the command every review instruction points AT, so a doc that misspells it
+    // sends the AI to a bin that does not exist — the same failure this describe() block exists to prevent,
+    // for a command the flow-bin regex above does not cover.
+    it('every wp-review* token in tracked .ts/.md files is exactly the real bin', () => {
+        expect(prGateBins(repoRoot)).toContain('wp-review-upsert-pr');
+        // A trailing hyphen means it is a PREFIX, not a command (e.g. a mkdtempSync temp-dir prefix).
+        expect(offendingTokens(repoRoot, /\bwp-review[a-z0-9-]*/g, 'wp-review-upsert-pr')).toEqual([]);
+    });
 
-        const files = execFileSync('git', ['ls-files', '*.ts', '*.md'], { cwd: repoRoot, encoding: 'utf8' })
-            .split('\n')
-            .filter((f: string): boolean => f !== '' && !f.endsWith('sync-flow-guidance.spec.ts'));
-        const bad: string[] = [];
-        for (const file of files) {
-            const lines = fs.readFileSync(path.join(repoRoot, file), 'utf8').split('\n');
-            lines.forEach((line: string, i: number): void => {
-                const matches = stripDocLinks(line).match(/\bwp-checklist[a-z0-9-]*/g) ?? [];
-                for (const token of matches) {
-                    // A trailing hyphen means it is a PREFIX, not a command — e.g. the `wp-checklist-` handed
-                    // to mkdtempSync as a temp-dir prefix. Only a complete token can be a misspelled command.
-                    if (token !== 'wp-checklist' && !token.endsWith('-')) bad.push(`${file}:${i + 1}  ${token}`);
-                }
-            });
-        }
-        expect(bad).toEqual([]);
+    // `wp-checklist` was RENAMED to `wp-review-upsert-pr` — the bin is GONE, so any surviving mention sends
+    // the AI to a command that no longer exists. This guard is what makes the rename stay done: it turns
+    // "I think I got them all" into a failing test that names each one.
+    it('no tracked .ts/.md file still mentions the removed wp-checklist bin', () => {
+        expect(prGateBins(repoRoot)).not.toContain('wp-checklist');
+        expect(offendingTokens(repoRoot, /\bwp-checklist[a-z0-9-]*/g, '')).toEqual([]);
     });
 });
+
+// webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
+function prGateBins(repoRoot: string): string[] {
+    const pkg = path.join(repoRoot, 'packages/tooling/pr-gate/package.json');
+    // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
+    const parsed = JSON.parse(fs.readFileSync(pkg, 'utf8')) as { bin?: Record<string, string> };
+    return Object.keys(parsed.bin ?? {});
+}
+
+/**
+ * Every `<file>:<line>  <token>` where `pattern` matched something that is not `allowed`. Pass '' for
+ * `allowed` to ban the whole prefix. This spec file is skipped — it necessarily names the tokens it bans.
+ */
+// webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
+function offendingTokens(repoRoot: string, pattern: RegExp, allowed: string): string[] {
+    const files = execFileSync('git', ['ls-files', '*.ts', '*.md'], { cwd: repoRoot, encoding: 'utf8' })
+        .split('\n')
+        .filter((f: string): boolean => f !== '' && !f.endsWith('sync-flow-guidance.spec.ts'));
+    const bad: string[] = [];
+    for (const file of files) {
+        const lines = fs.readFileSync(path.join(repoRoot, file), 'utf8').split('\n');
+        lines.forEach((line: string, i: number): void => {
+            for (const token of stripDocLinks(line).match(pattern) ?? []) {
+                // A trailing hyphen means it is a PREFIX, not a command — e.g. a mkdtempSync dir prefix.
+                if (token !== allowed && !token.endsWith('-')) bad.push(`${file}:${i + 1}  ${token}`);
+            }
+        });
+    }
+    return bad;
+}

@@ -42,6 +42,20 @@ export const MERGE_MODES = [MERGE_MODE_AUTO, MERGE_MODE_NONE];
  * landing has a home, and so the rationale can sit beside the setting as a `*Why` sibling: JSON has no
  * comments, and `<key>Why` is how this repo documents non-obvious config.
  */
+/**
+ * One `pr-gate.reviewContext` entry: a human label and a repo-relative path a reviewer is handed instead of
+ * having to find it. Data-only (per CLAUDE.md).
+ */
+export class ReviewContextEntry {
+    label: string;
+    path: string; // repo-relative in config; resolved to absolute when written into an instructions file
+
+    constructor(label: string, entryPath: string) {
+        this.label = label;
+        this.path = entryPath;
+    }
+}
+
 export class LandPrConfig {
     // One of BRANCH_RETENTIONS. Defaults to 'archive-tag' — see BranchArchiver for why a tag beats
     // keeping the branch, storing a patch, or trusting the reflog.
@@ -59,9 +73,19 @@ export function defaultLandPrConfig(): LandPrConfig {
 
 export class PrGateConfig {
     mode: string;
-    // The nx-affected build gate command. FINISH-ONLY: only wp-finish-upsert-pr runs it (authoritatively,
-    // before the one push). wp-start-upsert-pr runs no build gate — it only syncs the branch from main.
-    // Empty string => BuildAffected falls back to DEFAULT_BUILD_COMMAND.
+    /**
+     * The nx-affected build gate command, shared by the two commands that can run it.
+     *
+     * It is NOT finish-only any more, and the change is the point. It used to run once, in
+     * wp-finish-upsert-pr, which meant reviewers were spawned against a branch nobody had built — they could
+     * spend a full review on code that does not compile, or on an unresolved 3-point merge.
+     *
+     * Now `wp-review-upsert-pr` finalizes the merge and runs this gate BEFORE briefing any reviewer, and
+     * records the passing HEAD sha in the stage receipt. `wp-finish-upsert-pr` re-runs it only when HEAD has
+     * moved since — so the flow gained a gate where it mattered without paying for two full builds.
+     *
+     * Empty string => BuildAffected falls back to DEFAULT_BUILD_COMMAND.
+     */
     buildCommand: string;
     gates: GateDefinition[];
     /**
@@ -107,6 +131,37 @@ export class PrGateConfig {
      * call site correctly wants the default.
      */
     landPr: LandPrConfig = defaultLandPrConfig();
+    /**
+     * Globs whose diffs are NOT extracted into `.webpieces/pr-review/<feature>/diff/` — regenerated noise a
+     * reviewer should not spend context reading (lockfiles, generated graphs). Default [].
+     *
+     * They are still MATCHED against checklists and still listed in the manifest, with a stub naming the
+     * command that gets the real diff. Removing them from the changed-file set would read as "this file did
+     * not change", which is a different and false claim.
+     *
+     * Fields-with-defaults rather than constructor params: that constructor is already at max-params, and
+     * every existing `new PrGateConfig(...)` correctly wants the defaults.
+     */
+    reviewDiffExclude: string[] = [];
+    /**
+     * Repo-specific places a reviewer would otherwise hunt for, as `{label, path}` — e.g.
+     * `{"label":"Cloud Tasks queue names","path":"terraform/services/"}`. Resolved to absolute paths in each
+     * generated instructions file; a configured-but-missing path is printed as missing, never dropped.
+     */
+    reviewContext: ReviewContextEntry[] = [];
+    /**
+     * Installed packages to resolve and hand reviewers by absolute directory. This is the knob aimed at a
+     * measured failure: one reviewer burned three separate greps into `node_modules/@webpieces` looking for
+     * a scanner the tooling could have pointed at directly.
+     */
+    reviewContextPackages: string[] = [];
+    /**
+     * Promote "this reviewer wrote a verdict without ever opening the diff" from a warning to a refusal.
+     * Default false, and it should stay false until a repo has watched the warning for a while: the signal
+     * is derived from undocumented Claude Code transcript internals, so a format change would otherwise
+     * wedge every PR in the repo with no self-service way out.
+     */
+    requireDiffEvidence = false;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = [], gateSalt = '', checklistComments = true) {
@@ -153,10 +208,19 @@ interface RawPrGateSection {
     gateSalt?: string;
     checklistComments?: boolean;
     landPr?: RawLandPr;
+    reviewDiffExclude?: string[];
+    reviewContext?: RawReviewContext[];
+    reviewContextPackages?: string[];
+    requireDiffEvidence?: boolean;
 }
 
 interface RawLandPr {
     branchRetention?: string;
+}
+
+interface RawReviewContext {
+    label?: string;
+    path?: string;
 }
 
 function toGate(raw: RawGate): GateDefinition {
@@ -192,6 +256,14 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     const checklistComments = raw.checklistComments ?? defaults.checklistComments;
     const built = new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
     built.landPr = buildLandPrConfig(raw.landPr);
+    // Review-context knobs. All optional and all defaulted, so a config that omits every one of them (which
+    // is every consumer's config today) behaves exactly as it did before they existed.
+    built.reviewDiffExclude = Array.isArray(raw.reviewDiffExclude) ? raw.reviewDiffExclude : defaults.reviewDiffExclude;
+    built.reviewContextPackages = Array.isArray(raw.reviewContextPackages) ? raw.reviewContextPackages : defaults.reviewContextPackages;
+    built.reviewContext = Array.isArray(raw.reviewContext)
+        ? raw.reviewContext.map((e: RawReviewContext): ReviewContextEntry => new ReviewContextEntry(e.label ?? '', e.path ?? ''))
+        : defaults.reviewContext;
+    built.requireDiffEvidence = raw.requireDiffEvidence ?? defaults.requireDiffEvidence;
     return built;
 }
 

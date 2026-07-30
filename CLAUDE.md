@@ -338,7 +338,7 @@ Almost everything else runs the **published** copy:
 | Runs the PUBLISHED copy | Consequence |
 |---|---|
 | nx executors (`architecture:generate`, `di-graph-generate`, `validate-*-unchanged`) | local `nx-webpieces-rules` changes are invisible to `pnpm arch:generate` and to the build's `validate-*-unchanged` gates |
-| `wp-*` bins (`wp-ci`, `wp-checklist`, `wp-start-upsert-pr`, `wp-finish-upsert-pr`, `wp-cleanup`) | running one is **not** an end-to-end test of unreleased `pr-gate` / `code-rules` changes |
+| `wp-*` bins (`wp-ci`, `wp-start-upsert-pr`, `wp-review-upsert-pr`, `wp-finish-upsert-pr`, `wp-cleanup`) | running one is **not** an end-to-end test of unreleased `pr-gate` / `code-rules` changes |
 | PreToolUse hooks (`wp-ai-rules-hook`, `wp-ai-guards-hook`) | guard changes take effect only after publish + `pnpm install` |
 | the ESLint `@webpieces` plugin | a rule named in the live config before publish fails the graph load |
 
@@ -371,9 +371,15 @@ PR** — do NOT end your turn with "want me to open a PR?" That question is alre
 always.** Commit your work (the tooling never commits for you), then run the gated flow:
 
 ```bash
-pnpm wp-start-upsert-pr        # updates from main, pushes, runs the build gate, tells you to write review.json
-pnpm wp-finish-upsert-pr       # authoritative build gate, then creates/updates the PR
+pnpm wp-start-upsert-pr        # ① 3-point update from main
+pnpm wp-review-upsert-pr       # ② validates that merge, BUILDS it, extracts the diff, briefs the reviewers
+                               #   → then spawn the reviewers it names and write review.json
+pnpm wp-finish-upsert-pr       # ③ creates/updates the PR
 ```
+
+Stage ② is where verification happens: it fails on an unresolved merge or a red build BEFORE any
+reviewer is spawned, so a broken branch costs no review effort. It records the sha it verified, and
+stage ③ skips its own build when HEAD has not moved — three stages, one build.
 
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.

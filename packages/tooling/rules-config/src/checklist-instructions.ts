@@ -2,7 +2,6 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { formatFileList } from './checklist-config';
 import {
     ChecklistReviewContext, RequiredChecklist, ReviewJsonService,
-    VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED,
 } from './review-json';
 
 /**
@@ -10,7 +9,7 @@ import {
  * to tell them. There is a single renderer because three callers need the identical text and any drift
  * between them is a correctness bug, not a cosmetic one:
  *
- *   - `wp-checklist`            — the AI asks "what review do I owe on this diff?"
+ *   - `wp-review-upsert-pr`            — the AI asks "what review do I owe on this diff?"
  *   - `wp-finish-upsert-pr`     — fails fast, listing ONLY the reviewers that still have not run
  *   - `ReviewJsonService`       — the same list appended to a review.json validation failure
  *
@@ -81,18 +80,15 @@ export class ChecklistInstructionsService {
         ];
     }
 
-    // ONE shared format block for every reviewer, rather than repeating the schema under each name.
+    // ONE shared format block for every reviewer, rather than repeating the schema under each name — and
+    // the schema itself comes from ReviewJsonService, the single renderer, so a change to the verdict shape
+    // cannot leave a stale copy in print. (It did once: `success` outlived its own removal in every
+    // hand-written agent .md.)
     private verdictFormat(): string[] {
         return [
             'TELL EACH subagent to write that file with EXACTLY this format (there is NO "success" field —',
             'it was removed; "status" is a tri-state so a reviewer can pass a change AND still raise a concern):',
-            `  { "id": "<its own subagent name>", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", "output": "what you checked / found", "override": "" }`,
-            `    "${VERDICT_GREEN}"   → passes, nothing to flag`,
-            `    "${VERDICT_YELLOW}"  → PASSES WITH CONCERNS; blocks nothing, and "output" is published on the PR as 🟡`,
-            `    "${VERDICT_RED}" + empty "override"      → REFUSES the PR; the reviewer's "output" is printed verbatim`,
-            `    "${VERDICT_RED}" + non-empty "override"  → ships anyway as 🟠; the justification is published on the PR`,
-            `  Prefer "${VERDICT_YELLOW}" over a red-plus-override when the change is acceptable but worth a human's`,
-            '  attention — an override reads as a deliberately-accepted defect, a yellow reads as a note.',
+            ...this.reviewJsonService.verdictSchemaFor('<its own subagent name>', '', '  ').split('\n'),
         ];
     }
 
@@ -109,10 +105,27 @@ export class ChecklistInstructionsService {
                 '    and note that path matching is COARSE — judge the real change, not the path.',
             ];
         }
-        const lines = [
-            'Also give EACH one the real diff — path matching is COARSE, so judge the change, not the path:',
-            `  git diff ${context.baseSha} HEAD -- <file>`,
-        ];
+        const lines = ['Also give EACH one the real diff — path matching is COARSE, so judge the change, not the path:'];
+        // The MATERIALIZED diff first when it exists: it is one Read instead of a shell-out per file, and it
+        // cannot go empty the way a hand-assembled range can.
+        if (context.diffDir.trim() !== '') {
+            lines.push(`  everything, already extracted:  ${context.diffDir}/ALL.diff`);
+            lines.push(`  per-file diffs + path map:      ${context.diffDir}/files/  (see manifest.json)`);
+        }
+        // NEVER hand-assemble `<baseSha> HEAD` here. On a dirty tree the changed-file set is base→working
+        // tree, so that range is empty and the reviewer is handed a command that shows it nothing — the
+        // failure this whole class of field exists to prevent. The command is derived from the same basis
+        // the file set was; when it is absent (an older pr-gate wrote the context), say so instead.
+        if (context.fileDiffCommand.trim() !== '') {
+            lines.push(`  reproduce one file:             ${context.fileDiffCommand}`);
+        } else {
+            lines.push(`  ⚠️  no reproduce command recorded — derive it yourself from base ${context.baseSha},`);
+            lines.push('      and check `git status` first: uncommitted work needs `git diff <base>` with NO head.');
+        }
+        if (context.dirty) {
+            lines.push('  ⚠️  this diff INCLUDES uncommitted + untracked work, so it is not what a commit-to-commit');
+            lines.push('      range would show. Judge it anyway — it is what the checklist matched against.');
+        }
         if (context.prContextPath.trim() !== '') {
             lines.push(`  full changed-file set + base/head sha:  ${context.prContextPath}`);
         }

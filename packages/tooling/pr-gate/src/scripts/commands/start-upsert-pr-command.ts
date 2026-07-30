@@ -1,21 +1,26 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, reviewJsonPath, reviewJsonSchemaHint, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
+import { loadAndValidate, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { DiffBasisResolver } from '../workflow/diff-basis';
 import { GitExec } from '../workflow/git-exec';
-import { ForkPoint } from '../workflow/git-findForkPoint';
 import { PrContextWriter } from '../workflow/pr-context-writer';
 import { RunUpdate } from '../workflow/run-update';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
-// START of the AI-first PR flow: the deterministic setup — update from main — then hand the AI
-// instructions to run `wp-checklist`, WRITE review.json, and run `wp-finish-upsert-pr` (which reads it
-// and posts the PR). It runs NO build gate: start's job is the update / 3-point merge, and the SINGLE
-// build gate is authoritative and lives in wp-finish-upsert-pr (so `pr-gate.buildCommand` is a
-// finish-only knob). This command NEVER creates/updates a PR and NEVER pushes: all `gh` posting and the
-// ONE push live in finish, behind review.json + the checklists + the authoritative build gate.
+// STAGE ① of the AI-first PR flow: the deterministic setup — update from main / drive the 3-point merge —
+// then hand the AI ONE next command, `wp-review-upsert-pr`.
+//
+// It runs NO build gate, and that is still deliberate, but the reason has changed. It is not that the build
+// belongs only at the end: it is that at THIS point a conflicted 3-point merge may still be unresolved, so
+// there is nothing worth building yet. The gate moved FORWARD, not away — stage ② finalizes the merge and
+// then builds, so reviewers never judge a branch that does not compile, and wp-finish-upsert-pr skips the
+// rebuild when HEAD has not moved since. `pr-gate.buildCommand` is therefore no longer a finish-only knob.
+//
+// This command NEVER creates/updates a PR and NEVER pushes: all `gh` posting and the ONE push live in
+// finish, behind review.json + the checklists + the build gate.
 @injectable(bindingScopeValues.Singleton)
 export class StartUpsertPrCommand {
     constructor(
@@ -24,7 +29,7 @@ export class StartUpsertPrCommand {
         private readonly branchNaming: BranchNaming,
         private readonly gitExec: GitExec,
         private readonly runUpdate: RunUpdate,
-        private readonly forkPoint: ForkPoint,
+        private readonly diffBasisResolver: DiffBasisResolver,
         private readonly prContextWriter: PrContextWriter,
     ) {}
 
@@ -48,61 +53,46 @@ export class StartUpsertPrCommand {
         // remote, and there is no early `synchronize` firing against a PR body with a stale gate token.
         await this.updateBranchFromMain(repoRoot);
 
-        // No build gate here — start only updates from main / drives the 3-point merge. The one build
-        // gate is authoritative and runs in wp-finish-upsert-pr, after review.json + every checklist.
+        // No build gate here — a conflicted merge may still be unresolved, so there is nothing worth
+        // building. Stage ② finalizes the merge FIRST, then builds; see the class comment.
         this.handOffToReview(repoRoot);
     }
 
     /**
-     * Hand the AI its next step: run `wp-checklist`, write review.json, then run finish (which posts the PR).
+     * Hand the AI its ONE next step: `wp-review-upsert-pr`.
      *
-     * This USED to compute the matched checklists and print every reviewer's full instructions inline — twice,
-     * in two blocks that could drift. That detail now lives in ONE command, `wp-checklist`, which wp-finish
-     * validates against; here we only point at it. Keeping this section short is the point: it is the block
-     * the AI must actually act on, and burying the three steps in forty lines of reviewer detail is how a
-     * step gets skipped.
+     * This prints exactly one command on purpose. It used to print three (run the checklist, write
+     * review.json, then finish), and a three-item list is a list with a step to skip. Stage ② now owns all
+     * of it — it validates the 3-point merge, builds, materializes the diff, briefs the reviewers, AND
+     * prints the review.json schema — so there is nothing here to enumerate. Notably review.json is NOT
+     * requested here any more: asking for a written review before the branch is known to compile invites
+     * one that describes code that does not build.
      */
     private handOffToReview(repoRoot: string): void {
-        const reviewPath = reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName());
         // Persist the review-format + process instructions where any failure message can cite them.
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
-        // Persist the PR diff context (base sha + the full changed-file set) — wp-checklist and every reviewer
-        // subagent read it, so it must exist before either runs.
-        const context = this.prContextWriter.ensure(repoRoot, this.aiBranchName.getFeatureName(), this.forkPoint.resolveForkPoint(repoRoot));
+        // Persist the PR diff context (base sha + the full changed-file set) so it exists even if the AI
+        // stops here. Stage ② rewrites it with the materialized-diff dir once it has one.
+        const context = this.prContextWriter.ensure(
+            repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot));
         process.stdout.write('\n' + SEP + '② Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +
             `${this.contextLines(context)}\n` +
-            `${this.checklistPointer(repoRoot)}\n` +
-            `Then review your own changes and\n` +
-            `${reviewJsonSchemaHint(reviewPath)}\n\n` +
-            `Finally run:  pnpm wp-finish-upsert-pr\n` +
-            `(It re-validates the build, re-checks every checklist, renders the dashboard, and creates/updates the PR.)\n\n`,
+            `▶ NEXT run:  pnpm wp-review-upsert-pr\n` +
+            `   It validates the 3-point merge, runs the build gate, extracts this branch's diff for the\n` +
+            `   reviewers, and prints what to spawn plus the review.json schema. Everything else waits on it —\n` +
+            `   wp-finish-upsert-pr refuses to open a PR until it has run.\n\n`,
         );
     }
 
-    /**
-     * Step 1 of the review: find out what review this diff owes. A repo with checklists gets pointed at
-     * `wp-checklist`; a repo with none is told plainly that it has none, because printing "run wp-checklist"
-     * forever at a repo that will never have one is noise, and silence reads as "a checklist passed".
-     */
-    private checklistPointer(repoRoot: string): string {
-        if (loadAndValidate(repoRoot).prGate.checklists.length === 0) {
-            return '📋 Review checklists: NONE CONFIGURED for this repo — nothing to run, and that is fine.\n';
-        }
-        return (
-            '📋 FIRST run:  pnpm wp-checklist\n' +
-            '   It validates this repo\'s checklist patterns against your diff and prints WHICH reviewer\n' +
-            '   subagents you must spawn, plus the exact review-<id>.json each must write. Do that BEFORE\n' +
-            '   finishing — wp-finish-upsert-pr refuses to open the PR until every one of them has run.\n'
-        );
-    }
-
-    // The diff facts, stated where the instruction to use them is — not in a separate block above it.
+    // The diff facts, stated where the instruction to use them is — not in a separate block above it. The
+    // command comes from the resolved basis; hand-writing `<base> HEAD` here is empty on a dirty tree.
     private contextLines(context: ChecklistReviewContext): string {
         if (context.baseSha.trim() === '') return '';
+        const cmd = context.fileDiffCommand.replace(' -- <file>', '');
         return (
-            `Your diff:  git diff ${context.baseSha} HEAD\n` +
+            `${cmd === '' ? '' : `Your diff:  ${cmd}\n`}` +
             `Full changed-file set + base/head sha:  ${context.prContextPath}\n`
         );
     }
@@ -121,14 +111,16 @@ export class StartUpsertPrCommand {
     }
 
     // Bring the branch up to date with main via the shared 3-point engine (in-process). On conflict the
-    // merge process doc it writes names `wp-finish-upsert-pr` as the finish command.
+    // merge process doc it writes names `wp-review-upsert-pr` as the finish command — that is the command
+    // that now validates and commits a conflict resolution, so it is what the doc must send the AI to.
     private async updateBranchFromMain(repoRoot: string): Promise<void> {
         process.stdout.write('\n' + SEP + '① Updating branch from main\n' + SEP + '\n');
         // pushRemote=false — finish owns the single push (see MergeEndOptions).
-        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', 'wp-finish-upsert-pr', false);
+        const outcome = await this.runUpdate.runUpdateFromMain(repoRoot, 'wp-start-upsert-pr', 'wp-review-upsert-pr', false);
         if (outcome === 'conflict' || outcome === 'unvalidatedResume') {
             throw new CliExitError(2,
-                '\n⏸️  Conflicts — resolve them, then run pnpm wp-finish-upsert-pr (it validates the merge AND finishes the PR).',
+                '\n⏸️  Conflicts — resolve them, then run pnpm wp-review-upsert-pr (it validates the merge, builds it,\n' +
+                '   and only then briefs the reviewers).',
             );
         }
     }

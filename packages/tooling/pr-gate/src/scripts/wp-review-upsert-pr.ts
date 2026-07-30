@@ -9,6 +9,9 @@ runMain(async (): Promise<void> => {
     // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
     const container = new Container({ autobind: true });
     // Reject `--help`/bogus flags BEFORE the app touches git — an ignored flag must never start the flow.
-    container.get(CliArgs).assertNoArgs(new CliUsage('wp-checklist', 'Print which reviewer subagents this diff owes, and exactly what to tell them.'));
-    await container.get(PrGateApp).checklist();
+    container.get(CliArgs).assertNoArgs(new CliUsage(
+        'wp-review-upsert-pr',
+        'Validate the 3-point merge, build it, extract this branch\'s diff, and brief the reviewer subagents.',
+    ));
+    await container.get(PrGateApp).reviewUpsertPr();
 });

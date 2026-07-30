@@ -148,6 +148,7 @@ export {
     GateDefinition,
     PrGateConfig,
     LandPrConfig,
+    ReviewContextEntry,
     defaultGates,
     defaultPrGateConfig,
     defaultLandPrConfig,
@@ -167,6 +168,12 @@ export type { RawChecklistItem } from './checklist-config';
 export { ChecklistValidator } from './checklist-validator';
 export { ChecklistInstructionsService } from './checklist-instructions';
 export {
+    ReviewerInstructionsService,
+    ReviewerBriefing,
+    BriefedFile,
+    ContextEntry,
+} from './reviewer-instructions';
+export {
     GateTokenService,
     computeGateToken,
     gateTokenMarker,
@@ -175,6 +182,8 @@ export {
 } from './gate-token';
 export {
     SubagentProvenanceService,
+    ReviewerEvidence,
+    EvidenceRequest,
     ProvenanceResult,
     PROVENANCE_OK,
     PROVENANCE_MISSING,

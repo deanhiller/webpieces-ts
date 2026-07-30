@@ -5,6 +5,7 @@ import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
     writeTemplate, RepoRootFinder, ReviewJsonService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
+    ProvenanceResult, ReviewerEvidence, EvidenceRequest, PrGateConfig,
     ChecklistInstructionsService, InformAiError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -14,8 +15,7 @@ import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workfl
 import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
-import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
-import { MergeContext } from '../workflow/merge-start';
+import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
@@ -24,6 +24,20 @@ import {
 } from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+
+/**
+ * The provenance outcome: whether each reviewer was VERIFIED to have run (the integrity check, which
+ * blocks) plus what each one actually read (the quality signal, which is published). Data-only.
+ */
+class ProvenanceReport {
+    verified: boolean;
+    evidence: ReviewerEvidence[];
+
+    constructor(verified: boolean, evidence: ReviewerEvidence[]) {
+        this.verified = verified;
+        this.evidence = evidence;
+    }
+}
 
 // A resolved PR's number + web URL. Both '' when the PR can't be resolved (e.g. create failed).
 class PrRef {
@@ -51,10 +65,16 @@ class UpsertResult {
     }
 }
 
-// FINISH of the AI-first PR flow. Runs after the AI wrote review.json. In order: (1) if a 3-point merge
-// was in progress, validate + commit + FINALIZE via merge-END; (2) REQUIRE review.json; (3) run the
-// authoritative build gate; (4) render the dashboard; (5) create/update the PR via `gh`. The ONLY
-// command that posts PRs.
+// STAGE ③ — FINISH of the AI-first PR flow, and the ONLY command that posts PRs. Runs after
+// `wp-review-upsert-pr` verified the branch and the AI spawned the reviewers + wrote review.json.
+//
+// In order: (1) REFUSE on an unvalidated 3-point merge and REQUIRE stage ②'s receipt; (2) REQUIRE
+// review.json + every reviewer's verdict + provenance; (3) run the build gate UNLESS the receipt already
+// covers this exact HEAD; (4) render the dashboard; (5) create/update the PR via `gh`.
+//
+// It no longer FINALIZES a merge — stage ② does. Two commands owning conflict-resolution validation is two
+// implementations that drift, and finalizing here came too late to help anyway: the reviewers had already
+// reviewed the pre-merge tree by then.
 @injectable(bindingScopeValues.Singleton)
 export class FinishUpsertPrCommand {
     constructor(
@@ -64,7 +84,6 @@ export class FinishUpsertPrCommand {
         private readonly gitExec: GitExec,
         private readonly buildAffected: BuildAffected,
         private readonly mergeState: MergeState,
-        private readonly mergeEnd: MergeEnd,
         private readonly prMerger: PrMerger,
         private readonly publisher: GatedPrPublisher,
         private readonly dashboard: Dashboard,
@@ -73,19 +92,21 @@ export class FinishUpsertPrCommand {
         private readonly gateTokenService: GateTokenService,
         private readonly provenance: SubagentProvenanceService,
         private readonly instructions: ChecklistInstructionsService,
+        private readonly receipts: ReviewStageReceiptService,
     ) {}
 
     async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
-        // 1. Finish any in-progress conflict resolution: validate + commit + finalize the branch swap.
-        await this.finalizeAnyInProgressMerge(repoRoot);
+        // 1. REQUIRE stage ② — see assertStageTwoRan. Returns true when its receipt covers THIS commit,
+        //    which is what lets the build gate below be skipped rather than re-run for a foregone answer.
+        const buildAlreadyGreen = this.assertStageTwoRan(repoRoot);
 
         // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
-        // The SAME scan wp-checklist runs, with filterAlreadyReviewed:true so `outstanding` is exactly what
+        // The SAME scan wp-review-upsert-pr runs, with filterAlreadyReviewed:true so `outstanding` is exactly what
         // still owes a verdict (Z of N of X). Sharing the computation is the point: the command that REPORTS
         // and the command that GATES must not be able to disagree about what is owed. review-<id>.json files
         // persist locally, so a re-run re-validates the EXISTING verdicts against the (possibly changed)
@@ -104,15 +125,13 @@ export class FinishUpsertPrCommand {
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const provenanceVerified = this.enforceProvenance(required, currentBranch);
+        const provenance = this.enforceProvenance(required, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
 
-        // 3. Authoritative build gate, then post the gated body, then push (that ORDER — see GatedPrPublisher).
-        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
-            '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
-        ));
+        // 3. Build gate, then post the gated body, then push (that ORDER — see GatedPrPublisher).
+        this.runOrSkipBuildGate(repoRoot, buildAlreadyGreen);
         const base = this.branchNaming.baseBranchName(execSync('git branch --show-current', { encoding: 'utf8' }).trim());
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
@@ -129,7 +148,7 @@ export class FinishUpsertPrCommand {
         const result = this.upsertPr(repoRoot, base, body, title, input);
         // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
         // fatal — the PR is already up by now, so a comment failure only warns.
-        this.postChecklistComment(repoRoot, result.prNumber, scan, review, provenanceVerified);
+        this.postChecklistComment(repoRoot, result.prNumber, scan, review, provenance);
         const prNum = result.prNumber;
 
         process.stdout.write(
@@ -160,21 +179,95 @@ export class FinishUpsertPrCommand {
     // Validate + commit + finalize a 3-point merge the AI resolved, if one is in progress. Finalizing here
     // does NOT push (pushRemote=false): this command pushes exactly ONCE, from GatedPrPublisher, and only
     // after review.json + every BLOCK checklist + the build gate pass and the gated PR body is written.
-    private async finalizeAnyInProgressMerge(repoRoot: string): Promise<void> {
+    /**
+     * The build gate — SKIPPED when stage ②'s receipt already covers this exact HEAD.
+     *
+     * The gate is authoritative per-COMMIT, not per-command: re-running it on a tree that has not moved
+     * since stage ② verified it buys nothing and costs a full `nx affected`. That skip is what makes the
+     * three-stage flow cost ONE build rather than two, and it is why moving the gate earlier was affordable.
+     */
+    private runOrSkipBuildGate(repoRoot: string, alreadyGreen: boolean): void {
+        if (alreadyGreen) {
+            process.stdout.write('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n');
+            return;
+        }
+        this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+            '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
+        ));
+    }
+
+    /**
+     * The two stage-② preconditions, together: no unvalidated merge, and a receipt proving stage ② ran.
+     * Returns true when that receipt covers the CURRENT HEAD, i.e. the build gate can be skipped.
+     */
+    private assertStageTwoRan(repoRoot: string): boolean {
+        this.assertNoUnvalidatedMerge(repoRoot);
+        return this.assertReviewStageRan(
+            repoRoot, this.aiBranchName.getFeatureName(), this.gitOut(['rev-parse', 'HEAD']));
+    }
+
+    /**
+     * REFUSE while a 3-point merge is still unvalidated — do not finalize it here.
+     *
+     * This command used to do the finalizing itself. Finalizing means validating a conflict resolution, and
+     * two commands owning that means two implementations that can drift; `PrContextWriter`'s docstring
+     * records this codebase already paying for exactly that once. It also came too late to matter: by the
+     * time finish ran, the reviewers had already reviewed the pre-merge tree.
+     *
+     * So stage ② owns it, and finish only checks. Nothing is lost — the recovery is one command away, and
+     * running it also builds the merged tree and re-briefs the reviewers against it, which finalizing here
+     * never did.
+     */
+    private assertNoUnvalidatedMerge(repoRoot: string): void {
         const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
         const activeDir = this.mergeState.findActiveMergeRunDir(home);
         const marker = activeDir ? this.mergeState.readMergeMarker(activeDir) : null;
         if (!activeDir || !marker || marker.validated) return;
-        await this.mergeEnd.mergeEnd(
-            repoRoot, 'wp-finish-upsert-pr', activeDir,
-            new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
-            new MergeEndOptions(marker.conflictedFiles, false),
+        throw new InformAiError(
+            '⛔ NO PR — a 3-point merge on this branch is still unvalidated, so nothing here has been\n' +
+            'verified: the conflict resolution is unchecked, the merged tree was never built, and any\n' +
+            'reviewer that ran judged the PRE-merge code.\n\n' +
+            `Conflicted file(s): ${marker.conflictedFiles.join(', ')}\n\n` +
+            'Resolve them (see .webpieces/instruct-ai/webpieces.mergeprocess.md), then run:\n' +
+            '  pnpm wp-review-upsert-pr\n' +
+            'It validates the resolution, commits it, builds it, and re-briefs the reviewers.',
         );
     }
 
     /**
+     * REQUIRE stage ② (`wp-review-upsert-pr`) to have run, and report whether it ran on THIS commit.
+     *
+     * Returns true when the receipt matches the current HEAD — the caller then skips its own build, because
+     * the receipt IS the gate for that sha and rebuilding an unchanged tree is a second full `nx affected`
+     * run for a foregone answer.
+     *
+     * Without this check a repo with NO checklists has nothing forcing stage ②: `assertEveryReviewerRan`
+     * is vacuous, and review.json — the only other interlock — is a file the AI writes itself. It could
+     * write it and come straight here, skipping the merge validation and the build entirely.
+     */
+    private assertReviewStageRan(repoRoot: string, featureName: string, headSha: string): boolean {
+        const receipt = this.receipts.read(repoRoot, featureName);
+        if (receipt === null) {
+            throw new InformAiError(
+                '⛔ NO PR — stage ② never ran on this branch. That means the 3-point merge is unvalidated,\n' +
+                'the build gate has not run, no diff was extracted, and no reviewer was briefed.\n\n' +
+                'Run:  pnpm wp-review-upsert-pr\n' +
+                '(then spawn the reviewers it names, write review.json, and re-run this command)',
+            );
+        }
+        if (receipt.headSha === headSha) return true;
+        // Not fatal. Re-reviewing on every follow-up commit would be intolerable, and most drift is a typo
+        // fix. But it is never silent: the build re-runs here, and the PR says the reviewers saw an older tree.
+        process.stderr.write(
+            `\n⚠️  HEAD moved since stage ② ran (reviewed ${receipt.headSha.slice(0, 8)}, now ${headSha.slice(0, 8)}).\n` +
+            '   The build gate will re-run, and the PR will record that reviewers judged an earlier tree.\n' +
+            '   If the change was substantive, re-run pnpm wp-review-upsert-pr and re-spawn the reviewers.\n\n');
+        return false;
+    }
+
+    /**
      * Refuse the PR while ANY applicable checklist still owes a verdict, naming exactly those reviewers and
-     * exactly what to tell them — via the same renderer `wp-checklist` uses, so the AI sees the identical
+     * exactly what to tell them — via the same renderer `wp-review-upsert-pr` uses, so the AI sees the identical
      * block it would have seen there. Lists ONLY the outstanding ones: re-instructing an already-reviewed
      * checklist invites a redundant second run and reads as though the earlier verdict did not count.
      * No-op for a repo with no applicable checklists.
@@ -193,7 +286,9 @@ export class FinishUpsertPrCommand {
             `branch have no passing verdict yet: ${this.instructions.names(scan.outstanding)}\n\n` +
             format +
             `${this.instructions.render(scan.outstanding, scan.reviewPath, scan.context)}\n\n` +
-            `Then re-run: pnpm wp-finish-upsert-pr   (or check anytime with: pnpm wp-checklist)`,
+            `Then re-run: pnpm wp-finish-upsert-pr\n` +
+            `(Each reviewer's generated instructions file is already written — re-running wp-review-upsert-pr\n` +
+            ` is only needed if the code changed since it ran.)`,
         );
     }
 
@@ -240,7 +335,10 @@ export class FinishUpsertPrCommand {
      * absent from `applicable` by construction, and their "why not" evidence (the configured globs and the
      * changed-file total) exists nowhere else without recomputing the diff a second way.
      */
-    private commentRows(scan: ChecklistScan, review: ReviewJson): ChecklistCommentRow[] {
+    private commentRows(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): ChecklistCommentRow[] {
+        // agentType -> did it open the diff. Absent ⇒ not assessed, which prints nothing (see ChecklistCommentRow.diffRead).
+        const readByAgent = new Map<string, boolean>();
+        for (const e of provenance.evidence) readByAgent.set(e.agentType, e.readDiff);
         return scan.roster.entries.map((entry: TriggeredChecklist): ChecklistCommentRow => {
             const ran = entry.matchedFiles.length > 0;
             const req = new RequiredChecklist(
@@ -250,9 +348,12 @@ export class FinishUpsertPrCommand {
             const verdict = ran
                 ? this.reviewJsonService.resolveVerdict(req, review.results)
                 : new ChecklistVerdict(entry.def.id, '', '');
-            return new ChecklistCommentRow(
+            const row = new ChecklistCommentRow(
                 entry.def.subagent, verdict.status, verdict.detail, ran,
                 entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
+            const read = readByAgent.get(entry.def.subagent);
+            row.diffRead = read === undefined ? '' : (read ? 'yes' : 'no');
+            return row;
         });
     }
 
@@ -266,18 +367,21 @@ export class FinishUpsertPrCommand {
     // Enforce that EACH matched checklist was reviewed by its OWN named subagent, as a DISTINCT run —
     // the coding agent may not self-certify, and one reviewer may not stand in for several. A verified set
     // passes silently; no session id warns but passes; any missing reviewer throws so the PR does not open.
-    private enforceProvenance(required: readonly RequiredChecklist[], branch: string): boolean {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private enforceProvenance(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
         const errors: string[] = [];
-        let verified = true; // no reviewers to verify ⇒ vacuously true
+        const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
         const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
         if (subagents.length > 0) {
             const result = this.provenance.verifyDistinct(subagents, branch);
-            verified = result.status === PROVENANCE_OK;
+            report.verified = result.status === PROVENANCE_OK;
             if (result.status === PROVENANCE_MISSING) {
                 errors.push(result.detail);
             } else if (result.status === PROVENANCE_SKIPPED) {
                 process.stderr.write(`⚠️  ${result.detail}\n`);
             }
+            report.evidence = this.gatherEvidence(repoRoot, required, result, branch);
+            errors.push(...this.evidenceErrors(report.evidence, config));
         }
         if (errors.length > 0) {
             throw new InformAiError(
@@ -286,7 +390,41 @@ export class FinishUpsertPrCommand {
                 `\n\nSpawn the named reviewer subagent to review the checklist on THIS branch, then re-run.`,
             );
         }
-        return verified;
+        return report;
+    }
+
+    /**
+     * What each credited reviewer actually read. Purely observational here — {@link evidenceErrors} decides
+     * whether any of it blocks, and by default none of it does.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private gatherEvidence(repoRoot: string, required: readonly RequiredChecklist[], result: ProvenanceResult, branch: string): ReviewerEvidence[] {
+        const docPaths: Record<string, string> = {};
+        for (const req of required) {
+            if (req.subagent.trim() !== '') docPaths[req.subagent] = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
+        }
+        const diffDir = path.join(prDirFor(repoRoot, this.aiBranchName.getFeatureName()), 'diff');
+        return this.provenance.evidenceFor(new EvidenceRequest(branch, result.agentIds, diffDir, docPaths));
+    }
+
+    /**
+     * WARN (default) or REFUSE (opt-in) on a reviewer that wrote a verdict without opening the diff.
+     *
+     * Default-warn because the signal is derived from undocumented Claude Code transcript internals: if the
+     * format shifts, a blocking check wedges every PR in every consumer repo with no self-service recovery.
+     * `requireDiffEvidence` lets a repo that has watched the warning promote it deliberately.
+     */
+    private evidenceErrors(evidence: readonly ReviewerEvidence[], config: PrGateConfig): string[] {
+        const blind = evidence.filter((e: ReviewerEvidence): boolean => !e.readDiff);
+        if (blind.length === 0) return [];
+        const names = blind.map((e: ReviewerEvidence): string => e.agentType).join(', ');
+        if (!config.requireDiffEvidence) {
+            process.stderr.write(
+                `\n⚠️  ${blind.length} reviewer(s) wrote a verdict with no record of opening the extracted diff: ${names}\n` +
+                '   Published on the PR as a note. Not blocking — set pr-gate.requireDiffEvidence:true to make it one.\n');
+            return [];
+        }
+        return [`these reviewers wrote a verdict without opening the diff (pr-gate.requireDiffEvidence is on): ${names}`];
     }
 
     /**
@@ -300,11 +438,12 @@ export class FinishUpsertPrCommand {
      * checklists configured must still see no comment at all (see ChecklistNotice / renderDashboard).
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: ReviewJson, provenanceVerified: boolean): void {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): void {
         if (prNumber === '' || scan.defined.length === 0) return;
         if (!loadAndValidate(repoRoot).prGate.checklistComments) return;
         const body = this.dashboard.renderChecklistComment(
-            this.commentRows(scan, review), provenanceVerified, scan.roster.baseResolved);
+            this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved);
         const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         fs.mkdirSync(prDir, { recursive: true });
         const payload = path.join(prDir, 'checklist-comment.json');

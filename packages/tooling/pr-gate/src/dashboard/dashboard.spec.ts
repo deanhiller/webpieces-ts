@@ -74,8 +74,13 @@ describe('renderChecklistComment — roll-up + full roster', () => {
 
     it('distinguishes a PATTERNLESS checklist from a skipped one (both fired zero globs)', () => {
         const md = renderChecklistComment([alwaysRow('api-reviewer', CK_PASS, 'ok')], true);
-        expect(md).toContain('ALWAYS RUNS (no patterns) — whole diff in scope, 4 changed file(s)');
+        expect(md).toContain('ALWAYS RUNS — no `patterns` configured');
+        expect(md).toContain('Whole diff in scope, 4 changed file(s)');
         expect(md).not.toContain('matched 0 of');
+        // The line must say what a missing `patterns` COSTS, not just what it means. Six patternless
+        // checklists all firing on a one-file docs PR is what that misconfiguration looks like from the
+        // outside, and a reader told only "ALWAYS RUNS" has no reason to suspect the config over the diff.
+        expect(md).toContain('fires on EVERY PR including docs-only ones');
     });
 
     it('refuses to report an unresolvable diff base as an all-clear', () => {

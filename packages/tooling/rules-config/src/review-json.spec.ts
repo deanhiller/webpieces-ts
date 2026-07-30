@@ -90,10 +90,24 @@ describe('writePrContext', () => {
     it('writes base/head/changedFiles JSON to pr-context.json and round-trips', () => {
         const svc = new ReviewJsonService();
         const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-prctx-'));
-        const p = svc.writePrContext(repo, 'feat', new PrContext('base123', 'head456', ['a.ts', 'db/1.sql']));
+        const p = svc.writePrContext(repo, 'feat', new PrContext(
+            'base123', 'head456', ['a.ts', 'db/1.sql'],
+            true, ['a.ts'], 'git diff base123', '/repo/diff', '2026-07-30T00:00:00.000Z'));
         expect(p).toBe(svc.prContextPath(repo, 'feat'));
         const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
-        expect(parsed).toEqual({ base: 'base123', head: 'head456', changedFiles: ['a.ts', 'db/1.sql'] });
+        expect(parsed).toEqual({
+            base: 'base123',
+            // A real sha, NOT the literal 'HEAD'. 'HEAD' is not a fact: it cannot be compared later to
+            // detect that the tree moved under a review, which is what the stage-② receipt needs.
+            head: 'head456',
+            changedFiles: ['a.ts', 'db/1.sql'],
+            // Recorded so a reviewer is never handed a range that silently excludes uncommitted work.
+            dirty: true,
+            dirtyFiles: ['a.ts'],
+            diffCommand: 'git diff base123',
+            diffDir: '/repo/diff',
+            generatedAt: '2026-07-30T00:00:00.000Z',
+        });
     });
 });
 
@@ -141,7 +155,7 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
     });
 
     // The schema hint is now ONLY the review.json shape. Checklist instructions moved to
-    // ChecklistInstructionsService (one renderer, shared by wp-checklist / wp-finish / this file's errors) —
+    // ChecklistInstructionsService (one renderer, shared by wp-review-upsert-pr / wp-finish / this file's errors) —
     // they used to be appended here AND printed by wp-start, two copies that could drift.
     it('carries no checklist instructions at all — that is ChecklistInstructionsService now', () => {
         const hint = reviewJsonSchemaHint('/repo/review.json');
@@ -221,10 +235,13 @@ describe('ReviewJsonService.pendingChecklists', () => {
     });
 });
 
-// The ONE renderer behind wp-checklist, wp-finish's fail-fast, and review.json validation errors.
+// The ONE renderer behind wp-review-upsert-pr, wp-finish's fail-fast, and review.json validation errors.
 describe('ChecklistInstructionsService', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
-    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json');
+    // A CLEAN-tree context: base→head, both real shas. The command is GIVEN, never assembled here — see
+    // the dirty-tree regression test below for why that distinction is the whole point.
+    const CTX = new ChecklistReviewContext(
+        'abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json', 'git diff abc1234 def5678 -- <file>');
     const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
 
     it('renders nothing at all when nothing is pending, so callers can concatenate blindly', () => {
@@ -258,11 +275,58 @@ describe('ChecklistInstructionsService', () => {
         expect(text).toContain('merge-base origin/main HEAD');
     });
 
-    it('inlines the diff command with the real base sha and the authoritative full-file-set path', () => {
+    it('inlines the diff command it was GIVEN, and the authoritative full-file-set path', () => {
         const req = new RequiredChecklist('a', 'a', '', ['x'], ['**']);
         const text = inst.render([req], REVIEW, CTX);
-        expect(text).toContain('git diff abc1234 HEAD -- <file>');
+        expect(text).toContain('git diff abc1234 def5678 -- <file>');
         expect(text).toContain('/repo/.webpieces/pr-review/feat/pr-context.json');
+    });
+
+});
+
+// Split out to keep each describe under the method-length limit. These are the diff-command tests: the
+// renderer must print the command it was GIVEN, never re-assemble `<base> HEAD`.
+describe('ChecklistInstructionsService — the diff command', () => {
+    const inst = new ChecklistInstructionsService(new ReviewJsonService());
+    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+
+    /**
+     * THE regression test for the recorded failure.
+     *
+     * This renderer used to hand-assemble `git diff <baseSha> HEAD -- <file>`. On a dirty tree that range is
+     * empty — the changed-FILE set is computed base→working-tree — so a reviewer was handed a file list and
+     * a command that showed it nothing. A real reviewer subagent ran that command, got no output, and had
+     * to guess its way to `git diff HEAD`.
+     *
+     * The command must therefore come from the basis that produced the file set, and a dirty one must carry
+     * NO head. Asserting the absence of ` HEAD ` is the point: that token reappearing IS the bug.
+     */
+    it('prints the dirty-tree command with NO head, and never re-assembles `<base> HEAD`', () => {
+        const dirty = new ChecklistReviewContext(
+            'abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json', 'git diff abc1234 -- <file>', '', true);
+        const text = inst.render([new RequiredChecklist('a', 'a', '', ['x'], ['**'])], REVIEW, dirty);
+        expect(text).toContain('git diff abc1234 -- <file>');
+        expect(text).not.toContain('git diff abc1234 HEAD');
+        // …and it must SAY the diff includes uncommitted work, so the reviewer knows what it is judging.
+        expect(text).toContain('INCLUDES uncommitted');
+    });
+
+    // A materialized diff is one Read instead of a shell-out per file, so it leads when it exists.
+    it('points at the extracted diff when one was materialized', () => {
+        const withDiff = new ChecklistReviewContext(
+            'abc1234', '/repo/ctx.json', 'git diff abc1234 def5678 -- <file>', '/repo/.webpieces/pr-review/feat/diff');
+        const text = inst.render([new RequiredChecklist('a', 'a', '', ['x'], ['**'])], REVIEW, withDiff);
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
+        expect(text).toContain('manifest.json');
+    });
+
+    // An older pr-gate wrote a context with no command. Guessing `<base> HEAD` to fill the gap would
+    // resurrect the exact bug above, so the gap is stated instead.
+    it('states a missing reproduce command rather than inventing one', () => {
+        const noCmd = new ChecklistReviewContext('abc1234', '/repo/ctx.json');
+        const text = inst.render([new RequiredChecklist('a', 'a', '', ['x'], ['**'])], REVIEW, noCmd);
+        expect(text).toContain('no reproduce command recorded');
+        expect(text).not.toContain('git diff abc1234 HEAD');
     });
 
     // A truncated list that looks complete is how a reviewer reviews 6 of 40 files and reports success.

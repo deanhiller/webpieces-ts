@@ -105,13 +105,19 @@ flow are not interchangeable.
 2. **`pnpm wp-finish-update`** — finalize a squash-update after you've resolved its conflicts (validates +
    commits + swaps the branch). Only needed on the conflict path; a clean `wp-start-update` finalizes
    itself. It does NOT build or post a PR.
-3. **`pnpm wp-start-upsert-pr`** — the PR flow: update from main (same 3-point engine), then tells you to
-   run `wp-checklist` + write `review.json`. It runs NO build gate and does NOT push — start only syncs
-   from main; the single (authoritative) build gate and the one push both live in finish. Never creates
-   the PR itself. On a merge conflict here, finish with `pnpm wp-finish-upsert-pr` (not `wp-finish-update`).
-4. **`pnpm wp-finish-upsert-pr`** — validates any in-progress merge, requires your `review.json` (its
-   `title` becomes the PR title), runs the **authoritative** build gate, pushes, and creates/updates the PR.
-5. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge
+3. **`pnpm wp-start-upsert-pr`** — the PR flow, STAGE ①: update from main (same 3-point engine), then
+   tells you to run `wp-review-upsert-pr`. It runs NO build gate and does NOT push, and never creates the
+   PR itself. On a merge conflict here, resolve it and continue with `pnpm wp-review-upsert-pr` (not
+   `wp-finish-update`, and no longer `wp-finish-upsert-pr`).
+4. **`pnpm wp-review-upsert-pr`** — STAGE ②, and the one that verifies before anyone reviews. It validates
+   and commits any in-progress 3-point merge, asserts a clean tree, runs the **build gate**, extracts this
+   branch's diff to `.webpieces/pr-review/<branch>/diff/`, writes a per-reviewer instructions file, and
+   prints exactly what to spawn plus the `review.json` schema. It CAN fail — and when it does, no reviewer
+   has been spawned yet, so a broken branch costs no review effort.
+5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `review.json` (its `title`
+   becomes the PR title) and every reviewer's verdict, then pushes and creates/updates the PR. It re-runs
+   the build gate ONLY if HEAD moved since stage ②, so the three stages still cost one build.
+6. **`pnpm wp-cleanup`** — delete the local branches that are provably dead (merged PR, squash-merge
    backup of a merged branch, or no commits of their own). Run it after `gh pr merge`, or any time the
    branch cap blocks you. It takes no arguments and needs no judgement call from you: it recomputes the
    verdicts itself, deletes one branch per command, spares anything a human should rule on, and logs

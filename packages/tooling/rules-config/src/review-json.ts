@@ -30,7 +30,7 @@ export class ChecklistResult {
     override: string;  // '' = no override; non-empty = ship-anyway justification (renders 🟠 overridden)
     // '' = a well-formed verdict. Non-empty = the file exists and parses but its verdict cannot be READ
     // (most often: it still uses the removed `success` field). Carried as data rather than thrown so the
-    // complaint can be reported by BOTH wp-checklist and wp-finish-upsert-pr in identical words, and so a
+    // complaint can be reported by BOTH wp-review-upsert-pr and wp-finish-upsert-pr in identical words, and so a
     // legacy file is never silently mistaken for a missing one.
     problem: string;
 
@@ -74,12 +74,25 @@ export class RequiredChecklist {
  * them over — so the printed block could not stand on its own. Data-only; empty = omit those lines.
  */
 export class ChecklistReviewContext {
-    baseSha: string;        // the 3-point merge-base sha; `git diff <baseSha> HEAD -- <file>`
+    baseSha: string;        // the 3-point merge-base sha
     prContextPath: string;  // path of pr-context.json — the AUTHORITATIVE full changed-file set
+    /**
+     * The exact command that reproduces ONE file's diff, with a `-- <file>` tail — NOT assembled by the
+     * caller. This used to be hardcoded as `git diff <baseSha> HEAD -- <file>`, which returns NOTHING on a
+     * dirty tree because the changed-file set is computed base→working-tree. See DiffBasis, which derives
+     * this string from the same range the file set came from.
+     */
+    fileDiffCommand: string;
+    diffDir: string;        // dir of the MATERIALIZED diff (diff/ALL.diff + diff/files/…); '' when not written
+    dirty: boolean;         // true ⇒ the range includes uncommitted + untracked work, and must be said out loud
 
-    constructor(baseSha = '', prContextPath = '') {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(baseSha = '', prContextPath = '', fileDiffCommand = '', diffDir = '', dirty = false) {
         this.baseSha = baseSha;
         this.prContextPath = prContextPath;
+        this.fileDiffCommand = fileDiffCommand;
+        this.diffDir = diffDir;
+        this.dirty = dirty;
     }
 }
 
@@ -148,13 +161,32 @@ export class ChecklistVerdict {
 // coarsely by path (in the config) while the subagent makes the fine, content-level judgment. Data-only.
 export class PrContext {
     base: string;          // the 3-point merge-base sha the gate diffs against
-    head: string;          // HEAD sha
-    changedFiles: string[]; // every file changed base..head (NOT tsOnly — includes .sql/.gql/Dockerfile/…)
+    /**
+     * The real HEAD sha. This was once the literal string 'HEAD', which is not a fact — it cannot be
+     * compared later to detect that the tree moved under a review, and it reads as a range that was never
+     * actually diffed. Its only reader (reviewContextFor) takes `base`, so recording the sha is free.
+     */
+    head: string;
+    changedFiles: string[]; // every file changed in the range (NOT tsOnly — includes .sql/.gql/Dockerfile/…)
+    dirty: boolean;         // true ⇒ changedFiles includes uncommitted + untracked work
+    dirtyFiles: string[];   // exactly which paths are uncommitted/untracked — why `dirty` is true
+    diffCommand: string;    // the command that reproduces the WHOLE diff (see DiffBasis; correct when dirty)
+    diffDir: string;        // dir holding the materialized per-file diffs + ALL.diff; '' when not materialized
+    generatedAt: string;    // ISO timestamp, so a stale context is detectable rather than silently trusted
 
-    constructor(base: string, head: string, changedFiles: string[]) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(
+        base: string, head: string, changedFiles: string[],
+        dirty = false, dirtyFiles: string[] = [], diffCommand = '', diffDir = '', generatedAt = '',
+    ) {
         this.base = base;
         this.head = head;
         this.changedFiles = changedFiles;
+        this.dirty = dirty;
+        this.dirtyFiles = dirtyFiles;
+        this.diffCommand = diffCommand;
+        this.diffDir = diffDir;
+        this.generatedAt = generatedAt;
     }
 }
 
@@ -204,7 +236,13 @@ export class ReviewJsonService {
             // webpieces-disable no-any-unknown -- parsed JSON is opaque until narrowed on the next line
             const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>;
             const base = typeof raw['base'] === 'string' ? (raw['base'] as string) : '';
-            return new ChecklistReviewContext(base, p);
+            // Recover the REPRODUCE command rather than re-deriving it: a context written by an older
+            // pr-gate has no diffCommand, and guessing `<base> HEAD` there would resurrect the exact
+            // empty-on-a-dirty-tree bug this field exists to kill. Absent ⇒ omit the line entirely.
+            const cmd = typeof raw['diffCommand'] === 'string' ? (raw['diffCommand'] as string) : '';
+            const diffDir = typeof raw['diffDir'] === 'string' ? (raw['diffDir'] as string) : '';
+            const dirty = raw['dirty'] === true;
+            return new ChecklistReviewContext(base, p, cmd === '' ? '' : `${cmd} -- <file>`, diffDir, dirty);
         } catch (err: unknown) {
             const error = toError(err);
             void error;
@@ -365,7 +403,7 @@ export class ReviewJsonService {
     // Every matched checklist whose verdict is FAIL (reviewed, found a problem, no override) or MISSING (no
     // review-<id>.json written) → one error each, printing the reviewer's `output` verbatim.
     private requiredChecklistErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): string[] {
-        // Format complaints come from the ONE renderer, so wp-checklist and wp-finish word them identically.
+        // Format complaints come from the ONE renderer, so wp-review-upsert-pr and wp-finish word them identically.
         const errors: string[] = this.checklistFormatErrors(required, results);
         for (const req of required) {
             const verdict = this.resolveVerdict(req, results);
@@ -391,6 +429,33 @@ export class ReviewJsonService {
 
     private checklistFileName(checklistId: string): string {
         return `review-${checklistId}.json`;
+    }
+
+    /**
+     * THE renderer for a reviewer's verdict schema — with the reviewer's own `id` already filled in and,
+     * when known, the exact file it must write.
+     *
+     * There is one because a verdict schema that lives anywhere a human maintains it goes stale, and a
+     * reviewer follows the stale copy. That is not a hypothetical: when `success` was replaced by the
+     * tri-state `status`, hand-written `.claude/agents/*.md` files kept documenting `success`, and a real
+     * PR had to carry "the verdict format in your own agent .md file is OUT OF DATE" in the spawn prompt to
+     * work around it. Every printed copy — the stage-② roster, the generated per-reviewer instructions
+     * file, and the complaint raised against a malformed verdict — now comes from here.
+     *
+     * `verdictPath` may be '' when the caller is describing the shape rather than a specific file.
+     */
+    verdictSchemaFor(id: string, verdictPath = '', indent = '      '): string {
+        const lines = [
+            `${indent}{ "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
+            `"output": "what you checked / found", "override": "" }`,
+            `${indent}  ${VERDICT_GREEN}  → passes, nothing to flag`,
+            `${indent}  ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR`,
+            `${indent}  ${VERDICT_RED}    → REFUSES the PR (set a non-empty "override" to ship anyway with a stated justification)`,
+            `${indent}Prefer "${VERDICT_YELLOW}" over red-plus-override when the change is acceptable but worth a human's`,
+            `${indent}attention — an override reads as a deliberately-accepted defect, a yellow reads as a note.`,
+        ];
+        if (verdictPath !== '') lines.push(`${indent}File: ${verdictPath}`);
+        return lines.join('\n');
     }
 
     /**
@@ -431,13 +496,9 @@ export class ReviewJsonService {
     private statusProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
         // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
         if ((VERDICT_STATUSES as readonly string[]).includes(status)) return '';
-        const shape =
-            `      { "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
-            `"output": "what you checked / found", "override": "" }\n` +
-            `        ${VERDICT_GREEN}  → passes\n` +
-            `        ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR\n` +
-            `        ${VERDICT_RED}    → REFUSES the PR (set a non-empty "override" to ship anyway with a stated justification)\n` +
-            `      File: ${filePath}`;
+        // The ONE renderer — see verdictSchemaFor. A second copy here is what let the old `success` shape
+        // survive in print after it was removed from the parser.
+        const shape = this.verdictSchemaFor(id, filePath);
         if ('success' in raw) {
             return `Checklist "${id}" wrote its verdict with the REMOVED "success" field. It is now a tri-state ` +
                 `"status" — there is no compatibility mode. Rewrite the file as:\n${shape}`;
