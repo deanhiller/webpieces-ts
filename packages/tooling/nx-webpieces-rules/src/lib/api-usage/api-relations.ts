@@ -104,10 +104,15 @@ export interface ApiMethodMeta {
     path: string;
     kind: EndpointKind;
     /**
-     * `@Queue(...)` override, else `${ApiClassName}-${methodName}`. Present for every method so a
-     * `cron` schedule and a `cloudtasks` queue are both nameable; Terraform matches on this string.
+     * `@Queue(...)` override, else `${ApiClassName}-${methodName}`.
+     *
+     * ONLY on a `cloudtasks` or `cron` method — those are the kinds actually delivered through a
+     * named queue or schedule, and Terraform matches on this string. A synchronous `rpc` (or an
+     * inbound `external`) endpoint has no queue and needs none; emitting a plausible-looking name for
+     * one put every synchronous endpoint one naive `methods.map(m => m.queueName)` away from being
+     * provisioned as a queue.
      */
-    queueName: string;
+    queueName?: string;
 }
 
 /**
@@ -139,12 +144,43 @@ export interface ApiContract {
     owner: string;
     /** 'rpc' | 'pubsub' for an in-repo contract, 'external' for a vendor seam. */
     apiKind: ApiTransport;
-    basePath?: string;
+    /**
+     * REQUIRED. Every routed contract carries `@ApiPath`, so every entry in this table must carry the
+     * base path its methods hang off. Optional was worse than absent: a consumer joining
+     * `basePath + path` for the ONE entry that lost it computed `/test` where the real route was
+     * `/whatsapp/test`, and had no reason to suspect it — every other entry had the field. Generation
+     * now FAILS instead of shipping an entry that computes a confidently wrong URL.
+     */
+    basePath: string;
     methods: ApiMethodMeta[];
 }
 
 /** apiClassName -> its committed contract. Serialized as the `apiContracts` key. */
 export type ApiContracts = Record<string, ApiContract>;
+
+/**
+ * ONE decorator argument the scan saw but could not reduce to a string — `@ApiPath(SOME_CONST)`
+ * where SOME_CONST is imported from another module, a computed expression, an enum member, ...
+ *
+ * Recorded rather than dropped. Before this existed, an unresolvable argument cost the contract its
+ * basePath, or a method, or (when EVERY method's path was one) the whole class — with nothing
+ * printed anywhere. Same-module constants now resolve, so what remains here is the genuinely
+ * unresolvable, which the author can fix by inlining the literal or moving the constant in-module.
+ */
+export class NonLiteralDecoratorArg {
+    constructor(
+        /** The contract class the argument was written on. */
+        public readonly api: string,
+        /** `ApiPath` | `Endpoint` | `Queue`. */
+        public readonly decorator: string,
+        /** The method name for a member decorator, null for a class decorator. */
+        public readonly method: string | null,
+        /** The argument exactly as written, e.g. `WHATSAPP_API_PATH`. */
+        public readonly argument: string,
+        /** `path/to/file.ts:LINE`, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
 
 /** Derive the relation kind from the (possibly empty) implements/uses ref lists. */
 // webpieces-disable no-function-outside-class -- pure data helper for these serialization DTOs

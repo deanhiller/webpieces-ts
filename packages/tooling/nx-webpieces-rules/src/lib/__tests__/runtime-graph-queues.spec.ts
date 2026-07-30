@@ -157,7 +157,7 @@ const PUSH_CONTRACTS: ApiContracts = {
         owner: 'shared-api',
         apiKind: 'rpc',
         basePath: '/api/push',
-        methods: [{ name: 'notify', path: '/notify', kind: 'external', queueName: 'RpcApi-notify' }],
+        methods: [{ name: 'notify', path: '/notify', kind: 'external' }],
     },
 };
 
