@@ -182,6 +182,48 @@ export class NonLiteralDecoratorArg {
     ) {}
 }
 
+/**
+ * ONE `@Endpoint(path, kind)` whose PATH argument was present but could not be reduced to a string.
+ *
+ * Split out of NonLiteralDecoratorArg (which stays a warning, covering @Queue and the rest) because
+ * this one is FATAL. Upstream components need the URL: an http client builds its request as
+ * `basePath + path`, so an unreadable path is missing ROUTING, not missing metadata — the same
+ * reasoning that already makes basePath required. Skipping the method instead used to delete it, and
+ * a class whose every path was a constant lost every method and vanished from `apiContracts` with
+ * nothing printed anywhere.
+ */
+export class UnresolvedEndpointPath {
+    constructor(
+        /** The contract class the method is declared on. */
+        public readonly api: string,
+        /** The method name. */
+        public readonly method: string,
+        /** The path argument exactly as written, e.g. `PROCESS_PATH`. */
+        public readonly argument: string,
+        /** `path/to/file.ts:LINE`, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
+
+/**
+ * A contract class that DECLARED `@Endpoint` methods and kept none of them.
+ *
+ * The backstop for the mechanism that hid an entire service: `buildApiContracts` skips a zero-method
+ * class (correctly — a vendor seam has no routes), so a class gutted by unreadable decorator
+ * arguments left through the same door as a legitimately routeless one. A class that declared
+ * endpoints and produced none is never legitimate, so it is named instead.
+ */
+export class EmptiedApiContract {
+    constructor(
+        /** The contract class name. */
+        public readonly api: string,
+        /** How many `@Endpoint` decorators were written on it. */
+        public readonly declared: number,
+        /** `path/to/file.ts:LINE` of the class, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
+
 /** Derive the relation kind from the (possibly empty) implements/uses ref lists. */
 // webpieces-disable no-function-outside-class -- pure data helper for these serialization DTOs
 export function deriveApiRelationKind(implementsRefs: ApiRef[], usesRefs: ApiRef[]): ApiRelationKind {

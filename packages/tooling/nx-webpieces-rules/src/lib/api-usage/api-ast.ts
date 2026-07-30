@@ -14,7 +14,15 @@ import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
 import { classDecorators, decoratorName } from '../di-graph/bindings';
-import { ApiClassInfo, ApiMethodMeta, ApiTransport, EndpointKind, NonLiteralDecoratorArg } from './api-relations';
+import {
+    ApiClassInfo,
+    ApiMethodMeta,
+    ApiTransport,
+    EmptiedApiContract,
+    EndpointKind,
+    NonLiteralDecoratorArg,
+    UnresolvedEndpointPath,
+} from './api-relations';
 
 /** Legal `@Endpoint(path, kind)` values; anything else is a source error, not a kind we invent. */
 const ENDPOINT_KINDS: readonly EndpointKind[] = ['rpc', 'cloudtasks', 'cron', 'external'];
@@ -120,15 +128,23 @@ export function decoratorArgValue(
 }
 
 /**
- * Collects every decorator argument the scan could not reduce to a string.
+ * Collects everything this parser-only pass had to drop: decorator arguments it could not reduce to
+ * a string, plus the two of those that are FATAL rather than merely lossy.
  *
  * A same-module constant now resolves, but a cross-module one (`import { PATH } from './paths'`)
  * genuinely cannot — the source pre-pass has no checker by design. That gap used to be invisible:
  * the contract simply came out with no basePath, or with fewer methods, or not at all. Recording it
  * turns a silent drop into a named one, pointing at the exact file, line and identifier.
+ *
+ * Three sinks, because the consequences differ. `record` is the warning stream (a @Queue name falls
+ * back to a derived one, so the graph is degraded, not wrong). `recordUnresolvedPath` and
+ * `recordEmptiedContract` are collected so generation can FAIL — one aggregated error naming every
+ * offender, because an author fixing five constants wants all five in one run.
  */
 export class DecoratorArgDiagnostics {
     private readonly found: NonLiteralDecoratorArg[] = [];
+    private readonly unresolvedPaths: UnresolvedEndpointPath[] = [];
+    private readonly emptied: EmptiedApiContract[] = [];
 
     constructor(private readonly workspaceRoot: string) {}
 
@@ -137,8 +153,26 @@ export class DecoratorArgDiagnostics {
         this.found.push(new NonLiteralDecoratorArg(api, decorator, method, argument, this.locate(node)));
     }
 
+    /** Record an `@Endpoint` whose path argument is unreadable — fatal, see UnresolvedEndpointPathError. */
+    recordUnresolvedPath(api: string, method: string, argument: string, node: ts.Node): void {
+        this.unresolvedPaths.push(new UnresolvedEndpointPath(api, method, argument, this.locate(node)));
+    }
+
+    /** Record a class that declared `declared` `@Endpoint` methods and kept none of them. */
+    recordEmptiedContract(api: string, declared: number, node: ts.Node): void {
+        this.emptied.push(new EmptiedApiContract(api, declared, this.locate(node)));
+    }
+
     all(): NonLiteralDecoratorArg[] {
         return this.found;
+    }
+
+    unresolvedEndpointPaths(): UnresolvedEndpointPath[] {
+        return this.unresolvedPaths;
+    }
+
+    emptiedContracts(): EmptiedApiContract[] {
+        return this.emptied;
     }
 
     private locate(node: ts.Node): string {
@@ -185,8 +219,14 @@ const QUEUED_KINDS: readonly EndpointKind[] = ['cloudtasks', 'cron'];
  * would put an undeclared cron or webhook into the graph as an ordinary rpc call, which is precisely
  * the blindness the required argument exists to remove.
  *
- * `path` may be a same-module constant; an argument that still cannot be reduced is recorded on
- * `diagnostics` before the method is skipped, so the hole is named rather than merely absent.
+ * `path` is NOT skippable. It may be a same-module constant; an argument that is present but still
+ * cannot be reduced is recorded on `diagnostics` as an UnresolvedEndpointPath, which FAILS generation
+ * later. Upstream components need the URL — a client computes its request as `basePath + path` — so
+ * dropping the method here shipped a contract missing routing information, and a class whose every
+ * path was a constant lost every method and disappeared from the graph entirely.
+ *
+ * A class that declared endpoints and kept NONE of them is recorded too: `buildApiContracts` skips
+ * zero-method classes, which is the door a gutted contract used to leave through unannounced.
  */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
 export function endpointMethodsOf(
@@ -196,16 +236,21 @@ export function endpointMethodsOf(
     diagnostics: DecoratorArgDiagnostics | null = null,
 ): ApiMethodMeta[] {
     const methods: ApiMethodMeta[] = [];
+    let declared = 0;
     for (const member of cls.members) {
         if (!ts.isMethodDeclaration(member) || !ts.isIdentifier(member.name)) continue;
         const endpoint = memberDecorator(member, 'Endpoint');
         if (endpoint === null) continue;
+        declared++;
         const name = member.name.text;
         const args = decoratorArgs(endpoint);
         const pathArg = decoratorArgValue(args[0], constants);
         const kindArg = decoratorArgValue(args[1], constants);
         reportUnresolved(diagnostics, api, 'Endpoint', name, pathArg, endpoint);
         reportUnresolved(diagnostics, api, 'Endpoint', name, kindArg, endpoint);
+        if (diagnostics !== null && pathArg.unresolvedName !== null) {
+            diagnostics.recordUnresolvedPath(api, name, pathArg.unresolvedName, endpoint);
+        }
         const kind = kindArg.value;
         if (pathArg.value === null || kind === null || !ENDPOINT_KINDS.includes(kind as EndpointKind)) continue;
         const method: ApiMethodMeta = { name, path: pathArg.value, kind: kind as EndpointKind };
@@ -216,6 +261,11 @@ export function endpointMethodsOf(
             method.queueName = queueNameOf(member, api, name, constants, diagnostics);
         }
         methods.push(method);
+    }
+    // Declared endpoints, kept none: the class is about to be skipped as "zero methods" and would
+    // leave no trace. Never legitimate — a routeless contract declares no @Endpoint at all.
+    if (diagnostics !== null && declared > 0 && methods.length === 0) {
+        diagnostics.recordEmptiedContract(api, declared, cls);
     }
     return methods;
 }
