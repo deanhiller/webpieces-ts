@@ -611,6 +611,25 @@ export function validateCommandsSection(commands: unknown, legacyPrGate: unknown
     // legacy top-level block so an un-migrated file still validates its gate config.
     errors.push(...validatePrGateSection(c['pr-gate'] ?? legacyPrGate, repoRoot));
 
+    // Canonical guard-hint strings live under commands.guardHints; each value, when present, must be a
+    // non-empty command string. The two names bind to the two guards that surface them in fix hints.
+    const hints = c['guardHints'];
+    if (hints !== undefined) {
+        if (typeof hints !== 'object' || hints === null || Array.isArray(hints)) {
+            errors.push(`[commands] "guardHints" must be an object { "prCreationOrPush": "...", "mergeInProgress": "..." }.`);
+        } else {
+            // webpieces-disable no-any-unknown -- narrowing the opaque guardHints object from consumer JSON
+            const h = hints as Record<string, unknown>;
+            for (const field of ['prCreationOrPush', 'mergeInProgress']) {
+                if (field in h && (typeof h[field] !== 'string' || (h[field] as string).trim() === '')) {
+                    errors.push(`[commands] "guardHints.${field}" must be a non-empty string (the gated command to run).`);
+                }
+            }
+        }
+    }
+
+    // Legacy FLAT command strings (pre-guardHints). Still accepted for back-compat; a migrated file
+    // uses commands.guardHints instead.
     for (const field of ['upsertPr', 'mergeComplete']) {
         if (field in c && typeof c[field] !== 'string') {
             errors.push(`[commands] "${field}" must be a string (the gated command to run).`);

@@ -399,6 +399,24 @@ describe('validateCommandsSection', () => {
         const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, upsertPr: 123 }, undefined);
         expect(errors.some(e => e.includes('[commands] "upsertPr" must be a string'))).toBe(true);
     });
+
+    it('accepts a commands.guardHints object with valid command strings', () => {
+        const errors = validateCommandsSection(
+            { 'pr-gate': { mode: 'OFF' }, guardHints: { prCreationOrPush: 'pnpm up', mergeInProgress: 'pnpm fin' } },
+            undefined,
+        );
+        expect(errors).toEqual([]);
+    });
+
+    it('rejects an empty guardHints command string', () => {
+        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, guardHints: { prCreationOrPush: '  ' } }, undefined);
+        expect(errors.some(e => e.includes('[commands] "guardHints.prCreationOrPush" must be a non-empty string'))).toBe(true);
+    });
+
+    it('rejects guardHints that is not an object', () => {
+        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, guardHints: 'pnpm up' }, undefined);
+        expect(errors.some(e => e.includes('[commands] "guardHints" must be an object'))).toBe(true);
+    });
 });
 
 describe('validateExcludePaths', () => {
