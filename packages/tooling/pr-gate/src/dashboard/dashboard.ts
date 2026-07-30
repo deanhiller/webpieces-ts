@@ -1,12 +1,13 @@
 import {
-    GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson,
-    CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
+    GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson, formatFileList,
+    CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // Hidden marker on the checklist review COMMENT, so wp-finish can find + PATCH its own comment on every
 // push instead of appending a new one. Versioned so the format can evolve without matching an old shape.
-export const CHECKLIST_COMMENT_MARKER = '<!-- webpieces-checklists v1 -->';
+// v2 = the full roster (every DEFINED checklist, matched or not) + tri-state verdicts.
+export const CHECKLIST_COMMENT_MARKER = '<!-- webpieces-checklists v2 -->';
 const COMMENT_LIMIT = 65000; // under GitHub's 65536-char cap, with headroom for the marker + roll-up.
 
 // One checklist section for the combined comment (heading + verbatim reviewer output), so oversize
@@ -34,11 +35,11 @@ export class GateResult {
 }
 
 // One row for a consumer review checklist the branch triggered. `status` is the resolved verdict (one of
-// CK_PASS | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_ACKED); `detail` is the reviewer output / override
-// justification. A BLOCK row is always PASS/OVERRIDDEN/ACKED by the time it renders — a failed or missing
-// BLOCK throws before the dashboard is built; a WARN row may render in any state. Rendered into the PR
-// body so the verdict reaches the server — the PR body is the artifact of the local flow that leaves the
-// checkout (alongside the HMAC gate token that proves the flow ran).
+// CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT); `detail` is the reviewer
+// output / override justification. A row is always PASS/WARN/OVERRIDDEN by the time it renders — a failed,
+// missing or unreadable verdict throws before the dashboard is built. Rendered into the PR body so the
+// verdict reaches the server — the PR body is the artifact of the local flow that leaves the checkout
+// (alongside the HMAC gate token that proves the flow ran).
 export class ChecklistRow {
     title: string;  // the checklist id (= reviewer subagent name)
     status: string; // CK_* verdict
@@ -48,6 +49,43 @@ export class ChecklistRow {
         this.title = title;
         this.status = status;
         this.detail = detail;
+    }
+}
+
+/**
+ * One roster line of the checklist COMMENT: a defined checklist, whether its reviewer ran, and the evidence
+ * for WHY. Deliberately separate from {@link ChecklistRow} rather than five more fields on it — ChecklistRow
+ * also feeds the PR body and the squash-commit body, and roster evidence has no business travelling into
+ * main's git history or through every DashboardInput construction site.
+ *
+ * Kept in pr-gate, not rules-config: the shape of a GitHub comment is this package's concern, and
+ * rules-config is the dependency, not the dependent.
+ */
+export class ChecklistCommentRow {
+    subagent: string;              // the reviewer / checklist id
+    status: string;                // CK_* verdict; '' when it did not run
+    detail: string;                // verbatim reviewer output
+    ran: boolean;                  // false = skipped, which is a NORMAL, healthy outcome
+    // The checklist's CONFIGURED globs. The only safe signal for "always runs": a patternless checklist and
+    // a skipped one both have an empty `firedPatterns`, and they mean opposite things.
+    configuredPatterns: string[];
+    firedPatterns: string[];       // which configured globs actually hit a changed file
+    matchedFiles: string[];
+    changedFileCount: number;      // how many files were considered at all — "0 of N" needs the N
+
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(
+        subagent: string, status: string, detail: string, ran: boolean,
+        configuredPatterns: string[], firedPatterns: string[], matchedFiles: string[], changedFileCount: number,
+    ) {
+        this.subagent = subagent;
+        this.status = status;
+        this.detail = detail;
+        this.ran = ran;
+        this.configuredPatterns = configuredPatterns;
+        this.firedPatterns = firedPatterns;
+        this.matchedFiles = matchedFiles;
+        this.changedFileCount = changedFileCount;
     }
 }
 
@@ -154,28 +192,140 @@ export class Dashboard {
         return lines.join('\n');
     }
 
-    // The ONE combined PR comment carrying every reviewer's full `output` — the depth the body-line
-    // verdict throws away. Overridden sections first (the only non-green verdicts reaching a PR — a
-    // hard FAIL refuses the PR before this runs), then passing reviews. Idempotent: keyed by the hidden
-    // marker so wp-finish PATCHes this same comment on every push.
-    renderChecklistComment(rows: readonly ChecklistRow[], provenanceVerified: boolean): string {
-        const overridden = rows.filter((r: ChecklistRow): boolean => r.status === CK_OVERRIDDEN);
-        const passed = rows.filter((r: ChecklistRow): boolean => r.status !== CK_OVERRIDDEN);
-        const roll = overridden.length > 0
-            ? `## 🔍 Company review checklists — ${rows.length} reviewed, 🟡 ${overridden.length} overridden`
-            : `## 🔍 Company review checklists — 🟢 ${rows.length} reviewed, all passed`;
+    /**
+     * The ONE combined PR comment. Two halves, in this order:
+     *
+     *   1. A roll-up plus the FULL ROSTER — every DEFINED checklist as a checkbox, each with a sub-bullet
+     *      stating exactly which globs fired against which files, or which did not and out of how many.
+     *      Skipped checklists are listed on purpose: skipping is the normal, healthy outcome, and a comment
+     *      that names only the reviewers that fired cannot distinguish "evaluated and irrelevant" from
+     *      "never wired up" — nor answer "why did the DB reviewer run on my frontend PR?".
+     *   2. One section per reviewer that RAN, carrying its full `output` — the depth a verdict line throws
+     *      away. Overridden first, then warned, then passed: a reader should meet the exceptions first.
+     *
+     * Idempotent: keyed by the hidden marker so wp-finish PATCHes this same comment on every push.
+     */
+    renderChecklistComment(rows: readonly ChecklistCommentRow[], provenanceVerified: boolean, baseResolved: boolean): string {
+        const ran = this.ranOrdered(rows);
         const prov = provenanceVerified
             ? '_Each reviewer ran as its own independent subagent, verified from the Claude Code harness._'
             : '_⚠️ Reviewer provenance was NOT verified (no Claude Code session) — treat these as unverified._';
-        const header = `${CHECKLIST_COMMENT_MARKER}\n${roll}\n${prov}`;
-        const sections = [...overridden, ...passed].map((r: ChecklistRow): CommentSection => this.commentSection(r));
-        return this.fitComment(header, sections);
+        // The roster lives in the HEADER, never in a section: fitComment only ever shrinks section bodies,
+        // so a roster line can never be the thing an oversize comment silently drops.
+        const lines: string[] = [CHECKLIST_COMMENT_MARKER, this.rollupHeader(rows, baseResolved)];
+        // No reviewer ran ⇒ no provenance claim to make. Printing one either way would attest to nothing.
+        if (ran.length > 0) lines.push(prov);
+        lines.push('', `### Checklists (all ${rows.length})`);
+        for (const row of rows) lines.push(this.rosterBullet(row));
+        const header = lines.join('\n');
+        if (ran.length === 0) {
+            return `${header}\n\n_No reviewer had to run on this diff — every configured checklist was ` +
+                `evaluated and none of them applied._`;
+        }
+        return this.fitComment(`${header}\n\n### Reviews that ran`, ran.map((r: ChecklistCommentRow): CommentSection => this.commentSection(r)));
     }
 
-    private commentSection(row: ChecklistRow): CommentSection {
-        const heading = row.status === CK_OVERRIDDEN
-            ? `### 🟡 ${row.title} — OVERRIDDEN`
-            : `### 🟢 ${row.title} — passed`;
+    // The roll-up line. `baseResolved:false` replaces it entirely: with no fork point the changed-file set is
+    // EMPTY, so nothing matched — including patternless ALWAYS-RUNS checklists — and reporting that as
+    // "all skipped ✅" would post a green all-clear for a PR where nothing was actually evaluated.
+    private rollupHeader(rows: readonly ChecklistCommentRow[], baseResolved: boolean): string {
+        if (!baseResolved) {
+            return `## 🔍 Company review checklists — ⚠️ NOT EVALUATED (${rows.length} defined)\n` +
+                `_No diff base (fork point of main) could be resolved, so no checklist was matched against ` +
+                `anything. This is **not** an all-clear._`;
+        }
+        const ran = rows.filter((r: ChecklistCommentRow): boolean => r.ran);
+        const skipped = rows.length - ran.length;
+        const parts: string[] = [];
+        for (const pair of this.rollupCounts(ran)) parts.push(pair);
+        const breakdown = parts.length > 0 ? ` (${parts.join(' · ')})` : '';
+        const skip = skipped > 0 ? ` · ${skipped} skipped ✅` : '';
+        return `## 🔍 Company review checklists — ${rows.length} defined · ${ran.length} ran${breakdown}${skip}`;
+    }
+
+    // `🟢 2 · 🟡 1` — only the non-zero buckets, so a clean run reads as one number rather than four.
+    private rollupCounts(ran: readonly ChecklistCommentRow[]): string[] {
+        const counts: string[] = [];
+        const emojiFor: string[] = ['🟢', '🟡', '🟠'];
+        const statusFor: string[] = [CK_PASS, CK_WARN, CK_OVERRIDDEN];
+        statusFor.forEach((status: string, i: number): void => {
+            const n = ran.filter((r: ChecklistCommentRow): boolean => r.status === status).length;
+            if (n > 0) counts.push(`${emojiFor[i]} ${n}`);
+        });
+        return counts;
+    }
+
+    // One roster line + its why sub-bullet. A checked box means a reviewer ran; an unchecked one means the
+    // checklist was evaluated and did not apply, which the words state as the good news it is.
+    private rosterBullet(row: ChecklistCommentRow): string {
+        const box = row.ran ? '- [x]' : '- [ ]';
+        return `${box} ${this.verdictEmoji(row)} **${row.subagent}** — ${this.verdictWords(row)}\n` +
+            `  - ${this.whyLine(row)}`;
+    }
+
+    private verdictEmoji(row: ChecklistCommentRow): string {
+        if (!row.ran) return '⚪';
+        if (row.status === CK_PASS) return '🟢';
+        if (row.status === CK_WARN) return '🟡';
+        if (row.status === CK_OVERRIDDEN) return '🟠';
+        if (row.status === CK_FAIL) return '🔴';
+        return '⚪';
+    }
+
+    // SHORT words for a roster line / section heading. Short on purpose: the reviewer's own output and any
+    // override justification get their own section below, and a roster exists to be scanned.
+    private verdictWords(row: ChecklistCommentRow): string {
+        if (!row.ran) return 'skipped, not applicable to this diff (expected ✅)';
+        if (row.status === CK_PASS) return 'passed';
+        if (row.status === CK_WARN) return 'passed with concerns';
+        if (row.status === CK_OVERRIDDEN) return 'OVERRIDDEN — shipped with a stated justification';
+        if (row.status === CK_FAIL) return 'FAILED review';
+        if (row.status === CK_MISSING) return 'no verdict written';
+        return `unknown verdict (${row.status})`;
+    }
+
+    /**
+     * WHY this checklist ran or did not — the line that answers "why was this reviewer involved?". Branches
+     * on `configuredPatterns`, NEVER on `firedPatterns.length`: a patternless checklist and a skipped one
+     * both fired zero globs and they mean opposite things, so keying off the fired list would tell every
+     * skipped checklist's reader that the whole diff had been in its scope.
+     */
+    private whyLine(row: ChecklistCommentRow): string {
+        const total = row.changedFileCount;
+        if (row.configuredPatterns.length === 0) {
+            return `ALWAYS RUNS (no patterns) — whole diff in scope, ${total} changed file(s): ` +
+                `${formatFileList(row.matchedFiles)}`;
+        }
+        const configured = this.asCode(row.configuredPatterns);
+        if (row.firedPatterns.length === 0) {
+            return `${configured} matched 0 of ${total} changed file(s)`;
+        }
+        return `matched ${this.asCode(row.firedPatterns)} → ${row.matchedFiles.length} of ${total} ` +
+            `changed file(s): ${formatFileList(row.matchedFiles)}`;
+    }
+
+    private asCode(patterns: readonly string[]): string {
+        return patterns.map((p: string): string => `\`${p}\``).join(', ');
+    }
+
+    // Reviewers that ran, exceptions first (overridden → warned → passed) so a reader meets what needs
+    // attention before a wall of green.
+    private ranOrdered(rows: readonly ChecklistCommentRow[]): ChecklistCommentRow[] {
+        const rank: string[] = [CK_OVERRIDDEN, CK_WARN, CK_PASS];
+        return rows
+            .filter((r: ChecklistCommentRow): boolean => r.ran)
+            .slice()
+            .sort((a: ChecklistCommentRow, b: ChecklistCommentRow): number =>
+                this.rankOf(rank, a.status) - this.rankOf(rank, b.status));
+    }
+
+    private rankOf(rank: readonly string[], status: string): number {
+        const idx = rank.indexOf(status);
+        return idx < 0 ? rank.length : idx;
+    }
+
+    private commentSection(row: ChecklistCommentRow): CommentSection {
+        const heading = `#### ${this.verdictEmoji(row)} ${row.subagent} — ${this.verdictWords(row)}`;
         const body = row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
         return new CommentSection(heading, body);
     }
@@ -257,14 +407,19 @@ export class Dashboard {
     }
 
     // Emoji + words for a checklist verdict, shared by the dashboard row and the commit-body flag.
+    // Every state is matched EXPLICITLY and the fallthrough names the status it did not recognize. The
+    // previous `return '🟢 passed'` fallthrough meant any newly-added verdict rendered as a clean pass on
+    // both the PR body and main's commit history until someone noticed — exactly the wrong default.
     private checklistStatusText(row: ChecklistRow): string {
         if (row.status === CK_OVERRIDDEN) {
             const why = row.detail.trim() !== '' ? ` — override: ${row.detail.trim()}` : '';
-            return `🟡 OVERRIDDEN${why}`;
+            return `🟠 OVERRIDDEN${why}`;
         }
+        if (row.status === CK_WARN) return '🟡 passed with concerns';
         if (row.status === CK_FAIL) return '🔴 FAILED review';
         if (row.status === CK_MISSING) return '⚪ not reviewed';
-        return '🟢 passed'; // CK_PASS
+        if (row.status === CK_PASS) return '🟢 passed';
+        return `⚪ unknown verdict (${row.status})`;
     }
 
     // First `max` sentences of `text`. A sentence ends at `. ! ?` ONLY when followed by whitespace or

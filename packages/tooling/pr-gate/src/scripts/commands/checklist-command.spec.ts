@@ -139,7 +139,7 @@ describe('wp-checklist output states its scope', () => {
         const reviewPath = svc.reviewJsonPath(dir, new AiBranchName(new BranchNaming()).getFeatureName());
         fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
         fs.writeFileSync(svc.checklistResultPath(reviewPath, 'db-reviewer'),
-            JSON.stringify({ id: 'db-reviewer', success: true, output: 'ok', override: '' }));
+            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok', override: '' }));
 
         const out = await runIn(dir);
         expect(out).toContain('✓ db-reviewer');
@@ -148,6 +148,23 @@ describe('wp-checklist output states its scope', () => {
         const instructions = out.slice(out.indexOf('You MUST run'));
         expect(instructions).toContain('ops-reviewer');
         expect(instructions).not.toContain('db-reviewer');
+    });
+
+    // Without this line the command reports the checklist as simply owed while its verdict file sits right
+    // there, and the AI re-runs a reviewer that already ran instead of correcting four characters of JSON.
+    it('calls out a verdict file still using the removed `success` field', async () => {
+        const dir = repoWithChecklists([{ subagent: 'db-reviewer', patterns: ['**/*.sql'] }]);
+        fs.writeFileSync(path.join(dir, 'a.sql'), 'x\n');
+        const svc = new ReviewJsonService();
+        const reviewPath = svc.reviewJsonPath(dir, new AiBranchName(new BranchNaming()).getFeatureName());
+        fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+        fs.writeFileSync(svc.checklistResultPath(reviewPath, 'db-reviewer'),
+            JSON.stringify({ id: 'db-reviewer', success: true, output: 'ok', override: '' }));
+
+        const out = await runIn(dir);
+        expect(out).toContain('"success"');
+        expect(out).toContain('REMOVED');
+        expect(out).toContain('green | yellow | red');
     });
 
     it('says ALWAYS RUNS for a patternless checklist rather than claiming a match', async () => {

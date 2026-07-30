@@ -20,6 +20,27 @@ export class TriggeredChecklist {
 }
 
 /**
+ * Every DEFINED checklist paired with what it matched, plus the two facts a reader needs to judge a skip:
+ * how many files were even considered, and whether a diff was computable at all. Data-only (per CLAUDE.md).
+ */
+export class ChecklistRoster {
+    entries: TriggeredChecklist[]; // one per defined checklist, in config order; matchedFiles may be []
+    changedFileCount: number;      // N — "matched 0 of N changed files" is only meaningful with N
+    /**
+     * false when no fork point resolved. Load-bearing: with no base the changed-file set is EMPTY, so
+     * nothing matches — including patternless ALWAYS-RUNS checklists. Rendering that as "all skipped ✅"
+     * would post a green all-clear to GitHub for a PR where no checklist was actually evaluated.
+     */
+    baseResolved: boolean;
+
+    constructor(entries: TriggeredChecklist[], changedFileCount: number, baseResolved: boolean) {
+        this.entries = entries;
+        this.changedFileCount = changedFileCount;
+        this.baseResolved = baseResolved;
+    }
+}
+
+/**
  * Decides which company review checklists a branch matched, from what the diff CHANGED. Path matching
  * uses `isPathExcluded` — the SAME minimatch-based matcher rules-config already shares across
  * exclude-paths and the rule validators. A checklist with empty `patterns` matches every PR (always runs).
@@ -31,17 +52,31 @@ export class TriggeredChecklist {
 export class ChecklistDetector {
     constructor(private readonly diffScope: DiffScope) {}
 
-    // Pure matching — unit-testable without git. Return every checklist whose patterns hit a changed file
-    // (empty patterns ⇒ always matches).
-    detect(defs: readonly ChecklistDefinition[], changedFiles: readonly string[]): TriggeredChecklist[] {
-        const triggered: TriggeredChecklist[] = [];
-        for (const def of defs) {
+    /**
+     * Pure matching over EVERY defined checklist, matched or not — one entry per def, in config order, with
+     * `matchedFiles: []` for the ones nothing hit. This is what lets the PR comment publish the full roster:
+     * a skipped checklist is the normal, healthy outcome, and a comment that lists only the ones that fired
+     * cannot distinguish "evaluated and irrelevant" from "never configured".
+     *
+     * A skipped entry has `matchedPatterns: []` — and so does a PATTERNLESS one. They mean opposite things,
+     * so a renderer must decide "always runs" from `def.patterns.length === 0`, NEVER from
+     * `matchedPatterns.length`, or every skipped checklist claims the whole diff was in its scope.
+     */
+    roster(defs: readonly ChecklistDefinition[], changedFiles: readonly string[]): TriggeredChecklist[] {
+        return defs.map((def: ChecklistDefinition): TriggeredChecklist => {
             const matched = def.patterns.length === 0
                 ? [...changedFiles]
                 : changedFiles.filter((f: string): boolean => isPathExcluded(f, def.patterns));
-            if (matched.length > 0) triggered.push(new TriggeredChecklist(def, matched, this.firedPatterns(def, changedFiles)));
-        }
-        return triggered;
+            return new TriggeredChecklist(def, matched, this.firedPatterns(def, changedFiles));
+        });
+    }
+
+    // Pure matching — unit-testable without git. Return every checklist whose patterns hit a changed file
+    // (empty patterns ⇒ always matches). Defined as the roster minus the empty entries so the set that GATES
+    // and the set the comment REPORTS can never be computed two different ways.
+    detect(defs: readonly ChecklistDefinition[], changedFiles: readonly string[]): TriggeredChecklist[] {
+        return this.roster(defs, changedFiles)
+            .filter((t: TriggeredChecklist): boolean => t.matchedFiles.length > 0);
     }
 
     // Which of a checklist's globs hit at least one changed file. [] for a patternless checklist (it matches

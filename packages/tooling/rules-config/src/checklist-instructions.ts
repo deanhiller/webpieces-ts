@@ -1,6 +1,9 @@
 import { injectable, bindingScopeValues } from 'inversify';
 import { formatFileList } from './checklist-config';
-import { ChecklistReviewContext, RequiredChecklist, ReviewJsonService } from './review-json';
+import {
+    ChecklistReviewContext, RequiredChecklist, ReviewJsonService,
+    VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED,
+} from './review-json';
 
 /**
  * Renders the ONE block that tells the coding agent which reviewer subagents it must run and exactly what
@@ -81,10 +84,15 @@ export class ChecklistInstructionsService {
     // ONE shared format block for every reviewer, rather than repeating the schema under each name.
     private verdictFormat(): string[] {
         return [
-            'TELL EACH subagent to write that file with EXACTLY this format:',
-            '  { "id": "<its own subagent name>", "success": true, "output": "what you checked / found", "override": "" }',
-            '    success:false + empty "override"      → REFUSES the PR; the reviewer\'s "output" is printed verbatim',
-            '    success:false + non-empty "override"  → ships anyway as 🟡; the justification is published on the PR',
+            'TELL EACH subagent to write that file with EXACTLY this format (there is NO "success" field —',
+            'it was removed; "status" is a tri-state so a reviewer can pass a change AND still raise a concern):',
+            `  { "id": "<its own subagent name>", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", "output": "what you checked / found", "override": "" }`,
+            `    "${VERDICT_GREEN}"   → passes, nothing to flag`,
+            `    "${VERDICT_YELLOW}"  → PASSES WITH CONCERNS; blocks nothing, and "output" is published on the PR as 🟡`,
+            `    "${VERDICT_RED}" + empty "override"      → REFUSES the PR; the reviewer's "output" is printed verbatim`,
+            `    "${VERDICT_RED}" + non-empty "override"  → ships anyway as 🟠; the justification is published on the PR`,
+            `  Prefer "${VERDICT_YELLOW}" over a red-plus-override when the change is acceptable but worth a human's`,
+            '  attention — an override reads as a deliberately-accepted defect, a yellow reads as a note.',
         ];
     }
 

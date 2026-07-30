@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist,
+    loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
     writeTemplate, RepoRootFinder, ReviewJsonService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ChecklistInstructionsService, InformAiError,
@@ -18,7 +18,10 @@ import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
 import { PrMerger, MergeOutcome } from '../workflow/pr-merger';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
-import { Dashboard, DashboardInput, ChecklistRow, CHECKLIST_COMMENT_MARKER } from '../../dashboard/dashboard';
+import { TriggeredChecklist } from '../workflow/checklist-detector';
+import {
+    Dashboard, DashboardInput, ChecklistRow, ChecklistCommentRow, CHECKLIST_COMMENT_MARKER,
+} from '../../dashboard/dashboard';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -126,7 +129,7 @@ export class FinishUpsertPrCommand {
         const result = this.upsertPr(repoRoot, base, body, title, input);
         // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
         // fatal — the PR is already up by now, so a comment failure only warns.
-        this.postChecklistComment(repoRoot, result.prNumber, input.checklists, provenanceVerified);
+        this.postChecklistComment(repoRoot, result.prNumber, scan, review, provenanceVerified);
         const prNum = result.prNumber;
 
         process.stdout.write(
@@ -178,9 +181,17 @@ export class FinishUpsertPrCommand {
      */
     private assertEveryReviewerRan(scan: ChecklistScan): void {
         if (scan.outstanding.length === 0) return;
+        // Unreadable verdict files come FIRST. A reviewer that wrote its verdict in the removed `success`
+        // format is otherwise indistinguishable from one that never ran, and the AI would go re-run a
+        // subagent instead of correcting four characters of JSON.
+        const format = scan.formatErrors.length === 0
+            ? ''
+            : `${scan.formatErrors.length} verdict file(s) are in an UNREADABLE format:\n\n` +
+              scan.formatErrors.map((e: string): string => `  • ${e}`).join('\n') + '\n\n';
         throw new InformAiError(
             `⛔ NO PR — ${scan.outstanding.length} of ${scan.applicable.length} review checklist(s) that apply to this ` +
             `branch have no passing verdict yet: ${this.instructions.names(scan.outstanding)}\n\n` +
+            format +
             `${this.instructions.render(scan.outstanding, scan.reviewPath, scan.context)}\n\n` +
             `Then re-run: pnpm wp-finish-upsert-pr   (or check anytime with: pnpm wp-checklist)`,
         );
@@ -223,6 +234,28 @@ export class FinishUpsertPrCommand {
         });
     }
 
+    /**
+     * One comment row per DEFINED checklist — matched or not — pairing the roster's match evidence with the
+     * resolved verdict. Built from `scan.roster` rather than from the applicable set: the skipped ones are
+     * absent from `applicable` by construction, and their "why not" evidence (the configured globs and the
+     * changed-file total) exists nowhere else without recomputing the diff a second way.
+     */
+    private commentRows(scan: ChecklistScan, review: ReviewJson): ChecklistCommentRow[] {
+        return scan.roster.entries.map((entry: TriggeredChecklist): ChecklistCommentRow => {
+            const ran = entry.matchedFiles.length > 0;
+            const req = new RequiredChecklist(
+                entry.def.id, entry.def.subagent, entry.def.doc, entry.matchedFiles, entry.matchedPatterns);
+            // A skipped checklist has no verdict to resolve — asking for one would report it as MISSING,
+            // i.e. as an unreviewed obligation, when in fact it never had one.
+            const verdict = ran
+                ? this.reviewJsonService.resolveVerdict(req, review.results)
+                : new ChecklistVerdict(entry.def.id, '', '');
+            return new ChecklistCommentRow(
+                entry.def.subagent, verdict.status, verdict.detail, ran,
+                entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
+        });
+    }
+
     // Hidden HMAC gate-token marker (with a leading blank line) to append to the PR body, or '' when the
     // repo sets no gateSalt (byte-identical body to before this feature). Bound to the pushed HEAD sha.
     private gateTokenBody(gateSalt: string, headSha: string): string {
@@ -256,13 +289,22 @@ export class FinishUpsertPrCommand {
         return verified;
     }
 
-    // Publish every reviewer's full `output` as ONE combined PR comment, idempotently (find the marker
-    // comment → PATCH it, else POST). No-op when there is no PR number or no matched checklists. Never
-    // fatal: by here the PR is already created/updated, so a `gh` failure only warns.
-    private postChecklistComment(repoRoot: string, prNumber: string, rows: readonly ChecklistRow[], provenanceVerified: boolean): void {
-        if (prNumber === '' || rows.length === 0) return;
+    /**
+     * Publish the roster + every reviewer's full `output` as ONE combined PR comment, idempotently (find the
+     * marker comment → PATCH it, else POST). Never fatal: by here the PR is already created/updated, so a
+     * `gh` failure only warns.
+     *
+     * Posted on EVERY run of a repo that defines checklists — including one where nothing matched, because
+     * "all five were evaluated and none applied" is the good news the old comment could not deliver. The
+     * guard is `scan.defined.length`, deliberately NOT the number of rows that ran: a repo with no
+     * checklists configured must still see no comment at all (see ChecklistNotice / renderDashboard).
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: ReviewJson, provenanceVerified: boolean): void {
+        if (prNumber === '' || scan.defined.length === 0) return;
         if (!loadAndValidate(repoRoot).prGate.checklistComments) return;
-        const body = this.dashboard.renderChecklistComment(rows, provenanceVerified);
+        const body = this.dashboard.renderChecklistComment(
+            this.commentRows(scan, review), provenanceVerified, scan.roster.baseResolved);
         const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         fs.mkdirSync(prDir, { recursive: true });
         const payload = path.join(prDir, 'checklist-comment.json');

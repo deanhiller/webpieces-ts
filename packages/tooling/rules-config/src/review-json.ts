@@ -5,25 +5,42 @@ import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 
+// The three colors a reviewer subagent may report in `review-<id>.json`. A TRI-state, not a boolean,
+// because the boolean it replaced gave a reviewer no way to say "this passes, but a human should look at
+// X" — the only way to raise a concern was to FAIL the PR and then override your own failure, which reads
+// on the dashboard as a deliberately-accepted defect rather than as a note.
+export const VERDICT_GREEN = 'green';
+export const VERDICT_YELLOW = 'yellow';
+export const VERDICT_RED = 'red';
+export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
+
 // The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<branch>/review-<id>.json`, one per
 // matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
 // file. It records the OUTCOME:
-//   success:true                       → PASS
-//   success:false + override non-empty → OVERRIDDEN (pass; the free-text justification reaches the PR)
-//   success:false + no override        → FAIL (refuse; `output` is printed verbatim)
+//   status:'green'                  → PASS
+//   status:'yellow'                 → WARN (passes; the concern is published on the PR, nothing is blocked)
+//   status:'red' + override non-empty → OVERRIDDEN (pass; the free-text justification reaches the PR)
+//   status:'red' + no override      → FAIL (refuse; `output` is printed verbatim)
 // `override` is deliberately free text, not a boolean — it forces the ship-anyway decision to be stated
 // in words and surfaces it on the dashboard, where a human sees it. Data-only (per CLAUDE.md).
 export class ChecklistResult {
     id: string;
-    success: boolean;
-    output: string;   // what the reviewer found; printed verbatim when the checklist fails
-    override: string;  // '' = no override; non-empty = ship-anyway justification (renders 🟡 overridden)
+    status: string;    // one of VERDICT_STATUSES; anything else is reported via `problem`
+    output: string;    // what the reviewer found; printed verbatim when the checklist fails
+    override: string;  // '' = no override; non-empty = ship-anyway justification (renders 🟠 overridden)
+    // '' = a well-formed verdict. Non-empty = the file exists and parses but its verdict cannot be READ
+    // (most often: it still uses the removed `success` field). Carried as data rather than thrown so the
+    // complaint can be reported by BOTH wp-checklist and wp-finish-upsert-pr in identical words, and so a
+    // legacy file is never silently mistaken for a missing one.
+    problem: string;
 
-    constructor(id: string, success: boolean, output: string, override: string) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(id: string, status: string, output: string, override: string, problem = '') {
         this.id = id;
-        this.success = success;
+        this.status = status;
         this.output = output;
         this.override = override;
+        this.problem = problem;
     }
 }
 
@@ -105,15 +122,18 @@ export class ReviewJson {
 }
 
 // A checklist's resolved outcome, shared by review.json enforcement and the dashboard so both agree.
-export const CK_PASS = 'pass';               // review-<id>.json success:true
-export const CK_OVERRIDDEN = 'overridden';   // review-<id>.json success:false + non-empty override → 🟡
-export const CK_FAIL = 'fail';               // review-<id>.json success:false + no override → refuse
+// PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING and BAD_FORMAT all refuse the PR.
+export const CK_PASS = 'pass';               // review-<id>.json status:'green'
+export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns
+export const CK_OVERRIDDEN = 'overridden';   // review-<id>.json status:'red' + non-empty override → 🟠
+export const CK_FAIL = 'fail';               // review-<id>.json status:'red' + no override → refuse
 export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
+export const CK_BAD_FORMAT = 'bad-format';   // written, but its verdict is unreadable (e.g. legacy `success`)
 
 export class ChecklistVerdict {
     id: string;
-    status: string; // one of CK_PASS | CK_OVERRIDDEN | CK_FAIL | CK_MISSING
-    detail: string; // reviewer output / override justification (for the dashboard + errors)
+    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
+    detail: string; // reviewer output / override justification / format complaint (dashboard + errors)
 
     constructor(id: string, status: string, detail: string) {
         this.id = id;
@@ -292,7 +312,10 @@ export class ReviewJsonService {
     pendingChecklists(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): RequiredChecklist[] {
         return required.filter((req: RequiredChecklist): boolean => {
             const status = this.resolveVerdict(req, results).status;
-            return status !== CK_PASS && status !== CK_OVERRIDDEN;
+            // CK_WARN must be listed here beside PASS/OVERRIDDEN. A yellow verdict SHIPS — leaving it out
+            // would mark the checklist owed forever, so `outstanding` never empties and the PR is refused
+            // permanently no matter how many times the reviewer runs.
+            return status !== CK_PASS && status !== CK_WARN && status !== CK_OVERRIDDEN;
         });
     }
 
@@ -311,24 +334,46 @@ export class ReviewJsonService {
     }
 
     // Resolve ONE checklist's verdict from its review-<id>.json. Central so review.json enforcement AND the
-    // finish-command dashboard agree on the outcome.
+    // finish-command dashboard agree on the outcome. `problem` is checked FIRST: a file whose verdict cannot
+    // be read must not fall through to any shipping outcome.
     resolveVerdict(req: RequiredChecklist, results: readonly ChecklistResult[]): ChecklistVerdict {
         const result = results.find((r: ChecklistResult): boolean => r.id === req.id);
         if (!result) return new ChecklistVerdict(req.id, CK_MISSING, '');
-        if (result.success) return new ChecklistVerdict(req.id, CK_PASS, result.output);
+        if (result.problem !== '') return new ChecklistVerdict(req.id, CK_BAD_FORMAT, result.problem);
+        if (result.status === VERDICT_GREEN) return new ChecklistVerdict(req.id, CK_PASS, result.output);
+        if (result.status === VERDICT_YELLOW) return new ChecklistVerdict(req.id, CK_WARN, result.output);
         if (result.override.trim() !== '') return new ChecklistVerdict(req.id, CK_OVERRIDDEN, result.override.trim());
         return new ChecklistVerdict(req.id, CK_FAIL, result.output);
+    }
+
+    /**
+     * One loud complaint per checklist whose verdict file EXISTS but cannot be read as a verdict — almost
+     * always one still using the removed `success` field. Public and separate from
+     * {@link requiredChecklistErrors} because `wp-finish-upsert-pr` refuses on missing reviewers BEFORE it
+     * parses review.json: without this, a legacy file would surface as the generic "no verdict yet" block
+     * and the AI would re-run a reviewer that already ran instead of fixing four characters of JSON.
+     */
+    checklistFormatErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): string[] {
+        const errors: string[] = [];
+        for (const req of required) {
+            const verdict = this.resolveVerdict(req, results);
+            if (verdict.status === CK_BAD_FORMAT) errors.push(verdict.detail);
+        }
+        return errors;
     }
 
     // Every matched checklist whose verdict is FAIL (reviewed, found a problem, no override) or MISSING (no
     // review-<id>.json written) → one error each, printing the reviewer's `output` verbatim.
     private requiredChecklistErrors(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): string[] {
-        const errors: string[] = [];
+        // Format complaints come from the ONE renderer, so wp-checklist and wp-finish word them identically.
+        const errors: string[] = this.checklistFormatErrors(required, results);
         for (const req of required) {
             const verdict = this.resolveVerdict(req, results);
+            // CK_WARN ('yellow' — passed with concerns) is deliberately absent from this chain: it SHIPS.
+            // The concern still reaches the PR, published in the checklist comment. Do not "fix" this.
             if (verdict.status === CK_FAIL) {
                 errors.push(
-                    `Checklist "${req.id}" FAILED review. The reviewer (${req.subagent}) wrote:\n      ` +
+                    `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.subagent}) wrote:\n      ` +
                     `${verdict.detail.split('\n').join('\n      ')}\n` +
                     `      Fix it, then re-run; or set a non-empty "override" in ${this.checklistFileName(req.id)} to ship anyway with a stated justification.`,
                 );
@@ -336,7 +381,8 @@ export class ReviewJsonService {
                 const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
                 errors.push(
                     `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.subagent}" subagent to review it, ` +
-                    `then write ${this.checklistFileName(req.id)} with {"id":"${req.id}","success":true,"output":"…"}.${doc}`,
+                    `then write ${this.checklistFileName(req.id)} with ` +
+                    `{"id":"${req.id}","status":"${VERDICT_GREEN}","output":"…","override":""}.${doc}`,
                 );
             }
         }
@@ -347,25 +393,57 @@ export class ReviewJsonService {
         return `review-${checklistId}.json`;
     }
 
-    // Parse one review-<id>.json into a ChecklistResult, or null when malformed. Tolerant: missing
-    // `success` counts as false (fail-closed), `output`/`override` default to ''.
+    /**
+     * Parse one review-<id>.json into a ChecklistResult. `null` ONLY when the bytes do not parse as a JSON
+     * object at all — that tolerance is why a half-written file never wedges a branch, and it degrades to
+     * the same "no verdict yet" message as an absent file, which is honest (nothing readable is there).
+     *
+     * A file that DOES parse always yields a result, even when its verdict is unreadable, carrying the
+     * complaint in `problem`. Returning `null` for those instead would collapse "wrote a verdict in the old
+     * format" into "never wrote a verdict" and send the AI off to re-run a reviewer that already ran.
+     */
     // webpieces-disable no-any-unknown -- opaque parsed JSON, narrowed field-by-field
     private parseChecklistResult(filePath: string, id: string): ChecklistResult | null {
-        // webpieces-disable no-unmanaged-exceptions -- chokepoint: a malformed per-checklist file is skipped, not fatal
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unparseable per-checklist file is skipped, not fatal
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             // webpieces-disable no-any-unknown -- parsed JSON is opaque until narrowed below
             const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
             if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
-            const success = raw['success'] === true;
             const output = typeof raw['output'] === 'string' ? (raw['output'] as string) : '';
             const override = typeof raw['override'] === 'string' ? (raw['override'] as string) : '';
-            return new ChecklistResult(id, success, output, override);
+            const status = typeof raw['status'] === 'string' ? (raw['status'] as string).trim().toLowerCase() : '';
+            return new ChecklistResult(id, status, output, override, this.statusProblem(filePath, id, status, raw));
         } catch (err: unknown) {
             const error = toError(err);
             void error;
             return null;
         }
+    }
+
+    /**
+     * '' when `status` is one of the three colors. Otherwise the complaint to show the AI verbatim. The
+     * legacy-`success` case gets its OWN message: `success` was removed outright (no compatibility mode),
+     * and a reviewer told only "status must be green|yellow|red" cannot tell whether it wrote the wrong
+     * value or is using a field that no longer exists.
+     */
+    // webpieces-disable no-any-unknown -- opaque parsed JSON; only tested for key presence here
+    private statusProblem(filePath: string, id: string, status: string, raw: Record<string, unknown>): string {
+        // webpieces-disable no-any-unknown -- comparing against the readonly literal tuple of valid colors
+        if ((VERDICT_STATUSES as readonly string[]).includes(status)) return '';
+        const shape =
+            `      { "id": "${id}", "status": "${VERDICT_GREEN} | ${VERDICT_YELLOW} | ${VERDICT_RED}", ` +
+            `"output": "what you checked / found", "override": "" }\n` +
+            `        ${VERDICT_GREEN}  → passes\n` +
+            `        ${VERDICT_YELLOW} → passes WITH CONCERNS; nothing is blocked and the concern is published on the PR\n` +
+            `        ${VERDICT_RED}    → REFUSES the PR (set a non-empty "override" to ship anyway with a stated justification)\n` +
+            `      File: ${filePath}`;
+        if ('success' in raw) {
+            return `Checklist "${id}" wrote its verdict with the REMOVED "success" field. It is now a tri-state ` +
+                `"status" — there is no compatibility mode. Rewrite the file as:\n${shape}`;
+        }
+        return `Checklist "${id}" wrote a verdict with no valid "status" (got ${JSON.stringify(status)}). ` +
+            `It must be exactly one of ${VERDICT_STATUSES.join(', ')}:\n${shape}`;
     }
 
     // webpieces-disable no-any-unknown -- opaque parsed JSON value, narrowed to string[] here

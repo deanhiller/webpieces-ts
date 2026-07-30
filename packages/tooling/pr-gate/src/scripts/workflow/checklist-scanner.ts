@@ -4,7 +4,7 @@ import {
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
-import { ChecklistDetector } from './checklist-detector';
+import { ChecklistDetector, ChecklistRoster } from './checklist-detector';
 import { ForkPoint } from './git-findForkPoint';
 import { PrContextWriter } from './pr-context-writer';
 
@@ -32,11 +32,19 @@ export class ChecklistScanOptions {
 export class ChecklistScan {
     defined: ChecklistDefinition[];      // X
     applicable: RequiredChecklist[];     // N
-    reviewed: RequiredChecklist[];       // N − Z: already have a passing/overridden review-<id>.json
+    reviewed: RequiredChecklist[];       // N − Z: already have a passing/warned/overridden review-<id>.json
     outstanding: RequiredChecklist[];    // Z (== applicable when not filtering)
     context: ChecklistReviewContext;     // fork-point sha + pr-context.json path
     reviewPath: string;                  // the branch's review.json; verdict files sit beside it
     forkPoint: string;                   // '' when no fork point resolved
+    // ALL X, matched or not, with why — what the PR comment publishes as its roster. Skipped checklists are
+    // absent from `applicable` by construction, and recovering them downstream would mean a second
+    // changed-file computation with different semantics (see the class comment).
+    roster: ChecklistRoster;
+    // Verdict files that exist but cannot be read as a verdict (e.g. still using the removed `success`).
+    // Carried on the SCAN because wp-finish-upsert-pr refuses on missing reviewers before it ever parses
+    // review.json — a complaint raised only in there would never reach the AI.
+    formatErrors: string[];
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -47,6 +55,8 @@ export class ChecklistScan {
         context: ChecklistReviewContext,
         reviewPath: string,
         forkPoint: string,
+        roster: ChecklistRoster,
+        formatErrors: string[],
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -55,6 +65,8 @@ export class ChecklistScan {
         this.context = context;
         this.reviewPath = reviewPath;
         this.forkPoint = forkPoint;
+        this.roster = roster;
+        this.formatErrors = formatErrors;
     }
 }
 
@@ -97,9 +109,12 @@ export class ChecklistScanner {
         const featureName = this.aiBranchName.getFeatureName();
         const reviewPath = reviewJsonPath(repoRoot, featureName);
         const base = this.forkPoint.resolveForkPoint(repoRoot);
-        const applicable = this.checklistDetector.toRequired(
-            this.checklistDetector.detect(defined, this.changedFiles(repoRoot, base)),
-        );
+        // ONE changed-file computation feeds both the roster (all X) and the applicable set (N). `detect` is
+        // pure and defined as the roster minus its empty entries, so the two cannot disagree about a match.
+        const changedFiles = this.changedFiles(repoRoot, base);
+        const roster = new ChecklistRoster(
+            this.checklistDetector.roster(defined, changedFiles), changedFiles.length, base !== '');
+        const applicable = this.checklistDetector.toRequired(this.checklistDetector.detect(defined, changedFiles));
         const results = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
@@ -112,6 +127,8 @@ export class ChecklistScanner {
             this.prContextWriter.ensure(repoRoot, featureName, base),
             reviewPath,
             base,
+            roster,
+            this.reviewJsonService.checklistFormatErrors(applicable, results),
         );
     }
 

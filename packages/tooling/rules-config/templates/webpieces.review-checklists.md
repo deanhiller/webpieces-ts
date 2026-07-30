@@ -58,7 +58,7 @@ For EACH matched checklist you must:
 2. Have that subagent **read its doc, then inspect the real diff** of the changed files it cares about —
    `git diff <base> HEAD -- <file>` (base is in `pr-context.json`) — and decide whether the change
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
-   `success: true` when the diffs add no new route/queue.)
+   `"status": "green"` when the diffs add no new route/queue.)
 3. Have it **write its verdict** to `.webpieces/pr-review/<branch>/review-<id>.json` (one file per
    checklist, so concurrent reviewers never clobber each other). `<id>` is the subagent name.
 
@@ -71,16 +71,35 @@ whose `subagent` has no `.claude/agents/<subagent>.md`, so this should surface a
 ```json
 {
   "id": "<the checklist id / subagent name>",
-  "success": true,
+  "status": "green | yellow | red",
   "output": "what you checked and what you found",
   "override": ""
 }
 ```
 
-- `success: true` → the checklist passes.
-- `success: false` with an empty `override` → **`wp-finish` refuses to open the PR** and prints your `output`.
-- `success: false` with a non-empty `override` → ships anyway as **🟡 overridden**; the `override`
-  justification is surfaced on the PR. Use this only to deliberately, visibly accept a known issue.
+| `status` | outcome |
+| --- | --- |
+| `green` | 🟢 passes, nothing to flag |
+| `yellow` | 🟡 **passes with concerns.** Blocks nothing; your `output` is published on the PR for a human to read |
+| `red` + empty `override` | 🔴 **`wp-finish` refuses to open the PR** and prints your `output` verbatim |
+| `red` + non-empty `override` | 🟠 ships anyway; the `override` justification is published on the PR |
+
+> **The `success` boolean is REMOVED — there is no compatibility mode.** A verdict file still using it is
+> rejected with a message naming the replacement. It was removed because a boolean gave a reviewer no way
+> to say *"this is fine, but someone should look at X"*: the only route to raising a concern was to fail the
+> PR and then override your own failure, which reads on the dashboard as a deliberately-accepted defect.
+
+**Prefer `yellow` over `red`-plus-`override`** when a change is acceptable but worth attention. Reserve
+`red` + `override` for deliberately, visibly accepting a known issue.
+
+## What lands on the PR
+
+`wp-finish-upsert-pr` posts ONE comment per PR (updated in place on every push) listing **every** defined
+checklist as a checkbox — the ones whose reviewers ran *and* the ones that were skipped — each with a
+sub-bullet naming the globs that matched, the files they matched, or how many changed files they missed.
+**A skipped checklist is a normal, healthy outcome** and is shown as such; it is published so a reader can
+tell "evaluated and not applicable" from "never wired up", and so nobody has to guess why a given reviewer
+was involved. Below the roster, each reviewer that ran gets its full `output` verbatim.
 
 ## `review.json` (you, the main agent, write this once)
 
