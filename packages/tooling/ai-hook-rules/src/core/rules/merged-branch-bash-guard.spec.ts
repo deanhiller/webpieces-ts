@@ -130,6 +130,63 @@ describe('merged-branch-bash-guard — allows recovery / cleanup / inspection', 
     });
 });
 
+/**
+ * The regression this suite exists for: the allowlist matched the RAW command string, so appending
+ * the output shaping every agent appends by reflex turned an allowed command into a blocked one —
+ * including `git fetch origin main`, printed verbatim in the guard's own remedy block. Verified pairs
+ * from the field (only the shell decoration differs):
+ *
+ *     pnpm wp-cleanup                     allowed
+ *     pnpm wp-cleanup 2>&1 | tail -40     BLOCKED
+ *     git fetch origin main               allowed
+ *     git fetch origin main 2>&1; echo …  BLOCKED
+ */
+describe('merged-branch-bash-guard — judges each SEGMENT, not the raw string', () => {
+    beforeEach(reset);
+
+    it('allows the remedy with the pipe/redirect an agent reflexively appends', () => {
+        expect(allowed('git fetch origin main 2>&1 | tail -5')).toBe(true);
+        expect(allowed('pnpm wp-cleanup 2>&1 | tail -40')).toBe(true);
+        expect(allowed('git log --oneline --no-merges -20 | head -5')).toBe(true);
+        expect(allowed('git branch -a | wc -l')).toBe(true);
+    });
+
+    it('allows a sequence whose other segment is inert', () => {
+        expect(allowed('git fetch origin main 2>&1; echo "fetched"')).toBe(true);
+        expect(allowed('cd ../other-tree && git status')).toBe(true);
+    });
+
+    it('allows a loop whose body is allowlisted (for/do/done are not commands)', () => {
+        expect(allowed('for b in one two; do gh pr list --head $b; done')).toBe(true);
+    });
+
+    it('still BLOCKS when a segment of the pipeline is genuinely disallowed', () => {
+        // The consumer is fine; the producer is not.
+        expect(allowed('pnpm build 2>&1 | tail -20')).toBe(false);
+        expect(allowed('scripts/local.sh start lang | head -5')).toBe(false);
+        // A piped filter that names a WORKSPACE PATH reads pre-merge content — the thing being guarded.
+        expect(allowed('git status | cat src/foo.ts')).toBe(false);
+        // A loop body that is not allowlisted.
+        expect(allowed('for b in one two; do scripts/local.sh start $b; done')).toBe(false);
+    });
+
+    // `echo x > src/y.ts` is a WRITE. A redirect to a file is never inert, so it must not ride in on
+    // the "echo is harmless" allowance.
+    it('does not let an output redirect ride in as inert', () => {
+        expect(allowed('echo "broken" > src/foo.ts')).toBe(false);
+        expect(allowed('git status')).toBe(true);
+    });
+
+    // Read-only, and watching CI is exactly what you do while parked on a just-merged branch. `gh run
+    // view <id>` was blocked BARE in the field while `gh pr view` beside it succeeded.
+    it('allows read-only gh run inspection, but not its write actions', () => {
+        expect(allowed('gh run view 123456')).toBe(true);
+        expect(allowed('gh run list --limit 5 | head -3')).toBe(true);
+        expect(allowed('gh run watch 123456')).toBe(true);
+        expect(allowed('gh run cancel 123456')).toBe(false);
+    });
+});
+
 describe('merged-branch-bash-guard — fail-open', () => {
     beforeEach(reset);
 

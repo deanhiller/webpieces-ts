@@ -262,11 +262,21 @@ describe('read-stale-guard — merged feature branch', () => {
         expect(message).toContain('git fetch origin main');
     });
 
-    it('names what is still allowed, so the agent is never stuck', () => {
+    /**
+     * ONE merged allowance list, not this guard's private view of the world. It used to promise
+     * "EVERY Bash command (the git commands above, installs, builds, all git/gh)" — true of THIS guard
+     * and false of the session, because merged-branch-bash-guard fires on the very same state and
+     * blocks most Bash. Both claims reached the agent in the same turn.
+     */
+    it('names what is still allowed with the ONE shared list, not a per-guard fiction', () => {
         onMergedBranch();
         const message = rule().check(ctx())[0].message ?? '';
-        expect(message).toContain('EVERY Bash command');
+        expect(message).not.toContain('EVERY Bash command');
+        expect(message).toContain('Still allowed while this block is up');
+        expect(message).toContain('pnpm wp-cleanup');
         expect(message).toContain('webpieces.config.json');
+        // …and it is honest about what the SIBLING guards block on the same branch.
+        expect(message).toContain('merged-branch-bash-guard');
     });
 
     // Same escape valve as state A, for the same reason: uncommitted work on a merged branch exists
@@ -311,7 +321,13 @@ describe('read-stale-guard — merged LINKED WORKTREE', () => {
         const message = rule().check(ctx())[0].message ?? '';
         expect(message).toContain('git worktree add');
         expect(message).not.toContain('git checkout -b');
-        expect(message).not.toContain('git checkout main');
+        // `git checkout main` may be NAMED here — the worktree message warns that it fatals, and that
+        // warning is worktree-scoped on purpose (in the primary clone the same command is the easy
+        // exit). What must never happen is emitting it as a RUNNABLE step, since that is the part an
+        // AI copies and runs. Runnable steps are the indented `  git …` lines.
+        const runnable = message.split('\n').filter((line: string): boolean => /^\s+git\s/.test(line));
+        expect(runnable.some((line: string): boolean => line.includes('git checkout main'))).toBe(false);
+        expect(message).toContain('fatals here');
     });
 
     it('tells a merged worktree to reap itself, so it stops spending the worktree budget', () => {

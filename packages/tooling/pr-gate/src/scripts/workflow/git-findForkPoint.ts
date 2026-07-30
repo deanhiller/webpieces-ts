@@ -147,8 +147,13 @@ export class ForkPoint {
         process.stderr.write('1. Fetch the latest main (works on the primary repo AND in a worktree):\n');
         process.stderr.write('   git fetch origin main\n');
         process.stderr.write('\n');
-        process.stderr.write('2. Create a new branch OFF origin/main — do NOT `git checkout main`\n');
-        process.stderr.write('   (it fatals inside a worktree: "main is already checked out at <primary>"):\n');
+        // The "do NOT `git checkout main`" caveat is scoped to the WORKTREE case, where it is true.
+        // Stated unconditionally it forbids a command that is perfectly good in the primary clone —
+        // and that CLAUDE.md's own post-merge cleanup recipe uses — which is how an agent talked
+        // itself into believing a new branch was its only exit.
+        process.stderr.write('2. Create a new branch OFF origin/main (this form works from ANY tree; inside a\n');
+        process.stderr.write('   worktree do NOT `git checkout main` first — it fatals with "main is already\n');
+        process.stderr.write('   checked out at <primary>"):\n');
         process.stderr.write(`   git checkout -b ${featureName}-v2 origin/main\n`);
         process.stderr.write('\n');
         process.stderr.write('3. Squash merge your old branch — THIS STEP IS FOR THE HUMAN TO RUN:\n');

@@ -14,9 +14,11 @@ import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { logGuardDecision, GuardDecision } from '../decision-log';
-import { CommandScanner } from '../command-scan';
+import { CommandScanner, CommandSegment } from '../command-scan';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
+import { ShellSegmentScan, SegmentVerdict } from './shell-segment-scan';
+import { ContentReadScan } from './content-read-scan';
 
 /**
  * The BASH half of the merged-branch protection — the gap that let a whole session run on an
@@ -51,6 +53,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     constructor(config: MergedBranchBashGuardConfig) { super(config, 'merged-branch-bash-guard'); }
 
     private readonly scanner = new CommandScanner();
+    private readonly shell = new ShellSegmentScan(this.scanner);
 
     readonly description =
         'Block ordinary Bash on an already-merged branch (allowlisting only recovery/cleanup and ' +
@@ -93,7 +96,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         // Merged. Allow ONLY when every segment of the command is a recovery / cleanup / read-only
         // inspection command — anything else (servers, builds, tests, cat/ls of repo files, git writes)
         // is denied with the redirect.
-        if (this.isFullyRecovery(ctx.command)) {
+        if (this.isFullyRecovery(ctx)) {
             return this.allow(ctx, branch, 'merged-branch recovery/inspection (allowlisted)', cache);
         }
 
@@ -101,38 +104,59 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         return this.block(ctx, branch, `already-merged PR#${pr}`, this.mergedMessage(ctx.workspaceRoot, branch, status.mergedPr), cache);
     }
 
-    // A command is a recovery command only when EVERY one of its segments is — a single
-    // `… && scripts/local.sh start` in the chain is enough to deny the whole thing.
-    private isFullyRecovery(command: string): boolean {
-        const segments = this.scanner.commandSegments(command);
+    /**
+     * A command is a recovery command only when EVERY one of its segments is — a single
+     * `… && scripts/local.sh start` in the chain is enough to deny the whole thing.
+     *
+     * Segments are judged by ROLE first (see ShellSegmentScan). Shell STRUCTURE (`for … in`, `do`,
+     * `done`) invokes nothing, and output SHAPING (`| tail -40`, `; echo done`) cannot touch the repo
+     * — so neither may veto a chain. Judging the raw string instead is what made the guard reject
+     * `git fetch origin main 2>&1 | tail -5`, a command its own redirect had just told the agent to run.
+     */
+    private isFullyRecovery(ctx: BashContext): boolean {
+        const segments = this.scanner.segmentsWithPipes(ctx.command);
         if (segments.length === 0) return false;
-        return segments.every((segment: string): boolean => this.isRecoverySegment(segment));
+        const content = new ContentReadScan(this.scanner, ctx.workspaceRoot);
+        return segments.every((segment: CommandSegment): boolean => this.isRecoverySegment(segment, content));
     }
 
-    private isRecoverySegment(segment: string): boolean {
-        const gitSub = this.scanner.gitSubcommand(segment);
+    private isRecoverySegment(segment: CommandSegment, content: ContentReadScan): boolean {
+        const verdict = this.shell.classify(segment);
+        if (verdict.role === 'structure') return true;
+        // Inert / piped-into filters are fine EXCEPT when they name a workspace path: `git status |
+        // cat src/foo.ts` still hands the agent pre-merge file content, which is the thing this guard
+        // is protecting against. ContentReadScan already draws exactly that line.
+        if (verdict.role === 'shaping') return content.readsStaleContent(segment) === null;
+
+        const gitSub = this.scanner.gitSubcommandOf(verdict.words);
         if (gitSub !== null) return ALLOWED_GIT_SUBCOMMANDS.has(gitSub);
-        if (this.isGhInspection(segment)) return true;
-        if (this.isPackageRecovery(segment)) return true;
+        if (this.isGhInspection(verdict)) return true;
+        if (this.isPackageRecovery(verdict)) return true;
         return false;
     }
 
-    // Read-only / status `gh` invocations used for orientation. gh writes (pr create/merge, api POSTs)
-    // are governed by pr-creation-or-push-guard / pr-merge-guard and are NOT allowlisted here.
-    private isGhInspection(segment: string): boolean {
-        const m = /^gh\s+(\S+)(?:\s+(\S+))?/.exec(segment.trim());
-        if (m === null) return false;
-        const top = m[1];
-        const action = m[2];
-        if (top === 'pr') return action !== undefined && GH_PR_READ_ACTIONS.has(action);
+    // Read-only / status `gh` invocations used for orientation, INCLUDING `gh run view|list|watch` —
+    // watching CI is precisely what you do while parked on a just-merged branch. gh writes (pr
+    // create/merge, run cancel/rerun, api POSTs) are governed by pr-creation-or-push-guard /
+    // pr-merge-guard and are NOT allowlisted here.
+    private isGhInspection(verdict: SegmentVerdict): boolean {
+        const words = verdict.words;
+        if (words.length === 0 || words[0] !== 'gh') return false;
+        const top = words[1];
+        if (top === undefined) return false;
+        const action = words[2];
+        const readActions = GH_READ_ACTIONS.get(top);
+        if (readActions !== undefined) return action !== undefined && readActions.has(action);
         return GH_READ_TOPLEVEL.has(top);
     }
 
     // pnpm/npm/yarn recovery bins: the `wp-*` cleanup/gated commands and package installs (a chained
     // install that isInstallerCommand — the pure-install bypass — did not catch reaches here).
-    private isPackageRecovery(segment: string): boolean {
-        if (!/^(?:pnpm|npm|npx|pnpx|yarn)\b/.test(segment.trim())) return false;
-        return /\bwp-[a-z-]+/.test(segment) || /\b(?:install|ci|add)\b/.test(segment);
+    private isPackageRecovery(verdict: SegmentVerdict): boolean {
+        const words = verdict.words;
+        if (words.length === 0 || !PACKAGE_MANAGERS.has(words[0])) return false;
+        return words.slice(1).some((word: string): boolean =>
+            /^wp-[a-z-]+$/.test(word) || PACKAGE_INSTALL_VERBS.has(word));
     }
 
     private mergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
@@ -200,7 +224,17 @@ const ALLOWED_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
     'blame', 'whatchanged', 'cherry',
 ]);
 
-// Read-only `gh pr` actions used for orientation.
-const GH_PR_READ_ACTIONS: ReadonlySet<string> = new Set(['list', 'view', 'status', 'checks', 'diff']);
+// Read-only actions per `gh` topic. `run` is here because `gh run view <id>` was blocked outright in
+// the field while `gh pr view` beside it succeeded — both are read-only, and CI watching is the normal
+// thing to do while parked. The WRITE actions of the same topics (pr create/merge/close, run
+// cancel/rerun/delete) are simply absent, so they still fall through to the block.
+const GH_READ_ACTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+    ['pr', new Set(['list', 'view', 'status', 'checks', 'diff'])],
+    ['run', new Set(['list', 'view', 'watch'])],
+    ['issue', new Set(['list', 'view', 'status'])],
+]);
 // Read-only top-level `gh` commands.
 const GH_READ_TOPLEVEL: ReadonlySet<string> = new Set(['status', 'auth', 'browse', 'repo', 'search']);
+
+const PACKAGE_MANAGERS: ReadonlySet<string> = new Set(['pnpm', 'npm', 'npx', 'pnpx', 'yarn']);
+const PACKAGE_INSTALL_VERBS: ReadonlySet<string> = new Set(['install', 'ci', 'add', 'i']);

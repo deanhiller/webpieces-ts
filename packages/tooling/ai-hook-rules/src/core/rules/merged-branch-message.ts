@@ -14,10 +14,46 @@ import { TreeRecovery, TreeKind } from './tree-recovery';
  * The steps themselves come from {@link TreeRecovery}, which renders them in the flavour of the tree
  * we are actually standing in — a merged LINKED WORKTREE is told to open a new worktree and remove
  * this dead one, a merged branch in the primary clone is told to `git checkout -b … origin/main`.
- * Neither is ever told to `git checkout main`, which fatals in a worktree.
+ *
+ * ONE VOICE on `git checkout main`: only the WORKTREE flavour says never to run it (there it fatals —
+ * main is checked out in the primary clone). In the primary clone it is a perfectly good move and the
+ * allowance list below says so explicitly. The two used to disagree inside a single message — the
+ * header forbade it while the allowance list permitted "git checkout <other-branch>", and `main` is an
+ * other-branch — and an agent that resolved the contradiction in favour of the prohibition concluded
+ * its only exit was creating a branch, which the branch cap then refused.
  */
 export class MergedBranchMessage {
     private readonly recovery = new TreeRecovery();
+
+    /**
+     * The ONE allowance list, shared by every guard that blocks while this state is up.
+     *
+     * Each guard used to print its own view of the world: this one's narrow bash allowlist, and
+     * read-stale-guard's "EVERY Bash command". Both statements were true of their own guard and false
+     * of the session — on a merged branch BOTH fire, so the agent was told simultaneously that all
+     * Bash runs and that most Bash is blocked. One list, printed by both.
+     */
+    private allowances(kind: TreeKind): string[] {
+        const switching = kind === 'worktree'
+            ? '  - switching away: git checkout/switch <other-branch> (NOT `git checkout main` — it fatals ' +
+              'in a worktree; use `git fetch origin main`), git worktree add/remove/prune'
+            : '  - switching away: git checkout/switch <other-branch> — `main` included, so ' +
+              '`git checkout main && git pull origin main && pnpm wp-cleanup` is allowed and is the ' +
+              'shortest exit; also git worktree add/remove/prune';
+        return [
+            'Still allowed while this block is up (these get you OFF this branch — run one, then retry):',
+            '  - the fresh-start / cleanup git commands above',
+            '  - read-only orientation: git status|log|diff|show|branch, gh pr list|view|status, gh run view|list|watch',
+            switching,
+            '  - pnpm wp-cleanup and the gated wp-start-*/wp-finish-* commands, pnpm install / upgrades',
+            '  - output shaping on any of the above: `… 2>&1 | tail -40`, `… | head -5`, `…; echo done`',
+            '  - reading and editing webpieces.config.json (the mode-OFF escape hatch for these guards)',
+            '',
+            'NOT allowed on this branch, by the sibling guards that fire on the same state: ordinary Bash',
+            '(merged-branch-bash-guard), Read (read-stale-guard) and Write/Edit (feature-branch-guard).',
+            'One list — all three guards print exactly this one.',
+        ];
+    }
 
     // The diagnosis + cure. Identical for both guards — this is the part that must never drift.
     private common(branch: string, mergedPr: string, kind: TreeKind, worktreePath: string): string[] {
@@ -41,16 +77,18 @@ export class MergedBranchMessage {
     forEdits(branch: string, mergedPr: string, kind: TreeKind = 'unknown', worktreePath: string = '<worktree-dir>'): string {
         return this.common(branch, mergedPr, kind, worktreePath).concat([
             '',
+            ...this.allowances(kind),
+            '',
             'Please add to memory: start a new branch/worktree off origin/main after a PR is merged.',
         ]).join('\n');
     }
 
     /**
-     * The Bash variant. merged-branch-bash-guard DEFAULT-DENIES Bash on a merged branch, so unlike the
-     * Read/Write guards (whose escape hatch IS "every Bash command still runs") this one has to spell
-     * out the narrow allowlist — otherwise an agent reads "blocked" and believes it is wedged. The cure
-     * commands it lists are exactly the ones the allowlist lets through, so following this message can
-     * never hit the guard again.
+     * The Bash variant. merged-branch-bash-guard DEFAULT-DENIES Bash on a merged branch, so the message
+     * has to spell out the narrow allowlist — otherwise an agent reads "blocked" and believes it is
+     * wedged. The cure commands it lists are exactly the ones the allowlist lets through (including the
+     * `| tail`/`; echo` shaping an agent reflexively appends), so following this message can never hit
+     * the guard again.
      */
     forBash(branch: string, mergedPr: string, kind: TreeKind = 'unknown', worktreePath: string = '<worktree-dir>'): string {
         return this.common(branch, mergedPr, kind, worktreePath).concat([
@@ -58,11 +96,7 @@ export class MergedBranchMessage {
             'Bash is blocked here because working on a merged branch (booting servers, running builds,',
             'reading files with cat/ls) operates on a PRE-MERGE snapshot that origin/main has moved past.',
             '',
-            'Still allowed while this block is up (these get you OFF this branch — run one, then retry):',
-            '  - the fresh-start / cleanup git commands above',
-            '  - read-only orientation: git status|log|diff|show|branch, gh pr list|view|status',
-            '  - switching away: git checkout/switch <other-branch>, git worktree add/remove/prune',
-            '  - pnpm wp-cleanup and the gated wp-start-*/wp-finish-* commands, pnpm install / upgrades',
+            ...this.allowances(kind),
             '',
             'Please add to memory: start a new branch/worktree off origin/main after a PR is merged.',
         ]).join('\n');
@@ -79,10 +113,7 @@ export class MergedBranchMessage {
             'Reads are blocked here because this tree is a PRE-MERGE snapshot: anything you read is',
             'stale relative to origin/main, and a plan built on it is built on code that has moved.',
             '',
-            'Still allowed while this block is up:',
-            '  - EVERY Bash command (the git commands above, installs, builds, all git/gh)',
-            '  - All Write/Edit (feature-branch-guard governs those separately)',
-            '  - Reading and editing webpieces.config.json (set read-stale-guard mode OFF to disable)',
+            ...this.allowances(kind),
             '',
             'Please add to memory: start a new branch/worktree off origin/main after a PR is merged.',
         ]).join('\n');

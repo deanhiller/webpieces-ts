@@ -54,10 +54,20 @@ export class TreeRecovery {
         ];
 
         if (kind === 'worktree') {
-            return ['You are in a linked worktree. Start the new work in its own worktree:', ...worktreeForm];
+            return [
+                'You are in a linked worktree (`git checkout main` fatals here — main is checked out in',
+                'the primary clone). Start the new work in its own worktree:',
+                ...worktreeForm,
+            ];
         }
+        // The primary clone. NO "never `git checkout main`" here: that is a WORKTREE-only truth, and
+        // printing it in the primary clone forbids the shortest exit off a merged branch
+        // (`git checkout main && git pull origin main && pnpm wp-cleanup` — the exact command a human
+        // had to hand an agent that had wedged itself following this very message). Branching off
+        // origin/main is still what we RECOMMEND, because it works from any tree; it is no longer
+        // dressed up as the only legal move.
         if (kind === 'branch') {
-            return ['Start fresh — branch off origin/main (never `git checkout main`):', ...branchForm];
+            return ['Start fresh — branch off origin/main (works from here and from any worktree):', ...branchForm];
         }
         return [
             'Start fresh off origin/main. Pick the form for the tree you are in:',

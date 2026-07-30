@@ -307,9 +307,14 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
         expect(rule('ON', { maxLocalBranches: 5 }).check(ctx('git checkout -b dean/next origin/main')).length).toBe(0);
     });
 
-    // Legitimately 6 live branches: nothing is reapable, so the ONLY way forward is a config change.
-    // The hint must say so rather than dead-ending.
-    it('at the cap with nothing reapable, offers the raise-cap and bypass escapes', () => {
+    /**
+     * Legitimately 6 live branches, nothing reapable — the shape that produced the incident this
+     * remedy exists for. Both printed remedies used to LOOSEN the rule ("raise maxLocalBranches",
+     * "set turnOffRuleUntilEpoch"), so an agent with no human present edited webpieces.config.json to
+     * escape: the exact failure the cap exists to prevent. The preferred remedy must now be to SHOW
+     * the spared branches and ASK, with the config edits demoted to human-approved.
+     */
+    it('at the cap with nothing reapable, PREFERS asking the human which spared branch may go', () => {
         git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
         git.cacheJson = cacheWith([], ['a', 'b', 'c', 'd', 'e']);
 
@@ -319,10 +324,21 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
         expect(violations[0].message).toContain('None of them are dead');
 
         const hint = r.fixHint;
+        const preferred = hint.fixOptions.filter((o: { preferred: boolean }): boolean => o.preferred);
+        expect(preferred.length).toBe(1);
+        expect(preferred[0].text).toContain('ASK THE HUMAN');
+        // The candidates are NAMED, so the human has something to adjudicate.
+        expect(preferred[0].text).toContain('a');
+        expect(preferred[0].text).toContain('e');
+
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
-        expect(flat).not.toContain('git branch -D');
+        expect(flat).toContain('git branch -D <approved-branch>');
+        expect(flat).toContain('git branch <name> <sha>');   // the delete is reversible
+        // The loosening escapes survive, but only as HUMAN-approved ones.
         expect(flat).toContain('maxLocalBranches');
         expect(flat).toContain('turnOffRuleUntilEpoch');
+        expect(flat).toContain('ONLY IF A HUMAN SAYS SO');
+        expect(flat).toContain('do NOT edit webpieces.config.json instead');
         expect(flat).toContain('5 unmerged branch(es) with real commits were deliberately SPARED');
     });
 
