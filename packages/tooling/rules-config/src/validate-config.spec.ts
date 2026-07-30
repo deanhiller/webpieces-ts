@@ -12,7 +12,8 @@ function validMatchRule(overrides: Record<string, unknown> = {}): Record<string,
         patterns: ['(?<![.\\w])fetch\\s*\\('],
         mainMessage: 'Use the generated client instead.',
         mode: 'NEW_AND_MODIFIED_CODE',
-        ignoreModifiedUntilEpoch: 0,
+        turnOffRuleUntilEpoch: 0,
+        turnOffRuleWhileOnBranch: null,
         ...overrides,
     };
 }
@@ -29,8 +30,8 @@ describe('validateWebpiecesConfig', () => {
                 mode: 'RUN_EVERY_TIME',
                 ignoreTypeOnly: false,
                 excludePackages: ['@kami/entities'],
-                ignoreModifiedUntilEpoch: 1771931925,
-                ignoreRuleWhileOnBranch: 'deanhiller/foo',
+                turnOffRuleUntilEpoch: 1771931925,
+                turnOffRuleWhileOnBranch: 'deanhiller/foo',
             },
         });
         // No field-level complaints for this rule (missing-OTHER-rule errors are expected and ignored).
@@ -65,9 +66,9 @@ describe('validateWebpiecesConfig', () => {
 
     it('every rule accepts the universal escape hatches', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
-            'pr-merge-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
-            'feature-branch-guard': { mode: 'ON', ignoreRuleWhileOnBranch: 'x', ignoreModifiedUntilEpoch: 1 },
+            'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
+            'pr-merge-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
+            'feature-branch-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
         });
         for (const rule of ['pr-creation-or-push-guard', 'pr-merge-guard', 'feature-branch-guard']) {
             const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
@@ -75,21 +76,19 @@ describe('validateWebpiecesConfig', () => {
         }
     });
 
-    it('missing-rule snippet lists mode as required; all four escape-hatch fields are optional', () => {
+    it('missing-rule snippet lists mode + BOTH escape hatches as required (always visible)', () => {
         // Omit no-file-import-cycles so the snippet is emitted for it.
         const errors = validateWebpiecesConfig({});
         const snippet = errors.find(e => e.includes('[no-file-import-cycles] Not configured'));
         expect(snippet).toBeDefined();
-        // Required block contains mode...
         expect(snippet!).toContain('"mode"');
-        const [requiredBlock, optionalBlock] = snippet!.split('Optional fields you may add');
-        expect(optionalBlock).toBeDefined();
-        // The time-box / branch hatches are ALL optional now (either name) — a rule may carry the
-        // branch hatch alone with no epoch. None of them belong in the required copy-paste entry.
-        for (const field of ['ignoreModifiedUntilEpoch', 'turnOffRuleUntilEpoch', 'ignoreRuleWhileOnBranch', 'turnOffRuleWhileOnBranch']) {
-            expect(requiredBlock).not.toContain(field);
-            expect(optionalBlock).toContain(field);
-        }
+        const [requiredBlock] = snippet!.split('Optional fields you may add');
+        // Both hatches are REQUIRED now, so they land in the primary copy-paste block — the whole point
+        // is that a seeded/edited rule always shows them. The old names must NOT appear at all.
+        expect(requiredBlock).toContain('turnOffRuleUntilEpoch');
+        expect(requiredBlock).toContain('turnOffRuleWhileOnBranch');
+        expect(snippet!).not.toContain('ignoreModifiedUntilEpoch');
+        expect(snippet!).not.toContain('ignoreRuleWhileOnBranch');
     });
 });
 
@@ -100,7 +99,7 @@ describe('validateWebpiecesConfig — retired runtime-architecture fields', () =
         const errors = validateWebpiecesConfig({
             'runtime-architecture': {
                 mode: 'RUN_EVERY_TIME',
-                ignoreModifiedUntilEpoch: 0,
+                turnOffRuleUntilEpoch: 0,
                 servicePaths: ['services/*/*'],
                 apiProjectPaths: ['libraries/apis/internal/portal-apis', 'libraries/apis/internal/lang-apis'],
                 allowedCycles: [],
@@ -119,12 +118,12 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
     it('accepts RUN_EVERY_TIME and rejects ON for structural rules', () => {
         for (const rule of ['no-file-import-cycles', 'runtime-architecture', 'nx-wiring']) {
             const ok = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'RUN_EVERY_TIME', ignoreModifiedUntilEpoch: 0 },
+                [rule]: { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: 0 },
             })).filter(e => e.includes('Must be one of'));
             expect(ok).toEqual([]);
 
             const bad = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
+                [rule]: { mode: 'ON', turnOffRuleUntilEpoch: 0 },
             }));
             expect(bad.some(e => e.includes('Must be one of') && e.includes('RUN_EVERY_TIME'))).toBe(true);
         }
@@ -134,12 +133,12 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
     it('accepts NEW_AND_MODIFIED_FILES and rejects MODIFIED_FILES for file-tier rules', () => {
         for (const rule of ['max-file-lines', 'validate-ts-in-src', 'no-js-files']) {
             const ok = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'NEW_AND_MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
+                [rule]: { mode: 'NEW_AND_MODIFIED_FILES', turnOffRuleUntilEpoch: 0 },
             })).filter(e => e.includes('Must be one of'));
             expect(ok).toEqual([]);
 
             const bad = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'MODIFIED_FILES', ignoreModifiedUntilEpoch: 0 },
+                [rule]: { mode: 'MODIFIED_FILES', turnOffRuleUntilEpoch: 0 },
             }));
             expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_FILES'))).toBe(true);
         }
@@ -150,12 +149,12 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
     it('accepts NEW_AND_MODIFIED_CODE and rejects the old MODIFIED_CODE for line-tier rules', () => {
         for (const rule of ['no-any-unknown', 'no-destructure', 'catch-error-pattern', 'no-symbol-di-tokens', 'throw-cause-required']) {
             const ok = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+                [rule]: { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
             })).filter(e => e.includes('Must be one of'));
             expect(ok).toEqual([]);
 
             const bad = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+                [rule]: { mode: 'MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
             }));
             expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_CODE'))).toBe(true);
         }
@@ -164,12 +163,12 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
     // framework-tag is PROJECT-level: it uses MODIFIED_PROJECTS, not the line/file-scoped modes.
     it('accepts MODIFIED_PROJECTS and rejects NEW_AND_MODIFIED_CODE for framework-tag', () => {
         const ok = errorsFor('framework-tag', validateWebpiecesConfig({
-            'framework-tag': { mode: 'MODIFIED_PROJECTS', ignoreModifiedUntilEpoch: 0 },
+            'framework-tag': { mode: 'MODIFIED_PROJECTS', turnOffRuleUntilEpoch: 0 },
         })).filter(e => e.includes('Must be one of'));
         expect(ok).toEqual([]);
 
         const bad = errorsFor('framework-tag', validateWebpiecesConfig({
-            'framework-tag': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
+            'framework-tag': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
         }));
         expect(bad.some(e => e.includes('Must be one of') && e.includes('MODIFIED_PROJECTS'))).toBe(true);
     });
@@ -186,11 +185,12 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
 });
 
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
-    it('accepts a rule with mode only — the time-box hatch is now optional (either name)', () => {
-        const errors = validateWebpiecesConfig({
+    it('rejects a rule with mode only — BOTH escape hatches are now required', () => {
+        const errors = errorsFor('pr-creation-or-push-guard', validateWebpiecesConfig({
             'pr-creation-or-push-guard': { mode: 'ON' },
-        });
-        expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
+        }));
+        expect(errors.some(e => e.includes('Missing required field "turnOffRuleUntilEpoch"'))).toBe(true);
+        expect(errors.some(e => e.includes('Missing required field "turnOffRuleWhileOnBranch"'))).toBe(true);
     });
 
     it('accepts the new turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch field names', () => {
@@ -214,7 +214,7 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
 
     it('rejects a present rule that is missing the required mode', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { ignoreModifiedUntilEpoch: 0 },
+            'pr-creation-or-push-guard': { turnOffRuleUntilEpoch: 0 },
         });
         expect(
             errorsFor('pr-creation-or-push-guard', errors).some(
@@ -223,9 +223,9 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
         ).toBe(true);
     });
 
-    it('accepts a fully-specified rule (mode + ignoreModifiedUntilEpoch)', () => {
+    it('accepts a fully-specified rule (mode + both hatches)', () => {
         const errors = validateWebpiecesConfig({
-            'pr-creation-or-push-guard': { mode: 'OFF', ignoreModifiedUntilEpoch: 0 },
+            'pr-creation-or-push-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
         });
         expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
     });
@@ -237,12 +237,31 @@ describe('validateWebpiecesConfig — required fields + branch-creation-guard mo
                 branchFormat: 'Name it {whoami}/<feature>',
                 subBranchNaming: 'feature/<ticket>/<desc>',
                 autoReapMergedBranches: true,
-                ignoreModifiedUntilEpoch: 0,
+                turnOffRuleUntilEpoch: 0,
+                turnOffRuleWhileOnBranch: null,
             },
         });
         expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
     });
 
+});
+
+describe('validateWebpiecesConfig — escape-hatch fields (required, nullable branch, renamed old names)', () => {
+    it('accepts a null branch hatch (the always-on value)', () => {
+        const errors = validateWebpiecesConfig({
+            'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+        });
+        expect(errorsFor('pr-creation-or-push-guard', errors)).toEqual([]);
+    });
+
+    it('flags the renamed old names with a "renamed to X" hint', () => {
+        const errors = errorsFor('pr-creation-or-push-guard', validateWebpiecesConfig({
+            // webpieces-disable no-any-unknown -- deliberately the removed old names for the negative test
+            'pr-creation-or-push-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0, ignoreRuleWhileOnBranch: null } as unknown as Record<string, unknown>,
+        }));
+        expect(errors.some(e => e.includes('"ignoreModifiedUntilEpoch" — it was renamed to "turnOffRuleUntilEpoch"'))).toBe(true);
+        expect(errors.some(e => e.includes('"ignoreRuleWhileOnBranch" — it was renamed to "turnOffRuleWhileOnBranch"'))).toBe(true);
+    });
 });
 
 describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', () => {
@@ -254,7 +273,7 @@ describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', 
      */
     it('branch-creation-guard requires an explicit autoReapMergedBranches — no silent default', () => {
         const errors = validateWebpiecesConfig({
-            'branch-creation-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
+            'branch-creation-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
         });
         expect(
             errorsFor('branch-creation-guard', errors).some(
@@ -268,7 +287,8 @@ describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', 
             'branch-creation-guard': {
                 mode: 'ON',
                 autoReapMergedBranches: false,
-                ignoreModifiedUntilEpoch: 0,
+                turnOffRuleUntilEpoch: 0,
+                turnOffRuleWhileOnBranch: null,
             },
         });
         expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
@@ -276,7 +296,7 @@ describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', 
 
     it('branch-creation-guard rejects an invalid mode', () => {
         const errors = validateWebpiecesConfig({
-            'branch-creation-guard': { mode: 'SOMETIMES', ignoreModifiedUntilEpoch: 0 },
+            'branch-creation-guard': { mode: 'SOMETIMES', turnOffRuleUntilEpoch: 0 },
         });
         expect(
             errorsFor('branch-creation-guard', errors).some(
@@ -482,27 +502,28 @@ describe('validateMatchRulesSection', () => {
         expect(errors.some(e => e.includes('"no-fetch".patterns[0] is not a valid regex'))).toBe(true);
     });
 
-    it('requires name, patterns, mainMessage, and mode (the epoch hatch is optional)', () => {
+    it('requires name, patterns, mainMessage, mode, and BOTH escape hatches', () => {
         const errors = validateMatchRulesSection([{ name: '' }]);
         expect(errors.some(e => e.includes('.name must be a non-empty string'))).toBe(true);
         expect(errors.some(e => e.includes('.patterns must be a non-empty string[]'))).toBe(true);
         expect(errors.some(e => e.includes('.mainMessage must be a non-empty string'))).toBe(true);
         expect(errors.some(e => e.includes('.mode must be one of'))).toBe(true);
-        // Neither epoch name is required — omitting both is fine.
-        expect(errors.some(e => e.includes('must be a number'))).toBe(false);
+        // Both hatches are required on match-rules too.
+        expect(errors.some(e => e.includes('.turnOffRuleUntilEpoch must be a number'))).toBe(true);
+        expect(errors.some(e => e.includes('.turnOffRuleWhileOnBranch must be a string or null'))).toBe(true);
     });
 
-    it('validates the epoch hatch type when present, under either name', () => {
-        // webpieces-disable no-any-unknown -- deliberately wrong types for the negative test
-        const oldName = validateMatchRulesSection([validMatchRule({ ignoreModifiedUntilEpoch: 'soon' as unknown as number })]);
-        expect(oldName.some(e => e.includes('.ignoreModifiedUntilEpoch must be a number'))).toBe(true);
-        // webpieces-disable no-any-unknown -- deliberately wrong types for the negative test
-        const newName = validateMatchRulesSection([validMatchRule({ turnOffRuleUntilEpoch: 'soon' as unknown as number })]);
-        expect(newName.some(e => e.includes('.turnOffRuleUntilEpoch must be a number'))).toBe(true);
+    it('validates the epoch hatch type when present', () => {
+        // webpieces-disable no-any-unknown -- deliberately wrong type for the negative test
+        const errors = validateMatchRulesSection([validMatchRule({ turnOffRuleUntilEpoch: 'soon' as unknown as number })]);
+        expect(errors.some(e => e.includes('.turnOffRuleUntilEpoch must be a number'))).toBe(true);
     });
 
-    it('accepts the new turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch names on a match-rule', () => {
+    it('accepts a null branch hatch and flags the renamed old names', () => {
         expect(validateMatchRulesSection([validMatchRule({ turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' })])).toEqual([]);
+        // webpieces-disable no-any-unknown -- deliberately the removed old name for the negative test
+        const renamed = validateMatchRulesSection([validMatchRule({ ignoreModifiedUntilEpoch: 0 } as Record<string, unknown>)]);
+        expect(renamed.some(e => e.includes('"ignoreModifiedUntilEpoch" — it was renamed to "turnOffRuleUntilEpoch"'))).toBe(true);
     });
 
     it('rejects an invalid mode value', () => {

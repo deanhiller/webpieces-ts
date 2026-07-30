@@ -369,7 +369,7 @@ function reportViolations(violations: DestructureViolation[], mode: ModifiedCode
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolveNoDestructureMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
@@ -389,7 +389,7 @@ async function runValidatorImpl(
     options: NoDestructureConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveNoDestructureMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveNoDestructureMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [];
 

@@ -49,7 +49,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // config, so RUN_EVERY_TIME is the only default that keeps existing repos behaving identically on
     // upgrade. Set "mode": "OFF" to disable one; the two graph-baseline rules
     // (validate-architecture-unchanged / validate-no-architecture-cycles) additionally honor
-    // ignoreModifiedUntilEpoch — the other three are all-or-nothing (see rule-configs.ts).
+    // turnOffRuleUntilEpoch — the other three are all-or-nothing (see rule-configs.ts).
     'validate-architecture-unchanged': { mode: 'RUN_EVERY_TIME' },
     'validate-no-architecture-cycles': { mode: 'RUN_EVERY_TIME' },
     'validate-packagejson': { mode: 'RUN_EVERY_TIME' },

@@ -49,6 +49,18 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 
 /**
+ * Directory names whose contents SHIP to consumers as scaffolding (copied into a consumer repo by the
+ * installer), so their imports are consumer-facing PRODUCTION deps — NOT this project's own dev-time
+ * tooling. A file like `templates/eslint.webpieces.config.mjs` otherwise trips DEV_CONFIG_RE on its
+ * name and gets mis-bucketed as dev, which then flags a genuinely-required dependency (e.g.
+ * `@webpieces/eslint-rules`, which those very templates import) as "test-only in dependencies".
+ * A `templates/` segment therefore short-circuits isDevFile to production, ahead of the name heuristics.
+ */
+const SHIPPED_DIR_NAMES = new Set([
+    'templates',
+]);
+
+/**
  * Directory names that make everything below them test/dev-only.
  * Kept tight on purpose — a false "this is a test dir" would let a real
  * production import be classified as test-only.
@@ -122,6 +134,11 @@ export class DepUsageScanner {
         const segments = normalized.split('/');
         const fileName = segments[segments.length - 1];
 
+        // Shipped scaffolding wins over every dev heuristic below: a template file's imports are
+        // consumer-facing production deps, even when its NAME looks like a dev config (eslint.*.config.mjs).
+        for (const dir of segments.slice(0, -1)) {
+            if (SHIPPED_DIR_NAMES.has(dir)) return false;
+        }
         for (const dir of segments.slice(0, -1)) {
             if (TEST_DIR_NAMES.has(dir)) return true;
         }

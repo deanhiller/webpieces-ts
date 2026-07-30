@@ -534,7 +534,7 @@ function reportViolations(violations: InlineTypeViolation[], mode: InlineTypeMod
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolveMode(normalMode: InlineTypeMode, epoch: number | undefined, branchPattern: string | undefined): InlineTypeMode {
@@ -554,7 +554,7 @@ async function runValidatorImpl(
     options: NoInlineTypeLiteralsConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: InlineTypeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: InlineTypeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

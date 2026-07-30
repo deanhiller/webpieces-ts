@@ -146,7 +146,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
 
     private resolveMode(normalMode: ModifiedCodeMode): ModifiedCodeMode {
         if (normalMode === 'OFF') return normalMode;
-        const skip = shouldSkipRule(this.config.ignoreModifiedUntilEpoch, this.config.ignoreRuleWhileOnBranch);
+        const skip = shouldSkipRule(this.config.turnOffRuleUntilEpoch, this.config.turnOffRuleWhileOnBranch);
         if (skip.skip) {
             console.log(`\n⏭️  Skipping ${RULE_NAME} validation (${skip.reason})`);
             console.log('');

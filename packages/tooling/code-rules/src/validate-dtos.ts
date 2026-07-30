@@ -481,7 +481,7 @@ function validateDtoFiles(
 }
 
 /**
- * Resolve mode considering ignoreModifiedUntilEpoch override.
+ * Resolve mode considering turnOffRuleUntilEpoch override.
  * When active, downgrades to OFF. When expired, logs a warning.
  */
 function resolveMode(normalMode: PrismaValidateDtosMode, epoch: number | undefined, branchPattern: string | undefined): PrismaValidateDtosMode {
@@ -501,7 +501,7 @@ async function runValidatorImpl(
     options: PrismaValidateDtosConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping validate-dtos (mode: OFF)');

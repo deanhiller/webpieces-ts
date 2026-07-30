@@ -5,7 +5,7 @@ export type RuleOptions = Record<string, unknown>;
  * One rule entry from webpieces.config.json, merged with built-in defaults.
  *
  * `options` contains the raw option bag (mode, limit, disableAllowed,
- * ignoreModifiedUntilEpoch, enforcePaths, etc). Consumers extract the
+ * turnOffRuleUntilEpoch, enforcePaths, etc). Consumers extract the
  * fields they understand and ignore the rest.
  *
  * On/off is driven entirely by `mode`: a rule is OFF only when explicitly

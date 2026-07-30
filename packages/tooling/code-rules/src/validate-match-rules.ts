@@ -55,7 +55,7 @@ export class MatchRulesChecker {
     /** True unless this entry is `mode: "OFF"` or skipped by a branch/epoch escape hatch. */
     shouldRun(config: MatchRuleConfig): boolean {
         if ((config.mode ?? 'OFF') === 'OFF') return false;
-        return !shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch).skip;
+        return !shouldSkipRule(config.turnOffRuleUntilEpoch, config.turnOffRuleWhileOnBranch).skip;
     }
 
     /** Run one `match-rules` entry against the workspace (per-entry mode/diff-scoping/report). */
@@ -176,7 +176,7 @@ export class MatchRulesChecker {
     private resolveMode(config: MatchRuleConfig): ModifiedCodeMode {
         const normalMode: ModifiedCodeMode = config.mode ?? 'OFF';
         if (normalMode === 'OFF') return normalMode;
-        const skip = shouldSkipRule(config.ignoreModifiedUntilEpoch, config.ignoreRuleWhileOnBranch);
+        const skip = shouldSkipRule(config.turnOffRuleUntilEpoch, config.turnOffRuleWhileOnBranch);
         if (skip.skip) {
             console.log(`\n⏭️  Skipping ${config.name} validation (${skip.reason})\n`);
             return 'OFF';

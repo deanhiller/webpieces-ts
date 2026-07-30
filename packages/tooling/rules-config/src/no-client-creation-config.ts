@@ -20,7 +20,7 @@ export type ClientCreationSeverity = typeof CLIENT_CREATION_SEVERITIES[number];
 // `severity` ships "warn" (report + migration, build passes) so an upgrade can't break an un-migrated
 // Angular repo; flip to "error" once libraries are migrated. `allowedRoles` defaults to the runnable
 // roles; `allowedPaths` exempts whole file trees (shared glob semantics). Standard rollout knobs via
-// the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch,
+// the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch,
 // branch, and disableAllowed for the inline `// webpieces-disable` escape.
 export class NoClientCreationOutsideServerOrClientConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;

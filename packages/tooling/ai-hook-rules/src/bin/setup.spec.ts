@@ -34,8 +34,8 @@ describe('migrate', () => {
     it('moves guards from rules → hookGuards and a top-level pr-gate → commands', () => {
         const result = migrate({
             rules: {
-                'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE', ignoreModifiedUntilEpoch: 0 },
-                'pr-creation-or-push-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0 },
+                'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
+                'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
             },
             'pr-gate': { mode: 'OFF', buildCommand: 'echo ci', gates: [] },
         });
@@ -51,9 +51,9 @@ describe('migrate', () => {
 
     it('adds every missing built-in into its correct section (OFF)', () => {
         const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
-        // A code rule and a guard both get seeded into the right section.
-        expect(result.config.rules['max-file-lines']).toEqual({ mode: 'OFF', ignoreModifiedUntilEpoch: 0 });
-        expect(result.config.hookGuards['branch-creation-guard']).toEqual({ mode: 'OFF', ignoreModifiedUntilEpoch: 0 });
+        // A code rule and a guard both get seeded into the right section, with BOTH escape hatches shown.
+        expect(result.config.rules['max-file-lines']).toEqual({ mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
+        expect(result.config.hookGuards['branch-creation-guard']).toEqual({ mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
     });
 
     it('reports no changes for an already-migrated config', () => {

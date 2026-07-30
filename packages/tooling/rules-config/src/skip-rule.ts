@@ -5,8 +5,8 @@ import { toError } from './to-error';
 
 // Universal "should this rule be skipped right now?" logic, shared by code-rules,
 // ai-hook-rules and the Nx executors so every rule honors the same two escape
-// hatches: ignoreRuleWhileOnBranch (skip while on a named branch) and
-// ignoreModifiedUntilEpoch (skip until an epoch passes).
+// hatches: turnOffRuleWhileOnBranch (skip while on a named branch) and
+// turnOffRuleUntilEpoch (skip until an epoch passes).
 
 export interface SkipRuleResult {
     skip: boolean;
@@ -30,7 +30,9 @@ export function getCurrentBranch(): string {
 
 export function shouldSkipRule(
     epoch: number | undefined,
-    branchPattern: string | undefined
+    // null (the "no branch / always on" value of turnOffRuleWhileOnBranch) is treated exactly like
+    // undefined — no branch scoping. Only a non-empty branch name activates the branch hatch.
+    branchPattern: string | undefined | null
 ): SkipRuleResult {
     if (branchPattern) {
         const current = getCurrentBranch();
@@ -42,7 +44,7 @@ export function shouldSkipRule(
         const nowSeconds = Date.now() / 1000;
         if (nowSeconds < epoch) {
             const expiresDate = new Date(epoch * 1000).toISOString().split('T')[0];
-            return { skip: true, reason: `ignoreModifiedUntilEpoch active, expires: ${expiresDate}` };
+            return { skip: true, reason: `turnOffRuleUntilEpoch active, expires: ${expiresDate}` };
         }
     }
     return { skip: false };

@@ -30,6 +30,14 @@ describe('DepUsageScanner.isDevFile', () => {
         expect(scanner.isDevFile('src/controllers/save-controller.ts')).toBe(false);
         expect(scanner.isDevFile('src/latest/protest.ts')).toBe(false);
     });
+
+    it('classifies SHIPPED templates/ scaffolding as production even when the filename looks like a dev config', () => {
+        // templates/**.config.mjs ships to consumers and its imports (e.g. @webpieces/eslint-rules) are
+        // consumer-facing production deps — the shipped-dir short-circuit must beat DEV_CONFIG_RE.
+        expect(scanner.isDevFile('templates/eslint.webpieces.config.mjs')).toBe(false);
+        expect(scanner.isDevFile('templates/eslint.webpieces-angular.config.mjs')).toBe(false);
+        expect(scanner.isDevFile('src/templates/jest.setup.ts')).toBe(false);
+    });
 });
 
 describe('DepUsageScanner.toPackageName', () => {

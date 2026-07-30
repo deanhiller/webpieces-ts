@@ -71,7 +71,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
         const opts = this.config;
-        const mode = this.resolveMode(opts.mode ?? 'OFF', opts.ignoreModifiedUntilEpoch, opts.ignoreRuleWhileOnBranch);
+        const mode = this.resolveMode(opts.mode ?? 'OFF', opts.turnOffRuleUntilEpoch, opts.turnOffRuleWhileOnBranch ?? undefined);
         const disableAllowed = opts.disableAllowed ?? true;
         if (mode === 'OFF') {
             console.log('\n⏭️  Skipping no-custom-css validation (mode: OFF)\n');

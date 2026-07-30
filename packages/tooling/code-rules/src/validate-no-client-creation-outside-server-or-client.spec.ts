@@ -24,7 +24,7 @@ function writeFile(root: string, relPath: string, content: string): void {
 function config(overrides: Partial<NoClientCreationOutsideServerOrClientConfig>): NoClientCreationOutsideServerOrClientConfig {
     const c = new NoClientCreationOutsideServerOrClientConfig();
     c.mode = 'NEW_AND_MODIFIED_FILES';
-    c.ignoreModifiedUntilEpoch = 0;
+    c.turnOffRuleUntilEpoch = 0;
     Object.assign(c, overrides);
     return c;
 }

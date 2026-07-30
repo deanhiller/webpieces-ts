@@ -236,7 +236,7 @@ export async function runNewMethods(
     const disableAllowed = options.disableAllowed ?? true;
 
     const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch) : { skip: false };
+    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : { skip: false };
     const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
 
     // Skip validation entirely if mode is OFF

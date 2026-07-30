@@ -46,7 +46,7 @@ export type OnOffMode = typeof ON_OFF_MODES[number];
 // branch-creation-guard modes. ON_NO_SUBBRANCHES is the strict variant: it hard-blocks
 // creating a branch off any non-main branch (no sub-branch affordance), pointing the agent
 // back to `git checkout main && git pull && git checkout -b <branch>`. Temporarily overridable
-// via the universal ignoreModifiedUntilEpoch escape hatch.
+// via the universal turnOffRuleUntilEpoch escape hatch.
 export const BRANCH_GUARD_MODES = ['ON', 'OFF', 'ON_NO_SUBBRANCHES'] as const;
 export type BranchGuardMode = typeof BRANCH_GUARD_MODES[number];
 
@@ -68,42 +68,32 @@ export type StructuralMode = typeof STRUCTURAL_MODES[number];
 // rule. `mode` stays per-rule because its allowed values vary (ON/OFF vs
 // NEW_AND_MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
 //
-// TWO NAMES per hatch, and BOTH are accepted (see normalizeTurnOffAliases):
-//   turnOffRuleUntilEpoch   — new, self-describing name. Supersedes ignoreModifiedUntilEpoch.
-//   turnOffRuleWhileOnBranch — new, self-describing name. Supersedes ignoreRuleWhileOnBranch.
-// The original `ignoreModifiedUntilEpoch` / `ignoreRuleWhileOnBranch` keep working so a config can
-// migrate a rule at a time. When both names are present on one rule, the new name wins.
-//
-// Convention (unchanged): 0 = rule active (epoch is in the past, never skipped); a future unix epoch
-// IN SECONDS = rule temporarily disabled until that moment. All four fields are OPTIONAL — a rule may
-// carry the branch hatch alone (turnOffRuleWhileOnBranch) with no epoch, which is the intended
-// end-state once callers stop writing turnOffRuleUntilEpoch.
+// BOTH fields are REQUIRED on every rule so both hatches are ALWAYS VISIBLE in the config — an AI
+// editing webpieces.config.json sees them on every rule and cannot miss that a rule can be time-boxed
+// or branch-scoped off. Convention:
+//   turnOffRuleUntilEpoch:    0 = rule active (epoch in the past); a future unix epoch IN SECONDS =
+//                             temporarily disabled until that moment.
+//   turnOffRuleWhileOnBranch: null = always on; a branch name = disabled while that branch is checked out.
+//                             Required-but-nullable so its "unset" state is present-and-visible (null)
+//                             rather than omitted.
+// The earlier names `ignoreModifiedUntilEpoch` / `ignoreRuleWhileOnBranch` were RENAMED to these and are
+// no longer accepted — the validator flags them with a "renamed to X" hint (validate-config.ts).
 // ---------------------------------------------------------------------------
 export abstract class BaseRuleConfig {
     // `mode` is declared here (loosely typed) so the shared AbstractRule base can read it for
     // on/off. Each concrete *Config narrows it to its own union (e.g. `mode?: ModifiedCodeMode`),
     // which is an assignable (covariant) override.
     mode?: string;
-    // Original names — still accepted. normalizeTurnOffAliases canonicalizes the new names ONTO these,
-    // so every reader in both packages keeps reading exactly this pair.
-    ignoreModifiedUntilEpoch?: number;
-    ignoreRuleWhileOnBranch?: string;
-    // New, self-describing names. A config using these is normalized onto the pair above at load time.
+    // TS-optional, but schema-REQUIRED (see BASE_RULE_SCHEMA) — same split as `mode`. Read directly by
+    // AbstractRule.shouldRun, RuleGate, and the code-rules validators.
     turnOffRuleUntilEpoch?: number;
-    turnOffRuleWhileOnBranch?: string;
+    turnOffRuleWhileOnBranch?: string | null;
 }
 
 export const BASE_RULE_SCHEMA = {
-    ignoreModifiedUntilEpoch: FieldDef.optional('number'),
-    ignoreRuleWhileOnBranch: FieldDef.optional('string'),
-    turnOffRuleUntilEpoch: FieldDef.optional('number'),
-    turnOffRuleWhileOnBranch: FieldDef.optional('string'),
+    turnOffRuleUntilEpoch: new FieldDef('number'),
+    turnOffRuleWhileOnBranch: FieldDef.nullableString(),
 };
-
-// The new names are canonicalized onto the original pair at the load boundary by
-// ConfigLoader.normalizeTurnOffAliases (load-config.ts), sibling to normalizeDeprecatedKeys — so every
-// downstream reader (AbstractRule.shouldRun, RuleGate, the match-rules engine) reads one name and
-// needs no change. new name wins when both are present.
 
 export class MaxMethodLinesConfig extends BaseRuleConfig {
     declare mode?: MethodLimitMode;
@@ -303,7 +293,7 @@ export class NoSymbolDiTokensConfig extends BaseRuleConfig {
 
 // Flags `process.exit(...)` outside a main()/runMain wrapper (and `import { main }`) so a deep exit
 // can't silently kill a reused server/command. Gradual-rollout knobs via the standard base: mode
-// (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch, branch, and
+// (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch, branch, and
 // disableAllowed for the inline `// webpieces-disable` escape at genuine terminal boundaries.
 export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
@@ -321,7 +311,7 @@ export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
 // @DocumentDesign only work when behavior lives in injectable classes — a module-scope function is a
 // dead-end the DI graph can't reach. Inline callbacks, nested functions inside methods, and non-function
 // top-level consts (objects, zod schemas, primitives) are NOT flagged. Standard rollout knobs via the
-// base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch, branch,
+// base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch, branch,
 // and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole file
 // trees that legitimately live outside the class-per-behavior model (e.g. React component/hook files,
 // framework glue), matched with the shared glob/prefix/segment semantics of `isPathExcluded`.
@@ -345,7 +335,7 @@ export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
 // its own (see CLAUDE.md, and the no-symbol-di-tokens rule that pushes the same way). Symbol/interface
 // tokens are NOT flagged because they never equal the type (`@inject(FOO_TOKEN) x: Provider<Foo>`).
 // AI keeps carpet-bombing `@inject`; this fails the build on the redundant form. Standard rollout knobs
-// via the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), ignoreModifiedUntilEpoch,
+// via the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch,
 // branch, and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole
 // file trees, matched with the shared glob/prefix/segment semantics.
 export class InjectAnnotationNotNeededForConcreteClassConfig extends BaseRuleConfig {
@@ -416,7 +406,7 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     // Let the detached background refresher DELETE dead branches on its own, instead of only
     // reporting them. Every candidate is provably dead (merged PR / squash backup / no commits) and
     // recoverable by the SHA logged to branch-mutations.log — but it is still UNATTENDED deletion,
-    // so this is schema-REQUIRED like `mode` and `ignoreModifiedUntilEpoch`. "Every built-in rule
+    // so this is schema-REQUIRED like `mode` and `turnOffRuleUntilEpoch`. "Every built-in rule
     // must be explicitly configured — no silent defaults" (validate-config.ts) applies with extra
     // force here: branches disappearing on a preference nobody ever stated is precisely the kind of
     // default that must not exist. Validation makes each consumer answer the question once.

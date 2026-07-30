@@ -259,7 +259,7 @@ async function runValidatorImpl(
     options: NoSymbolDiTokensConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.ignoreModifiedUntilEpoch, options.ignoreRuleWhileOnBranch);
+    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
     const disableAllowed = options.disableAllowed ?? true;
     const allowedPaths = options.allowedPaths ?? [];
 
