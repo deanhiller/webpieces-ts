@@ -57,11 +57,27 @@
                     "level": 1
                 },
                 {
+                    "id": "ChecklistCommand",
+                    "className": "ChecklistCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/checklist-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "ChecklistDetector",
                     "className": "ChecklistDetector",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ChecklistInstructionsService",
+                    "className": "ChecklistInstructionsService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/checklist-instructions.ts",
                     "level": 2
                 },
                 {
@@ -336,6 +352,69 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
+                    "from": "ChecklistCommand",
+                    "to": "AiBranchName",
+                    "injection": "type",
+                    "token": "AiBranchName",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
+                    "paramName": "aiBranchName",
+                    "paramType": "AiBranchName"
+                },
+                {
+                    "from": "ChecklistCommand",
+                    "to": "ChecklistDetector",
+                    "injection": "type",
+                    "token": "ChecklistDetector",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
+                    "paramName": "checklistDetector",
+                    "paramType": "ChecklistDetector"
+                },
+                {
+                    "from": "ChecklistCommand",
+                    "to": "ChecklistInstructionsService",
+                    "injection": "type",
+                    "token": "ChecklistInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
+                    "paramName": "instructions",
+                    "paramType": "ChecklistInstructionsService"
+                },
+                {
+                    "from": "ChecklistCommand",
+                    "to": "ChecklistManifestService",
+                    "injection": "type",
+                    "token": "ChecklistManifestService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
+                    "paramName": "manifestService",
+                    "paramType": "ChecklistManifestService"
+                },
+                {
+                    "from": "ChecklistCommand",
+                    "to": "ChecklistNotice",
+                    "injection": "type",
+                    "token": "ChecklistNotice",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
+                    "paramName": "checklistNotice",
+                    "paramType": "ChecklistNotice"
+                },
+                {
+                    "from": "ChecklistCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "ChecklistCommand",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
                     "from": "ChecklistDetector",
                     "to": "DiffScope",
                     "injection": "type",
@@ -442,6 +521,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
                     "paramName": "checklistDetector",
                     "paramType": "ChecklistDetector"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ChecklistInstructionsService",
+                    "injection": "type",
+                    "token": "ChecklistInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
+                    "paramName": "instructions",
+                    "paramType": "ChecklistInstructionsService"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -769,6 +857,15 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "ChecklistCommand",
+                    "injection": "type",
+                    "token": "ChecklistCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/checklist-command.ts#ChecklistCommand",
+                    "paramName": "checklistCommand",
+                    "paramType": "ChecklistCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "CleanupCommand",
                     "injection": "type",
                     "token": "CleanupCommand",
@@ -910,33 +1007,6 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
                     "paramName": "buildAffected",
                     "paramType": "BuildAffected"
-                },
-                {
-                    "from": "StartUpsertPrCommand",
-                    "to": "ChecklistDetector",
-                    "injection": "type",
-                    "token": "ChecklistDetector",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-detector.ts#ChecklistDetector",
-                    "paramName": "checklistDetector",
-                    "paramType": "ChecklistDetector"
-                },
-                {
-                    "from": "StartUpsertPrCommand",
-                    "to": "ChecklistManifestService",
-                    "injection": "type",
-                    "token": "ChecklistManifestService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-manifest.ts#ChecklistManifestService",
-                    "paramName": "manifestService",
-                    "paramType": "ChecklistManifestService"
-                },
-                {
-                    "from": "StartUpsertPrCommand",
-                    "to": "ChecklistNotice",
-                    "injection": "type",
-                    "token": "ChecklistNotice",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
-                    "paramName": "checklistNotice",
-                    "paramType": "ChecklistNotice"
                 },
                 {
                     "from": "StartUpsertPrCommand",

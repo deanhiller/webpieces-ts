@@ -5,7 +5,7 @@ import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist,
     writeTemplate, RepoRootFinder, ReviewJsonService, ChecklistManifestService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
-    InformAiError,
+    ChecklistInstructionsService, InformAiError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -67,6 +67,7 @@ export class FinishUpsertPrCommand {
         private readonly reviewJsonService: ReviewJsonService,
         private readonly gateTokenService: GateTokenService,
         private readonly provenance: SubagentProvenanceService,
+        private readonly instructions: ChecklistInstructionsService,
     ) {}
 
     async run(): Promise<void> {
@@ -79,13 +80,19 @@ export class FinishUpsertPrCommand {
         // 2. REQUIRE the AI-authored review.json (throws InformAiError with the schema if missing/invalid).
         //    Compute the consumer checklists this diff triggered FIRST so an unacknowledged BLOCK throws
         //    here — BEFORE any `gh pr create` — matching the guarantee buildCommand already provides.
-        const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklistDoc);
+        const defs = this.manifestService.load(repoRoot, loadAndValidate(repoRoot).prGate.checklists);
         const required = this.checklistDetector.toRequired(this.checklistDetector.detectForRepo(repoRoot, defs));
         // review-<id>.json files persist locally between runs, so a re-run after a push re-validates the
         // EXISTING verdicts against the (possibly changed) triggered set for free: an unchanged checklist
         // needs no re-review, a newly-triggered one refuses until its file is written. That is the
         // "full review only when the checklist surface changes" behavior — no special-casing here.
-        const review = this.reviewJsonService.loadReviewJson(reviewJsonPath(repoRoot, this.aiBranchName.getFeatureName()), required);
+        // FAIL FAST on missing reviewers, BEFORE review.json is even parsed. A missing reviewer is not a
+        // review.json defect and folding it into that error made the AI fix the wrong thing; and the message
+        // lists ONLY the subagents that still owe a verdict, so an already-reviewed checklist is never
+        // re-instructed. Same computation + same renderer as `wp-checklist`, so the two cannot disagree.
+        const featureName = this.aiBranchName.getFeatureName();
+        this.assertEveryReviewerRan(repoRoot, featureName, required);
+        const review = this.reviewJsonService.loadReviewJson(reviewJsonPath(repoRoot, featureName), required);
 
         // 2c. For any BLOCK checklist that names a reviewer `subagent`, VERIFY (from the harness's own
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
@@ -141,6 +148,26 @@ export class FinishUpsertPrCommand {
             repoRoot, 'wp-finish-upsert-pr', activeDir,
             new MergeContext(marker.currentBranch, marker.squashBranch, marker.backupBranch, marker.prNumber),
             new MergeEndOptions(marker.conflictedFiles, false),
+        );
+    }
+
+    /**
+     * Refuse the PR while ANY applicable checklist still owes a verdict, naming exactly those reviewers and
+     * exactly what to tell them. Throws InformAiError so the AI gets one actionable message; passes silently
+     * when nothing is pending, and is a no-op for a repo with no checklists.
+     */
+    private assertEveryReviewerRan(repoRoot: string, featureName: string, required: readonly RequiredChecklist[]): void {
+        if (required.length === 0) return;
+        const reviewPath = reviewJsonPath(repoRoot, featureName);
+        const results = this.reviewJsonService.loadChecklistResults(reviewPath, required);
+        const pending = this.reviewJsonService.pendingChecklists(required, results);
+        if (pending.length === 0) return;
+        const context = this.reviewJsonService.reviewContextFor(repoRoot, featureName);
+        throw new InformAiError(
+            `⛔ NO PR — ${pending.length} of ${required.length} review checklist(s) that apply to this diff have ` +
+            `no passing verdict yet: ${this.instructions.names(pending)}\n\n` +
+            `${this.instructions.render(pending, reviewPath, context)}\n\n` +
+            `Then re-run: pnpm wp-finish-upsert-pr   (or check anytime with: pnpm wp-checklist)`,
         );
     }
 

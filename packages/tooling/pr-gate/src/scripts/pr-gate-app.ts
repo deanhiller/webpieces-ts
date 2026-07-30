@@ -7,6 +7,7 @@ import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
+import { ChecklistCommand } from './commands/checklist-command';
 
 /**
  * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the command
@@ -25,6 +26,7 @@ export class PrGateApp {
         private readonly cleanupCommand: CleanupCommand,
         private readonly landPrCommand: LandPrCommand,
         private readonly checkPrCommand: CheckPrCommand,
+        private readonly checklistCommand: ChecklistCommand,
     ) {}
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */
@@ -55,6 +57,11 @@ export class PrGateApp {
     /** `wp-land-pr`: squash-merge this branch's PR into main with the compact commit body. */
     landPr(): Promise<void> {
         return this.landPrCommand.run();
+    }
+
+    /** `wp-checklist`: READ-ONLY — which reviewer subagents this diff still owes, and what to tell them. */
+    checklist(): Promise<void> {
+        return this.checklistCommand.run();
     }
 
     /** `wp-check-pr`: READ-ONLY CI check — verify the PR body carries a valid HMAC gate token for its head sha. */

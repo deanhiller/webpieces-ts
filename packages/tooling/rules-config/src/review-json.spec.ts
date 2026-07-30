@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ReviewJsonService, PrContext } from './review-json';
+import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, RequiredChecklist, ChecklistResult, ChecklistReviewContext, ReviewJsonService, PrContext } from './review-json';
+import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
 
@@ -137,10 +138,101 @@ describe('loadReviewJson checklists (review-<id>.json verdicts)', () => {
         expect(reviewJsonSchemaHint(p)).not.toContain('checklist');
     });
 
-    it('a non-empty required set injects the per-file instructions + subagent + doc into the schema hint', () => {
-        const hint = reviewJsonSchemaHint('/repo/review.json', [REQ('migrations')]);
-        expect(hint).toContain('review-migrations.json');
-        expect(hint).toContain('.claude/review/migrations.md');
-        expect(hint).toContain('subagent: migrations');
+    // The schema hint is now ONLY the review.json shape. Checklist instructions moved to
+    // ChecklistInstructionsService (one renderer, shared by wp-checklist / wp-finish / this file's errors) —
+    // they used to be appended here AND printed by wp-start, two copies that could drift.
+    it('carries no checklist instructions at all — that is ChecklistInstructionsService now', () => {
+        const hint = reviewJsonSchemaHint('/repo/review.json');
+        expect(hint).toContain('"riskScore"');
+        expect(hint).not.toContain('subagent');
+        expect(hint).not.toContain('review-');
+    });
+});
+
+// The set every message lists. An already-reviewed checklist must NOT reappear: re-instructing it invites a
+// redundant second reviewer run and reads as though the earlier verdict did not count.
+describe('ReviewJsonService.pendingChecklists', () => {
+    const svc2 = new ReviewJsonService();
+    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, id, '', ['x.sql'], ['**/*.sql']);
+
+    it('drops the ones that passed and keeps the ones with no verdict', () => {
+        const required = [req('a'), req('b')];
+        const results = [new ChecklistResult('a', true, 'ok', '')];
+        expect(svc2.pendingChecklists(required, results).map((r): string => r.id)).toEqual(['b']);
+    });
+
+    it('keeps an un-overridden FAIL (it still owes a passing verdict)', () => {
+        const results = [new ChecklistResult('a', false, 'bad', '')];
+        expect(svc2.pendingChecklists([req('a')], results).map((r): string => r.id)).toEqual(['a']);
+    });
+
+    it('drops an OVERRIDDEN fail — the ship-anyway decision was stated, so it is resolved', () => {
+        const results = [new ChecklistResult('a', false, 'bad', 'accepted, tracked in JIRA-1')];
+        expect(svc2.pendingChecklists([req('a')], results)).toEqual([]);
+    });
+});
+
+// The ONE renderer behind wp-checklist, wp-finish's fail-fast, and review.json validation errors.
+describe('ChecklistInstructionsService', () => {
+    const inst = new ChecklistInstructionsService();
+    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json');
+    const REVIEW = '/repo/.webpieces/pr-review/feat/review.json';
+
+    it('renders nothing at all when nothing is pending, so callers can concatenate blindly', () => {
+        expect(inst.render([], REVIEW, CTX)).toBe('');
+    });
+
+    it('names each subagent, its repo-relative doc, and the exact verdict file it must write', () => {
+        const req = new RequiredChecklist('db', 'db-reviewer', '.claude/review/db.md', ['db/1.sql'], ['**/*.sql']);
+        const text = inst.render([req], REVIEW, CTX);
+        expect(text).toContain('• db-reviewer');
+        expect(text).toContain('doc to read:  .claude/review/db.md');
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/review-db.json');
+    });
+
+    it('states the ONE verdict format once, not repeated under every reviewer', () => {
+        const two = [
+            new RequiredChecklist('a', 'a', '', ['x'], ['**']),
+            new RequiredChecklist('b', 'b', '', ['x'], ['**']),
+        ];
+        const text = inst.render(two, REVIEW, CTX);
+        expect(text.split('"override": ""').length - 1).toBe(1);
+    });
+
+    it('inlines the diff command with the real base sha and the authoritative full-file-set path', () => {
+        const req = new RequiredChecklist('a', 'a', '', ['x'], ['**']);
+        const text = inst.render([req], REVIEW, CTX);
+        expect(text).toContain('git diff abc1234 HEAD -- <file>');
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/pr-context.json');
+    });
+
+    // A truncated list that looks complete is how a reviewer reviews 6 of 40 files and reports success.
+    it('never truncates the matched list silently — it states how many were dropped', () => {
+        const many = Array.from({ length: 40 }, (_v: unknown, i: number): string => `db/${i}.sql`);
+        const req = new RequiredChecklist('a', 'a', '', many, ['**/*.sql']);
+        expect(inst.render([req], REVIEW, CTX)).toContain('+34 more (40 total)');
+    });
+
+    it('names the glob that fired, so a precise match is distinguishable from a blanket one', () => {
+        const req = new RequiredChecklist('a', 'a', '', ['db/1.sql'], ['**/*.sql']);
+        expect(inst.render([req], REVIEW, CTX)).toContain('matched "**/*.sql"');
+    });
+
+    // NOT every checklist is pattern-matched. Calling a patternless checklist's file list "matched" implies
+    // it is a narrow slice of the diff when it is in fact the whole thing.
+    it('says ALWAYS RUNS for a patternless checklist instead of calling the whole diff a match', () => {
+        const req = new RequiredChecklist('a', 'a', '', ['x.ts', 'y.ts'], []);
+        const text = inst.render([req], REVIEW, CTX);
+        expect(text).toContain('ALWAYS RUNS');
+        expect(text).toContain('all 2 changed file(s)');
+        expect(text).not.toContain('file(s) matched');
+    });
+
+    it('names() gives a one-line list for a fail-fast headline', () => {
+        const two = [
+            new RequiredChecklist('a', 'a-reviewer', '', ['x'], ['**']),
+            new RequiredChecklist('b', 'b-reviewer', '', ['x'], ['**']),
+        ];
+        expect(inst.names(two)).toBe('a-reviewer, b-reviewer');
     });
 });

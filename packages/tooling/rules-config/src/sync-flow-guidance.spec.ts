@@ -47,6 +47,20 @@ describe('SyncFlowGuidance — the canonical text', () => {
 
 // The drift this whole file exists to stop: messages and docs inventing command names that no bin
 // answers to (`wp-update-start`, `wp-git-update`), which sends an AI chasing a command that errors.
+/**
+ * Drop whole markdown links — `[text](target)` — before scanning a line for command names.
+ *
+ * A link is a reference to a DOCUMENT, never a command invocation, and backlog filenames legitimately begin
+ * with a command name (`bug-wp-start-upsert-pr-checklist-message-…`). Tokenizing those produced a bogus
+ * "command" like `wp-start-upsert-pr-checklist-message-gives-the-ai-unresolvable-doc-paths` — a false
+ * positive on a filename. Both the link TEXT and its TARGET are stripped, because a cross-reference commonly
+ * repeats the filename in both. Commands in prose are written bare or in backticks, so they still get scanned.
+ */
+// webpieces-disable no-function-outside-class -- spec-local text helper, matches this file's style
+function stripDocLinks(line: string): string {
+    return line.replace(/\[[^\]]*\]\([^)]*\)/g, '');
+}
+
 // The bins are the source of truth — read them out of pr-gate's package.json, then scan every tracked
 // .ts/.md for `wp-`-prefixed commands that are not among them.
 describe('no doc or message names a wp-* command that does not exist', () => {
@@ -77,9 +91,36 @@ describe('no doc or message names a wp-* command that does not exist', () => {
             lines.forEach((line: string, i: number): void => {
                 // Also catch the inverted/legacy shapes that have actually been typed into docs before:
                 // `wp-update-start`, `wp-upsert-pr-start`, `wp-git-update`.
-                const matches = line.match(/\bwp-(?:start|finish)-[a-z0-9-]+|\bwp-(?:update|upsert-pr|git-update)\b(?:-start|-finish)?/g) ?? [];
+                const matches = stripDocLinks(line).match(/\bwp-(?:start|finish)-[a-z0-9-]+|\bwp-(?:update|upsert-pr|git-update)\b(?:-start|-finish)?/g) ?? [];
                 for (const token of matches) {
                     if (!known.has(token)) bad.push(`${file}:${i + 1}  ${token}`);
+                }
+            });
+        }
+        expect(bad).toEqual([]);
+    });
+
+    // wp-checklist is now the command every review instruction points AT, so a doc that misspells it
+    // (`wp-checklists`, `wp-checklist-review`) sends the AI to a bin that does not exist — the same failure
+    // this describe() block exists to prevent, for a command the flow-bin regex above does not cover.
+    it('every wp-checklist* token in tracked .ts/.md files is exactly the real bin', () => {
+        const pkg = path.join(repoRoot, 'packages/tooling/pr-gate/package.json');
+        // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
+        const parsed = JSON.parse(fs.readFileSync(pkg, 'utf8')) as { bin?: Record<string, string> };
+        expect(Object.keys(parsed.bin ?? {})).toContain('wp-checklist');
+
+        const files = execFileSync('git', ['ls-files', '*.ts', '*.md'], { cwd: repoRoot, encoding: 'utf8' })
+            .split('\n')
+            .filter((f: string): boolean => f !== '' && !f.endsWith('sync-flow-guidance.spec.ts'));
+        const bad: string[] = [];
+        for (const file of files) {
+            const lines = fs.readFileSync(path.join(repoRoot, file), 'utf8').split('\n');
+            lines.forEach((line: string, i: number): void => {
+                const matches = stripDocLinks(line).match(/\bwp-checklist[a-z0-9-]*/g) ?? [];
+                for (const token of matches) {
+                    // A trailing hyphen means it is a PREFIX, not a command — e.g. the `wp-checklist-` handed
+                    // to mkdtempSync as a temp-dir prefix. Only a complete token can be a misspelled command.
+                    if (token !== 'wp-checklist' && !token.endsWith('-')) bad.push(`${file}:${i + 1}  ${token}`);
                 }
             });
         }

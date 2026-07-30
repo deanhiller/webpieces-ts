@@ -9,7 +9,10 @@ import {
     MergedBranchBashGuardConfig,
     StaleMainBashGuardConfig,
 } from './main-sync-guard-configs';
-import { ChecklistManifestService } from './checklist-manifest';
+import { validateChecklistsSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
+
+// Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
+export { validateChecklistsSection };
 import { DEFAULT_MATCH_RULES } from './match-rules-config';
 import { toError } from './to-error';
 import {
@@ -284,9 +287,27 @@ function prGateExample(): string {
         `    "buildCommand": "<command CI runs to validate a PR, e.g. pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)>",\n` +
         `    "gates": [\n` +
         `      { "name": "API Changed", "patterns": ["libraries/apis/**", "**/*Api.ts"], "warningColor": "yellow" }\n` +
+        `    ],\n` +
+        `    "checklists": [   // OPTIONAL — per-area review, one distinct reviewer subagent each\n` +
+        `      { "subagent": "db-migration-reviewer", "doc": ".claude/review/db-migrations.md", "patterns": ["**/*.sql"] }\n` +
         `    ]\n` +
         `  }`
     );
+}
+
+// The `gates` array: dashboard-only warning flags. Extracted from validatePrGateSection to keep that
+// method inside the length limit.
+// webpieces-disable no-any-unknown -- `value` is the opaque consumer `gates` value until narrowed here
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function validateGatesSection(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [`[pr-gate] "gates" must be an array of { name, patterns, warningColor, disabled? }.`];
+    }
+    const errors: string[] = [];
+    for (let i = 0; i < value.length; i += 1) {
+        errors.push(...validateGate(value[i], i));
+    }
+    return errors;
 }
 
 // webpieces-disable no-any-unknown -- one gate entry from opaque consumer JSON, validated field-by-field
@@ -357,16 +378,7 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
         }
     }
 
-    if ('gates' in s) {
-        const gates = s['gates'];
-        if (!Array.isArray(gates)) {
-            errors.push(`[pr-gate] "gates" must be an array of { name, patterns, warningColor, disabled? }.`);
-        } else {
-            for (let i = 0; i < gates.length; i += 1) {
-                errors.push(...validateGate(gates[i], i));
-            }
-        }
-    }
+    if ('gates' in s) errors.push(...validateGatesSection(s['gates']));
 
     // Optional extension point: company review checklists. The config only points at ONE manifest doc —
     // { "doc": "..." } — and the checklist SET lives in that doc. Absent ⇒ no checklists.
@@ -381,31 +393,14 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
         }
     }
 
+    errors.push(...validateNoGateSaltRationale(s));
+
     // Optional: publish reviewer output as a PR comment (defaults true). Must be a boolean when present.
     if ('checklistComments' in s && typeof s['checklistComments'] !== 'boolean') {
         errors.push(`[pr-gate] "checklistComments" must be a boolean (defaults to true; set false to keep the PR body-only).`);
     }
 
     return errors;
-}
-
-// The `checklists` section of a pr-gate config: { "doc": "<path to the manifest doc>" }. The manifest
-// itself (the list of { subagent, doc?, patterns? }) lives in that doc's <!-- webpieces:checklists -->
-// block and is validated by ChecklistManifestService. Exported so the isolated validate-checklist-docs
-// target reuses it. `repoRoot` (when known) lets the doc + manifest existence checks run.
-// webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed below
-// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
-export function validateChecklistsSection(value: unknown, repoRoot?: string): string[] {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return [`[pr-gate] "checklists" must be an object { "doc": "<path to the review manifest doc>" }.`];
-    }
-    // webpieces-disable no-any-unknown -- narrowing the opaque checklists section
-    const doc = (value as Record<string, unknown>)['doc'];
-    if (typeof doc !== 'string' || doc.trim() === '') {
-        return [`[pr-gate] "checklists.doc" must be a non-empty string — the repo-relative markdown doc carrying the <!-- webpieces:checklists [...] --> manifest.`];
-    }
-    if (repoRoot === undefined) return [];
-    return new ChecklistManifestService().validate(repoRoot, doc);
 }
 
 function excludePathsExample(): string {

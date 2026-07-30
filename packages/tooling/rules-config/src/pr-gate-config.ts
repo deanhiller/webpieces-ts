@@ -1,3 +1,5 @@
+import { ChecklistDefinition, ChecklistSource, RawChecklistItem, toChecklist } from './checklist-config';
+
 // PrGateConfig is the "special section" for the pr-gate dashboard. It does NOT live in the
 // validated `rules` map (the FieldDef schema can't express nested object arrays), but as a
 // top-level `pr-gate` key in webpieces.config.json. It is built and validated by
@@ -51,9 +53,11 @@ export class PrGateConfig {
      *   commits land as the internal "Squash merge of <branch>" subject.
      */
     mergeMode: string;
-    // Repo-relative path of the ONE doc carrying the checklist manifest (a <!-- webpieces:checklists [...] -->
-    // JSON block). '' = no checklists. The checklist SET lives in that doc (content), never here (config).
-    checklistDoc: string;
+    // WHERE this repo's review checklists come from: the `pr-gate.checklists` ARRAY in webpieces.config.json
+    // (primary — `patterns` is a path-glob dispatch table and `subagent` a name binding, both config), or the
+    // legacy `{ doc }` form pointing at a doc carrying a <!-- webpieces:checklists [...] --> block. Empty
+    // source = no checklists.
+    checklists: ChecklistSource;
     // Whether wp-finish-upsert-pr publishes each reviewer's full `output` as ONE combined PR comment
     // (idempotently updated on every push). Defaults to true. Set false to keep the PR body-only.
     checklistComments: boolean;
@@ -72,12 +76,12 @@ export class PrGateConfig {
     gateSalt: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklistDoc = '', gateSalt = '', checklistComments = true) {
+    constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists = new ChecklistSource(), gateSalt = '', checklistComments = true) {
         this.mode = mode;
         this.buildCommand = buildCommand;
         this.gates = gates;
         this.mergeMode = mergeMode;
-        this.checklistDoc = checklistDoc;
+        this.checklists = checklists;
         this.gateSalt = gateSalt;
         this.checklistComments = checklistComments;
     }
@@ -95,8 +99,8 @@ export function defaultGates(): GateDefinition[] {
 }
 
 export function defaultPrGateConfig(): PrGateConfig {
-    // No default checklist doc — the extension point is opt-in; the default monorepo ships none.
-    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO, '');
+    // No default checklists — the extension point is opt-in; the default monorepo ships none.
+    return new PrGateConfig('ON', '', defaultGates(), MERGE_MODE_AUTO, new ChecklistSource());
 }
 
 interface RawGate {
@@ -106,12 +110,19 @@ interface RawGate {
     disabled?: boolean;
 }
 
+// The legacy `checklists: { "doc": "..." }` pointer at a manifest doc. Named (not inline in the union) so
+// the two accepted shapes each have a name a reader can look up.
+interface RawChecklistDocPointer {
+    doc?: string;
+}
+
 interface RawPrGateSection {
     mode?: string;
     buildCommand?: string;
     gates?: RawGate[];
     mergeMode?: string;
-    checklists?: { doc?: string };
+    // Either the array (primary) or the legacy { doc } pointer. validateChecklistsSection rejects anything else.
+    checklists?: RawChecklistItem[] | RawChecklistDocPointer;
     gateSalt?: string;
     checklistComments?: boolean;
 }
@@ -138,11 +149,23 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
     // REQUIRED — validatePrGateSection rejects an omitted/unknown value, so this fallback only ever
     // applies to the no-config-file path that defaultPrGateConfig() serves.
     const mergeMode = raw.mergeMode ?? defaults.mergeMode;
-    // Optional extension point — omitted ⇒ '' ⇒ no checklists computed anywhere downstream.
-    const checklistDoc = raw.checklists?.doc ?? defaults.checklistDoc;
+    // Optional extension point — omitted ⇒ an empty source ⇒ no checklists computed anywhere downstream.
+    const checklists = toChecklistSource(raw.checklists, defaults.checklists);
     // Optional — omitted ⇒ '' ⇒ no gate token minted and CI enforcement is a no-op (back-compat).
     const gateSalt = raw.gateSalt ?? defaults.gateSalt;
     // Optional — omitted ⇒ true ⇒ reviewer output published as a PR comment.
     const checklistComments = raw.checklistComments ?? defaults.checklistComments;
-    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklistDoc, gateSalt, checklistComments);
+    return new PrGateConfig(mode, buildCommand, gates, mergeMode, checklists, gateSalt, checklistComments);
+}
+
+/**
+ * Narrow the two accepted `pr-gate.checklists` shapes into ONE ChecklistSource so every downstream caller
+ * stops caring which one the consumer wrote. The array form resolves each entry's `doc` REPO-relative;
+ * the legacy `{ doc }` form defers to ChecklistManifestService, which resolves against the manifest doc.
+ */
+// webpieces-disable no-function-outside-class -- pure config transform beside its data classes
+function toChecklistSource(raw: RawChecklistItem[] | RawChecklistDocPointer | undefined, defaults: ChecklistSource): ChecklistSource {
+    if (raw === undefined) return defaults;
+    if (Array.isArray(raw)) return new ChecklistSource(raw.map((item: RawChecklistItem): ChecklistDefinition => toChecklist(item, '')), '');
+    return new ChecklistSource([], raw.doc ?? '');
 }
