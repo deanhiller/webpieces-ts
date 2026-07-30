@@ -4,6 +4,7 @@ import { spawnSync } from 'child_process';
 import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
+import { CommandScanner } from './command-scan';
 import { loadRules, loadMatchRules, globMatches } from './load-rules';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
@@ -44,6 +45,37 @@ export function filterByExcludedPaths(rules: readonly Rule[], relativePath: stri
 function gitToplevel(cwd: string): string | null {
     const r = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
     return r.status === 0 ? (r.stdout ?? '').trim() : null;
+}
+
+// True when `cwd` sits inside a git repo OTHER than the one `workspaceRoot` governs (a nested clone).
+// Not in a git repo / git unavailable (null) is NOT foreign — it falls through to the normal guards.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function isForeignGitRepo(cwd: string, workspaceRoot: string): boolean {
+    const gitRoot = gitToplevel(cwd);
+    return gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot);
+}
+
+// The cwd a command actually runs from, resolving any leading `cd`/`pushd` in the command itself.
+// PreToolUse fires BEFORE the command runs, so the shell's `cwd` is the pre-`cd` directory; a command
+// like `cd repositories/clone && git push` really executes in `repositories/clone`. Every git-boundary
+// and excludePaths decision must key off THIS directory, not the pre-`cd` one, or a nested clone is
+// judged against the outer repo (the two defects this repairs).
+//
+// Reuses CommandScanner so quoting is handled exactly as the guards handle it: `echo "cd sub && git
+// push"` is ONE opaque segment whose first word is `echo`, so the quoted `cd` is never picked up —
+// the prose/quoted `cd` cannot be weaponised into a scope escape. `cd a && cd b` resolves left to
+// right (last wins), matching the shell.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+export function effectiveBashCwd(command: string, cwd: string): string {
+    const scanner = new CommandScanner();
+    let effective = cwd;
+    for (const segment of scanner.commandSegments(command)) {
+        const words = scanner.words(segment);
+        if ((words[0] === 'cd' || words[0] === 'pushd') && words[1] !== undefined) {
+            effective = path.resolve(effective, words[1]);
+        }
+    }
+    return effective;
 }
 
 // A git or gh invocation anywhere in the command (start, or after a ;/&&/|| separator or pipe).
@@ -184,6 +216,21 @@ function isInstallerCommand(command: string): boolean {
     return INSTALLER_ALLOW_JS.test(command.trim());
 }
 
+// Force-to-root: git/gh commands must run from the repo root, where the guards can reason about git
+// state coherently. From a subdir, BLOCK with an actionable cd message — never silently skip. Returns
+// null when the command is not a subdir git/gh invocation (nothing to block).
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function gitFromSubdirBlock(command: string, cwd: string, workspaceRoot: string): BlockedResult | null {
+    if (!isGitOrGhCommand(command) || path.resolve(cwd) === path.resolve(workspaceRoot)) return null;
+    const report =
+        `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
+        `   You are in: ${cwd}\n` +
+        `   cd to the repo root first:  cd ${workspaceRoot}\n` +
+        `   Then re-run your command. (The webpieces guards evaluate the repo's git state at its root.)`;
+    logGuardDecision(workspaceRoot, new GuardDecision('force-to-root', 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'git/gh from subdir'));
+    return new BlockedResult(report);
+}
+
 function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
     if (isInstallerCommand(command)) {
         // Anchor the audit-log write at the repo root that owns `.webpieces` (config-walk-up first,
@@ -199,33 +246,36 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
-    // Git-repo-boundary governance. The hook now always runs (via $CLAUDE_PROJECT_DIR), so this is
-    // where out-of-scope work is let through deliberately instead of the old accidental 127.
-    const gitRoot = gitToplevel(cwd);
-    if (gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot)) {
-        // cwd is inside a DIFFERENT git repo than this webpieces.config governs (e.g. a clone under
-        // repositories/). Out of scope → allow, hands-off. Intentional, not a silent hole.
+    // The directory the command actually runs from (after any in-command `cd`), not the pre-`cd`
+    // shell cwd. Both the git-boundary check and the excludePaths filter below key off this, so a
+    // self-contained `cd <nested clone> && …` is judged against the clone, not the outer repo.
+    const effectiveCwd = effectiveBashCwd(command, cwd);
+
+    // Git-repo-boundary governance: the command runs inside a DIFFERENT git repo than this
+    // webpieces.config governs (e.g. a clone under repositories/). Out of scope → allow, hands-off.
+    // Intentional, not a silent hole. (The hook always runs via $CLAUDE_PROJECT_DIR, so this is where
+    // out-of-scope work is let through deliberately instead of the old accidental 127.)
+    if (isForeignGitRepo(effectiveCwd, workspaceRoot)) {
         logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'foreign git repo (out of scope)'));
         return null;
     }
 
-    const rules = filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode);
+    // Honour excludePaths.guards on the bash path too (not just Read/Edit): a command whose effective
+    // cwd sits under an excluded tree (e.g. repositories/**) drops the whole guard set — matching how
+    // runInternal/runRead treat file paths. The relative path is '' when there is no `cd` (root), which
+    // matches no exclusion glob, so a plain command at the repo root is unaffected.
+    const rules = filterByExcludedPaths(
+        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode),
+        path.relative(workspaceRoot, effectiveCwd),
+        loaded.excludePaths,
+    );
     if (rules.length === 0) return null;
 
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
-    // Force-to-root: git/gh commands must run from the repo root, where the guards can reason about
-    // git state coherently. From a subdir, BLOCK with an actionable cd message — never silently skip.
-    if (isGitOrGhCommand(command) && path.resolve(cwd) !== path.resolve(workspaceRoot)) {
-        const report =
-            `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
-            `   You are in: ${cwd}\n` +
-            `   cd to the repo root first:  cd ${workspaceRoot}\n` +
-            `   Then re-run your command. (The webpieces guards evaluate the repo's git state at its root.)`;
-        logGuardDecision(workspaceRoot, new GuardDecision('force-to-root', 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'git/gh from subdir'));
-        return new BlockedResult(report);
-    }
+    const subdirBlock = gitFromSubdirBlock(command, cwd, workspaceRoot);
+    if (subdirBlock) return subdirBlock;
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs
     // far more bash than edits, so refreshing here means the guard's next file-edit check reads a
