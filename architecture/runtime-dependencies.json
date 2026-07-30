@@ -14,6 +14,7 @@
         },
         "client-server": {
             "level": 1,
+            "serviceName": "client-server",
             "implements": [
                 "PublicApi",
                 "SaveApi",
@@ -41,6 +42,7 @@
         },
         "server2": {
             "level": 0,
+            "serviceName": "server2",
             "implements": [
                 "Server2Api"
             ],
@@ -57,7 +59,8 @@
             "usedBy": [
                 "angular-site"
             ],
-            "type": "rpc"
+            "type": "rpc",
+            "owner": "client-server-api"
         },
         "SaveApi": {
             "implementedBy": [
@@ -67,14 +70,16 @@
             "usedBy": [
                 "angular-site"
             ],
-            "type": "rpc"
+            "type": "rpc",
+            "owner": "client-server-api"
         },
         "SecureApi": {
             "implementedBy": [
                 "client-server"
             ],
             "usedBy": [],
-            "type": "rpc"
+            "type": "rpc",
+            "owner": "client-server-api"
         },
         "Server2Api": {
             "implementedBy": [
@@ -84,7 +89,8 @@
                 "client-server",
                 "legacy-server"
             ],
-            "type": "rpc"
+            "type": "rpc",
+            "owner": "server2-api"
         }
     },
     "runtimeEdges": [

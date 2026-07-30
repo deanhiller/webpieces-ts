@@ -159,6 +159,31 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "ignoreModifiedUntilEpoch": 0
+        },
+        "no-client-creation-outside-server-or-client": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "disableAllowed": true,
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "validate-architecture-unchanged": {
+            "mode": "RUN_EVERY_TIME",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "validate-no-architecture-cycles": {
+            "mode": "RUN_EVERY_TIME",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "validate-packagejson": {
+            "mode": "OFF",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "validate-versions-locked": {
+            "mode": "RUN_EVERY_TIME",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "validate-eslint-sync": {
+            "mode": "RUN_EVERY_TIME",
+            "ignoreModifiedUntilEpoch": 0
         }
     },
     "hookGuards": {
@@ -195,6 +220,10 @@
             "ignoreModifiedUntilEpoch": 0
         },
         "merged-branch-bash-guard": {
+            "mode": "ON",
+            "ignoreModifiedUntilEpoch": 0
+        },
+        "stale-main-bash-guard": {
             "mode": "ON",
             "ignoreModifiedUntilEpoch": 0
         }

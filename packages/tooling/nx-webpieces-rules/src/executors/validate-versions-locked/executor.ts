@@ -349,8 +349,9 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
 
-    // All-or-nothing (honorEpoch = false): there is no blessed baseline to grandfather against.
-    if (new RuleGate().isDisabled(workspaceRoot, 'validate-versions-locked', false)) {
+    // Time-boxable (honorEpoch = true): a schedule is not a baseline — "do not enforce until <epoch>
+    // / off <branch>" is coherent even with nothing to grandfather. See rule-configs.ts (five-validator block).
+    if (new RuleGate().isDisabled(workspaceRoot, 'validate-versions-locked', true)) {
         return { success: true };
     }
 

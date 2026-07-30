@@ -62,32 +62,48 @@ export type StructuralMode = typeof STRUCTURAL_MODES[number];
 
 // ---------------------------------------------------------------------------
 // Universal escape hatches — EVERY rule supports temporarily disabling itself
-// either while on a named git branch (ignoreRuleWhileOnBranch) or until an
-// epoch passes (ignoreModifiedUntilEpoch). They live on a shared base class so
-// the two fields (and their schema entries) are declared once instead of
-// repeated per rule. `mode` stays per-rule because its allowed values vary
-// (ON/OFF vs NEW_AND_MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
+// either while on a named git branch (turnOffRuleWhileOnBranch) or until an
+// epoch passes (turnOffRuleUntilEpoch). They live on a shared base class so the
+// fields (and their schema entries) are declared once instead of repeated per
+// rule. `mode` stays per-rule because its allowed values vary (ON/OFF vs
+// NEW_AND_MODIFIED_CODE vs NEW_AND_MODIFIED_METHODS, etc).
 //
-// `ignoreModifiedUntilEpoch` is REQUIRED on every rule so the time-box escape
-// hatch is always present and a rule can be turned off with a one-value edit.
-// Convention: 0 = rule active (epoch is in the past, never skipped); a future
-// unix epoch IN SECONDS = rule temporarily disabled until that moment.
-// `ignoreRuleWhileOnBranch` stays optional.
+// TWO NAMES per hatch, and BOTH are accepted (see normalizeTurnOffAliases):
+//   turnOffRuleUntilEpoch   — new, self-describing name. Supersedes ignoreModifiedUntilEpoch.
+//   turnOffRuleWhileOnBranch — new, self-describing name. Supersedes ignoreRuleWhileOnBranch.
+// The original `ignoreModifiedUntilEpoch` / `ignoreRuleWhileOnBranch` keep working so a config can
+// migrate a rule at a time. When both names are present on one rule, the new name wins.
+//
+// Convention (unchanged): 0 = rule active (epoch is in the past, never skipped); a future unix epoch
+// IN SECONDS = rule temporarily disabled until that moment. All four fields are OPTIONAL — a rule may
+// carry the branch hatch alone (turnOffRuleWhileOnBranch) with no epoch, which is the intended
+// end-state once callers stop writing turnOffRuleUntilEpoch.
 // ---------------------------------------------------------------------------
 export abstract class BaseRuleConfig {
     // `mode` is declared here (loosely typed) so the shared AbstractRule base can read it for
     // on/off. Each concrete *Config narrows it to its own union (e.g. `mode?: ModifiedCodeMode`),
     // which is an assignable (covariant) override.
     mode?: string;
-    // TS-optional, but schema-REQUIRED (see BASE_RULE_SCHEMA) — same split as `mode`.
+    // Original names — still accepted. normalizeTurnOffAliases canonicalizes the new names ONTO these,
+    // so every reader in both packages keeps reading exactly this pair.
     ignoreModifiedUntilEpoch?: number;
     ignoreRuleWhileOnBranch?: string;
+    // New, self-describing names. A config using these is normalized onto the pair above at load time.
+    turnOffRuleUntilEpoch?: number;
+    turnOffRuleWhileOnBranch?: string;
 }
 
 export const BASE_RULE_SCHEMA = {
-    ignoreModifiedUntilEpoch: new FieldDef('number'),
+    ignoreModifiedUntilEpoch: FieldDef.optional('number'),
     ignoreRuleWhileOnBranch: FieldDef.optional('string'),
+    turnOffRuleUntilEpoch: FieldDef.optional('number'),
+    turnOffRuleWhileOnBranch: FieldDef.optional('string'),
 };
+
+// The new names are canonicalized onto the original pair at the load boundary by
+// ConfigLoader.normalizeTurnOffAliases (load-config.ts), sibling to normalizeDeprecatedKeys — so every
+// downstream reader (AbstractRule.shouldRun, RuleGate, the match-rules engine) reads one name and
+// needs no change. new name wins when both are present.
 
 export class MaxMethodLinesConfig extends BaseRuleConfig {
     declare mode?: MethodLimitMode;
@@ -571,23 +587,19 @@ export class NoJsFilesConfig extends BaseRuleConfig {
 
 // ---------------------------------------------------------------------------
 // The five Nx infrastructure validators (architecture-unchanged, no-architecture-cycles,
-// packagejson, versions-locked, eslint-sync). They hardcoded their behavior until now — the ONLY
-// rules in the system that could not be turned off or time-boxed. Each is whole-graph / whole-repo
-// by nature (a cycle, a drifted dependencies.json, an unlocked version can be introduced by a file
-// nobody in this diff touched), so the only honest mode set is STRUCTURAL_MODES: RUN_EVERY_TIME
-// (the default) or OFF.
+// packagejson, versions-locked, eslint-sync). Each is whole-graph / whole-repo by nature (a cycle, a
+// drifted dependencies.json, an unlocked version can be introduced by a file nobody in this diff
+// touched), so the only honest mode set is STRUCTURAL_MODES: RUN_EVERY_TIME (the default) or OFF.
 //
-// Epoch gating splits the five in two, and the split is deliberate:
-//  - architecture-unchanged / no-architecture-cycles compare against a BLESSED baseline, so
-//    "grandfather today's drift until <epoch>" is a coherent request — those two honor
-//    ignoreModifiedUntilEpoch (and ignoreRuleWhileOnBranch) via shouldSkipRule.
-//  - packagejson / versions-locked / eslint-sync have no baseline to grandfather against; they are
-//    all-or-nothing, so their executors read `mode` ONLY. ignoreModifiedUntilEpoch is still present
-//    (it is schema-required on EVERY rule by BASE_RULE_SCHEMA) but is NOT honored by those three —
-//    set "mode": "OFF" to turn them off.
+// All five now honor the universal escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch,
+// and their ignore* aliases) via shouldSkipRule — the RuleGate is called with honorEpoch:true from
+// every executor. This lets a repo time-box or branch-scope a failing infrastructure check (e.g. hold
+// validate-packagejson off until an upgrade PR lands) with a one-value edit, instead of only the
+// blunt "mode": "OFF". Originally packagejson/versions-locked/eslint-sync were all-or-nothing on the
+// theory that "no blessed baseline" made grandfathering meaningless, but a time-box is a schedule, not
+// a baseline: "do not enforce this until <epoch>/off <branch>" is coherent for any rule.
 // ---------------------------------------------------------------------------
 
-// Epoch-gateable: the current graph is compared to the blessed architecture/dependencies.json.
 export class ValidateArchitectureUnchangedConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
 
@@ -597,7 +609,6 @@ export class ValidateArchitectureUnchangedConfig extends BaseRuleConfig {
     };
 }
 
-// Epoch-gateable: the set of project-level cycles can be grandfathered while a refactor lands.
 export class ValidateNoArchitectureCyclesConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
 
@@ -607,7 +618,6 @@ export class ValidateNoArchitectureCyclesConfig extends BaseRuleConfig {
     };
 }
 
-// All-or-nothing (no baseline to grandfather): ignoreModifiedUntilEpoch is NOT honored.
 export class ValidatePackageJsonConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
 
@@ -617,7 +627,6 @@ export class ValidatePackageJsonConfig extends BaseRuleConfig {
     };
 }
 
-// All-or-nothing (no baseline to grandfather): ignoreModifiedUntilEpoch is NOT honored.
 export class ValidateVersionsLockedConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
 
@@ -627,7 +636,6 @@ export class ValidateVersionsLockedConfig extends BaseRuleConfig {
     };
 }
 
-// All-or-nothing (no baseline to grandfather): ignoreModifiedUntilEpoch is NOT honored.
 export class ValidateEslintSyncConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
 

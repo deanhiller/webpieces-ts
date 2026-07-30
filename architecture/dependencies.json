@@ -72,6 +72,7 @@
             "level": 6,
             "framework": ["express"],
             "role": "server",
+            "serviceName": "client-server",
             "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
             "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
             "designFile": "apps/app-example/client-server/design.json",
@@ -100,7 +101,8 @@
                     "uses": [
                         {
                             "api": "Server2Api",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "targetService": "server2"
                         }
                     ]
                 }
@@ -293,7 +295,8 @@
                     "uses": [
                         {
                             "api": "Server2Api",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "targetService": "server2"
                         }
                     ]
                 }
@@ -342,6 +345,7 @@
             "level": 6,
             "framework": ["express"],
             "role": "server",
+            "serviceName": "server2",
             "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
             "responsibilitiesFile": "apps/app-example/server2/responsibilities.md",
             "designFile": "apps/app-example/server2/design.json",

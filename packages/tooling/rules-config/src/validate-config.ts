@@ -110,9 +110,10 @@ export function allRuleNames(): readonly string[] {
 }
 
 function valueHint(def: FieldDef, key?: string): string {
-    // ignoreModifiedUntilEpoch is required on every rule; 0 keeps the rule active (epoch in the
-    // past), a future unix epoch (seconds) temporarily disables it. Spell that out for the AI.
-    if (key === 'ignoreModifiedUntilEpoch') return '0  (0 = active; future unix-epoch seconds = temporarily off)';
+    // The time-box hatch (either name): 0 keeps the rule active (epoch in the past), a future unix
+    // epoch (seconds) temporarily disables it. Spell that out for the AI. turnOffRuleUntilEpoch is the
+    // preferred, self-describing name; ignoreModifiedUntilEpoch is the still-accepted original.
+    if (key === 'ignoreModifiedUntilEpoch' || key === 'turnOffRuleUntilEpoch') return '0  (0 = active; future unix-epoch seconds = temporarily off)';
     return def.enumValues
         ? `"${def.enumValues.join(' | ')}"`
         : def.type === 'string[]' ? '["<string>", ...]'
@@ -501,8 +502,12 @@ function validateMatchRule(entry: unknown, index: number): string[] {
     if (typeof e['mode'] !== 'string' || !MODIFIED_CODE_MODES.includes(e['mode'] as typeof MODIFIED_CODE_MODES[number]))
         errors.push(`[match-rules] ${label}.mode must be one of: ${MODIFIED_CODE_MODES.join(', ')}.`);
 
-    if (typeof e['ignoreModifiedUntilEpoch'] !== 'number')
+    // Time-box hatch — optional, either name; each must be a number when present (0 = active; a future
+    // unix-epoch in seconds = temporarily off). turnOffRuleUntilEpoch supersedes ignoreModifiedUntilEpoch.
+    if (e['ignoreModifiedUntilEpoch'] !== undefined && typeof e['ignoreModifiedUntilEpoch'] !== 'number')
         errors.push(`[match-rules] ${label}.ignoreModifiedUntilEpoch must be a number (0 = active; future unix-epoch seconds = temporarily off).`);
+    if (e['turnOffRuleUntilEpoch'] !== undefined && typeof e['turnOffRuleUntilEpoch'] !== 'number')
+        errors.push(`[match-rules] ${label}.turnOffRuleUntilEpoch must be a number (0 = active; future unix-epoch seconds = temporarily off).`);
 
     if (e['options'] !== undefined && !isStringArray(e['options']))
         errors.push(`[match-rules] ${label}.options must be a string[] (omit if not needed).`);
@@ -510,8 +515,12 @@ function validateMatchRule(entry: unknown, index: number): string[] {
         errors.push(`[match-rules] ${label}.allowedPaths must be a string[] of globs (omit if not needed).`);
     if (e['disableAllowed'] !== undefined && typeof e['disableAllowed'] !== 'boolean')
         errors.push(`[match-rules] ${label}.disableAllowed must be a boolean.`);
+    // Branch hatch — optional, either name; each must be a string when present.
+    // turnOffRuleWhileOnBranch supersedes ignoreRuleWhileOnBranch.
     if (e['ignoreRuleWhileOnBranch'] !== undefined && typeof e['ignoreRuleWhileOnBranch'] !== 'string')
         errors.push(`[match-rules] ${label}.ignoreRuleWhileOnBranch must be a string.`);
+    if (e['turnOffRuleWhileOnBranch'] !== undefined && typeof e['turnOffRuleWhileOnBranch'] !== 'string')
+        errors.push(`[match-rules] ${label}.turnOffRuleWhileOnBranch must be a string.`);
 
     return errors;
 }
