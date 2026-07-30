@@ -176,6 +176,36 @@ describe('loadAndValidate — sections & commands', () => {
         const guard = loaded.rulesConfig['pr-creation-or-push-guard'] as Record<string, unknown>;
         expect(guard['upsertPrCommand']).toBe('pnpm my-upsert');
     });
+
+    it('sources both guard hints from commands.guardHints (canonical) into their guards', () => {
+        const sections = allRulesOff();
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...sections,
+            commands: {
+                'pr-gate': validPrGate(),
+                guardHints: { prCreationOrPush: 'pnpm gh-upsert', mergeInProgress: 'pnpm gh-finish' },
+            },
+            excludePaths: validExcludePaths(),
+        }) });
+        const loaded = loadAndValidate(dir);
+        expect(loaded.commands.upsertPr).toBe('pnpm gh-upsert');
+        expect(loaded.commands.mergeComplete).toBe('pnpm gh-finish');
+        const prGuard = loaded.rulesConfig['pr-creation-or-push-guard'] as Record<string, unknown>;
+        expect(prGuard['upsertPrCommand']).toBe('pnpm gh-upsert');
+        const mergeGuard = loaded.rulesConfig['merge-in-progress-guard'] as Record<string, unknown>;
+        expect(mergeGuard['mergeCompleteCommand']).toBe('pnpm gh-finish');
+    });
+
+    it('prefers commands.guardHints over the legacy flat command string', () => {
+        const sections = allRulesOff();
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...sections,
+            // Both present: guardHints wins, flat upsertPr is the back-compat fallback only.
+            commands: { 'pr-gate': validPrGate(), guardHints: { prCreationOrPush: 'pnpm canonical' }, upsertPr: 'pnpm legacy' },
+            excludePaths: validExcludePaths(),
+        }) });
+        expect(loadAndValidate(dir).commands.upsertPr).toBe('pnpm canonical');
+    });
 });
 
 // Regression for the config-validation banner (bugReport.md, released 0.3.241): a stale/unknown rule
