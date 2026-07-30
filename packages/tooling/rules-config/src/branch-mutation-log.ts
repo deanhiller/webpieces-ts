@@ -48,6 +48,11 @@ export class BranchMutationEvent {
     // still addressable by hash (the reflog holds it ~90 days), so formatDetail renders a literal
     // `recover=git branch <name> <sha>` next to it. Empty for mutations that delete nothing.
     sha: string = '';
+    // The `archive/<date>/<branch>` tag written immediately BEFORE a REAP deleted the branch. When set,
+    // formatDetail renders `recover=` against the TAG instead of the sha: a tag is a permanent ref that
+    // survives `gc` and reflog expiry and can be pushed, whereas a bare sha is only recoverable while
+    // this clone's reflog still holds it. Empty when nothing was tagged (retention policy 'delete').
+    archiveTag: string = '';
 
     constructor(verb: MutationVerb, phase: MutationPhase) {
         this.verb = verb;
@@ -103,7 +108,15 @@ export class BranchMutationLog {
         if (event.conflictFiles.length > 0) parts.push(`conflictFiles=${event.conflictFiles.length}(${event.conflictFiles.join(',')})`);
         if (event.outcome !== '') parts.push(`outcome=${event.outcome}`);
         // Emitted as one unit so the hash is never separated from the command that undoes the delete.
-        if (event.sha !== '') parts.push(`sha=${event.sha} recover=git branch ${event.fromBranch || '?'} ${event.sha}`);
+        // Prefer the archive TAG as the recover ref when there is one — it does not expire.
+        if (event.sha !== '' && event.archiveTag !== '') {
+            parts.push(
+                `sha=${event.sha} archiveTag=${event.archiveTag} ` +
+                `recover=git checkout -b ${event.fromBranch || '?'} ${event.archiveTag}`,
+            );
+        } else if (event.sha !== '') {
+            parts.push(`sha=${event.sha} recover=git branch ${event.fromBranch || '?'} ${event.sha}`);
+        }
         for (const artifact of event.artifacts) parts.push(`artifact=${artifact}`);
         return parts.join(' ');
     }

@@ -51,7 +51,10 @@ export class CleanTmp {
         const cutoffMs = CUTOFF_DAYS * 24 * 60 * 60 * 1000;
         const now = Date.now();
 
-        // `true` => this is the root, which is swept into but never itself removed.
+        // `true` => this is the root, which is swept into but never itself removed. This generic
+        // depth-first sweep needs NO knowledge of the merge-info layout — including the new
+        // staged/<feature> and merged/<feature> split, which sits one level deeper than the old
+        // per-feature dirs. That is precisely why it replaced the per-home special-casing.
         const result = this.sweep(tmpBase, tmpBase, now, cutoffMs, true);
 
         if (result.files === 0 && result.dirs === 0) {

@@ -14,6 +14,11 @@ const world = vi.hoisted(() => ({
     deleteFails: {} as Record<string, string>,
     // Every `git branch -D` invocation, as the list of branch names it was given.
     deletes: [] as string[][],
+    // Every `git tag <name> <sha>` invocation, as [tag, sha]. The reap ARCHIVES before it deletes, so
+    // this is the assertion surface for "nothing was destroyed without a restorable ref first".
+    tags: [] as string[][],
+    // Tag names whose `git tag` fails, mapped to git's stderr.
+    tagFails: {} as Record<string, string>,
     written: [] as string[],
     logLines: [] as string[],
 }));
@@ -38,9 +43,18 @@ vi.mock('child_process', () => ({
             return { status: 0, stdout: String(world.commitsAhead[branch] ?? 1), stderr: '' };
         }
         if (args[0] === 'rev-parse') {
-            const sha = world.shas[String(args[1])];
-            if (sha === undefined) return { status: 1, stdout: '', stderr: 'unknown revision' };
-            return { status: 0, stdout: sha, stderr: '' };
+            // `rev-parse --verify --quiet refs/tags/<tag>` is the archiver's tag-collision probe. No tag
+            // in this fake world ever pre-exists, so it always misses.
+            if (args[1] === '--verify') return { status: 1, stdout: '', stderr: '' };
+            // Every branch resolves to SOMETHING (a real repo's would). Tests that care about the exact
+            // value set world.shas; the rest just need the archive step to find a tip to tag.
+            return { status: 0, stdout: world.shas[String(args[1])] ?? `sha-${String(args[1])}`, stderr: '' };
+        }
+        if (args[0] === 'tag') {
+            world.tags.push(args.slice(1));
+            const failure = world.tagFails[String(args[1])];
+            if (failure !== undefined) return { status: 1, stdout: '', stderr: failure };
+            return { status: 0, stdout: '', stderr: '' };
         }
         if (args[0] === 'branch' && args[1] === '-D') {
             world.deletes.push(args.slice(2));
@@ -62,7 +76,9 @@ vi.mock('fs', () => ({
     readFileSync: (): string => '{}',
 }));
 
+import { BRANCH_RETENTION_DELETE, BRANCH_RETENTION_KEEP } from './branch-archiver';
 import { BranchReaper, ReapedBranch } from './branch-reaper';
+import { DeletableBranch } from './merged-branches';
 
 const reaper = new BranchReaper();
 
@@ -78,6 +94,8 @@ beforeEach(() => {
     world.shas = {};
     world.deleteFails = {};
     world.deletes = [];
+    world.tags = [];
+    world.tagFails = {};
     world.written = [];
     world.logLines = [];
 });
@@ -126,12 +144,98 @@ describe('BranchReaper.reap', () => {
         const line = world.logLines.join('');
         expect(line).toContain('auto-reap');
         expect(line).toContain('REAP');
-        expect(line).toContain('recover=git branch dean/merged 58368f2deadbeef');
+        // The recover ref is the ARCHIVE TAG, not the bare sha: a tag survives `gc` and reflog expiry,
+        // and is a name a human can type. The sha is still logged next to it for provenance.
+        expect(line).toContain('sha=58368f2deadbeef');
+        expect(line).toContain('recover=git checkout -b dean/merged archive/');
         // A delete has no destination — `to=?` would read as a lost one.
         expect(line).toContain('branch=dean/merged');
         expect(line).not.toContain('to=?');
     });
+
+    // With retention 'delete' there is no tag to point at, so the log falls back to the sha form. Kept
+    // so the pre-archive recovery path stays covered for repos that opt out of tagging.
+    it('falls back to the sha recover command when retention is "delete"', () => {
+        world.mergedPrs = [{ number: 430, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged'];
+        world.shas = { 'dean/merged': '58368f2deadbeef' };
+
+        const result = reaper.reap('/repo', 'wp-cleanup', null, BRANCH_RETENTION_DELETE);
+
+        expect(world.tags).toEqual([]);
+        expect(result.reaped[0].archiveTag).toBe('');
+        expect(world.logLines.join('')).toContain('recover=git branch dean/merged 58368f2deadbeef');
+    });
 });
+
+describe('archive-before-delete (Part 1)', () => {
+    // The core invariant: a branch is never destroyed before a permanent ref points at its tip.
+    it('tags the tip BEFORE deleting, and reports the tag on the result', () => {
+        world.mergedPrs = [{ number: 430, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged'];
+        world.shas = { 'dean/merged': 'abc123' };
+
+        const result = reaper.reap('/repo', 'wp-cleanup');
+
+        expect(world.tags.length).toBe(1);
+        expect(world.tags[0][0]).toMatch(/^archive\/\d{4}-\d{2}-\d{2}\/dean\/merged$/);
+        expect(world.tags[0][1]).toBe('abc123');
+        expect(result.reaped[0].archiveTag).toBe(world.tags[0][0]);
+        expect(world.deletes).toEqual([['dean/merged']]);
+    });
+
+    /**
+     * If the archive cannot be written, the delete must NOT happen. A branch we could not tag is a
+     * branch whose only remaining copy would be the reflog — and not relying on the reflog is the whole
+     * point. The fail-safe direction is a branch that survives one more cleanup cycle.
+     */
+    it('does NOT delete a branch it could not archive', () => {
+        world.mergedPrs = [{ number: 430, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged'];
+        world.tagFails = { [`archive/${today()}/dean/merged`]: 'fatal: tag already exists' };
+
+        const result = reaper.reap('/repo', 'wp-cleanup');
+
+        expect(world.deletes).toEqual([]);
+        expect(result.reaped.length).toBe(0);
+        expect(result.failed[0].error).toContain('could not archive it first');
+    });
+
+    // 'keep' turns the reap into a pure report: nothing tagged, nothing deleted, everything visible.
+    it('deletes nothing at all under retention "keep"', () => {
+        world.mergedPrs = [{ number: 430, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged'];
+
+        const result = reaper.reap('/repo', 'wp-cleanup', null, BRANCH_RETENTION_KEEP);
+
+        expect(world.deletes).toEqual([]);
+        expect(world.tags).toEqual([]);
+        expect(result.reaped.length).toBe(0);
+        expect(result.spared.map((entry: { branch: string }): string => entry.branch)).toContain('dean/merged');
+    });
+
+    /**
+     * reapApproved is the human-answered path from wp-cleanup's classification prompt. These branches
+     * are NOT provably dead — they are deleted because a person said yes — so the archive step matters
+     * even more here than on the proven path.
+     */
+    it('reapApproved archives the human-approved branches before deleting them', () => {
+        const approved = [new DeletableBranch('dean/never-proposed', 'never had a PR', 0)];
+
+        const result = reaper.reapApproved('/repo', 'wp-cleanup', approved);
+
+        expect(world.tags.length).toBe(1);
+        expect(world.tags[0][0]).toContain('dean/never-proposed');
+        expect(world.deletes).toEqual([['dean/never-proposed']]);
+        expect(result.reaped[0].archiveTag).toContain('dean/never-proposed');
+    });
+});
+
+function today(): string {
+    const now = new Date();
+    const pad = (value: number): string => String(value).padStart(2, '0');
+    return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 describe('BranchReaper safety rails and failure handling', () => {
     it('keeps reaping after one delete fails, and reports the failure with git stderr', () => {
