@@ -15,9 +15,30 @@ export const METADATA_KEYS = {
     QUEUE_OVERRIDE: 'webpieces:queue-override',
     /** Per-method @Endpoint options (e.g. formPost), parallel to ENDPOINTS. */
     ENDPOINT_OPTIONS: 'webpieces:endpoint-options',
+    /** Per-method @Endpoint trigger kind (rpc | cloudtasks | cron | external), parallel to ENDPOINTS. */
+    ENDPOINT_KIND: 'webpieces:endpoint-kind',
     /** Per-method @MaskLog spec (which DTO fields the LogApiCall path masks). */
     MASK_LOG: 'webpieces:mask-log',
 };
+
+/**
+ * WHAT TRIGGERS an endpoint at runtime — the single fact that decides how the runtime architecture
+ * graph draws it, and which Terraform resource must exist for it to ever fire:
+ *
+ *  - `rpc`        — a caller in this repo (or a browser) calls it synchronously. A direct arrow.
+ *  - `cloudtasks` — a producer ENQUEUES it; Cloud Tasks delivers it later. Drawn producer → queue →
+ *                   consumer, one queue node per METHOD (see {@link Queue}). Producer and consumer
+ *                   being the SAME service is legal and common — the queue decouples them.
+ *  - `cron`       — a scheduler fires it on a clock. Nothing in-repo calls it; drawn hanging off a
+ *                   clock symbol. Backed by a Cloud Scheduler job.
+ *  - `external`   — a system OUTSIDE this repo drives it (a GCP Pub/Sub push subscription, a Twilio
+ *                   or Gmail webhook). Drawn as an inbound dashed arrow from that system.
+ *
+ * Declared PER METHOD, because one api class routinely mixes them: an admin contract can have
+ * caller-driven endpoints AND a nightly cron sweep. A class-level marker cannot express that, which
+ * is exactly why the graph could not tell these apart before.
+ */
+export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
 
 /**
  * Options for a single @Endpoint. Kept in a metadata map PARALLEL to ENDPOINTS so the existing
@@ -143,7 +164,7 @@ export class AuthMeta {
  * @Authentication({authenticated: true})
  * @ApiPath('/api/save')
  * abstract class SaveApi {
- *   @Endpoint('/item')
+ *   @Endpoint('/item', 'rpc')
  *   save(request: SaveRequest): Promise<SaveResponse> { ... }
  * }
  * ```
@@ -161,25 +182,39 @@ export function ApiPath(basePath: string): ClassDecorator {
 }
 
 /**
- * @Endpoint(path, options?) - Method decorator that registers a POST endpoint at the given path.
+ * @Endpoint(path, kind, options?) - Method decorator that registers a POST endpoint at the given
+ * path and declares WHAT TRIGGERS it.
  *
  * All endpoints are POST-only (matching gRPC/thrift style).
  *
  * Usage:
  * ```typescript
- * @Endpoint('/item')
+ * @Endpoint('/item', 'rpc')
  * save(request: SaveRequest): Promise<SaveResponse> { ... }
  *
+ * // enqueued by a producer, delivered later by Cloud Tasks:
+ * @Endpoint('/send', 'cloudtasks')
+ * send(request: SendRequest): Promise<void> { ... }
+ *
+ * // fired by Cloud Scheduler on a clock, called by nobody in this repo:
+ * @Endpoint('/nightly', 'cron')
+ * nightly(request: NightlyRequest): Promise<void> { ... }
+ *
  * // EXTERNAL webhook posting application/x-www-form-urlencoded (e.g. Twilio):
- * @Endpoint('/hook', { formPost: true })
+ * @Endpoint('/hook', 'external', { formPost: true })
  * inbound(request: InboundRequest): Promise<InboundResponse> { ... }
  * ```
  *
- * The path write to ENDPOINTS is UNCHANGED (every consumer iterates `[methodName, path]`); options
- * ride a PARALLEL ENDPOINT_OPTIONS map so nothing downstream changes shape.
+ * `kind` is REQUIRED and deliberately positional: it makes every pre-existing single-argument
+ * `@Endpoint('/x')` a COMPILE error rather than something a lint rule has to chase, so no endpoint
+ * can slip into the runtime architecture graph with its trigger left to guesswork. See
+ * {@link EndpointKind} for what each value draws and which Terraform resource backs it.
+ *
+ * The path write to ENDPOINTS is UNCHANGED (every consumer iterates `[methodName, path]`); the kind
+ * and options ride PARALLEL ENDPOINT_KIND / ENDPOINT_OPTIONS maps so nothing downstream changes shape.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(path: string, options: EndpointOptions = {}): MethodDecorator {
+export function Endpoint(path: string, kind: EndpointKind, options: EndpointOptions = {}): MethodDecorator {
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
     return (target: any, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
         const metadataTarget = typeof target === 'function' ? target : target.constructor;
@@ -190,6 +225,11 @@ export function Endpoint(path: string, options: EndpointOptions = {}): MethodDec
         endpoints[propertyKey as string] = path;
 
         Reflect.defineMetadata(METADATA_KEYS.ENDPOINTS, endpoints, metadataTarget);
+
+        const kinds: Record<string, EndpointKind> =
+            Reflect.getMetadata(METADATA_KEYS.ENDPOINT_KIND, metadataTarget) || {};
+        kinds[propertyKey as string] = kind;
+        Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_KIND, kinds, metadataTarget);
 
         const opts: Record<string, EndpointOptions> =
             Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, metadataTarget) || {};
@@ -205,7 +245,7 @@ export function Endpoint(path: string, options: EndpointOptions = {}): MethodDec
  * untouched — masking lives in the logging path only.
  *
  * ```typescript
- * @Endpoint('/account')
+ * @Endpoint('/account', 'rpc')
  * @MaskLog({ refreshToken: 'full', accessToken: 'last4', credential: 'full' })
  * getEmailAccount(request: GetEmailAccountRequest): Promise<GetEmailAccountResponse> { ... }
  * ```
@@ -371,6 +411,28 @@ export function getEndpoints(apiClass: Function): Record<string, string> | undef
 }
 
 /**
+ * Every method's declared trigger kind, as `methodName -> kind`. Parallel to {@link getEndpoints}.
+ * Empty for a class carrying no @Endpoint at all.
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpoints
+export function getEndpointKinds(apiClass: Function): Record<string, EndpointKind> {
+    return Reflect.getMetadata(METADATA_KEYS.ENDPOINT_KIND, apiClass) || {};
+}
+
+/**
+ * What triggers ONE method, or undefined when the method carries no @Endpoint.
+ *
+ * Defaults to nothing rather than to 'rpc': `kind` is a required argument, so a missing entry means
+ * "this is not an endpoint", never "an endpoint that forgot to say". Silently defaulting here would
+ * put an undeclared cron or webhook back into the graph as a normal rpc call — the exact blindness
+ * the required argument exists to remove.
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpoints
+export function getEndpointKind(apiClass: Function, methodName: string): EndpointKind | undefined {
+    return getEndpointKinds(apiClass)[methodName];
+}
+
+/**
  * Get the @Endpoint options for one method (empty object if the method had no options).
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpoints
@@ -514,9 +576,23 @@ export function assertApiKind(apiClass: Function, expected: ApiKind): void {
 }
 
 /**
- * Validate @PubSub conventions at wiring time: the class must be @ApiPath + @PubSub
- * and declare at least one endpoint. (Return-type is Promise<void>, a compile-time
- * contract — TS erases types at runtime so it cannot be re-checked here.)
+ * Which {@link EndpointKind}s each {@link ApiKind} may declare. A @PubSub contract is delivered
+ * asynchronously by definition, so `rpc` is meaningless on it; an @Rpc contract has no queue, so
+ * `cloudtasks`/`cron` on it would name a queue/schedule nothing could ever deliver to. `external`
+ * is legal on both — a webhook posts synchronously, a push subscription does not.
+ *
+ * Shared so the wiring-time assert below and the build-time architecture scan enforce ONE rule.
+ */
+export const ENDPOINT_KINDS_BY_API_KIND: Record<ApiKind, readonly EndpointKind[]> = {
+    rpc: ['rpc', 'external'],
+    pubsub: ['cloudtasks', 'cron', 'external'],
+};
+
+/**
+ * Validate @PubSub conventions at wiring time: the class must be @ApiPath + @PubSub, declare at
+ * least one endpoint, and every endpoint must declare a kind this api kind can actually deliver.
+ * (Return-type is Promise<void>, a compile-time contract — TS erases types at runtime so it cannot
+ * be re-checked here.)
  * @throws Error if conventions are violated.
  */
 export function assertPubSubConventions(apiClass: Function): void {
@@ -528,6 +604,16 @@ export function assertPubSubConventions(apiClass: Function): void {
     const endpoints = getEndpoints(apiClass) || {};
     if (Object.keys(endpoints).length === 0) {
         throw new Error(`@PubSub API ${apiName} declares no @Endpoint methods`);
+    }
+    const allowed = ENDPOINT_KINDS_BY_API_KIND.pubsub;
+    const kinds = getEndpointKinds(apiClass);
+    for (const methodName of Object.keys(endpoints)) {
+        const kind = kinds[methodName];
+        if (kind !== undefined && allowed.includes(kind)) continue;
+        throw new Error(
+            `@PubSub API ${apiName}.${methodName} declares @Endpoint(..., '${kind ?? 'missing'}') — a ` +
+            `@PubSub contract is delivered through a queue, so it must be one of: ${allowed.join(' | ')}.`,
+        );
     }
 }
 

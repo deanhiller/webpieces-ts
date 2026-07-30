@@ -28,3 +28,25 @@ export function isPathExcluded(relPath: string, excludePaths: readonly string[])
     }
     return false;
 }
+
+/**
+ * Does `relPath` match any of `patterns`, as a glob or as a directory prefix?
+ *
+ * The strict sibling of {@link isPathExcluded}: it drops rule 1 (bare segment name matching anywhere
+ * in the path), which is right for an opt-out exclusion list but wrong for anything that CLASSIFIES
+ * a path — a pattern like "external" would otherwise claim every path containing that segment at any
+ * depth. Used for config lists that positively identify a set of projects (e.g.
+ * `runtime-architecture.externalApiPaths`).
+ *
+ * Paths are normalized to forward slashes so Windows backslashes match too. Empty `patterns` matches
+ * nothing, so an unconfigured list is inert rather than universal.
+ */
+// webpieces-disable no-function-outside-class -- pure path predicate, sibling of isPathExcluded above
+export function matchesAnyGlob(relPath: string, patterns: readonly string[]): boolean {
+    const norm = relPath.replace(/\\/g, '/');
+    for (const pattern of patterns) {
+        if (minimatch(norm, pattern)) return true;
+        if (minimatch(norm, `${pattern}/**`)) return true;
+    }
+    return false;
+}

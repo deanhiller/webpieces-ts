@@ -26,7 +26,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
-import type { ProjectApiRelations } from './api-usage/api-relations';
+import type { ApiContracts, ProjectApiRelations } from './api-usage/api-relations';
 import { toError } from '../toError';
 
 /**
@@ -83,7 +83,16 @@ export class DependenciesFile {
     constructor(
         public readonly aiInstructions: string,
         public readonly commands: CommandMap,
-        public readonly projects: EnhancedGraph
+        public readonly projects: EnhancedGraph,
+        /**
+         * Every API contract's per-method trigger table (kind + queue name + path).
+         *
+         * MUST be persisted, for the same reason `callsService` must: the runtime graph is derived
+         * SOLELY from this file, and `validate-runtime-architecture` re-derives from the LOADED copy
+         * while generate derives from the in-memory one. A field that is scanned but not written
+         * makes those two inputs differ, and the validator reports a diff no one can fix.
+         */
+        public readonly apiContracts: ApiContracts = {}
     ) {}
 }
 
@@ -113,7 +122,12 @@ export function loadBlessedGraph(
             return new DependenciesFile(
                 typeof parsed.aiInstructions === 'string' ? parsed.aiInstructions : '',
                 parsed.commands !== null && typeof parsed.commands === 'object' ? (parsed.commands as CommandMap) : {},
-                parsed.projects as EnhancedGraph
+                parsed.projects as EnhancedGraph,
+                // Absent in a file written before apiContracts existed; an empty table degrades the
+                // runtime graph to unnamed per-pair queues rather than failing to load.
+                parsed.apiContracts !== null && typeof parsed.apiContracts === 'object'
+                    ? (parsed.apiContracts as ApiContracts)
+                    : {}
             );
         }
         // Legacy flat format: the whole object is the project map
@@ -137,6 +151,7 @@ function formatGraphJson(file: DependenciesFile): string {
         lines.push(`        ${JSON.stringify(name)}: ${JSON.stringify(file.commands[name])}${comma}`);
     });
     lines.push(`    },`);
+    lines.push(...apiContractsLines(file.apiContracts));
     lines.push(`    "projects": {`);
 
     const keys = Object.keys(file.projects).sort();
@@ -153,6 +168,23 @@ function formatGraphJson(file: DependenciesFile): string {
     lines.push('    }');
     lines.push('}');
     return lines.join('\n') + '\n';
+}
+
+/**
+ * The `"apiContracts": {...}` block (4-space indent), with a trailing comma since `projects` always
+ * follows it. Omitted entirely when empty, so a repo with no api contracts keeps the old file shape.
+ * The scanner already sorts contracts by name and leaves methods in declaration order, so pretty
+ * JSON.stringify is deterministic.
+ */
+// webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling formatters here
+function apiContractsLines(contracts: ApiContracts): string[] {
+    if (Object.keys(contracts).length === 0) return [];
+    const pretty = JSON.stringify(contracts, null, 4).split('\n');
+    return pretty.map((line: string, index: number) => {
+        const prefix = index === 0 ? '"apiContracts": ' : '';
+        const suffix = index === pretty.length - 1 ? ',' : '';
+        return `    ${prefix}${line}${suffix}`;
+    });
 }
 
 /**
@@ -260,7 +292,8 @@ function pushApiRelationsField(lines: string[], value: ProjectApiRelations | und
 export function saveGraph(
     graph: EnhancedGraph,
     workspaceRoot: string,
-    graphPath: string = DEFAULT_GRAPH_PATH
+    graphPath: string = DEFAULT_GRAPH_PATH,
+    apiContracts: ApiContracts = {}
 ): void {
     const fullPath = path.join(workspaceRoot, graphPath);
     const dir = path.dirname(fullPath);
@@ -277,7 +310,9 @@ export function saveGraph(
         sortedGraph[key] = graph[key];
     }
 
-    const content = formatGraphJson(new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph));
+    const content = formatGraphJson(
+        new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph, apiContracts)
+    );
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
 

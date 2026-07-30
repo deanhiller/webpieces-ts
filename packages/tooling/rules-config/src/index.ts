@@ -11,7 +11,7 @@ export { RepoRootFinder, INSTRUCT_AI_DIR } from './repo-root';
 export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
 export { ExcludePaths } from './exclude-hook-paths';
-export { isPathExcluded } from './exclude-paths';
+export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
 export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';

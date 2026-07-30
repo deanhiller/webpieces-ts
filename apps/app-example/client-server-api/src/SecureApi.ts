@@ -18,35 +18,35 @@ export interface SecureResponse {
 @ApiPath('/secure')
 export abstract class SecureApi {
     /** Requires ANY logged-in user — a valid JWT with no particular role (@AuthJwt() = no roles). */
-    @Endpoint('/user')
+    @Endpoint('/user', 'rpc')
     @AuthJwt()
     userOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method userOp() must be implemented by subclass');
     }
 
     /** Requires a user JWT carrying the 'admin' role. */
-    @Endpoint('/admin')
+    @Endpoint('/admin', 'rpc')
     @AuthJwt('admin')
     adminOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method adminOp() must be implemented by subclass');
     }
 
     /** Custom app requirement: a logged-in user WHO belongs to an org (@Auth({inOrg:true})). */
-    @Endpoint('/org')
+    @Endpoint('/org', 'rpc')
     @Auth({ inOrg: true })
     orgOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method orgOp() must be implemented by subclass');
     }
 
     /** Requires the INTERNAL_API_SECRET shared-secret header. */
-    @Endpoint('/internal')
+    @Endpoint('/internal', 'rpc')
     @AuthSharedSecret('INTERNAL_API_SECRET')
     internalOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method internalOp() must be implemented by subclass');
     }
 
     /** Requires a genuine Google OIDC token; @AuthOidc() (no callers) trusts the edge for WHO (run.invoker IAM). */
-    @Endpoint('/service')
+    @Endpoint('/service', 'rpc')
     @AuthOidc()
     serviceOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method serviceOp() must be implemented by subclass');

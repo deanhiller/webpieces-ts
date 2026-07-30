@@ -14,8 +14,15 @@ import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { saveGraph } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { ProjectInfo } from '../../lib/project-info';
-import { scanAndAttachApiRelations, describeUnresolvedApiCalls } from '../../lib/api-usage/api-scanner';
-import type { EnhancedGraph } from '../../lib/graph-sorter';
+import {
+    scanAndAttachApiRelations,
+    describeUnresolvedApiCalls,
+    buildApiContracts,
+    describeMismatchedEndpointKinds,
+} from '../../lib/api-usage/api-scanner';
+import type { ApiContracts } from '../../lib/api-usage/api-relations';
+import { loadRuntimeConfig } from '../../lib/runtime-config';
+import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { toError } from '../../toError';
@@ -35,13 +42,20 @@ export interface ExecutorResult {
  * pubsub APIs become edges the viz draws through a queue.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
-function generateRuntimeGraph(workspaceRoot: string, graph: EnhancedGraph, hiddenProjects: Set<string>): void {
+function generateRuntimeGraph(
+    workspaceRoot: string,
+    graph: EnhancedGraph,
+    hiddenProjects: Set<string>,
+    apiContracts: ApiContracts,
+): void {
     console.log('📡 Deriving runtime graph from dependencies.json (implements × uses per API)...');
-    const report = deriveRuntimeGraphReport(graph, hiddenProjects);
+    const report = deriveRuntimeGraphReport(graph, hiddenProjects, apiContracts);
     saveRuntimeGraph(report.graph, workspaceRoot);
     const serviceCount = Object.keys(report.graph.services).length;
+    const queueCount = Object.keys(report.graph.queues).length;
     console.log(
-        `✅ Runtime graph saved (${serviceCount} services, ${report.graph.runtimeEdges.length} runtime edges)`,
+        `✅ Runtime graph saved (${serviceCount} services, ${report.graph.runtimeEdges.length} runtime edges, ` +
+            `${queueCount} queues, ${report.graph.triggers.length} cron/external triggers)`,
     );
     // Every edge the derivation had to GUESS at. Loud on purpose: a fanned-out edge is committed and
     // then reasoned about as if it were derived, which is how a fictional call survives for months.
@@ -69,10 +83,42 @@ function printRuntimeWarnings(warnings: string[]): void {
  * a green run that quietly omits a service gets committed, rendered, and trusted.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
-function scanApiRelations(workspaceRoot: string, graph: EnhancedGraph, projectInfos: Map<string, ProjectInfo>): void {
+function scanApiRelations(
+    workspaceRoot: string,
+    graph: EnhancedGraph,
+    projectInfos: Map<string, ProjectInfo>,
+): ApiContracts {
     console.log('🔎 Scanning source for implements/uses API relations...');
-    const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos);
+    const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
+    const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
     if (scan.unresolvedApiCalls.length > 0) console.warn(describeUnresolvedApiCalls(scan.unresolvedApiCalls));
+    const contracts = buildApiContracts(scan);
+    // An endpoint whose declared trigger its api kind cannot deliver would silently draw a queue or a
+    // clock that nothing could ever fire — name it here, where the fix is one decorator away.
+    const mismatches = describeMismatchedEndpointKinds(contracts);
+    if (mismatches.length > 0) {
+        console.error(`❌ ${mismatches.length} @Endpoint kind(s) conflict with their api kind:`);
+        for (const mismatch of mismatches) console.error(`     • ${mismatch}`);
+    }
+    return contracts;
+}
+
+/** Projects tagged drawOnGraph:false — kept in the JSON, omitted from every rendered graph. */
+// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
+function hiddenProjectsIn(graph: EnhancedGraph): Set<string> {
+    const hidden = new Set<string>();
+    for (const name of Object.keys(graph)) {
+        if (graph[name].drawOnGraph === false) hidden.add(name);
+    }
+    return hidden;
+}
+
+// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
+function printGraphSummary(graph: EnhancedGraph): void {
+    const levels = new Set(Object.values(graph).map((entry: GraphEntry) => entry.level));
+    console.log(`\n📈 Graph Summary:`);
+    console.log(`   Projects: ${Object.keys(graph).length}`);
+    console.log(`   Levels: ${levels.size} (0-${Math.max(...levels)})`);
 }
 
 export default async function runExecutor(
@@ -104,11 +150,13 @@ export default async function runExecutor(
         // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
         // scanning source, so dependencies.json + the viz + the runtime graph all
         // read the same derived truth.
-        scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
+        const apiContracts = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
 
-        // Step 4: Save the graph
+        // Step 4: Save the graph, INCLUDING the per-contract method table the runtime derivation
+        // reads back — generate derives from the in-memory graph, validate from the file, so
+        // anything not written here would make the two disagree.
         console.log('💾 Saving graph to architecture/dependencies.json...');
-        saveGraph(enhancedGraph, workspaceRoot, graphPath);
+        saveGraph(enhancedGraph, workspaceRoot, graphPath, apiContracts);
         console.log('✅ Graph saved successfully');
 
         // Step 4b: Write the committed, clickable HTML view next to the JSON so
@@ -119,19 +167,9 @@ export default async function runExecutor(
         // Step 5: Generate the runtime microservice graph from the same scan.
         // Projects tagged drawOnGraph:false are threaded through so the runtime
         // graph hides them too (they stay flagged in runtime-dependencies.json).
-        const hiddenProjects = new Set<string>();
-        for (const name of Object.keys(enhancedGraph)) {
-            if (enhancedGraph[name].drawOnGraph === false) hiddenProjects.add(name);
-        }
-        generateRuntimeGraph(workspaceRoot, enhancedGraph, hiddenProjects);
+        generateRuntimeGraph(workspaceRoot, enhancedGraph, hiddenProjectsIn(enhancedGraph), apiContracts);
 
-        // Print summary
-        const projectCount = Object.keys(enhancedGraph).length;
-        const levels = new Set(Object.values(enhancedGraph).map((e) => e.level));
-        console.log(`\n📈 Graph Summary:`);
-        console.log(`   Projects: ${projectCount}`);
-        console.log(`   Levels: ${levels.size} (0-${Math.max(...levels)})`);
-
+        printGraphSummary(enhancedGraph);
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);

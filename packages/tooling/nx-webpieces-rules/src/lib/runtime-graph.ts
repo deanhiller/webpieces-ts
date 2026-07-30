@@ -28,90 +28,46 @@
  * one, so it must never degrade silently.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { sortGraphTopologically } from './graph-sorter';
 import type { EnhancedGraph } from './graph-sorter';
-import type { ApiRef, ApiTransport } from './api-usage/api-relations';
+import type { ApiContracts, ApiMethodMeta, ApiRef, ApiTransport } from './api-usage/api-relations';
 import { apiRefKey, sortApiRefs } from './api-usage/api-relations';
+import type {
+    RuntimeApi,
+    RuntimeEdge,
+    RuntimeGraph,
+    RuntimeQueue,
+    RuntimeService,
+    RuntimeTrigger,
+    RuntimeUnresolved,
+} from './runtime-graph-model';
 import { toError } from '../toError';
 
-export const DEFAULT_RUNTIME_GRAPH_PATH = 'architecture/runtime-dependencies.json';
+// The committed data shape lives in runtime-graph-model.ts; re-exported here so every existing
+// `from './runtime-graph'` import keeps working and there is still one obvious place to import from.
+export type {
+    RuntimeApi,
+    RuntimeEdge,
+    RuntimeGraph,
+    RuntimeQueue,
+    RuntimeService,
+    RuntimeTrigger,
+    RuntimeUnresolved,
+} from './runtime-graph-model';
 
-export interface RuntimeService {
-    level: number;
-    /**
-     * The name clients address this service by (`new ClientConfig('helper-fsdb')`), declared in its
-     * project.json. Absent for a service nothing calls by name (e.g. a browser app).
-     */
-    serviceName?: string;
-    /**
-     * The service(s) this node's clients call when the call site carries no literal `ClientConfig`,
-     * declared in its project.json (metadata.webpieces.callsService). A single name, or an
-     * `{ apiClassName: serviceName }` map. Absent when the node declares no target. Mirrors
-     * GraphEntry.callsService; it is the CALLING-side counterpart of `serviceName`.
-     */
-    callsService?: string | Record<string, string>;
-    implements: string[];
-    /**
-     * apiClassName -> the LIBRARY project whose apiRelations declared that implements, for the apis
-     * this service serves through an embedded library rather than its own source (e.g. a shared
-     * route-registration lib). Answers "who implements WarmupApi, and where did that come from?",
-     * which previously required walking the dependsOn closure by hand.
-     */
-    implementsVia?: Record<string, string>;
-    uses: string[];
-    dependsOn: string[];
-    /**
-     * When false, this service is hidden from the rendered runtime graph (its
-     * node AND every edge touching it are omitted from the HTML/DOT). It stays
-     * in runtime-dependencies.json so the data view is complete. Absent means
-     * drawn (the default). Mirrors GraphEntry.drawOnGraph from the `drawOnGraph:`
-     * nx tag.
-     */
-    drawOnGraph?: boolean;
-}
-
-export interface RuntimeApi {
-    implementedBy: string[];
-    usedBy: string[];
-    /** Transport of this API — 'rpc' (direct call) or 'pubsub' (delivered through a queue). */
-    type?: ApiTransport;
-    /**
-     * The api-lib project that OWNS this contract. For a contract nothing in-repo implements, this
-     * is the external library the calls leave the repo through (`lib-firestore`, `lib-gmail`), which
-     * is what the runtime viz labels its terminal external nodes with.
-     */
-    owner?: string;
-}
-
-export interface RuntimeEdge {
-    from: string;
-    to: string;
-    via: string[];
-    /**
-     * Transport of this edge. 'rpc' → a direct call arrow. 'pubsub' → the producer enqueues and the
-     * consumer is delivered later, so the runtime viz draws it as producer → QUEUE → consumer.
-     * Edges are split by transport, so every edge is a single kind.
-     */
-    type?: ApiTransport;
-}
-
-export interface RuntimeUnresolved {
-    service: string;
-    api: string;
-}
-
-export interface RuntimeGraph {
-    services: Record<string, RuntimeService>;
-    apis: Record<string, RuntimeApi>;
-    runtimeEdges: RuntimeEdge[];
-    unresolvedUses: RuntimeUnresolved[];
-}
+// Persistence lives in runtime-graph-io.ts; re-exported for the same reason as the model types.
+export {
+    DEFAULT_RUNTIME_GRAPH_PATH,
+    saveRuntimeGraph,
+    runtimeGraphFileExists,
+    loadRuntimeGraph,
+    serializeRuntimeGraph,
+} from './runtime-graph-io';
 
 interface EdgeResult {
     edges: RuntimeEdge[];
     unresolved: RuntimeUnresolved[];
+    queues: Record<string, RuntimeQueue>;
 }
 
 /**
@@ -135,11 +91,20 @@ export class RuntimeGraphReport {
     ) {}
 }
 
-/** Adjacency (service -> [targets]) used for leveling + cycle checks. */
+/**
+ * Adjacency (service -> [targets]) used for leveling + cycle checks.
+ *
+ * PUBSUB EDGES ARE EXCLUDED. A queue is precisely the thing that decouples producer from consumer:
+ * the producer returns as soon as the task is enqueued and never waits on the consumer, so a queued
+ * hop is not a runtime dependency in the sense levels and cycle detection mean. Counting them would
+ * make the common and correct `A → queue → A` (a service deferring its own work) an architecture
+ * cycle, and would rank services by an ordering that does not constrain deploy or startup.
+ */
 function adjacencyFromEdges(serviceNames: string[], edges: RuntimeEdge[]): Record<string, string[]> {
     const adj: Record<string, string[]> = {};
     for (const name of serviceNames) adj[name] = [];
     for (const edge of edges) {
+        if (edge.type === 'pubsub') continue;
         if (!adj[edge.from]) adj[edge.from] = [];
         adj[edge.from].push(edge.to);
     }
@@ -222,7 +187,13 @@ class RuntimeGraphDeriver {
     constructor(
         private readonly projects: EnhancedGraph,
         /** Project names tagged drawOnGraph:false — kept in the JSON but flagged so the viz omits them. */
-        private readonly hiddenProjects: Set<string>
+        private readonly hiddenProjects: Set<string>,
+        /**
+         * The committed per-contract method table from dependencies.json. Empty means the file
+         * predates `apiContracts`: every pubsub edge then falls back to one unnamed queue per
+         * service pair, exactly as before, instead of failing on a missing table.
+         */
+        private readonly apiContracts: ApiContracts = {},
     ) {
         // A node ALWAYS answers to its own module name, so a repo whose deployed names match its
         // project names needs no declaration at all — and no alias can ever redirect 'ai-chat' away
@@ -260,8 +231,48 @@ class RuntimeGraphDeriver {
             apis: apisObj,
             runtimeEdges: edgeResult.edges,
             unresolvedUses: edgeResult.unresolved,
+            queues: edgeResult.queues,
+            triggers: this.buildTriggers(decls),
         };
         return new RuntimeGraphReport(graph, this.warnings, this.problems);
+    }
+
+    /**
+     * The clock- and outside-driven entry points: for every contract a node IMPLEMENTS, each method
+     * declared `cron` or `external` becomes a trigger pointing AT that node.
+     *
+     * Driven off `implements` rather than `uses` on purpose — these have no in-repo caller at all,
+     * which is why they never produced an edge and stayed invisible.
+     */
+    private buildTriggers(decls: ScanDecl[]): RuntimeTrigger[] {
+        const triggers: RuntimeTrigger[] = [];
+        for (const decl of decls) {
+            for (const ref of decl.implementsApis) {
+                for (const method of this.methodsOf(ref.api)) {
+                    if (method.kind !== 'cron' && method.kind !== 'external') continue;
+                    const trigger: RuntimeTrigger = {
+                        kind: method.kind,
+                        api: ref.api,
+                        method: method.name,
+                        service: decl.name,
+                    };
+                    if (method.kind === 'cron') trigger.queueName = method.queueName;
+                    triggers.push(trigger);
+                }
+            }
+        }
+        return triggers.sort(
+            (a: RuntimeTrigger, b: RuntimeTrigger) =>
+                a.kind.localeCompare(b.kind) ||
+                a.api.localeCompare(b.api) ||
+                a.method.localeCompare(b.method) ||
+                a.service.localeCompare(b.service),
+        );
+    }
+
+    /** The committed method table for a contract, or [] when it declares none (e.g. a vendor seam). */
+    private methodsOf(api: string): ApiMethodMeta[] {
+        return this.apiContracts[api]?.methods ?? [];
     }
 
     /**
@@ -356,22 +367,82 @@ class RuntimeGraphDeriver {
     private buildEdges(decls: ScanDecl[], apis: Map<string, RuntimeApi>): EdgeResult {
         const viaByKey = new Map<string, Set<string>>();
         const unresolved: RuntimeUnresolved[] = [];
+        const queues = new Map<string, RuntimeQueue>();
         for (const decl of decls) {
             for (const ref of decl.usesApis) {
                 const implementers = apis.get(ref.api)?.implementedBy ?? [];
                 if (implementers.length === 0) {
+                    // Nobody in-repo serves it. For a vendor contract that is the ANSWER, not a gap:
+                    // the call leaves the repo, and the viz terminates it at a dashed vendor node.
                     unresolved.push({ service: decl.name, api: ref.api });
                     continue;
                 }
                 for (const target of this.targetsFor(decl.name, ref, implementers)) {
-                    if (target === decl.name) continue;
+                    // A service calling ITSELF synchronously is noise; a service ENQUEUEING to
+                    // itself is a real, common topology (deferring its own work), and dropping it
+                    // was hiding the single most interesting thing about a queue.
+                    if (target === decl.name && ref.type !== 'pubsub') continue;
+                    if (ref.type === 'pubsub') {
+                        this.addQueuedEdges(decl.name, target, ref.api, viaByKey, queues);
+                        continue;
+                    }
                     const key = `${decl.name} ${target} ${ref.type}`;
                     if (!viaByKey.has(key)) viaByKey.set(key, new Set());
                     viaByKey.get(key)!.add(ref.api);
                 }
             }
         }
-        return { edges: this.edgesFromKeys(viaByKey), unresolved: sortUnresolved(unresolved) };
+        return {
+            edges: this.edgesFromKeys(viaByKey),
+            unresolved: sortUnresolved(unresolved),
+            queues: sortedQueues(queues),
+        };
+    }
+
+    /**
+     * One edge PER QUEUED METHOD of `api`, plus the queue each flows through.
+     *
+     * Per method rather than per service pair because that is the unit Cloud Tasks and Terraform
+     * create: two services exchanging three queued methods run three independently-configured,
+     * independently-backed-up queues, and collapsing them into one arrow hides which one is stuck.
+     *
+     * A contract with no committed method table (a dependencies.json predating `apiContracts`)
+     * degrades to a single unnamed queue for the pair — the old behavior — rather than vanishing.
+     */
+    private addQueuedEdges(
+        from: string,
+        to: string,
+        api: string,
+        viaByKey: Map<string, Set<string>>,
+        queues: Map<string, RuntimeQueue>,
+    ): void {
+        const queued = this.methodsOf(api).filter((m: ApiMethodMeta) => m.kind === 'cloudtasks');
+        if (queued.length === 0) {
+            const key = `${from} ${to} pubsub `;
+            if (!viaByKey.has(key)) viaByKey.set(key, new Set());
+            viaByKey.get(key)!.add(api);
+            return;
+        }
+        for (const method of queued) {
+            const queueKey = `${api}.${method.name}`;
+            const key = `${from} ${to} pubsub ${queueKey}`;
+            if (!viaByKey.has(key)) viaByKey.set(key, new Set());
+            viaByKey.get(key)!.add(api);
+
+            let queue = queues.get(queueKey);
+            if (queue === undefined) {
+                queue = {
+                    api,
+                    method: method.name,
+                    queueName: method.queueName,
+                    producedBy: [],
+                    consumedBy: [],
+                };
+                queues.set(queueKey, queue);
+            }
+            if (!queue.producedBy.includes(from)) queue.producedBy.push(from);
+            if (!queue.consumedBy.includes(to)) queue.consumedBy.push(to);
+        }
     }
 
     /**
@@ -464,15 +535,30 @@ class RuntimeGraphDeriver {
         return implementers;
     }
 
+    /**
+     * Rebuild edges from their `"from to type queue"` keys. The 4th part is the queue ("Api.method")
+     * and is empty for every non-queued edge; it is part of the KEY so two queued methods between
+     * the same pair stay two edges instead of collapsing into one.
+     */
     private edgesFromKeys(viaByKey: Map<string, Set<string>>): RuntimeEdge[] {
         const edges: RuntimeEdge[] = [];
         for (const key of viaByKey.keys()) {
             const parts = key.split(' ');
-            edges.push({ from: parts[0], to: parts[1], via: Array.from(viaByKey.get(key)!).sort(), type: parts[2] as ApiTransport });
+            const edge: RuntimeEdge = {
+                from: parts[0],
+                to: parts[1],
+                via: Array.from(viaByKey.get(key)!).sort(),
+                type: parts[2] as ApiTransport,
+            };
+            if (parts[3] !== undefined && parts[3] !== '') edge.queue = parts[3];
+            edges.push(edge);
         }
         edges.sort(
             (a: RuntimeEdge, b: RuntimeEdge) =>
-                a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || (a.type ?? '').localeCompare(b.type ?? ''),
+                a.from.localeCompare(b.from) ||
+                a.to.localeCompare(b.to) ||
+                (a.type ?? '').localeCompare(b.type ?? '') ||
+                (a.queue ?? '').localeCompare(b.queue ?? ''),
         );
         return edges;
     }
@@ -480,8 +566,15 @@ class RuntimeGraphDeriver {
     private buildServices(decls: ScanDecl[], edges: RuntimeEdge[]): Record<string, RuntimeService> {
         const services: Record<string, RuntimeService> = {};
         for (const decl of decls) {
+            // A queued hop depends on the QUEUE, not on the peer: the producer hands off and returns,
+            // so naming the consumer here would assert a coupling that does not exist (and would make
+            // a service that defers work to itself look self-dependent).
             const dependsOn = Array.from(
-                new Set(edges.filter((e: RuntimeEdge) => e.from === decl.name).map((e: RuntimeEdge) => e.to)),
+                new Set(
+                    edges
+                        .filter((e: RuntimeEdge) => e.from === decl.name)
+                        .map((e: RuntimeEdge) => (e.queue === undefined ? e.to : `queue:${e.queue}`)),
+                ),
             ).sort();
             // Keys are written in this order; an undefined value is omitted by JSON.stringify, so
             // the committed JSON stays clean AND deterministic without conditional assembly.
@@ -513,9 +606,10 @@ class RuntimeGraphDeriver {
 // webpieces-disable no-function-outside-class -- module entry point for the runtime graph derivation
 export function deriveRuntimeGraph(
     projects: EnhancedGraph,
-    hiddenProjects: Set<string> = new Set<string>()
+    hiddenProjects: Set<string> = new Set<string>(),
+    apiContracts: ApiContracts = {},
 ): RuntimeGraph {
-    return deriveRuntimeGraphReport(projects, hiddenProjects).graph;
+    return deriveRuntimeGraphReport(projects, hiddenProjects, apiContracts).graph;
 }
 
 /**
@@ -527,9 +621,10 @@ export function deriveRuntimeGraph(
 // webpieces-disable no-function-outside-class -- module entry point for the runtime graph derivation
 export function deriveRuntimeGraphReport(
     projects: EnhancedGraph,
-    hiddenProjects: Set<string> = new Set<string>()
+    hiddenProjects: Set<string> = new Set<string>(),
+    apiContracts: ApiContracts = {},
 ): RuntimeGraphReport {
-    return new RuntimeGraphDeriver(projects, hiddenProjects).assemble();
+    return new RuntimeGraphDeriver(projects, hiddenProjects, apiContracts).assemble();
 }
 
 /** Drop duplicate api refs, keeping the first — needed after a node absorbs the same api from both
@@ -545,6 +640,19 @@ function dedupApiRefs(refs: ApiRef[]): ApiRef[] {
         if (seen.has(key)) continue;
         seen.add(key);
         out.push(ref);
+    }
+    return out;
+}
+
+/** Queues as a key-sorted object, with each producer/consumer list sorted, for a deterministic file. */
+// webpieces-disable no-function-outside-class -- pure data helper, matches the sibling helpers in this file
+function sortedQueues(queues: Map<string, RuntimeQueue>): Record<string, RuntimeQueue> {
+    const out: Record<string, RuntimeQueue> = {};
+    for (const key of [...queues.keys()].sort()) {
+        const queue = queues.get(key)!;
+        queue.producedBy.sort();
+        queue.consumedBy.sort();
+        out[key] = queue;
     }
     return out;
 }
@@ -567,45 +675,3 @@ function sortUnresolved(unresolved: RuntimeUnresolved[]): RuntimeUnresolved[] {
     );
 }
 
-/** Deterministic JSON (sorted keys + arrays already sorted during assembly). */
-function formatRuntimeJson(graph: RuntimeGraph): string {
-    return JSON.stringify(graph, null, 4) + '\n';
-}
-
-export function saveRuntimeGraph(
-    graph: RuntimeGraph,
-    workspaceRoot: string,
-    graphPath: string = DEFAULT_RUNTIME_GRAPH_PATH,
-): void {
-    const fullPath = path.join(workspaceRoot, graphPath);
-    const dir = path.dirname(fullPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(fullPath, formatRuntimeJson(graph), 'utf-8');
-}
-
-export function runtimeGraphFileExists(
-    workspaceRoot: string,
-    graphPath: string = DEFAULT_RUNTIME_GRAPH_PATH,
-): boolean {
-    return fs.existsSync(path.join(workspaceRoot, graphPath));
-}
-
-export function loadRuntimeGraph(
-    workspaceRoot: string,
-    graphPath: string = DEFAULT_RUNTIME_GRAPH_PATH,
-): RuntimeGraph | null {
-    const fullPath = path.join(workspaceRoot, graphPath);
-    if (!fs.existsSync(fullPath)) return null;
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as RuntimeGraph;
-    } catch (err: unknown) {
-        const error = toError(err);
-        throw new Error(`Failed to load runtime graph from ${fullPath}`, { cause: error });
-    }
-}
-
-/** Serialize for an in-memory equality check (matches the on-disk format). */
-export function serializeRuntimeGraph(graph: RuntimeGraph): string {
-    return formatRuntimeJson(graph);
-}

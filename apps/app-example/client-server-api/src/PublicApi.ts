@@ -37,7 +37,7 @@ export interface PublicInfoResponse {
 @Authentication(new AuthenticationConfig(false))
 @ApiPath('/public')
 export abstract class PublicApi {
-    @Endpoint('/info')
+    @Endpoint('/info', 'rpc')
     getInfo(request: PublicInfoRequest): Promise<PublicInfoResponse> {
         throw new Error('Method getInfo() must be implemented by subclass');
     }
