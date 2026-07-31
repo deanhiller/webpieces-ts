@@ -110,6 +110,7 @@ export class RuntimeGraphReport {
  * make the common and correct `A → queue → A` (a service deferring its own work) an architecture
  * cycle, and would rank services by an ordering that does not constrain deploy or startup.
  */
+// webpieces-disable no-function-outside-class -- pure graph helper, matches the sibling helpers in this file
 function adjacencyFromEdges(
     serviceNames: string[],
     edges: RuntimeEdge[],
