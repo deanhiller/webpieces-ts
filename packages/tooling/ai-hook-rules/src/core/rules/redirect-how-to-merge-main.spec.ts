@@ -65,6 +65,35 @@ describe('redirect-how-to-merge-main — merge/rebase are banned outright', () =
     });
 });
 
+// An AI that only learns WHAT to type instead keeps looking for a way around the guard; one that
+// understands WHY the fork point matters stops trying. So the hint must state the invariant itself
+// (BOTH halves) and name what breaks, not merely the replacement commands. The authoritative version
+// of this reasoning lives in the git-workflow template; the hint carries a compact echo of it.
+describe('redirect-how-to-merge-main — why the fork point matters', () => {
+    it('explains WHY, not only which command to run instead', () => {
+        const hint = rule.fixHint.mainMessage;
+        // Both halves of the symmetric invariant.
+        expect(hint).toContain('pure main commit holding none of your work');
+        expect(hint).toContain('none of main\'s commits after it');
+        // The consumers a polluted fork point corrupts — the merge is only one of three.
+        expect(hint).toContain('nx affected --base=');
+        expect(hint).toContain('review diff');
+        // The rewrite is the mechanism, and the ownership consequence that follows from it.
+        expect(hint).toContain('the rewrite IS the mechanism');
+        expect(hint).toContain('NEVER run these commands on a branch another session owns');
+    });
+
+    it('sends the AI to a doc that states the invariant in full', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-invariant-'));
+        rule.check(ctx('git merge origin/main', root));
+        const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
+        expect(written).toContain('THE FORK POINT INVARIANT');
+        expect(written).toContain('pure `main` commit containing none of your work');
+        expect(written).toContain('none of main\'s commits after it');
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+});
+
 // What the AI actually READS when blocked: the fix hint's text and the doc it is sent to. These are
 // the surface that drifted before (a start from one pair + the other pair's finish).
 describe('redirect-how-to-merge-main — what the block tells the AI', () => {
