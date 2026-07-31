@@ -30,11 +30,19 @@
 
 import { sortGraphTopologically } from './graph-sorter';
 import type { EnhancedGraph } from './graph-sorter';
-import type { ApiContracts, ApiMethodMeta, ApiRef, ApiTransport } from './api-usage/api-relations';
+import type {
+    ApiContracts,
+    ApiMethodMeta,
+    ApiRef,
+    ApiTransport,
+    ExternalSystemDecls,
+} from './api-usage/api-relations';
 import { apiRefKey, sortApiRefs } from './api-usage/api-relations';
+import { attachExternalSystems, resolveExternalSystems } from './api-usage/external-systems';
 import type {
     RuntimeApi,
     RuntimeEdge,
+    RuntimeExternalSystem,
     RuntimeGraph,
     RuntimeQueue,
     RuntimeService,
@@ -48,6 +56,7 @@ import { toError } from '../toError';
 export type {
     RuntimeApi,
     RuntimeEdge,
+    RuntimeExternalSystem,
     RuntimeGraph,
     RuntimeQueue,
     RuntimeService,
@@ -194,6 +203,11 @@ class RuntimeGraphDeriver {
          * service pair, exactly as before, instead of failing on a missing table.
          */
         private readonly apiContracts: ApiContracts = {},
+        /**
+         * Declared external systems from dependencies.json, keyed by identity. Empty means nothing
+         * was declared, which renders exactly as it did before declarations existed.
+         */
+        private readonly externalSystemDecls: ExternalSystemDecls = {},
     ) {
         // A node ALWAYS answers to its own module name, so a repo whose deployed names match its
         // project names needs no declaration at all — and no alias can ever redirect 'ai-chat' away
@@ -234,6 +248,7 @@ class RuntimeGraphDeriver {
             queues: edgeResult.queues,
             triggers: this.buildTriggers(decls),
         };
+        attachExternalSystems(graph, resolveExternalSystems(this.externalSystemDecls, services));
         return new RuntimeGraphReport(graph, this.warnings, this.problems);
     }
 
@@ -625,8 +640,9 @@ export function deriveRuntimeGraphReport(
     projects: EnhancedGraph,
     hiddenProjects: Set<string> = new Set<string>(),
     apiContracts: ApiContracts = {},
+    externalSystems: ExternalSystemDecls = {},
 ): RuntimeGraphReport {
-    return new RuntimeGraphDeriver(projects, hiddenProjects, apiContracts).assemble();
+    return new RuntimeGraphDeriver(projects, hiddenProjects, apiContracts, externalSystems).assemble();
 }
 
 /** Drop duplicate api refs, keeping the first — needed after a node absorbs the same api from both

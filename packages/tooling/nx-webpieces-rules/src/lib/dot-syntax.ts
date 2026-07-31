@@ -31,6 +31,23 @@ export function dotValue(value: string): string {
     return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+/**
+ * Escape a runtime value for a `record`/`Mrecord` label, on TOP of {@link dotValue}.
+ *
+ * A record label is not ordinary label text: `|` splits fields, `{}` toggles the layout direction
+ * and `<>` delimit port names. A queue name carrying any of them would not merely look wrong — it
+ * would restructure the node, splitting one queue box into two or rotating it. Graphviz's record
+ * grammar escapes those with a backslash, and since {@link dotValue} has already doubled real
+ * backslashes, the `\\` emitted here survives into the record parser as a single one.
+ *
+ * Leading and trailing spaces are also dropped by the record parser, which is exactly why the
+ * horizontal-cylinder queue node uses a `" |"` prefix — that empty first field is deliberate.
+ */
+// webpieces-disable no-function-outside-class -- DOT string helpers, matching the sibling builders in runtime-visualizer.ts
+export function recordValue(value: string): string {
+    return dotValue(value).replace(/[|{}<>]/g, (char: string) => `\\${char}`);
+}
+
 /** Thrown when the generator produces DOT that Graphviz could not parse. */
 export class InvalidDotError extends Error {
     constructor(message: string) {

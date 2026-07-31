@@ -20,6 +20,8 @@ import {
     ApiTransport,
     EmptiedApiContract,
     EndpointKind,
+    ExternalSystemDeclaration,
+    isExternalSystemKind,
     NonLiteralDecoratorArg,
     UnresolvedEndpointPath,
 } from './api-relations';
@@ -33,6 +35,9 @@ const ENDPOINT_KINDS: readonly EndpointKind[] = ['rpc', 'cloudtasks', 'cron', 'e
  * The same convention the in-repo contracts already follow, applied where no decorator can be read.
  */
 const EXTERNAL_CONTRACT_SUFFIX = 'Api';
+
+/** JSDoc tag a vendor contract uses to declare WHAT it is a seam to: `@externalSystem database Firestore`. */
+const EXTERNAL_SYSTEM_TAG = 'externalSystem';
 
 /**
  * Client-config class-name suffix whose FIRST constructor argument is the target service name —
@@ -441,7 +446,40 @@ export function externalApiInfoFrom(node: ts.Node, project: string): ApiClassInf
     if (!named || !node.name || !isExported(node)) return null;
     const api = node.name.text;
     if (!api.endsWith(EXTERNAL_CONTRACT_SUFFIX)) return null;
-    return { api, owner: project, type: 'external', methods: [] };
+    const externalSystem = externalSystemTagFrom(node, api);
+    return externalSystem === null
+        ? { api, owner: project, type: 'external', methods: [] }
+        : { api, owner: project, type: 'external', methods: [], externalSystem };
+}
+
+/**
+ * The `@externalSystem <kind> [label]` JSDoc tag on a vendor contract, or null when absent.
+ *
+ * JSDoc rather than a decorator is not a style choice: these seams are TS `interface`s, and TS has
+ * no interface decorators. Without the tag the contract still renders — as the generic dashed box it
+ * always was — so this is purely additive and nothing needs migrating.
+ *
+ * The label defaults to the contract name minus its `Api` suffix (`FirestoreAdminApi` →
+ * `FirestoreAdmin`), because the label is the node IDENTITY: two contracts that mean the same system
+ * must be given the SAME explicit label to converge on one node.
+ *
+ * An unrecognised kind is ignored rather than defaulted. Silently drawing a `@externalSystem
+ * databse` typo as a generic box is recoverable; drawing it as the wrong shape teaches the reader
+ * something false about the architecture.
+ */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function externalSystemTagFrom(node: ts.Node, api: string): ExternalSystemDeclaration | null {
+    for (const tag of ts.getJSDocTags(node)) {
+        if (tag.tagName.text !== EXTERNAL_SYSTEM_TAG) continue;
+        const comment = typeof tag.comment === 'string' ? tag.comment : '';
+        const parts = comment.trim().split(/\s+/).filter((part: string) => part !== '');
+        if (parts.length === 0) continue;
+        const kind = parts[0].toLowerCase();
+        if (!isExternalSystemKind(kind)) continue;
+        const label = parts.slice(1).join(' ').trim();
+        return { kind, label: label === '' ? api.replace(/Api$/, '') : label };
+    }
+    return null;
 }
 
 /** True when the declaration carries an `export` modifier. */

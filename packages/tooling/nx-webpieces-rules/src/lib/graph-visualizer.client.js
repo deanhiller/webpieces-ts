@@ -6,7 +6,7 @@
  * functions without tripping the TypeScript lint rules that scan .ts template
  * strings. Copied into dist by the build's assets glob and read via readFileSync.
  *
- * After viz.js renders the SVG, wireHoverHighlight indexes nodes/edges and:
+ * After Viz renders the SVG, wireHoverHighlight indexes nodes/edges and:
  *   - hovering a box dims the rest and lights its full ancestor+descendant chain;
  *   - the #wp-lock dropdown LOCKS one box's chain (dim persists on mouse-leave)
  *     and filters the responsibilities cards below the graph to just that chain.
@@ -14,9 +14,12 @@
  */
 (function () {
     var dot = __DOT__;
-    var viz = new Viz();
-    viz.renderSVGElement(dot)
-        .then(function (element) {
+    // @viz-js/viz v3: instance() resolves the WASM-backed renderer (v2 used `new Viz()`), and
+    // renderSVGElement is then SYNCHRONOUS (v2's returned a promise) — hence the element is used
+    // directly inside this then() rather than chained through another one.
+    Viz.instance()
+        .then(function (viz) {
+            var element = viz.renderSVGElement(dot);
             document.getElementById('graph').appendChild(element);
             wireHoverHighlight(element);
         })

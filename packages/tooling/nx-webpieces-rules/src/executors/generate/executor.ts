@@ -21,7 +21,8 @@ import {
     buildApiContracts,
     describeMismatchedEndpointKinds,
 } from '../../lib/api-usage/api-scanner';
-import type { ApiContracts } from '../../lib/api-usage/api-relations';
+import { buildExternalSystems } from '../../lib/api-usage/external-systems';
+import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
@@ -48,9 +49,10 @@ function generateRuntimeGraph(
     graph: EnhancedGraph,
     hiddenProjects: Set<string>,
     apiContracts: ApiContracts,
+    externalSystems: ExternalSystemDecls,
 ): void {
     console.log('📡 Deriving runtime graph from dependencies.json (implements × uses per API)...');
-    const report = deriveRuntimeGraphReport(graph, hiddenProjects, apiContracts);
+    const report = deriveRuntimeGraphReport(graph, hiddenProjects, apiContracts, externalSystems);
     saveRuntimeGraph(report.graph, workspaceRoot);
     const serviceCount = Object.keys(report.graph.services).length;
     const queueCount = Object.keys(report.graph.queues).length;
@@ -88,7 +90,7 @@ function scanApiRelations(
     workspaceRoot: string,
     graph: EnhancedGraph,
     projectInfos: Map<string, ProjectInfo>,
-): ApiContracts {
+): ScannedTables {
     console.log('🔎 Scanning source for implements/uses API relations...');
     const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
     const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
@@ -106,7 +108,15 @@ function scanApiRelations(
         console.error(`❌ ${mismatches.length} @Endpoint kind(s) conflict with their api kind:`);
         for (const mismatch of mismatches) console.error(`     • ${mismatch}`);
     }
-    return contracts;
+    return new ScannedTables(contracts, buildExternalSystems(scan.apiIndex, projectInfos));
+}
+
+/** The two committed tables one scan produces, kept together so callers cannot persist just one. */
+class ScannedTables {
+    constructor(
+        public readonly apiContracts: ApiContracts,
+        public readonly externalSystems: ExternalSystemDecls,
+    ) {}
 }
 
 /** Projects tagged drawOnGraph:false — kept in the JSON, omitted from every rendered graph. */
@@ -127,6 +137,60 @@ function printGraphSummary(graph: EnhancedGraph): void {
     console.log(`   Levels: ${levels.size} (0-${Math.max(...levels)})`);
 }
 
+/**
+ * The whole generation pipeline. Split out of runExecutor so that function stays a thin
+ * try/catch-and-report shell — the error reporting is what a caller reads on failure, and it should
+ * not be separated from the throw by fifty lines of steps.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
+async function generateEverything(workspaceRoot: string, graphPath: string | undefined): Promise<void> {
+    // Step 1: Build the full graph from nx, then transitively reduce it to the view
+    console.log("📊 Generating dependency graph from nx's project graph...");
+    const reducedGraph = await generateReducedGraph();
+
+    // Step 2: Topological sort (to assign levels for visualization)
+    console.log('🔄 Computing topological layers...');
+    const enhancedGraph = sortGraphTopologically(reducedGraph);
+
+    // Step 3: Enrich with AI metadata (framework, shortDescription, file
+    // pointers). This VALIDATES (responsibilities.md required per project)
+    // and throws before any write, so a failure never clobbers the file.
+    console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
+    const projectInfos = await collectProjectInfo();
+    enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
+
+    // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
+    // scanning source, so dependencies.json + the viz + the runtime graph all
+    // read the same derived truth.
+    const scanned = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
+    const apiContracts = scanned.apiContracts;
+
+    // Step 4: Save the graph, INCLUDING the per-contract method table and the external-system
+    // declarations the runtime derivation reads back — generate derives from the in-memory graph,
+    // validate from the file, so anything not written here would make the two disagree.
+    console.log('💾 Saving graph to architecture/dependencies.json...');
+    saveGraph(enhancedGraph, workspaceRoot, graphPath, apiContracts, scanned.externalSystems);
+    console.log('✅ Graph saved successfully');
+
+    // Step 4b: Write the committed, clickable HTML view next to the JSON so
+    // dependencies.html regenerates in lock-step with dependencies.json.
+    const vizPaths = new GraphVisualizer().writeVisualization(enhancedGraph, workspaceRoot);
+    console.log(`✅ Wrote ${vizPaths.htmlPath}`);
+
+    // Step 5: Generate the runtime microservice graph from the same scan.
+    // Projects tagged drawOnGraph:false are threaded through so the runtime
+    // graph hides them too (they stay flagged in runtime-dependencies.json).
+    generateRuntimeGraph(
+        workspaceRoot,
+        enhancedGraph,
+        hiddenProjectsIn(enhancedGraph),
+        apiContracts,
+        scanned.externalSystems,
+    );
+
+    printGraphSummary(enhancedGraph);
+}
+
 export default async function runExecutor(
     options: GenerateExecutorOptions,
     context: ExecutorContext
@@ -138,44 +202,7 @@ export default async function runExecutor(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        // Step 1: Build the full graph from nx, then transitively reduce it to the view
-        console.log("📊 Generating dependency graph from nx's project graph...");
-        const reducedGraph = await generateReducedGraph();
-
-        // Step 2: Topological sort (to assign levels for visualization)
-        console.log('🔄 Computing topological layers...');
-        const enhancedGraph = sortGraphTopologically(reducedGraph);
-
-        // Step 3: Enrich with AI metadata (framework, shortDescription, file
-        // pointers). This VALIDATES (responsibilities.md required per project)
-        // and throws before any write, so a failure never clobbers the file.
-        console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
-        const projectInfos = await collectProjectInfo();
-        enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
-
-        // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
-        // scanning source, so dependencies.json + the viz + the runtime graph all
-        // read the same derived truth.
-        const apiContracts = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
-
-        // Step 4: Save the graph, INCLUDING the per-contract method table the runtime derivation
-        // reads back — generate derives from the in-memory graph, validate from the file, so
-        // anything not written here would make the two disagree.
-        console.log('💾 Saving graph to architecture/dependencies.json...');
-        saveGraph(enhancedGraph, workspaceRoot, graphPath, apiContracts);
-        console.log('✅ Graph saved successfully');
-
-        // Step 4b: Write the committed, clickable HTML view next to the JSON so
-        // dependencies.html regenerates in lock-step with dependencies.json.
-        const vizPaths = new GraphVisualizer().writeVisualization(enhancedGraph, workspaceRoot);
-        console.log(`✅ Wrote ${vizPaths.htmlPath}`);
-
-        // Step 5: Generate the runtime microservice graph from the same scan.
-        // Projects tagged drawOnGraph:false are threaded through so the runtime
-        // graph hides them too (they stay flagged in runtime-dependencies.json).
-        generateRuntimeGraph(workspaceRoot, enhancedGraph, hiddenProjectsIn(enhancedGraph), apiContracts);
-
-        printGraphSummary(enhancedGraph);
+        await generateEverything(workspaceRoot, graphPath);
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);

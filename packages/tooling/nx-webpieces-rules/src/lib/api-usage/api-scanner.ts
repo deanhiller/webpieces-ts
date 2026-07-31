@@ -531,6 +531,7 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     return contracts;
 }
 
+
 /**
  * Loud, actionable report for decorator arguments the scan could not reduce to a string.
  *

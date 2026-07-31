@@ -487,10 +487,12 @@ describe('the runtime node says what it implements and where that came from', ()
         expect(derived.services['helper-fsdb-svr'].implements).toContain('HelperFsdbApi');
     });
 
-    it('names the implemented + used contracts ON the node, with no incoming edge needed', () => {
+    it('names the implemented contracts ON the node, with no incoming edge needed', () => {
         const dot = generateRuntimeDot(derived);
         expect(dot).toContain('implements: HelperFsdbApi, WarmupApi (via svc-core)');
-        expect(dot).toContain('uses: HelperFsdbApi, WarmupApi');
+        // What a node USES is deliberately absent: every use already draws an outgoing arrow
+        // labeled with the same contract, so repeating it only widened every box.
+        expect(dot).not.toContain('uses: HelperFsdbApi');
         // The declared runtime name is on the node too, so the ClientConfig string is discoverable.
         // The quotes around it are ESCAPED — a bare `"` here ends the label and kills the graph.
         expect(dot).toContain(', \\"helper-portal\\")');
@@ -576,7 +578,7 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
     });
 
     it('draws the pubsub edge through a cylinder queue node', () => {
-        expect(dot).toContain('"queue__producer__consumer" [shape=cylinder');
+        expect(dot).toContain('"queue__producer__consumer" [shape=Mrecord');
         expect(dot).toContain('"producer" -> "queue__producer__consumer" [label="enqueue", style=dashed];');
         expect(dot).toContain('"queue__producer__consumer" -> "consumer" [label="deliver", style=dashed];');
     });

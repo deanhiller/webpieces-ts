@@ -26,7 +26,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
-import type { ApiContracts, ProjectApiRelations } from './api-usage/api-relations';
+import type { ApiContracts, ExternalSystemDecls, ProjectApiRelations } from './api-usage/api-relations';
 import { toError } from '../toError';
 
 /**
@@ -92,7 +92,13 @@ export class DependenciesFile {
          * while generate derives from the in-memory one. A field that is scanned but not written
          * makes those two inputs differ, and the validator reports a diff no one can fix.
          */
-        public readonly apiContracts: ApiContracts = {}
+        public readonly apiContracts: ApiContracts = {},
+        /**
+         * Declared external systems (databases, buckets, ...) keyed by identity. Persisted for the
+         * same reason apiContracts is: the runtime graph is derived SOLELY from this file, so a
+         * declaration that is scanned but not written would make generate and validate disagree.
+         */
+        public readonly externalSystems: ExternalSystemDecls = {}
     ) {}
 }
 
@@ -127,6 +133,11 @@ export function loadBlessedGraph(
                 // runtime graph to unnamed per-pair queues rather than failing to load.
                 parsed.apiContracts !== null && typeof parsed.apiContracts === 'object'
                     ? (parsed.apiContracts as ApiContracts)
+                    : {},
+                // Absent in any file written before external systems could be declared; an empty
+                // table simply draws no shaped nodes, which is exactly the old rendering.
+                parsed.externalSystems !== null && typeof parsed.externalSystems === 'object'
+                    ? (parsed.externalSystems as ExternalSystemDecls)
                     : {}
             );
         }
@@ -152,6 +163,7 @@ function formatGraphJson(file: DependenciesFile): string {
     });
     lines.push(`    },`);
     lines.push(...apiContractsLines(file.apiContracts));
+    lines.push(...externalSystemsLines(file.externalSystems));
     lines.push(`    "projects": {`);
 
     const keys = Object.keys(file.projects).sort();
@@ -182,6 +194,24 @@ function apiContractsLines(contracts: ApiContracts): string[] {
     const pretty = JSON.stringify(contracts, null, 4).split('\n');
     return pretty.map((line: string, index: number) => {
         const prefix = index === 0 ? '"apiContracts": ' : '';
+        const suffix = index === pretty.length - 1 ? ',' : '';
+        return `    ${prefix}${line}${suffix}`;
+    });
+}
+
+/**
+ * The `"externalSystems": {...}` block (4-space indent), with a trailing comma since `projects`
+ * always follows. Omitted entirely when empty, so a repo that declares none keeps the exact file
+ * shape it had before this existed — which is what makes adopting it a no-op diff.
+ */
+// webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling formatters here
+function externalSystemsLines(systems: ExternalSystemDecls): string[] {
+    if (Object.keys(systems).length === 0) return [];
+    const sorted: ExternalSystemDecls = {};
+    for (const identity of Object.keys(systems).sort()) sorted[identity] = systems[identity];
+    const pretty = JSON.stringify(sorted, null, 4).split('\n');
+    return pretty.map((line: string, index: number) => {
+        const prefix = index === 0 ? '"externalSystems": ' : '';
         const suffix = index === pretty.length - 1 ? ',' : '';
         return `    ${prefix}${line}${suffix}`;
     });
@@ -293,7 +323,8 @@ export function saveGraph(
     graph: EnhancedGraph,
     workspaceRoot: string,
     graphPath: string = DEFAULT_GRAPH_PATH,
-    apiContracts: ApiContracts = {}
+    apiContracts: ApiContracts = {},
+    externalSystems: ExternalSystemDecls = {}
 ): void {
     const fullPath = path.join(workspaceRoot, graphPath);
     const dir = path.dirname(fullPath);
@@ -311,7 +342,7 @@ export function saveGraph(
     }
 
     const content = formatGraphJson(
-        new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph, apiContracts)
+        new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph, apiContracts, externalSystems)
     );
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
