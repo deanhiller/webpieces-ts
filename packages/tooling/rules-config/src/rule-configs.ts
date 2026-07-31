@@ -404,7 +404,8 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
     // parked branches count against maxLocalBranches. Enforced at `git worktree add`.
     maxWorktrees?: number;
     // Let the detached background refresher DELETE dead branches on its own, instead of only
-    // reporting them. Every candidate is provably dead (merged PR / squash backup / no commits) and
+    // reporting them. Every candidate is provably dead (a MERGED PR — its own, or the PR of the branch
+    // it snapshots; nothing else qualifies) and
     // recoverable by the SHA logged to branch-mutations.log — but it is still UNATTENDED deletion,
     // so this is schema-REQUIRED like `mode` and `turnOffRuleUntilEpoch`. "Every built-in rule
     // must be explicitly configured — no silent defaults" (validate-config.ts) applies with extra

@@ -17,11 +17,15 @@ import { BranchCreationGuardRule } from './branch-creation-guard';
 /**
  * The cap against REAL git — no mocked child_process.
  *
- * The unit specs prove the decisions; this proves the two things a mock structurally cannot: that we
- * parse what `git worktree list --porcelain` actually emits, and that the reap command we hand the
- * agent actually RUNS. The command's ordering (prune → remove → branch -D) is the whole point — git
- * refuses to delete a branch a worktree still holds, and since the delete is one multi-name command, a
- * single held branch takes the entire reap down with it. That failure only shows up against real git.
+ * The unit specs prove the decisions; this proves what a mock structurally cannot: that we parse what
+ * `git worktree list --porcelain` actually emits, over worktrees made the way the docs tell you to make
+ * them (`git worktree add -b <name> origin/main`).
+ *
+ * It used to assert that the reap ONE-LINER the guard printed ran clean. It did run clean — that was
+ * the problem. Three of the six worktrees below are exactly what an agent's freshly created worktree
+ * looks like (no commits yet, no PR), and the guard called them dead and offered to delete them, which
+ * on 2026-07-30 it did to three worktrees with live agents in them. So the assertion is inverted: over
+ * real git, with no merged PR provable, NOTHING may be offered for deletion.
  */
 
 let root = '';
@@ -54,8 +58,9 @@ beforeAll(() => {
     // A local origin/main, so `origin/main..<branch>` resolves exactly as it does in a real clone.
     git('update-ref refs/remotes/origin/main HEAD');
 
-    // Six worktrees. feat1..feat3 have no commits of their own (dead — identical to origin/main);
-    // feat4..feat6 carry real work and must be spared.
+    // Six worktrees. feat1..feat3 have no commits of their own — the state EVERY worktree is in from
+    // `git worktree add -b … origin/main` until its first commit, i.e. while an agent is working in it.
+    // feat4..feat6 carry real work. With no merged PR provable, all six are LIVE.
     for (let i = 1; i <= 6; i++) {
         const dir = path.join(root, `wt${String(i)}`);
         git(`worktree add -q ${dir} -b feat${String(i)} origin/main`);
@@ -66,28 +71,34 @@ beforeAll(() => {
         }
     }
 
-    // What the detached refresher does. `gh` fails here (no GitHub remote) — the fail-soft path, so the
-    // only branches provable dead are the zero-commit ones.
+    // What the detached refresher does. `gh` fails here (no GitHub remote) — the fail-soft path, so
+    // NOTHING is provably merged, and therefore nothing is reapable.
     merged.writeMergedBranches(repo, merged.computeMergedBranches(repo));
-});
+// 60s: this hook runs `git init` plus SIX `git worktree add` and then the refresher's own `gh` probes,
+// and the default 15s is not enough when the whole package's suites are running in parallel.
+}, 60_000);
 
 afterAll(() => {
     if (root !== '') fs.rmSync(root, { recursive: true, force: true });
 });
 
 describe('branch-creation-guard against real git', () => {
-    it('never proposes deleting a branch a worktree still holds', () => {
+    it('records a verdict for every worktree, and calls none of them dead without a merged PR', () => {
         const cache = merged.readMergedBranches(repo);
 
-        // All six branches are worktree-held, so `git branch -D` must be offered NONE of them — even the
-        // three that are provably dead. They get reaped by removing their worktree instead.
+        // Every branch is worktree-held, so none is offered for `git branch -D` regardless of verdict.
         expect(cache?.deletable.length).toBe(0);
 
+        // Part 2 of the ticket: the refresher records status for EVERY worktree, not just interesting ones.
+        expect((cache?.worktrees ?? []).length).toBe(6);
+
+        // Part 1: no merged PR anywhere, so nothing is reapable — INCLUDING feat1..feat3, which hold no
+        // commits of their own. That is a worktree in active use, not a corpse.
         const dead = (cache?.worktrees ?? []).filter((tree: DeletableWorktree): boolean => tree.deletable);
-        expect(dead.map((tree: DeletableWorktree): string => tree.branch).sort()).toEqual(['feat1', 'feat2', 'feat3']);
+        expect(dead).toEqual([]);
     });
 
-    it('blocks the 6th worktree, and the reap command it emits actually runs clean', () => {
+    it('blocks the 6th worktree and prints NO command that deletes anything', () => {
         expect(worktrees.linkedWorktrees(repo).length).toBe(6);
 
         const cfg = new BranchCreationGuardConfig();
@@ -99,19 +110,52 @@ describe('branch-creation-guard against real git', () => {
 
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('6 linked worktrees');
-        expect(violations[0].message).toContain('3 of them are dead');
+        expect(violations[0].message).toContain('None of them are dead');
 
-        // Pull the command back out of the hint exactly as an agent would read it, and RUN it.
-        const reap = rule.fixHint.fixOptions[0].text;
-        const command = reap.slice(reap.indexOf('git worktree prune'));
-        expect(command).toContain('git branch -D feat1 feat2 feat3');
+        // The whole remedy, read exactly as an agent reads it. Not one destructive git command in it.
+        const hint = rule.fixHint;
+        const flat = [hint.mainMessage, hint.subMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)]
+            .join('\n');
+        expect(flat).not.toContain('git worktree remove');
+        expect(flat).not.toContain('git worktree prune');
+        expect(flat).not.toContain('git branch -D');
+        expect(flat).not.toContain('no work can be lost');
+        expect(flat).toContain('pnpm wp-cleanup');
 
-        execSync(command, { cwd: repo, encoding: 'utf8' });
-
-        expect(worktrees.linkedWorktrees(repo).length).toBe(3);
-        expect(merged.localBranches(repo).sort()).toEqual(['feat4', 'feat5', 'feat6']);
-
-        // Under the cap now, so the very command that was blocked must go through.
-        expect(rule.check(ctx(add)).length).toBe(0);
+        // And the six live worktrees are still there — nothing about being at the cap removed anything.
+        expect(worktrees.linkedWorktrees(repo).length).toBe(6);
     });
+
+});
+
+describe('branch-creation-guard against real git — the merged half', () => {
+    /**
+     * The other half of "live unless merged": once a branch IS provably merged, its worktree becomes
+     * reapable on that evidence alone. `gh` cannot run here, so the merged verdict is injected the same
+     * way the refresher would have written it, and the guard is asked what it does with it.
+     */
+    it('does offer a worktree whose PR is merged — but still only via wp-cleanup', () => {
+        const cache = merged.computeMergedBranches(repo);
+        // git reports its own canonicalised path (on macOS /var/… resolves to /private/var/…), so take
+        // the path from git rather than reconstructing it — reconcile() matches on exactly this string.
+        const wt1 = cache.worktrees[0].path;
+        cache.worktrees = cache.worktrees.map((tree: DeletableWorktree): DeletableWorktree =>
+            tree.path === wt1
+                ? new DeletableWorktree(tree.path, tree.branch, 'PR #514 merged', 514, true, 'merged-pr')
+                : tree);
+        merged.writeMergedBranches(repo, cache);
+
+        const cfg = new BranchCreationGuardConfig();
+        cfg.mode = 'ON_NO_SUBBRANCHES';
+        const rule = new BranchCreationGuardRule(cfg);
+        const violations = rule.check(ctx(`git worktree add ${path.join(root, 'wt7')} -b dean/next origin/main`));
+
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('1 of them are dead');
+
+        const flat = rule.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
+        expect(flat).toContain(wt1);
+        expect(flat).toContain('pnpm wp-cleanup');
+        expect(flat).not.toContain('git worktree remove');
+    }, 60_000);
 });

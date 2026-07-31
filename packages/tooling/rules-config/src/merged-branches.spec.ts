@@ -64,6 +64,9 @@ import {
     CLASSIFICATION_PRUNABLE,
     CLASSIFICATION_LOCKED,
     CLASSIFICATION_CURRENT,
+    PROMPTABLE_CLASSIFICATIONS,
+    MergedBranchesCache,
+    DeletableWorktree,
 } from './merged-branches';
 
 function names(list: DeletableBranch[]): string[] {
@@ -139,18 +142,30 @@ describe('MergedBranchesService.computeMergedBranches', () => {
 
 describe('MergedBranchesService empty-branch husks', () => {
     /**
-     * A branch with zero commits of its own holds no work — deleting it cannot lose anything. This is
-     * the ONE git-local signal squash-merge cannot corrupt (it destroys patch-id and ancestry, so "is
-     * this work in main?" is unanswerable — but "are there any commits at all?" is exact).
+     * "Zero commits of its own" is NOT a proof of death and must never auto-reap.
+     *
+     * It reads as "holds no work", and for a bare ref that is true — but it is equally the state of
+     * every branch created by `git worktree add -b … origin/main` from creation until its first
+     * commit, i.e. exactly the window in which an agent is working in it. Observed 2026-07-30: three
+     * worktrees with live agents were listed as dead under this rule, with the words "so no work can
+     * be lost". The husk is still CLEANED UP — it lands in `keep` as CLASSIFICATION_NO_COMMITS, which
+     * wp-cleanup prompts about — but only ever with a human's yes.
      */
-    it('reaps a branch with no commits of its own, even with no PR', () => {
+    it('SPARES a branch with no commits of its own — it may be a worktree in active use', () => {
         world.localBranches = ['main', 'dean/never-committed'];
         world.commitsAhead = { 'dean/never-committed': 0 };
 
         const cache = svc.computeMergedBranches('/repo');
 
-        expect(names(cache.deletable)).toEqual(['dean/never-committed']);
-        expect(cache.deletable[0].reason).toContain('no commits of its own');
+        expect(cache.deletable).toEqual([]);
+        expect(names(cache.keep)).toEqual(['dean/never-committed']);
+        expect(cache.keep[0].classification).toBe(CLASSIFICATION_NO_COMMITS);
+        expect(cache.keep[0].reason).toContain('working in');
+    });
+
+    // …and it is offered to the human rather than dropped on the floor, so real husks still go.
+    it('makes the husk PROMPTABLE, so wp-cleanup can still ask about it', () => {
+        expect(PROMPTABLE_CLASSIFICATIONS).toContain(CLASSIFICATION_NO_COMMITS);
     });
 
     it('spares an unmerged branch that has real commits on it', () => {
@@ -411,17 +426,141 @@ describe('classification keeps the situations distinct, and still deletes nothin
         expect(spared('dean/abandoned').classification).toBe(CLASSIFICATION_NEVER_PROPOSED);
     });
 
-    // Proven-dead branches keep their own classifications, so a report can group everything.
-    it('classifies the deletable branches too', () => {
+    // Proven-dead branches keep their own classifications, so a report can group everything — and a
+    // MERGED PR is the ONLY thing that gets a branch into the deletable list. The husk is spared.
+    it('classifies the deletable branches too, and a merged PR is the only way in', () => {
         world.mergedPrs = [{ number: 1, headRefName: 'dean/merged' }];
         world.localBranches = ['main', 'dean/merged', 'dean/mergedPreMerge1', 'dean/husk'];
         world.commitsAhead = { 'dean/husk': 0 };
 
-        const byBranch = new Map(svc.computeMergedBranches('/repo').deletable
+        const cache = svc.computeMergedBranches('/repo');
+        const byBranch = new Map(cache.deletable
             .map((entry: DeletableBranch): [string, string] => [entry.branch, entry.classification]));
 
         expect(byBranch.get('dean/merged')).toBe(CLASSIFICATION_MERGED_PR);
         expect(byBranch.get('dean/mergedPreMerge1')).toBe(CLASSIFICATION_BACKUP_OF_MERGED);
-        expect(byBranch.get('dean/husk')).toBe(CLASSIFICATION_NO_COMMITS);
+        expect(byBranch.has('dean/husk')).toBe(false);
+        expect(names(cache.keep)).toContain('dean/husk');
+    });
+});
+
+/**
+ * The incident this whole change exists for: `branch-creation-guard` offered to delete three worktrees
+ * that had live agents working in them, on the strength of "a branch with no commits of its own".
+ * These lock the verdicts at the level the guard actually reads.
+ */
+describe('worktree liveness is "live unless merged"', () => {
+    it('treats a worktree whose branch has no commits and no PR as LIVE, never deletable', () => {
+        world.localBranches = ['main', 'dean/apipath'];
+        world.commitsAhead = { 'dean/apipath': 0 };
+        world.worktrees = [{ path: '/wt/apipath', branch: 'dean/apipath' }];
+
+        const verdict = svc.computeMergedBranches('/repo').worktrees
+            .find((tree: DeletableWorktree): boolean => tree.path === '/wt/apipath');
+
+        expect(verdict?.deletable).toBe(false);
+        expect(verdict?.classification).toBe(CLASSIFICATION_NO_COMMITS);
+    });
+
+    // The mirror image: a MERGED PR is proof, and proof still reaps without asking.
+    it('marks a worktree whose PR is merged as deletable', () => {
+        world.mergedPrs = [{ number: 514, headRefName: 'dean/landed' }];
+        world.localBranches = ['main', 'dean/landed'];
+        world.worktrees = [{ path: '/wt/landed', branch: 'dean/landed' }];
+
+        const verdict = svc.computeMergedBranches('/repo').worktrees
+            .find((tree: DeletableWorktree): boolean => tree.path === '/wt/landed');
+
+        expect(verdict?.deletable).toBe(true);
+        expect(verdict?.classification).toBe(CLASSIFICATION_MERGED_PR);
+        expect(verdict?.pr).toBe(514);
+    });
+
+    // An OPEN PR with real commits was already spared correctly and must stay that way.
+    it('spares a worktree whose PR is open', () => {
+        world.allPrs = [{ number: 514, headRefName: 'dean/in-review', state: 'OPEN' }];
+        world.localBranches = ['main', 'dean/in-review'];
+        world.commitsAhead = { 'dean/in-review': 1 };
+        world.worktrees = [{ path: '/wt/review', branch: 'dean/in-review' }];
+
+        const verdict = svc.computeMergedBranches('/repo').worktrees
+            .find((tree: DeletableWorktree): boolean => tree.path === '/wt/review');
+
+        expect(verdict?.deletable).toBe(false);
+        expect(verdict?.reason).toContain('not merged');
+    });
+
+    /**
+     * Ticket part 2: the refresher must record a status for EVERY worktree and EVERY branch, so no
+     * consumer ever has an excuse to re-derive one. `main` is the single deliberate omission on each
+     * side (the primary clone cannot be removed; the main branch is never reaped).
+     */
+    it('records a verdict for every linked worktree and every non-main branch', () => {
+        world.mergedPrs = [{ number: 1, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged', 'dean/husk', 'dean/held', 'dean/parked'];
+        world.commitsAhead = { 'dean/husk': 0 };
+        world.worktrees = [
+            { path: '/wt/merged', branch: 'dean/merged' },
+            { path: '/wt/husk', branch: 'dean/husk' },
+            { path: '/wt/held', branch: 'dean/held' },
+            { path: '/wt/gone', branch: 'dean/parked', extra: 'prunable' },
+        ];
+
+        const cache = svc.computeMergedBranches('/repo');
+
+        expect(cache.worktrees.map((tree: DeletableWorktree): string => tree.path).sort())
+            .toEqual(['/wt/gone', '/wt/held', '/wt/husk', '/wt/merged']);
+        expect([...names(cache.deletable), ...names(cache.keep)].sort())
+            .toEqual(['dean/held', 'dean/husk', 'dean/merged', 'dean/parked']);
+    });
+});
+
+/**
+ * Ticket part 4: the guard asserted "8 parked local branches" over a repo that had ONE, because it
+ * quoted a cache written before those branches were deleted, and then BLOCKED on that figure.
+ */
+describe('cache freshness and reconciliation', () => {
+    const NOW = Date.parse('2026-07-30T12:00:00.000Z');
+
+    function cache(timestamp: string): MergedBranchesCache {
+        return new MergedBranchesCache(
+            timestamp,
+            [new DeletableBranch('dean/gone', 'PR #1 merged', 1)],
+            [new DeletableBranch('dean/here', 'no merged PR', 0)],
+            [new DeletableWorktree('/wt/gone', 'dean/gone', 'PR #1 merged', 1, true),
+             new DeletableWorktree('/wt/here', 'dean/here', 'no merged PR', 0, false)],
+        );
+    }
+
+    it('calls a cache written minutes ago fresh, and an hour-old one stale', () => {
+        expect(svc.freshness(cache('2026-07-30T11:59:00.000Z'), NOW).stale).toBe(false);
+        const old = svc.freshness(cache('2026-07-30T11:00:00.000Z'), NOW);
+        expect(old.stale).toBe(true);
+        expect(old.ageMinutes).toBe(60);
+    });
+
+    // A cache with no usable timestamp cannot be dated, so it can never be quoted as fact.
+    it('treats a missing or unparseable timestamp as stale', () => {
+        expect(svc.freshness(cache(''), NOW).stale).toBe(true);
+        expect(svc.freshness(cache(''), NOW).ageMinutes).toBe(-1);
+    });
+
+    it('drops cached entries whose branch or worktree no longer exists', () => {
+        world.localBranches = ['main', 'dean/here'];
+        world.worktrees = [{ path: '/wt/here', branch: 'dean/here' }];
+
+        const reconciled = svc.reconcile('/repo', cache('2026-07-30T11:00:00.000Z'));
+
+        expect(reconciled.deletable).toEqual([]);
+        expect(names(reconciled.keep)).toEqual(['dean/here']);
+        expect(reconciled.worktrees.map((tree: DeletableWorktree): string => tree.path)).toEqual(['/wt/here']);
+    });
+
+    // "git could not answer" must never read as "everything was deleted".
+    it('leaves the cache alone when git reports nothing at all', () => {
+        world.localBranches = [];
+        const reconciled = svc.reconcile('/repo', cache('2026-07-30T11:00:00.000Z'));
+        expect(reconciled.deletable.length).toBe(1);
+        expect(reconciled.keep.length).toBe(1);
     });
 });

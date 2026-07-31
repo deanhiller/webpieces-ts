@@ -49,7 +49,7 @@ export class PrGateApp {
         return this.finishUpsertPrCommand.run();
     }
 
-    /** `wp-cleanup`: delete local branches whose PR is already merged (or that hold no commits). */
+    /** `wp-cleanup`: reap what is provably merged, and ASK about everything that merely looks dead. */
     cleanup(): Promise<void> {
         return this.cleanupCommand.run();
     }

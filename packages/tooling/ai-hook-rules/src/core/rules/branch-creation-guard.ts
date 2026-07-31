@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 
 import {
     BranchCreationGuardConfig,
+    CacheFreshness,
     DeletableBranch,
     DeletableWorktree,
     MergedBranchesCache,
@@ -14,6 +15,7 @@ import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
+import { CapRemedies } from './cap-remedies';
 import { toError } from '../to-error';
 
 // Defaults used when the rule has no explicit value in webpieces.config.json.
@@ -161,6 +163,10 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     private capCache: MergedBranchesCache | null = null;
     private worktreeCapCache: MergedBranchesCache | null = null;
 
+    // How old the cache backing whichever cap fired was, so the hint can SAY "these verdicts are stale"
+    // instead of quoting them as present-tense fact. Null until a cap fires.
+    private capFreshness: CacheFreshness | null = null;
+
     // True when the blocked command was a `git worktree add`, so the recovery command we hand back is
     // a worktree command and not a `git checkout -b` the user cannot use here.
     private worktreeAdd = false;
@@ -192,8 +198,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
     // hard-blocks it and points instead at the turnOffRuleUntilEpoch escape hatch.
     get fixHint(): FixHint {
-        if (this.worktreeCapCache) return this.worktreeCapFixHint(this.worktreeCapCache);
-        if (this.capCache) return this.capFixHint(this.capCache);
+        const remedies = new CapRemedies(this.capFreshness);
+        if (this.worktreeCapCache) return remedies.worktreeCap(this.worktreeCapCache);
+        if (this.capCache) return remedies.branchCap(this.capCache);
 
         const create = this.worktreeAdd
             ? 'Create it off fresh main: git fetch origin main && git worktree add ../<dir> -b <name> origin/main'
@@ -238,6 +245,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     check(ctx: BashContext): readonly Violation[] {
         this.capCache = null;
         this.worktreeCapCache = null;
+        this.capFreshness = null;
         // Match against the command with heredoc bodies and prose-in-quotes removed (BashContext
         // computes it for every guard now — this rule's private copy was the original).
         const command = ctx.commandCode;
@@ -388,22 +396,62 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         const cap = this.effectiveBranchCap(ctx);
         if (count < cap) return null;
 
-        const cache = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
+        const cache = this.loadReconciledCache(ctx);
         if (!cache) return null;
 
         this.capCache = cache;
-        const reapable = cache.deletable.length;
-        const detail = reapable > 0
-            ? `${String(reapable)} of them are dead (merged, or holding no commits) and can be deleted right now.`
-            : 'None of them are dead, so none can be auto-reaped — see the options below.';
+        // Only branches that are BOTH still on disk (reconcile guaranteed that) and parked can be
+        // reaped to make room. A cached verdict about a branch a worktree now holds is not a figure
+        // this message may quote at someone.
+        const parkedSet = new Set(parked);
+        const reapable = cache.deletable
+            .filter((entry: DeletableBranch): boolean => parkedSet.has(entry.branch)).length;
 
         return new V(
             1,
             truncate(ctx.command),
             `You have ${String(count)} parked local branches (not counting any checked out in a worktree); ` +
             `the cap (branch-creation-guard.maxLocalBranches) is ${String(this.maxLocalBranches)}. ` +
-            `${detail} Clean up before creating another.`,
+            `${this.deadDetail(reapable, 'dead (a MERGED PR backs them)')} Clean up before creating another.`,
         );
+    }
+
+    /**
+     * The cache, with entries for branches/worktrees that no longer exist dropped, plus its age recorded.
+     *
+     * Reconciling is the fix for the phantom count: the file is written by a detached refresher and is
+     * DELIBERATELY allowed to go stale, so it keeps naming branches deleted minutes ago and worktrees
+     * already removed. Quoting it verbatim is how the guard announced "8 parked local branches … none of
+     * them are dead" over a repo that had ONE, and then blocked a legitimate `git worktree add` on that
+     * figure. `reconcile` re-checks existence with instant local git reads; it does NOT re-derive any
+     * verdict (that needs the network and belongs in the refresher).
+     */
+    private loadReconciledCache(ctx: BashContext): MergedBranchesCache | null {
+        const raw = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
+        if (!raw) return null;
+        this.capFreshness = this.mergedBranches.freshness(raw);
+        return this.mergedBranches.reconcile(ctx.workspaceRoot, raw);
+    }
+
+    /**
+     * The "N of them are dead" sentence — or an honest refusal to say a number.
+     *
+     * A count read off a stale file is a claim the guard cannot stand behind, and this guard's numbers
+     * are acted on: they decide whether an agent goes and deletes things. When the cache is too old,
+     * say so and point at the command that recomputes from scratch, rather than asserting a figure.
+     */
+    private deadDetail(reapable: number, what: string): string {
+        const freshness = this.capFreshness;
+        if (freshness !== null && freshness.stale) {
+            const age = freshness.ageMinutes >= 0
+                ? `${String(freshness.ageMinutes)} minute(s) old`
+                : 'carrying no usable timestamp';
+            return `How many are dead is NOT known right now — the cached verdicts ` +
+                `(.webpieces/merged-branches.json, ${age}) are stale, so no count is asserted. ` +
+                '`pnpm wp-cleanup` recomputes them from scratch.';
+        }
+        if (reapable === 0) return 'None of them are dead, so none can be auto-reaped — see the options below.';
+        return `${String(reapable)} of them are ${what} and wp-cleanup can reap them.`;
     }
 
     /**
@@ -452,195 +500,20 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         const count = this.worktrees.linkedWorktrees(ctx.workspaceRoot).length;
         if (count < this.maxWorktrees) return null;
 
-        const cache = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
+        const cache = this.loadReconciledCache(ctx);
         if (!cache) return null;
 
         this.worktreeCapCache = cache;
         const reapable = cache.worktrees.filter((tree: DeletableWorktree): boolean => tree.deletable).length;
-        const detail = reapable > 0
-            ? `${String(reapable)} of them are dead (merged branch, no commits, or a missing directory) ` +
-              'and can be removed right now.'
-            : 'None of them are dead, so none can be auto-reaped — see the options below.';
 
         return new V(
             1,
             truncate(ctx.command),
             `You have ${String(count)} linked worktrees; the cap (branch-creation-guard.maxWorktrees) ` +
-            `is ${String(this.maxWorktrees)}. ${detail} Clean up before creating another.`,
+            `is ${String(this.maxWorktrees)}. ` +
+            `${this.deadDetail(reapable, 'dead (a MERGED PR backs the branch, or the directory is already gone)')} ` +
+            'Clean up before creating another.',
         );
     }
 
-    /**
-     * The reap instructions. `deletable` is PRECOMPUTED in the cache, and every entry earned its place
-     * by one of exactly two proofs: a MERGED PR (the work is in main), or zero commits of its own
-     * (there is no work). Deleting the list cannot lose anything — so just run the command.
-     *
-     * The command is `pnpm wp-cleanup`, NOT the `git branch -D a b c` this used to emit. Two reasons,
-     * both learned the hard way: agents read a bare `-D` as destructive and stop to ask (so nothing
-     * was ever cleaned, and this cap kept firing), and the multi-name form aborts wholesale on the
-     * first branch git refuses, stranding every branch after it in the list. wp-cleanup recomputes
-     * the verdicts, deletes one branch per command, and logs each pre-delete SHA.
-     *
-     * The wording must not overstate the safety: the list is NOT uniformly "merged PR" branches, and
-     * a message that tells an agent to delete has to be exactly true about why that's safe.
-     */
-    private capFixHint(cache: MergedBranchesCache): FixHint {
-        const options: Option[] = [];
-        // Nothing auto-reapable → the ASK is the preferred move, and it comes FIRST. This is the whole
-        // point of the option: with an empty `deletable` list the only advice left used to be "raise
-        // maxLocalBranches" / "set turnOffRuleUntilEpoch", and an agent with no human in the loop
-        // edited webpieces.config.json to escape — loosening the very rule that was working correctly.
-        const askFirst = cache.deletable.length === 0;
-
-        if (cache.deletable.length > 0) {
-            const names = cache.deletable.map((entry: DeletableBranch): string => entry.branch);
-            options.push(new Option(
-                `Run: pnpm wp-cleanup — it deletes these ${String(names.length)} dead branches. Each is either ` +
-                `backed by a MERGED PR or has no commits of its own, so no work can be lost, and every delete ` +
-                `is logged with a recover-by-SHA command (see merged-branches.json for the per-branch reason): ` +
-                names.join(' '),
-                true,
-            ));
-        }
-
-        const ask = this.askHumanOption(cache, askFirst);
-        if (ask) options.push(ask);
-
-        options.push(new Option(
-            'ONLY IF A HUMAN SAYS SO: raise branch-creation-guard.maxLocalBranches in ' +
-            'webpieces.config.json. Editing this config to get past a guard is not a fix you may make on ' +
-            'your own — ask first (use the option above).',
-        ));
-        options.push(new Option(
-            'ONLY IF A HUMAN SAYS SO: set branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) ' +
-            'in webpieces.config.json to bypass this once. Same rule — ask, do not self-approve.',
-        ));
-
-        const kept = cache.keep.length > 0
-            ? ` ${String(cache.keep.length)} unmerged branch(es) with real commits were deliberately SPARED — ` +
-              'do not delete those; a human decides.'
-            : '';
-
-        return new FixHint(
-            'Too many local branches — reap the dead ones before creating another.',
-            'Full detail (deletable + spared, with per-branch reasons) is in .webpieces/merged-branches.json, ' +
-            `refreshed ${cache.timestamp || 'never'}.${kept} Pick one:`,
-            options,
-        );
-    }
-
-    /**
-     * The remedy that actually deletes something without loosening anything: SHOW the spared branches
-     * and ASK the human which may go.
-     *
-     * `keep` is the list the tooling refuses to touch on its own — no merged PR, so no proof the work
-     * is safe. That is exactly the list a human can adjudicate in five seconds and the tooling never
-     * can, and it was never printed: the cap said "N branches were SPARED, do not delete those" and
-     * then offered only config edits. So the agent edited the config.
-     *
-     * Every column is read straight off `.webpieces/merged-branches.json` (written by the detached
-     * refresher) — nothing is recomputed on this blocking path. The SHA is there so the human can see
-     * the delete is reversible; the commit count is there so "0 commits" branches are obvious yeses.
-     */
-    private askHumanOption(cache: MergedBranchesCache, preferred: boolean): Option | null {
-        if (cache.keep.length === 0) return null;
-
-        const rows = cache.keep.map((entry: DeletableBranch): string => {
-            const sha = entry.sha !== '' ? entry.sha : '???????';
-            const pr = entry.pr > 0
-                ? `PR #${String(entry.pr)} ${entry.prState || 'MERGED'}`
-                : (entry.prState !== '' ? `PR ${entry.prState}` : 'no PR');
-            const commits = entry.commits >= 0 ? `${String(entry.commits)} commit(s) of its own` : 'commit count unknown';
-            return `    ${entry.branch}  [${sha}]  ${pr}  ${commits}  — ${entry.reason}`;
-        });
-
-        return new Option(
-            `ASK THE HUMAN which of these ${String(cache.keep.length)} branches may be deleted. They are ` +
-            'not provably dead, so the tooling will not reap them — but a human can decide in seconds, ' +
-            'and deleting one is the correct fix for "too many branches". Paste this list and ask:\n' +
-            rows.join('\n') + '\n' +
-            'Then delete ONLY the ones approved: git branch -D <approved-branch>\n' +
-            '(each is recoverable — `git branch <name> <sha>` restores it at the SHA shown above).\n' +
-            'Do NOT delete any of these without an explicit yes, and do NOT edit webpieces.config.json instead.',
-            preferred,
-        );
-    }
-
-    /**
-     * The worktree reap remedy.
-     *
-     * It is now ONE command — `pnpm wp-cleanup` — and that is the point of it. The hand-written
-     * sequence this used to print (prune → remove each path → one multi-name `git branch -D`) was
-     * correct git, and it was still never run: an AI agent reads a raw `worktree remove` / `-D` as
-     * destructive, asks permission, and stops. A guard whose only actionable remedies are "raise the
-     * cap" and "set turnOffRuleUntilEpoch" is a guard that teaches config edits, which is the exact
-     * failure the cap exists to prevent. wp-cleanup archives each branch as a tag, removes the
-     * directory, then deletes the branch — in that order, because git refuses to delete a branch a
-     * worktree still holds — and it will not touch the primary clone, the tree you are standing in, or
-     * anything with uncommitted work.
-     *
-     * The explicit git sequence is still printed BELOW the command, as reference rather than as the
-     * instruction: when wp-cleanup declines one of these (typically untracked files), the human needs
-     * to see which directory and what git would have run.
-     */
-    private worktreeCapFixHint(cache: MergedBranchesCache): FixHint {
-        const options: Option[] = [];
-        const dead = cache.worktrees.filter((tree: DeletableWorktree): boolean => tree.deletable);
-
-        if (dead.length > 0) {
-            const steps = ['git worktree prune'];
-            for (const tree of dead) {
-                // A prunable worktree has no directory left to remove — step 1 already handled it.
-                if (tree.path !== '') steps.push(`git worktree remove ${tree.path}`);
-            }
-            const branches = dead
-                .map((tree: DeletableWorktree): string => tree.branch)
-                .filter((branch: string): boolean => branch !== '');
-            if (branches.length > 0) steps.push(`git branch -D ${branches.join(' ')}`);
-
-            options.push(new Option(
-                `Run: pnpm wp-cleanup — it REMOVES these ${String(dead.length)} dead worktrees for you. Each ` +
-                'holds a branch backed by a MERGED PR, a branch with no commits of its own, or a directory ' +
-                'that is already gone, so no work can be lost (see merged-branches.json for the per-worktree ' +
-                'reason). It archives every branch as an `archive/<date>/<branch>` tag BEFORE removing ' +
-                'anything, logs each removal with a `recover=` command, and refuses to touch the primary ' +
-                'clone, the worktree you are standing in, or any worktree holding uncommitted work. ' +
-                `Equivalent by hand, in this order (prune first, branches last — git refuses to delete a ` +
-                `branch a worktree still holds): ${steps.join(' && ')}`,
-                true,
-            ));
-        } else {
-            // Nothing is PROVABLY dead, but wp-cleanup also prompts about the probably-dead ones, so it
-            // is still the remedy that can delete something — and it is still better advice than a knob.
-            options.push(new Option(
-                'Run: pnpm wp-cleanup — none of these worktrees is provably dead, but it lists the ' +
-                'probably-dead ones (closed-unmerged PR, content already in main, never proposed) with ' +
-                'their branch and reason and asks which to remove. Answer that prompt instead of raising ' +
-                'the cap.',
-                true,
-            ));
-        }
-
-        options.push(new Option(
-            'If you genuinely need more worktrees in flight, raise branch-creation-guard.maxWorktrees ' +
-            'in webpieces.config.json.',
-        ));
-        options.push(new Option(
-            'To bypass this once, set branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) ' +
-            'in webpieces.config.json.',
-        ));
-
-        const spared = cache.worktrees.length - dead.length;
-        const kept = spared > 0
-            ? ` ${String(spared)} worktree(s) were deliberately SPARED (locked, holding unmerged work, or ` +
-              'the one you are standing in) — do not remove those; a human decides.'
-            : '';
-
-        return new FixHint(
-            'Too many worktrees — reap the dead ones before creating another.',
-            'Full detail (deletable + spared, with per-worktree reasons) is in .webpieces/merged-branches.json, ' +
-            `refreshed ${cache.timestamp || 'never'}.${kept} Pick one:`,
-            options,
-        );
-    }
 }

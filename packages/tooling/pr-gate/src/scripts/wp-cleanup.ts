@@ -10,6 +10,6 @@ runMain(async (): Promise<void> => {
     const container = new Container({ autobind: true });
     // Reject `--help`/bogus flags BEFORE the app touches git — an ignored flag must never start the flow.
     container.get(CliArgs).assertNoArgs(new CliUsage(
-        'wp-cleanup', 'Delete local branches whose PR is already merged (or that hold no commits).'));
+        'wp-cleanup', 'Remove worktrees and branches whose PR is already merged; ask about the rest.'));
     await container.get(PrGateApp).cleanup();
 });

@@ -238,6 +238,8 @@ export {
     DeletableWorktree,
     MergedBranchesCache,
     MergedBranchesService,
+    CacheFreshness,
+    CACHE_STALE_AFTER_MS,
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_BACKUP_OF_MERGED,
     CLASSIFICATION_NO_COMMITS,

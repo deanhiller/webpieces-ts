@@ -6,6 +6,47 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { WEBPIECES_TMP_DIR } from './constants';
 import { toError } from './to-error';
 import { Worktree, WorktreeService } from './worktrees';
+import {
+    CacheFreshness,
+    CACHE_STALE_AFTER_MS,
+    CLASSIFICATION_BACKUP_OF_MERGED,
+    CLASSIFICATION_CONTENT_IN_MAIN,
+    CLASSIFICATION_CURRENT,
+    CLASSIFICATION_DETACHED,
+    CLASSIFICATION_IN_USE,
+    CLASSIFICATION_LOCKED,
+    CLASSIFICATION_MERGED_PR,
+    CLASSIFICATION_NEVER_PROPOSED,
+    CLASSIFICATION_NO_COMMITS,
+    CLASSIFICATION_PRUNABLE,
+    CLASSIFICATION_SUPERSEDED,
+    DeletableBranch,
+    DeletableWorktree,
+    MergedBranch,
+    MergedBranchesCache,
+} from './merged-branch-verdicts';
+
+export {
+    MergedBranch,
+    DeletableBranch,
+    DeletableWorktree,
+    MergedBranchesCache,
+    CacheFreshness,
+    CACHE_STALE_AFTER_MS,
+    CLASSIFICATION_MERGED_PR,
+    CLASSIFICATION_BACKUP_OF_MERGED,
+    CLASSIFICATION_NO_COMMITS,
+    CLASSIFICATION_SUPERSEDED,
+    CLASSIFICATION_CONTENT_IN_MAIN,
+    CLASSIFICATION_NEVER_PROPOSED,
+    CLASSIFICATION_IN_USE,
+    CLASSIFICATION_PRUNABLE,
+    CLASSIFICATION_LOCKED,
+    CLASSIFICATION_CURRENT,
+    CLASSIFICATION_DETACHED,
+    PROMPTABLE_CLASSIFICATIONS,
+} from './merged-branch-verdicts';
+
 
 /**
  * The "which local branches are dead?" cache.
@@ -32,179 +73,6 @@ const MERGED_PR_LOOKUP_LIMIT = 100;
 // (base → baseSquash / basewp2 / basePreMerge3). GitHub has never seen these SHAs, so no PR will ever
 // name them — they can only be reaped by stripping back to the base branch they were cloned from.
 const BACKUP_SUFFIX = /(?:Squash|PreMerge\d*|wp\d+)$/;
-
-// Data-only (per CLAUDE.md, classes for data).
-export class MergedBranch {
-    branch: string;
-    pr: number;
-
-    constructor(branch: string, pr: number) {
-        this.branch = branch;
-        this.pr = pr;
-    }
-}
-
-/**
- * WHY a branch is dead, or why it was spared — as a STABLE token, alongside the English prose.
- *
- * `sha`/`commits`/`prState` (below) let a human SEE a spared branch. This adds the other half: a token
- * saying WHICH KIND of spared it is. Every spared branch used to report the identical string
- * `no merged PR found — a human must decide`, and in one observed repo that one string covered three
- * genuinely different situations — a PR CLOSED UNMERGED whose work landed under a later number, a
- * branch that NEVER had a PR and holds the only copy of its commits, and content already in main.
- * Reporting all three identically is why nobody ever decided, and why the pile grew to 6 branches
- * against a cap of 5. A token lets wp-cleanup GROUP them and ask a question that can be answered.
- */
-// Dead by proof — these are auto-deletable.
-export const CLASSIFICATION_MERGED_PR = 'merged-pr';
-export const CLASSIFICATION_BACKUP_OF_MERGED = 'backup-of-merged';
-export const CLASSIFICATION_NO_COMMITS = 'no-commits';
-// Spared, but a human should be ASKED — in descending order of "obviously fine to delete".
-export const CLASSIFICATION_SUPERSEDED = 'superseded';
-export const CLASSIFICATION_CONTENT_IN_MAIN = 'content-already-in-main';
-export const CLASSIFICATION_NEVER_PROPOSED = 'never-proposed';
-// Spared for a mechanical reason, not a judgement call (checked out somewhere).
-export const CLASSIFICATION_IN_USE = 'in-use';
-
-/**
- * WORKTREE-only classifications. A worktree verdict borrows every token above (its branch is what is
- * being judged), but three of its outcomes have no branch analogue at all, and lumping them under
- * `in-use` would tell wp-cleanup to shut up about exactly the ones a human might want to act on.
- *
- *  - PRUNABLE   — the directory is already gone; `git worktree prune` is the reap, not `remove`.
- *  - LOCKED     — a human ran `git worktree lock`. Explicitly "do not touch"; never promptable.
- *  - CURRENT    — the worktree the command is running IN. Removing your own cwd is a self-destruct.
- *  - DETACHED   — detached HEAD, so there is no branch to judge and no branch to archive.
- */
-export const CLASSIFICATION_PRUNABLE = 'prunable-worktree';
-export const CLASSIFICATION_LOCKED = 'locked-worktree';
-export const CLASSIFICATION_CURRENT = 'current-worktree';
-export const CLASSIFICATION_DETACHED = 'detached-worktree';
-
-// Spared classifications a human can meaningfully rule on, most-safe first. wp-cleanup prompts in
-// exactly this order so the easy yeses come before the ones that need thought.
-export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
-    CLASSIFICATION_SUPERSEDED,
-    CLASSIFICATION_CONTENT_IN_MAIN,
-    CLASSIFICATION_NEVER_PROPOSED,
-];
-
-/**
- * A local branch and the verdict on it. `pr` is 0 when no merged PR backs the verdict (a `keep`).
- *
- * `sha`, `commits` and `prState` exist for the SPARED branches specifically. When nothing is
- * auto-reapable the branch cap has nothing safe to offer, and its only remaining advice was "raise
- * maxLocalBranches" / "set turnOffRuleUntilEpoch" — both of which loosen the rule. An agent with no
- * human present took the config edit, which is the exact failure the cap exists to prevent. To ask a
- * human "may I delete these?" instead, the guard has to be able to SHOW what it would delete: tip SHA
- * (so the delete is recoverable), PR state (closed? never opened?) and how much unique work is on it.
- *
- * All three are computed in the DETACHED refresher and read straight off merged-branches.json — the
- * blocking hook path never recomputes them. Defaulted so a cache written by an older release (and
- * every existing call site) revives without them.
- */
-export class DeletableBranch {
-    branch: string;
-    reason: string;
-    pr: number;
-    /** Short tip SHA — what makes the delete undoable (`git branch <name> <sha>`). '' when unknown. */
-    sha: string;
-    /** Commits on this branch that are not on origin/main. -1 when it could not be established. */
-    commits: number;
-    /** GitHub's state for the PR whose head is this branch: MERGED / CLOSED / OPEN, or '' for none. */
-    prState: string;
-    /**
-     * One of the CLASSIFICATION_* tokens. Defaulted like the fields above so every pre-existing call
-     * site — and every cache written by an older release — still constructs; an unclassified revived
-     * entry reads as 'never-proposed', the most conservative of the spared verdicts.
-     */
-    classification: string;
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        branch: string,
-        reason: string,
-        pr: number,
-        sha: string = '',
-        commits: number = -1,
-        prState: string = '',
-        classification: string = CLASSIFICATION_NEVER_PROPOSED,
-    ) {
-        this.branch = branch;
-        this.reason = reason;
-        this.pr = pr;
-        this.sha = sha;
-        this.commits = commits;
-        this.prState = prState;
-        this.classification = classification;
-    }
-}
-
-/**
- * A worktree and the verdict on it. Carries `path` (what `git worktree remove` takes) AND `branch`
- * (what `git branch -D` takes afterwards) because reaping a worktree is always those two steps, in
- * that order — git refuses to delete a branch that is still checked out somewhere.
- *
- * `classification` is the same STABLE token the branch verdicts carry, plus the four worktree-only
- * ones above. It exists for the same reason it does on DeletableBranch: `deletable` answers "may the
- * tooling reap this unattended?", and everything false used to collapse into one undifferentiated
- * "spared" that a human could not rule on. With a token, WorktreeReaper knows whether the reap is a
- * `prune` or a `remove`, and wp-cleanup knows which spared worktrees are worth ASKING about.
- * Defaulted so every pre-existing call site and every cache written by an older release still builds;
- * an unclassified revived entry reads as 'never-proposed', the most conservative spared verdict.
- */
-export class DeletableWorktree {
-    path: string;
-    branch: string;
-    reason: string;
-    pr: number;
-    deletable: boolean;
-    classification: string;
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        path: string,
-        branch: string,
-        reason: string,
-        pr: number,
-        deletable: boolean,
-        classification: string = CLASSIFICATION_NEVER_PROPOSED,
-    ) {
-        this.path = path;
-        this.branch = branch;
-        this.reason = reason;
-        this.pr = pr;
-        this.deletable = deletable;
-        this.classification = classification;
-    }
-}
-
-/**
- * `deletable` is PRECOMPUTED so the consumer just deletes the list — no re-deriving, no judgement
- * call at block time. `keep` carries the branches we refuse to touch (no merged PR found), each with
- * its reason, so a human can see what was spared and why.
- *
- * `worktrees` is the parallel verdict list for the SECOND budget (see worktrees.ts): every linked
- * worktree, each flagged deletable or not. Both budgets are reaped from this one cache file.
- */
-export class MergedBranchesCache {
-    timestamp: string;
-    deletable: DeletableBranch[];
-    keep: DeletableBranch[];
-    worktrees: DeletableWorktree[];
-
-    constructor(
-        timestamp: string,
-        deletable: DeletableBranch[],
-        keep: DeletableBranch[],
-        worktrees: DeletableWorktree[] = [],
-    ) {
-        this.timestamp = timestamp;
-        this.deletable = deletable;
-        this.keep = keep;
-        this.worktrees = worktrees;
-    }
-}
 
 /**
  * Internal: the bulk PR lookup, indexed.
@@ -328,6 +196,48 @@ export class MergedBranchesService {
         }
     }
 
+    /**
+     * How old is this cache, and may its numbers be quoted as fact?
+     *
+     * `now` is a parameter purely so the specs can pin it; every caller passes nothing.
+     */
+    freshness(cache: MergedBranchesCache, now: number = Date.now()): CacheFreshness {
+        const written = Date.parse(cache.timestamp);
+        if (Number.isNaN(written)) return new CacheFreshness(true, -1, cache.timestamp);
+        const ageMs = Math.max(0, now - written);
+        const ageMinutes = Math.floor(ageMs / 60000);
+        return new CacheFreshness(ageMs > CACHE_STALE_AFTER_MS, ageMinutes, cache.timestamp);
+    }
+
+    /**
+     * Drop every cached verdict whose subject no longer exists, using only LOCAL, instant git reads.
+     *
+     * The verdicts themselves are NOT re-derived here — that is the detached refresher's job and it
+     * needs the network. This answers a different and much cheaper question: does this branch / this
+     * worktree still exist at all? A cache written before a `git branch -D` or a `git worktree remove`
+     * keeps naming things that are gone, and a reader that counts those entries reports a repo that
+     * does not exist (observed: 8 parked branches asserted against an actual 1) and then blocks on it.
+     *
+     * Fails toward the cache: if git cannot answer (empty branch list), the cache is returned untouched
+     * rather than emptied, since "git failed" must never read as "everything was deleted".
+     */
+    reconcile(repoRoot: string, cache: MergedBranchesCache): MergedBranchesCache {
+        const live = new Set(this.localBranches(repoRoot));
+        const trees = this.worktrees.listWorktrees(repoRoot);
+        const livePaths = new Set(trees.map((tree: Worktree): string => tree.path));
+
+        const keepBranch = (entry: DeletableBranch): boolean => live.size === 0 || live.has(entry.branch);
+        const keepTree = (entry: DeletableWorktree): boolean =>
+            trees.length === 0 || livePaths.has(entry.path);
+
+        return new MergedBranchesCache(
+            cache.timestamp,
+            cache.deletable.filter(keepBranch),
+            cache.keep.filter(keepBranch),
+            cache.worktrees.filter(keepTree),
+        );
+    }
+
     writeMergedBranches(repoRoot: string, cache: MergedBranchesCache): void {
         const cachePath = this.mergedBranchesPath(repoRoot);
         fs.mkdirSync(path.dirname(cachePath), { recursive: true });
@@ -406,10 +316,11 @@ export class MergedBranchesService {
      * clone and is not a thing you can remove.
      *
      * A worktree is deletable when its directory is already gone (`prunable`), or when its branch is
-     * dead by the very same proofs the branch cap uses (merged PR, backup-of-merged, or zero commits of
-     * its own). It is spared when it is LOCKED (a human said "do not touch"), when it is the worktree we
-     * are standing in right now (removing your own cwd is not a thing to suggest to an agent), or when
-     * its branch still holds unmerged work.
+     * dead by the very same proof the branch cap uses — a MERGED PR, its own or that of the branch it
+     * snapshots. Nothing else. It is spared when it is LOCKED (a human said "do not touch"), when it is
+     * the worktree we are standing in right now (removing your own cwd is not a thing to suggest to an
+     * agent), or when its branch is anything short of provably merged — INCLUDING a branch with no
+     * commits yet, which is what every worktree looks like while an agent is working in it.
      */
     private classifyWorktrees(
         repoRoot: string,
@@ -490,14 +401,18 @@ export class MergedBranchesService {
             }
         }
 
-        // The one git-local signal that squash-merge CANNOT corrupt: a branch with zero commits of its
-        // own holds no work, so deleting it can lose nothing. (Squash breaks patch-id and ancestry, so
-        // "are these commits in main?" is unanswerable from git — but "are there any commits at all?"
-        // is exact.) These are the husks left behind by branching and then never committing.
+        // Zero commits of its own. This is SPARED, not deletable — see CLASSIFICATION_NO_COMMITS for
+        // why. It is a real signal (the branch is identical to origin/main), but it is equally the
+        // signature of a worktree an agent created thirty seconds ago and has not committed in yet,
+        // and there is no git-local way to tell those two apart. So it becomes a question for a human
+        // (wp-cleanup prompts on it) instead of an unattended delete.
         if (commits === 0) {
-            return new Verdict(true, new DeletableBranch(
-                branch, 'no commits of its own — identical to origin/main', 0, sha, 0, prState,
-                CLASSIFICATION_NO_COMMITS));
+            return new Verdict(false, new DeletableBranch(
+                branch,
+                'no commits of its own — identical to origin/main. That is either an abandoned husk OR a '
+                + 'worktree/branch someone is working in right now and has not committed to yet, so it is '
+                + 'never reaped unattended',
+                0, sha, 0, prState, CLASSIFICATION_NO_COMMITS));
         }
 
         return new Verdict(false, this.classifySpared(repoRoot, branch, prs, sha, commits, prState));
