@@ -1,11 +1,22 @@
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**
- * Builds the message `wp-start-upsert-pr` prints when a diff matched ZERO review checklists.
+ * Builds the message stage ② (`wp-review-upsert-pr`) prints when a diff matched ZERO review checklists.
  *
  * ZERO IS A VALID, SUPPORTED STATE — it is NOT an error and NEVER blocks the flow. This exists only
  * because the previous behavior was to print nothing at all, which is indistinguishable from "the
  * checklist ran and passed". Silence is the bug; refusing would be a worse one.
+ *
+ * ORDER IS THE FEATURE. This block used to open with ~10 lines of "here is how to configure checklists"
+ * and only reach the all-clear at the bottom, so a repo with none configured read as a repo with a
+ * problem for the several seconds it took to scroll. The verdict now comes FIRST — headline, then the
+ * all-clear — and the how-to sits below it, explicitly marked optional and for the human. The guidance is
+ * genuinely useful the first time; it is just not the answer to "is anything wrong?".
+ *
+ * It also no longer names a command to run. Naming one here produced TWO "what to do next" instructions in
+ * stage ②'s output — this one, and the real one below it that asks for review.json first — and an agent
+ * reading top to bottom obeyed the first, skipping the review it was told to write. Exactly one next-step
+ * instruction is emitted per stage now, and it is `ReviewReport`'s, not this class's.
  *
  * The two empty cases need different fixes, so they get different text:
  *   - NONE CONFIGURED  — the repo configured no checklists at all. Perfectly fine; mention that a human
@@ -24,33 +35,47 @@ import { injectable, bindingScopeValues } from 'inversify';
 @injectable(bindingScopeValues.Singleton)
 export class ChecklistNotice {
     /**
-     * @param definedCount   how many checklists `pr-gate.checklists` defines (0 = the repo configured none)
-     * @param finishCommand  the command to continue with, named in every branch
+     * @param definedCount how many checklists `pr-gate.checklists` defines (0 = the repo configured none)
      */
-    build(definedCount: number, finishCommand: string): string {
-        return `${this.reason(definedCount)}\n${this.continueLine(finishCommand)}`;
+    build(definedCount: number): string {
+        return `${this.headline(definedCount)}\n${this.allClear()}\n${this.details(definedCount)}\n`;
     }
 
-    private reason(definedCount: number): string {
-        if (definedCount === 0) return this.noneConfigured();
-        return this.noneMatched(definedCount);
+    // Line one: the verdict, in one line. A reader who only reads this far has the right answer.
+    private headline(definedCount: number): string {
+        if (definedCount === 0) {
+            return '📋 Review checklists: NONE CONFIGURED (0 ran) — that is fine, this repo simply has none.';
+        }
+        return `📋 Review checklists: ${definedCount} defined in pr-gate.checklists, 0 matched this diff.`;
     }
 
-    // Every branch ends here: 0 checklists is OK, keep going. Stated plainly so neither the AI nor the
-    // human reads the notice as a gate that needs satisfying before finishing.
-    private continueLine(finishCommand: string): string {
+    /**
+     * The all-clear, immediately under the headline and BEFORE any explanation or how-to. Stated plainly so
+     * neither the AI nor the human reads the notice as a gate that needs satisfying — and stated here, at
+     * the top, so nobody has to read a config tutorial to find out that nothing is wrong.
+     *
+     * It deliberately names no command: the single next step is printed once, at the end of the stage.
+     */
+    private allClear(): string {
         return (
-            `\n✅ Zero checklists is a perfectly valid state — this is INFORMATION, not a blocker, and\n` +
-            `   nothing here needs fixing before you continue. Carry on and run:  pnpm ${finishCommand}\n`
+            '✅ Zero checklists is a perfectly valid state — this is INFORMATION, not a blocker, and\n' +
+            '   nothing here needs fixing. Nothing is owed on the checklist front; keep going with the\n' +
+            '   NEXT steps printed at the end of this command.\n'
         );
     }
 
-    private noneConfigured(): string {
+    // Everything a reader may safely skip. Kept — it is what teaches a repo how to get reviews — but it
+    // lives below the verdict, not in front of it.
+    private details(definedCount: number): string {
+        if (definedCount === 0) return this.howToConfigure();
+        return this.whyNothingMatched();
+    }
+
+    private howToConfigure(): string {
         return (
-            '📋 Review checklists: NONE CONFIGURED (0 ran) — that is fine, this repo simply has none.\n' +
-            '\n' +
-            '   FYI for the human: if you ever want per-area reviews enforced on PRs that touch certain\n' +
-            '   paths, add checklist *.md docs and list them in webpieces.config.json:\n' +
+            '   ── optional, for the human (skip this unless you WANT per-area reviews) ──────────────\n' +
+            '   If you ever want reviews enforced on PRs that touch certain paths, add checklist *.md\n' +
+            '   docs and list them in webpieces.config.json:\n' +
             '     "commands": { "pr-gate": { "checklists": [\n' +
             '       { "subagent": "db-migration-reviewer",\n' +
             '         "doc": ".claude/review/db-migrations.md",\n' +
@@ -61,11 +86,11 @@ export class ChecklistNotice {
         );
     }
 
-    private noneMatched(definedCount: number): string {
+    private whyNothingMatched(): string {
         return (
-            `📋 Review checklists: ${definedCount} defined in pr-gate.checklists, 0 matched this diff — none of their\n` +
-            '   path patterns hit a changed file. Expected for changes outside those areas; if you thought\n' +
-            '   one should have run, check its "patterns" against the changed-file list above.'
+            '   ── why ──────────────────────────────────────────────────────────────────────────────\n' +
+            '   None of their path patterns hit a changed file. Expected for changes outside those areas;\n' +
+            '   if you thought one should have run, check its "patterns" against the changed-file list above.'
         );
     }
 }

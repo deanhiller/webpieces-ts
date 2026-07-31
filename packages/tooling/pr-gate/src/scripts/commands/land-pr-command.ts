@@ -54,8 +54,9 @@ export class LandPrCommand {
                 'That file is written by `pnpm wp-finish-upsert-pr`, which is also what posts the PR.\n' +
                 'Its absence means finish has not run on this branch, so there is no reviewed PR to\n' +
                 'land. Run the gated flow first:\n\n' +
-                '  pnpm wp-start-upsert-pr     # update from main, push, build gate\n' +
-                '  # write .webpieces/review.json\n' +
+                '  pnpm wp-start-upsert-pr     # update from main (3-point merge). No push, no build gate.\n' +
+                '  pnpm wp-review-upsert-pr    # validate the merge, build gate, extract the diff, brief reviewers\n' +
+                '  # write review.json at the path wp-review-upsert-pr prints\n' +
                 '  pnpm wp-finish-upsert-pr    # build gate, dashboard, create/update the PR\n\n' +
                 'Then re-run `pnpm wp-land-pr` if the PR still needs landing.\n' + SEP,
             );

@@ -28,7 +28,8 @@ export class OpenPrCheck {
                 'This check must NOT be skipped: a 3-point update creates a NEW branch generation, so if a\n' +
                 'PR already exists, wp-start-update would leave it pointing at the OLD branch. Fix gh first\n' +
                 '(install / `gh auth login` / restore network), then re-run — or, if a PR does exist, use\n' +
-                'the PR flow: pnpm wp-start-upsert-pr → /wp-merge → pnpm wp-finish-upsert-pr\n',
+                'the PR flow: pnpm wp-start-upsert-pr → /wp-merge (only on conflict) →\n' +
+                'pnpm wp-review-upsert-pr → write review.json → pnpm wp-finish-upsert-pr\n',
             );
         }
         return (result.stdout ?? '').trim();
