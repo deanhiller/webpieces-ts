@@ -108,7 +108,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
     // command is scanned, not commandCode: this is a blocklist-shaped guard, so stripping quoted
     // prose can only ever block LESS (see BashContext.commandCode).
     private staleContentRead(ctx: BashContext): string | null {
-        const scan = new ContentReadScan(this.scanner, ctx.workspaceRoot);
+        const scan = new ContentReadScan(this.scanner, ctx.workspaceRoot, ctx.effectiveCwd);
         for (const segment of this.scanner.segmentsWithPipes(ctx.command)) {
             const hit = scan.readsStaleContent(segment);
             if (hit !== null) return hit;
@@ -143,7 +143,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
     }
 
     private staleMessage(workspaceRoot: string): string {
-        return new StaleMainMessage().forBash(this.behindCount(workspaceRoot));
+        return new StaleMainMessage(workspaceRoot).forBash(this.behindCount(workspaceRoot));
     }
 
     private behindCount(workspaceRoot: string): string {

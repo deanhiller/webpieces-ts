@@ -27,9 +27,29 @@ export type TreeKind = 'worktree' | 'branch' | 'unknown';
 export class TreeRecovery {
     private readonly worktrees = new WorktreeService();
 
+    /**
+     * `treeRoot` is the tree the guard JUDGED. When it is given, every command below is rendered as
+     * `cd <treeRoot> && <command>`.
+     *
+     * WHY: a Bash tool call does NOT persist `cd` between calls, so an agent working in a linked
+     * worktree starts every call back in the primary clone. A bare `git fetch origin main` therefore
+     * runs against the WRONG tree — and in the field a guard prescribed `git pull` in a primary clone
+     * the agent had been explicitly forbidden to touch. Naming the directory in the command itself is
+     * the only form that is correct no matter where the next tool call starts. A leading `cd <path> &&`
+     * cannot change what a command does to a repo, so the guards accept it.
+     *
+     * Empty (the default) renders the bare commands, for callers with no root to name.
+     */
+    constructor(private readonly treeRoot: string = '') {}
+
     /** The kind of tree rooted at `root`, for callers that have a workspace root and no other info. */
     kindOf(root: string): TreeKind {
         return this.worktrees.isLinkedWorktree(root) ? 'worktree' : 'branch';
+    }
+
+    // Render one command in the form that survives a tool call: `cd <root> && <command>`.
+    private at(command: string): string {
+        return this.treeRoot === '' ? command : `cd ${this.treeRoot} && ${command}`;
     }
 
     /**
@@ -45,12 +65,12 @@ export class TreeRecovery {
             ? '<feature-dir>'
             : newBranchName.replace(/\//g, '-');
         const branchForm = [
-            '  git fetch origin main',
-            `  git checkout -b ${newBranchName} origin/main`,
+            `  ${this.at('git fetch origin main')}`,
+            `  ${this.at(`git checkout -b ${newBranchName} origin/main`)}`,
         ];
         const worktreeForm = [
-            '  git fetch origin main',
-            `  git worktree add ../${dir} -b ${newBranchName} origin/main`,
+            `  ${this.at('git fetch origin main')}`,
+            `  ${this.at(`git worktree add ../${dir} -b ${newBranchName} origin/main`)}`,
         ];
 
         if (kind === 'worktree') {
@@ -94,7 +114,7 @@ export class TreeRecovery {
      * delete ordering is the part that has to be exactly right.
      */
     cleanupSteps(kind: TreeKind, branch: string, worktreePath: string = '<worktree-dir>'): string[] {
-        const branchForm = '  git checkout main && git pull origin main && pnpm wp-cleanup';
+        const branchForm = `  ${this.at('git checkout main && git pull origin main && pnpm wp-cleanup')}`;
         const worktreeForm =
             `  git worktree prune && git worktree remove ${worktreePath} && git branch -D ${branch}`;
 
@@ -124,8 +144,8 @@ export class TreeRecovery {
      * you need to then branch off `origin/main`.
      */
     updateMainSteps(kind: TreeKind): string[] {
-        const branchForm = '  git checkout main && git pull origin main';
-        const worktreeForm = '  git fetch origin main        (then work off origin/main)';
+        const branchForm = `  ${this.at('git checkout main && git pull origin main')}`;
+        const worktreeForm = `  ${this.at('git fetch origin main')}        (then work off origin/main)`;
 
         if (kind === 'worktree') {
             return [

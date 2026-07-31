@@ -151,7 +151,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     // The tree kind picks the flavour of the cure: a dead LINKED WORKTREE is told to open a new
     // worktree off origin/main and reap this one; the primary clone is told to branch off origin/main.
     private alreadyMergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
-        return new MergedBranchMessage().forEdits(
+        return new MergedBranchMessage(workspaceRoot).forEdits(
             branch, mergedPr, new TreeRecovery().kindOf(workspaceRoot), workspaceRoot,
         );
     }

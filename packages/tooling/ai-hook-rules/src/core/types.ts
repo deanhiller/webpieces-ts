@@ -134,14 +134,27 @@ export class BashContext {
      * session — there, match on the raw `command`.
      */
     readonly commandCode: string;
+    /**
+     * The tree this command is JUDGED against — the root of the worktree it actually acts on, which
+     * is NOT the shell's cwd whenever the command carries a leading `cd <path> &&` (see
+     * EffectiveTreeResolver). Guards read git state, the main-sync cache and the decision log from
+     * here, so a command aimed at a linked worktree is judged on that worktree's branch, never the
+     * primary clone's.
+     */
     readonly workspaceRoot: string;
+    /** The directory the command really runs in (post-`cd`). Relative paths resolve against THIS. */
+    readonly effectiveCwd: string;
+    /** The root owning webpieces.config.json. Equals workspaceRoot except in a linked worktree. */
+    readonly governedRoot: string;
     options: RuleOptions;
 
-    constructor(command: string, workspaceRoot: string) {
+    constructor(command: string, workspaceRoot: string, effectiveCwd?: string, governedRoot?: string) {
         this.tool = 'Bash';
         this.command = command;
         this.commandCode = this.stripProse(command);
         this.workspaceRoot = workspaceRoot;
+        this.effectiveCwd = effectiveCwd ?? workspaceRoot;
+        this.governedRoot = governedRoot ?? workspaceRoot;
         this.options = {};
     }
 

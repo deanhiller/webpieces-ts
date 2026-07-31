@@ -182,7 +182,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
     // worktree). Detection is one statSync — see WorktreeService.isLinkedWorktree.
     private mergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
         const recovery = new TreeRecovery();
-        return new MergedBranchMessage().forReads(
+        return new MergedBranchMessage(workspaceRoot).forReads(
             branch, mergedPr, recovery.kindOf(workspaceRoot), workspaceRoot,
         );
     }
@@ -246,7 +246,7 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
     // never prescribe different cures. Its "still allowed" tail no longer promises EVERY Bash command:
     // content-reading Bash is now blocked too, which is the whole point of the Bash counterpart.
     private staleMainMessage(workspaceRoot: string): string {
-        return new StaleMainMessage().forReads(this.behindCount(workspaceRoot));
+        return new StaleMainMessage(workspaceRoot).forReads(this.behindCount(workspaceRoot));
     }
 
     private cacheSummary(status: MainSyncStatus): string {
