@@ -105,6 +105,11 @@ C-A.diff          # what main changed (C−A)
 \`updatemain-hashes.json\` holds A/B/C commit hashes. To see why main changed:
 \`git log <A>..<C> --oneline\`.
 
+Why A/B/C are trustworthy here — and why you must never \`git merge\`/\`git rebase\` main in yourself —
+is the fork-point invariant: see \`webpieces.git-workflow.md\` → "THE FORK POINT INVARIANT". Read it
+once if \`B-A.diff\` or \`C-A.diff\` ever shows you changes you do not recognize; that is the symptom
+of a polluted fork point, not of a bad diff.
+
 ## STEP 2 — Resolve each conflicted file
 
 For each file: read the working-tree file (the markers) and its \`B-A.diff\` / \`C-A.diff\` (intent),

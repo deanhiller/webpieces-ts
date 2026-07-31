@@ -51,10 +51,54 @@ squash commit. If a command tells you the tree is dirty, commit or delete the li
 - **B = feature HEAD**: your branch tip
 - **C = main HEAD**: `origin/main`
 
-Never `git merge` or `git rebase` main into your branch directly — it breaks the fork point (A) that
-produces clean PR diffs. Sync only via the gated 3-point squash-update — `pnpm wp-start-update` when no
-PR is open, `pnpm wp-start-upsert-pr` when one is (see "Which flow?" below). This is enforced by the
-`redirect-how-to-merge-main` guard.
+### THE FORK POINT INVARIANT (read this once, it explains every rule below)
+
+> The fork point must be a **pure `main` commit containing none of your work**, AND your branch must
+> contain **none of main's commits after it**. Only then is `diff(fork point → HEAD)` *exactly* your
+> changes — no more and no less.
+
+The invariant is symmetric, and both halves matter. Pollute the fork point with your own work and the
+diff *understates* what you did; pull main's commits onto your branch and the diff *overstates* it with
+work other people already landed. Either way the answer to "what did this branch change?" stops being
+computable, and three separate consumers are asking exactly that question:
+
+1. **The 3-point merge.** `A` is the base, `B` is what *you* intended, `C` is what *main* intended, and
+   the whole method is reading `B−A` against `C−A` to see the two intentions side by side. If `A`
+   already contains your work, `B−A` no longer shows what you changed; if `B` already contains main's
+   commits, `C−A` is being compared against a branch that partly *is* main. The diffs stop describing
+   intentions and conflict resolution degrades into guessing which side a hunk came from.
+2. **`nx affected` — the build gate's scope.** The gate's `--base` is the fork point, not
+   `origin/main`, and the config states why verbatim:
+   > `--base is the FORK POINT via $(git merge-base origin/main HEAD), NOT origin/main: basing on origin/main marks projects from other people's already-merged PRs as 'affected' (your branch still has their pre-merge versions), wasting rebuilds. The fork point scopes affected to only your branch's work.`
+3. **The review diff.** `wp-review-upsert-pr` extracts this branch's diff for the reviewer subagents
+   from the same two endpoints. A polluted fork point hands reviewers changes nobody on this branch
+   made, and they will dutifully review them.
+
+**Why an ordinary `git merge main` breaks it:** it violates *both* halves in one command. Your branch
+now carries main's commits (so the diff shows work you did not do) and the base is no longer a clean
+main state. That is why the `redirect-how-to-merge-main` guard blocks `git merge` and `git rebase` in
+every form — the block is not stylistic, and there is nothing to work around.
+
+**Why the gated flow squash-rewrites and force-pushes:** it restores the invariant *by construction*.
+After a sync your branch is `current main + one commit that is precisely your work`, so the fork point
+is a real, unmodified main commit by definition. The rewrite **is** the mechanism, not a side effect of
+one — which is why the flow cannot politely skip it.
+
+**Why squash rather than rebase:** a rebase would restore the same invariant, but it preserves N
+commits and makes you resolve the same conflict once per commit. Squash gives you one resolution and
+one commit. And since this repo squash-merges PRs anyway, those individual commits were never going to
+survive into main's history — the `<feature>PreMerge<n>` snapshot branches exist precisely to preserve
+the original pre-squash history for debugging, which is their entire purpose.
+
+**Consequence — never sync a branch you do not own.** Because the flow rewrites history and
+force-pushes, **never run `pnpm wp-start-upsert-pr` (or `pnpm wp-start-update`) against a branch that
+another process, session, or agent owns.** This is not caution or etiquette, it is a correctness
+requirement: that other process's fork point and its `PreMerge<n>` snapshot trail would be replaced
+underneath it mid-flight, and the work it was holding becomes unrecoverable-by-construction. If you
+find yourself looking at an open PR on a branch this session did not create, leave it alone.
+
+Sync only via the gated 3-point squash-update — `pnpm wp-start-update` when no PR is open,
+`pnpm wp-start-upsert-pr` when one is (see "Which flow?" below).
 
 **AI never runs `git merge` or `git rebase` — at all.** The guard blocks both outright: on any branch,
 against any target, in any form (including `--squash` and `--ff-only`), and in any compound command
