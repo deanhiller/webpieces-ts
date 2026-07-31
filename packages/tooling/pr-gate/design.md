@@ -43,6 +43,7 @@ graph TD
     GitExec["GitExec"]
     GitStatusParser["GitStatusParser"]
     LandPrCommand["LandPrCommand"]
+    LandedWorktreeReaper["LandedWorktreeReaper"]
     MergeEnd["MergeEnd"]
     MergeInfoIndex["MergeInfoIndex"]
     MergeStart["MergeStart"]
@@ -52,6 +53,7 @@ graph TD
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
+    ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
     ReviewStageReceiptService["ReviewStageReceiptService"]
@@ -128,10 +130,11 @@ graph TD
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
+    LandPrCommand --> LandedWorktreeReaper
     LandPrCommand --> MergeInfoIndex
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
-    LandPrCommand --> WorktreeService
+    LandedWorktreeReaper --> WorktreeService
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
@@ -154,9 +157,12 @@ graph TD
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
     PrGateApp --> LandPrCommand
+    PrGateApp --> ReapWorktreeCommand
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
+    ReapWorktreeCommand --> RepoRootFinder
+    ReapWorktreeCommand --> WorktreeCleanupSection
     RepoRootFinder --> DotWebpieces
     ReviewJsonService --> DotWebpieces
     ReviewStageReceiptService --> ReviewJsonService

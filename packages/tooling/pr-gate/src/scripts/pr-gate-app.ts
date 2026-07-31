@@ -8,6 +8,7 @@ import { CleanupCommand } from './commands/cleanup-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand } from './commands/review-upsert-pr-command';
+import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 
 /**
  * The pr-gate application root. `container.get(PrGateApp)` resolves the entire workflow DAG (the command
@@ -27,7 +28,17 @@ export class PrGateApp {
         private readonly landPrCommand: LandPrCommand,
         private readonly checkPrCommand: CheckPrCommand,
         private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
+        private readonly reapWorktreeCommand: ReapWorktreeCommand,
     ) {}
+
+    /**
+     * INTERNAL (`wp-reap-worktree.js`, no `bin` entry): remove ONE named worktree and its branch.
+     * `wp-land-pr` spawns it with cwd = the primary clone so the tree it just landed from can be
+     * reaped by a process that is not standing in it.
+     */
+    reapWorktree(args: string[]): Promise<void> {
+        return this.reapWorktreeCommand.run(args);
+    }
 
     /** `wp-start-update`: 3-point squash-update from main (no PR). */
     startUpdate(): Promise<void> {

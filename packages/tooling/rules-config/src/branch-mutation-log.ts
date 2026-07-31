@@ -22,7 +22,7 @@ const MAX_DETAIL_LEN = 400;
 // unattended: a deletion nobody watched happen is the one that most needs an audit line.
 export type MutationVerb =
     | 'wp-start-update' | 'wp-finish-update' | 'wp-start-upsert-pr' | 'wp-review-upsert-pr'
-    | 'wp-finish-upsert-pr' | 'wp-cleanup' | 'auto-reap';
+    | 'wp-finish-upsert-pr' | 'wp-cleanup' | 'wp-land-pr' | 'auto-reap';
 
 // A boundary within a verb's execution. START/END bracket the whole run; the middle phases mark each
 // irreversible git step so an interrupt leaves a breadcrumb at the last phase reached.
