@@ -1,20 +1,20 @@
 import * as path from 'path';
-import { spawnSync } from 'child_process';
 
-import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
-import { CommandScanner } from './command-scan';
+import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { loadRules, loadMatchRules, globMatches } from './load-rules';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
+import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { INSTALLER_ALLOW_JS } from '../bin/shim';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
-    Rule, Violation, RuleGroup, RuleFailError,
+    Rule, Violation, RuleGroup, RuleFailError, InformAiError,
     EditContext, FileContext, BashContext,
 } from './types';
 
@@ -39,46 +39,12 @@ export function filterByExcludedPaths(rules: readonly Rule[], relativePath: stri
     });
 }
 
-// The git repo root of `cwd`, or null if cwd is not in a git repo / git is unavailable. This is the
-// repo-boundary signal: the guards only govern commands whose repo IS the one this webpieces.config
-// governs; a command run inside a nested clone (different git root) is out of scope.
-function gitToplevel(cwd: string): string | null {
-    const r = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
-    return r.status === 0 ? (r.stdout ?? '').trim() : null;
-}
-
-// True when `cwd` sits inside a git repo OTHER than the one `workspaceRoot` governs (a nested clone).
-// Not in a git repo / git unavailable (null) is NOT foreign — it falls through to the normal guards.
-// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function isForeignGitRepo(cwd: string, workspaceRoot: string): boolean {
-    const gitRoot = gitToplevel(cwd);
-    return gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot);
-}
-
-// The cwd a command actually runs from, resolving a LEADING run of `cd`/`pushd` in the command itself.
-// PreToolUse fires BEFORE the command runs, so the shell's `cwd` is the pre-`cd` directory; a command
-// like `cd repositories/clone && git push` really executes in `repositories/clone`. Every git-boundary
-// and excludePaths decision must key off THIS directory, not the pre-`cd` one, or a nested clone is
-// judged against the outer repo.
-//
-// ONLY a leading run of cd/pushd counts. Once a non-cd command appears it has ALREADY run in the
-// current dir, so a later cd must not retroactively pull it out of scope — otherwise a trailing
-// `... && cd <exempt-tree>` would exempt the WHOLE line, smuggling a root-level `git push` past the
-// guards. `cd a && cd b && git …` (leading run) resolves left to right, matching the shell.
-//
-// Reuses CommandScanner so quoting is handled exactly as the guards handle it: `echo "cd sub && git
-// push"` is ONE opaque segment whose first word is `echo`, so the quoted `cd` is never picked up —
-// the prose/quoted `cd` cannot be weaponised into a scope escape.
+// The cwd a command actually runs from, after its own leading `cd`/`pushd` run. Thin delegate kept
+// for the callers (and specs) that only need the directory; the full tree classification — primary
+// clone vs linked worktree vs nested clone vs outside any repo — is EffectiveTreeResolver.resolve().
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 export function effectiveBashCwd(command: string, cwd: string): string {
-    const scanner = new CommandScanner();
-    let effective = cwd;
-    for (const segment of scanner.commandSegments(command)) {
-        const words = scanner.words(segment);
-        if (words[0] !== 'cd' && words[0] !== 'pushd') break;
-        if (words[1] !== undefined) effective = path.resolve(effective, words[1]);
-    }
-    return effective;
+    return new EffectiveTreeResolver().effectiveCwd(command, cwd);
 }
 
 // A git or gh invocation anywhere in the command (start, or after a ;/&&/|| separator or pipe).
@@ -189,9 +155,9 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
-    // Same git-repo-boundary governance as bash: a read inside a different clone is out of scope.
-    const gitRoot = gitToplevel(cwd);
-    if (gitRoot !== null && path.resolve(gitRoot) !== path.resolve(workspaceRoot)) return null;
+    // Same git-repo-boundary governance as bash, through the SAME resolver: a read inside a different
+    // clone is out of scope. (No command to parse here, so the shell cwd IS the effective cwd.)
+    if (new EffectiveTreeResolver().resolve('', cwd, workspaceRoot).kind === 'foreign') return null;
 
     const relativePath = path.relative(workspaceRoot, filePath);
     const all = loadRules(loaded.rulesConfig, workspaceRoot);
@@ -214,57 +180,104 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
 // binary doesn't know yet) makes loadAndValidate() throw and would deny `pnpm install` — the very
 // command that updates the validator (deadlock). Mirrors the fail-closed shim's INSTALLER_ALLOW_ERE
 // (missing-bin case); INSTALLER_ALLOW_JS is its locked JS twin. Match is tight (`pnpm install` /
-// `npm i` + `--flags` only, no chaining) so `pnpm install && rm -rf /` still falls to the guards.
+// `npm i` + `--flags`, plus an optional LEADING `cd <path> &&` so the cure is typable from a
+// worktree) so `pnpm install && rm -rf /` still falls to the guards.
 function isInstallerCommand(command: string): boolean {
     return INSTALLER_ALLOW_JS.test(command.trim());
 }
 
-// Force-to-root: git/gh commands must run from the repo root, where the guards can reason about git
-// state coherently. Fires ONLY when the shell is STUCK in a governed subdir — the shell persists in a
-// subdir (raw `cwd`) AND the command does not `cd` back to the root (`effectiveCwd`). A command that
-// explicitly cd's to the root runs at the root, so it is judged by the normal guards, never here:
-// without the effectiveCwd condition, `cd <root> && git push` from a nested clone was force-to-root
-// blocked while advising the very `cd <root>` it just ran (the self-contradicting dead-end this fixes).
-// Returns null when there is nothing to block.
+// Force-to-root: git/gh commands must run from the repo root of the tree they act on, where the guards
+// can reason about git state coherently. Fires ONLY when the shell is STUCK in a governed subdir — the
+// shell persists in a subdir AND the command does not `cd` to a tree root (`tree.root`, which is the
+// linked worktree's root when the command cd's into one). A command that explicitly cd's to a root is
+// judged by the normal guards, never here.
+//
+// The remedy is emitted as ONE runnable line, `cd <root> && <the original command>`, because `cd` does
+// not persist between tool calls: telling the agent to "cd first, then re-run" costs a turn and the
+// next call starts back in the old directory anyway. The bare-`cd` advice is what made this guard
+// print the very command it had just rejected.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function gitFromSubdirBlock(command: string, cwd: string, effectiveCwd: string, workspaceRoot: string): BlockedResult | null {
-    const atRoot = path.resolve(cwd) === path.resolve(workspaceRoot);
-    const cdsToRoot = path.resolve(effectiveCwd) === path.resolve(workspaceRoot);
-    if (!isGitOrGhCommand(command) || atRoot || cdsToRoot) return null;
+function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult | null {
+    const shellAtRoot = path.resolve(tree.shellCwd) === path.resolve(tree.root);
+    const cdsToRoot = path.resolve(tree.effectiveCwd) === path.resolve(tree.root);
+    if (!isGitOrGhCommand(command) || shellAtRoot || cdsToRoot) return null;
     const report =
         `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
-        `   You are in: ${cwd}\n` +
-        `   cd to the repo root first:  cd ${workspaceRoot}\n` +
-        `   Then re-run your command. (The webpieces guards evaluate the repo's git state at its root.)`;
-    logGuardDecision(workspaceRoot, new GuardDecision('force-to-root', 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'git/gh from subdir'));
+        `   You are in: ${tree.shellCwd}\n` +
+        `   Judged against: ${tree.root}\n` +
+        `   Run EXACTLY this instead (one line — \`cd\` does NOT persist between tool calls):\n` +
+        `     ${atRoot(tree.root, command)}\n` +
+        `   A leading \`cd <path> &&\` is ACCEPTED by the guards — it cannot change what the command\n` +
+        `   does to the repo. (The webpieces guards evaluate the repo's git state at its root.)`;
+    logGuardDecision(tree.root, new GuardDecision('force-to-root', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'git/gh from subdir'));
     return new BlockedResult(report);
+}
+
+// The installer bypass's audit line. Anchored at the repo root that owns `.webpieces` — RepoRootFinder
+// (config-walk-up first, then git toplevel) is the authority for that, and it is correct in a linked
+// worktree because each worktree checks out its own webpieces.config.json. This runs BEFORE
+// loadAndValidate, which is why it resolves the root itself rather than using workspaceRoot.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function logInstallerBypass(command: string, cwd: string): void {
+    const root = new RepoRootFinder().resolveRepoRoot(cwd);
+    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'installer bypass (always allowed)'));
+}
+
+/**
+ * Load the config for the bash path — but do NOT let an unloadable config trap the tools needed to
+ * repair it.
+ *
+ * loadAndValidate throws an InformAiError when webpieces.config.json is unparseable (a real syntax
+ * error, or leftover `<<<<<<< HEAD` markers mid-merge) or fails validation. That throw propagates to
+ * the hook adapter, which fails CLOSED and denies the command — correct for work, since a config that
+ * did not load means no guards ran. But it denied `cat`/`grep`/`sed -n` on webpieces.config.json too,
+ * i.e. it blocked the only way to see the problem it was reporting. Observed live, twice.
+ *
+ * So: on a load failure, a provably-inert INSPECTION command is allowed through (returns null, "no
+ * block"), matching the escape hatch every other layer already grants this file. Everything else —
+ * every write, every git/gh command, every build — still hits the same hard failure as before. The
+ * bypass cannot be widened by accident; see ReadOnlyInspectionScan for how narrow "inert" is.
+ *
+ * Returns the loaded config, or null meaning "allow this command without guards".
+ */
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig | null {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrown unchanged unless the command is provably inert
+    try {
+        return loadAndValidate(cwd);
+    } catch (err: unknown) {
+        const error = toError(err);
+        if (error instanceof InformAiError && new ReadOnlyInspectionScan().isReadOnlyInspection(command)) {
+            return null;
+        }
+        throw error;
+    }
 }
 
 function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
     if (isInstallerCommand(command)) {
-        // Anchor the audit-log write at the repo root that owns `.webpieces` (config-walk-up first,
-        // then git toplevel) so a bypass logged from a subdir/nested clone never scatters a stray
-        // `.webpieces` tree. This runs before loadAndValidate, so resolveRepoRoot (not workspaceRoot).
-        const root = new RepoRootFinder().resolveRepoRoot(cwd);
-        logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'installer bypass (always allowed)'));
+        logInstallerBypass(command, cwd);
         return null;
     }
 
-    const loaded = loadAndValidate(cwd);
+    const loaded = loadConfigOrAllowInspection(command, cwd);
+    // null = the config would not load AND this command only inspects → allow, see the helper.
+    if (loaded === null) return null;
     if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
-    // The directory the command actually runs from (after any in-command `cd`), not the pre-`cd`
-    // shell cwd. Both the git-boundary check and the excludePaths filter below key off this, so a
-    // self-contained `cd <nested clone> && …` is judged against the clone, not the outer repo.
-    const effectiveCwd = effectiveBashCwd(command, cwd);
+    // WHICH TREE does this command act on? Not necessarily the shell's cwd — an agent working in a
+    // linked worktree writes `cd <worktree> && …` because `cd` does not persist between tool calls.
+    // ONE resolver answers this for the guards AND for force-to-root below, so the two can never
+    // disagree about which tree you are in.
+    const tree = new EffectiveTreeResolver().resolve(command, cwd, workspaceRoot);
 
     // Git-repo-boundary governance: the command runs inside a DIFFERENT git repo than this
     // webpieces.config governs (e.g. a clone under repositories/). Out of scope → allow, hands-off.
-    // Intentional, not a silent hole. (The hook always runs via $CLAUDE_PROJECT_DIR, so this is where
-    // out-of-scope work is let through deliberately instead of the old accidental 127.)
-    if (isForeignGitRepo(effectiveCwd, workspaceRoot)) {
+    // Intentional, not a silent hole. A LINKED WORKTREE of this repo is deliberately NOT foreign — it
+    // is the same project, so the guards run against THAT tree's branch and cache.
+    if (tree.kind === 'foreign') {
         logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'foreign git repo (out of scope)'));
         return null;
     }
@@ -275,7 +288,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
     const rules = filterByExcludedPaths(
         filterByMode(loadRules(loaded.rulesConfig, workspaceRoot), mode),
-        path.relative(workspaceRoot, effectiveCwd),
+        path.relative(workspaceRoot, tree.effectiveCwd),
         loaded.excludePaths,
     );
     if (rules.length === 0) return null;
@@ -283,16 +296,17 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
     if (outOfSync) return outOfSync;
 
-    const subdirBlock = gitFromSubdirBlock(command, cwd, effectiveCwd, workspaceRoot);
+    const subdirBlock = gitFromSubdirBlock(command, tree);
     if (subdirBlock) return subdirBlock;
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs
     // far more bash than edits, so refreshing here means the guard's next file-edit check reads a
     // fresh status. Detached + fire-and-forget — never blocks the command. Only when the guard is
     // loaded (guards/all mode) and enabled, so a project that opted out never triggers git fetches.
-    maybeRefreshMainSync(rules, workspaceRoot);
+    // Keyed on the JUDGED tree, so a worktree's cache is refreshed rather than the primary clone's.
+    maybeRefreshMainSync(rules, tree.root);
 
-    const ctx = buildBashContext(command, workspaceRoot);
+    const ctx = buildBashContext(command, tree);
     const groups = runBashRules(rules, ctx);
     if (groups.length === 0) {
         // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
@@ -300,13 +314,13 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
         // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
         // logged below.
         if (/\b(?:git|gh)\b/.test(command)) {
-            logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'no bash-guard block'));
+            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block'));
         }
         return null;
     }
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
-    logGuardDecision(workspaceRoot, new GuardDecision(ruleNames, 'Bash', command, branchForLog(workspaceRoot), 'BLOCK', 'bash-guard block'));
+    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'));
     const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.guards);
     return new BlockedResult(report);
 }

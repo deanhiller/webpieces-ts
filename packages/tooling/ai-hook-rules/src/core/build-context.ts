@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { EffectiveTree } from './effective-tree';
 import { stripTsNoise } from './strip-ts-noise';
 import { createIsLineDisabled } from './disable-directives';
 import {
@@ -74,8 +75,11 @@ export function buildContexts(
     return new BuiltContexts(fileContext, editContexts);
 }
 
-export function buildBashContext(command: string, workspaceRoot: string): BashContext {
-    return new BashContext(command, workspaceRoot);
+// The bash context is built from the RESOLVED tree, not the shell's cwd: `tree.root` is the worktree
+// the command acts on (what the guards must judge) while `tree.governedRoot` still owns the config.
+// webpieces-disable no-function-outside-class -- sibling of buildContexts() above; this module is a pair of module-scope context factories and a lone class for one of them would break its shape
+export function buildBashContext(command: string, tree: EffectiveTree): BashContext {
+    return new BashContext(command, tree.root, tree.effectiveCwd, tree.governedRoot);
 }
 
 function readCurrentFileLines(filePath: string): number {

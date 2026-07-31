@@ -73,6 +73,12 @@ function blocked(command: string): boolean {
     return rule().check(ctx(command)).length > 0;
 }
 
+// The same guard, for a command that runs somewhere else entirely (a leading `cd` — the only way an
+// agent reaches a worktree or a scratchpad, since `cd` does not persist between tool calls).
+function blockedFrom(command: string, effectiveCwd: string): boolean {
+    return rule().check(new BashContext(command, '/repo', effectiveCwd)).length > 0;
+}
+
 beforeEach(() => {
     state.branch = 'main';
     state.status = staleMainStatus();
@@ -213,5 +219,33 @@ describe('stale-main-bash-guard — fail-open valves', () => {
         const cfg = new StaleMainBashGuardConfig();
         cfg.mode = 'OFF';
         expect(new StaleMainBashGuardRule(cfg).shouldRun()).toBe(false);
+    });
+});
+
+/**
+ * The 2026-07-30 sighting: a command aimed at the agent's own scratchpad under /private/tmp was
+ * blocked because the PRIMARY CLONE's main was behind — and the remedy was to `git pull` that clone,
+ * which the agent had been explicitly instructed not to touch. A read that never touches the tree
+ * cannot be reading a stale tree.
+ */
+describe('stale-main-bash-guard — only reads of THIS tree count as stale reads', () => {
+    it('allows a read whose paths are all outside the workspace (unchanged)', () => {
+        expect(blocked('cat /etc/hosts')).toBe(false);
+        expect(blocked('ls -la /Users/dean/.claude/projects/')).toBe(false);
+    });
+
+    it('resolves a RELATIVE path against the directory the command runs in, not the workspace root', () => {
+        expect(blockedFrom('cd /private/tmp/scratch && cat notes.md', '/private/tmp/scratch')).toBe(false);
+        expect(blockedFrom('cd /private/tmp/scratch && ls -la', '/private/tmp/scratch')).toBe(false);
+    });
+
+    it('still blocks an ABSOLUTE path back into the tree, from anywhere (no bypass)', () => {
+        expect(blockedFrom('cd /private/tmp/scratch && cat /repo/src/app.ts', '/private/tmp/scratch')).toBe(true);
+        expect(blockedFrom('cd /private/tmp/scratch && grep -r x /repo/src', '/private/tmp/scratch')).toBe(true);
+    });
+
+    it('still blocks a relative read when the command really does run in the tree (no regression)', () => {
+        expect(blockedFrom('cat src/app.ts', '/repo')).toBe(true);
+        expect(blockedFrom('cd /repo/src && cat app.ts', '/repo/src')).toBe(true);
     });
 });

@@ -23,7 +23,17 @@ import { TreeRecovery, TreeKind } from './tree-recovery';
  * its only exit was creating a branch, which the branch cap then refused.
  */
 export class MergedBranchMessage {
-    private readonly recovery = new TreeRecovery();
+    private readonly recovery: TreeRecovery;
+
+    /**
+     * `treeRoot` is the tree the guard judged — pass it and every prescribed command comes out as
+     * `cd <treeRoot> && …`. That form is the only one that is correct across tool calls, because a
+     * Bash call does not persist `cd`: an agent in a linked worktree is back in the primary clone by
+     * the time it runs the cure, and a bare `git checkout -b` would then branch the WRONG tree.
+     */
+    constructor(private readonly treeRoot: string = '') {
+        this.recovery = new TreeRecovery(treeRoot);
+    }
 
     /**
      * The ONE allowance list, shared by every guard that blocks while this state is up.
@@ -61,6 +71,11 @@ export class MergedBranchMessage {
         const where = kind === 'worktree' ? 'worktree' : 'branch';
         const lines = [
             `It looks like you forgot to clean up this ${where} "${branch}" — its PR is already merged into main${pr}.`,
+            // Name the tree that was judged. With several agents running in parallel worktrees, a guard
+            // that reasons from the shell cwd can block a command while citing an UNRELATED agent's
+            // branch — observed live. Printing the directory makes a wrong judgement visible instead of
+            // baffling, and lets the reader see immediately that it is not the tree they meant.
+            ...(this.treeRoot !== '' ? [`Evaluated against: ${this.treeRoot}  (branch ${branch})`] : []),
             'Your work is in main — do NOT keep working here (you will reconflict with main).',
             '',
             ...this.recovery.freshStartSteps(kind, '<new-feature-branch>'),
