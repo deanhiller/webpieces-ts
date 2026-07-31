@@ -35,6 +35,11 @@
                         "input": "packages/tooling/nx-webpieces-rules/src/lib",
                         "glob": "**/*.client.js",
                         "output": "src/lib"
+                    },
+                    {
+                        "input": "packages/tooling/nx-webpieces-rules/bin",
+                        "glob": "**/*",
+                        "output": "bin"
                     }
                 ]
             }
