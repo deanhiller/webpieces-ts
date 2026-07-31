@@ -2,8 +2,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { describe, it, expect } from 'vitest';
-import { RepoRootFinder } from '@webpieces/rules-config';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { RepoRootFinder, toError } from '@webpieces/rules-config';
 import { BuildAffected } from './build-affected';
 import { BuildArtifactGate, BuildArtifactVerdict, DirtyPath } from './build-artifact-gate';
 import { GeneratedArtifactRegistry, GeneratedArtifacts, ARTIFACT_SOURCE_NX } from './generated-artifact-registry';
@@ -22,11 +22,30 @@ function newGate(): BuildArtifactGate {
 }
 
 const classify = (porcelain: string): BuildArtifactVerdict => newGate().classify(porcelain, KNOWN);
-const runGate = (dir: string): (() => void) => (): void => { newGate().assertBuildLeftNothingUncommitted(dir); };
 const paths = (entries: readonly DirtyPath[]): string[] => entries.map((d: DirtyPath): string => d.path);
 
-// A throwaway repo, so the "clean tree passes" and "staged passes" cases go through REAL git rather
-// than a hand-typed porcelain string. core.hooksPath=/dev/null keeps ambient webpieces hooks out.
+/**
+ * Run the gate and hand back the failure message ('' when it passed), so each case costs ONE git
+ * invocation instead of one per assertion. Spawning git is by far the slowest thing in this file.
+ */
+function gateMessage(dir: string): string {
+    // webpieces-disable no-unmanaged-exceptions -- chokepoint: a spec helper whose whole job is to
+    // capture the CliExitError message the gate throws so the assertions can read it
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
+        newGate().assertBuildLeftNothingUncommitted(dir);
+    } catch (err: unknown) {
+        const error = toError(err);
+        return error.message;
+    }
+    return '';
+}
+
+// ONE throwaway repo for the whole real-git block, restored between cases: `git init` + config +
+// initial commit is 8 subprocesses, and paying that per test is what made this file slow enough to
+// starve vitest's reporter under a parallel full-suite run.
+let repo = '';
+
 function initRepo(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-artifactgate-'));
     const run = (args: string): void => { execSync(`git ${args}`, { cwd: dir, stdio: 'ignore' }); };
@@ -41,6 +60,10 @@ function initRepo(): string {
     run('add -A');
     run('commit -q -m initial');
     return dir;
+}
+
+function resetRepo(): void {
+    execSync('git reset -q --hard HEAD && git clean -qfd', { cwd: repo, stdio: 'ignore' });
 }
 
 describe('classify — the "committed OR staged" predicate', () => {
@@ -102,39 +125,43 @@ describe('classify — the "committed OR staged" predicate', () => {
 });
 
 describe('assertBuildLeftNothingUncommitted — against a real git repo', () => {
+    beforeAll((): void => { repo = initRepo(); });
+    beforeEach((): void => { resetRepo(); });
+
+    const dirty = (rel: string): void => { fs.writeFileSync(path.join(repo, rel), `${Date.now()}\n`); };
+
     it('passes on a clean tree', () => {
-        expect(runGate(initRepo())).not.toThrow();
+        expect(gateMessage(repo)).toBe('');
     });
 
     it('passes when the regenerated file is STAGED but not yet committed', () => {
-        const dir = initRepo();
-        fs.writeFileSync(path.join(dir, 'architecture', 'dependencies.json'), '{"a":1}\n');
-        execSync('git add architecture/dependencies.json', { cwd: dir, stdio: 'ignore' });
-        expect(runGate(dir)).not.toThrow();
+        dirty('architecture/dependencies.json');
+        execSync('git add architecture/dependencies.json', { cwd: repo, stdio: 'ignore' });
+        expect(gateMessage(repo)).toBe('');
     });
 
     it('fails with the "run the build and commit" message when a known generated file is dirty', () => {
-        const dir = initRepo();
-        fs.writeFileSync(path.join(dir, 'architecture', 'dependencies.json'), '{"a":1}\n');
-        expect(runGate(dir)).toThrow('and commit the regenerated design files');
-        expect(runGate(dir)).toThrow('architecture/dependencies.json');
-        expect(runGate(dir)).not.toThrow('generating uncommitted git artifacts');
+        dirty('architecture/dependencies.json');
+        const message = gateMessage(repo);
+        expect(message).toContain('and commit the regenerated design files');
+        expect(message).toContain('architecture/dependencies.json');
+        expect(message).not.toContain('generating uncommitted git artifacts');
     });
 
     it('fails with the "generating uncommitted git artifacts" message for an undeclared path', () => {
-        const dir = initRepo();
-        fs.writeFileSync(path.join(dir, 'surprise.out'), 'x\n');
-        expect(runGate(dir)).toThrow('generating uncommitted git artifacts');
-        expect(runGate(dir)).toThrow('.gitignore');
-        expect(runGate(dir)).toThrow('surprise.out');
-        expect(runGate(dir)).not.toThrow('and commit the regenerated design files');
+        dirty('surprise.out');
+        const message = gateMessage(repo);
+        expect(message).toContain('generating uncommitted git artifacts');
+        expect(message).toContain('.gitignore');
+        expect(message).toContain('surprise.out');
+        expect(message).not.toContain('and commit the regenerated design files');
     });
 
     it('reports BOTH sections when a generated file and a stray file are dirty together', () => {
-        const dir = initRepo();
-        fs.writeFileSync(path.join(dir, 'architecture', 'dependencies.json'), '{"a":1}\n');
-        fs.writeFileSync(path.join(dir, 'surprise.out'), 'x\n');
-        expect(runGate(dir)).toThrow('and commit the regenerated design files');
-        expect(runGate(dir)).toThrow('generating uncommitted git artifacts');
+        dirty('architecture/dependencies.json');
+        dirty('surprise.out');
+        const message = gateMessage(repo);
+        expect(message).toContain('and commit the regenerated design files');
+        expect(message).toContain('generating uncommitted git artifacts');
     });
 });
