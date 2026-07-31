@@ -32,6 +32,17 @@ export class MergedBranch {
 export const CLASSIFICATION_MERGED_PR = 'merged-pr';
 export const CLASSIFICATION_BACKUP_OF_MERGED = 'backup-of-merged';
 /**
+ * A `<feature>PreMerge<N>` / `<feature>Squash` snapshot whose BASE branch is still alive — its PR is
+ * open, or it simply has not been proposed yet.
+ *
+ * Spared, because the base has not landed and the snapshot is still the pre-merge state someone may
+ * need to fall back to. But it is emphatically NOT the orphan case: a snapshot is a copy of its base
+ * BY CONSTRUCTION, so while the base exists this branch cannot be "the only copy in existence".
+ * Reporting it as one is why these were never answered and piled up against maxLocalBranches — the
+ * question named a risk that could not be real, so the safe answer was always "keep".
+ */
+export const CLASSIFICATION_BACKUP_OF_LIVE = 'backup-of-live';
+/**
  * NOT a proof of death — a SPARED verdict, and the reason this whole liveness model exists.
  *
  * "Zero commits of its own" used to be auto-deletable, on the reasoning that a branch holding no
@@ -71,6 +82,9 @@ export const CLASSIFICATION_DETACHED = 'detached-worktree';
 // Spared classifications a human can meaningfully rule on, most-safe first. wp-cleanup prompts in
 // exactly this order so the easy yeses come before the ones that need thought.
 export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
+    // FIRST — the easiest yes in the list. The base branch is right there holding the same work, so
+    // "is this the only copy?" has a provable no rather than a judgement call.
+    CLASSIFICATION_BACKUP_OF_LIVE,
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,

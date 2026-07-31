@@ -9,6 +9,7 @@ import { Worktree, WorktreeService } from './worktrees';
 import {
     CacheFreshness,
     CACHE_STALE_AFTER_MS,
+    CLASSIFICATION_BACKUP_OF_LIVE,
     CLASSIFICATION_BACKUP_OF_MERGED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_CURRENT,
@@ -35,6 +36,7 @@ export {
     CACHE_STALE_AFTER_MS,
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_BACKUP_OF_MERGED,
+    CLASSIFICATION_BACKUP_OF_LIVE,
     CLASSIFICATION_NO_COMMITS,
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
@@ -419,6 +421,23 @@ export class MergedBranchesService {
                     basePr, sha, commits, prState, CLASSIFICATION_BACKUP_OF_MERGED,
                 ));
             }
+            // The base has not MERGED — but a snapshot is a copy of its base by construction, so as
+            // long as the base still exists this branch is provably not the only copy of anything.
+            // Falling through to classifySpared told the human the opposite ("may be the only copy in
+            // existence"), which is unanswerable-by-design and is why these accumulated.
+            if (this.branchExists(repoRoot, base)) {
+                const basePrState = prs.state.get(base);
+                const liveness = basePrState
+                    ? `PR #${String(basePrState.number)} ${basePrState.state}`
+                    : 'no PR yet';
+                return new Verdict(false, new DeletableBranch(
+                    branch,
+                    `pre-merge snapshot of '${base}' (${liveness}) — '${base}' still exists and holds ` +
+                    `this work, so this is a spare copy, not the only one`,
+                    basePrState ? basePrState.number : 0, sha, commits, prState,
+                    CLASSIFICATION_BACKUP_OF_LIVE,
+                ));
+            }
         }
 
         // Zero commits of its own. This is SPARED, not deletable — see CLASSIFICATION_NO_COMMITS for
@@ -497,6 +516,15 @@ export class MergedBranchesService {
             .filter((line: string): boolean => line !== '');
         if (lines.length === 0) return false;
         return lines.every((line: string): boolean => line.startsWith('-'));
+    }
+
+    /**
+     * Does this local branch exist? Used to prove a snapshot is not the last copy of its work — the
+     * base branch being present is that proof. Verifies it is a BRANCH (`refs/heads/`), not just any
+     * resolvable rev, so a tag or a stray SHA sharing the name cannot stand in for the base.
+     */
+    private branchExists(repoRoot: string, branch: string): boolean {
+        return this.capture(repoRoot, 'git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).ok;
     }
 
     // Short tip SHA — the value that makes any delete of this branch reversible.

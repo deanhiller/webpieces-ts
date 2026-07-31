@@ -33,6 +33,12 @@ vi.mock('child_process', () => ({
             if (listing === undefined) return { status: 1, stdout: '' };
             return { status: 0, stdout: listing };
         }
+        // `git show-ref --verify --quiet refs/heads/<branch>` — exit 0 only when that BRANCH exists.
+        // This is how a snapshot proves its base is still around and therefore still holds the work.
+        if (cmd === 'git' && args[0] === 'show-ref') {
+            const ref = String(args[args.length - 1]).replace('refs/heads/', '');
+            return { status: world.localBranches.includes(ref) ? 0 : 1, stdout: '' };
+        }
         if (cmd === 'git' && args[0] === 'for-each-ref') {
             return { status: 0, stdout: world.localBranches.join('\n') + '\n' };
         }
@@ -57,6 +63,7 @@ import {
     DeletableBranch,
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_BACKUP_OF_MERGED,
+    CLASSIFICATION_BACKUP_OF_LIVE,
     CLASSIFICATION_NO_COMMITS,
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
@@ -441,6 +448,81 @@ describe('classification keeps the situations distinct, and still deletes nothin
         expect(byBranch.get('dean/mergedPreMerge1')).toBe(CLASSIFICATION_BACKUP_OF_MERGED);
         expect(byBranch.has('dean/husk')).toBe(false);
         expect(names(cache.keep)).toContain('dean/husk');
+    });
+});
+
+/**
+ * A pre-merge snapshot of a branch that has NOT merged yet.
+ *
+ * These accumulate fast — every `wp-start-upsert-pr` and `wp-review-upsert-pr` on a branch with an
+ * OPEN PR leaves another one, and they are only archived-and-reaped once that PR merges. Until then
+ * they were reported as "never had a PR; holds N unique commit(s) that may be the only copy in
+ * existence", which is false BY CONSTRUCTION: a snapshot is a copy of its base, and the base is
+ * sitting right there in the same listing. That unanswerable question is why nobody ever said yes and
+ * the pile grew past maxLocalBranches.
+ */
+describe('a snapshot whose base is still alive is not the only copy', () => {
+    it('classifies a PreMerge snapshot of an OPEN-PR branch as backup-of-live, naming the base', () => {
+        world.allPrs = [{ number: 42, headRefName: 'dean/feature', state: 'OPEN' }];
+        world.localBranches = ['main', 'dean/feature', 'dean/featurePreMerge1', 'dean/featurePreMerge2'];
+
+        const cache = svc.computeMergedBranches('/repo');
+        const byBranch = new Map(cache.keep
+            .map((entry: DeletableBranch): [string, DeletableBranch] => [entry.branch, entry]));
+
+        for (const snapshot of ['dean/featurePreMerge1', 'dean/featurePreMerge2']) {
+            const entry = byBranch.get(snapshot)!;
+            expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_LIVE);
+            expect(entry.reason).toContain("snapshot of 'dean/feature'");
+            expect(entry.reason).toContain('PR #42 OPEN');
+            // The exact claim that made this unanswerable must be gone.
+            expect(entry.reason).not.toContain('only copy in existence');
+        }
+    });
+
+    it('still classifies it as a live snapshot when the base has no PR at all', () => {
+        world.localBranches = ['main', 'dean/feature', 'dean/featureSquash'];
+
+        const entry = svc.computeMergedBranches('/repo').keep
+            .find((row: DeletableBranch): boolean => row.branch === 'dean/featureSquash')!;
+
+        expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_LIVE);
+        expect(entry.reason).toContain('no PR yet');
+        expect(entry.reason).not.toContain('only copy in existence');
+    });
+
+    /**
+     * The one case where the scary wording is CORRECT. With the base gone, a snapshot really may hold
+     * the last copy of that work, so it must fall back to never-proposed rather than being waved
+     * through as a spare.
+     */
+    it('falls back to never-proposed when the base branch no longer exists', () => {
+        world.localBranches = ['main', 'dean/orphanPreMerge1'];
+
+        const entry = svc.computeMergedBranches('/repo').keep
+            .find((row: DeletableBranch): boolean => row.branch === 'dean/orphanPreMerge1')!;
+
+        expect(entry.classification).toBe(CLASSIFICATION_NEVER_PROPOSED);
+        expect(entry.reason).toContain('only copy in existence');
+    });
+
+    // A merged base still wins: that verdict is DELETABLE, and this change must not downgrade it to
+    // a spared prompt, or snapshots would stop being auto-reaped after their PR lands.
+    it('does not shadow backup-of-merged when the base branch still exists locally', () => {
+        world.mergedPrs = [{ number: 7, headRefName: 'dean/landed' }];
+        world.localBranches = ['main', 'dean/landed', 'dean/landedPreMerge1'];
+
+        const entry = svc.computeMergedBranches('/repo').deletable
+            .find((row: DeletableBranch): boolean => row.branch === 'dean/landedPreMerge1')!;
+
+        expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_MERGED);
+    });
+
+    // Promptable, and FIRST — it is the easiest yes in the list, because the base is the proof.
+    it('is promptable and ordered ahead of the judgement-call groups', () => {
+        expect(PROMPTABLE_CLASSIFICATIONS).toContain(CLASSIFICATION_BACKUP_OF_LIVE);
+        expect(PROMPTABLE_CLASSIFICATIONS.indexOf(CLASSIFICATION_BACKUP_OF_LIVE))
+            .toBeLessThan(PROMPTABLE_CLASSIFICATIONS.indexOf(CLASSIFICATION_NEVER_PROPOSED));
     });
 });
 
