@@ -162,7 +162,10 @@ function implementsEntries(svc: RuntimeService): string[] {
  */
 // webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
 function nodeLabel(name: string, svc: RuntimeService): string {
-    const role = svc.implements.length > 0 ? 'server' : 'client';
+    // The DECLARED role when the graph carries one; the old inference only as a fallback for a
+    // runtime-dependencies.json committed before `role` existed. Inferring it labelled every server
+    // with no implements as a "client", which is exactly wrong for a queue-driven service.
+    const role = svc.role ?? (svc.implements.length > 0 ? 'server' : 'client');
     // The declared name is quoted for the reader — those quotes MUST be DOT-escaped, or they end
     // the label string and the whole graph stops parsing.
     const declared = svc.serviceName === undefined ? '' : `, \\"${dotValue(svc.serviceName)}\\"`;
