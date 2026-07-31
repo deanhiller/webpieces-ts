@@ -6,7 +6,7 @@
     "main": "./src/index.js",
     "executors": "./executors.json",
     "bin": {
-        "wp-design-visualize": "./src/scripts/wp-design-visualize.js"
+        "wp-design-visualize": "./bin/wp-design-visualize.js"
     },
     "exports": {
         ".": "./src/index.js",
@@ -14,7 +14,13 @@
         "./plugin": "./src/plugin.js",
         "./executors.json": "./executors.json"
     },
-    "files": ["src/**/*", "templates/**/*", "executors.json", "README.md"],
+    "files": [
+        "src/**/*",
+        "templates/**/*",
+        "executors.json",
+        "README.md",
+        "bin/**/*"
+    ],
     "dependencies": {
         "@webpieces/ai-hook-rules": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
@@ -33,5 +39,7 @@
         "url": "https://github.com/deanhiller/webpieces-ts.git",
         "directory": "packages/tooling/nx-webpieces-rules"
     },
-    "publishConfig": { "access": "public" }
+    "publishConfig": {
+        "access": "public"
+    }
 }

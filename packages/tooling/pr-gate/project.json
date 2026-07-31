@@ -17,7 +17,14 @@
                 "outputPath": "dist/packages/tooling/pr-gate",
                 "main": "packages/tooling/pr-gate/src/index.ts",
                 "tsConfig": "packages/tooling/pr-gate/tsconfig.lib.json",
-                "assets": ["packages/tooling/pr-gate/package.json"]
+                "assets": [
+                    "packages/tooling/pr-gate/package.json",
+                    {
+                        "input": "packages/tooling/pr-gate/bin",
+                        "glob": "**/*",
+                        "output": "bin"
+                    }
+                ]
             }
         }
     },
