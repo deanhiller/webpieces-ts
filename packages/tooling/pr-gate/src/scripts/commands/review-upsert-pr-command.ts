@@ -1,14 +1,12 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import {
-    loadAndValidate, reviewJsonSchemaHint, writeTemplate, PrGateConfig, RepoRootFinder,
-    ChecklistInstructionsService, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, toError,
+    loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder,
+    ReviewerBriefing, ReviewerInstructionsService,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { BuildArtifactGate } from '../workflow/build-artifact-gate';
-import { ChecklistNotice } from '../workflow/checklist-notice';
 import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
 import { DiffMaterializer } from '../workflow/diff-materializer';
 import { GitExec } from '../workflow/git-exec';
@@ -17,6 +15,7 @@ import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeState } from '../workflow/merge-state';
 import { PrContextWriter } from '../workflow/pr-context-writer';
 import { ReviewerBriefingBuilder } from '../workflow/reviewer-briefing-builder';
+import { ReviewReport, ReviewReportInput } from '../workflow/review-report';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -56,8 +55,7 @@ export class ReviewUpsertPrCommand {
         private readonly mergeState: MergeState,
         private readonly mergeEnd: MergeEnd,
         private readonly checklistScanner: ChecklistScanner,
-        private readonly checklistNotice: ChecklistNotice,
-        private readonly instructions: ChecklistInstructionsService,
+        private readonly reviewReport: ReviewReport,
         private readonly materializer: DiffMaterializer,
         private readonly prContextWriter: PrContextWriter,
         private readonly briefingBuilder: ReviewerBriefingBuilder,
@@ -159,61 +157,21 @@ export class ReviewUpsertPrCommand {
         return briefings;
     }
 
-    /** What the AI must do next: spawn each reviewer, then write review.json. */
-    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[]): void {
-        process.stdout.write('\n' + SEP + '② Spawn Subagent Reviews, then finish\n' + SEP + '\n');
-        if (scan.applicable.length === 0) {
-            process.stdout.write(this.checklistNotice.build(scan.defined.length, 'wp-finish-upsert-pr'));
-        } else {
-            process.stdout.write(this.spawnBlocks(repoRoot, featureName, scan, briefings));
-        }
-        process.stdout.write(
-            `\nWhile your subagents are running, review your own changes and\n${reviewJsonSchemaHint(scan.reviewPath)}\n\n` +
-            `Finally run:  pnpm wp-finish-upsert-pr\n` +
-            `(The build gate is already green for this commit — finish reuses it unless HEAD moves.)\n\n`);
-    }
-
     /**
-     * One copy-paste block per owed reviewer. The prompt is deliberately a POINTER and nothing else: the
-     * generated instructions file is the contract, so anything restated here is a second copy that can go
-     * stale — which is exactly how a removed `success` field outlived its own removal in print.
+     * What the AI must do next — rendered by `ReviewReport`, which owns the ordering.
+     *
+     * The rendering moved OUT of this command so the ordering could be asserted on as a string. It had a
+     * real bug: the zero-checklist notice signed off with "Carry on and run: pnpm wp-finish-upsert-pr"
+     * while the block right beneath it said to write review.json first. An agent that reads top to bottom
+     * obeyed the first line and posted a PR with no review at all.
      */
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private spawnBlocks(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[]): string {
-        const reviewedIds = new Set(scan.reviewed.map((r: RequiredChecklist): string => r.id));
-        const owed = briefings.filter((b: ReviewerBriefing): boolean => !reviewedIds.has(b.checklistId));
-        const lines: string[] = [];
-        for (const r of scan.reviewed) {
-            lines.push(`  ✓ ${r.subagent} — already reviewed on this branch (reusing its review-${r.id}.json)`);
-        }
-        // A verdict file that EXISTS but is unreadable as a verdict is called out here. Without it this
-        // reports the checklist as simply owed, and the AI re-runs a reviewer that already ran instead of
-        // correcting the file sitting right there.
-        for (const e of scan.formatErrors) lines.push(`  ⛔ ${e}`);
-        if (owed.length === 0) {
-            lines.push('', '✅ Every checklist that applies is already reviewed — nothing to spawn.');
-            return lines.join('\n') + '\n';
-        }
-        lines.push('',
-            `Spawn these ${owed.length} reviewer subagent(s) — a SEPARATE one each. You may NOT review your own`,
-            'work, and you may NOT write a reviewer\'s verdict file on its behalf.',
-            '');
-        for (const b of owed) {
-            lines.push(`  ▶ ${b.subagent} — ${this.why(b)}`);
-            lines.push(`      subagent_type: ${b.subagent}`);
-            lines.push('      prompt:        Read your instructions file FIRST and follow it exactly:');
-            lines.push(`                     ${this.reviewerInstructions.pathFor(repoRoot, featureName, b.subagent)}`);
-            lines.push('');
-        }
-        return lines.join('\n');
-    }
-
-    // Why this one is in scope. A patternless checklist is NOT "matched" — it always runs, over the whole
-    // diff, and saying so is what tells a repo its checklist is firing on docs-only PRs by design.
-    private why(b: ReviewerBriefing): string {
-        if (b.matchedPatterns.length === 0) {
-            return `ALWAYS RUNS (no "patterns" configured), whole diff in scope — ${b.myFiles.length} file(s)`;
-        }
-        return `${b.myFiles.length} file(s) matched ${b.matchedPatterns.map((p: string): string => `"${p}"`).join(', ')}`;
+    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[]): void {
+        const input = new ReviewReportInput(repoRoot, featureName, scan.reviewPath);
+        input.definedCount = scan.defined.length;
+        input.applicableCount = scan.applicable.length;
+        input.reviewed = scan.reviewed.slice();
+        input.formatErrors = scan.formatErrors.slice();
+        input.briefings = briefings.slice();
+        process.stdout.write(this.reviewReport.render(input));
     }
 }

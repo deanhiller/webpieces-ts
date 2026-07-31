@@ -56,6 +56,7 @@ graph TD
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
+    ReviewReport["ReviewReport"]
     ReviewStageReceiptService["ReviewStageReceiptService"]
     ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
     ReviewerBriefingBuilder["ReviewerBriefingBuilder"]
@@ -165,12 +166,12 @@ graph TD
     ReapWorktreeCommand --> WorktreeCleanupSection
     RepoRootFinder --> DotWebpieces
     ReviewJsonService --> DotWebpieces
+    ReviewReport --> ChecklistNotice
+    ReviewReport --> ReviewerInstructionsService
     ReviewStageReceiptService --> ReviewJsonService
     ReviewUpsertPrCommand --> AiBranchName
     ReviewUpsertPrCommand --> BuildAffected
     ReviewUpsertPrCommand --> BuildArtifactGate
-    ReviewUpsertPrCommand --> ChecklistInstructionsService
-    ReviewUpsertPrCommand --> ChecklistNotice
     ReviewUpsertPrCommand --> ChecklistScanner
     ReviewUpsertPrCommand --> DiffMaterializer
     ReviewUpsertPrCommand --> GitExec
@@ -178,6 +179,7 @@ graph TD
     ReviewUpsertPrCommand --> MergeState
     ReviewUpsertPrCommand --> PrContextWriter
     ReviewUpsertPrCommand --> RepoRootFinder
+    ReviewUpsertPrCommand --> ReviewReport
     ReviewUpsertPrCommand --> ReviewStageReceiptService
     ReviewUpsertPrCommand --> ReviewerBriefingBuilder
     ReviewUpsertPrCommand --> ReviewerInstructionsService

@@ -59,7 +59,9 @@ export class StartUpdateCommand {
             'flow instead — it re-merges main AND updates the PR:\n' +
             '  1. pnpm wp-start-upsert-pr\n' +
             '  2. /wp-merge   (only if conflicts)\n' +
-            '  3. pnpm wp-finish-upsert-pr\n',
+            '  3. pnpm wp-review-upsert-pr   (validates the merge, builds, briefs the reviewers)\n' +
+            '  4. write review.json at the path wp-review-upsert-pr prints\n' +
+            '  5. pnpm wp-finish-upsert-pr\n',
         );
     }
 }

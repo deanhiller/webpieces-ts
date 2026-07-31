@@ -97,7 +97,8 @@ export class CheckPrCommand {
             `This PR was NOT created through the webpieces gated flow — or was pushed after finishing without re-running it.\n` +
             `Every commit that lands here must go through it, so:\n\n` +
             `  1. Install the webpieces hooks if you don't have them.\n` +
-            `  2. Recreate/update this PR by running:  pnpm wp-start-upsert-pr  → write review.json → pnpm wp-finish-upsert-pr\n\n` +
+            `  2. Recreate/update this PR by running the full gated flow, in order:\n` +
+            `       pnpm wp-start-upsert-pr → pnpm wp-review-upsert-pr → write review.json → pnpm wp-finish-upsert-pr\n\n` +
             `That re-stamps the PR title, body, and the gate token for the current head commit, and this check goes green.`
         );
     }

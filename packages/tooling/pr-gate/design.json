@@ -102,7 +102,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "ChecklistScanner",
@@ -361,6 +361,14 @@
                     "level": 4
                 },
                 {
+                    "id": "ReviewReport",
+                    "className": "ReviewReport",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-report.ts",
+                    "level": 2
+                },
+                {
                     "id": "ReviewStageReceiptService",
                     "className": "ReviewStageReceiptService",
                     "kind": "class",
@@ -390,7 +398,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/reviewer-instructions.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "RunUpdate",
@@ -1332,6 +1340,24 @@
                     "paramType": "DotWebpieces"
                 },
                 {
+                    "from": "ReviewReport",
+                    "to": "ChecklistNotice",
+                    "injection": "type",
+                    "token": "ChecklistNotice",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
+                    "paramName": "checklistNotice",
+                    "paramType": "ChecklistNotice"
+                },
+                {
+                    "from": "ReviewReport",
+                    "to": "ReviewerInstructionsService",
+                    "injection": "type",
+                    "token": "ReviewerInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/reviewer-instructions.ts#ReviewerInstructionsService",
+                    "paramName": "reviewerInstructions",
+                    "paramType": "ReviewerInstructionsService"
+                },
+                {
                     "from": "ReviewStageReceiptService",
                     "to": "ReviewJsonService",
                     "injection": "type",
@@ -1366,24 +1392,6 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-artifact-gate.ts#BuildArtifactGate",
                     "paramName": "buildArtifactGate",
                     "paramType": "BuildArtifactGate"
-                },
-                {
-                    "from": "ReviewUpsertPrCommand",
-                    "to": "ChecklistInstructionsService",
-                    "injection": "type",
-                    "token": "ChecklistInstructionsService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
-                    "paramName": "instructions",
-                    "paramType": "ChecklistInstructionsService"
-                },
-                {
-                    "from": "ReviewUpsertPrCommand",
-                    "to": "ChecklistNotice",
-                    "injection": "type",
-                    "token": "ChecklistNotice",
-                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-notice.ts#ChecklistNotice",
-                    "paramName": "checklistNotice",
-                    "paramType": "ChecklistNotice"
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
@@ -1447,6 +1455,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "ReviewReport",
+                    "injection": "type",
+                    "token": "ReviewReport",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-report.ts#ReviewReport",
+                    "paramName": "reviewReport",
+                    "paramType": "ReviewReport"
                 },
                 {
                     "from": "ReviewUpsertPrCommand",

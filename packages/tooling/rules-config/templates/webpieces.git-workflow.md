@@ -28,6 +28,9 @@ Stage ② is where verification happens, deliberately BEFORE any reviewer reads 
 unresolved merge or a red build, so a broken branch costs no review effort. It records the sha it
 verified, and stage ③ re-runs the build ONLY if HEAD moved since — three stages, one build.
 
+All three stages are required and none may be skipped: stage ③ refuses to post a PR unless stage ② has
+run on this branch AND review.json exists.
+
 The tooling never commits for you (see the golden rule below), so **commit your work first**, then run
 `pnpm wp-start-upsert-pr`. The only reasons to stop *before* posting are: the human explicitly said "don't
 open a PR yet," or the build/tests are red. Otherwise, finishing the feature and posting the PR are the
@@ -137,6 +140,7 @@ flow are not interchangeable.
 | start | `pnpm wp-start-update` | `pnpm wp-start-upsert-pr` |
 | resolve conflicts | `/wp-merge` | `/wp-merge` |
 | validate + build + brief reviewers | *(n/a — no PR, no review)* | `pnpm wp-review-upsert-pr` |
+| write the review | *(n/a)* | review.json, at the path stage ② prints |
 | finish | `pnpm wp-finish-update` | `pnpm wp-finish-upsert-pr` |
 
 - `wp-start-update` **pairs with** `wp-finish-update`. `wp-start-upsert-pr` **pairs with**
