@@ -225,6 +225,14 @@
                     "level": 5
                 },
                 {
+                    "id": "GitStatusParser",
+                    "className": "GitStatusParser",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/git-status.ts",
+                    "level": 6
+                },
+                {
                     "id": "LandPrCommand",
                     "className": "LandPrCommand",
                     "kind": "class",
@@ -618,6 +626,15 @@
                     "paramType": "ForkPoint"
                 },
                 {
+                    "from": "DiffBasisResolver",
+                    "to": "GitStatusParser",
+                    "injection": "type",
+                    "token": "GitStatusParser",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-status.ts#GitStatusParser",
+                    "paramName": "statusParser",
+                    "paramType": "GitStatusParser"
+                },
+                {
                     "from": "DiffMaterializer",
                     "to": "ReviewJsonService",
                     "injection": "type",
@@ -886,6 +903,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "GitExec",
+                    "to": "GitStatusParser",
+                    "injection": "type",
+                    "token": "GitStatusParser",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-status.ts#GitStatusParser",
+                    "paramName": "statusParser",
+                    "paramType": "GitStatusParser"
                 },
                 {
                     "from": "GitExec",

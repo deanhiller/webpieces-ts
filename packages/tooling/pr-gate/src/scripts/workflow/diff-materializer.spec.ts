@@ -7,6 +7,7 @@ import { ReviewJsonService } from '@webpieces/rules-config';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { DiffManifestEntry, DiffMaterializer, FILE_DIFF_MAX_BYTES } from './diff-materializer';
 import { ForkPoint } from './git-findForkPoint';
+import { GitStatusParser } from './git-status';
 
 const dirs: string[] = [];
 
@@ -35,7 +36,7 @@ function materializerFor(): DiffMaterializer {
 }
 
 function basisFor(dir: string): DiffBasis {
-    return new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never)).resolve(dir);
+    return new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never), new GitStatusParser()).resolve(dir);
 }
 
 function entryFor(entries: readonly DiffManifestEntry[], file: string): DiffManifestEntry {

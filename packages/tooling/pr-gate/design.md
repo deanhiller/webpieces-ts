@@ -39,6 +39,7 @@ graph TD
     GatherInfo["GatherInfo"]
     GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
     GitExec["GitExec"]
+    GitStatusParser["GitStatusParser"]
     LandPrCommand["LandPrCommand"]
     MergeEnd["MergeEnd"]
     MergeInfoIndex["MergeInfoIndex"]
@@ -85,6 +86,7 @@ graph TD
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
     DiffBasisResolver --> ForkPoint
+    DiffBasisResolver --> GitStatusParser
     DiffMaterializer --> ReviewJsonService
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
@@ -115,6 +117,7 @@ graph TD
     GatherInfo --> GitExec
     GatherInfo --> MergeState
     GatherInfo --> RepoRootFinder
+    GitExec --> GitStatusParser
     GitExec --> RepoRootFinder
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver

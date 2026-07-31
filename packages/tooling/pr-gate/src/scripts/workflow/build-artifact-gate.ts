@@ -3,29 +3,9 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { BuildAffected } from './build-affected';
 import { GeneratedArtifactRegistry, GeneratedArtifacts } from './generated-artifact-registry';
 import { GitExec } from './git-exec';
+import { GitStatusEntry } from './git-status';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-
-/**
- * One path `git status --porcelain` reported as NOT satisfying "committed OR staged", with the two
- * porcelain status columns kept so a message can say why. Data-only (per CLAUDE.md).
- */
-export class DirtyPath {
-    path: string;
-    indexStatus: string;     // porcelain column 1 — the INDEX (staged) state
-    worktreeStatus: string;  // porcelain column 2 — the WORKING TREE state
-
-    constructor(dirtyPath: string, indexStatus: string, worktreeStatus: string) {
-        this.path = dirtyPath;
-        this.indexStatus = indexStatus;
-        this.worktreeStatus = worktreeStatus;
-    }
-
-    /** `?? path` — untracked, i.e. the build created a brand-new file nobody has ever committed. */
-    isUntracked(): boolean {
-        return this.indexStatus === '?';
-    }
-}
 
 /**
  * What the repo-wide post-build tree check concluded, split into the ticket's two verdicts. Both lists
@@ -34,11 +14,11 @@ export class DirtyPath {
  */
 export class BuildArtifactVerdict {
     /** Verdict 1 — dirty, but the build is SUPPOSED to write it: you did not commit the regeneration. */
-    staleGenerated: DirtyPath[];
+    staleGenerated: GitStatusEntry[];
     /** Verdict 2 — dirty and nobody declared it: the build is emitting uncommitted git artifacts. */
-    strayArtifacts: DirtyPath[];
+    strayArtifacts: GitStatusEntry[];
 
-    constructor(staleGenerated: DirtyPath[], strayArtifacts: DirtyPath[]) {
+    constructor(staleGenerated: GitStatusEntry[], strayArtifacts: GitStatusEntry[]) {
         this.staleGenerated = staleGenerated;
         this.strayArtifacts = strayArtifacts;
     }
@@ -86,9 +66,9 @@ export class BuildArtifactGate {
      */
     assertBuildLeftNothingUncommitted(repoRoot: string): void {
         const artifacts = this.registry.resolve(repoRoot);
-        // porcelainStatus, NOT uncommittedFiles: the latter trims, which eats the leading space that IS
-        // the index column, turning every unstaged " M path" into a staged-looking "M path".
-        const verdict = this.classify(this.gitExec.porcelainStatus(repoRoot), artifacts);
+        // statusEntries, never a raw/trimmed string: the staged-vs-unstaged answer arrives as a boolean
+        // so no caller can re-derive it from column positions and get it backwards.
+        const verdict = this.classify(this.gitExec.statusEntries(repoRoot), artifacts);
         if (verdict.isClean()) {
             process.stdout.write('\n✅ Build left the tree committed — no uncommitted build artifacts.\n');
             return;
@@ -97,39 +77,22 @@ export class BuildArtifactGate {
     }
 
     /**
-     * Parse `git status --porcelain` and sort every UNSATISFIED entry into the two verdicts. Pure, so
-     * the specs drive it with literal porcelain text instead of building repos for every case.
+     * Sort every UNSATISFIED status entry into the two verdicts. Pure, so the specs drive it with
+     * literal porcelain text (run through `GitStatusParser`) instead of building repos.
+     *
+     * THE PREDICATE lives in {@link GitStatusEntry.isCommittedOrStaged} — a clean worktree column
+     * means the change is committed or staged, and `??` is excluded because its second column is not
+     * a worktree state at all.
      */
-    classify(porcelain: string, artifacts: GeneratedArtifacts): BuildArtifactVerdict {
-        const stale: DirtyPath[] = [];
-        const stray: DirtyPath[] = [];
-        for (const line of porcelain.split('\n')) {
-            const entry = this.parseLine(line);
-            if (entry === null) continue;
+    classify(entries: readonly GitStatusEntry[], artifacts: GeneratedArtifacts): BuildArtifactVerdict {
+        const stale: GitStatusEntry[] = [];
+        const stray: GitStatusEntry[] = [];
+        for (const entry of entries) {
+            if (entry.isCommittedOrStaged()) continue;
             if (matchesAnyGlob(entry.path, artifacts.paths)) stale.push(entry);
             else stray.push(entry);
         }
         return new BuildArtifactVerdict(stale, stray);
-    }
-
-    /**
-     * One porcelain line → a DirtyPath, or null when the line is blank or already satisfied.
-     *
-     * Format is `XY <path>`, with `XY` = index+worktree status and `R  old -> new` for renames (the NEW
-     * path is the one on disk, so that is the one classified). Untracked is `?? <path>`.
-     */
-    private parseLine(line: string): DirtyPath | null {
-        if (line.length < 4) return null;
-        const indexStatus = line.charAt(0);
-        const worktreeStatus = line.charAt(1);
-        // THE PREDICATE. A clean worktree column means the change is committed or staged — satisfied.
-        // `??` is the one entry whose column 2 is not a worktree state, so it is excluded explicitly.
-        if (worktreeStatus === ' ' && indexStatus !== '?') return null;
-        const raw = line.slice(3).trim();
-        const arrow = raw.indexOf(' -> ');
-        const filePath = arrow >= 0 ? raw.slice(arrow + 4) : raw;
-        const unquoted = filePath.startsWith('"') && filePath.endsWith('"') ? filePath.slice(1, -1) : filePath;
-        return unquoted === '' ? null : new DirtyPath(unquoted, indexStatus, worktreeStatus);
     }
 
     /** The full failure message — verdict 1 section, verdict 2 section, or both. */
@@ -163,9 +126,9 @@ export class BuildArtifactGate {
             this.listing(verdict.strayArtifacts);
     }
 
-    private listing(entries: readonly DirtyPath[]): string {
+    private listing(entries: readonly GitStatusEntry[]): string {
         return entries
-            .map((e: DirtyPath): string => `   ${e.indexStatus}${e.worktreeStatus}  ${e.path}${e.isUntracked() ? '   (untracked — brand new)' : ''}\n`)
+            .map((e: GitStatusEntry): string => `   ${e.indexStatus}${e.worktreeStatus}  ${e.path}${e.isUntracked() ? '   (untracked — brand new)' : ''}\n`)
             .join('');
     }
 }
