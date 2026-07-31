@@ -224,6 +224,8 @@
             "mode": "ON_NO_SUBBRANCHES",
             "subBranchNaming": "feature/<ticket>/<short-description>",
             "autoReapMergedBranches": true,
+            "maxWorktrees": 10,
+            "maxLocalBranches": 10,
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },

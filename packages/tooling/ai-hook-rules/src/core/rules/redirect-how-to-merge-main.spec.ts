@@ -82,6 +82,17 @@ describe('redirect-how-to-merge-main — what the block tells the AI', () => {
         expect(hint).toContain('MUST use the upsert-pr pair');
     });
 
+    // A hint may ask the AI to persist a sentence, and that sentence outlives the code that printed it.
+    // "Add that info to memory" pointed at the git-workflow doc, which is REGENERATED per repo and per
+    // version — so the remembered copy is stale by construction. Only version-stable invariants qualify.
+    it('asks the AI to memorize only the invariant, never the regenerated doc it links', () => {
+        const hint = rule.fixHint.mainMessage;
+        const memoryLines = hint.split('\n').filter((line: string): boolean => line.includes('to memory'));
+        expect(memoryLines.length).toBe(1);
+        expect(memoryLines[0]).not.toContain('Add that info to memory');
+        expect(hint).toContain('re-read its git-workflow doc each time rather than recalling it');
+    });
+
     it('writes the git-workflow doc it points the AI at, and links that exact path', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-redirect-doc-'));
         const doc = path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md');
