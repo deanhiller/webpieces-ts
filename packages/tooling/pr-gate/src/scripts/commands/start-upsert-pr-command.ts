@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { loadAndValidate, writeTemplate, writeTemplateIfMissing, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
+import { writeTemplate, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -37,11 +37,10 @@ export class StartUpsertPrCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         // Refresh the AI-facing workflow doc so it's present + current for any failure message to cite.
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
-        // When this repo has opted into server-side enforcement (a committed gateSalt), scaffold the CI
-        // workflow into the gitignored instruct-ai dir (never .github directly — that would dirty the tree
-        // before the clean-tree check) and tell the human to copy + require it. IfMissing so it is written
-        // once and never clobbers a customized copy.
-        this.scaffoldCiWorkflow(repoRoot);
+        // NOTE: the server-side CI gate is NOT scaffolded here any more — `wp-install-ai-hooks` owns it.
+        // This printed copy-to-.github + branch-protection instructions on EVERY run, at an agent doing
+        // feature work that could not act on them: marking a check required needs a repo admin. Setup
+        // belongs in the setup command; see templates/webpieces.ci-gate-setup.md.
 
         // Precondition: a fully-committed tree. This flow squash-updates the branch and builds it — the
         // tooling must not commit your work for you, and building a dirty working tree would let an
@@ -74,7 +73,7 @@ export class StartUpsertPrCommand {
         // Persist the PR diff context (base sha + the full changed-file set) so it exists even if the AI
         // stops here. Stage ② rewrites it with the materialized-diff dir once it has one.
         const context = this.prContextWriter.ensure(
-            repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot));
+            repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
         process.stdout.write('\n' + SEP + '② Review the PR, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +
@@ -94,19 +93,6 @@ export class StartUpsertPrCommand {
         return (
             `${cmd === '' ? '' : `Your diff:  ${cmd}\n`}` +
             `Full changed-file set + base/head sha:  ${context.prContextPath}\n`
-        );
-    }
-
-    // Scaffold the server-side CI check when (and only when) this repo set a gateSalt. Written to the
-    // gitignored instruct-ai dir so it never dirties the tree; the human copies it to .github/workflows
-    // and marks it required (webpieces can't set branch protection). No-op for repos with no gateSalt.
-    private scaffoldCiWorkflow(repoRoot: string): void {
-        if (loadAndValidate(repoRoot).prGate.gateSalt.trim() === '') return;
-        writeTemplateIfMissing(repoRoot, 'webpieces-pr-gate.yml');
-        process.stdout.write(
-            `\nℹ️  Server-side gate enforcement is ON (gateSalt set). If you have not already:\n` +
-            `   • copy  .webpieces/instruct-ai/webpieces-pr-gate.yml  → .github/workflows/  and commit it\n` +
-            `   • mark the "webpieces-pr-gate" check REQUIRED in branch protection (repo admin only)\n`,
         );
     }
 

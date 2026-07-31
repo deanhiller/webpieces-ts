@@ -207,6 +207,31 @@ describe('ChecklistScanner — degenerate and always-write cases', () => {
         expect(fs.existsSync(scan.context.prContextPath)).toBe(true);
         expect(scan.context.baseSha).toBe(scan.forkPoint);
     });
+
+    /**
+     * Writing is what you get by DEFAULT; opting out is explicit. A reviewer block that lost its diff
+     * command because nobody wrote pr-context.json is a bug this codebase already shipped once, so the
+     * opt-out has to be a visible act by a caller that writes it later (stage ②, after materializing) —
+     * never an omission.
+     */
+    it('writes a per-stage snapshot beside pr-context.json, so earlier states survive for debugging', () => {
+        const dir = repoWithFour();
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(false, 'stage3-finish'));
+        const snapshot = path.join(path.dirname(scan.context.prContextPath), 'stages', 'stage3-finish.json');
+        expect(fs.existsSync(snapshot)).toBe(true);
+        // The snapshot is a byte-for-byte copy of what pr-context.json said AT THAT STAGE — the point is
+        // that a later stage overwriting pr-context.json cannot destroy it.
+        expect(fs.readFileSync(snapshot, 'utf8')).toBe(fs.readFileSync(scan.context.prContextPath, 'utf8'));
+    });
+
+    it('contextStage:"" skips the write, for the one caller that writes it itself afterwards', () => {
+        const dir = repoWithFour();
+        const scan = scannerFor().scan(dir, FOUR, new ChecklistScanOptions(false, ''));
+        expect(fs.existsSync(scan.context.prContextPath)).toBe(false);
+        // …but the context still names WHERE it will be, so a caller can point at it before it exists.
+        expect(scan.context.prContextPath).not.toBe('');
+        expect(scan.context.baseSha).toBe(scan.forkPoint);
+    });
 });
 
 describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {

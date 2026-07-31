@@ -42,6 +42,14 @@ function ctx(command: string): BashContext {
 const worktrees = new WorktreeService();
 const merged = new MergedBranchesService(worktrees);
 
+/**
+ * 60s, not the 15s default: this hook does REAL work — `git init`, a commit, SIX `git worktree add`
+ * calls that each check out a working copy, and then the refresher's own `gh` probes. ~2s idle, but the
+ * wall-clock scales with whatever else is shelling out to git at the same time, and `nx affected` runs
+ * several projects' suites concurrently. It was already marginal at 15s and began timing out as more
+ * git-backed specs landed beside it. The hook is not slow because it is wrong; six worktrees cost what
+ * six worktrees cost.
+ */
 beforeAll(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-worktree-cap-'));
     repo = path.join(root, 'repo');
@@ -74,8 +82,6 @@ beforeAll(() => {
     // What the detached refresher does. `gh` fails here (no GitHub remote) — the fail-soft path, so
     // NOTHING is provably merged, and therefore nothing is reapable.
     merged.writeMergedBranches(repo, merged.computeMergedBranches(repo));
-// 60s: this hook runs `git init` plus SIX `git worktree add` and then the refresher's own `gh` probes,
-// and the default 15s is not enough when the whole package's suites are running in parallel.
 }, 60_000);
 
 afterAll(() => {

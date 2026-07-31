@@ -18,10 +18,27 @@ import { ForkPoint } from './git-findForkPoint';
  */
 export class DiffBasis {
     // The 3-point fork point of main. '' when neither origin/main nor main resolves.
+    // Alias of {@link hashForkPoint} — see the hash-point trio below.
     base: string;
     // The REAL sha, never the literal string 'HEAD'. A recorded 'HEAD' is worthless the moment a commit
     // lands on top of it, and the stage receipt has to compare shas to know the tree moved under a review.
+    // Alias of {@link hashFeatureHead}.
     headSha: string;
+    /**
+     * The SAME three hash points the 3-point merge records, under the SAME names
+     * (`merge-info/<branch>/updatemain-hashes.json` → hashForkPoint / hashFeatureHead / hashMainHead).
+     *
+     * Two reasons this matters. First, vocabulary: the merge half of the system said "hashForkPoint"
+     * while the review half said "base" for the identical sha, so nothing could be grepped across both.
+     * Second, and the real gap: the review side recorded only TWO of the three. Without `hashMainHead`
+     * nothing downstream can answer "did main move while this branch was under review?" — which is
+     * exactly what you want to know when a review looks stale or a merge is about to surprise you.
+     *
+     * `hashMainHead` is '' when origin/main cannot be resolved offline; it is a REPORT, never a gate.
+     */
+    hashForkPoint: string;
+    hashFeatureHead: string;
+    hashMainHead: string;
     // True when the diff includes staged/unstaged/untracked work, i.e. the range is base→working tree.
     dirty: boolean;
     // Exactly WHICH paths make it dirty, so a message can name them instead of asserting dirtiness.
@@ -32,13 +49,18 @@ export class DiffBasis {
     fileDiffCommand: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(base = '', headSha = '', dirty = false, dirtyFiles: string[] = [], diffCommand = '', fileDiffCommand = '') {
+    constructor(base = '', headSha = '', dirty = false, dirtyFiles: string[] = [], diffCommand = '', fileDiffCommand = '', hashMainHead = '') {
         this.base = base;
         this.headSha = headSha;
         this.dirty = dirty;
         this.dirtyFiles = dirtyFiles;
         this.diffCommand = diffCommand;
         this.fileDiffCommand = fileDiffCommand;
+        // The trio is DERIVED from base/headSha rather than passed separately, so the two names for one
+        // sha cannot drift apart into disagreeing values.
+        this.hashForkPoint = base;
+        this.hashFeatureHead = headSha;
+        this.hashMainHead = hashMainHead;
     }
 
     // True when there is no usable base — callers must SAY so rather than print a command that cannot work.
@@ -70,11 +92,15 @@ export class DiffBasisResolver {
     resolve(repoRoot: string): DiffBasis {
         const base = this.forkPoint.resolveForkPoint(repoRoot);
         const headSha = this.gitOut(repoRoot, ['rev-parse', 'HEAD']);
+        // Point C. Deliberately does NOT fetch — this must work offline, like resolveForkPoint. So it is
+        // main as this clone last saw it, which is the honest answer to "has main moved under me?" that a
+        // local command can give. '' when origin/main is unknown (no remote yet).
+        const mainHead = this.gitOut(repoRoot, ['rev-parse', 'origin/main']);
         const dirtyFiles = this.dirtyPaths(repoRoot);
         const dirty = dirtyFiles.length > 0;
-        if (base === '') return new DiffBasis('', headSha, dirty, dirtyFiles);
+        if (base === '') return new DiffBasis('', headSha, dirty, dirtyFiles, '', '', mainHead);
         const whole = dirty ? `git diff ${base}` : `git diff ${base} ${headSha}`;
-        return new DiffBasis(base, headSha, dirty, dirtyFiles, whole, `${whole} -- <file>`);
+        return new DiffBasis(base, headSha, dirty, dirtyFiles, whole, `${whole} -- <file>`, mainHead);
     }
 
     /**

@@ -173,12 +173,24 @@ export class PrContext {
     diffCommand: string;    // the command that reproduces the WHOLE diff (see DiffBasis; correct when dirty)
     diffDir: string;        // dir holding the materialized per-file diffs + ALL.diff; '' when not materialized
     generatedAt: string;    // ISO timestamp, so a stale context is detectable rather than silently trusted
+    /**
+     * Main's head as this clone last saw it — the THIRD hash point, matching the trio the 3-point merge
+     * records in `merge-info/<branch>/updatemain-hashes.json`. `base`/`head` above are points A and B
+     * under the review side's older names.
+     *
+     * The review side used to record only A and B, so nothing could answer "did main move while this was
+     * under review?" — the question you most want answered when a review looks stale. '' when origin/main
+     * is unresolvable. Purely informational; nothing gates on it.
+     */
+    hashMainHead: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         base: string, head: string, changedFiles: string[],
         dirty = false, dirtyFiles: string[] = [], diffCommand = '', diffDir = '', generatedAt = '',
+        hashMainHead = '',
     ) {
+        this.hashMainHead = hashMainHead;
         this.base = base;
         this.head = head;
         this.changedFiles = changedFiles;
@@ -211,13 +223,27 @@ export class ReviewJsonService {
         return path.join(this.prDirFor(repoRoot, featureName), 'pr-context.json');
     }
 
-    // Persist the PR's diff context so reviewer subagents can read the changed-file set + the exact base
-    // sha (then `git diff <base> HEAD -- <file>` for content). Returns the file path written.
-    writePrContext(repoRoot: string, featureName: string, context: PrContext): string {
+    /**
+     * Persist the PR's diff context so reviewer subagents can read the changed-file set + the exact base
+     * sha. Returns the file path written.
+     *
+     * ALSO writes an immutable per-stage snapshot under `stages/<stage>.json` when `stage` is given.
+     * `pr-context.json` is overwritten by each stage, so by the time anything goes wrong the earlier
+     * states are gone — and "what did the tooling think the diff was at stage ①, vs ②, vs ③?" is exactly
+     * the question you need answered when debugging a review that went sideways. The snapshots make the
+     * review system auditable by an AI reviewing IT, which the single mutable file never could.
+     */
+    writePrContext(repoRoot: string, featureName: string, context: PrContext, stage = ''): string {
         const dir = this.prDirFor(repoRoot, featureName);
         fs.mkdirSync(dir, { recursive: true });
+        const body = JSON.stringify(context, null, 2) + '\n';
         const p = this.prContextPath(repoRoot, featureName);
-        fs.writeFileSync(p, JSON.stringify(context, null, 2) + '\n');
+        fs.writeFileSync(p, body);
+        if (stage !== '') {
+            const stagesDir = path.join(dir, 'stages');
+            fs.mkdirSync(stagesDir, { recursive: true });
+            fs.writeFileSync(path.join(stagesDir, `${stage}.json`), body);
+        }
         return p;
     }
 

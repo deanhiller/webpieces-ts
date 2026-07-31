@@ -41,10 +41,14 @@ export class BuildAffected {
         return configured !== undefined && configured.trim() !== '' ? configured : DEFAULT_BUILD_COMMAND;
     }
 
-    /** Run the build gate. Returns the process exit code (0 = pass). */
+    /**
+     * Run the build gate. Returns the process exit code (0 = pass).
+     *
+     * Prints NOTHING itself — `runBuildGate` announces the command in one line. This used to print its own
+     * `▶ Build gate: <cmd>` banner on top of that, so the command appeared twice in a row.
+     */
     runBuildAffected(repoRoot: string, buildCommand?: string): number {
         const cmd = buildCommand !== undefined && buildCommand.trim() !== '' ? buildCommand : DEFAULT_BUILD_COMMAND;
-        process.stdout.write(`\n▶ Build gate: ${cmd}\n\n`);
         const result = spawnSync(cmd, { stdio: 'inherit', cwd: repoRoot, shell: true });
         return result.status ?? 1;
     }
@@ -61,11 +65,10 @@ export class BuildAffected {
      */
     runBuildGate(repoRoot: string, opts: BuildGateOptions): void {
         const buildCommand = this.resolveBuildCommand(repoRoot);
-        process.stdout.write('\n' + SEP + opts.label + '\n' + SEP + '\n');
-        process.stdout.write(
-            `Running the build gate. To get it passing, run the SAME command yourself and fix everything it reports:\n\n` +
-            `    ${buildCommand}\n\n`,
-        );
+        // TWO lines on the happy path — the command, then the result. The old framing spent a banner and a
+        // paragraph explaining how to reproduce a build that was about to pass anyway; that explanation is
+        // only useful when the build FAILS, so it now lives solely on the failure path below.
+        process.stdout.write(`\n${opts.label}: ${buildCommand}\n`);
         const buildCode = this.runConfiguredBuildGate(repoRoot);
         if (buildCode !== 0) {
             throw new CliExitError(buildCode,

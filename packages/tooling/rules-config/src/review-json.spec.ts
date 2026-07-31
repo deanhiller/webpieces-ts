@@ -107,6 +107,9 @@ describe('writePrContext', () => {
             diffCommand: 'git diff base123',
             diffDir: '/repo/diff',
             generatedAt: '2026-07-30T00:00:00.000Z',
+            // Point C of the same trio the 3-point merge records. Without it nothing downstream can
+            // answer "did main move while this branch was under review?".
+            hashMainHead: '',
         });
     });
 });

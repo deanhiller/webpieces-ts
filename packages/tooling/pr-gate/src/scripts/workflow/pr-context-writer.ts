@@ -38,16 +38,33 @@ export class PrContextWriter {
      * *.sql / Dockerfile / .env* file a checklist most wants to key on). `includeDeletions` is on for the
      * same reason: a DELETED migration is exactly what a checklist wants to see.
      */
-    ensure(repoRoot: string, featureName: string, basis: DiffBasis, diffDir = ''): ChecklistReviewContext {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    ensure(repoRoot: string, featureName: string, basis: DiffBasis, stage: string, changedFiles?: readonly string[], diffDir = ''): ChecklistReviewContext {
         if (basis.unresolved) return new ChecklistReviewContext();
+        // Reuse the caller's changed-file set when it has one. ChecklistScanner already computed exactly
+        // this list to do its matching, and recomputing it here was a second `git diff --name-only` per
+        // command for a list we were handed — and a second chance for the two to disagree.
+        const changed = changedFiles ?? this.changedFiles(repoRoot, basis);
+        const p = this.reviewJsonService.writePrContext(repoRoot, featureName, new PrContext(
+            basis.base, basis.headSha, [...changed],
+            basis.dirty, basis.dirtyFiles, basis.diffCommand, diffDir, new Date().toISOString(),
+            basis.hashMainHead,
+        ), stage);
+        return new ChecklistReviewContext(basis.base, p, basis.fileDiffCommand, diffDir, basis.dirty);
+    }
+
+    /** The context WITHOUT persisting it — for a caller that must write later (after materializing). */
+    contextFor(repoRoot: string, featureName: string, basis: DiffBasis): ChecklistReviewContext {
+        if (basis.unresolved) return new ChecklistReviewContext();
+        return new ChecklistReviewContext(
+            basis.base, this.reviewJsonService.prContextPath(repoRoot, featureName),
+            basis.fileDiffCommand, '', basis.dirty);
+    }
+
+    private changedFiles(repoRoot: string, basis: DiffBasis): string[] {
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
         opts.includeDeletions = true;
-        const changed = this.diffScope.getChangedFiles(repoRoot, basis.base, undefined, opts);
-        const p = this.reviewJsonService.writePrContext(repoRoot, featureName, new PrContext(
-            basis.base, basis.headSha, changed,
-            basis.dirty, basis.dirtyFiles, basis.diffCommand, diffDir, new Date().toISOString(),
-        ));
-        return new ChecklistReviewContext(basis.base, p, basis.fileDiffCommand, diffDir, basis.dirty);
+        return this.diffScope.getChangedFiles(repoRoot, basis.base, undefined, opts);
     }
 }

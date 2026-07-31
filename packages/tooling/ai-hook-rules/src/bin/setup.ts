@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RepoRootFinder } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -415,6 +415,32 @@ async function wireHook(hook: HookSpec, targets: InstallTarget[], projectRoot: s
     applyHook(hook, chosen, targets, projectRoot);
 }
 
+/**
+ * Scaffold the SERVER-SIDE PR gate: the CI workflow plus the doc explaining how to turn it on.
+ *
+ * This lives in the installer, not the PR flow. `wp-start-upsert-pr` used to do it — printing
+ * copy-to-`.github` and branch-protection instructions on EVERY run, at an agent doing feature work
+ * that could not act on them anyway (marking a check required needs a repo admin). Setup is a
+ * one-time, admin-shaped act, so it belongs with the other one-time setup.
+ *
+ * Written UNCONDITIONALLY, unlike the old version which required a `gateSalt` to already be set: the
+ * whole point of the doc is to tell you to set one, so gating it on the thing it teaches meant the
+ * instructions only appeared to repos that no longer needed them.
+ *
+ * Both land in gitignored `.webpieces/instruct-ai/`, never `.github/` directly — writing there would
+ * dirty the tree, and copying it is the human's decision. `IfMissing` for the yml so a repo that has
+ * customized its workflow never gets it clobbered; the doc itself is refreshed so it cannot go stale.
+ */
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function scaffoldCiGate(projectRoot: string): void {
+    writeTemplateIfMissing(projectRoot, 'webpieces-pr-gate.yml');
+    writeTemplate(projectRoot, 'webpieces.ci-gate-setup.md');
+    console.log('');
+    console.log('ℹ️  Optional: server-side PR gate (stops an UNHOOKED teammate opening a PR in the web UI).');
+    console.log('   It is OFF until you set a gateSalt. Three steps, one of which needs a repo admin:');
+    console.log('     .webpieces/instruct-ai/webpieces.ci-gate-setup.md');
+}
+
 export async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const syncOnly = args.includes('--sync');
@@ -424,6 +450,8 @@ export async function main(): Promise<void> {
 
     seedOrSyncConfig(projectRoot, syncOnly);
     if (syncOnly) return;
+
+    scaffoldCiGate(projectRoot);
 
     const targets = installTargets(projectRoot);
 

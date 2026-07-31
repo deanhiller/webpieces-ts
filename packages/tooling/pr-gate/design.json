@@ -1249,6 +1249,15 @@
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
+                    "to": "PrContextWriter",
+                    "injection": "type",
+                    "token": "PrContextWriter",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-context-writer.ts#PrContextWriter",
+                    "paramName": "prContextWriter",
+                    "paramType": "PrContextWriter"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",

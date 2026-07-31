@@ -30,8 +30,13 @@ export class DiffManifestEntry {
 
 /** The authoritative map from a mangled `.diff` name back to its real path, plus what was dropped. */
 export class DiffManifest {
+    // Points A and B. Also exposed as hashForkPoint/hashFeatureHead below, which is the vocabulary the
+    // 3-point merge already uses — one grep should find the same sha on both halves of the system.
     base: string;
     head: string;
+    hashForkPoint: string;
+    hashFeatureHead: string;
+    hashMainHead: string;   // point C: main as this clone last saw it. '' when unresolvable.
     dirty: boolean;
     diffCommand: string;
     entries: DiffManifestEntry[];
@@ -42,9 +47,14 @@ export class DiffManifest {
     constructor(
         base: string, head: string, dirty: boolean, diffCommand: string,
         entries: DiffManifestEntry[] = [], excluded: string[] = [], omittedFromAllDiff: string[] = [],
+        hashMainHead = '',
     ) {
         this.base = base;
         this.head = head;
+        // Derived, never passed separately, so the two names for one sha cannot drift into disagreement.
+        this.hashForkPoint = base;
+        this.hashFeatureHead = head;
+        this.hashMainHead = hashMainHead;
         this.dirty = dirty;
         this.diffCommand = diffCommand;
         this.entries = entries;
@@ -87,7 +97,8 @@ export class DiffMaterializer {
         const filesDir = path.join(dir, 'files');
         fs.rmSync(dir, { recursive: true, force: true }); // a stale diff read as current is worse than none
         fs.mkdirSync(filesDir, { recursive: true });
-        const manifest = new DiffManifest(basis.base, basis.headSha, basis.dirty, basis.diffCommand);
+        const manifest = new DiffManifest(
+            basis.base, basis.headSha, basis.dirty, basis.diffCommand, [], [], [], basis.hashMainHead);
         if (basis.unresolved) return this.writeManifest(dir, manifest);
         const byFile = this.captureByFile(repoRoot, basis);
         const used = new Set<string>();

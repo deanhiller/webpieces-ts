@@ -10,11 +10,12 @@ import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { BuildArtifactGate } from '../workflow/build-artifact-gate';
 import { ChecklistNotice } from '../workflow/checklist-notice';
 import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
-import { DiffManifest, DiffManifestEntry, DiffMaterializer } from '../workflow/diff-materializer';
+import { DiffMaterializer } from '../workflow/diff-materializer';
 import { GitExec } from '../workflow/git-exec';
 import { MergeContext } from '../workflow/merge-start';
 import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeState } from '../workflow/merge-state';
+import { PrContextWriter } from '../workflow/pr-context-writer';
 import { ReviewerBriefingBuilder } from '../workflow/reviewer-briefing-builder';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 
@@ -58,6 +59,7 @@ export class ReviewUpsertPrCommand {
         private readonly checklistNotice: ChecklistNotice,
         private readonly instructions: ChecklistInstructionsService,
         private readonly materializer: DiffMaterializer,
+        private readonly prContextWriter: PrContextWriter,
         private readonly briefingBuilder: ReviewerBriefingBuilder,
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly receipts: ReviewStageReceiptService,
@@ -74,7 +76,7 @@ export class ReviewUpsertPrCommand {
         this.gitExec.assertCleanTree(repoRoot);
         const buildPassedAt = this.runBuildGate(repoRoot);
 
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false));
+        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(false, ''));  // '' — THIS command writes the context itself, after materializing
         const briefings = this.briefReviewers(repoRoot, featureName, scan, config);
         this.receipts.write(repoRoot, featureName, new ReviewStageReceipt(
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
@@ -117,7 +119,7 @@ export class ReviewUpsertPrCommand {
      */
     private runBuildGate(repoRoot: string): string {
         this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
-            '🛠️  Build gate (pre-review)',
+            '🛠️  Build gate',
             'pnpm wp-review-upsert-pr',
             'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.',
         ));
@@ -140,9 +142,12 @@ export class ReviewUpsertPrCommand {
         const manifest = this.materializer.materialize(
             repoRoot, featureName, scan.basis, scan.changedFiles, config.reviewDiffExclude);
         const diffDir = this.materializer.diffDirFor(repoRoot, featureName);
-        // Re-point pr-context.json at the extracted diff now that there is one — the scan wrote it before
-        // materialization, so without this the reviewers' own context file would not mention the diff dir.
-        this.rewritePrContext(repoRoot, featureName, diffDir);
+        // Write pr-context.json ONCE, here — after materializing, so `diffDir` is populated on the first
+        // write. The scan deliberately did not write it (ChecklistScanOptions.contextStage === ''); it used
+        // to, which meant this command wrote the same file twice, the first time with an empty diffDir.
+        // `scan.changedFiles` is passed through so the context is not recomputed from a second git call.
+        scan.context = this.prContextWriter.ensure(
+            repoRoot, featureName, scan.basis, 'stage2-review', scan.changedFiles, diffDir);
         const briefings = this.briefingBuilder.build(repoRoot, scan, manifest, diffDir, config);
         const dir = this.reviewerInstructions.instructionsDirFor(repoRoot, featureName);
         fs.rmSync(dir, { recursive: true, force: true }); // stale instructions read as current are worse than none
@@ -151,48 +156,19 @@ export class ReviewUpsertPrCommand {
             fs.writeFileSync(this.reviewerInstructions.pathFor(repoRoot, featureName, b.subagent),
                 this.reviewerInstructions.render(b));
         }
-        this.printDiffSummary(manifest, diffDir);
         return briefings;
-    }
-
-    // pr-context.json is written by the scan (before the diff exists). Patch in the dir rather than
-    // re-deriving the whole context: re-deriving means a second basis resolution, which is the drift.
-    private rewritePrContext(repoRoot: string, featureName: string, diffDir: string): void {
-        const p = path.join(repoRoot, '.webpieces', 'pr-review', featureName, 'pr-context.json');
-        if (!fs.existsSync(p)) return;
-        // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable context is left as-is, never fatal
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            // webpieces-disable no-any-unknown -- opaque parsed JSON, one key added
-            const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>;
-            raw['diffDir'] = diffDir;
-            fs.writeFileSync(p, JSON.stringify(raw, null, 2) + '\n');
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error; // leave the file as-is — the instructions files carry the same paths directly
-        }
-    }
-
-    private printDiffSummary(manifest: DiffManifest, diffDir: string): void {
-        process.stdout.write('\n' + SEP + '② Diff extracted for the reviewers\n' + SEP + '\n');
-        process.stdout.write(`   ${manifest.entries.length} file(s) → ${diffDir}\n`);
-        if (manifest.excluded.length > 0) {
-            process.stdout.write(`   ${manifest.excluded.length} excluded by pr-gate.reviewDiffExclude (stubbed, still matched)\n`);
-        }
-        const truncated = manifest.entries.filter((e: DiffManifestEntry): boolean => e.truncated).length;
-        if (truncated > 0) process.stdout.write(`   ${truncated} truncated at the per-file cap (each says so in its footer)\n`);
     }
 
     /** What the AI must do next: spawn each reviewer, then write review.json. */
     private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[]): void {
-        process.stdout.write('\n' + SEP + '③ Review, then finish\n' + SEP + '\n');
+        process.stdout.write('\n' + SEP + '② Spawn Subagent Reviews, then finish\n' + SEP + '\n');
         if (scan.applicable.length === 0) {
             process.stdout.write(this.checklistNotice.build(scan.defined.length, 'wp-finish-upsert-pr'));
         } else {
             process.stdout.write(this.spawnBlocks(repoRoot, featureName, scan, briefings));
         }
         process.stdout.write(
-            `\nThen review your own changes and\n${reviewJsonSchemaHint(scan.reviewPath)}\n\n` +
+            `\nWhile your subagents are running, review your own changes and\n${reviewJsonSchemaHint(scan.reviewPath)}\n\n` +
             `Finally run:  pnpm wp-finish-upsert-pr\n` +
             `(The build gate is already green for this commit — finish reuses it unless HEAD moves.)\n\n`);
     }
