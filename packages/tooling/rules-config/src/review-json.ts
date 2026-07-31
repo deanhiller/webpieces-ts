@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
-import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
+import { PR_REVIEW_DIR } from './constants';
+import { DotWebpieces, dotWebpieces } from './state-dir';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
 
@@ -208,9 +209,12 @@ const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡',
 /** Locates + loads/validates the AI-authored review.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
 @injectable(bindingScopeValues.Singleton)
 export class ReviewJsonService {
-    // The per-feature PR working dir: `.webpieces/pr-review/<feature>`.
+    constructor(private readonly dotDir: DotWebpieces = dotWebpieces) {}
+
+    // The per-feature PR working dir: `<local .webpieces>/pr-review/<feature>`. LOCAL scope — a PR
+    // review belongs to the worktree that is preparing it, and two worktrees never share one.
     prDirFor(repoRoot: string, featureName: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, featureName);
+        return this.dotDir.localFile(repoRoot, PR_REVIEW_DIR, featureName);
     }
 
     // Absolute path of the review.json for a feature — beside pr-body.md, keyed by branch name.

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { WEBPIECES_TMP_DIR, RepoRootFinder } from '@webpieces/rules-config';
+import { DotWebpieces, dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const CUTOFF_DAYS = 30;
@@ -29,11 +29,17 @@ class SweepResult {
  */
 @injectable(bindingScopeValues.Singleton)
 export class CleanTmp {
-    constructor(private readonly repoRootFinder: RepoRootFinder) {}
+    constructor(
+        private readonly repoRootFinder: RepoRootFinder,
+        private readonly dotDir: DotWebpieces = dotWebpieces,
+    ) {}
 
     async cleanTmp(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        const tmpBase = path.join(repoRoot, WEBPIECES_TMP_DIR);
+        // LOCAL scope: a worktree garbage-collects its OWN merge-info/pr-review scratch dirs. It must
+        // never sweep the repo-wide dir, whose entries (merged-branches.json, the main-sync status and
+        // its lock) belong to every worktree at once.
+        const tmpBase = this.dotDir.local(repoRoot);
 
         if (!fs.existsSync(tmpBase)) {
             return;

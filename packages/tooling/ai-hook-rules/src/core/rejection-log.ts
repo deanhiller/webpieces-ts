@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { RepoRootFinder } from '@webpieces/rules-config';
+import { dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 
-const HOOKS_DIR = '.webpieces/hooks';
+const HOOKS_DIR = 'hooks';
 const LOG_FILE = 'hook-rejection.log';
 const LOG_FILE_PREV = 'hook-rejection.1.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded
@@ -29,7 +29,9 @@ export function logRejection(
         const epochMs = String(now.getTime());
         const dateStr = timestamp.slice(0, 10);
 
-        const hooksDir = path.join(root, HOOKS_DIR);
+        // LOCAL scope — a rejection is this worktree's event, and a per-worktree log has exactly one
+        // writer, so its appends and its daily detail files cannot collide with another agent's.
+        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
         const dayDir = path.join(hooksDir, dateStr);
         fs.mkdirSync(dayDir, { recursive: true });
 

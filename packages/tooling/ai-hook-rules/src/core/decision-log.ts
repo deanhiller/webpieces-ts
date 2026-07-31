@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { readMainSyncStatus, MainSyncStatus, RepoRootFinder } from '@webpieces/rules-config';
+import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
 
@@ -11,7 +11,7 @@ import { toError } from './to-error';
 // one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
 // traceable to a stale or missing async write. Writes to `.webpieces/hooks/guard-sync-decisions.log`.
-const HOOKS_DIR = '.webpieces/hooks';
+const HOOKS_DIR = 'hooks';
 const LOG_FILE = 'guard-sync-decisions.log';
 const LOG_FILE_PREV = 'guard-sync-decisions.1.log';
 // The per-INVOCATION stream (companion to the per-DECISION log above): one line for every guards-hook
@@ -58,7 +58,9 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const timestamp = new Date().toISOString();
-        const hooksDir = path.join(root, HOOKS_DIR);
+        // LOCAL scope: a guard decision belongs to the tree it judged, and a per-worktree log has one
+        // writer, so appends cannot interleave with another agent's.
+        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
         fs.mkdirSync(hooksDir, { recursive: true });
 
         const logPath = path.join(hooksDir, LOG_FILE);
@@ -97,7 +99,7 @@ export function logGuardInvocation(cwd: string, tool: string, target: string): v
         const branch = branchForLog(root);
         const sync = summarizeSyncStatus(readMainSyncStatus(root));
 
-        const hooksDir = path.join(root, HOOKS_DIR);
+        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
         fs.mkdirSync(hooksDir, { recursive: true });
         const logPath = path.join(hooksDir, INVOCATION_LOG_FILE);
         rotateLogFile(logPath, path.join(hooksDir, INVOCATION_LOG_FILE_PREV));

@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { WEBPIECES_TMP_DIR } from './constants';
+import { AtomicFile } from './atomic-file';
+import { DotWebpieces, dotWebpieces } from './state-dir';
 import { toError } from './to-error';
 
 // Shared "is my feature branch healthy relative to origin/main?" state. The SLOW signals (git fetch +
@@ -113,12 +114,47 @@ interface CmdCapture {
  */
 @injectable(bindingScopeValues.Singleton)
 export class MainSyncStatusService {
+    constructor(
+        private readonly dotDir: DotWebpieces = dotWebpieces,
+        private readonly atomicFile: AtomicFile = new AtomicFile(),
+    ) {}
+
+    /**
+     * SHARED scope: `<primary>/.webpieces/main-sync-status.json`, one per repo.
+     *
+     * It is the OUTPUT of the single-flight refresher below, so it has to live where the lock lives —
+     * one `.git`, one `origin/main`, one fetch, one answer. A per-worktree copy under single-flight
+     * would only ever be written for whichever worktree won the lock anyway.
+     *
+     * KNOWN CONSEQUENCE, stated plainly rather than discovered later: the file's CONTENT is keyed to
+     * one branch (`branch`, `featureHead`, `conflict`, `conflictFiles`), and every reader fails OPEN
+     * when the cached branch is not the branch being judged (`merged-branch-bash-guard` and
+     * `stale-main-bash-guard` both log `stale-cross-branch-cache (fail-open)`). With several worktrees
+     * on several branches, the losers of the lock therefore see a cross-branch cache and their guards
+     * allow rather than block. That is the fail-SAFE direction and it is inherent to single-flight, not
+     * to the shared path — but making the entries branch-keyed (a map of branch → status, written
+     * atomically) is the obvious follow-up.
+     */
     mainSyncStatusPath(repoRoot: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_STATUS_FILE);
+        return this.dotDir.sharedFile(repoRoot, MAIN_SYNC_STATUS_FILE);
     }
 
+    /**
+     * SHARED scope — the single-flight lock for the whole repo.
+     *
+     * This is the fix for the filed bug "the detached main-sync refresher's `git fetch` races the
+     * agent's foreground `git fetch`/`git pull` and corrupts `.git/FETCH_HEAD`". The lock was already
+     * atomic (O_CREAT|O_EXCL) and already serialised refreshers against each other — but only WITHIN
+     * one worktree, so N worktrees meant N locks and up to N concurrent `git fetch`es against the ONE
+     * shared `.git`, which is exactly how a duplicate `for-merge` line lands in FETCH_HEAD. There is
+     * one `.git`, so there is now one lock: at most one refresher in flight across all worktrees.
+     *
+     * Stale-lock handling is unchanged and still required (a lock nobody can clear is worse than the
+     * race): the holder records pid + start epoch, and `tryAcquireMainSyncLock` reclaims it once
+     * `isRefreshInProgress` proves the holder is finished, hung past hangTimeoutMinutes, or dead.
+     */
     mainSyncLockPath(repoRoot: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MAIN_SYNC_LOCK_FILE);
+        return this.dotDir.sharedFile(repoRoot, MAIN_SYNC_LOCK_FILE);
     }
 
     // Pure read — any error (missing file, malformed JSON) returns null so the guard fails OPEN.
@@ -150,10 +186,14 @@ export class MainSyncStatusService {
         }
     }
 
+    /**
+     * ATOMIC write (temp file + `rename()` in the same directory). The refresher writes this file while
+     * guards on the blocking path read it; a plain `writeFileSync` truncates first, so a reader landing
+     * in that window gets a torn document. Now that the file is repo-wide the reader may be in another
+     * worktree entirely, which widens the window rather than creating it. See AtomicFile.
+     */
     writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void {
-        const statusPath = this.mainSyncStatusPath(repoRoot);
-        this.ensureDir(statusPath);
-        fs.writeFileSync(statusPath, JSON.stringify(status, null, 2) + '\n');
+        this.atomicFile.writeJsonAtomic(this.mainSyncStatusPath(repoRoot), status);
     }
 
     readMainSyncLock(repoRoot: string): MainSyncLock | null {

@@ -6,7 +6,7 @@
             "root": "PrGateApp",
             "rootKind": "controller",
             "file": "packages/tooling/pr-gate/src/scripts/pr-gate-app.ts",
-            "maxLevel": 7,
+            "maxLevel": 8,
             "nodes": [
                 {
                     "id": "AiBranchName",
@@ -15,6 +15,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts",
                     "level": 6
+                },
+                {
+                    "id": "AtomicFile",
+                    "className": "AtomicFile",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/atomic-file.ts",
+                    "level": 4
                 },
                 {
                     "id": "BranchArchiver",
@@ -151,6 +159,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/diff-scope.ts",
                     "level": 4
+                },
+                {
+                    "id": "DotWebpieces",
+                    "className": "DotWebpieces",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/state-dir.ts",
+                    "level": 7
                 },
                 {
                     "id": "FinishBanner",
@@ -385,6 +401,14 @@
                     "level": 1
                 },
                 {
+                    "id": "StateDirMigrator",
+                    "className": "StateDirMigrator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/state-dir-migration.ts",
+                    "level": 8
+                },
+                {
                     "id": "SubagentProvenanceService",
                     "className": "SubagentProvenanceService",
                     "kind": "class",
@@ -426,6 +450,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
                     "paramName": "branchNaming",
                     "paramType": "BranchNaming"
+                },
+                {
+                    "from": "BranchMutationLog",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
                 },
                 {
                     "from": "BranchReaper",
@@ -573,6 +606,15 @@
                 },
                 {
                     "from": "CleanTmp",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "CleanTmp",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
@@ -642,6 +684,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "DotWebpieces",
+                    "to": "StateDirMigrator",
+                    "injection": "type",
+                    "token": "StateDirMigrator",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir-migration.ts#StateDirMigrator",
+                    "paramName": "migrator",
+                    "paramType": "StateDirMigrator"
                 },
                 {
                     "from": "FinishUpdateCommand",
@@ -1023,6 +1074,15 @@
                 },
                 {
                     "from": "MergeInfoIndex",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "MergeInfoIndex",
                     "to": "MergeState",
                     "injection": "type",
                     "token": "MergeState",
@@ -1065,6 +1125,33 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "MergeState",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "MergedBranchesService",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "MergedBranchesService",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
                 },
                 {
                     "from": "MergedBranchesService",
@@ -1173,6 +1260,24 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
                     "paramName": "startUpsertPrCommand",
                     "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "RepoRootFinder",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReviewJsonService",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
                 },
                 {
                     "from": "ReviewStageReceiptService",

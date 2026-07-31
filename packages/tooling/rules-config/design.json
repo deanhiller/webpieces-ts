@@ -6,8 +6,16 @@
             "root": "RulesConfigDesign",
             "rootKind": "apiImplementation",
             "file": "packages/tooling/rules-config/src/rules-config-design.ts",
-            "maxLevel": 2,
+            "maxLevel": 3,
             "nodes": [
+                {
+                    "id": "AtomicFile",
+                    "className": "AtomicFile",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/atomic-file.ts",
+                    "level": 2
+                },
                 {
                     "id": "BranchMutationLog",
                     "className": "BranchMutationLog",
@@ -39,6 +47,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/diff-scope.ts",
                     "level": 1
+                },
+                {
+                    "id": "DotWebpieces",
+                    "className": "DotWebpieces",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/state-dir.ts",
+                    "level": 2
                 },
                 {
                     "id": "MainSyncStatusService",
@@ -73,6 +89,14 @@
                     "level": 0
                 },
                 {
+                    "id": "StateDirMigrator",
+                    "className": "StateDirMigrator",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/state-dir-migration.ts",
+                    "level": 3
+                },
+                {
                     "id": "TemplateWriter",
                     "className": "TemplateWriter",
                     "kind": "class",
@@ -83,6 +107,15 @@
             ],
             "edges": [
                 {
+                    "from": "BranchMutationLog",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
                     "from": "ConfigLoader",
                     "to": "ConfigFile",
                     "injection": "type",
@@ -90,6 +123,51 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/config-file.ts#ConfigFile",
                     "paramName": "configFile",
                     "paramType": "ConfigFile"
+                },
+                {
+                    "from": "DotWebpieces",
+                    "to": "StateDirMigrator",
+                    "injection": "type",
+                    "token": "StateDirMigrator",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir-migration.ts#StateDirMigrator",
+                    "paramName": "migrator",
+                    "paramType": "StateDirMigrator"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "RepoRootFinder",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReviewJsonService",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
                 },
                 {
                     "from": "RulesConfigDesign",
@@ -153,6 +231,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/load-template.ts#TemplateWriter",
                     "paramName": "templateWriter",
                     "paramType": "TemplateWriter"
+                },
+                {
+                    "from": "TemplateWriter",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
+                    "from": "TemplateWriter",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotDir",
+                    "paramType": "DotWebpieces"
                 }
             ],
             "unresolved": []

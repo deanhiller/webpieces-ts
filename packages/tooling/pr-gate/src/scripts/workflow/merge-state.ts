@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    WEBPIECES_TMP_DIR,
+    DotWebpieces,
+    dotWebpieces,
     MERGE_INFO_DIR,
     MERGE_IN_PROGRESS_FILE,
     MERGE_EXPLANATION_FILE,
@@ -106,6 +107,8 @@ export const MERGE_INDEX_FILE = 'index.json';
 /** Filesystem layout + read/write of the per-feature merge run dirs and their conflict markers. */
 @injectable(bindingScopeValues.Singleton)
 export class MergeState {
+    constructor(private readonly dotDir: DotWebpieces = dotWebpieces) {}
+
     // The per-feature "home" dir `.webpieces/merge-info/<slug>/`. It no longer holds the marker/context
     // directly — each sync gets its own numbered `merge-<n>/` run dir underneath (mergeRunDirFor),
     // paired with the sync's `<feature>PreMerge<n>` backup branch. This keeps merge N from ever reusing
@@ -116,19 +119,27 @@ export class MergeState {
         return staged;
     }
 
-    /** `.webpieces/merge-info/staged/<feature>/` — the in-flight home. */
+    /**
+     * `<local .webpieces>/merge-info/staged/<feature>/` — the in-flight home.
+     *
+     * LOCAL scope throughout this class: a 3-point merge belongs to the worktree performing it, and
+     * two worktrees are on two different branches, so these paths are disjoint by construction and need
+     * no locking. In a linked worktree they now resolve under
+     * `<primary>/.webpieces/worktrees/<name>/merge-info/…`, which also means an in-flight merge is not
+     * destroyed by removing the worktree directory.
+     */
     stagedDirFor(repoRoot: string, featureName: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, STAGED_DIR, featureName);
+        return this.dotDir.localFile(repoRoot, MERGE_INFO_DIR, STAGED_DIR, featureName);
     }
 
-    /** `.webpieces/merge-info/merged/<feature>/` — the landed home. */
+    /** `<local .webpieces>/merge-info/merged/<feature>/` — the landed home. */
     mergedDirFor(repoRoot: string, featureName: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, MERGED_DIR, featureName);
+        return this.dotDir.localFile(repoRoot, MERGE_INFO_DIR, MERGED_DIR, featureName);
     }
 
-    /** `.webpieces/merge-info/` itself — the home holding `staged/`, `merged/` and `index.json`. */
+    /** `<local .webpieces>/merge-info/` itself — holds `staged/`, `merged/` and `index.json`. */
     mergeInfoRoot(repoRoot: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR);
+        return this.dotDir.localFile(repoRoot, MERGE_INFO_DIR);
     }
 
     /**
@@ -148,7 +159,7 @@ export class MergeState {
      * ever part of a commit.
      */
     private migrateLegacyHome(repoRoot: string, featureName: string, staged: string): void {
-        const legacy = path.join(repoRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, featureName);
+        const legacy = this.dotDir.localFile(repoRoot, MERGE_INFO_DIR, featureName);
         if (featureName === STAGED_DIR || featureName === MERGED_DIR) return;
         if (!fs.existsSync(legacy) || fs.existsSync(staged)) return;
         fs.mkdirSync(path.dirname(staged), { recursive: true });

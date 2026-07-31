@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { dotWebpieces } from '@webpieces/rules-config';
+
 import { toError } from './to-error';
 
 // The ASYNC log — observability for the detached background refresher (sync-main.ts) that writes
@@ -10,7 +12,7 @@ import { toError } from './to-error';
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
 // mid-run (START with no FINISH), or threw. Writes to `.webpieces/hooks/guard-async-work.log`.
-const HOOKS_DIR = '.webpieces/hooks';
+const HOOKS_DIR = 'hooks';
 const LOG_FILE = 'guard-async-work.log';
 const LOG_FILE_PREV = 'guard-async-work.1.log';
 const STDERR_FILE = 'guard-async-work.stderr.log';
@@ -43,7 +45,9 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const timestamp = new Date().toISOString();
-        const hooksDir = path.join(root, HOOKS_DIR);
+        // LOCAL scope: this is the refresher's own lifecycle trace for THIS worktree. One writer per
+        // log, so its appends cannot interleave with another agent's.
+        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
         fs.mkdirSync(hooksDir, { recursive: true });
 
         const logPath = path.join(hooksDir, LOG_FILE);
@@ -68,7 +72,7 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
 // captured instead of vanishing into /dev/null. Callers must ensure the hooks dir exists first
 // (logSyncEvent's mkdir, called for SPAWN_ATTEMPT, does that).
 export function syncStderrLogPath(root: string): string {
-    return path.join(root, HOOKS_DIR, STDERR_FILE);
+    return dotWebpieces.localFile(root, HOOKS_DIR, STDERR_FILE);
 }
 
 // Collapse newlines/tabs and cap length so one event is always one log line.
