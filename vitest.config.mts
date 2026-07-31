@@ -79,32 +79,37 @@ export default defineConfig({
         // cost is dominated by SPAWN COUNT, not by work. That is fixed where it belongs — batched grep
         // (ShimTestkit.ereMatchSet), repo fixtures built once and copied (main-sync-status.spec), one
         // shim run per it() — which took the worst test from ~13s to ~5s under a full parallel run.
-        // What is left is inherent: an integration test of a git-driven code path spawns git. 15s keeps
-        // ~3x headroom over that measured worst case while still catching a genuine hang.
-        testTimeout: 15_000,
-        hookTimeout: 15_000,
+        // What is left is inherent: an integration test of a git-driven code path spawns git.
+        //
+        // 45s, not the old 15s. A spawn from INSIDE a vitest worker costs ~195ms even for a bare `echo`
+        // (2.6ms from plain node), so a spec doing ~50 git calls is spawn-bound, and on a loaded machine
+        // these integration tests were measured at 15-24s. 15s was not catching hangs, it was failing
+        // honest work. 45s still catches a genuine hang while leaving room for a busy CI box.
+        testTimeout: 45_000,
+        hookTimeout: 45_000,
         /**
-         * The 'dot' reporter, to stop a GREEN run being reported as a failure.
+         * NO `reporters` override and NO pool tuning here — both were tried against this repo's
+         * `[vitest-worker]: Timeout calling "onTaskUpdate"` failures (a run reported FAILED while
+         * printing `307 passed, 0 failed`) and neither is the fix. Recorded so nobody re-adds them:
          *
-         * These suites drive real git through `execSync`, which BLOCKS the worker's event loop. The
-         * default reporter sends an `onTaskUpdate` RPC per test; when a blocking git call runs long
-         * enough under load, the worker cannot answer that call and vitest fails the run with
-         * `[vitest-worker]: Timeout calling "onTaskUpdate"` — while printing `307 passed, 0 failed`.
-         * A green run reported as a failure is worse than a slow one: it trains you to re-run and
-         * shrug, which is exactly how a REAL failure gets shrugged at too.
+         *   - `reporters: ['dot']` cannot help. The worker emits `onTaskUpdate` UNCONDITIONALLY;
+         *     reporters live only in the MAIN process, so the choice changes rendering, not RPC volume.
+         *     Worse under nx: output is a pipe, so non-TTY `DotReporter` does a SYNCHRONOUS write PER
+         *     TEST — one real run emitted 638 of them, where the default reporter writes none.
+         *   - `maxForks: 1` measured 0 failures once and then 26 failures on the next run at higher
+         *     load. Not a fix, just a wider margin.
+         *   - `pool: 'threads'` made no difference (182.9ms vs 194.8ms spawn floor).
          *
-         * 'dot' emits far fewer of those updates, so it targets the call that actually times out —
-         * rather than reducing parallelism (which the spawn-count note above argues is not the
-         * driver) or loosening a timeout that is not being exceeded by any test.
+         * THE ACTUAL CAUSE was an upstream BUG, not our configuration: vitest's `forks.ts` passed the
+         * `node:v8` module straight in as birpc options; `v8` has no `timeout` property, so birpc fell
+         * back to `DEFAULT_TIMEOUT` = 60s (vitest-dev/vitest#8164). Our suites drive git through
+         * `execSync`, which BLOCKS the worker's event loop, and the ack arrives as an IPC message — an
+         * I/O event needing a MACROTASK turn that a synchronous test never yields. So acks queued
+         * unprocessed for a measured 55-95s, and everything past 60s was reported as a failure.
          *
-         * The tradeoff is per-test names only appear for failures. Failure output is unchanged.
+         * Fixed upstream in #8297 by passing `timeout: -1`, shipped in 4.1.6 and NEVER backported to
+         * 3.x. That is why this repo is on vitest >= 4.1.6 — do not downgrade below it.
          */
-        reporters: ['dot'],
         pool: 'forks',
-        poolOptions: {
-            forks: {
-                maxForks: 2,
-            },
-        },
     },
 });

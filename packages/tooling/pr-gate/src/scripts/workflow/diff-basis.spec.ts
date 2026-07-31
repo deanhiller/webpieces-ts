@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -18,15 +18,41 @@ function git(cwd: string, cmd: string): void {
     execSync(cmd, { cwd, stdio: 'pipe' });
 }
 
-/** A real git repo with `main` at a baseline commit and a feature branch checked out on top of it. */
+/**
+ * The fixture repo, built ONCE and copied per test rather than `git init`-ed per test.
+ *
+ * MEASURED, not assumed: building it costs ~268ms (4 git spawns); copying the finished tree costs
+ * ~5ms — 56x. That difference is not about speed for its own sake. Every one of those spawns runs
+ * through `execSync`, which BLOCKS this worker's event loop, and a blocked worker cannot process
+ * vitest's `onTaskUpdate` acks. Let one spec file block long enough and an in-flight ack passes
+ * birpc's hardcoded 60s timeout, and the whole run is reported as FAILED with every test passing.
+ *
+ * So the spawn count in a git-heavy spec is not a tidiness concern — it is the flake budget.
+ */
+let template = '';
+
+beforeAll(() => {
+    template = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-basis-tpl-'));
+    git(template, 'git init -q -b main');
+    // core.hooksPath=/dev/null: this developer has a GLOBAL core.hooksPath, so every `git commit` in a
+    // throwaway repo fires their real hooks — measured at 460ms vs 13ms, 35x, and almost all of it spent
+    // WAITING (0.03s CPU of 0.46s). That cost lands on `execSync`, which blocks this worker's event loop
+    // and is what pushes an in-flight vitest ack past its 60s timeout. Ten other specs already do this.
+    git(template, 'git config core.hooksPath /dev/null');
+    git(template, 'git config user.email t@t.t && git config user.name t');
+    fs.writeFileSync(path.join(template, 'base.txt'), 'base\n');
+    git(template, 'git add -A && git commit -q -m base');
+    git(template, 'git checkout -q -b feat');
+});
+
+afterAll(() => {
+    if (template !== '') fs.rmSync(template, { recursive: true, force: true });
+});
+
 function repoOnFeatureBranch(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-basis-'));
     dirs.push(dir);
-    git(dir, 'git init -q -b main');
-    git(dir, 'git config user.email t@t.t && git config user.name t');
-    fs.writeFileSync(path.join(dir, 'base.txt'), 'base\n');
-    git(dir, 'git add -A && git commit -q -m base');
-    git(dir, 'git checkout -q -b feat');
+    fs.cpSync(template, dir, { recursive: true });
     return dir;
 }
 
@@ -110,6 +136,7 @@ describe('DiffBasisResolver — dirtiness and degenerate repos', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-basis-nomain-'));
         dirs.push(dir);
         git(dir, 'git init -q -b solo');
+        git(dir, 'git config core.hooksPath /dev/null');
         git(dir, 'git config user.email t@t.t && git config user.name t');
         fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n');
         git(dir, 'git add -A && git commit -q -m only');

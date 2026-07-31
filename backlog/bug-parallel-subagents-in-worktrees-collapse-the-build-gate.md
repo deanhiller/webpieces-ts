@@ -60,7 +60,7 @@ All times local (transcript `timestamp` fields, UTC−3 offset applied consisten
 
 **`landpr` is a natural experiment.** The same agent, same repo, same gate:
 
-- **04:33–04:51, alone**: `build-all` → `wp-start` → `wp-review` → `wp-finish`, each ~1 minute apart,
+- **04:33–04:51, alone**: `build-all` → `wp-start-upsert-pr` → `wp-review-upsert-pr` → `wp-finish-upsert-pr`, each ~1 minute apart,
   every stage first try. It even hit **genuine** `ai-hook-rules:test` failures at 04:46:38, fixed them
   in code, and moved on. Total 18 minutes.
 - **06:20–07:22, with seven siblings**: ~59 minutes, **42+ gate invocations**, never green, killed.

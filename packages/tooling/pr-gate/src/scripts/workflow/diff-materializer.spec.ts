@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -19,15 +19,42 @@ function git(cwd: string, cmd: string): void {
     execSync(cmd, { cwd, stdio: 'pipe' });
 }
 
+/**
+ * Built ONCE and copied per test. MEASURED, interleaved against the per-test-`git init` version to
+ * cancel this machine's load drift: 30.5s -> 14.2s mean, a consistent 2.1x over three rounds.
+ *
+ * Two costs are being removed, and both matter for the same reason. `core.hooksPath=/dev/null`: this
+ * developer has a GLOBAL hooksPath, so every commit in a throwaway repo fires their real hooks — 460ms
+ * vs 13ms. And copying the finished tree replaces 4 spawns with one filesystem copy, which matters far
+ * more than it looks: a spawn from inside a vitest worker costs ~195ms even for `echo` (vs 2.6ms in
+ * bare node), so spawns here are ~75x their normal price.
+ *
+ * Why a test-speed comment belongs in a spec: every one of those spawns is `execSync`, which BLOCKS
+ * the worker's event loop, and a blocked worker cannot process vitest's `onTaskUpdate` acks. Enough
+ * blocking in one file and an in-flight ack passes birpc's hardcoded 60s timeout — at which point the
+ * whole run is reported FAILED with every test passing. Spawn count here is the flake budget.
+ */
+let template = '';
+
+beforeAll(() => {
+    template = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mat-tpl-'));
+    git(template, 'git init -q -b main');
+    git(template, 'git config core.hooksPath /dev/null');
+    git(template, 'git config user.email t@t.t && git config user.name t');
+    fs.mkdirSync(path.join(template, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(template, 'src', 'keep.ts'), 'keep\n');
+    git(template, 'git add -A && git commit -q -m base');
+    git(template, 'git checkout -q -b feat');
+});
+
+afterAll(() => {
+    if (template !== '') fs.rmSync(template, { recursive: true, force: true });
+});
+
 function repoOnFeatureBranch(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mat-'));
     dirs.push(dir);
-    git(dir, 'git init -q -b main');
-    git(dir, 'git config user.email t@t.t && git config user.name t');
-    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\n');
-    git(dir, 'git add -A && git commit -q -m base');
-    git(dir, 'git checkout -q -b feat');
+    fs.cpSync(template, dir, { recursive: true });
     return dir;
 }
 
@@ -165,6 +192,7 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-mat-nomain-'));
         dirs.push(dir);
         git(dir, 'git init -q -b solo');
+        git(dir, 'git config core.hooksPath /dev/null');
         git(dir, 'git config user.email t@t.t && git config user.name t');
         fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n');
         git(dir, 'git add -A && git commit -q -m only');
