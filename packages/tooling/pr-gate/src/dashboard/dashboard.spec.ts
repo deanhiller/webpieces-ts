@@ -4,7 +4,7 @@ import {
     Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow, ChecklistCommentRow,
     CHECKLIST_COMMENT_MARKER,
 } from './dashboard';
-import { CK_PASS, CK_WARN, CK_OVERRIDDEN } from '@webpieces/rules-config';
+import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL } from '@webpieces/rules-config';
 
 const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] => dash.computeGateResults(g, f);
@@ -283,41 +283,99 @@ describe('renderCommitBody', () => {
     });
 });
 
-describe('renderDashboard checklists', () => {
-    it('renders NO checklist row when none triggered (non-adopting repos see no change)', () => {
+// The ~90-word override paragraph that used to be inlined on EVERY per-checklist dashboard row.
+const OVERRIDE_PROSE =
+    'HUMAN-APPROVED OVERRIDE (Dean Hiller, explicit, in-session). This branch is a THROWAWAY pr-gate ' +
+    'smoke test and is NOT for merge - the defects below were planted deliberately. Delete this branch ' +
+    'after the layout has been eyeballed.';
+
+function dashboardWith(rows: ChecklistRow[]): string {
+    const input = new DashboardInput(
+        'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
+    );
+    return renderDashboard(input);
+}
+
+describe('renderDashboard checklists — ONE rolled-up row', () => {
+    // Nobody looked is NOT an all-clear. A green row (or, as before, no row at all) reads as "checked and
+    // clean"; ⚪ says no reviewer was involved, which is precisely what a reader must be able to tell apart.
+    it('renders a SKIPPED ⚪ row — never green, never nothing — when no checklist ran', () => {
         const input = new DashboardInput(
             'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(),
         );
-        expect(renderDashboard(input)).not.toContain('Checklist —');
-    });
-
-    it('renders one row per matched checklist with its resolved verdict', () => {
-        const rows = [
-            new ChecklistRow('migrations-reviewer', CK_PASS),
-            new ChecklistRow('hasura-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210'),
-        ];
-        const input = new DashboardInput(
-            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
-        );
         const md = renderDashboard(input);
-        expect(md).toContain('**Checklist — migrations-reviewer:** 🟢 passed');
-        expect(md).toContain('**Checklist — hasura-reviewer:** 🟠 OVERRIDDEN — override: behind a flag; ONE-2210');
+        expect(md).toContain('**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment');
+        expect(md).not.toContain('**Checklists:** 🟢');
+        expect(md).not.toContain('Checklist —');   // and no per-checklist row survives anywhere
     });
 
-    it('renders a yellow verdict as passed-with-concerns, never as a plain pass', () => {
-        const rows = [new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit on the new route')];
+    // The bug this row replaced: six checklists meant six rows, each repeating the SAME override paragraph.
+    it('collapses six overridden checklists into ONE orange row with a count and NO override prose', () => {
+        const ids = ['morpheus-envvars', 'morpheus-frontend', 'morpheus-db', 'morpheus-api', 'morpheus-infra', 'morpheus-a11y'];
+        const md = dashboardWith(ids.map((id: string): ChecklistRow => new ChecklistRow(id, CK_OVERRIDDEN, OVERRIDE_PROSE)));
+
+        expect(md).toContain('**Checklists:** 🟠 6 ran — 6 overridden (morpheus-envvars, morpheus-frontend, ' +
+            'morpheus-db, morpheus-api +2 more) · per-checklist detail in the checklist comment');
+        expect(md.match(/\*\*Checklists:\*\*/g)).toHaveLength(1);
+        expect(md).not.toContain('HUMAN-APPROVED OVERRIDE');
+        expect(md).not.toContain('THROWAWAY');
+        expect(md).not.toContain('override:');
+    });
+
+    it('is GREEN and says all passed when every checklist passed', () => {
+        const md = dashboardWith([new ChecklistRow('db-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_PASS)]);
+        expect(md).toContain('**Checklists:** 🟢 2 ran — all passed · per-checklist detail in the checklist comment');
+    });
+
+    // Worst-of: red beats orange beats yellow beats green, and the row names who is red.
+    it('is RED when any checklist is blocking, even amid overrides and passes', () => {
+        const md = dashboardWith([
+            new ChecklistRow('db-reviewer', CK_PASS),
+            new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit'),
+            new ChecklistRow('secrets-reviewer', CK_OVERRIDDEN, OVERRIDE_PROSE),
+            new ChecklistRow('infra-reviewer', CK_FAIL, 'the Dockerfile is never built'),
+        ]);
+        expect(md).toContain('**Checklists:** 🔴 4 ran — 1 blocking (infra-reviewer), 1 overridden ' +
+            '(secrets-reviewer), 1 with concerns (api-reviewer), 1 passed · per-checklist detail in the checklist comment');
+        expect(md).not.toContain('Dockerfile');
+    });
+
+    // An override is a human knowingly accepting a RED verdict — it must never render as a clean pass.
+    it('is ORANGE (never green) for an override, and YELLOW for a warn-only run', () => {
+        expect(dashboardWith([new ChecklistRow('hasura-reviewer', CK_OVERRIDDEN, 'behind a flag; ONE-2210')]))
+            .toContain('**Checklists:** 🟠 1 ran — 1 overridden (hasura-reviewer)');
+        expect(dashboardWith([new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit on the new route')]))
+            .toContain('**Checklists:** 🟡 1 ran — 1 with concerns (api-reviewer)');
+    });
+
+    // An unrecognized verdict is BLOCKING, not a silent pass — the same default the comment side uses.
+    it('treats an unknown verdict as blocking rather than green', () => {
+        expect(dashboardWith([new ChecklistRow('mystery-reviewer', 'brand-new-state')]))
+            .toContain('**Checklists:** 🔴 1 ran — 1 blocking (mystery-reviewer)');
+    });
+});
+
+describe('renderDashboard checklists — the detail still lives in the comment', () => {
+    // The roll-up row is a SUMMARY, not a replacement: the comment is unchanged and still carries every
+    // reviewer's verbatim output, which is exactly why the PR body no longer needs to.
+    it('leaves the comment carrying the full override prose the dashboard dropped', () => {
+        const rows = [new ChecklistCommentRow(
+            'morpheus-envvars', CK_OVERRIDDEN, OVERRIDE_PROSE, true, ['**/*.ts'], ['**/*.ts'], ['src/a.ts'], 4)];
+        const md = renderChecklistComment(rows, true);
+
+        expect(md).toContain(OVERRIDE_PROSE);
+        expect(md).toContain('#### 🟠 morpheus-envvars — OVERRIDDEN — shipped with a stated justification');
+        expect(md).not.toContain('**Checklists:** ');  // the dashboard row belongs to the PR body only
+    });
+
+    // The compact commit body is a separate artifact and keeps its per-checklist flags.
+    it('carries matched checklists into the compact commit body unchanged', () => {
+        const rows = [new ChecklistRow('hasura-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit')];
         const input = new DashboardInput(
             'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
         );
-        expect(renderDashboard(input)).toContain('**Checklist — api-reviewer:** 🟡 passed with concerns');
-        expect(renderCommitBody(input, '')).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
-    });
-
-    it('carries matched checklists into the compact commit body', () => {
-        const rows = [new ChecklistRow('hasura-reviewer', CK_PASS)];
-        const input = new DashboardInput(
-            'My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows,
-        );
-        expect(renderCommitBody(input, '')).toContain('Checklist — hasura-reviewer: 🟢 passed');
+        const body = renderCommitBody(input, '');
+        expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
+        expect(body).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
     });
 });

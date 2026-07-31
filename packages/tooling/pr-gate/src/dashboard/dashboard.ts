@@ -98,6 +98,27 @@ export class ChecklistCommentRow {
     }
 }
 
+/**
+ * One severity bucket of the rolled-up **Checklists** dashboard row: its emoji, the words that describe it,
+ * and which checklists landed in it. Data-only.
+ *
+ * A bucket knows whether it should NAME its members: the non-green ones do (a reader has to know WHICH
+ * reviewer to go read), the passed bucket does not (a list of what went fine is noise on a one-line row).
+ */
+class RollupBucket {
+    label: string;    // 'blocking' | 'overridden' | 'with concerns' | 'passed'
+    emoji: string;
+    named: boolean;   // list the checklist ids on the row, or report a bare count
+    titles: string[];
+
+    constructor(label: string, emoji: string, named: boolean) {
+        this.label = label;
+        this.emoji = emoji;
+        this.named = named;
+        this.titles = [];
+    }
+}
+
 export class DisableCounts {
     webpiecesCount: number;
     eslintCount: number;
@@ -183,9 +204,14 @@ export class Dashboard {
         lines.push(this.disableLine(input.disables));
         const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
         lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
-        // One row per triggered consumer checklist — only when some fired, so non-adopting repos see no
-        // change to the dashboard at all.
-        for (const row of input.checklists) lines.push(this.checklistLine(row));
+        // ONE rolled-up row for ALL triggered consumer checklists — a worst-of colour and a count, sitting
+        // with the other status rows. It used to be one row PER checklist, each inlining that checklist's
+        // whole verdict/override paragraph: on a six-checklist PR that was the same ~90-word override
+        // repeated six times, burying the signal rows above it — and every word of it was already in the
+        // checklist COMMENT, per reviewer, in full. ALWAYS emitted, including the zero case: "no reviewer
+        // looked at this PR" is a fact a reader must be told, and an absent row silently reads as a green
+        // all-clear (see checklistRollupLine).
+        lines.push(this.checklistRollupLine(input.checklists));
         lines.push('');
         if (input.review.summary.trim() !== '') {
             lines.push('### Summary');
@@ -505,9 +531,59 @@ export class Dashboard {
         return `**${result.name}:** ${emoji} Yes (${result.matchedFiles.length} file(s))`;
     }
 
-    // A triggered consumer checklist row: the resolved verdict (passed / overridden / failed / …).
-    private checklistLine(row: ChecklistRow): string {
-        return `**Checklist — ${row.title}:** ${this.checklistStatusText(row)}`;
+    /**
+     * The ONE rolled-up **Checklists:** row, coloured worst-of across every checklist that ran, in the same
+     * shape as its neighbours (`**Build (nx affected):** 🟢 Passed`). Counts and names only — never a line
+     * of reviewer output or override justification, which is the whole reason this row exists.
+     */
+    private checklistRollupLine(rows: readonly ChecklistRow[]): string {
+        const buckets = this.rollupBuckets(rows);
+        const filled = buckets.filter((b: RollupBucket): boolean => b.titles.length > 0);
+        // NO reviewer ran ⇒ the SKIPPED icon, never green. Green claims something was checked and came back
+        // clean; ⚪ says nobody looked, which is what a reader has to be able to tell apart at a glance.
+        if (filled.length === 0) {
+            return '**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment';
+        }
+        const allPassed = filled.length === 1 && !filled[0].named;
+        const detail = allPassed ? 'all passed' : filled.map((b: RollupBucket): string => this.bucketPhrase(b)).join(', ');
+        return `**Checklists:** ${filled[0].emoji} ${rows.length} ran — ${detail} · per-checklist detail in the checklist comment`;
+    }
+
+    /**
+     * The four severity buckets, WORST FIRST, so `filled[0]` is the roll-up colour: red beats orange beats
+     * yellow beats green. The colours are the same vocabulary the comment already uses (see verdictEmoji).
+     *
+     * OVERRIDDEN is deliberately NOT folded into passed: an override is a human knowingly accepting a red
+     * verdict, and a dashboard that painted that green would hide the single most review-worthy thing on
+     * the PR. The blocking bucket is the FALLTHROUGH — CK_FAIL, CK_MISSING, CK_BAD_FORMAT and any verdict
+     * added later all land there, matching review.json's own "not pass|warn|overridden ⇒ refuse" rule
+     * rather than a second list that could silently drift green.
+     */
+    private rollupBuckets(rows: readonly ChecklistRow[]): RollupBucket[] {
+        const blocking = new RollupBucket('blocking', '🔴', true);
+        const overridden = new RollupBucket('overridden', '🟠', true);
+        const warned = new RollupBucket('with concerns', '🟡', true);
+        const passed = new RollupBucket('passed', '🟢', false);
+        for (const row of rows) {
+            if (row.status === CK_PASS) passed.titles.push(row.title);
+            else if (row.status === CK_WARN) warned.titles.push(row.title);
+            else if (row.status === CK_OVERRIDDEN) overridden.titles.push(row.title);
+            else blocking.titles.push(row.title);
+        }
+        return [blocking, overridden, warned, passed];
+    }
+
+    // `2 overridden (a, b)` for the buckets a reviewer must act on; a bare `3 passed` for the one they need
+    // no list of. Names are capped so a many-checklist repo still gets a ONE-LINE row.
+    private bucketPhrase(bucket: RollupBucket): string {
+        if (!bucket.named) return `${bucket.titles.length} ${bucket.label}`;
+        return `${bucket.titles.length} ${bucket.label} (${this.compactNames(bucket.titles)})`;
+    }
+
+    private compactNames(titles: readonly string[]): string {
+        const max = 4;
+        if (titles.length <= max) return titles.join(', ');
+        return `${titles.slice(0, max).join(', ')} +${titles.length - max} more`;
     }
 
     // 10-cell risk bar colored by band (🟩 ≤25, 🟨 ≤50, 🟧 ≤75, 🟥 >75), at least one filled cell.
