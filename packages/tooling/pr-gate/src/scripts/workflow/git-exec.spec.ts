@@ -67,6 +67,27 @@ describe('uncommittedFiles / untrackedFiles', () => {
     });
 });
 
+describe('porcelainStatus keeps the index column that uncommittedFiles trims away', () => {
+    it('an unstaged modification starts with a SPACE (column 1 = index = clean)', () => {
+        const dir = initRepo();
+        fs.writeFileSync(path.join(dir, 'tracked.txt'), 'changed\n');
+        expect(git.porcelainStatus(dir)).toBe(' M tracked.txt');
+        // The trap this method exists to avoid: trimming makes an unstaged change look staged.
+        expect(uncommittedFiles(dir)).toBe('M tracked.txt');
+    });
+
+    it('a staged modification has the columns the other way round', () => {
+        const dir = initRepo();
+        fs.writeFileSync(path.join(dir, 'tracked.txt'), 'changed\n');
+        execSync('git add tracked.txt', { cwd: dir, stdio: 'ignore' });
+        expect(git.porcelainStatus(dir)).toBe('M  tracked.txt');
+    });
+
+    it('is empty on a clean tree', () => {
+        expect(git.porcelainStatus(initRepo())).toBe('');
+    });
+});
+
 describe('assertCleanTree / assertNoUntracked', () => {
     it('return normally (do not exit) on a clean tree', () => {
         const dir = initRepo();

@@ -55,7 +55,7 @@ describe('createCiTarget', () => {
 
     it('appends the per-project validation gates so ci validates but build stays fast', () => {
         const ci = createCiTarget(
-            ['validate-no-file-import-cycles', 'validate-di-graph-unchanged'],
+            ['validate-no-file-import-cycles', 'di-graph-generate'],
             false,
         );
         expect(ci.dependsOn).toEqual([
@@ -63,7 +63,7 @@ describe('createCiTarget', () => {
             'build',
             'test',
             'validate-no-file-import-cycles',
-            'validate-di-graph-unchanged',
+            'di-graph-generate',
         ]);
     });
 

@@ -7,6 +7,7 @@ import {
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
+import { BuildArtifactGate } from '../workflow/build-artifact-gate';
 import { ChecklistNotice } from '../workflow/checklist-notice';
 import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
 import { DiffManifest, DiffManifestEntry, DiffMaterializer } from '../workflow/diff-materializer';
@@ -50,6 +51,7 @@ export class ReviewUpsertPrCommand {
         private readonly aiBranchName: AiBranchName,
         private readonly gitExec: GitExec,
         private readonly buildAffected: BuildAffected,
+        private readonly buildArtifactGate: BuildArtifactGate,
         private readonly mergeState: MergeState,
         private readonly mergeEnd: MergeEnd,
         private readonly checklistScanner: ChecklistScanner,
@@ -119,6 +121,11 @@ export class ReviewUpsertPrCommand {
             'pnpm wp-review-upsert-pr',
             'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.',
         ));
+        // Repo-wide: the build must not have left anything uncommitted AND unstaged. Runs HERE, not in
+        // finish, because this is the stage that ran buildCommand and is therefore holding the dirty
+        // tree at the exact moment the question is answerable. Replaces the per-project
+        // validate-di-graph-unchanged nx target — see BuildArtifactGate for why that one had to go.
+        this.buildArtifactGate.assertBuildLeftNothingUncommitted(repoRoot);
         return new Date().toISOString();
     }
 

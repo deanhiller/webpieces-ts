@@ -18,6 +18,20 @@ export class GitExec {
         return this.gitQuery(['status', '--porcelain'], cwd, 'Failed to run `git status --porcelain` to check the working tree.');
     }
 
+    /**
+     * Raw `git status --porcelain` with ONLY the trailing newline(s) stripped.
+     *
+     * uncommittedFiles() trims, and trimming DESTROYS DATA here: porcelain column 1 is the index state
+     * and column 2 the worktree state, so an unstaged modification is " M path" — trim() eats that
+     * leading space and the line then reads as "M " (staged, clean worktree), i.e. the exact opposite.
+     * Anything that parses the two status columns (BuildArtifactGate) must use THIS method; the trimmed
+     * one is only safe for "is it empty?" and for printing.
+     */
+    porcelainStatus(cwd: string): string {
+        return this.rawGitQuery(['status', '--porcelain'], cwd,
+            'Failed to run `git status --porcelain` to check the working tree.').replace(/\n+$/, '');
+    }
+
     // Untracked files only (respects .gitignore). Empty string = none.
     untrackedFiles(cwd: string): string {
         return this.gitQuery(['ls-files', '--others', '--exclude-standard'], cwd, 'Failed to list untracked files (git ls-files --others).');
@@ -92,10 +106,15 @@ export class GitExec {
     // Run a read-only git query from the repo root; abort if git itself errors. Kept `cwd`-explicit
     // because `git ls-files --others` is scoped to the cwd subtree.
     private gitQuery(args: string[], cwd: string, failMsg: string): string {
+        return this.rawGitQuery(args, cwd, failMsg).trim();
+    }
+
+    // The untrimmed sibling — see porcelainStatus for why trimming is not always safe.
+    private rawGitQuery(args: string[], cwd: string, failMsg: string): string {
         const out = spawnSync('git', args, { encoding: 'utf8', cwd });
         if (out.status !== 0) {
             throw new CliExitError(1, `❌ ${failMsg}`);
         }
-        return out.stdout.trim();
+        return out.stdout;
     }
 }

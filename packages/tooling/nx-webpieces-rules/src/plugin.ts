@@ -30,10 +30,7 @@ import {
     createValidateRuntimeArchitectureTarget,
 } from './runtime-targets';
 import { ValidationTargets } from './validation-targets';
-import {
-    createDiGraphGenerateTarget,
-    createValidateDiGraphUnchangedTarget,
-} from './di-graph-targets';
+import { createDiGraphGenerateTarget } from './di-graph-targets';
 
 /**
  * Circular dependency checking options
@@ -314,12 +311,15 @@ function buildPerProjectTargets(
         }
     }
 
-    // Per-project DI design DAG: regenerate design.json/design.md on every build,
-    // then gate CI on the committed copies being current.
+    // Per-project DI design DAG: regenerate design.json/design.md/design.html on every build.
+    //
+    // `di-graph-generate` is itself pushed onto validationTargets so `ci` still RUNS it — it used to ride
+    // in only as the `dependsOn` of the deleted `validate-di-graph-unchanged` gate. There is no staleness
+    // gate here any more: "the regenerated design files are committed" is now one repo-wide check in
+    // `wp-review-upsert-pr` (see di-graph-targets.ts for why the per-project gate could not work).
     if (isProjectJson && opts.workspace.validations!.diGraph) {
         targets['di-graph-generate'] = createDiGraphGenerateTarget();
-        targets['validate-di-graph-unchanged'] = createValidateDiGraphUnchangedTarget();
-        validationTargets.push('validate-di-graph-unchanged');
+        validationTargets.push('di-graph-generate');
     }
 
     // Add ci target to ALL projects (both project.json and package.json). ci aggregates
