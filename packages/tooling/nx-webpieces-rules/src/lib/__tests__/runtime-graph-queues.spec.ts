@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { deriveRuntimeGraph, runtimeAdjacency } from '../runtime-graph';
-import type { RuntimeEdge } from '../runtime-graph';
+import type { RuntimeEdge, RuntimeGraph, RuntimeQueue, RuntimeService } from '../runtime-graph';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { ApiContracts } from '../api-usage/api-relations';
 import { generateRuntimeDot } from '../runtime-visualizer';
@@ -143,7 +143,9 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
         // a database, so the two never look alike.
         expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
         expect(dot).toContain('label=" |TaskApi.send');
-        expect(dot).toContain('queue: TaskApi-send');
+        // CHANGED from toContain: `TaskApi-send` is the DERIVED `${Api}-${method}` name, so the
+        // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
+        expect(dot).not.toContain('queue: TaskApi-send');
         expect(dot).toContain('"worker" -> "queue__TaskApi_send" [label="enqueue", style=dashed];');
         expect(dot).toContain('"queue__TaskApi_send" -> "worker" [label="deliver", style=dashed];');
     });
@@ -151,6 +153,131 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
     it('hangs the cron endpoint off a clock pointing INTO the service', () => {
         expect(dot).toContain('"cron__TaskApi_nightly" [shape=circle');
         expect(dot).toContain('"cron__TaskApi_nightly" -> "worker" [label="TaskApi.nightly\\nTaskApi-nightly"');
+    });
+});
+
+/**
+ * TaskApi with THREE queued methods: two on derived names, one carrying a `@Queue('custom-blast')`
+ * override. All three flow worker -> worker, so all three belong in ONE box.
+ */
+const MERGE_CONTRACTS: ApiContracts = {
+    TaskApi: {
+        owner: 'task-api',
+        apiKind: 'pubsub',
+        basePath: '/api/tasks',
+        methods: [
+            { name: 'send', path: '/send', kind: 'cloudtasks', queueName: 'TaskApi-send' },
+            { name: 'retry', path: '/retry', kind: 'cloudtasks', queueName: 'TaskApi-retry' },
+            { name: 'blast', path: '/blast', kind: 'cloudtasks', queueName: 'custom-blast' },
+        ],
+    },
+};
+
+/** Count the lines of `dot` containing `text` — how many arrows/nodes were actually drawn. */
+function countLines(dot: string, text: string): number {
+    return dot.split('\n').filter((line: string) => line.includes(text)).length;
+}
+
+describe('generateRuntimeDot — merging queues of one contract into one box', () => {
+    const dot = generateRuntimeDot(deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS));
+
+    it('draws ONE box listing every queue, with one enqueue and one deliver arrow', () => {
+        // Node id comes from the group's FIRST member by sorted key — TaskApi.blast.
+        expect(countLines(dot, '[shape=Mrecord')).toBe(1);
+        expect(dot).toContain('"queue__TaskApi_blast" [shape=Mrecord');
+        const label = dot.split('\n').find((line: string) => line.includes('[shape=Mrecord'))!;
+        expect(label).toContain(' |TaskApi.blast');
+        expect(label).toContain('TaskApi.retry');
+        expect(label).toContain('TaskApi.send');
+        expect(countLines(dot, '[label="enqueue"')).toBe(1);
+        expect(countLines(dot, '[label="deliver"')).toBe(1);
+        expect(dot).toContain('"worker" -> "queue__TaskApi_blast" [label="enqueue", style=dashed];');
+        expect(dot).toContain('"queue__TaskApi_blast" -> "worker" [label="deliver", style=dashed];');
+    });
+
+    it('keeps a @Queue(...) OVERRIDE name and drops the derived ones', () => {
+        // 'custom-blast' appears nowhere else on the graph and is what Terraform must match.
+        expect(dot).toContain('queue: custom-blast');
+        expect(dot).not.toContain('queue: TaskApi-send');
+        expect(dot).not.toContain('queue: TaskApi-retry');
+    });
+
+    it('leaves runtime-dependencies.json at ONE entry per method', () => {
+        // RENDER-ONLY: the merge is a drawing decision, never a change to the committed data.
+        const derived = deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS);
+        expect(Object.keys(derived.queues).sort()).toEqual(['TaskApi.blast', 'TaskApi.retry', 'TaskApi.send']);
+        expect(derived.runtimeEdges.filter((e: RuntimeEdge) => e.type === 'pubsub')).toHaveLength(3);
+    });
+});
+
+/** A queue entry for the hand-built graphs below. */
+function queue(api: string, method: string, producedBy: string[], consumedBy: string[]): RuntimeQueue {
+    return { api, method, queueName: `${api}-${method}`, producedBy, consumedBy };
+}
+
+function service(): RuntimeService {
+    return { level: 0, implements: [], uses: [], dependsOn: [] };
+}
+
+/**
+ * Two queues of ONE contract whose PRODUCER sets differ: {p1} -> {c} and {p1,p2} -> {c}. Hand-built
+ * because the derivation attributes every queued method of a contract to every producer of it, so
+ * differing sets cannot come out of one apiRelations table — but they CAN come out of a hand-edited
+ * or future graph, and merging them would invent a producer nobody wrote.
+ */
+function splitProducerGraph(): RuntimeGraph {
+    return {
+        services: { p1: service(), p2: service(), c: service() },
+        apis: {},
+        runtimeEdges: [
+            { from: 'p1', to: 'c', via: ['TaskApi'], type: 'pubsub', queue: 'TaskApi.send' },
+            { from: 'p1', to: 'c', via: ['TaskApi'], type: 'pubsub', queue: 'TaskApi.retry' },
+            { from: 'p2', to: 'c', via: ['TaskApi'], type: 'pubsub', queue: 'TaskApi.retry' },
+        ],
+        unresolvedUses: [],
+        queues: {
+            'TaskApi.send': queue('TaskApi', 'send', ['p1'], ['c']),
+            'TaskApi.retry': queue('TaskApi', 'retry', ['p1', 'p2'], ['c']),
+        },
+        triggers: [],
+    };
+}
+
+describe('generateRuntimeDot — queues with different endpoints stay separate', () => {
+    const dot = generateRuntimeDot(splitProducerGraph());
+
+    it('does NOT merge two queues of one contract whose producer sets differ', () => {
+        expect(countLines(dot, '[shape=Mrecord')).toBe(2);
+        expect(dot).toContain('"queue__TaskApi_retry" [shape=Mrecord');
+        expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
+        // The two-producer queue keeps BOTH its enqueue arrows.
+        expect(dot).toContain('"p1" -> "queue__TaskApi_retry" [label="enqueue", style=dashed];');
+        expect(dot).toContain('"p2" -> "queue__TaskApi_retry" [label="enqueue", style=dashed];');
+        expect(dot).toContain('"p1" -> "queue__TaskApi_send" [label="enqueue", style=dashed];');
+        expect(countLines(dot, '[label="deliver"')).toBe(2);
+    });
+});
+
+/** A pubsub edge from a dependencies.json predating `apiContracts`: no per-method queue at all. */
+function legacyQueueGraph(): RuntimeGraph {
+    return {
+        services: { p1: service(), c: service() },
+        apis: {},
+        runtimeEdges: [{ from: 'p1', to: 'c', via: ['EmailApi'], type: 'pubsub' }],
+        unresolvedUses: [],
+        queues: {},
+        triggers: [],
+    };
+}
+
+describe('generateRuntimeDot — the legacy unnamed per-pair queue', () => {
+    const dot = generateRuntimeDot(legacyQueueGraph());
+
+    it('still renders an edge that carries no queue key', () => {
+        expect(dot).toContain('"queue__p1__c" [shape=Mrecord');
+        expect(dot).toContain('label=" |EmailApi\\nqueue"');
+        expect(dot).toContain('"p1" -> "queue__p1__c" [label="enqueue", style=dashed];');
+        expect(dot).toContain('"queue__p1__c" -> "c" [label="deliver", style=dashed];');
     });
 });
 

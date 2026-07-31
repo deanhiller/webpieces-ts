@@ -69,10 +69,17 @@
         var first = shapes[0];
         var fill = first.getAttribute('fill') || 'none';
         var stroke = first.getAttribute('stroke') || 'black';
+        // Measured BEFORE the shapes go: the record separator is where the label text starts.
+        var separator = separatorX(shapes);
         for (var i = 0; i < shapes.length; i++) shapes[i].remove();
 
         var ry = (box.y1 - box.y0) / 2;
         var rx = Math.max(6, ry * CAP_RATIO);
+        // A box listing several queues is TALL, and a cap scaled off half-height alone would then
+        // reach past the empty leading field and sit on top of the first characters of the label.
+        // Graphviz sizes that field from the font, not from the label's height, so the separator is
+        // the only honest bound on how far right the cap may go.
+        if (separator !== null) rx = Math.max(6, Math.min(rx, separator - box.x0));
         var body =
             'M' + (box.x0 + rx) + ',' + box.y0 +
             ' L' + (box.x1 - rx) + ',' + box.y0 +
@@ -92,6 +99,21 @@
         // leading record field, so Graphviz has centred the text in the space to the RIGHT of where
         // the cap lands. Shifting it again double-counts that offset and pushes the longest line out
         // through the far end of the cylinder.
+    }
+
+    /**
+     * The x of the record's field separator — the VERTICAL polyline Graphviz draws between the empty
+     * leading field and the label — or null if this node has none.
+     */
+    function separatorX(shapes) {
+        for (var i = 0; i < shapes.length; i++) {
+            if (shapes[i].tagName !== 'polyline') continue;
+            var nums = (shapes[i].getAttribute('points') || '').match(/-?[\d.]+/g);
+            if (!nums || nums.length < 4) continue;
+            var x = parseFloat(nums[0]);
+            if (Math.abs(x - parseFloat(nums[2])) < 0.5) return x;
+        }
+        return null;
     }
 
     /** The union bounding box of some SVG shape elements, from their raw geometry attributes. */

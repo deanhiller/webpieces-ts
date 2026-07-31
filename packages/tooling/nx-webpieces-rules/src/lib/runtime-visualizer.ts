@@ -15,7 +15,11 @@
  * Shape says what a node IS and line style says what a call IS. Solid = rpc: the
  * request follows the arrow and the response flows back. Dashed = event: it flows
  * in the arrow's direction and returns once it is queued. A queue is a sideways
- * cylinder, a datastore an upright one.
+ * cylinder, a datastore an upright one. A queue box lists ONE LINE PER QUEUE: the
+ * unit underneath is still the METHOD (what Terraform creates, and what
+ * runtime-dependencies.json records), but queues of one contract sharing the same
+ * producers and consumers are drawn together instead of as adjacent near-identical
+ * boxes — every queue is still named, only the node count drops.
  *
  * Calls that leave the repo (a contract NOTHING in-repo implements — firestore,
  * gmail, ...) are drawn as terminal nodes, so the vendor systems that actually
@@ -175,40 +179,143 @@ function nodeLabel(name: string, svc: RuntimeService): string {
 }
 
 /**
- * DOT for ONE runtime edge. rpc → a direct labeled SOLID arrow (producer calls consumer, response
- * comes back). pubsub → the producer enqueues and the consumer is delivered later, so we draw
- * producer → QUEUE → consumer through a sideways-cylinder queue node with DASHED arrows.
+ * DOT for ONE NON-QUEUED runtime edge: a direct labeled SOLID arrow (producer calls consumer, the
+ * response comes back). Queued (pubsub) hops are drawn by {@link queuesDot} instead, because they
+ * are merged across methods and therefore cannot be emitted one edge at a time.
  *
  * Solid vs dashed is the graph's one line-level distinction: solid is a call that returns a
  * response, dashed is an event that returns as soon as it is queued.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function edgeDot(edge: RuntimeEdge, queues: Record<string, RuntimeQueue>): string {
+function edgeDot(edge: RuntimeEdge): string {
     const from = dotValue(getShortName(edge.from));
     const to = dotValue(getShortName(edge.to));
-    // Kept RAW: an ordinary edge label needs dotValue, the record-mode queue label needs
-    // recordValue, and recordValue already applies dotValue — escaping here would double it.
     const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
-    if (edge.type !== 'pubsub') {
-        return `  "${from}" -> "${to}" [label="${dotValue(viaRaw)}"];\n`;
-    }
-    // The queue node is identified by the METHOD, not by the (from,to) pair, so every producer and
-    // consumer of one queue converges on ONE box — including a service that enqueues to itself,
-    // which then renders as a visible loop through its queue instead of vanishing.
-    const queueId = edge.queue === undefined ? `queue__${from}__${to}` : `queue__${dotId(edge.queue)}`;
-    const queueName = edge.queue === undefined ? undefined : queues[edge.queue]?.queueName;
+    return `  "${from}" -> "${to}" [label="${dotValue(viaRaw)}"];\n`;
+}
+
+/** The VISIBLE producers and consumers of one queue, gathered from the edges that survived hiding. */
+class QueueEndpoints {
+    readonly producers = new Set<string>();
+    readonly consumers = new Set<string>();
+}
+
+/**
+ * One drawn queue BOX: the queue keys (`Api.method`) it shows, and the endpoints they all share.
+ * Several keys land in one box only when they agree on all three of contract, producers and
+ * consumers — see {@link queuesDot}.
+ */
+class QueueGroup {
+    constructor(
+        public readonly members: string[],
+        public readonly producers: string[],
+        public readonly consumers: string[],
+    ) {}
+}
+
+/**
+ * The label line for ONE queue inside a box: `Api.method`, and the Terraform queue name ONLY when it
+ * is not the derived `${Api}-${method}`.
+ *
+ * Printing a derived name was pure restatement — the line above it already said `Api.method`, so
+ * every queue box carried a second line that added nothing and doubled its height. A `@Queue(...)`
+ * OVERRIDE is the opposite: that string appears nowhere else on the graph, and it is the one string
+ * Terraform must match, so it stays.
+ */
+// webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
+function queueLine(key: string, queue: RuntimeQueue | undefined): string {
+    const line = recordValue(key);
+    if (queue === undefined) return line;
+    if (queue.queueName === `${queue.api}-${queue.method}`) return line;
+    return `${line}\\nqueue: ${recordValue(queue.queueName)}`;
+}
+
+/** The node statement + enqueue/deliver arrows for one queue box. Names arrive pre-escaped. */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function queueBoxDot(id: string, body: string, producers: string[], consumers: string[]): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
-    // empty leading field that draws the cylinder's end cap.
-    const body =
-        edge.queue === undefined
-            ? `${recordValue(viaRaw)}\\nqueue`
-            : `${recordValue(edge.queue)}\\nqueue: ${recordValue(queueName ?? edge.queue)}`;
-    return (
-        `  "${queueId}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
-        `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n` +
-        `  "${from}" -> "${queueId}" [label="enqueue", style=dashed];\n` +
-        `  "${queueId}" -> "${to}" [label="deliver", style=dashed];\n`
+    // empty leading field that draws the cylinder's end cap. Drop it and the node silently
+    // degrades to a plain box.
+    let dot =
+        `  "${id}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
+        `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`;
+    for (const producer of producers) dot += `  "${producer}" -> "${id}" [label="enqueue", style=dashed];\n`;
+    for (const consumer of consumers) dot += `  "${id}" -> "${consumer}" [label="deliver", style=dashed];\n`;
+    return dot;
+}
+
+/**
+ * Group the queued hops into boxes. The key is (contract, producer SET, consumer SET) — NOT the
+ * (from,to) pair of some edge.
+ *
+ * A queue node converges EVERY producer and consumer of its method onto one box, so keying by a
+ * service PAIR would re-split a two-producer queue into two boxes and invent topology nobody wrote.
+ * Only queues of the same contract whose producer and consumer sets are IDENTICAL may share a box;
+ * anything else stays separate, because merging it would assert a routing that does not exist.
+ */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph): QueueGroup[] {
+    const groups = new Map<string, QueueGroup>();
+    // Sorted keys → the first member of every group, and therefore its node id, is deterministic.
+    for (const key of [...byQueue.keys()].sort()) {
+        const ends = byQueue.get(key)!;
+        const producers = [...ends.producers].sort();
+        const consumers = [...ends.consumers].sort();
+        const api = graph.queues[key]?.api ?? key.split('.')[0];
+        const mergeKey = [api, producers.join(','), consumers.join(',')].join(PAIR_SEP);
+        const existing = groups.get(mergeKey);
+        if (existing === undefined) groups.set(mergeKey, new QueueGroup([key], producers, consumers));
+        else existing.members.push(key);
+    }
+    return [...groups.values()];
+}
+
+/**
+ * The queued half of the graph: producer → QUEUE → consumer, drawn with a sideways-cylinder node and
+ * DASHED arrows (an event returns as soon as it is queued).
+ *
+ * One BOX may list several queues, one per line. The unit Cloud Tasks and Terraform create is still
+ * the METHOD — that is what runtime-dependencies.json records and this render never changes it — but
+ * two methods of one contract flowing between exactly the same producers and consumers drew two
+ * adjacent boxes whose only difference was the method name, and each carried a `queue:` line that
+ * merely restated it. Listing them inside ONE box keeps every queue named (you can still see which
+ * one is stuck) at a fraction of the node count.
+ */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
+    const queued = graph.runtimeEdges.filter(
+        (e: RuntimeEdge) => e.type === 'pubsub' && !hidden.has(e.from) && !hidden.has(e.to),
     );
+    if (queued.length === 0) return '';
+
+    let dot =
+        '\n  // Queued hops. Each LINE in a box is one Cloud Tasks queue; queues of one contract\n' +
+        '  // sharing the same producers AND consumers are drawn in a single box.\n';
+
+    // A contract with no committed method table (a dependencies.json predating apiContracts) has no
+    // per-method queue at all, so it keeps the historical unnamed per-pair box.
+    const byQueue = new Map<string, QueueEndpoints>();
+    for (const edge of queued) {
+        const from = dotValue(getShortName(edge.from));
+        const to = dotValue(getShortName(edge.to));
+        if (edge.queue === undefined) {
+            // Kept RAW: recordValue already applies dotValue, so escaping here would double it.
+            const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
+            dot += queueBoxDot(`queue__${from}__${to}`, `${recordValue(viaRaw)}\\nqueue`, [from], [to]);
+            continue;
+        }
+        if (!byQueue.has(edge.queue)) byQueue.set(edge.queue, new QueueEndpoints());
+        byQueue.get(edge.queue)!.producers.add(from);
+        byQueue.get(edge.queue)!.consumers.add(to);
+    }
+
+    for (const group of groupQueues(byQueue, graph)) {
+        const body = group.members
+            .map((key: string) => queueLine(key, graph.queues[key]))
+            .join('\\n');
+        dot += queueBoxDot(`queue__${dotId(group.members[0])}`, body, group.producers, group.consumers);
+    }
+    return dot;
 }
 
 /** A DOT-safe node-id fragment: anything but letters, digits and `_` becomes `_`. */
@@ -375,9 +482,12 @@ export function generateRuntimeDot(
 
     for (const edge of graph.runtimeEdges) {
         if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
-        dot += edgeDot(edge, graph.queues);
+        // Queued hops are merged across methods, so they cannot be emitted one edge at a time.
+        if (edge.type === 'pubsub') continue;
+        dot += edgeDot(edge);
     }
 
+    dot += queuesDot(graph, hidden);
     dot += triggerDot(graph, hidden);
 
     if (options.showExternalNodes) {
@@ -450,7 +560,7 @@ function legendHtml(): string {
             <div class="legend-col">
                 <h3>Node shapes &mdash; <em>what a box is</em></h3>
                 ${item(sw.service, '<strong>service</strong> &mdash; a deployable in this repo; fill is its dependency level')}
-                ${item(sw.queue, '<strong>queue</strong> &mdash; one box <em>per method</em>, the unit Cloud Tasks and Terraform actually create')}
+                ${item(sw.queue, '<strong>queue</strong> &mdash; each <em>line</em> in the box is one Cloud Tasks queue, the unit Terraform actually creates. Queues of one contract that flow between the <em>same</em> producer and consumer share a box; every one is still named, so you can always see <em>which</em> queue is stuck.')}
                 ${item(sw.database, '<strong>database</strong> &mdash; a datastore outside this repo')}
                 ${item(sw.storage, '<strong>object storage</strong> &mdash; a bucket outside this repo')}
                 ${item(sw.external, '<strong>external system</strong> &mdash; outside this repo; nothing here implements it. Pointing <strong>OUT</strong> = a system this repo calls (firestore, gmail). Pointing <strong>IN</strong> = an endpoint driven from outside (a Pub/Sub push, a Gmail or Twilio webhook).')}
