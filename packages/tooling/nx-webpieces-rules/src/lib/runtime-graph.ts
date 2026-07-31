@@ -272,6 +272,9 @@ class RuntimeGraphDeriver {
                         service: decl.name,
                     };
                     if (method.kind === 'cron') trigger.queueName = method.queueName;
+                    // ONLY for 'external' (a clock needs no vendor name), and only when declared —
+                    // a graph committed before callers were required has none and must still render.
+                    if (method.kind === 'external' && method.caller !== undefined) trigger.caller = method.caller;
                     triggers.push(trigger);
                 }
             }

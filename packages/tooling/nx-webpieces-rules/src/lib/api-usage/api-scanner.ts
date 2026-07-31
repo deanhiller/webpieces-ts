@@ -46,6 +46,7 @@ import {
     EndpointKind,
     NonLiteralDecoratorArg,
     ProjectApiRelations,
+    UndeclaredExternalCaller,
     UnresolvedEndpointPath,
     apiRefKey,
     deriveApiRelationKind,
@@ -54,6 +55,7 @@ import {
 import {
     EmptiedApiContractError,
     MissingBasePathError,
+    UndeclaredExternalCallerError,
     UnresolvedEndpointPathError,
 } from './api-contract-errors';
 import {
@@ -130,6 +132,11 @@ export interface ApiScanResult {
      * slip out through buildApiContracts' zero-method skip, taking a whole service's queues with it.
      */
     emptiedApiContracts: EmptiedApiContract[];
+    /**
+     * `external` endpoints that did not say WHO calls them. Fatal: the inbound box on the runtime
+     * graph exists to name that system, and with nothing to name it restates our own contract name.
+     */
+    undeclaredExternalCallers: UndeclaredExternalCaller[];
 }
 
 /** Maps an absolute source-file path to the workspace project that owns it (longest-root-prefix). */
@@ -321,6 +328,7 @@ export class ApiUsageScanner {
             nonLiteralDecoratorArgs: this.decoratorArgDiagnostics.all(),
             unresolvedEndpointPaths: this.decoratorArgDiagnostics.unresolvedEndpointPaths(),
             emptiedApiContracts: this.decoratorArgDiagnostics.emptiedContracts(),
+            undeclaredExternalCallers: this.decoratorArgDiagnostics.undeclaredExternalCallers(),
         };
     }
 
@@ -494,7 +502,8 @@ export function scanAndAttachApiRelations(
  * would be an empty shell, and its identity is already carried by the `external` refs in
  * apiRelations. Sorted by api name, methods left in declaration order, so the file is deterministic.
  *
- * THROWS on the three ways an entry can be wrong-but-green, checked root cause first:
+ * THROWS on the four ways an entry can be wrong-but-green, checked root cause first (the fourth is
+ * an `external` method that never said WHO calls it — UndeclaredExternalCallerError):
  *   1. an `@Endpoint` path the scan could not read (UnresolvedEndpointPathError) — the other half of
  *      the URL a consumer computes, and the cause of most emptied contracts;
  *   2. a class that declared endpoints and kept none (EmptiedApiContractError), which would otherwise
@@ -510,6 +519,11 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     // is what the author can actually act on.
     if (scan.unresolvedEndpointPaths.length > 0) throw new UnresolvedEndpointPathError(scan.unresolvedEndpointPaths);
     if (scan.emptiedApiContracts.length > 0) throw new EmptiedApiContractError(scan.emptiedApiContracts);
+    // After the two above: an unreadable path is what empties a contract, and a contract that lost
+    // every method has no external endpoint left to complain about.
+    if (scan.undeclaredExternalCallers.length > 0) {
+        throw new UndeclaredExternalCallerError(scan.undeclaredExternalCallers);
+    }
     const contracts: ApiContracts = {};
     const missing: string[] = [];
     for (const api of [...scan.apiIndex.keys()].sort()) {

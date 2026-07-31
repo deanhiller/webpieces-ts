@@ -11,7 +11,7 @@
  * Split out of api-scanner.ts, which owns the scan itself and is at its file-size limit.
  */
 
-import { EmptiedApiContract, UnresolvedEndpointPath } from './api-relations';
+import { EmptiedApiContract, UndeclaredExternalCaller, UnresolvedEndpointPath } from './api-relations';
 
 /**
  * A routed contract whose `@ApiPath` argument the scan could not read. Fatal on purpose: shipping the
@@ -56,6 +56,38 @@ export class UnresolvedEndpointPathError extends Error {
                 `   decorator-erased .d.ts).`,
         );
         this.name = 'UnresolvedEndpointPathError';
+    }
+}
+
+/**
+ * `external` endpoints whose CALLER the scan could not read. Fatal, like the two above, because the
+ * alternative is a diagram that lies by omission: the inbound box exists solely to name the system
+ * calling us from outside, and with nothing to name it falls back to restating our own contract
+ * name — which the reader already sees on the service box the arrow points at.
+ *
+ * `@Endpoint`'s TS overloads make `calledBy` a compile error to omit, so a scan reaching here saw a
+ * JS caller, an `as any`, a cross-module constant this parser-only pass cannot fold, or a
+ * `callerKind` that is not one of the declared kinds.
+ */
+export class UndeclaredExternalCallerError extends Error {
+    constructor(public readonly callers: readonly UndeclaredExternalCaller[]) {
+        super(
+            `${callers.length} 'external' @Endpoint(s) do not declare WHO calls them:\n` +
+                callers
+                    .map(
+                        (c: UndeclaredExternalCaller) =>
+                            `     • ${c.api}.${c.method} — ${c.argument} at ${c.at}`,
+                    )
+                    .join('\n') +
+                `\n   An 'external' endpoint is driven by a system OUTSIDE this repo, and the runtime\n` +
+                `   architecture graph draws that system as an inbound box. Name it:\n` +
+                `     @Endpoint('/hook', 'external', { calledBy: 'twilio' })\n` +
+                `   Add callerKind for anything that is not a vendor SaaS — database | cache | queue |\n` +
+                `   storage | saas | system — e.g. a GCP Pub/Sub push subscription:\n` +
+                `     @Endpoint('/push', 'external', { calledBy: 'pubsub-push', callerKind: 'system' })\n` +
+                `   Use a string LITERAL or a SAME-module const: this scan is parser-only by design.`,
+        );
+        this.name = 'UndeclaredExternalCallerError';
     }
 }
 

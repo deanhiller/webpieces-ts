@@ -42,7 +42,7 @@ function writeDecorators(): void {
         'libraries/whatsapp-api/src/decorators.ts',
         `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
 export function PubSub(): ClassDecorator { return (): void => undefined; }
-export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator { return (): void => undefined; }
 `,
     );
 }
@@ -80,7 +80,7 @@ export abstract class WhatsAppApi {
     @Endpoint(CONTINUE_PATH, 'cloudtasks')
     abstract continueConversation(): Promise<void>;
 
-    @Endpoint(INBOUND_PATH, 'external')
+    @Endpoint(INBOUND_PATH, 'external', { calledBy: 'twilio' })
     abstract inbound(): Promise<void>;
 }
 `,
@@ -104,7 +104,7 @@ function writeCrossModuleApiLib(): void {
     write(
         'libraries/cross-api/src/decorators.ts',
         `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
-export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator { return (): void => undefined; }
 `,
     );
     write(
@@ -144,7 +144,7 @@ export const C_PATH = '/c';
     write(
         'libraries/multi-api/src/decorators.ts',
         `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
-export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator { return (): void => undefined; }
 `,
     );
     write(
@@ -191,7 +191,7 @@ function writeEmptiedApiLib(): void {
     write(
         'libraries/badkind-api/src/decorators.ts',
         `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
-export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator { return (): void => undefined; }
 `,
     );
     write(
@@ -232,7 +232,7 @@ function writeNoBasePathApiLib(): void {
     write(
         'libraries/nobase-api/src/decorators.ts',
         `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
-export function Endpoint(_p: string, _k: string): MethodDecorator { return (): void => undefined; }
+export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator { return (): void => undefined; }
 `,
     );
     write(
@@ -332,6 +332,8 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
             '/inbound',
         ]);
         expect(methods.map((m: ApiMethodMeta) => m.kind)).toEqual(['cloudtasks', 'cloudtasks', 'external']);
+        // The external method must also name its caller — required by @Endpoint, fatal if unreadable.
+        expect(methods[2].caller).toEqual({ kind: 'saas', label: 'twilio' });
     });
 
     it('emits an apiContracts entry with basePath for the all-const class', () => {

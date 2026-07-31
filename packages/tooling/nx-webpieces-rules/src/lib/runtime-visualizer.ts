@@ -29,9 +29,11 @@
  * derivation, levels and cycle detection never see them.
  *
  * The same is true in the other direction for endpoints nothing in-repo CALLS: a
- * `cron` method hangs off a clock and an `external` method off a dashed inbound
- * box. Those are the entry points that wake a service up at 3am, and a graph
- * built only from in-repo callers cannot show them at all.
+ * `cron` method hangs off a clock and an `external` method off a box naming the
+ * CALLER that posts to it (`twilio`), in the same id space as the outbound
+ * systems, so a vendor we both call and are called by is ONE box. Those are the
+ * entry points that wake a service up at 3am, and a graph built only from in-repo
+ * callers cannot show them at all.
  */
 
 import * as fs from 'fs';
@@ -325,6 +327,33 @@ function dotId(raw: string): string {
 }
 
 /**
+ * ONE external-system node statement: the shape/fill of what the system IS, its label, and a
+ * parenthesised subtitle saying which way it faces.
+ *
+ * Shared by the OUTBOUND systems ({@link externalSystemsDot}) and the INBOUND callers
+ * ({@link triggerDot}) on purpose. They emit into the SAME `system__<identity>` id space, so a
+ * vendor this repo both calls and is called by is one box with arrows in both directions — and a
+ * copy-pasted attribute string would have let the two drift until they stopped being one box.
+ */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function externalSystemNodeDot(identity: string, kind: string, label: string, subtitle: string): string {
+    const shape = EXTERNAL_SHAPES[kind] ?? 'box';
+    const fill = EXTERNAL_FILLS[kind] ?? EXTERNAL_FILL;
+    // An Mrecord-shaped system needs the same empty leading field as a queue node, or it renders as
+    // a plain box and silently loses the sideways-cylinder read.
+    const isQueue = shape === QUEUE_SHAPE;
+    const prefix = isQueue ? QUEUE_LABEL_PREFIX : '';
+    const text = isQueue ? recordValue(label) : dotValue(label);
+    // Only a queue-kind system is marked: a database here is an UPRIGHT cylinder and must not be
+    // caught by the browser-side reshaping that lays queues on their side.
+    const marker = isQueue ? `class="${QUEUE_CLASS}", ` : '';
+    return (
+        `  "system__${dotId(identity)}" [shape=${shape}, style="filled", fillcolor="${fill}", ` +
+        `${marker}label="${prefix}${text}\\n(${subtitle})"];\n`
+    );
+}
+
+/**
  * The clock and outside-system nodes for endpoints NOTHING in-repo calls.
  *
  * A cron sweep and a GCP push subscription are real runtime entry points with real Terraform behind
@@ -332,12 +361,26 @@ function dotId(raw: string): string {
  * absent — a server's most operationally interesting endpoint could be invisible on its own graph.
  * Both are drawn pointing INTO the service that serves them, the opposite direction from
  * {@link externalDot}'s outbound vendor calls.
+ *
+ * The inbound box names the CALLER (`twilio`), never the contract. Naming the contract was the whole
+ * bug: it restated what the service box directly below already says, while the one fact the box
+ * exists to convey — which vendor is posting to us — appeared nowhere. The contract keeps its place
+ * on the EDGE label, where `WhatsAppApi.inbound` reads as "…posts to this method".
+ *
+ * Identity is the caller's label in the SAME `system__` space {@link externalSystemsDot} uses, which
+ * buys three things at once: two vendors hitting one contract are two boxes, one vendor hitting three
+ * methods is one box with three arrows, and a vendor this repo also CALLS is that same single box.
+ * `options` is passed in for the last of those — when that outbound half will be drawn, this half
+ * must not restate the node statement.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function triggerDot(graph: RuntimeGraph, hidden: Set<string>): string {
+function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVizOptions): string {
     const triggers = graph.triggers.filter((t: RuntimeTrigger) => !hidden.has(t.service));
     if (triggers.length === 0) return '';
 
+    // Identities externalSystemsDot is about to draw; skipped here so the node is stated ONCE.
+    const drawnOutbound = new Set(options.showExternalNodes ? Object.keys(graph.externalSystems ?? {}) : []);
+    const emitted = new Set<string>();
     let dot = '\n  // Entry points nothing in this repo calls: a clock, or a system outside the repo.\n';
     for (const trigger of triggers) {
         const service = dotValue(getShortName(trigger.service));
@@ -351,11 +394,20 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>): string {
                 `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`;
             continue;
         }
-        const id = `inbound__${dotId(trigger.api)}`;
-        dot +=
-            `  "${id}" [shape=box, style="dashed,filled", fillcolor="${EXTERNAL_FILL}", ` +
-            `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n(external caller)"];\n` +
-            `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`;
+        const caller = trigger.caller;
+        // Undeclared: only possible for a graph generated BEFORE the caller was required (generation
+        // now fails instead). DOTTED and question-marked, so "we were never told who this is" cannot
+        // be mistaken for a named vendor.
+        const id = caller === undefined ? `inbound__${dotId(trigger.api)}` : `system__${dotId(caller.label)}`;
+        if (!emitted.has(id) && !(caller !== undefined && drawnOutbound.has(caller.label))) {
+            emitted.add(id);
+            dot +=
+                caller === undefined
+                    ? `  "${id}" [shape=box, style="dotted,filled", fillcolor="${EXTERNAL_FILL}", ` +
+                      `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n? unknown caller"];\n`
+                    : externalSystemNodeDot(caller.label, caller.kind, caller.label, 'external caller');
+        }
+        dot += `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`;
     }
     return dot;
 }
@@ -379,19 +431,7 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
     let dot = '\n  // Declared external systems — drawn with the shape of what they actually are.\n';
     for (const id of ids) {
         const system = systems[id];
-        const shape = EXTERNAL_SHAPES[system.kind] ?? 'box';
-        const fill = EXTERNAL_FILLS[system.kind] ?? EXTERNAL_FILL;
-        // An Mrecord-shaped system needs the same empty leading field as a queue node, or it
-        // renders as a plain box and silently loses the sideways-cylinder read.
-        const isQueue = shape === QUEUE_SHAPE;
-        const prefix = isQueue ? QUEUE_LABEL_PREFIX : '';
-        const text = isQueue ? recordValue(system.label) : dotValue(system.label);
-        // Only a queue-kind system is marked: a database here is an UPRIGHT cylinder and must not be
-        // caught by the browser-side reshaping that lays queues on their side.
-        const marker = isQueue ? `class="${QUEUE_CLASS}", ` : '';
-        dot +=
-            `  "system__${dotId(id)}" [shape=${shape}, style="filled", fillcolor="${fill}", ` +
-            `${marker}label="${prefix}${text}\\n(external ${dotValue(system.kind)})"];\n`;
+        dot += externalSystemNodeDot(id, system.kind, system.label, `external ${dotValue(system.kind)}`);
     }
     for (const id of ids) {
         const system = systems[id];
@@ -488,7 +528,7 @@ export function generateRuntimeDot(
     }
 
     dot += queuesDot(graph, hidden);
-    dot += triggerDot(graph, hidden);
+    dot += triggerDot(graph, hidden, options);
 
     if (options.showExternalNodes) {
         dot += externalSystemsDot(graph, hidden);
@@ -563,7 +603,7 @@ function legendHtml(): string {
                 ${item(sw.queue, '<strong>queue</strong> &mdash; each <em>line</em> in the box is one Cloud Tasks queue, the unit Terraform actually creates. Queues of one contract that flow between the <em>same</em> producer and consumer share a box; every one is still named, so you can always see <em>which</em> queue is stuck.')}
                 ${item(sw.database, '<strong>database</strong> &mdash; a datastore outside this repo')}
                 ${item(sw.storage, '<strong>object storage</strong> &mdash; a bucket outside this repo')}
-                ${item(sw.external, '<strong>external system</strong> &mdash; outside this repo; nothing here implements it. Pointing <strong>OUT</strong> = a system this repo calls (firestore, gmail). Pointing <strong>IN</strong> = an endpoint driven from outside (a Pub/Sub push, a Gmail or Twilio webhook).')}
+                ${item(sw.external, '<strong>external system</strong> &mdash; outside this repo; nothing here implements it. Pointing <strong>OUT</strong> = a system this repo calls (firestore, gmail). Pointing <strong>IN</strong> = an endpoint driven from outside, and the box names the <strong>CALLER</strong> (<code>twilio</code>), not our contract &mdash; the contract and method are on the arrow. One vendor is ONE box however many endpoints it posts to, and the same box whether we call it or it calls us. A dotted box labelled <code>? unknown caller</code> means the endpoint never declared one.')}
                 ${item(sw.cron, '<strong>cron</strong> &mdash; a scheduler fires this endpoint')}
             </div>
             <div class="legend-col">
