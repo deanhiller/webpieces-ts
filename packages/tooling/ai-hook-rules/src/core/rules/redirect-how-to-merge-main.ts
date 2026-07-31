@@ -37,7 +37,12 @@ const FIX_HINT = new FixHint(
     + '\n'
     + 'READ the instruct-ai git-workflow doc at the absolute path on the violation line above for the\n'
     + 'full flow (incl. worktrees).\n'
-    + 'Add that info to memory so you remember next time.',
+    // NOT "add that info to memory": "that info" was the whole git-workflow doc, which is REGENERATED
+    // per repo and per version — memorizing it guarantees a stale recall in the next session. Only the
+    // invariant is stable enough to persist; the doc must be re-read, never remembered.
+    + 'Add to memory: never run a raw `git merge`/`git rebase` — use this repo\'s gated sync flow, and\n'
+    + 're-read its git-workflow doc each time rather than recalling it (it is regenerated per repo and\n'
+    + 'per version, so a remembered copy will be wrong).',
 );
 
 // `git merge --abort` / `git rebase --abort|--quit` UNDO an in-progress operation — they cannot create

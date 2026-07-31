@@ -11,15 +11,36 @@ import { CommandScanner } from '../command-scan';
 
 const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
+// The ENTIRE enforcement surface of this guard, declared up here because the fixHint RENDERS ITSELF
+// from these two lists (see `blockedCommandList`). The hint used to hand-write "do not run other
+// commands" — an unbounded claim that forbade the reads, the `git add`, the build and the tests that
+// finishing a merge actually requires, and that survived every edit to these lists. It was also wrapped
+// in an "Add to memory" directive, so it outlived the session that read it. Generating the sentence
+// from the code is what stops the two drifting apart again.
+const BLOCKED_GIT_SUBCOMMANDS: readonly string[] = ['commit', 'push', 'merge', 'rebase'];
+const BLOCKED_GH_PR_SUBCOMMANDS: readonly string[] = ['create', 'edit', 'merge'];
+
+// webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
+function blockedCommandList(): string {
+    return BLOCKED_GIT_SUBCOMMANDS.map((sub: string) => `\`git ${sub}\``).join(', ')
+        + `, and \`gh pr ${BLOCKED_GH_PR_SUBCOMMANDS.join('|')}\``;
+}
+
+// webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
 function fixHintFor(mergeCompleteCommand: string): FixHint {
     return new FixHint(
         'A merge is in progress and not yet validated — this command is blocked.',
         'You started a merge but never called the finish-merge command, so a 3-point merge is still in progress.\n'
-        + 'Resolve the remaining conflicts in the working tree, then run:\n'
+        + `Blocked until the merge is validated: ${blockedCommandList()}. That is the whole list;\n`
+        + 'the finish command below does the commit for you.\n'
+        + 'EXPECTED of you right now, and NOT blocked: read the conflicted files, edit them until every\n'
+        + 'conflict marker is gone, `git add` each file you resolve, write the merge explanation for each\n'
+        + 'one, and run the build and the tests. Finishing a merge requires all of those.\n'
+        + 'Then run:\n'
         + `  ${mergeCompleteCommand}\n`
         + 'That scans for leftover conflict markers and runs the build; only when green does it commit,\n'
         + 'unblock commit/push/PR, render the dashboard, and create/update the PR.\n'
-        + 'Add to memory: while a merge is in progress, do not run other commands — finish it with the command above first.',
+        + 'Add to memory: finish a started merge before beginning other work.',
     );
 }
 
@@ -57,17 +78,20 @@ function findUnvalidatedMerge(workspaceRoot: string): string | null {
     return findMarkerUnder(path.join(workspaceRoot, WEBPIECES_TMP_DIR, MERGE_INFO_DIR), MARKER_SCAN_MAX_DEPTH);
 }
 
-const BLOCKED_GIT_SUBCOMMANDS: readonly string[] = ['commit', 'push', 'merge', 'rebase'];
 const SCANNER = new CommandScanner();
+// Built from BLOCKED_GH_PR_SUBCOMMANDS so the enforcement and the sentence the fixHint prints can
+// never name different commands.
+const BLOCKED_GH_PR_PATTERN = new RegExp(`\\bgh\\s+pr\\s+(${BLOCKED_GH_PR_SUBCOMMANDS.join('|')})\\b`);
 
 // Operations that would let an agent route around the merge gate.
 //
 // Routed through CommandScanner rather than `/\bgit\s+merge\b/`: that pattern matches the read-only
 // `git merge-base origin/main HEAD` (`\b` sits between `e` and `-`), which appears in this repo's own
 // documented build command — so an in-progress merge used to block a harmless diff-scope lookup.
+// webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
 function isBlockedDuringMerge(cmd: string): boolean {
     return SCANNER.commandInvokesAnyGit(cmd, BLOCKED_GIT_SUBCOMMANDS)
-        || /\bgh\s+pr\s+(create|edit|merge)\b/.test(cmd);
+        || BLOCKED_GH_PR_PATTERN.test(cmd);
 }
 
 function truncate(s: string): string {

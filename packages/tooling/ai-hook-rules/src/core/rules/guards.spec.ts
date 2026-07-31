@@ -28,6 +28,15 @@ function tempRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guards-'));
 }
 
+// A workspace root carrying a merge marker, so merge-in-progress-guard sees a merge in flight.
+function withMarkerRoot(validated: boolean): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-'));
+    const dir = path.join(root, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, 'feat');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, MERGE_IN_PROGRESS_FILE), JSON.stringify({ validated }));
+    return root;
+}
+
 describe('pr-creation-or-push-guard matches code, not prose about code', () => {
     // End-to-end proof for the guard whose `\bgit\s+push\b` pattern fires on the most ordinary English
     // in a repo whose subject matter IS the git workflow. Stripping lives in BashContext.commandCode.
@@ -87,13 +96,7 @@ describe('pr-creation-or-push-guard', () => {
 });
 
 describe('merge-in-progress-guard', () => {
-    function withMarker(validated: boolean): string {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-'));
-        const dir = path.join(root, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, 'feat');
-        fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(path.join(dir, MERGE_IN_PROGRESS_FILE), JSON.stringify({ validated }));
-        return root;
-    }
+    const withMarker = withMarkerRoot;
 
     it('blocks commit/push while an unvalidated marker exists', () => {
         const root = withMarker(false);
@@ -120,6 +123,58 @@ describe('merge-in-progress-guard', () => {
     it('allows everything when no merge is in progress', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guard-'));
         expect(mergeInProgressGuard.check(ctx('git commit -m x', root)).length).toBe(0);
+    });
+});
+
+// The fixHint is the ONLY thing an agent sees when this guard fires, and it used to say "do not run
+// other commands" — unbounded, and therefore a claim that the reads, the `git add`, the build and the
+// tests that finishing a merge REQUIRES were all forbidden. It said so inside an "Add to memory"
+// directive, so an agent that obeyed carried the falsehood into later sessions and other repos. These
+// tests pin the hint to the truth: name the blocked commands, name what is expected, and keep the only
+// memorized sentence to something that stays true at any version.
+describe('merge-in-progress-guard fixHint tells the truth about what is blocked', () => {
+    const hint = mergeInProgressGuard.fixHint.mainMessage;
+
+    it('names every command the guard actually blocks', () => {
+        for (const cmd of ['`git commit`', '`git push`', '`git merge`', '`git rebase`', '`gh pr create|edit|merge`']) {
+            expect(hint).toContain(cmd);
+        }
+    });
+
+    it('makes no unbounded claim about "other commands"', () => {
+        expect(hint).not.toContain('other commands');
+        expect(hint.toLowerCase()).not.toContain('do not run other');
+    });
+
+    it('states what IS expected during a merge, including the things the finish gate demands', () => {
+        // merge-end hard-fails with "Git still reports unmerged files … Resolve and `git add` them",
+        // so a hint that discourages `git add` contradicts the guard's own paired tool.
+        expect(hint).toContain('`git add`');
+        expect(hint).toContain('NOT blocked');
+        expect(hint).toContain('build');
+    });
+
+    it('only asks the agent to memorize a version-stable fact — never the blocked list', () => {
+        const memoryLines = hint.split('\n').filter((line: string): boolean => line.includes('Add to memory'));
+        expect(memoryLines.length).toBe(1);
+        const memorized = memoryLines[0];
+        // A memorized sentence outlives the code. It must not name a command, a version, a config key
+        // or a repo-specific path, because none of those are stable across sessions.
+        expect(memorized).toBe('Add to memory: finish a started merge before beginning other work.');
+        expect(memorized).not.toMatch(/git |gh |pnpm |wp-/);
+    });
+
+    it('derives the blocked list from the enforcement itself, so hint and code cannot drift', () => {
+        // Anything the hint names must genuinely be blocked, proven through check() rather than by
+        // re-reading the same constant the hint used.
+        const root = withMarkerRoot(false);
+        for (const cmd of ['git commit -m x', 'git push', 'git merge main', 'git rebase main', 'gh pr create', 'gh pr edit 1', 'gh pr merge 1']) {
+            expect(mergeInProgressGuard.check(ctx(cmd, root)).length).toBe(1);
+        }
+        // ...and everything the hint says is expected must genuinely run.
+        for (const cmd of ['git add src/foo.ts', 'git status', 'git diff', 'pnpm run build-all', 'cat src/foo.ts']) {
+            expect(mergeInProgressGuard.check(ctx(cmd, root)).length).toBe(0);
+        }
     });
 });
 
