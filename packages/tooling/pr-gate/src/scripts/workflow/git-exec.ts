@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+import { GitStatusEntry, GitStatusParser } from './git-status';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 // The AI-facing doc the failure messages point at (generated under `.webpieces/instruct-ai`, at the
@@ -10,26 +11,35 @@ const GIT_WORKFLOW_DOC_NAME = 'webpieces.git-workflow.md';
 /** Shared git precondition checks + push logic for the PR/merge workflow. */
 @injectable(bindingScopeValues.Singleton)
 export class GitExec {
-    constructor(private readonly repoRootFinder: RepoRootFinder) {}
-
-    // Tracked changes (staged + unstaged) AND untracked files, EXCLUDING gitignored paths — so
-    // `.webpieces/` tooling artifacts never count. Empty string = fully committed.
-    uncommittedFiles(cwd: string): string {
-        return this.gitQuery(['status', '--porcelain'], cwd, 'Failed to run `git status --porcelain` to check the working tree.');
-    }
+    constructor(
+        private readonly repoRootFinder: RepoRootFinder,
+        private readonly statusParser: GitStatusParser,
+    ) {}
 
     /**
-     * Raw `git status --porcelain` with ONLY the trailing newline(s) stripped.
+     * Raw `git status --porcelain` with ONLY the trailing newline(s) stripped — never `.trim()`.
      *
-     * uncommittedFiles() trims, and trimming DESTROYS DATA here: porcelain column 1 is the index state
-     * and column 2 the worktree state, so an unstaged modification is " M path" — trim() eats that
-     * leading space and the line then reads as "M " (staged, clean worktree), i.e. the exact opposite.
-     * Anything that parses the two status columns (BuildArtifactGate) must use THIS method; the trimmed
-     * one is only safe for "is it empty?" and for printing.
+     * There used to be a trimmed sibling here (`uncommittedFiles`) and it was a data-destroying trap:
+     * porcelain column 1 is the index state and column 2 the worktree state, so an unstaged
+     * modification is " M path"; `trim()` eats that leading space and the line then reads "M path",
+     * i.e. STAGED — the exact inverse of the truth. It is deleted. This method is for EMPTINESS
+     * ("is the tree dirty at all?") and for PRINTING; anything that reasons about the two columns
+     * calls {@link statusEntries} and reads booleans instead of re-parsing a string.
+     *
+     * Tracked changes (staged + unstaged) AND untracked files, EXCLUDING gitignored paths — so
+     * `.webpieces/` tooling artifacts never count. Empty string = fully committed.
      */
     porcelainStatus(cwd: string): string {
         return this.rawGitQuery(['status', '--porcelain'], cwd,
             'Failed to run `git status --porcelain` to check the working tree.').replace(/\n+$/, '');
+    }
+
+    /**
+     * The same status, PARSED: two status columns, an unquoted path, and explicit
+     * `isStaged()`/`isUnstaged()`/`isUntracked()` answers. Use this for every semantic question.
+     */
+    statusEntries(cwd: string): GitStatusEntry[] {
+        return this.statusParser.parse(this.porcelainStatus(cwd));
     }
 
     // Untracked files only (respects .gitignore). Empty string = none.
@@ -43,7 +53,7 @@ export class GitExec {
      * with instructions if anything is uncommitted (tracked or untracked, excluding gitignored).
      */
     assertCleanTree(cwd: string): void {
-        const dirty = this.uncommittedFiles(cwd);
+        const dirty = this.porcelainStatus(cwd);
         if (dirty === '') return;
         throw new CliExitError(1,
             '\n' + SEP +

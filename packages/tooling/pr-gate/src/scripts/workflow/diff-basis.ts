@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ForkPoint } from './git-findForkPoint';
+import { GitStatusEntry, GitStatusParser } from './git-status';
 
 /**
  * The ONE resolved answer to "what exactly is this branch's diff, and what command reproduces it?"
@@ -78,7 +79,10 @@ export class DiffBasis {
  */
 @injectable(bindingScopeValues.Singleton)
 export class DiffBasisResolver {
-    constructor(private readonly forkPoint: ForkPoint) {}
+    constructor(
+        private readonly forkPoint: ForkPoint,
+        private readonly statusParser: GitStatusParser,
+    ) {}
 
     /**
      * Resolve the basis. The command shape is the whole point:
@@ -107,24 +111,25 @@ export class DiffBasisResolver {
      * Every path that makes the tree dirty: tracked modifications/staged changes PLUS untracked files.
      * Untracked must be included — `git status --porcelain` reports them as `??`, and they are exactly the
      * files a brand-new migration or terraform rule arrives as, which is when a checklist most wants to fire.
+     *
+     * Parsed by {@link GitStatusParser} off the RAW (untrimmed) output. This used to hand-roll
+     * `line.slice(3).trim()` over `gitOut(...)`, which trims — and on a porcelain line the leading space
+     * IS the index column, so trimming shifted the FIRST line left by one and `slice(3)` then cut a
+     * character off the front of its path. It also left git's quoting on, so `"a b.txt"` was reported
+     * with the quotes still attached and matched no checklist glob.
      */
     private dirtyPaths(repoRoot: string): string[] {
-        const out = this.gitOut(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
-        if (out === '') return [];
-        const paths: string[] = [];
-        for (const line of out.split('\n')) {
-            // Porcelain v1: 2 status chars, a space, then the path. A rename reads `R  old -> new`; the new
-            // name is the one that exists on disk, so it is the one a reviewer can open.
-            const raw = line.slice(3).trim();
-            if (raw === '') continue;
-            const arrow = raw.indexOf(' -> ');
-            paths.push(arrow === -1 ? raw : raw.slice(arrow + 4));
-        }
-        return paths;
+        const out = this.rawGitOut(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
+        return this.statusParser.parse(out).map((entry: GitStatusEntry): string => entry.path);
     }
 
     private gitOut(repoRoot: string, args: string[]): string {
+        return this.rawGitOut(repoRoot, args).trim();
+    }
+
+    // Untrimmed — mandatory for `git status --porcelain`, where leading whitespace carries meaning.
+    private rawGitOut(repoRoot: string, args: string[]): string {
         const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+        return result.status === 0 ? (result.stdout ?? '') : '';
     }
 }

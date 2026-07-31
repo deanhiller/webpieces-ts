@@ -5,9 +5,10 @@ import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { RepoRootFinder, toError } from '@webpieces/rules-config';
 import { BuildAffected } from './build-affected';
-import { BuildArtifactGate, BuildArtifactVerdict, DirtyPath } from './build-artifact-gate';
+import { BuildArtifactGate, BuildArtifactVerdict } from './build-artifact-gate';
 import { GeneratedArtifactRegistry, GeneratedArtifacts, ARTIFACT_SOURCE_NX } from './generated-artifact-registry';
 import { GitExec } from './git-exec';
+import { GitStatusEntry, GitStatusParser } from './git-status';
 
 // The "known generated" set a real nx graph would hand us for this monorepo.
 const KNOWN = new GeneratedArtifacts(
@@ -18,11 +19,14 @@ const KNOWN = new GeneratedArtifacts(
 function newGate(): BuildArtifactGate {
     const registry = new GeneratedArtifactRegistry();
     registry.seed(KNOWN);
-    return new BuildArtifactGate(new GitExec(new RepoRootFinder()), registry, new BuildAffected());
+    return new BuildArtifactGate(new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, new BuildAffected());
 }
 
-const classify = (porcelain: string): BuildArtifactVerdict => newGate().classify(porcelain, KNOWN);
-const paths = (entries: readonly DirtyPath[]): string[] => entries.map((d: DirtyPath): string => d.path);
+// The gate takes PARSED entries, so the specs still drive it with literal porcelain text — they just
+// go through the same parser production does, untrimmed.
+const classify = (porcelain: string): BuildArtifactVerdict =>
+    newGate().classify(new GitStatusParser().parse(porcelain), KNOWN);
+const paths = (entries: readonly GitStatusEntry[]): string[] => entries.map((d: GitStatusEntry): string => d.path);
 
 /**
  * Run the gate and hand back the failure message ('' when it passed), so each case costs ONE git

@@ -7,6 +7,7 @@ import { ChecklistDefinition, DiffScope, RequiredChecklist, ReviewJsonService, t
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
+import { GitStatusParser } from './git-status';
 import { DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 import { AiBranchName } from './git-readAiBranchName';
@@ -55,7 +56,7 @@ function scannerFor(): ChecklistScanner {
     // the basis is now part of that plumbing (it is what makes the printed command match the matched range).
     return new ChecklistScanner(
         newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
-        new DiffBasisResolver(newForkPoint()),
+        new DiffBasisResolver(newForkPoint(), new GitStatusParser()),
         new PrContextWriter(diffScope, reviewJson), reviewJson,
     );
 }

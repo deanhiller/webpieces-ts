@@ -5,9 +5,10 @@ import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 import { RepoRootFinder } from '@webpieces/rules-config';
 import { GitExec } from './git-exec';
+import { GitStatusEntry, GitStatusParser } from './git-status';
 
-const git = new GitExec(new RepoRootFinder());
-const uncommittedFiles = (d: string): string => git.uncommittedFiles(d);
+const git = new GitExec(new RepoRootFinder(), new GitStatusParser());
+const porcelainStatus = (d: string): string => git.porcelainStatus(d);
 const untrackedFiles = (d: string): string => git.untrackedFiles(d);
 const assertCleanTree = (d: string): void => git.assertCleanTree(d);
 const assertNoUntracked = (d: string): void => git.assertNoUntracked(d);
@@ -29,24 +30,24 @@ function initRepo(): string {
     return dir;
 }
 
-describe('uncommittedFiles / untrackedFiles', () => {
+describe('porcelainStatus / untrackedFiles', () => {
     it('a freshly-committed tree is clean (both empty)', () => {
         const dir = initRepo();
-        expect(uncommittedFiles(dir)).toBe('');
+        expect(porcelainStatus(dir)).toBe('');
         expect(untrackedFiles(dir)).toBe('');
     });
 
-    it('a modified tracked file shows in uncommittedFiles but not untrackedFiles', () => {
+    it('a modified tracked file shows in porcelainStatus but not untrackedFiles', () => {
         const dir = initRepo();
         fs.writeFileSync(path.join(dir, 'tracked.txt'), 'changed\n');
-        expect(uncommittedFiles(dir)).toContain('tracked.txt');
+        expect(porcelainStatus(dir)).toContain('tracked.txt');
         expect(untrackedFiles(dir)).toBe('');
     });
 
     it('an untracked file shows in BOTH (this is the case the old diff-index check missed)', () => {
         const dir = initRepo();
         fs.writeFileSync(path.join(dir, 'stray.txt'), 'junk\n');
-        expect(uncommittedFiles(dir)).toContain('stray.txt');
+        expect(porcelainStatus(dir)).toContain('stray.txt');
         expect(untrackedFiles(dir)).toContain('stray.txt');
     });
 
@@ -62,25 +63,46 @@ describe('uncommittedFiles / untrackedFiles', () => {
         fs.writeFileSync(path.join(dir, 'debug.log'), 'noise\n');
         fs.mkdirSync(path.join(dir, 'ignored'), { recursive: true });
         fs.writeFileSync(path.join(dir, 'ignored', 'x.txt'), 'noise\n');
-        expect(uncommittedFiles(dir)).toBe('');
+        expect(porcelainStatus(dir)).toBe('');
         expect(untrackedFiles(dir)).toBe('');
     });
 });
 
-describe('porcelainStatus keeps the index column that uncommittedFiles trims away', () => {
+describe('porcelainStatus / statusEntries keep the index column that trimming destroys', () => {
     // One repo, three states — `git init` + config + commit is 8 subprocesses, so this walks a single
     // repo through clean → unstaged → staged rather than building three.
-    it('distinguishes unstaged (" M") from staged ("M "), which trimming destroys', () => {
+    it('distinguishes unstaged (" M") from staged ("M "), end to end against real git', () => {
         const dir = initRepo();
         expect(git.porcelainStatus(dir)).toBe('');
+        expect(git.statusEntries(dir)).toEqual([]);
 
         fs.writeFileSync(path.join(dir, 'tracked.txt'), 'changed\n');
         expect(git.porcelainStatus(dir)).toBe(' M tracked.txt');
-        // The trap this method exists to avoid: trimming makes an unstaged change look staged.
-        expect(uncommittedFiles(dir)).toBe('M tracked.txt');
+        const unstaged: GitStatusEntry[] = git.statusEntries(dir);
+        expect(unstaged.length).toBe(1);
+        expect(unstaged[0].path).toBe('tracked.txt');
+        expect(unstaged[0].isStaged()).toBe(false);
+        expect(unstaged[0].isUnstaged()).toBe(true);
+        // The trap the deleted uncommittedFiles() fell into: trim() would make this read as staged.
+        expect(git.porcelainStatus(dir).trim()).toBe('M tracked.txt');
 
         execSync('git add tracked.txt', { cwd: dir, stdio: 'ignore' });
         expect(git.porcelainStatus(dir)).toBe('M  tracked.txt');
+        const staged: GitStatusEntry[] = git.statusEntries(dir);
+        expect(staged[0].isStaged()).toBe(true);
+        expect(staged[0].isUnstaged()).toBe(false);
+    });
+
+    it('reports a quoted path with spaces unquoted, and a rename by its NEW name', () => {
+        const dir = initRepo();
+        fs.writeFileSync(path.join(dir, 'a file.txt'), 'x\n');
+        execSync('git add -A && git commit -q -m spaces', { cwd: dir, stdio: 'ignore' });
+        execSync('git mv "a file.txt" "b file.txt"', { cwd: dir, stdio: 'ignore' });
+        const entries: GitStatusEntry[] = git.statusEntries(dir);
+        expect(entries.length).toBe(1);
+        expect(entries[0].path).toBe('b file.txt');
+        expect(entries[0].renamedFrom).toBe('a file.txt');
+        expect(entries[0].isStaged()).toBe(true);
     });
 });
 

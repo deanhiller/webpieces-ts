@@ -6,6 +6,7 @@ import * as path from 'path';
 import { BranchNaming } from './branch-naming';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { ForkPoint } from './git-findForkPoint';
+import { GitStatusParser } from './git-status';
 
 const dirs: string[] = [];
 
@@ -30,7 +31,7 @@ function repoOnFeatureBranch(): string {
 }
 
 function resolverFor(): DiffBasisResolver {
-    return new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never));
+    return new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never), new GitStatusParser());
 }
 
 describe('DiffBasisResolver — the command must match the range', () => {
@@ -137,6 +138,32 @@ describe('DiffBasisResolver — porcelain parsing', () => {
         const basis = resolverFor().resolve(dir);
         expect(basis.dirtyFiles).toContain('new-name.ts');
         expect(basis.dirtyFiles).not.toContain('old-name.ts');
+    });
+
+    /**
+     * Regression: dirtyPaths used to run `.trim()` over the WHOLE porcelain output and then `slice(3)`
+     * each line. The first entry of an unstaged-only tree starts with a space (" M a.ts"), so the trim
+     * shifted line 1 left by one and slice(3) bit a character off the front of its path — `a.ts` was
+     * reported as `ts`. Only the FIRST line was affected, which is why it survived so long.
+     */
+    it('does not eat the first character of the first path when the first entry is unstaged', () => {
+        const dir = repoOnFeatureBranch();
+        fs.writeFileSync(path.join(dir, 'alpha.ts'), 'x\n');
+        fs.writeFileSync(path.join(dir, 'beta.ts'), 'x\n');
+        git(dir, 'git add -A && git commit -q -m add');
+        fs.writeFileSync(path.join(dir, 'alpha.ts'), 'changed\n');
+        fs.writeFileSync(path.join(dir, 'beta.ts'), 'changed\n');
+
+        const basis = resolverFor().resolve(dir);
+        expect(basis.dirtyFiles).toEqual(['alpha.ts', 'beta.ts']);
+    });
+
+    it('reports a space-containing path unquoted, so checklist globs can match it', () => {
+        const dir = repoOnFeatureBranch();
+        fs.writeFileSync(path.join(dir, 'a file.ts'), 'x\n');
+
+        const basis = resolverFor().resolve(dir);
+        expect(basis.dirtyFiles).toEqual(['a file.ts']);
     });
 
     it('BranchNaming is untouched by any of this (guard against an accidental coupling)', () => {
