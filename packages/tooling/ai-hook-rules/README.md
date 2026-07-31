@@ -51,7 +51,7 @@ location, or pick "none" to remove the hook from every target.
 ### Disabling enforcement
 
 There is no runtime escape-hatch file. To stop enforcement, **uninstall the hook**
-(re-run `wp-install-ai-hooks` and choose "none" for it). Per-rule opt-outs stay in
+(re-run `pnpm wp-install-ai-hooks` and choose "none" for it). Per-rule opt-outs stay in
 `webpieces.config.json` (`mode: "OFF"`, `ignoreModifiedUntilEpoch`, `ignoreRuleWhileOnBranch`)
 and per-line opt-outs use `// webpieces-disable <rule> -- reason`.
 

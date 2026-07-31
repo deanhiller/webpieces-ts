@@ -63,11 +63,27 @@ describe('pr-merge-guard redirects every hand-rolled merge to wp-land-pr', () =>
         expect(guard().check(ctx('gh pr list')).length).toBe(0);
     });
 
-    it('names wp-land-pr in the fix hint, and still prints the cleanup steps', () => {
+    it('names `pnpm wp-land-pr` in the fix hint, and still prints the cleanup steps', () => {
         const g = guard();
         g.check(ctx('gh pr merge --squash'));
         const hint = `${g.fixHint.mainMessage}\n${g.fixHint.options}`;
         expect(hint).toContain('pnpm wp-land-pr');
         expect(hint).toContain('wp-cleanup');
+    });
+
+    /**
+     * EVERY mention of the command in this hint must carry its `pnpm`. The hint is a block an agent
+     * follows verbatim, and a bare `wp-land-pr` is not something anyone can type. The one that WAS
+     * bare — "and `wp-land-pr` passes exactly the pair…" — sat two lines above the runnable form,
+     * which is precisely the line an agent copies from.
+     */
+    it('never names wp-land-pr without its pnpm prefix', () => {
+        const g = guard();
+        g.check(ctx('gh pr merge --squash'));
+        const hint = `${g.fixHint.mainMessage}\n${g.fixHint.options}`;
+        const bare = hint.split('\n')
+            .map((line: string): string => line.replace(/pnpm wp-land-pr/g, ''))
+            .filter((line: string): boolean => line.includes('wp-land-pr'));
+        expect(bare).toEqual([]);
     });
 });

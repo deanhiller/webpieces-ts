@@ -14,8 +14,7 @@
         "design:visualize": "wp-design-visualize",
         "clean": "rm -rf dist coverage .nx",
         "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "wp-land-pr": "wp-land-pr"
+        "format:check": "prettier --check ."
     },
     "repository": {
         "type": "git",

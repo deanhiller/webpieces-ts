@@ -184,4 +184,4 @@ go stale):
 - `wp-ai-rules-hook` — matcher `Write|Edit|MultiEdit` — runs the code-style rules.
 - `wp-ai-guards-hook` — matcher `Write|Edit|MultiEdit|Bash` — runs the git/PR/branch guards.
 
-To move or uninstall, re-run `wp-install-ai-hooks` and pick a different target (or "none").
+To move or uninstall, re-run `pnpm wp-install-ai-hooks` and pick a different target (or "none").
