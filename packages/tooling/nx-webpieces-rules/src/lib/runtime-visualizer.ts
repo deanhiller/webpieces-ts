@@ -64,6 +64,17 @@ const QUEUE_FILL = '#FFF3E0';
 const QUEUE_SHAPE = 'Mrecord';
 const QUEUE_LABEL_PREFIX = ' |';
 
+/**
+ * Marker class stamped on every queue node. Graphviz copies `class` straight into the rendered
+ * `<g class="node wp_queue">`, which is how runtime-visualizer.client.js finds these nodes and
+ * redraws them as true horizontal cylinders in the browser.
+ *
+ * A CLASS rather than an id prefix, because queue-kind EXTERNAL systems are queues too and share the
+ * `system__` id space with databases — which must stay upright. Underscored, not hyphenated: DOT
+ * emits a hyphen as `&#45;`, which is harmless but needlessly surprising to anyone reading the SVG.
+ */
+const QUEUE_CLASS = 'wp_queue';
+
 /** Fill for the upright cylinder standing for an external DATASTORE (firestore, postgres, ...). */
 const DATABASE_FILL = '#E1F5FE';
 
@@ -191,7 +202,7 @@ function edgeDot(edge: RuntimeEdge, queues: Record<string, RuntimeQueue>): strin
             : `${recordValue(edge.queue)}\\nqueue: ${recordValue(queueName ?? edge.queue)}`;
     return (
         `  "${queueId}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
-        `label="${QUEUE_LABEL_PREFIX}${body}"];\n` +
+        `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n` +
         `  "${from}" -> "${queueId}" [label="enqueue", style=dashed];\n` +
         `  "${queueId}" -> "${to}" [label="deliver", style=dashed];\n`
     );
@@ -262,11 +273,15 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
         const fill = EXTERNAL_FILLS[system.kind] ?? EXTERNAL_FILL;
         // An Mrecord-shaped system needs the same empty leading field as a queue node, or it
         // renders as a plain box and silently loses the sideways-cylinder read.
-        const prefix = shape === QUEUE_SHAPE ? QUEUE_LABEL_PREFIX : '';
-        const text = shape === QUEUE_SHAPE ? recordValue(system.label) : dotValue(system.label);
+        const isQueue = shape === QUEUE_SHAPE;
+        const prefix = isQueue ? QUEUE_LABEL_PREFIX : '';
+        const text = isQueue ? recordValue(system.label) : dotValue(system.label);
+        // Only a queue-kind system is marked: a database here is an UPRIGHT cylinder and must not be
+        // caught by the browser-side reshaping that lays queues on their side.
+        const marker = isQueue ? `class="${QUEUE_CLASS}", ` : '';
         dot +=
             `  "system__${dotId(id)}" [shape=${shape}, style="filled", fillcolor="${fill}", ` +
-            `label="${prefix}${text}\\n(external ${dotValue(system.kind)})"];\n`;
+            `${marker}label="${prefix}${text}\\n(external ${dotValue(system.kind)})"];\n`;
     }
     for (const id of ids) {
         const system = systems[id];
@@ -387,10 +402,13 @@ export function generateRuntimeDot(
 class LegendSwatches {
     readonly service =
         '<svg width="46" height="26"><rect x="1" y="3" width="44" height="20" rx="7" fill="#E8F5E9" stroke="#333"/></svg>';
-    /** Rounded outline + a cap line near the left end — the sideways cylinder the queue node draws. */
+    /**
+     * A cylinder on its side — the SAME geometry runtime-visualizer.client.js draws on the real
+     * node, so the legend cannot drift from the picture it explains.
+     */
     readonly queue =
-        `<svg width="46" height="26"><rect x="1" y="4" width="44" height="18" rx="9" fill="${QUEUE_FILL}" stroke="#333"/>` +
-        '<line x1="12" y1="4" x2="12" y2="22" stroke="#333"/></svg>';
+        `<svg width="46" height="26"><path d="M9,5 H37 A8,8 0 0 1 37,21 H9 A8,8 0 0 1 9,5 Z" fill="${QUEUE_FILL}" stroke="#333"/>` +
+        '<path d="M9,5 A8,8 0 0 1 9,21" fill="none" stroke="#333"/></svg>';
     readonly database =
         `<svg width="46" height="26"><path d="M8,7 a15,4 0 0 1 30,0 v12 a15,4 0 0 1 -30,0 z" fill="${DATABASE_FILL}" stroke="#333"/>` +
         '<path d="M8,7 a15,4 0 0 0 30,0" fill="none" stroke="#333"/></svg>';
@@ -456,17 +474,11 @@ implements: &lt;contracts it serves&gt;
 }
 
 function generateRuntimeHtml(dot: string, title: string): string {
-    // @viz-js/viz v3 (`dist/viz-global.js`, a UMD bundle exposing a global `Viz` with the WASM
-    // inlined — one file, no second request). Replaces viz.js 2.1.2, last published in 2018 and
-    // carrying Graphviz ~2.40; this build carries Graphviz 15. Note the API differs twice over:
-    // `instance()` returns a promise where v2 used `new Viz()`, and `renderSVGElement` is then
-    // SYNCHRONOUS where v2's returned a promise.
-    const script = `
-        const dot = ${JSON.stringify(dot)};
-        Viz.instance()
-            .then(viz => document.getElementById('graph').appendChild(viz.renderSVGElement(dot)))
-            .catch(err => { document.getElementById('graph').innerHTML = '<pre>' + err + '</pre>'; });
-    `;
+    // The browser half lives in a plain .js asset (matching graph-visualizer.client.js) rather than
+    // in a template literal here: it renders with @viz-js/viz v3 AND redraws every queue node as a
+    // true horizontal cylinder, which is more logic than belongs inline in a .ts string.
+    const clientJs = fs.readFileSync(path.join(__dirname, 'runtime-visualizer.client.js'), 'utf-8');
+    const script = clientJs.split('__DOT__').join(JSON.stringify(dot));
     return `<!DOCTYPE html>
 <html>
 <head>
