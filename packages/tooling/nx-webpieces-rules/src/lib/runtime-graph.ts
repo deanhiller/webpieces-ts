@@ -37,7 +37,8 @@ import type {
     ApiTransport,
     ExternalSystemDecls,
 } from './api-usage/api-relations';
-import { apiRefKey, sortApiRefs } from './api-usage/api-relations';
+import { sortApiRefs } from './api-usage/api-relations';
+import { dedupApiRefs, sortedQueues, sortedRecord, sortUnresolved } from './runtime-graph-sorters';
 import { attachExternalSystems, resolveExternalSystems } from './api-usage/external-systems';
 import type {
     RuntimeApi,
@@ -109,7 +110,10 @@ export class RuntimeGraphReport {
  * make the common and correct `A → queue → A` (a service deferring its own work) an architecture
  * cycle, and would rank services by an ordering that does not constrain deploy or startup.
  */
-function adjacencyFromEdges(serviceNames: string[], edges: RuntimeEdge[]): Record<string, string[]> {
+function adjacencyFromEdges(
+    serviceNames: string[],
+    edges: RuntimeEdge[],
+): Record<string, string[]> {
     const adj: Record<string, string[]> = {};
     for (const name of serviceNames) adj[name] = [];
     for (const edge of edges) {
@@ -168,7 +172,8 @@ class RelationSink {
     addImplements(ref: ApiRef, from: string): void {
         this.implementsApis.push(ref);
         // First contributor wins, matching dedupApiRefs' keep-the-first rule on the ref list.
-        if (from !== this.node && !this.implementsVia.has(ref.api)) this.implementsVia.set(ref.api, from);
+        if (from !== this.node && !this.implementsVia.has(ref.api))
+            this.implementsVia.set(ref.api, from);
     }
 
     addUses(ref: ApiRef): void {
@@ -274,7 +279,8 @@ class RuntimeGraphDeriver {
                     if (method.kind === 'cron') trigger.queueName = method.queueName;
                     // ONLY for 'external' (a clock needs no vendor name), and only when declared —
                     // a graph committed before callers were required has none and must still render.
-                    if (method.kind === 'external' && method.caller !== undefined) trigger.caller = method.caller;
+                    if (method.kind === 'external' && method.caller !== undefined)
+                        trigger.caller = method.caller;
                     triggers.push(trigger);
                 }
             }
@@ -335,7 +341,11 @@ class RuntimeGraphDeriver {
      * (skipping other nodes, which own their own relations). `visited` guards against
      * re-walking a lib reachable by more than one path (and any cycle).
      */
-    private collectEffectiveRelations(name: string, sink: RelationSink, visited: Set<string>): void {
+    private collectEffectiveRelations(
+        name: string,
+        sink: RelationSink,
+        visited: Set<string>,
+    ): void {
         const entry = this.projects[name];
         if (entry === undefined) return;
         const relations = entry.apiRelations;
@@ -371,7 +381,8 @@ class RuntimeGraphDeriver {
             return entry;
         };
         for (const decl of decls) {
-            for (const ref of decl.implementsApis) ensure(ref.api, ref.type).implementedBy.push(decl.name);
+            for (const ref of decl.implementsApis)
+                ensure(ref.api, ref.type).implementedBy.push(decl.name);
             for (const ref of decl.usesApis) ensure(ref.api, ref.type).usedBy.push(decl.name);
         }
         for (const api of apis.keys()) {
@@ -480,10 +491,12 @@ class RuntimeGraphDeriver {
      */
     private targetsFor(user: string, ref: ApiRef, implementers: string[]): string[] {
         const literal = ref.targetService;
-        if (literal !== undefined) return this.resolveNamedTarget(user, ref, implementers, literal, 'literal');
+        if (literal !== undefined)
+            return this.resolveNamedTarget(user, ref, implementers, literal, 'literal');
 
         const declared = this.callsServiceFor(user, ref.api);
-        if (declared !== undefined) return this.resolveNamedTarget(user, ref, implementers, declared, 'callsService');
+        if (declared !== undefined)
+            return this.resolveNamedTarget(user, ref, implementers, declared, 'callsService');
 
         return this.untargetedFanOut(user, ref, implementers);
     }
@@ -596,7 +609,9 @@ class RuntimeGraphDeriver {
                 new Set(
                     edges
                         .filter((e: RuntimeEdge) => e.from === decl.name)
-                        .map((e: RuntimeEdge) => (e.queue === undefined ? e.to : `queue:${e.queue}`)),
+                        .map((e: RuntimeEdge) =>
+                            e.queue === undefined ? e.to : `queue:${e.queue}`,
+                        ),
                 ),
             ).sort();
             // Keys are written in this order; an undefined value is omitted by JSON.stringify, so
@@ -607,7 +622,8 @@ class RuntimeGraphDeriver {
                 serviceName: this.projects[decl.name]?.serviceName,
                 callsService: this.projects[decl.name]?.callsService,
                 implements: decl.implementsApis.map((r: ApiRef) => r.api),
-                implementsVia: decl.implementsVia.size > 0 ? sortedRecord(decl.implementsVia) : undefined,
+                implementsVia:
+                    decl.implementsVia.size > 0 ? sortedRecord(decl.implementsVia) : undefined,
                 // One api used against two services is two refs but ONE api in this list.
                 uses: Array.from(new Set(decl.usesApis.map((r: ApiRef) => r.api))),
                 dependsOn,
@@ -649,54 +665,10 @@ export function deriveRuntimeGraphReport(
     apiContracts: ApiContracts = {},
     externalSystems: ExternalSystemDecls = {},
 ): RuntimeGraphReport {
-    return new RuntimeGraphDeriver(projects, hiddenProjects, apiContracts, externalSystems).assemble();
+    return new RuntimeGraphDeriver(
+        projects,
+        hiddenProjects,
+        apiContracts,
+        externalSystems,
+    ).assemble();
 }
-
-/** Drop duplicate api refs, keeping the first — needed after a node absorbs the same api from both
- * its own relations and an embedded lib's. Keyed by api AND target service: the same contract aimed
- * at two different services is two distinct relations (two distinct edges), not a duplicate. Input
- * is pre-sorted, so output stays deterministic. */
-// webpieces-disable no-function-outside-class -- pure list helper, matches the sibling helpers in this file
-function dedupApiRefs(refs: ApiRef[]): ApiRef[] {
-    const seen = new Set<string>();
-    const out: ApiRef[] = [];
-    for (const ref of refs) {
-        const key = apiRefKey(ref);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(ref);
-    }
-    return out;
-}
-
-/** Queues as a key-sorted object, with each producer/consumer list sorted, for a deterministic file. */
-// webpieces-disable no-function-outside-class -- pure data helper, matches the sibling helpers in this file
-function sortedQueues(queues: Map<string, RuntimeQueue>): Record<string, RuntimeQueue> {
-    const out: Record<string, RuntimeQueue> = {};
-    for (const key of [...queues.keys()].sort()) {
-        const queue = queues.get(key)!;
-        queue.producedBy.sort();
-        queue.consumedBy.sort();
-        out[key] = queue;
-    }
-    return out;
-}
-
-/** Sort a Map into a plain object with sorted keys, so the committed JSON is deterministic. */
-// webpieces-disable no-function-outside-class -- pure data helper, matches the sibling helpers in this file
-function sortedRecord(map: Map<string, string>): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const key of [...map.keys()].sort()) out[key] = map.get(key)!;
-    return out;
-}
-
-/** Sort AND de-duplicate: one api used against two targets must not be reported unresolved twice. */
-// webpieces-disable no-function-outside-class -- pure sort helper, matches the sibling helpers in this file
-function sortUnresolved(unresolved: RuntimeUnresolved[]): RuntimeUnresolved[] {
-    const byKey = new Map<string, RuntimeUnresolved>();
-    for (const entry of unresolved) byKey.set(`${entry.service} ${entry.api}`, entry);
-    return [...byKey.values()].sort(
-        (a: RuntimeUnresolved, b: RuntimeUnresolved) => a.service.localeCompare(b.service) || a.api.localeCompare(b.api),
-    );
-}
-
