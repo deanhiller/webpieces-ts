@@ -14,9 +14,11 @@ import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { compareGraphs } from '../../lib/graph-comparator';
 import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
+import type { DependenciesFile } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { scanAndAttachApiRelations, buildApiContracts } from '../../lib/api-usage/api-scanner';
-import type { ApiContracts } from '../../lib/api-usage/api-relations';
+import { buildExternalSystems } from '../../lib/api-usage/external-systems';
+import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { RuleGate } from '../../lib/rule-gate';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
@@ -81,6 +83,37 @@ function describeContractDrift(current: ApiContracts, saved: ApiContracts): stri
 }
 
 /**
+ * Drift in EITHER side table of dependencies.json — the api contracts or the external-system
+ * declarations — or null when both match. The first difference found is reported; fixing it is the
+ * same single command either way, so listing both adds noise rather than information.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractDrift above
+function describeTableDrift(current: CurrentArchitecture, saved: DependenciesFile): string | null {
+    const contractDrift = describeContractDrift(current.apiContracts, saved.apiContracts);
+    if (contractDrift !== null) return contractDrift;
+    return describeExternalSystemDrift(current.externalSystems, saved.externalSystems);
+}
+
+/**
+ * The same drift report for the declared external systems, or null when they match. Named per
+ * system so the message points at the database that changed rather than dumping two JSON blobs.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractDrift above
+function describeExternalSystemDrift(current: ExternalSystemDecls, saved: ExternalSystemDecls): string | null {
+    const names = [...new Set([...Object.keys(current), ...Object.keys(saved)])].sort();
+    const changes: string[] = [];
+    for (const name of names) {
+        const a = current[name];
+        const b = saved[name];
+        if (a === undefined) changes.push(`  - ${name}: in dependencies.json but no longer declared in source`);
+        else if (b === undefined) changes.push(`  + ${name}: declared in source but missing from dependencies.json`);
+        else if (JSON.stringify(a) !== JSON.stringify(b)) changes.push(`  ~ ${name}: kind/label/declarers changed`);
+    }
+    if (changes.length === 0) return null;
+    return `externalSystems drift (${changes.length} system(s)):\n${changes.join('\n')}`;
+}
+
+/**
  * Build the current dependency graph exactly as the generator does: reduce the nx
  * graph, sort into levels, enrich with metadata, and attach the derived
  * apiRelations — so this validator compares like-for-like against the committed file.
@@ -99,14 +132,19 @@ async function buildCurrentGraph(workspaceRoot: string): Promise<CurrentArchitec
     // relation from the regenerated graph and report drift against a perfectly fresh file.
     const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
     const scan = scanAndAttachApiRelations(workspaceRoot, currentGraph, projectInfos, externalApiPaths);
-    return new CurrentArchitecture(currentGraph, buildApiContracts(scan));
+    return new CurrentArchitecture(
+        currentGraph,
+        buildApiContracts(scan),
+        buildExternalSystems(scan.apiIndex, projectInfos),
+    );
 }
 
-/** The regenerated graph plus its api contract table — both halves of what dependencies.json holds. */
+/** The regenerated graph plus the two tables beside it — everything dependencies.json holds. */
 class CurrentArchitecture {
     constructor(
         public readonly graph: EnhancedGraph,
         public readonly apiContracts: ApiContracts,
+        public readonly externalSystems: ExternalSystemDecls,
     ) {}
 }
 
@@ -167,13 +205,12 @@ export default async function runExecutor(
             return { success: false };
         }
 
-        // Step 6: Compare the api contract table too. It is NOT part of the project graph, so a
-        // changed @Endpoint kind or queue name would otherwise pass here AND pass
-        // validate-runtime-architecture (which derives from this same stale file) — leaving a queue
-        // or cron in the committed graph that no longer matches the source.
-        const contractDrift = describeContractDrift(currentGraph.apiContracts, savedGraph.apiContracts);
-        if (contractDrift !== null) {
-            reportMismatch(contractDrift, workspaceRoot);
+        // Step 6: Compare the two side tables as well. Neither is part of the project graph, so a
+        // changed @Endpoint kind, queue name, or external-system declaration would otherwise pass
+        // here AND pass validate-runtime-architecture (which derives from this same stale file).
+        const tableDrift = describeTableDrift(currentGraph, savedGraph);
+        if (tableDrift !== null) {
+            reportMismatch(tableDrift, workspaceRoot);
             return { success: false };
         }
 

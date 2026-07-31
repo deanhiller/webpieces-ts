@@ -139,7 +139,10 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
     const dot = generateRuntimeDot(deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), TASK_CONTRACTS));
 
     it('names the queue node after the METHOD so producers/consumers converge on one box', () => {
-        expect(dot).toContain('"queue__TaskApi_send" [shape=cylinder');
+        // Mrecord + an empty leading field = a cylinder on its side; the upright cylinder now means
+        // a database, so the two never look alike.
+        expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
+        expect(dot).toContain('label=" |TaskApi.send');
         expect(dot).toContain('queue: TaskApi-send');
         expect(dot).toContain('"worker" -> "queue__TaskApi_send" [label="enqueue", style=dashed];');
         expect(dot).toContain('"queue__TaskApi_send" -> "worker" [label="deliver", style=dashed];');

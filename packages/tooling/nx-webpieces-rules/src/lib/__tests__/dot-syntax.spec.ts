@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { dotValue, assertValidDot, InvalidDotError } from '../dot-syntax';
+import { dotValue, recordValue, assertValidDot, InvalidDotError } from '../dot-syntax';
 
 describe('dotValue', () => {
     it('escapes the quote that ends a DOT string', () => {
@@ -53,6 +53,29 @@ describe('assertValidDot', () => {
 
     it('does not trip on a value that merely CONTAINS escaped quotes or backslashes', () => {
         const dot = `digraph G {\n  "n" [label="${dotValue('a "b" c\\d')}"];\n}\n`;
+        expect(() => assertValidDot(dot, 'test.dot')).not.toThrow();
+    });
+});
+
+describe('recordValue', () => {
+    it('escapes the record metacharacters that would RESTRUCTURE the node', () => {
+        // Inside a record label these are not text: `|` splits fields and `{}` toggles the layout
+        // direction, so an unescaped one splits the queue box in two or rotates it.
+        expect(recordValue('a|b')).toBe('a\\|b');
+        expect(recordValue('a{b}c')).toBe('a\\{b\\}c');
+        expect(recordValue('a<b>c')).toBe('a\\<b\\>c');
+    });
+
+    it('still applies dotValue, so a quote cannot end the string either', () => {
+        expect(recordValue('a"b')).toBe('a\\"b');
+    });
+
+    it('leaves an ordinary queue name untouched', () => {
+        expect(recordValue('ReportsDispatcherApi-fireReport')).toBe('ReportsDispatcherApi-fireReport');
+    });
+
+    it('produces a record label that still passes the parse-shape check', () => {
+        const dot = `digraph G {\n  "q" [shape=Mrecord, label=" |${recordValue('Api.m|x')}"];\n}\n`;
         expect(() => assertValidDot(dot, 'test.dot')).not.toThrow();
     });
 });

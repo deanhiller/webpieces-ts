@@ -10,7 +10,7 @@
  * class would only ever be a shape assertion over a plain object, never a constructed instance.
  */
 
-import type { ApiTransport } from './api-usage/api-relations';
+import type { ApiTransport, ExternalSystemDeclaration, ExternalSystemKind } from './api-usage/api-relations';
 
 export interface RuntimeService {
     level: number;
@@ -57,6 +57,12 @@ export interface RuntimeApi {
      * is what the runtime viz labels its terminal external nodes with.
      */
     owner?: string;
+    /**
+     * Set when the contract carries an `@externalSystem <kind> [label]` JSDoc tag — the vendor seam
+     * declaring WHAT it is a seam to, so the viz can draw firestore as a database rather than as the
+     * same grey box as every other external. Absent on everything else.
+     */
+    externalSystem?: ExternalSystemDeclaration;
 }
 
 export interface RuntimeEdge {
@@ -117,6 +123,33 @@ export interface RuntimeUnresolved {
     api: string;
 }
 
+/**
+ * A system outside this repo that a service TALKS TO, drawn with a shape that says what it is
+ * (a database as a cylinder, a bucket as a folder) instead of the one grey box every external
+ * used to collapse into.
+ *
+ * Two declaration sites feed this, because the two real cases differ in whether a contract exists:
+ *
+ * - **Wrapped** — the repo has a vendor seam (`FirestoreAdminApi`), so the kind is declared with an
+ *   `@externalSystem <kind> [label]` JSDoc tag on the contract. A decorator cannot go on a TS
+ *   `interface`, and these seams are interfaces, so JSDoc is the only marker that fits in place.
+ * - **Unwrapped** — the service opens the connection itself with no contract to mark (a `pg.Pool`,
+ *   a TypeORM `DataSource`), so the declaration is an `external:<kind>:<identity>` nx tag on that
+ *   project's project.json.
+ *
+ * `label` is the node IDENTITY, not just display text: two services declaring `postgres` converge on
+ * ONE node with two arrows into it, rather than drawing a database each.
+ */
+export interface RuntimeExternalSystem {
+    kind: ExternalSystemKind;
+    /** Display name AND node identity — declarations sharing a label share a node. */
+    label: string;
+    /** Services with a direct arrow to it. No transitive fan-out: a tag speaks only for its project. */
+    usedBy: string[];
+    /** Contracts flowing over it. Empty for the unwrapped (tag-declared) case — there are none. */
+    apis: string[];
+}
+
 export interface RuntimeGraph {
     services: Record<string, RuntimeService>;
     apis: Record<string, RuntimeApi>;
@@ -126,4 +159,9 @@ export interface RuntimeGraph {
     queues: Record<string, RuntimeQueue>;
     /** Clock- and outside-driven entry points, sorted for determinism. */
     triggers: RuntimeTrigger[];
+    /**
+     * Declared external systems, keyed by identity. Optional so every graph written before this
+     * existed still parses — an absent map means "nothing declared", which renders exactly as before.
+     */
+    externalSystems?: Record<string, RuntimeExternalSystem>;
 }

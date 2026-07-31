@@ -27,6 +27,44 @@
 export type ApiTransport = 'rpc' | 'pubsub' | 'external';
 
 /**
+ * The kinds an external system can be DECLARED as. Each draws its own shape in the runtime viz, so
+ * a datastore stops looking like an HTTP service.
+ *
+ * Lives here rather than beside the runtime graph model because that model already imports from this
+ * file; putting it there and importing back would close a module cycle.
+ */
+export const EXTERNAL_SYSTEM_KINDS = ['database', 'cache', 'queue', 'storage', 'saas', 'system'] as const;
+
+export type ExternalSystemKind = (typeof EXTERNAL_SYSTEM_KINDS)[number];
+
+/** True for a string that names one of {@link EXTERNAL_SYSTEM_KINDS}. */
+// webpieces-disable no-function-outside-class -- type guard beside the type it guards, matching this file's DTO style
+export function isExternalSystemKind(value: string): value is ExternalSystemKind {
+    return (EXTERNAL_SYSTEM_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * ONE declared external system, keyed in {@link ExternalSystemDecls} by its IDENTITY.
+ *
+ * Identity, not display text: two projects each tagged `external:database:postgres` name the same
+ * `postgres` node and converge on it with one arrow apiece, instead of drawing a database each.
+ *
+ * The two arrays are the two declaration sites, and a system may legitimately have both — a repo can
+ * wrap a datastore behind a contract in one service and open it directly in another.
+ */
+export interface ExternalSystemDecl {
+    kind: ExternalSystemKind;
+    label: string;
+    /** Contracts declaring it with an `@externalSystem` JSDoc tag; every user of one gets an arrow. */
+    apis: string[];
+    /** Projects declaring it with an `external:<kind>:<identity>` nx tag; each gets its OWN arrow. */
+    projects: string[];
+}
+
+/** identity -> its declaration. Serialized as the `externalSystems` key of dependencies.json. */
+export type ExternalSystemDecls = Record<string, ExternalSystemDecl>;
+
+/**
  * How a project relates to ONE api-lib it depends on:
  *  - `implements`       — it serves the api (a controller extends it)
  *  - `uses`             — it calls the api (generates a client)
@@ -130,6 +168,18 @@ export interface ApiClassInfo {
      * interface has no endpoints — it is called through a vendor SDK, not mounted).
      */
     methods: ApiMethodMeta[];
+    /**
+     * Set when the contract carries an `@externalSystem <kind> [label]` JSDoc tag — a vendor seam
+     * declaring WHAT it is a seam to. JSDoc rather than a decorator because these seams are plain TS
+     * `interface`s, which cannot carry one.
+     */
+    externalSystem?: ExternalSystemDeclaration;
+}
+
+/** The `(kind, label)` pair a single declaration resolves to. */
+export interface ExternalSystemDeclaration {
+    kind: ExternalSystemKind;
+    label: string;
 }
 
 /**

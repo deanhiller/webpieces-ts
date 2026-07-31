@@ -257,8 +257,7 @@ export class GraphVisualizer {
 <head>
     <meta charset="utf-8">
     <title>${title}</title>
-    <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
     <style>${styles}</style>
 </head>
 <body>
