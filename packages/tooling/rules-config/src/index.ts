@@ -6,7 +6,7 @@ export { CliUsage, CliArgsCheck, CliArgs } from './cli-args';
 export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
-export { findConfigFile, CONFIG_FILENAME, ConfigFile } from './config-file';
+export { findConfigFile, CONFIG_FILENAME, ConfigFile, ConfigParseAttempt, CONFIG_PARSE_ATTEMPTS, CONFIG_PARSE_RETRY_MILLIS } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR } from './repo-root';
 export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';

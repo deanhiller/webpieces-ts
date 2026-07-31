@@ -6,8 +6,8 @@ import * as nodePath from 'path';
 import { ExcludePaths, RuleFailError } from '@webpieces/rules-config';
 
 import { migrate } from '../bin/setup';
-import { effectiveBashCwd, filterByExcludedPaths, isGitOrGhCommand, runRuleCheck, runBash } from './runner';
-import { Rule, Violation, BashContext, BlockedResult } from './types';
+import { effectiveBashCwd, filterByExcludedPaths, isGitOrGhCommand, runRuleCheck, runBash, run } from './runner';
+import { Rule, Violation, BashContext, BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
 
 // The helper only reads `rule.name` to classify a rule as guard vs code rule (via isHookGuard), so
 // a minimal stand-in is enough. 'feature-branch-guard' is a hook guard; 'max-file-lines' is a code rule.
@@ -367,5 +367,61 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
         const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
         expect(report).toContain('gated flow');           // still the push block
         expect(report).not.toContain('cd into it first');  // but no exempt-tree hint
+    });
+});
+
+// A config that will not load must not trap the tools needed to repair it. The hard failure is kept
+// for WORK (writes, git, builds — the adapter turns the throw into a deny); only provably-inert
+// inspection is let through, so `cat`/`grep`/`sed -n` on webpieces.config.json still work.
+describe('runBash / run — an unloadable config blocks work but never read-only inspection', () => {
+    let root: string;
+
+    beforeAll(() => {
+        root = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-cfgbroken-')));
+        initRepo(root);
+    });
+
+    afterAll(() => { fs.rmSync(root, { recursive: true, force: true }); });
+
+    function breakConfig(): void {
+        // Exactly the live reproduction: mid-merge, the config holds conflict markers.
+        fs.writeFileSync(
+            nodePath.join(root, 'webpieces.config.json'),
+            '<<<<<<< HEAD\n{ "rules": {} }\n=======\n{ "rules": {} }\n>>>>>>> main\n',
+        );
+    }
+
+    it('allows `cat webpieces.config.json` while the config is invalid', () => {
+        breakConfig();
+        expect(runBash('cat webpieces.config.json', root, 'guards')).toBeNull();
+    });
+
+    it('allows grep/sed inspection of the broken file (the tools needed to find the markers)', () => {
+        breakConfig();
+        expect(runBash('grep -n "<<<<<<<" webpieces.config.json', root, 'guards')).toBeNull();
+        expect(runBash("sed -n '1,5p' webpieces.config.json", root, 'guards')).toBeNull();
+    });
+
+    it('still fails hard on a git command — a broken config ran NO guards, so work stays blocked', () => {
+        breakConfig();
+        expect(() => runBash('git push origin HEAD', root, 'guards')).toThrow('could not be parsed as JSON');
+    });
+
+    it('still fails hard on a build command (only INSPECTION is carved out, not "harmless-looking")', () => {
+        breakConfig();
+        expect(() => runBash('pnpm run build-all', root, 'guards')).toThrow('could not be parsed as JSON');
+    });
+
+    it('still blocks WRITES to other files while the config is invalid', () => {
+        breakConfig();
+        const input = new NormalizedToolInput(nodePath.join(root, 'src', 'x.ts'), [new NormalizedEdit('', 'const a = 1;')]);
+        expect(() => run('Write', input, root, 'guards')).toThrow('could not be parsed as JSON');
+    });
+
+    it('back to normal once the config is valid again — inspection and guards both behave', () => {
+        writeGuardConfig(root, []);
+        expect(runBash('cat webpieces.config.json', root, 'guards')).toBeNull();
+        const result = runBash('git push origin HEAD', root, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
     });
 });
