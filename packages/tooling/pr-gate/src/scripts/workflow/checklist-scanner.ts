@@ -16,9 +16,24 @@ export class ChecklistScanOptions {
      *         still owes review (what `wp-finish-upsert-pr` BLOCKS on).
      */
     filterAlreadyReviewed: boolean;
+    /**
+     * Which per-stage snapshot this scan should persist ('stage3-finish', …), or '' for "do not write
+     * pr-context.json here".
+     *
+     * '' exists for stage ②, which cannot write yet: the context records `diffDir`, and the diff has not
+     * been materialized at scan time. Letting the scan write anyway meant stage ② wrote the file twice,
+     * ~60 lines apart, the first time with an empty diffDir. Now it writes once, after materializing.
+     *
+     * The DEFAULT is deliberately non-empty, so writing is what you get by NOT thinking about it. A
+     * reviewer block that lost its diff command because nobody had written pr-context.json is a bug this
+     * codebase has already shipped once (see PrContextWriter's docstring); opting out must be an explicit,
+     * visible act by a caller that takes responsibility for writing it later — not an omission.
+     */
+    contextStage: string;
 
-    constructor(filterAlreadyReviewed = false) {
+    constructor(filterAlreadyReviewed = false, contextStage = 'stage-scan') {
         this.filterAlreadyReviewed = filterAlreadyReviewed;
+        this.contextStage = contextStage;
     }
 }
 
@@ -142,7 +157,9 @@ export class ChecklistScanner {
             applicable,
             reviewed,
             opts.filterAlreadyReviewed ? stillOwed : applicable,
-            this.prContextWriter.ensure(repoRoot, featureName, basis),
+            opts.contextStage === ''
+                ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
+                : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles),
             reviewPath,
             base,
             roster,

@@ -155,6 +155,7 @@ graph TD
     ReviewUpsertPrCommand --> GitExec
     ReviewUpsertPrCommand --> MergeEnd
     ReviewUpsertPrCommand --> MergeState
+    ReviewUpsertPrCommand --> PrContextWriter
     ReviewUpsertPrCommand --> RepoRootFinder
     ReviewUpsertPrCommand --> ReviewStageReceiptService
     ReviewUpsertPrCommand --> ReviewerBriefingBuilder

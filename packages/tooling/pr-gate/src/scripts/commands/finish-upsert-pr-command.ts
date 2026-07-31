@@ -115,7 +115,7 @@ export class FinishUpsertPrCommand {
         // applicable set for free — an unchanged checklist needs no re-review, a newly-applicable one refuses
         // until its file is written.
         const featureName = this.aiBranchName.getFeatureName();
-        const scan = this.checklistScanner.scan(repoRoot, loadAndValidate(repoRoot).prGate.checklists, new ChecklistScanOptions(true));
+        const scan = this.checklistScanner.scan(repoRoot, loadAndValidate(repoRoot).prGate.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
         const required = scan.applicable;
         // FAIL FAST on missing reviewers, BEFORE review.json is parsed and before the build gate runs. A
         // missing reviewer is not a review.json defect (folding it in made the AI fix the wrong thing), and
