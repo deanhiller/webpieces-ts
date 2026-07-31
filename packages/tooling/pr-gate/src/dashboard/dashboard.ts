@@ -1,6 +1,14 @@
 import {
-    GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, ReviewJson, formatFileList,
-    CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING,
+    GateDefinition,
+    WEBPIECES_DISABLE,
+    RULE_NAMES,
+    ReviewJson,
+    formatFileList,
+    CK_PASS,
+    CK_WARN,
+    CK_OVERRIDDEN,
+    CK_FAIL,
+    CK_MISSING,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -41,7 +49,7 @@ export class GateResult {
 // verdict reaches the server — the PR body is the artifact of the local flow that leaves the checkout
 // (alongside the HMAC gate token that proves the flow ran).
 export class ChecklistRow {
-    title: string;  // the checklist id (= reviewer subagent name)
+    title: string; // the checklist id (= reviewer subagent name)
     status: string; // CK_* verdict
     detail: string; // reviewer output / override justification (surfaced for OVERRIDDEN)
 
@@ -62,16 +70,16 @@ export class ChecklistRow {
  * rules-config is the dependency, not the dependent.
  */
 export class ChecklistCommentRow {
-    subagent: string;              // the reviewer / checklist id
-    status: string;                // CK_* verdict; '' when it did not run
-    detail: string;                // verbatim reviewer output
-    ran: boolean;                  // false = skipped, which is a NORMAL, healthy outcome
+    subagent: string; // the reviewer / checklist id
+    status: string; // CK_* verdict; '' when it did not run
+    detail: string; // verbatim reviewer output
+    ran: boolean; // false = skipped, which is a NORMAL, healthy outcome
     // The checklist's CONFIGURED globs. The only safe signal for "always runs": a patternless checklist and
     // a skipped one both have an empty `firedPatterns`, and they mean opposite things.
     configuredPatterns: string[];
-    firedPatterns: string[];       // which configured globs actually hit a changed file
+    firedPatterns: string[]; // which configured globs actually hit a changed file
     matchedFiles: string[];
-    changedFileCount: number;      // how many files were considered at all — "0 of N" needs the N
+    changedFileCount: number; // how many files were considered at all — "0 of N" needs the N
     /**
      * Whether this reviewer's own transcript shows it OPENING the extracted diff.
      *
@@ -84,8 +92,14 @@ export class ChecklistCommentRow {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
-        subagent: string, status: string, detail: string, ran: boolean,
-        configuredPatterns: string[], firedPatterns: string[], matchedFiles: string[], changedFileCount: number,
+        subagent: string,
+        status: string,
+        detail: string,
+        ran: boolean,
+        configuredPatterns: string[],
+        firedPatterns: string[],
+        matchedFiles: string[],
+        changedFileCount: number,
     ) {
         this.subagent = subagent;
         this.status = status;
@@ -106,9 +120,9 @@ export class ChecklistCommentRow {
  * reviewer to go read), the passed bucket does not (a list of what went fine is noise on a one-line row).
  */
 class RollupBucket {
-    label: string;    // 'blocking' | 'overridden' | 'with concerns' | 'passed'
+    label: string; // 'blocking' | 'overridden' | 'with concerns' | 'passed'
     emoji: string;
-    named: boolean;   // list the checklist ids on the row, or report a bare count
+    named: boolean; // list the checklist ids on the row, or report a bare count
     titles: string[];
 
     constructor(label: string, emoji: string, named: boolean) {
@@ -144,8 +158,14 @@ export class DashboardInput {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
-        title: string, gateResults: GateResult[], disables: DisableCounts,
-        buildPassed: boolean, forkPoint: string, featureHead: string, mainHead: string, review: ReviewJson,
+        title: string,
+        gateResults: GateResult[],
+        disables: DisableCounts,
+        buildPassed: boolean,
+        forkPoint: string,
+        featureHead: string,
+        mainHead: string,
+        review: ReviewJson,
         checklists: ChecklistRow[] = [],
     ) {
         this.title = title;
@@ -168,7 +188,9 @@ export class Dashboard {
         return gates
             .filter((gate: GateDefinition): boolean => !gate.disabled)
             .map((gate: GateDefinition): GateResult => {
-                const matched = changedFiles.filter((file: string): boolean => this.matchesAny(gate.patterns, file));
+                const matched = changedFiles.filter((file: string): boolean =>
+                    this.matchesAny(gate.patterns, file),
+                );
                 return new GateResult(gate.name, gate.warningColor, matched);
             });
     }
@@ -179,7 +201,9 @@ export class Dashboard {
         let webpiecesCount = 0;
         let eslintCount = 0;
         const rules = new Set<string>();
-        const allRuleTokens = Object.keys(RULE_NAMES).map((key: string): string => (RULE_NAMES as Record<string, string>)[key]);
+        const allRuleTokens = Object.keys(RULE_NAMES).map(
+            (key: string): string => (RULE_NAMES as Record<string, string>)[key],
+        );
 
         for (const line of patch.split('\n')) {
             if (!line.startsWith('+') || line.startsWith('+++')) continue;
@@ -202,7 +226,8 @@ export class Dashboard {
         lines.push(`**Build (nx affected):** ${input.buildPassed ? '🟢 Passed' : '🔴 Failed'}`);
         for (const result of input.gateResults) lines.push(this.gateLine(result));
         lines.push(this.disableLine(input.disables));
-        const eslintEmoji = input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
+        const eslintEmoji =
+            input.disables.eslintCount === 0 ? '🟢 No' : `🟡 ${input.disables.eslintCount} line(s)`;
         lines.push(`**ESLint Disables Added:** ${eslintEmoji}`);
         // ONE rolled-up row for ALL triggered consumer checklists — a worst-of colour and a count, sitting
         // with the other status rows. It used to be one row PER checklist, each inlining that checklist's
@@ -223,7 +248,9 @@ export class Dashboard {
         lines.push(`- Feature HEAD (B): \`${input.featureHead.slice(0, 12)}\``);
         lines.push(`- Main HEAD (C): \`${input.mainHead.slice(0, 12)}\``);
         lines.push('');
-        lines.push('<sub>🤖 Generated by `pnpm wp-finish-upsert-pr` (build ran via nx affected — not self-attested).</sub>');
+        lines.push(
+            '<sub>🤖 Generated by `pnpm wp-finish-upsert-pr` (build ran via nx affected — not self-attested).</sub>',
+        );
         return lines.join('\n');
     }
 
@@ -240,7 +267,11 @@ export class Dashboard {
      *
      * Idempotent: keyed by the hidden marker so wp-finish PATCHes this same comment on every push.
      */
-    renderChecklistComment(rows: readonly ChecklistCommentRow[], provenanceVerified: boolean, baseResolved: boolean): string {
+    renderChecklistComment(
+        rows: readonly ChecklistCommentRow[],
+        provenanceVerified: boolean,
+        baseResolved: boolean,
+    ): string {
         const ran = this.ranOrdered(rows);
         const prov = provenanceVerified
             ? '_Each reviewer ran as its own independent subagent, verified from the Claude Code harness._'
@@ -254,10 +285,15 @@ export class Dashboard {
         for (const row of rows) lines.push(this.rosterBullet(row));
         const header = lines.join('\n');
         if (ran.length === 0) {
-            return `${header}\n\n_No reviewer had to run on this diff — every configured checklist was ` +
-                `evaluated and none of them applied._`;
+            return (
+                `${header}\n\n_No reviewer had to run on this diff — every configured checklist was ` +
+                `evaluated and none of them applied._`
+            );
         }
-        return this.fitComment(`${header}\n\n### Reviews that ran`, ran.map((r: ChecklistCommentRow): CommentSection => this.commentSection(r)));
+        return this.fitComment(
+            `${header}\n\n### Reviews that ran`,
+            ran.map((r: ChecklistCommentRow): CommentSection => this.commentSection(r)),
+        );
     }
 
     // The roll-up line. `baseResolved:false` replaces it entirely: with no fork point the changed-file set is
@@ -265,9 +301,11 @@ export class Dashboard {
     // "all skipped ✅" would post a green all-clear for a PR where nothing was actually evaluated.
     private rollupHeader(rows: readonly ChecklistCommentRow[], baseResolved: boolean): string {
         if (!baseResolved) {
-            return `## 🔍 Company review checklists — ⚠️ NOT EVALUATED (${rows.length} defined)\n` +
+            return (
+                `## 🔍 Company review checklists — ⚠️ NOT EVALUATED (${rows.length} defined)\n` +
                 `_No diff base (fork point of main) could be resolved, so no checklist was matched against ` +
-                `anything. This is **not** an all-clear._`;
+                `anything. This is **not** an all-clear._`
+            );
         }
         const ran = rows.filter((r: ChecklistCommentRow): boolean => r.ran);
         const skipped = rows.length - ran.length;
@@ -294,8 +332,10 @@ export class Dashboard {
     // checklist was evaluated and did not apply, which the words state as the good news it is.
     private rosterBullet(row: ChecklistCommentRow): string {
         const box = row.ran ? '- [x]' : '- [ ]';
-        return `${box} ${this.verdictEmoji(row)} **${row.subagent}** — ${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
-            `  - ${this.whyLine(row)}`;
+        return (
+            `${box} ${this.verdictEmoji(row)} **${row.subagent}** — ${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
+            `  - ${this.whyLine(row)}`
+        );
     }
 
     /**
@@ -338,19 +378,23 @@ export class Dashboard {
     private whyLine(row: ChecklistCommentRow): string {
         const total = row.changedFileCount;
         if (row.configuredPatterns.length === 0) {
-            // Say what "no patterns" COSTS, not just what it means. Six patternless checklists all firing on
-            // a one-file docs PR is what a missing `patterns` looks like from the outside, and a reader who
-            // is told only "ALWAYS RUNS" has no reason to suspect the config rather than the diff.
-            return `ALWAYS RUNS — no \`patterns\` configured, so this fires on EVERY PR including docs-only ` +
-                `ones; add \`patterns\` if that is not intended. Whole diff in scope, ${total} changed file(s): ` +
-                `${formatFileList(row.matchedFiles)}`;
+            // State the fact, not a suspicion. Patternless is a deliberate configuration — an always-runs
+            // gate (every PR names a ticket, every PR has an owner) is exactly what it is FOR — so telling
+            // every such row to "add `patterns` if that is not intended" nags the repos that meant it, on
+            // every PR, forever. A reader who wants to know whether it was intended can read the config.
+            return (
+                `ALWAYS RUNS (no patterns) — whole diff in scope, ${total} changed file(s): ` +
+                `${formatFileList(row.matchedFiles)}`
+            );
         }
         const configured = this.asCode(row.configuredPatterns);
         if (row.firedPatterns.length === 0) {
             return `${configured} matched 0 of ${total} changed file(s)`;
         }
-        return `matched ${this.asCode(row.firedPatterns)} → ${row.matchedFiles.length} of ${total} ` +
-            `changed file(s): ${formatFileList(row.matchedFiles)}`;
+        return (
+            `matched ${this.asCode(row.firedPatterns)} → ${row.matchedFiles.length} of ${total} ` +
+            `changed file(s): ${formatFileList(row.matchedFiles)}`
+        );
     }
 
     private asCode(patterns: readonly string[]): string {
@@ -364,8 +408,10 @@ export class Dashboard {
         return rows
             .filter((r: ChecklistCommentRow): boolean => r.ran)
             .slice()
-            .sort((a: ChecklistCommentRow, b: ChecklistCommentRow): number =>
-                this.rankOf(rank, a.status) - this.rankOf(rank, b.status));
+            .sort(
+                (a: ChecklistCommentRow, b: ChecklistCommentRow): number =>
+                    this.rankOf(rank, a.status) - this.rankOf(rank, b.status),
+            );
     }
 
     private rankOf(rank: readonly string[], status: string): number {
@@ -375,14 +421,16 @@ export class Dashboard {
 
     private commentSection(row: ChecklistCommentRow): CommentSection {
         const heading = `#### ${this.verdictEmoji(row)} ${row.subagent} — ${this.verdictWords(row)}`;
-        const body = row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
+        const body =
+            row.detail.trim() !== '' ? row.detail.trim() : '_(reviewer recorded no output)_';
         return new CommentSection(heading, body);
     }
 
     // Keep the comment under GitHub's size cap by shrinking the LONGEST section body first (so a short
     // overridden note is never cut to make room for a long passing one), never dropping a verdict heading.
     private fitComment(header: string, sections: CommentSection[]): string {
-        const assemble = (): string => `${header}\n\n${sections.map((s: CommentSection): string => `${s.heading}\n\n${s.body}`).join('\n\n')}`;
+        const assemble = (): string =>
+            `${header}\n\n${sections.map((s: CommentSection): string => `${s.heading}\n\n${s.body}`).join('\n\n')}`;
         const trunc = '\n\n…_[truncated to fit the GitHub comment size limit]_';
         let out = assemble();
         while (out.length > COMMENT_LIMIT) {
@@ -400,7 +448,10 @@ export class Dashboard {
         let idx = -1;
         let max = -1;
         sections.forEach((s: CommentSection, i: number): void => {
-            if (s.body.length > max) { max = s.body.length; idx = i; }
+            if (s.body.length > max) {
+                max = s.body.length;
+                idx = i;
+            }
         });
         return idx;
     }
@@ -411,7 +462,9 @@ export class Dashboard {
     // out), the summary capped at 4 sentences, and a quick link back to the PR for the full dashboard.
     renderCommitBody(input: DashboardInput, prUrl: string): string {
         const lines: string[] = [];
-        lines.push(`Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`);
+        lines.push(
+            `Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`,
+        );
         lines.push('');
         const flags = this.nonGreenFlags(input);
         if (flags.length === 0) {
@@ -437,17 +490,24 @@ export class Dashboard {
     private nonGreenFlags(input: DashboardInput): string[] {
         const flags: string[] = [];
         if (!input.buildPassed) flags.push('Build (nx affected): 🔴 Failed');
-        if (input.review.violations.length > 0) flags.push(`Pattern Violations: 🟡 ${input.review.violations.length} violation(s)`);
+        if (input.review.violations.length > 0)
+            flags.push(`Pattern Violations: 🟡 ${input.review.violations.length} violation(s)`);
         for (const result of input.gateResults) {
             if (result.matchedFiles.length === 0) continue;
             const emoji = result.warningColor === 'red' ? '🔴' : '🟡';
             flags.push(`${result.name}: ${emoji} ${result.matchedFiles.length} file(s)`);
         }
         if (input.disables.webpiecesCount > 0) {
-            const which = input.disables.webpiecesRules.length > 0 ? ` — ${input.disables.webpiecesRules.join(', ')}` : '';
-            flags.push(`Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`);
+            const which =
+                input.disables.webpiecesRules.length > 0
+                    ? ` — ${input.disables.webpiecesRules.join(', ')}`
+                    : '';
+            flags.push(
+                `Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`,
+            );
         }
-        if (input.disables.eslintCount > 0) flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
+        if (input.disables.eslintCount > 0)
+            flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
         // A triggered checklist is noteworthy in main's history — carry each into the commit body.
         for (const row of input.checklists) {
             flags.push(`Checklist — ${row.title}: ${this.checklistStatusText(row)}`);
@@ -509,9 +569,21 @@ export class Dashboard {
                 if (pattern[i] === '/') i += 1;
                 continue;
             }
-            if (ch === '*') { re += '[^/]*'; i += 1; continue; }
-            if (ch === '?') { re += '[^/]'; i += 1; continue; }
-            if ('.+^$(){}|[]\\'.includes(ch)) { re += '\\' + ch; i += 1; continue; }
+            if (ch === '*') {
+                re += '[^/]*';
+                i += 1;
+                continue;
+            }
+            if (ch === '?') {
+                re += '[^/]';
+                i += 1;
+                continue;
+            }
+            if ('.+^$(){}|[]\\'.includes(ch)) {
+                re += '\\' + ch;
+                i += 1;
+                continue;
+            }
             re += ch;
             i += 1;
         }
@@ -545,7 +617,9 @@ export class Dashboard {
             return '**Checklists:** ⚪ 0 ran — no review checklist matched this PR · see the checklist comment';
         }
         const allPassed = filled.length === 1 && !filled[0].named;
-        const detail = allPassed ? 'all passed' : filled.map((b: RollupBucket): string => this.bucketPhrase(b)).join(', ');
+        const detail = allPassed
+            ? 'all passed'
+            : filled.map((b: RollupBucket): string => this.bucketPhrase(b)).join(', ');
         return `**Checklists:** ${filled[0].emoji} ${rows.length} ran — ${detail} · per-checklist detail in the checklist comment`;
     }
 
@@ -607,7 +681,8 @@ export class Dashboard {
 
     private disableLine(disables: DisableCounts): string {
         if (disables.webpiecesCount === 0) return '**Webpieces Disables Added:** 🟢 No';
-        const which = disables.webpiecesRules.length > 0 ? ` — ${disables.webpiecesRules.join(', ')}` : '';
+        const which =
+            disables.webpiecesRules.length > 0 ? ` — ${disables.webpiecesRules.join(', ')}` : '';
         return `**Webpieces Disables Added:** 🟡 ${disables.webpiecesCount} line(s)${which}`;
     }
 }
