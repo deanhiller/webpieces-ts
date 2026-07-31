@@ -228,3 +228,40 @@ describe('rendering a declared external system', () => {
         expect(dot).toContain('style="dashed,filled"');
     });
 });
+
+describe('queue nodes are marked for browser-side reshaping', () => {
+    it('stamps the wp_queue class on a pubsub queue node', () => {
+        const dot = generateRuntimeDot({
+            services: { p: service([]), c: service([]) },
+            apis: {},
+            runtimeEdges: [{ from: 'p', to: 'c', via: ['TaskApi'], type: 'pubsub', queue: 'TaskApi.send' }],
+            unresolvedUses: [],
+            queues: { 'TaskApi.send': { api: 'TaskApi', method: 'send', queueName: 'TaskApi-send', producedBy: ['p'], consumedBy: ['c'] } },
+            triggers: [],
+        });
+        expect(dot).toContain('class="wp_queue"');
+    });
+
+    it('marks a queue-KIND external system but NOT a database', () => {
+        // The two share the `system__` id space, and a database is an UPRIGHT cylinder — reshaping
+        // it would lay the datastore on its side, which is the one thing this must never do.
+        const graph: RuntimeGraph = {
+            services: { svc: service([]) },
+            apis: {},
+            runtimeEdges: [],
+            unresolvedUses: [],
+            queues: {},
+            triggers: [],
+        };
+        attachExternalSystems(graph, {
+            Postgres: { kind: 'database', label: 'Postgres', usedBy: ['svc'], apis: [] },
+            SqsInbox: { kind: 'queue', label: 'SqsInbox', usedBy: ['svc'], apis: [] },
+        });
+        const dot = generateRuntimeDot(graph);
+        const dbLine = dot.split('\n').find((l: string) => l.includes('"system__Postgres" ['))!;
+        const qLine = dot.split('\n').find((l: string) => l.includes('"system__SqsInbox" ['))!;
+        expect(dbLine).toContain('shape=cylinder');
+        expect(dbLine).not.toContain('wp_queue');
+        expect(qLine).toContain('class="wp_queue"');
+    });
+});
