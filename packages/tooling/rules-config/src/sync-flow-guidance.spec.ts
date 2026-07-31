@@ -116,7 +116,69 @@ describe('no doc or message names a wp-* command that does not exist', () => {
         expect(prGateBins(repoRoot)).not.toContain('wp-checklist');
         expect(offendingTokens(repoRoot, /\bwp-checklist[a-z0-9-]*/g, '')).toEqual([]);
     });
+
 });
+
+/**
+ * The sibling defect to the one above: the command EXISTS, but the text tells you to run it in a form
+ * you cannot type. None of the `wp-*` bins is a repo `package.json` script — every one resolves out of
+ * `node_modules/.bin`, so `pnpm <bin>` is the ONLY runnable spelling. An instruction that says
+ * "run `wp-cleanup`" hands an agent a command that dies with "command not found".
+ *
+ * Deliberately narrow: it fires only on an imperative verb IMMEDIATELY followed by a bin name
+ * ("run wp-x", "re-run `wp-x`", "call wp-x"). Prose that merely NAMES a command — "`wp-cleanup` spares
+ * worktree-held branches", "PAIRS with wp-start-update", doc comments, spec titles — is not an
+ * instruction and stays bare on purpose.
+ */
+describe('every wp-* command an instruction hands out is runnable as typed', () => {
+    const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+
+    it('no instruction tells you to run a wp-* bin without its `pnpm` prefix', () => {
+        const bins = allWpBins(repoRoot);
+        expect(bins).toContain('wp-land-pr');
+        expect(bareRunInstructions(repoRoot, bins)).toEqual([]);
+    });
+});
+
+/**
+ * EVERY `wp-*` bin this monorepo ships, across all three publishing packages — the source of truth for
+ * "is this token a real command someone is being told to run?".
+ */
+// webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
+function allWpBins(repoRoot: string): Set<string> {
+    const pkgs = [
+        'packages/tooling/pr-gate/package.json',
+        'packages/tooling/code-rules/package.json',
+        'packages/tooling/ai-hook-rules/package.json',
+        'packages/tooling/nx-webpieces-rules/package.json',
+    ];
+    const bins = new Set<string>();
+    for (const rel of pkgs) {
+        // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
+        const parsed = JSON.parse(fs.readFileSync(path.join(repoRoot, rel), 'utf8')) as { bin?: Record<string, string> };
+        for (const name of Object.keys(parsed.bin ?? {})) bins.add(name);
+    }
+    return bins;
+}
+
+/** Every `<file>:<line>  <phrase>` where an imperative verb hands out a bare (un-`pnpm`'d) bin name. */
+// webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
+function bareRunInstructions(repoRoot: string, bins: Set<string>): string[] {
+    const verb = /\b(?:re-)?(?:run|call)\s+`?(wp-[a-z0-9-]+)/gi;
+    const files = execFileSync('git', ['ls-files', '*.ts', '*.md'], { cwd: repoRoot, encoding: 'utf8' })
+        .split('\n')
+        .filter((f: string): boolean => f !== '' && !f.endsWith('sync-flow-guidance.spec.ts'));
+    const bad: string[] = [];
+    for (const file of files) {
+        const lines = fs.readFileSync(path.join(repoRoot, file), 'utf8').split('\n');
+        lines.forEach((line: string, i: number): void => {
+            for (const match of stripDocLinks(line).matchAll(verb)) {
+                if (bins.has(match[1])) bad.push(`${file}:${i + 1}  ${match[0].trim()}`);
+            }
+        });
+    }
+    return bad;
+}
 
 // webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
 function prGateBins(repoRoot: string): string[] {

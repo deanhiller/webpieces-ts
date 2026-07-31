@@ -271,7 +271,7 @@ export class FinishUpsertPrCommand {
             format +
             `${this.instructions.render(scan.outstanding, scan.reviewPath, scan.context)}\n\n` +
             `Then re-run: pnpm wp-finish-upsert-pr\n` +
-            `(Each reviewer's generated instructions file is already written — re-running wp-review-upsert-pr\n` +
+            `(Each reviewer's generated instructions file is already written — re-running pnpm wp-review-upsert-pr\n` +
             ` is only needed if the code changed since it ran.)`,
         );
     }

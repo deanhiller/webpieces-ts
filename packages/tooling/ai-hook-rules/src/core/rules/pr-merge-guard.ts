@@ -43,7 +43,7 @@ export class PrMergeGuardRule extends BashRuleBase<PrMergeGuardConfig> {
                 'the repo\'s squash_merge_commit_title/message settings, which commonly means the internal',
                 '"Squash merge of <branch>" subject — and NEVER the compact risk/flags body, because no',
                 'value of those settings can produce it. Only an explicit `--subject`/`--body-file` can,',
-                'and `wp-land-pr` passes exactly the pair that `wp-finish-upsert-pr` already rendered:',
+                'and `pnpm wp-land-pr` passes exactly the pair that `wp-finish-upsert-pr` already rendered:',
                 '',
                 '  pnpm wp-land-pr',
                 '',

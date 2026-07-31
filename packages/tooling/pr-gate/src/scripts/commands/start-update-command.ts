@@ -41,7 +41,7 @@ export class StartUpdateCommand {
                 '  pnpm wp-finish-update\n',
             );
         }
-        process.stdout.write('\n✅ Updated from main — clean. No need to call wp-finish-update.\n');
+        process.stdout.write('\n✅ Updated from main — clean. No need to call `pnpm wp-finish-update`.\n');
     }
 
     // If a PR is already OPEN for this branch, wp-start-update must refuse. The 3-point update
