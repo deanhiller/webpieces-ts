@@ -23,6 +23,7 @@ import {
     ExternalSystemDeclaration,
     isExternalSystemKind,
     NonLiteralDecoratorArg,
+    UndeclaredExternalCaller,
     UnresolvedEndpointPath,
 } from './api-relations';
 
@@ -150,6 +151,7 @@ export class DecoratorArgDiagnostics {
     private readonly found: NonLiteralDecoratorArg[] = [];
     private readonly unresolvedPaths: UnresolvedEndpointPath[] = [];
     private readonly emptied: EmptiedApiContract[] = [];
+    private readonly undeclaredCallers: UndeclaredExternalCaller[] = [];
 
     constructor(private readonly workspaceRoot: string) {}
 
@@ -168,6 +170,11 @@ export class DecoratorArgDiagnostics {
         this.emptied.push(new EmptiedApiContract(api, declared, this.locate(node)));
     }
 
+    /** Record an `external` `@Endpoint` whose caller is unreadable — fatal, see UndeclaredExternalCallerError. */
+    recordUndeclaredCaller(api: string, method: string, argument: string, node: ts.Node): void {
+        this.undeclaredCallers.push(new UndeclaredExternalCaller(api, method, argument, this.locate(node)));
+    }
+
     all(): NonLiteralDecoratorArg[] {
         return this.found;
     }
@@ -178,6 +185,10 @@ export class DecoratorArgDiagnostics {
 
     emptiedContracts(): EmptiedApiContract[] {
         return this.emptied;
+    }
+
+    undeclaredExternalCallers(): UndeclaredExternalCaller[] {
+        return this.undeclaredCallers;
     }
 
     private locate(node: ts.Node): string {
@@ -265,6 +276,14 @@ export function endpointMethodsOf(
         if (QUEUED_KINDS.includes(method.kind)) {
             method.queueName = queueNameOf(member, api, name, constants, diagnostics);
         }
+        // Only an `external` endpoint HAS an outside caller, mirroring the queue rule above. A
+        // caller recorded on an rpc method would be a fact about nothing, and would put a vendor
+        // box on the graph beside an endpoint no vendor calls.
+        if (method.kind === 'external') {
+            const caller = externalCallerOf(args[2], constants);
+            if (caller.declaration !== null) method.caller = caller.declaration;
+            else if (diagnostics !== null) diagnostics.recordUndeclaredCaller(api, name, caller.problem!, endpoint);
+        }
         methods.push(method);
     }
     // Declared endpoints, kept none: the class is about to be skipped as "zero methods" and would
@@ -273,6 +292,66 @@ export function endpointMethodsOf(
         diagnostics.recordEmptiedContract(api, declared, cls);
     }
     return methods;
+}
+
+/** Default `callerKind` when an `external` endpoint declares `calledBy` alone — mirrors core-util. */
+const DEFAULT_CALLER_KIND = 'saas';
+
+/**
+ * The outcome of reading `@Endpoint(path, 'external', { calledBy, callerKind })`'s third argument:
+ * either the resolved declaration, or the reason it could not be resolved (never both).
+ */
+export class ExternalCallerRead {
+    constructor(
+        public readonly declaration: ExternalSystemDeclaration | null,
+        /** What was wrong, as written, for the diagnostic. Null exactly when `declaration` is set. */
+        public readonly problem: string | null,
+    ) {}
+}
+
+/**
+ * Read the declared caller out of the @Endpoint OPTIONS OBJECT LITERAL — `args[2]`, not a positional
+ * argument, because that is where `formPost` already lives and one options bag beats two.
+ *
+ * Everything unreadable is a PROBLEM, never a default: an unknown `callerKind` draws the wrong shape
+ * (which teaches the reader something false), and a missing `calledBy` puts us back at a box that can
+ * only name our own contract. The kind default applies ONLY to the case the API deliberately allows —
+ * `calledBy` present, `callerKind` absent.
+ */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function externalCallerOf(
+    arg: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+): ExternalCallerRead {
+    if (arg === undefined) return new ExternalCallerRead(null, '<no options argument>');
+    if (!ts.isObjectLiteralExpression(arg)) return new ExternalCallerRead(null, arg.getText());
+    const calledBy = objectPropertyValue(arg, 'calledBy', constants);
+    if (calledBy.value === null || calledBy.value === '') {
+        return new ExternalCallerRead(null, calledBy.unresolvedName ?? '<no calledBy>');
+    }
+    const callerKind = objectPropertyValue(arg, 'callerKind', constants);
+    if (callerKind.value === null && callerKind.unresolvedName !== null) {
+        return new ExternalCallerRead(null, `callerKind: ${callerKind.unresolvedName}`);
+    }
+    const kind = callerKind.value ?? DEFAULT_CALLER_KIND;
+    if (!isExternalSystemKind(kind)) return new ExternalCallerRead(null, `callerKind: '${kind}'`);
+    return new ExternalCallerRead({ kind, label: calledBy.value }, null);
+}
+
+/** One property of an object literal, read as a string through the same constant folding as an argument. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers in di-graph/bindings.ts
+export function objectPropertyValue(
+    literal: ts.ObjectLiteralExpression,
+    name: string,
+    constants: ModuleStringConstants,
+): DecoratorArgValue {
+    for (const property of literal.properties) {
+        if (!ts.isPropertyAssignment(property) || property.name === undefined) continue;
+        const key = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : null;
+        if (key !== name) continue;
+        return decoratorArgValue(property.initializer, constants);
+    }
+    return new DecoratorArgValue(null, null);
 }
 
 /** `@Queue('...')` override when present and resolvable, else the derived `${Api}-${method}`. */

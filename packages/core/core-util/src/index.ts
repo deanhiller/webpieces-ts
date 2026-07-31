@@ -62,6 +62,7 @@ export {
     getAuthMeta,
     getAuthMode,
     assertEveryEndpointHasAuthMode,
+    assertEveryExternalEndpointDeclaresCaller,
     getApiKind,
     assertApiKind,
     assertPubSubConventions,
@@ -71,7 +72,11 @@ export {
     RouteMetadata,
     METADATA_KEYS,
 } from './http/decorators';
-export type { AuthMode, ApiKind, EndpointKind, JwtRequirement, EndpointOptions } from './http/decorators';
+export type { AuthMode, ApiKind, EndpointKind, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+// WHO calls an `external` endpoint — the caller declaration @Endpoint(..., 'external', {calledBy})
+// requires, and the reader for it.
+export { EXTERNAL_SYSTEM_KINDS, DEFAULT_CALLER_KIND, ExternalCaller, isExternalSystemKind, getEndpointCaller } from './http/external-caller';
+export type { ExternalSystemKind } from './http/external-caller';
 // Client-side shared-secret store (the value THIS service sends per @AuthSharedSecret key).
 export { Secrets, SECRETS } from './http/Secrets';
 

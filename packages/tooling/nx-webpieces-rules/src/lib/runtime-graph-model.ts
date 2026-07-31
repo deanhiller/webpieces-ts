@@ -124,6 +124,18 @@ export interface RuntimeTrigger {
     service: string;
     /** Present for 'cron': the Cloud Scheduler job / queue name Terraform must match. */
     queueName?: string;
+    /**
+     * Present for 'external': WHO outside this repo posts to it, declared as
+     * `@Endpoint(p, 'external', { calledBy: 'twilio' })`.
+     *
+     * The SAME `(kind,label)` an OUTBOUND {@link RuntimeExternalSystem} carries, so an inbound
+     * `saas twilio` and an outbound `saas twilio` share a node identity and converge on ONE box —
+     * `label` is the identity here too, not display text.
+     *
+     * Optional only for graphs generated BEFORE the caller was required; generation now fails rather
+     * than emitting an `external` method without one.
+     */
+    caller?: ExternalSystemDeclaration;
 }
 
 export interface RuntimeUnresolved {

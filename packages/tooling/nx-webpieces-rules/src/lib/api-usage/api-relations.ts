@@ -151,6 +151,20 @@ export interface ApiMethodMeta {
      * provisioned as a queue.
      */
     queueName?: string;
+    /**
+     * WHO outside this repo drives this endpoint, from `@Endpoint(p, 'external', { calledBy })`.
+     *
+     * ONLY on an `external` method, the same way `queueName` is only on the kinds that HAVE a queue.
+     *
+     * Deliberately the SAME {@link ExternalSystemDeclaration} the OUTBOUND `@externalSystem` tag
+     * resolves to, not a parallel inbound-only type: an inbound `saas twilio` and an outbound
+     * `saas twilio` are the same vendor, so sharing the type makes them share an IDENTITY and
+     * converge on ONE node instead of drawing twilio twice facing opposite directions.
+     *
+     * Optional in the TYPE only for graphs generated before the caller was required — generation
+     * FAILS on an `external` method whose caller cannot be read (UndeclaredExternalCallerError).
+     */
+    caller?: ExternalSystemDeclaration;
 }
 
 /**
@@ -249,6 +263,28 @@ export class UnresolvedEndpointPath {
         /** The method name. */
         public readonly method: string,
         /** The path argument exactly as written, e.g. `PROCESS_PATH`. */
+        public readonly argument: string,
+        /** `path/to/file.ts:LINE`, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
+
+/**
+ * ONE `external` `@Endpoint` whose CALLER could not be read from the source.
+ *
+ * Fatal for the same reason {@link UnresolvedEndpointPath} is. The inbound box exists to say who is
+ * calling us from outside; with no caller it can only restate our own contract name, which is the
+ * exact bug this diagnostic exists to make impossible to reintroduce. `@Endpoint`'s TS overloads
+ * already require `calledBy`, so anything reaching here is a JS caller, an `as any`, a cross-module
+ * constant the parser-only scan cannot fold, or an unknown `callerKind`.
+ */
+export class UndeclaredExternalCaller {
+    constructor(
+        /** The contract class the method is declared on. */
+        public readonly api: string,
+        /** The method name. */
+        public readonly method: string,
+        /** What was wrong, as written — `<missing>`, `SOME_CONST`, `callerKind: 'vendor'`. */
         public readonly argument: string,
         /** `path/to/file.ts:LINE`, workspace-relative. */
         public readonly at: string,

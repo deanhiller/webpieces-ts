@@ -281,8 +281,23 @@ describe('generateRuntimeDot — the legacy unnamed per-pair queue', () => {
     });
 });
 
-/** An rpc contract whose one endpoint is driven from OUTSIDE (a GCP push subscription). */
+/**
+ * An rpc contract whose one endpoint is driven from OUTSIDE by a DECLARED caller — a GCP Pub/Sub
+ * push subscription, which is infrastructure (`system`) rather than a vendor SaaS.
+ */
 const PUSH_CONTRACTS: ApiContracts = {
+    RpcApi: {
+        owner: 'shared-api',
+        apiKind: 'rpc',
+        basePath: '/api/push',
+        methods: [
+            { name: 'notify', path: '/notify', kind: 'external', caller: { kind: 'system', label: 'pubsub-push' } },
+        ],
+    },
+};
+
+/** The same contract as it appears in a graph committed BEFORE callers were required. */
+const LEGACY_PUSH_CONTRACTS: ApiContracts = {
     RpcApi: {
         owner: 'shared-api',
         apiKind: 'rpc',
@@ -294,15 +309,32 @@ const PUSH_CONTRACTS: ApiContracts = {
 describe('external (outside-driven) endpoints', () => {
     const derived = deriveRuntimeGraph(graph(), new Set<string>(), PUSH_CONTRACTS);
 
-    it('records an inbound trigger for the service that SERVES it', () => {
+    it('records an inbound trigger for the service that SERVES it, carrying the caller', () => {
         expect(derived.triggers).toEqual([
-            { kind: 'external', api: 'RpcApi', method: 'notify', service: 'consumer' },
+            {
+                kind: 'external',
+                api: 'RpcApi',
+                method: 'notify',
+                service: 'consumer',
+                caller: { kind: 'system', label: 'pubsub-push' },
+            },
         ]);
     });
 
-    it('draws it as a dashed box pointing INTO the service', () => {
+    it('names the box after the CALLER, with the contract on the arrow', () => {
         const dot = generateRuntimeDot(derived);
-        expect(dot).toContain('"inbound__RpcApi" [shape=box, style="dashed,filled"');
+        // Was "inbound__RpcApi" labelled `RpcApi\n(external caller)` — our own contract name, which
+        // the service box below already prints. The caller now owns the box AND its identity.
+        expect(dot).toContain('"system__pubsub_push" [shape=box');
+        expect(dot).toContain('label="pubsub-push\\n(external caller)"');
+        expect(dot).not.toContain('inbound__RpcApi');
+        expect(dot).toContain('"system__pubsub_push" -> "consumer" [label="RpcApi.notify", style=dashed');
+    });
+
+    it('still renders an UNDECLARED caller, visibly distinct as a dotted unknown', () => {
+        const dot = generateRuntimeDot(deriveRuntimeGraph(graph(), new Set<string>(), LEGACY_PUSH_CONTRACTS));
+        expect(dot).toContain('"inbound__RpcApi" [shape=box, style="dotted,filled"');
+        expect(dot).toContain('label="RpcApi\\n? unknown caller"');
         expect(dot).toContain('"inbound__RpcApi" -> "consumer" [label="RpcApi.notify", style=dashed');
     });
 });

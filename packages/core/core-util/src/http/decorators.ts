@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { MaskSpec, MaskMode } from './LogFieldMask';
+import { DEFAULT_CALLER_KIND, ENDPOINT_CALLER_KEY, ExternalCaller, ExternalSystemKind, getEndpointCaller } from './external-caller';
 
 /**
  * Metadata keys for storing API routing information.
@@ -17,6 +18,8 @@ export const METADATA_KEYS = {
     ENDPOINT_OPTIONS: 'webpieces:endpoint-options',
     /** Per-method @Endpoint trigger kind (rpc | cloudtasks | cron | external), parallel to ENDPOINTS. */
     ENDPOINT_KIND: 'webpieces:endpoint-kind',
+    /** Per-method declared external CALLER (only for kind 'external'), parallel to ENDPOINTS. */
+    ENDPOINT_CALLER: ENDPOINT_CALLER_KEY,
     /** Per-method @MaskLog spec (which DTO fields the LogApiCall path masks). */
     MASK_LOG: 'webpieces:mask-log',
 };
@@ -51,6 +54,17 @@ export interface EndpointOptions {
      * urlencoded has no nesting (unlike JSON). Default false = JSON.
      */
     formPost?: boolean;
+}
+
+/**
+ * Options for an `external` @Endpoint: everything {@link EndpointOptions} carries, PLUS a REQUIRED
+ * declaration of WHO is calling. See {@link Endpoint} for why, `external-caller.ts` for identity.
+ */
+export interface ExternalEndpointOptions extends EndpointOptions {
+    /** The outside system that posts here (`'twilio'`) — the graph node IDENTITY, not display text. */
+    calledBy: string;
+    /** What that caller IS; picks the node's shape. Defaults to `'saas'` (see DEFAULT_CALLER_KIND). */
+    callerKind?: ExternalSystemKind;
 }
 
 /**
@@ -201,7 +215,7 @@ export function ApiPath(basePath: string): ClassDecorator {
  * nightly(request: NightlyRequest): Promise<void> { ... }
  *
  * // EXTERNAL webhook posting application/x-www-form-urlencoded (e.g. Twilio):
- * @Endpoint('/hook', 'external', { formPost: true })
+ * @Endpoint('/hook', 'external', { formPost: true, calledBy: 'twilio' })
  * inbound(request: InboundRequest): Promise<InboundResponse> { ... }
  * ```
  *
@@ -210,9 +224,20 @@ export function ApiPath(basePath: string): ClassDecorator {
  * can slip into the runtime architecture graph with its trigger left to guesswork. See
  * {@link EndpointKind} for what each value draws and which Terraform resource backs it.
  *
- * The path write to ENDPOINTS is UNCHANGED (every consumer iterates `[methodName, path]`); the kind
- * and options ride PARALLEL ENDPOINT_KIND / ENDPOINT_OPTIONS maps so nothing downstream changes shape.
+ * `calledBy` is REQUIRED for `external` FOR EXACTLY THE SAME REASON, enforced by the overloads below:
+ * the one box on the runtime graph whose whole job is to say who calls us from outside could only
+ * restate OUR OWN contract name, because nothing in the source ever said who the caller was. This is
+ * BREAKING for published consumers, intentionally — an existing `@Endpoint(p, 'external', {...})`
+ * stops compiling until it names its caller. Migration is one property; see the migration note in
+ * `external-caller.ts`. Non-`external` endpoints are completely unaffected.
+ *
+ * The path write to ENDPOINTS is UNCHANGED (every consumer iterates `[methodName, path]`); kind,
+ * options and caller ride PARALLEL ENDPOINT_KIND / ENDPOINT_OPTIONS / ENDPOINT_CALLER maps.
  */
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function Endpoint(path: string, kind: 'external', options: ExternalEndpointOptions): MethodDecorator;
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function Endpoint(path: string, kind: Exclude<EndpointKind, 'external'>, options?: EndpointOptions): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function Endpoint(path: string, kind: EndpointKind, options: EndpointOptions = {}): MethodDecorator {
     // webpieces-disable no-any-unknown -- reflect-metadata decorator API requires any
@@ -235,6 +260,14 @@ export function Endpoint(path: string, kind: EndpointKind, options: EndpointOpti
             Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, metadataTarget) || {};
         opts[propertyKey as string] = options;
         Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, opts, metadataTarget);
+
+        // ONLY for 'external', mirroring how a queue name is recorded only for the kinds that HAVE
+        // a queue: a caller on an rpc endpoint would be a fact about nothing.
+        const declared = options as ExternalEndpointOptions;
+        if (kind !== 'external' || typeof declared.calledBy !== 'string' || declared.calledBy === '') return;
+        const callers: Record<string, ExternalCaller> = Reflect.getMetadata(METADATA_KEYS.ENDPOINT_CALLER, metadataTarget) || {};
+        callers[propertyKey as string] = new ExternalCaller(declared.callerKind ?? DEFAULT_CALLER_KIND, declared.calledBy);
+        Reflect.defineMetadata(METADATA_KEYS.ENDPOINT_CALLER, callers, metadataTarget);
     };
 }
 
@@ -440,6 +473,25 @@ export function getEndpointOptions(apiClass: Function, methodName: string): Endp
     const opts: Record<string, EndpointOptions> =
         Reflect.getMetadata(METADATA_KEYS.ENDPOINT_OPTIONS, apiClass) || {};
     return opts[methodName] ?? {};
+}
+
+/**
+ * Fail-fast at wiring time when an `external` endpoint declared no caller. The {@link Endpoint}
+ * overloads already make that a COMPILE error; this is the backstop for the ways TS is bypassed —
+ * a JS caller, an `as any` options object, a hand-rolled Reflect.defineMetadata.
+ * @throws Error naming the first external endpoint with no `calledBy`.
+ */
+// webpieces-disable no-function-outside-class -- wiring-time assert, sibling of assertEveryEndpointHasAuthMode
+export function assertEveryExternalEndpointDeclaresCaller(apiClass: Function): void {
+    const kinds = getEndpointKinds(apiClass);
+    for (const methodName of Object.keys(kinds)) {
+        if (kinds[methodName] !== 'external' || getEndpointCaller(apiClass, methodName) !== undefined) continue;
+        throw new Error(
+            `External endpoint '${methodName}' in ${apiClass.name || 'Unknown'} declares no caller. Say WHO ` +
+            `posts to it: @Endpoint(path, 'external', { calledBy: '<vendor>' }) — the runtime architecture ` +
+            `graph cannot name an inbound caller it was never told about.`,
+        );
+    }
 }
 
 /**
