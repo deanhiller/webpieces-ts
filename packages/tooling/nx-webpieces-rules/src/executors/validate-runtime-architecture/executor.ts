@@ -15,6 +15,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { loadBlessedGraph } from '../../lib/graph-loader';
+import type { EnhancedGraph } from '../../lib/graph-sorter';
 import {
     deriveRuntimeGraphReport,
     loadRuntimeGraph,
@@ -71,8 +72,9 @@ function checkCycles(graph: RuntimeGraph, allowed: AllowedCycle[]): string[] {
  * Now the only sanctioned way for a server to be absent from the drawing is `drawOnGraph:false`, and
  * anything else that ever removes one fails the build by name instead of disappearing quietly.
  */
+// webpieces-disable no-function-outside-class -- executor step helper, matches checkCycles/checkUnchanged in this file
 export function checkServersPresent(
-    projects: Record<string, { role?: string }>,
+    projects: EnhancedGraph,
     hiddenProjects: Set<string>,
     graph: RuntimeGraph,
 ): string[] {
