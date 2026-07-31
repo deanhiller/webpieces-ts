@@ -306,14 +306,17 @@ class RuntimeGraphDeriver {
             if (!this.isNode(name)) continue;
             const sink = new RelationSink(name);
             this.collectEffectiveRelations(name, sink, new Set<string>([name]));
-            if (sink.implementsApis.length > 0 || sink.usesApis.length > 0) {
-                decls.push({
-                    name,
-                    implementsApis: dedupApiRefs(sortApiRefs(sink.implementsApis)),
-                    usesApis: dedupApiRefs(sortApiRefs(sink.usesApis)),
-                    implementsVia: sink.implementsVia,
-                });
-            }
+            // EVERY node gets a decl, including one with zero relations. Gating this on "has at
+            // least one implements/uses" silently DELETED any deployed server whose work arrives
+            // from outside the repo (a pull subscription): the diagram looked complete while missing
+            // a running service — confidently wrong, not visibly incomplete. isNode() is the whole
+            // test; drawOnGraph:false is the ONE opt-out, and such a node renders as an isolated box.
+            decls.push({
+                name,
+                implementsApis: dedupApiRefs(sortApiRefs(sink.implementsApis)),
+                usesApis: dedupApiRefs(sortApiRefs(sink.usesApis)),
+                implementsVia: sink.implementsVia,
+            });
         }
         return decls;
     }
@@ -597,6 +600,7 @@ class RuntimeGraphDeriver {
             // the committed JSON stays clean AND deterministic without conditional assembly.
             const service: RuntimeService = {
                 level: 0,
+                role: this.projects[decl.name]?.role, // labels a relation-less node for what it IS
                 serviceName: this.projects[decl.name]?.serviceName,
                 callsService: this.projects[decl.name]?.callsService,
                 implements: decl.implementsApis.map((r: ApiRef) => r.api),

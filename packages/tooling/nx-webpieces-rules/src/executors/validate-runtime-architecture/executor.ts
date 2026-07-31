@@ -15,6 +15,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { loadBlessedGraph } from '../../lib/graph-loader';
+import type { EnhancedGraph } from '../../lib/graph-sorter';
 import {
     deriveRuntimeGraphReport,
     loadRuntimeGraph,
@@ -60,6 +61,32 @@ function checkCycles(graph: RuntimeGraph, allowed: AllowedCycle[]): string[] {
             continue;
         }
         problems.push(`runtime cycle: ${cycle.services.join(' -> ')} -> ${cycle.services[0]}`);
+    }
+    return problems;
+}
+
+/**
+ * Every `role:server` project must have a NODE in the runtime graph. A pure set difference against
+ * what the derivation produced, and it exists because the derivation once dropped relation-less
+ * servers silently: the diagram claimed to be complete while a deployed service was missing from it.
+ * Now the only sanctioned way for a server to be absent from the drawing is `drawOnGraph:false`, and
+ * anything else that ever removes one fails the build by name instead of disappearing quietly.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, matches checkCycles/checkUnchanged in this file
+export function checkServersPresent(
+    projects: EnhancedGraph,
+    hiddenProjects: Set<string>,
+    graph: RuntimeGraph,
+): string[] {
+    const problems: string[] = [];
+    for (const name of Object.keys(projects).sort()) {
+        if (projects[name].role !== 'server') continue;
+        if (hiddenProjects.has(name)) continue;
+        if (graph.services[name] !== undefined) continue;
+        problems.push(
+            `role:server '${name}' has no node in the runtime graph. Tag it drawOnGraph:false in its ` +
+                `project.json if that is intended.`,
+        );
     }
     return problems;
 }
@@ -113,7 +140,11 @@ export default async function runExecutor(
 
     // A call site naming a service no module answers to FAILS: the contract is served in-repo, so
     // the name is a typo or a stale rename, and the graph only ever hid it by fanning the edge out.
-    const problems: string[] = [...report.problems, ...checkCycles(graph, config.allowedCycles)];
+    const problems: string[] = [
+        ...report.problems,
+        ...checkCycles(graph, config.allowedCycles),
+        ...checkServersPresent(depsFile.projects, hiddenProjects, graph),
+    ];
     const unchanged = checkUnchanged(workspaceRoot, graph);
     if (unchanged) problems.push(unchanged);
 

@@ -15,6 +15,14 @@ import type { ApiTransport, ExternalSystemDeclaration, ExternalSystemKind } from
 export interface RuntimeService {
     level: number;
     /**
+     * The project's declared nx role — 'server' or 'client' (a library is never a node). Carried so
+     * the viz can LABEL the node with what it actually is: it used to infer the role from
+     * `implements.length > 0`, which labelled every relation-less server "client". Optional so a
+     * runtime-dependencies.json written before this field existed still parses and still renders
+     * exactly as it did (the visualizer falls back to the old inference).
+     */
+    role?: string;
+    /**
      * The name clients address this service by (`new ClientConfig('helper-fsdb')`), declared in its
      * project.json. Absent for a service nothing calls by name (e.g. a browser app).
      */
