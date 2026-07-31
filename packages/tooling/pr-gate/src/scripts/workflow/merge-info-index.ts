@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { toError } from '@webpieces/rules-config';
+import { AtomicFile, toError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { ARCHIVE_RECORD_FILE, MERGED_DIR, MERGE_INDEX_FILE, MergeState } from './merge-state';
@@ -89,7 +89,10 @@ interface RawArchiveRecord {
 
 @injectable(bindingScopeValues.Singleton)
 export class MergeInfoIndex {
-    constructor(private readonly mergeState: MergeState) {}
+    constructor(
+        private readonly mergeState: MergeState,
+        private readonly atomicFile: AtomicFile = new AtomicFile(),
+    ) {}
 
     indexPath(repoRoot: string): string {
         return path.join(this.mergeState.mergeInfoRoot(repoRoot), MERGE_INDEX_FILE);
@@ -132,9 +135,12 @@ export class MergeInfoIndex {
             }
         }
         const index = new MergeInfoIndexFile(entries);
-        const target = this.indexPath(repoRoot);
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, JSON.stringify(index, null, 2) + '\n');
+        // ATOMIC write. index.json is the one file under merge-info/ that is shared BETWEEN the
+        // features of a worktree rather than owned by one of them, so two commands promoting different
+        // branches at once can overlap here. Temp + rename means a reader never sees it torn. (It is a
+        // pure projection of `merged/` on disk, so a lost update self-heals on the next rebuild — this
+        // is not, and must not be assumed to be, a transaction.)
+        this.atomicFile.writeJsonAtomic(this.indexPath(repoRoot), index);
         return index;
     }
 

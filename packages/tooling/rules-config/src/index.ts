@@ -7,7 +7,12 @@ export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
 export { findConfigFile, CONFIG_FILENAME, ConfigFile, ConfigParseAttempt, CONFIG_PARSE_ATTEMPTS, CONFIG_PARSE_RETRY_MILLIS } from './config-file';
-export { RepoRootFinder, INSTRUCT_AI_DIR } from './repo-root';
+export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
+// The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two
+// named methods so the call site declares whether the state is repo-wide or worktree-private.
+export { DotWebpieces, dotWebpieces, GitDirs, WORKTREE_STATE_DIR } from './state-dir';
+export { StateDirMigrator, StateMigrationReport } from './state-dir-migration';
+export { AtomicFile } from './atomic-file';
 export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
 export { ExcludePaths } from './exclude-hook-paths';

@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    WEBPIECES_TMP_DIR, MERGE_EXPLANATION_FILE, CliExitError,
+    dotWebpieces, MERGE_EXPLANATION_FILE, CliExitError,
     MutationVerb, BranchMutationEvent, logBranchMutation, SyncFlowGuidance,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -305,7 +305,7 @@ export class MergeStart {
 
     // Returns the absolute path of the written doc.
     private writeMergeProcessDoc(repoRoot: string, mergeDir: string, squashBranch: string, conflictedFiles: string[], finishCommand: string): string {
-        const docDir = path.join(repoRoot, WEBPIECES_TMP_DIR, 'instruct-ai');
+        const docDir = dotWebpieces.localFile(repoRoot, 'instruct-ai');
         fs.mkdirSync(docDir, { recursive: true });
         const docPath = path.join(docDir, 'webpieces.mergeprocess.md');
         fs.writeFileSync(docPath, this.mergeProcessDoc(mergeDir, squashBranch, conflictedFiles, finishCommand));
@@ -379,7 +379,7 @@ export class MergeStart {
         event.conflictFiles = files;
         event.artifacts = [
             path.join(mergeDir, 'updatemain-<file>'),
-            path.join(repoRoot, WEBPIECES_TMP_DIR, 'instruct-ai', 'webpieces.mergeprocess.md'),
+            dotWebpieces.localFile(repoRoot, 'instruct-ai', 'webpieces.mergeprocess.md'),
         ];
         logBranchMutation(repoRoot, event);
     }

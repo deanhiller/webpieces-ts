@@ -1,9 +1,9 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
-import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { WEBPIECES_TMP_DIR } from './constants';
+import { AtomicFile } from './atomic-file';
+import { DotWebpieces, dotWebpieces } from './state-dir';
 import { toError } from './to-error';
 import { Worktree, WorktreeService } from './worktrees';
 import {
@@ -170,10 +170,20 @@ interface CmdCapture {
 export class MergedBranchesService {
     // Defaulted so the non-DI call sites (`new MergedBranchesService()` in the guard and the detached
     // refresher) keep working, while inversify still injects the singleton when resolved from a container.
-    constructor(private readonly worktrees: WorktreeService = new WorktreeService()) {}
+    constructor(
+        private readonly worktrees: WorktreeService = new WorktreeService(),
+        private readonly dotDir: DotWebpieces = dotWebpieces,
+        private readonly atomicFile: AtomicFile = new AtomicFile(),
+    ) {}
 
+    /**
+     * SHARED scope — one per repo, in the primary clone, NOT one per worktree. This file's contents
+     * describe every branch AND every worktree in the repo, so a per-worktree copy was a repo-wide fact
+     * stored N times and therefore N times wrong: branch-creation-guard reported "8 parked local
+     * branches" against an actual 1, reading a copy that predated deletions made from another worktree.
+     */
     mergedBranchesPath(repoRoot: string): string {
-        return path.join(repoRoot, WEBPIECES_TMP_DIR, MERGED_BRANCHES_FILE);
+        return this.dotDir.sharedFile(repoRoot, MERGED_BRANCHES_FILE);
     }
 
     // Pure read — any error (missing file, malformed JSON) returns null so the guard fails OPEN.
@@ -238,10 +248,20 @@ export class MergedBranchesService {
         );
     }
 
+    /**
+     * ATOMIC write. Now that this file is shared by every worktree it has N concurrent writers (one
+     * detached refresher per agent), and its readers are the guards' BLOCKING path. A plain
+     * `writeFileSync` truncates before it writes, so a reader landing in that window gets a torn
+     * document — the reader-side retry added in PR #526 cannot rescue a syntactically valid PREFIX.
+     * Fixed where it belongs: temp file + `rename()`, which POSIX makes atomic. See AtomicFile.
+     *
+     * This buys ATOMIC READS, not lost-update protection: two read-modify-write cycles still end
+     * last-writer-wins. That is acceptable and deliberate — this is a DERIVED cache, recomputed from
+     * `gh` + git by the refresher, and wp-cleanup recomputes rather than trusting it before deleting
+     * anything. Nothing here is transactional and no caller may assume it is.
+     */
     writeMergedBranches(repoRoot: string, cache: MergedBranchesCache): void {
-        const cachePath = this.mergedBranchesPath(repoRoot);
-        fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-        fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2) + '\n');
+        this.atomicFile.writeJsonAtomic(this.mergedBranchesPath(repoRoot), cache);
     }
 
     /**

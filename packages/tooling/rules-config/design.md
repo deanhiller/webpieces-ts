@@ -8,20 +8,29 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## RulesConfigDesign — api-impl, Level 0…2
+## RulesConfigDesign — api-impl, Level 0…3
 
 ```mermaid
 graph TD
+    AtomicFile["AtomicFile"]
     BranchMutationLog["BranchMutationLog"]
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
+    DotWebpieces["DotWebpieces"]
     MainSyncStatusService["MainSyncStatusService"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
+    StateDirMigrator["StateDirMigrator"]
     TemplateWriter["TemplateWriter"]
+    BranchMutationLog --> DotWebpieces
     ConfigLoader --> ConfigFile
+    DotWebpieces --> StateDirMigrator
+    MainSyncStatusService --> AtomicFile
+    MainSyncStatusService --> DotWebpieces
+    RepoRootFinder --> DotWebpieces
+    ReviewJsonService --> DotWebpieces
     RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader
     RulesConfigDesign --> DiffScope
@@ -29,6 +38,8 @@ graph TD
     RulesConfigDesign --> RepoRootFinder
     RulesConfigDesign --> ReviewJsonService
     RulesConfigDesign --> TemplateWriter
+    TemplateWriter --> AtomicFile
+    TemplateWriter --> DotWebpieces
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

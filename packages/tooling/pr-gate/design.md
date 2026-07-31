@@ -8,11 +8,12 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## PrGateApp — controller, Level 0…7
+## PrGateApp — controller, Level 0…8
 
 ```mermaid
 graph TD
     AiBranchName["AiBranchName"]
+    AtomicFile["AtomicFile"]
     BranchArchiver["BranchArchiver"]
     BranchMutationLog["BranchMutationLog"]
     BranchNaming["BranchNaming"]
@@ -30,6 +31,7 @@ graph TD
     DiffBasisResolver["DiffBasisResolver"]
     DiffMaterializer["DiffMaterializer"]
     DiffScope["DiffScope"]
+    DotWebpieces["DotWebpieces"]
     FinishBanner["FinishBanner"]
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
@@ -59,11 +61,13 @@ graph TD
     RunUpdate["RunUpdate"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
+    StateDirMigrator["StateDirMigrator"]
     SubagentProvenanceService["SubagentProvenanceService"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeReaper["WorktreeReaper"]
     WorktreeService["WorktreeService"]
     AiBranchName --> BranchNaming
+    BranchMutationLog --> DotWebpieces
     BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
@@ -80,6 +84,7 @@ graph TD
     ChecklistScanner --> DiffScope
     ChecklistScanner --> PrContextWriter
     ChecklistScanner --> ReviewJsonService
+    CleanTmp --> DotWebpieces
     CleanTmp --> RepoRootFinder
     CleanupCommand --> BranchArchiver
     CleanupCommand --> BranchReaper
@@ -88,6 +93,7 @@ graph TD
     DiffBasisResolver --> ForkPoint
     DiffBasisResolver --> GitStatusParser
     DiffMaterializer --> ReviewJsonService
+    DotWebpieces --> StateDirMigrator
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
@@ -130,11 +136,15 @@ graph TD
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
     MergeEnd --> MergeState
+    MergeInfoIndex --> AtomicFile
     MergeInfoIndex --> MergeState
     MergeStart --> BranchNaming
     MergeStart --> GatherInfo
     MergeStart --> GitExec
     MergeStart --> MergeState
+    MergeState --> DotWebpieces
+    MergedBranchesService --> AtomicFile
+    MergedBranchesService --> DotWebpieces
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
     PrContextWriter --> DiffScope
@@ -147,6 +157,8 @@ graph TD
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
+    RepoRootFinder --> DotWebpieces
+    ReviewJsonService --> DotWebpieces
     ReviewStageReceiptService --> ReviewJsonService
     ReviewUpsertPrCommand --> AiBranchName
     ReviewUpsertPrCommand --> BuildAffected

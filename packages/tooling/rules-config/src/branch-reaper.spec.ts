@@ -20,6 +20,9 @@ const world = vi.hoisted(() => ({
     // Tag names whose `git tag` fails, mapped to git's stderr.
     tagFails: {} as Record<string, string>,
     written: [] as string[],
+    // Temp files an atomic write has created but not yet renamed into place. Tracked so a leaked temp
+    // file would be visible to a test rather than silently ignored.
+    tempFiles: new Map<string, string>(),
     logLines: [] as string[],
 }));
 
@@ -67,12 +70,18 @@ vi.mock('child_process', () => ({
 }));
 
 // Capture what lands on disk without touching the filesystem.
+// `renameSync`/`unlinkSync` are here because the merged-branches cache is now written ATOMICALLY
+// (temp file + rename in the same directory), which is what stops a worktree from reading it torn now
+// that the file is shared repo-wide. The mock records the payload at rename time — i.e. the moment the
+// content actually becomes visible — which is the same thing the old writeFileSync capture recorded.
 vi.mock('fs', () => ({
     mkdirSync: (): void => undefined,
     statSync: (): never => { throw new Error('no log file yet'); },
     existsSync: (): boolean => false,
     appendFileSync: (_p: string, line: string): void => { world.logLines.push(line); },
-    writeFileSync: (_p: string, body: string): void => { world.written.push(body); },
+    writeFileSync: (p: string, body: string): void => { world.tempFiles.set(p, body); world.written.push(body); },
+    renameSync: (from: string, _to: string): void => { world.tempFiles.delete(from); },
+    unlinkSync: (p: string): void => { world.tempFiles.delete(p); },
     readFileSync: (): string => '{}',
 }));
 
@@ -97,6 +106,7 @@ beforeEach(() => {
     world.tags = [];
     world.tagFails = {};
     world.written = [];
+    world.tempFiles = new Map<string, string>();
     world.logLines = [];
 });
 

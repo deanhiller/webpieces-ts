@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { WEBPIECES_TMP_DIR } from './constants';
+import { DotWebpieces, dotWebpieces } from './state-dir';
 import { toError } from './to-error';
 
 // The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches.
@@ -72,8 +72,23 @@ export class BranchMutationEvent {
 /** Appends branch-mutation audit lines. `@injectable(bindingScopeValues.Singleton)` so it's injectable + drawn in the design. */
 @injectable(bindingScopeValues.Singleton)
 export class BranchMutationLog {
+    constructor(private readonly dotDir: DotWebpieces = dotWebpieces) {}
+
+    /**
+     * LOCAL scope, deliberately — one log per worktree, not one per repo.
+     *
+     * A SHARED append-only log would genuinely corrupt. `O_APPEND` makes a write indivisible only up to
+     * PIPE_BUF, which is 512 bytes on macOS, and a REAP_WORKTREE line carrying
+     * `recover=git worktree add -b <branch> <absolute-path> <tag>` exceeds that — concurrent appenders
+     * from seven worktrees would interleave into an unrecoverable audit trail, which is the one thing
+     * this file exists not to be. Per-worktree it has exactly ONE writer and cannot tear.
+     *
+     * Nothing is lost by keeping it local: under the `worktrees/<name>/` layout the log lives in the
+     * PRIMARY clone, so it survives `git worktree remove`, and the whole history is one glob —
+     * `<primary>/.webpieces/worktrees/＊/hooks/branch-mutations.log`.
+     */
     branchMutationLogPath(root: string): string {
-        return path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR, LOG_FILE);
+        return this.dotDir.localFile(root, HOOKS_DIR, LOG_FILE);
     }
 
     /**
@@ -85,7 +100,7 @@ export class BranchMutationLog {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const timestamp = new Date().toISOString();
-            const hooksDir = path.join(root, WEBPIECES_TMP_DIR, HOOKS_DIR);
+            const hooksDir = this.dotDir.localFile(root, HOOKS_DIR);
             fs.mkdirSync(hooksDir, { recursive: true });
 
             const logPath = path.join(hooksDir, LOG_FILE);
