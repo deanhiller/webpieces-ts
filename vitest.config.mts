@@ -83,6 +83,23 @@ export default defineConfig({
         // ~3x headroom over that measured worst case while still catching a genuine hang.
         testTimeout: 15_000,
         hookTimeout: 15_000,
+        /**
+         * The 'dot' reporter, to stop a GREEN run being reported as a failure.
+         *
+         * These suites drive real git through `execSync`, which BLOCKS the worker's event loop. The
+         * default reporter sends an `onTaskUpdate` RPC per test; when a blocking git call runs long
+         * enough under load, the worker cannot answer that call and vitest fails the run with
+         * `[vitest-worker]: Timeout calling "onTaskUpdate"` — while printing `307 passed, 0 failed`.
+         * A green run reported as a failure is worse than a slow one: it trains you to re-run and
+         * shrug, which is exactly how a REAL failure gets shrugged at too.
+         *
+         * 'dot' emits far fewer of those updates, so it targets the call that actually times out —
+         * rather than reducing parallelism (which the spawn-count note above argues is not the
+         * driver) or loosening a timeout that is not being exceeded by any test.
+         *
+         * The tradeoff is per-test names only appear for failures. Failure output is unchanged.
+         */
+        reporters: ['dot'],
         pool: 'forks',
         poolOptions: {
             forks: {
