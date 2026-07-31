@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadAndValidate, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
@@ -10,10 +10,11 @@ import { triggerMainSyncRefresh } from './main-sync-refresh';
 import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
+import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { INSTALLER_ALLOW_JS } from '../bin/shim';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
-    Rule, Violation, RuleGroup, RuleFailError,
+    Rule, Violation, RuleGroup, RuleFailError, InformAiError,
     EditContext, FileContext, BashContext,
 } from './types';
 
@@ -222,13 +223,46 @@ function logInstallerBypass(command: string, cwd: string): void {
     logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'installer bypass (always allowed)'));
 }
 
+/**
+ * Load the config for the bash path — but do NOT let an unloadable config trap the tools needed to
+ * repair it.
+ *
+ * loadAndValidate throws an InformAiError when webpieces.config.json is unparseable (a real syntax
+ * error, or leftover `<<<<<<< HEAD` markers mid-merge) or fails validation. That throw propagates to
+ * the hook adapter, which fails CLOSED and denies the command — correct for work, since a config that
+ * did not load means no guards ran. But it denied `cat`/`grep`/`sed -n` on webpieces.config.json too,
+ * i.e. it blocked the only way to see the problem it was reporting. Observed live, twice.
+ *
+ * So: on a load failure, a provably-inert INSPECTION command is allowed through (returns null, "no
+ * block"), matching the escape hatch every other layer already grants this file. Everything else —
+ * every write, every git/gh command, every build — still hits the same hard failure as before. The
+ * bypass cannot be widened by accident; see ReadOnlyInspectionScan for how narrow "inert" is.
+ *
+ * Returns the loaded config, or null meaning "allow this command without guards".
+ */
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig | null {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrown unchanged unless the command is provably inert
+    try {
+        return loadAndValidate(cwd);
+    } catch (err: unknown) {
+        const error = toError(err);
+        if (error instanceof InformAiError && new ReadOnlyInspectionScan().isReadOnlyInspection(command)) {
+            return null;
+        }
+        throw error;
+    }
+}
+
 function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
     if (isInstallerCommand(command)) {
         logInstallerBypass(command, cwd);
         return null;
     }
 
-    const loaded = loadAndValidate(cwd);
+    const loaded = loadConfigOrAllowInspection(command, cwd);
+    // null = the config would not load AND this command only inspects → allow, see the helper.
+    if (loaded === null) return null;
     if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
 
     const workspaceRoot = path.dirname(loaded.configPath);

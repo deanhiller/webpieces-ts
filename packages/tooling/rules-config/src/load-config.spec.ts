@@ -80,6 +80,17 @@ function writeConfig(sections: Record<string, unknown>, prGate: unknown = validP
     }) });
 }
 
+// A genuine syntax error survives every retry, so the hard failure is unchanged — but the message now
+// names the retry count, so a race against another process's write is distinguishable from a real
+// typo. The retry itself is unit-tested in config-file.spec.ts.
+describe('loadAndValidate — malformed JSON', () => {
+    it('throws InformAiError after the bounded retry, and says how many times it retried', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: '{ this is not json' });
+        expect(() => loadAndValidate(dir)).toThrow('webpieces.config.json could not be parsed as JSON');
+        expect(() => loadAndValidate(dir)).toThrow('retried 3 times');
+    });
+});
+
 describe('loadAndValidate', () => {
     it('returns lenient empties when no file is found', () => {
         const dir = mktmp({});
@@ -116,11 +127,6 @@ describe('loadAndValidate', () => {
         const rule = loadAndValidate(dir).resolved.rules.get('no-destructure')!;
         expect(rule.options['disableAllowed']).toBe(false);
         expect(rule.options['turnOffRuleUntilEpoch']).toBe(12345);
-    });
-
-    it('throws InformAiError on malformed JSON', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: '{ this is not json' });
-        expect(() => loadAndValidate(dir)).toThrow('webpieces.config.json has invalid JSON');
     });
 
     it('throws listing missing rules when config has none', () => {
