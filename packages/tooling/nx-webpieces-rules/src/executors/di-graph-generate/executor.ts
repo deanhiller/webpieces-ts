@@ -9,11 +9,15 @@
  *   design.md   — Mermaid diagram rendered by GitHub/IDEs in PRs
  *   design.html — clickable viz.js page (linked from architecture/dependencies.html)
  *
- * Runs on every build (cache:false; the build gates on
- * validate-di-graph-unchanged which dependsOn this target). Unrecognized DI
- * patterns become "unresolved" nodes rather than failing the build.
+ * Runs on every build (cache:false; `ci` dependsOn this target directly).
+ * Unrecognized DI patterns become "unresolved" nodes rather than failing the build.
  *
- * Config (webpieces.config.json, rule key `di-graph`): mode RUN_EVERY_TIME | OFF.
+ * That the regenerated files are actually COMMITTED is no longer checked here (the deleted
+ * validate-di-graph-unchanged target); it is one repo-wide "committed or staged" check in
+ * `wp-review-upsert-pr` — @webpieces/pr-gate BuildArtifactGate.
+ *
+ * Config (webpieces.config.json, rule key `di-graph`): mode RUN_EVERY_TIME | OFF. That key still
+ * governs THIS executor, so it stays in webpieces.config.json unchanged.
  *
  * Usage: nx run <project>:di-graph-generate
  */

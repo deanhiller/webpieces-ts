@@ -67,6 +67,23 @@ describe('uncommittedFiles / untrackedFiles', () => {
     });
 });
 
+describe('porcelainStatus keeps the index column that uncommittedFiles trims away', () => {
+    // One repo, three states — `git init` + config + commit is 8 subprocesses, so this walks a single
+    // repo through clean → unstaged → staged rather than building three.
+    it('distinguishes unstaged (" M") from staged ("M "), which trimming destroys', () => {
+        const dir = initRepo();
+        expect(git.porcelainStatus(dir)).toBe('');
+
+        fs.writeFileSync(path.join(dir, 'tracked.txt'), 'changed\n');
+        expect(git.porcelainStatus(dir)).toBe(' M tracked.txt');
+        // The trap this method exists to avoid: trimming makes an unstaged change look staged.
+        expect(uncommittedFiles(dir)).toBe('M tracked.txt');
+
+        execSync('git add tracked.txt', { cwd: dir, stdio: 'ignore' });
+        expect(git.porcelainStatus(dir)).toBe('M  tracked.txt');
+    });
+});
+
 describe('assertCleanTree / assertNoUntracked', () => {
     it('return normally (do not exit) on a clean tree', () => {
         const dir = initRepo();

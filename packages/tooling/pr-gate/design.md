@@ -18,6 +18,7 @@ graph TD
     BranchNaming["BranchNaming"]
     BranchReaper["BranchReaper"]
     BuildAffected["BuildAffected"]
+    BuildArtifactGate["BuildArtifactGate"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistDetector["ChecklistDetector"]
     ChecklistInstructionsService["ChecklistInstructionsService"]
@@ -36,6 +37,7 @@ graph TD
     GateTokenService["GateTokenService"]
     GatedPrPublisher["GatedPrPublisher"]
     GatherInfo["GatherInfo"]
+    GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
     GitExec["GitExec"]
     LandPrCommand["LandPrCommand"]
     MergeEnd["MergeEnd"]
@@ -64,6 +66,9 @@ graph TD
     BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
     BranchReaper --> MergedBranchesService
+    BuildArtifactGate --> BuildAffected
+    BuildArtifactGate --> GeneratedArtifactRegistry
+    BuildArtifactGate --> GitExec
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope
@@ -142,6 +147,7 @@ graph TD
     ReviewStageReceiptService --> ReviewJsonService
     ReviewUpsertPrCommand --> AiBranchName
     ReviewUpsertPrCommand --> BuildAffected
+    ReviewUpsertPrCommand --> BuildArtifactGate
     ReviewUpsertPrCommand --> ChecklistInstructionsService
     ReviewUpsertPrCommand --> ChecklistNotice
     ReviewUpsertPrCommand --> ChecklistScanner

@@ -150,11 +150,6 @@
             "schema": "./src/executors/di-graph-generate/schema.json",
             "description": "Per-project: generate the Inversify DI dependency DAG into design.json + design.md at the project root"
         },
-        "validate-di-graph-unchanged": {
-            "implementation": "./src/executors/validate-di-graph-unchanged/executor",
-            "schema": "./src/executors/validate-di-graph-unchanged/schema.json",
-            "description": "Per-project: fail when the regenerated design.json/design.md differ from the committed copies"
-        },
         "validate-nx-wiring": {
             "implementation": "./src/executors/validate-nx-wiring/executor",
             "schema": "./src/executors/validate-nx-wiring/schema.json",

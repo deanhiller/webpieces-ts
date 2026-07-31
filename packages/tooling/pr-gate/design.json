@@ -54,6 +54,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts",
+                    "level": 3
+                },
+                {
+                    "id": "BuildArtifactGate",
+                    "className": "BuildArtifactGate",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/build-artifact-gate.ts",
                     "level": 2
                 },
                 {
@@ -199,6 +207,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/git-gatherInfo.ts",
                     "level": 4
+                },
+                {
+                    "id": "GeneratedArtifactRegistry",
+                    "className": "GeneratedArtifactRegistry",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/generated-artifact-registry.ts",
+                    "level": 3
                 },
                 {
                     "id": "GitExec",
@@ -429,6 +445,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
                     "paramName": "mergedBranches",
                     "paramType": "MergedBranchesService"
+                },
+                {
+                    "from": "BuildArtifactGate",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "BuildArtifactGate",
+                    "to": "GeneratedArtifactRegistry",
+                    "injection": "type",
+                    "token": "GeneratedArtifactRegistry",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/generated-artifact-registry.ts#GeneratedArtifactRegistry",
+                    "paramName": "registry",
+                    "paramType": "GeneratedArtifactRegistry"
+                },
+                {
+                    "from": "BuildArtifactGate",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
                 },
                 {
                     "from": "CheckPrCommand",
@@ -1131,6 +1174,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
                     "paramName": "buildAffected",
                     "paramType": "BuildAffected"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
+                    "to": "BuildArtifactGate",
+                    "injection": "type",
+                    "token": "BuildArtifactGate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-artifact-gate.ts#BuildArtifactGate",
+                    "paramName": "buildArtifactGate",
+                    "paramType": "BuildArtifactGate"
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
