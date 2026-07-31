@@ -257,6 +257,14 @@
                     "level": 1
                 },
                 {
+                    "id": "LandedWorktreeReaper",
+                    "className": "LandedWorktreeReaper",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/landed-worktree-reaper.ts",
+                    "level": 2
+                },
+                {
                     "id": "MergeEnd",
                     "className": "MergeEnd",
                     "kind": "class",
@@ -327,6 +335,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts",
                     "level": 2
+                },
+                {
+                    "id": "ReapWorktreeCommand",
+                    "className": "ReapWorktreeCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/reap-worktree-command.ts",
+                    "level": 1
                 },
                 {
                     "id": "RepoRootFinder",
@@ -1002,6 +1018,15 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "LandedWorktreeReaper",
+                    "injection": "type",
+                    "token": "LandedWorktreeReaper",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/landed-worktree-reaper.ts#LandedWorktreeReaper",
+                    "paramName": "landedWorktree",
+                    "paramType": "LandedWorktreeReaper"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "MergeInfoIndex",
                     "injection": "type",
                     "token": "MergeInfoIndex",
@@ -1028,7 +1053,7 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
-                    "from": "LandPrCommand",
+                    "from": "LandedWorktreeReaper",
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
@@ -1236,6 +1261,15 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "ReapWorktreeCommand",
+                    "injection": "type",
+                    "token": "ReapWorktreeCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/reap-worktree-command.ts#ReapWorktreeCommand",
+                    "paramName": "reapWorktreeCommand",
+                    "paramType": "ReapWorktreeCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "ReviewUpsertPrCommand",
                     "injection": "type",
                     "token": "ReviewUpsertPrCommand",
@@ -1260,6 +1294,24 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
                     "paramName": "startUpsertPrCommand",
                     "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "ReapWorktreeCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "ReapWorktreeCommand",
+                    "to": "WorktreeCleanupSection",
+                    "injection": "type",
+                    "token": "WorktreeCleanupSection",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/worktree-cleanup.ts#WorktreeCleanupSection",
+                    "paramName": "worktreeSection",
+                    "paramType": "WorktreeCleanupSection"
                 },
                 {
                     "from": "RepoRootFinder",

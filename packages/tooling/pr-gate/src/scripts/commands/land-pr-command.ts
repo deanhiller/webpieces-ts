@@ -4,11 +4,11 @@ import * as path from 'path';
 import {
     prDirFor, InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate,
     BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP,
-    Worktree, WorktreeService,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { LandedWorktreeReaper, WorktreeReapHandoff } from '../workflow/landed-worktree-reaper';
 import { ArchiveRecord, MergeInfoIndex } from '../workflow/merge-info-index';
 import { PrMerger } from '../workflow/pr-merger';
 
@@ -38,7 +38,7 @@ export class LandPrCommand {
         private readonly prMerger: PrMerger,
         private readonly archiver: BranchArchiver,
         private readonly mergeInfoIndex: MergeInfoIndex,
-        private readonly worktrees: WorktreeService,
+        private readonly landedWorktree: LandedWorktreeReaper,
     ) {}
 
     async run(): Promise<void> {
@@ -95,30 +95,26 @@ export class LandPrCommand {
     }
 
     /**
-     * What to run next — which is NOT the same sentence when you landed from a worktree.
+     * What happens next — which is NOT the same act when you landed from a worktree.
      *
      * Landing from a linked worktree always used to leave a corpse: the merged branch is checked out
      * here, so `git branch -D` refuses, `wp-cleanup`'s branch pass spares it as in-use, and nothing
-     * removed the worktree — so the pair sat there until branch-creation-guard hit its cap. wp-cleanup
-     * now reaps dead worktrees, but it cannot reap the one it is RUNNING IN (removing your own cwd
-     * mid-command is a self-destruct), so the instruction has to say where to run it from.
+     * removed the worktree — so the pair sat there until branch-creation-guard hit its cap. #512 made
+     * worktrees reapable and printed `cd <primary> && pnpm wp-cleanup`; that instruction was correct
+     * and it was the most-skipped step in the flow, because the PR is already landed and the work
+     * feels done.
      *
-     * We deliberately do NOT remove the worktree here. This command is executing inside it, and a
-     * process that deletes the directory underneath itself is exactly the thing every safety rail in
-     * WorktreeReaper exists to refuse.
+     * So the reap is no longer an instruction. This command still refuses to remove the directory it
+     * is standing in — that rail is untouched — and instead HANDS THE REAP to a child process rooted
+     * in the primary clone, which is a tree nobody is deleting. See LandedWorktreeReaper. When that
+     * hand-off is not safely achievable the #512 notice is printed unchanged, because an honest
+     * limitation beats a command that deletes its own working directory mid-run.
      */
     private nextStep(repoRoot: string, base: string): string {
-        const here = this.worktrees.currentWorktree(repoRoot);
-        if (here === null || here.isMain || here.branch !== base) {
-            return '   Next: `pnpm wp-cleanup` to delete the merged branch.\n';
-        }
-        const main = this.worktrees.listWorktrees(repoRoot)
-            .find((tree: Worktree): boolean => tree.isMain);
-        const from = main ? main.path : '<the primary clone>';
-        return '   Next: this branch is checked out in THIS worktree, so neither it nor the worktree can\n'
-            + `         be removed from in here. Run cleanup from the primary clone instead:\n`
-            + `           cd ${from} && pnpm wp-cleanup\n`
-            + `         It archives ${base} as a tag, removes ${here.path}, then deletes the branch.\n`;
+        const handoff: WorktreeReapHandoff | null = this.landedWorktree.plan(repoRoot, base);
+        if (handoff === null) return '   Next: `pnpm wp-cleanup` to delete the merged branch.\n';
+        if (!handoff.canReap) return this.landedWorktree.manualNotice(handoff);
+        return this.landedWorktree.handOff(handoff);
     }
 
     /**

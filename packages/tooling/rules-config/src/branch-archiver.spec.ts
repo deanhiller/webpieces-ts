@@ -138,3 +138,28 @@ describe('archive tag naming and collision safety', () => {
         expect(result.error).toContain('cannot resolve');
     });
 });
+
+describe('archiving is idempotent for an unchanged tip', () => {
+    /**
+     * The SAME tip archived twice is not a collision — it is the same archive, and minting a `-2`
+     * beside it invents a second snapshot that never existed.
+     *
+     * This is exactly the shape `wp-land-pr` produces: it tags the landed branch for its own recap,
+     * then hands the worktree reap to a child process which (correctly — it trusts nothing the parent
+     * told it) archives again a second later. Two identical refs would be one more thing for anyone
+     * reading `git tag --list 'archive/*'` to explain away.
+     */
+    it('reuses the existing tag when the same tip is archived twice', () => {
+        git('checkout', '-b', 'dean/foo');
+        commit('a.ts', 'a\n', 'a');
+        const when = new Date(2026, 6, 30);
+
+        const first = archiver.archive(repo, 'dean/foo', when);
+        const second = archiver.archive(repo, 'dean/foo', when);
+
+        expect(second.ok).toBe(true);
+        expect(second.tag).toBe(first.tag);
+        expect(second.sha).toBe(first.sha);
+        expect(archiver.listArchiveTags(repo)).toEqual([first.tag]);
+    });
+});

@@ -84,13 +84,26 @@ export class BranchArchiver {
      * would silently destroy the older archive, which is the exact failure the archive exists to prevent.
      * Returns ok=false (with git's stderr) rather than throwing — an archive that cannot be written must
      * turn into "then do not delete either", a decision the CALLER makes.
+     *
+     * IDEMPOTENT for the same tip: if the base name is already taken by a tag pointing at the SAME sha,
+     * that tag is returned as-is rather than minting a `-2` beside it. Re-archiving an identical tip is
+     * not a collision — it is the same archive — and `wp-land-pr` produces exactly that case, tagging
+     * the branch in its own recap and then handing the worktree reap to a child that (correctly,
+     * because it trusts nothing the parent told it) archives again a second later. Without this the
+     * archive namespace fills with `…` / `…-2` pairs at one sha, which reads like two distinct
+     * snapshots and is one more ref to explain.
      */
     archive(repoRoot: string, branch: string, when: Date = new Date()): ArchiveResult {
         const resolved = this.capture(repoRoot, ['rev-parse', branch]);
         if (!resolved.ok) return new ArchiveResult('', '', false, `cannot resolve ${branch}: ${resolved.err}`);
         const sha = resolved.out;
 
-        const tag = this.freeTagName(repoRoot, this.archiveTagName(branch, when));
+        const base = this.archiveTagName(branch, when);
+        if (this.tagExists(repoRoot, base) && this.tagSha(repoRoot, base) === sha) {
+            return new ArchiveResult(base, sha, true, '');
+        }
+
+        const tag = this.freeTagName(repoRoot, base);
         const tagged = this.capture(repoRoot, ['tag', tag, sha]);
         if (!tagged.ok) return new ArchiveResult('', sha, false, tagged.err);
         return new ArchiveResult(tag, sha, true, '');
@@ -123,6 +136,13 @@ export class BranchArchiver {
             candidate = `${base}-${String(attempt)}`;
         }
         return candidate;
+    }
+
+    // The COMMIT an existing tag points at, '' when it cannot be resolved. `^{commit}` peels an
+    // annotated tag, so an archive written by hand with `git tag -a` compares equal to a lightweight one.
+    private tagSha(repoRoot: string, tag: string): string {
+        const result = this.capture(repoRoot, ['rev-parse', `refs/tags/${tag}^{commit}`]);
+        return result.ok ? result.out : '';
     }
 
     // Seam: overridden in the spec so name-collision logic is testable with no git and no repo.
