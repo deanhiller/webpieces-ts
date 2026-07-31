@@ -60,11 +60,9 @@ in place.
 
 ## Before you start — worktree cap
 
-This work runs alongside other tickets, each in its own worktree, so the default cap of 5 is too low.
-Raise it to **10**: `hookGuards → branch-creation-guard → maxWorktrees: 10` (and `maxLocalBranches: 10`)
-in `webpieces.config.json`. Neither key exists today — both are code defaults — so you are ADDING them;
-confirm the installed validator accepts them before relying on it.
+Parallel ticket work runs several subagents at once, each in its own worktree, so
+`hookGuards → branch-creation-guard → maxWorktrees` is **10** in `webpieces.config.json`.
+`maxLocalBranches` stays at **5** deliberately — branches outside a worktree are worked one at a time.
 
-`webpieces.config.json` is git-tracked, so every worktree gets its copy from its branch. **If `origin/main`
-already carries `maxWorktrees: 10`, you inherit it — change nothing.** If not, add it in this PR, and if
-you hit a conflict on that key while syncing, take main's value.
+Both keys are already on `origin/main`, so you inherit them: **change nothing.** If you hit a conflict on
+those lines while syncing, take main's value.

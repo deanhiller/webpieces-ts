@@ -69,23 +69,39 @@ index state in column 1 and worktree state in column 2:
 
 One rule, no exceptions, holds everywhere.
 
-## Open decisions
+## Decisions (settled — implement these, do not re-open)
 
-- **Which stage owns it?** `wp-review-upsert-pr` (stage ②, added in #513) is the natural home — it already
-  runs `buildCommand`, so it is holding exactly the dirty tree to inspect, at the "can we proceed to
-  review?" moment. `wp-finish-upsert-pr` is the alternative but is later, after more wasted work.
-- **Keep or drop `validate-di-graph-unchanged`?** Once the gate owns "are generated artifacts committed",
-  the nx target is redundant for the PR flow — though CI (`wp-check-pr`) may still want a check. Leaning
-  drop: two mechanisms for one invariant is how they drift apart. If kept, reduce it to a pure semantic
-  comparison (regenerated content vs committed content) with no `git status`.
+**Stage ② `wp-review-upsert-pr` owns the check.** It is the stage that RUNS `buildCommand`, so it is
+already holding the dirty tree at the exact moment the question matters. `wp-finish-upsert-pr` is later,
+after more work has been wasted.
+
+**`validate-di-graph-unchanged` is DROPPED, not repaired.** The nx target and its
+`createValidateDiGraphUnchangedTarget()` wiring both go. `di-graph-generate` STAYS — the design files are
+still generated and still committed; only the git-state-dependent gate is removed.
+
+The argument for keeping a CI-side copy was that someone could bypass the local flow and push directly.
+**They cannot.** `finish-upsert-pr-command.ts:121-128` mints an HMAC gate token bound to the local HEAD
+sha and writes it into the PR body; CI (`wp-check-pr`) recomputes it. Per that code, *"a valid token in
+the PR body is proof this gated flow ran + passed on this exact commit."* A PR that skipped the flow has
+no valid token and cannot merge. So a CI-side duplicate of this check has nothing left to catch, and
+two mechanisms for one invariant is how they drift apart.
+
+Per-project attribution is not lost: the gate names the offending files, and a path identifies its
+project just as well as a per-project target did.
+
+## Also delete, once the gate lands
+
+- `createValidateDiGraphUnchangedTarget()` in `src/di-graph-targets.ts` and its registration in `plugin.ts`
+- `src/executors/validate-di-graph-unchanged/**` and its `executors.json` entry
+- The `di-graph` rule's staleness-gate semantics in `webpieces.config.json` — check whether the rule key
+  still governs `di-graph-generate` (which stays) before removing anything from the config, and remember
+  the published validator lags one release, so defer live-config edits if it would reject them.
 
 ## Before you start — worktree cap
 
-This work runs alongside other tickets, each in its own worktree, so the default cap of 5 is too low.
-Raise it to **10**: `hookGuards → branch-creation-guard → maxWorktrees: 10` (and `maxLocalBranches: 10`)
-in `webpieces.config.json`. Neither key exists today — both are code defaults — so you are ADDING them;
-confirm the installed validator accepts them before relying on it.
+Parallel ticket work runs several subagents at once, each in its own worktree, so
+`hookGuards → branch-creation-guard → maxWorktrees` is **10** in `webpieces.config.json`.
+`maxLocalBranches` stays at **5** deliberately — branches outside a worktree are worked one at a time.
 
-`webpieces.config.json` is git-tracked, so every worktree gets its copy from its branch. **If `origin/main`
-already carries `maxWorktrees: 10`, you inherit it — change nothing.** If not, add it in this PR, and if
-you hit a conflict on that key while syncing, take main's value.
+Both keys are already on `origin/main`, so you inherit them: **change nothing.** If you hit a conflict on
+those lines while syncing, take main's value.

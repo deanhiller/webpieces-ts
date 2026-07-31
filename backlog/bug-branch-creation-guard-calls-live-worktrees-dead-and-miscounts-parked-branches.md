@@ -59,27 +59,49 @@ genuinely-merged worktrees and correctly spared the fourth with `PR #514 is OPEN
 unique commit(s)`. So the correct verdict logic exists and is already shipped; `branch-creation-guard`
 is not using it, or is using a stale cache of it.
 
-## Suggested fix
+## The fix (settled — implement this)
 
-- **Never classify a worktree as dead on "no commits of its own" alone.** A worktree whose branch has no
-  commits AND no merged PR is new, not dead. Require a merged PR, a missing directory, or an explicit
-  human answer.
-- **Treat an in-flight sync as a liveness signal** — a `*Squash` or `*PreMerge<n>` sibling means do not touch.
-- **Share `wp-cleanup`'s verdicts** rather than re-deriving them. It already distinguishes
-  `superseded` / `never-proposed` / `content-already-in-main` / `prunable-worktree` / `locked-worktree` /
-  `current-worktree` / `detached-worktree`.
-- **Never emit a chained `remove && … && branch -D …` one-liner.** A single command that deletes seven
-  things has no safe partial failure. Print candidates and make the human/AI choose, as `wp-cleanup` does.
-- **Recompute or invalidate the cache before printing counts**, and if the cache is stale, say so instead
-  of asserting a number.
+### 1. Liveness is "live unless merged" — the SAME rule branches already use
+
+Do not invent worktree liveness heuristics. Mtime, locks, and `*Squash`/`*PreMerge` siblings are all
+leaky, and none is needed. A branch is reapable when its PR is **merged**; a worktree is reapable on
+exactly the same evidence. **"No commits of its own" must stop being a death sentence entirely** — it is
+the normal state of a worktree from `git worktree add -b … origin/main` until its first commit, i.e.
+precisely while an agent is working in it.
+
+Anything not provably merged is **live**, and live means: do not offer to delete it without an explicit
+human answer.
+
+### 2. Reuse the recorded status — do not re-derive it
+
+The async refresher already writes worktree and branch status into `.webpieces/merged-branches.json`, and
+`wp-cleanup` reads it to produce correct verdicts (`superseded` / `never-proposed` /
+`content-already-in-main` / `prunable-worktree` / `locked-worktree` / `current-worktree` /
+`detached-worktree`). **Verify the refresher records status for EVERY worktree and EVERY branch** — if it
+does not, extend it; that is the fix, not a second classifier inside the guard.
+
+### 3. The guard should stop printing deletion commands at all
+
+`branch-creation-guard` has no business owning reaping logic. `wp-cleanup` already classifies, prompts,
+archive-tags before deleting, and refuses to remove the tree it is standing in. The guard should say:
+
+> You are at the cap — run `pnpm wp-cleanup` (it archives before deleting and asks before removing
+> anything that is not provably dead).
+
+**Never emit a chained `git worktree remove … && … && git branch -D …` one-liner.** A single command
+deleting seven things has no safe partial failure, and it is the exact line that would have destroyed
+live agent work.
+
+### 4. Fix the count
+
+Recompute or invalidate the cache before printing any number. If the cache is stale, say so rather than
+asserting a figure — it reported 8 parked branches when there was 1, then blocked on that fiction.
 
 ## Before you start — worktree cap
 
-This work runs alongside other tickets, each in its own worktree, so the default cap of 5 is too low.
-Raise it to **10**: `hookGuards → branch-creation-guard → maxWorktrees: 10` (and `maxLocalBranches: 10`)
-in `webpieces.config.json`. Neither key exists today — both are code defaults — so you are ADDING them;
-confirm the installed validator accepts them before relying on it.
+Parallel ticket work runs several subagents at once, each in its own worktree, so
+`hookGuards → branch-creation-guard → maxWorktrees` is **10** in `webpieces.config.json`.
+`maxLocalBranches` stays at **5** deliberately — branches outside a worktree are worked one at a time.
 
-`webpieces.config.json` is git-tracked, so every worktree gets its copy from its branch. **If `origin/main`
-already carries `maxWorktrees: 10`, you inherit it — change nothing.** If not, add it in this PR, and if
-you hit a conflict on that key while syncing, take main's value.
+Both keys are already on `origin/main`, so you inherit them: **change nothing.** If you hit a conflict on
+those lines while syncing, take main's value.
