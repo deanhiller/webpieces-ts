@@ -116,7 +116,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     private isFullyRecovery(ctx: BashContext): boolean {
         const segments = this.scanner.segmentsWithPipes(ctx.command);
         if (segments.length === 0) return false;
-        const content = new ContentReadScan(this.scanner, ctx.workspaceRoot);
+        const content = new ContentReadScan(this.scanner, ctx.workspaceRoot, ctx.effectiveCwd);
         return segments.every((segment: CommandSegment): boolean => this.isRecoverySegment(segment, content));
     }
 
@@ -127,6 +127,12 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         // cat src/foo.ts` still hands the agent pre-merge file content, which is the thing this guard
         // is protecting against. ContentReadScan already draws exactly that line.
         if (verdict.role === 'shaping') return content.readsStaleContent(segment) === null;
+
+        // A read that names NOTHING in this tree cannot be affected by which branch this tree is on.
+        // `ls -la ~/.claude/projects/ | grep -i foo` was blocked as "this branch is merged" — the
+        // command touches no repo at all. Only CONTENT READERS qualify, so a build, a server or a git
+        // write never slips through on the strength of its paths.
+        if (content.readsOnlyOutsideContent(segment)) return true;
 
         const gitSub = this.scanner.gitSubcommandOf(verdict.words);
         if (gitSub !== null) return ALLOWED_GIT_SUBCOMMANDS.has(gitSub);
@@ -160,7 +166,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     }
 
     private mergedMessage(workspaceRoot: string, branch: string, mergedPr: string): string {
-        return new MergedBranchMessage().forBash(
+        return new MergedBranchMessage(workspaceRoot).forBash(
             branch, mergedPr, new TreeRecovery().kindOf(workspaceRoot), workspaceRoot,
         );
     }

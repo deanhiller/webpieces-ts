@@ -15,15 +15,29 @@
  * fails loudly without touching anything.
  */
 export class StaleMainMessage {
+    /**
+     * `treeRoot` is the tree the guard JUDGED (which is NOT the shell's cwd when the command carried
+     * a leading `cd`). Pass it and the cure is rendered as `cd <treeRoot> && git pull …`, naming the
+     * directory outright.
+     *
+     * WHY that matters here specifically: in the field this guard told an agent working in a worktree
+     * to `git pull` — which, run from wherever the next tool call happened to start, meant pulling the
+     * PRIMARY CLONE, a tree that agent had been explicitly instructed not to touch. A remedy must
+     * never mutate a tree other than the one the command targeted, and naming it is how you ensure it.
+     */
+    constructor(private readonly treeRoot: string = '') {}
+
     // The diagnosis + cure. Identical for both guards — the part that must never drift.
     private common(behindCount: string): string[] {
+        const pull = 'git pull --ff-only origin main';
         return [
             `You are on main and main is ${behindCount} commit(s) behind origin/main.`,
+            ...(this.treeRoot !== '' ? [`Evaluated against: ${this.treeRoot}  (branch main)`] : []),
             'Anything you read here is STALE, and every plan built from it is built on code that no',
             'longer exists upstream.',
             '',
             'Run exactly this, then retry:',
-            '  git pull --ff-only origin main',
+            `  ${this.treeRoot !== '' ? `cd ${this.treeRoot} && ${pull}` : pull}`,
             '',
             'If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD holds a',
             'duplicate entry — clear it with `git fetch --prune origin main`, then pull again.',

@@ -72,6 +72,12 @@ function allowed(command: string): boolean {
     return rule().check(ctx(command)).length === 0;
 }
 
+// The same guard, but for a command that runs somewhere else entirely (a leading `cd`, which is how
+// an agent reaches a linked worktree or a scratchpad — `cd` does not persist between tool calls).
+function allowedFrom(command: string, effectiveCwd: string): boolean {
+    return rule().check(new BashContext(command, '/tmp/x', effectiveCwd)).length === 0;
+}
+
 describe('merged-branch-bash-guard — blocks non-recovery bash on a merged branch', () => {
     beforeEach(reset);
 
@@ -209,5 +215,46 @@ describe('merged-branch-bash-guard — fail-open', () => {
     it('allows when the branch cannot be determined', () => {
         state.branchThrows = true;
         expect(allowed('scripts/local.sh start lang')).toBe(true);
+    });
+});
+
+/**
+ * The 2026-07-30 sighting: `ls -la /Users/x/.claude/projects/ | grep -i foo` was blocked with "this
+ * branch is merged". The command touches nothing in any repo — which branch the tree is on cannot
+ * possibly matter to it. What makes this safe rather than a hole is that ONLY content readers qualify:
+ * a build, a server or a git write is never waved through on the strength of its paths.
+ */
+describe('merged-branch-bash-guard — a read that names nothing in this tree has no claim on it', () => {
+    beforeEach(reset);
+
+    it('allows a content read whose paths are all OUTSIDE the workspace', () => {
+        expect(allowed('ls -la /Users/dean/.claude/projects/')).toBe(true);
+        // The 2026-07-31 repro: a grep over two scratchpad files, NO `cd`, blocked and attributed to
+        // an UNRELATED agent's merged branch (the shell cwd was the primary clone). With several
+        // agents running, judging the shell cwd does not just misfire — it names someone else's tree.
+        expect(allowed('grep -n needle /private/tmp/claude-501/scratchpad/a.md /private/tmp/claude-501/scratchpad/b.md')).toBe(true);
+        expect(allowed('ls -la /Users/dean/.claude/projects/ | grep -i monorepo')).toBe(true);
+        expect(allowed('cat /etc/hosts')).toBe(true);
+        expect(allowed('grep -r needle /some/other/repo')).toBe(true);
+    });
+
+    it('still BLOCKS the same readers when they name workspace content (no bypass)', () => {
+        expect(allowed('cat src/foo.ts')).toBe(false);
+        expect(allowed('ls -la src/')).toBe(false);
+        expect(allowed('ls')).toBe(false);                      // a bare cwd walk IS a tree read
+        expect(allowed('grep -r needle src/')).toBe(false);
+    });
+
+    it('does NOT wave through non-readers just because their arguments point outside', () => {
+        expect(allowed('scripts/local.sh start /tmp/whatever')).toBe(false);
+        expect(allowed('node /tmp/server.js')).toBe(false);
+        expect(allowed('git commit -m x')).toBe(false);
+    });
+
+    it('judges a relative path against the directory the command RUNS in, not the shell cwd', () => {
+        // `cd /tmp/scratch && cat notes.md` reads /tmp/scratch/notes.md — nothing to do with this repo.
+        expect(allowedFrom('cd /tmp/scratch && cat notes.md', '/tmp/scratch')).toBe(true);
+        // …but an absolute path back into the tree is still caught from anywhere.
+        expect(allowedFrom('cd /tmp/scratch && cat /tmp/x/src/foo.ts', '/tmp/scratch')).toBe(false);
     });
 });
