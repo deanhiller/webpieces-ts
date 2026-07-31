@@ -481,6 +481,27 @@ describe('branch-creation-guard never quotes a stale or phantom count', () => {
         expect(flat).not.toContain('/tmp/wt1');
     });
 
+    // Same rule on the BRANCH cap, and the hint must not contradict the message by naming branches to
+    // delete out of the very cache the message just said it cannot quote.
+    it('withholds the branch-cap figure and the delete list when the cache is stale', () => {
+        git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
+        git.cacheJson = staleCacheWith(['a', 'b', 'c']);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxLocalBranches: 5 });
+        const violations = r.check(ctx('git checkout -b dean/next origin/main'));
+
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('5 parked local branches');
+        expect(violations[0].message).toContain('NOT known right now');
+
+        const flat = r.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
+        expect(flat).toContain('the cached verdicts are stale');
+        expect(flat).not.toContain('it deletes these');
+    });
+
+});
+
+describe('branch-creation-guard drops phantom cache entries', () => {
     it('drops cached verdicts for worktrees and branches that no longer exist', () => {
         // The cache still names two dead worktrees; only ONE of them is still in `git worktree list`.
         git.worktreePorcelain = porcelain(5);
