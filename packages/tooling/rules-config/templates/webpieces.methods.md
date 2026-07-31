@@ -77,6 +77,18 @@ if (isAdminWithWriteAccess(user)) {
 }
 ```
 
+## Test files: do NOT split a `describe`
+
+A `describe(...)` block is a CONTAINER, not a unit of logic, so in `*.spec.ts` / `*.test.ts`
+the callback passed to `describe` / `suite` / `context` (including `.only`, `.skip`, `.each`)
+is NOT counted by this rule. Never split a describe block, and never extract a helper, just to
+satisfy a line limit - that invents structure that maps to nothing.
+
+What IS still counted in a test file: each `it(...)` / `test(...)` body, the `beforeEach` /
+`beforeAll` / `afterEach` / `afterAll` hooks, and any named or assigned helper function. If one
+of those trips the limit, fix it with the patterns above - a 200-line test case or a 100-line
+setup hook is a real finding.
+
 ## AI Agent Action Steps
 
 1. **IDENTIFY** the long method in the error message

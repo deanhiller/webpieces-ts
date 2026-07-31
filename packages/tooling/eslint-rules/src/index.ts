@@ -7,7 +7,8 @@
  * Available rules:
  * - catch-error-pattern: Enforce toError() usage in catch blocks (HOW to handle)
  * - no-unmanaged-exceptions: Discourage try-catch outside tests (WHERE to handle)
- * - max-method-lines: Enforce maximum method length (default: 70 lines)
+ * - max-method-lines: Enforce maximum method length (default: 70 lines; describe/suite/context
+ *   callbacks in test files are containers, not methods, and are not counted)
  * - max-file-lines: Enforce maximum file length (default: 700 lines)
  * - enforce-architecture: Enforce architecture dependency boundaries
  * - no-json-property-primitive-type: Ban @JsonProperty({ type: String/Number/Boolean })

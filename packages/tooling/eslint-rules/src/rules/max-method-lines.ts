@@ -6,18 +6,42 @@
  *
  * Configuration:
  * '@webpieces/max-method-lines': ['error', { max: 70 }]
+ *
+ * WHY the test-container carve-out exists:
+ * In a spec file, `describe('...', () => { ... })` is a CONTAINER, not a unit of logic. Its
+ * length only says "how many cases does this behaviour need", so counting it as an anonymous
+ * method made agents split describe blocks purely to satisfy a limit written for production
+ * methods - inventing structure that maps to nothing. So in TEST FILES ONLY, the callback
+ * passed directly to a test-container call (describe/suite/context, incl. .each/.only/.skip)
+ * is not counted.
+ *
+ * Deliberately NOT exempt (the rule's real purpose is untouched):
+ *   - every `it(...)` / `test(...)` body - a 200-line test case IS worth flagging
+ *   - `beforeEach` / `beforeAll` / `afterEach` / `afterAll` - those are logic, not containers
+ *   - named helper functions inside spec files
+ *   - anything whatsoever in a non-test file - production code is unaffected
+ *
+ * Full configuration (both extras optional, defaults shown):
+ * '@webpieces/max-method-lines': ['error', {
+ *     max: 70,
+ *     testContainers: ['describe', 'suite', 'context'],
+ *     testFilePattern: '\\.(spec|test)\\.[cm]?[jt]sx?$',
+ * }]
  */
 
 import type { Rule } from 'eslint';
 import { writeTemplateIfMissing } from '@webpieces/rules-config';
 import { toError } from '../toError';
 import { EslintWorkspaceRoot } from '../workspace-root';
+import { TestContainerPolicy, DEFAULT_TEST_CONTAINERS, DEFAULT_TEST_FILE_PATTERN } from '../test-container-policy';
 
 const INSTRUCT_FILE = 'webpieces.methods.md';
 const workspace = new EslintWorkspaceRoot();
 
 interface MethodLinesOptions {
     max: number;
+    testContainers?: string[];
+    testFilePattern?: string;
 }
 
 // webpieces-disable no-any-unknown -- ESTree AST nodes require any for dynamic properties
@@ -46,6 +70,8 @@ interface FunctionNode {
 interface CheckerContext {
     context: Rule.RuleContext;
     maxLines: number;
+    testContainerPolicy: TestContainerPolicy;
+    filename: string;
 }
 
 // Module-level flag to prevent redundant file creation
@@ -99,6 +125,11 @@ function checkFunctionNode(ctx: CheckerContext, node: any): void {
 
     if (!funcNode.loc || !funcNode.body) return;
 
+    // describe(...)/suite(...) callbacks in spec files are containers, not units of logic.
+    if (ctx.testContainerPolicy.isExemptContainerCallback(ctx.filename, funcNode)) {
+        return;
+    }
+
     const name = getFunctionName(funcNode);
     const lineCount = funcNode.loc.end.line - funcNode.loc.start.line + 1;
 
@@ -143,6 +174,17 @@ const rule: Rule.RuleModule = {
                         type: 'integer',
                         minimum: 1,
                     },
+                    // Test-framework CONTAINER calls whose callback is not counted, in test
+                    // files only. Do NOT add 'it'/'test'/'beforeEach' here - those bodies are
+                    // logic and a long one is a real finding.
+                    testContainers: {
+                        type: 'array',
+                        items: { type: 'string' },
+                    },
+                    // Which files count as test files for the carve-out above.
+                    testFilePattern: {
+                        type: 'string',
+                    },
                 },
                 additionalProperties: false,
             },
@@ -151,7 +193,16 @@ const rule: Rule.RuleModule = {
 
     create(context: Rule.RuleContext): Rule.RuleListener {
         const options = context.options[0] as MethodLinesOptions | undefined;
-        const ctx: CheckerContext = { context, maxLines: options?.max ?? 70 };
+        const ctx: CheckerContext = {
+            context,
+            maxLines: options?.max ?? 70,
+            // ESLint 9 exposes context.filename; older versions only getFilename().
+            filename: context.filename ?? context.getFilename() ?? '',
+            testContainerPolicy: new TestContainerPolicy(
+                options?.testContainers ?? DEFAULT_TEST_CONTAINERS,
+                options?.testFilePattern ?? DEFAULT_TEST_FILE_PATTERN
+            ),
+        };
 
         return {
             FunctionDeclaration: (node) => checkFunctionNode(ctx, node),

@@ -205,6 +205,133 @@ function anotherShort() {
 
 console.log('All max-method-lines rule tests passed!');
 
+// ---------------------------------------------------------------------------
+// Test-container carve-out
+//
+// A describe(...) block is a CONTAINER, not a unit of logic - its length just says how many
+// cases a behaviour needs. It is exempt IN TEST FILES ONLY. Everything below the container
+// (it bodies, hooks, helpers) and everything in production code is still measured; those
+// invalid cases are what stops someone widening the carve-out by accident.
+// ---------------------------------------------------------------------------
+
+function bodyLines(count: number, indent: string): string {
+    return Array(count)
+        .fill(0)
+        .map((_unused: number, i: number) => `${indent}const line${i} = ${i};`)
+        .join('\n');
+}
+
+/** `<callee>('name', () => { ...100 lines... });` -> the callback spans 102 lines. */
+function longCallback(callee: string, indent = ''): string {
+    return `${indent}${callee}('a long block', () => {\n${bodyLines(100, indent + '    ')}\n${indent}});`;
+}
+
+const SPEC_FILE = 'src/thing.spec.ts';
+const TEST_FILE = 'src/thing.test.tsx';
+const PROD_FILE = 'src/thing.ts';
+
+ruleTester.run('max-method-lines (test containers)', rule, {
+    valid: [
+        // A 102-line describe in a .spec.ts is fine - it is a container.
+        { code: longCallback('describe'), filename: SPEC_FILE },
+        // Same for .test.tsx, and for the other default container names.
+        { code: longCallback('suite'), filename: TEST_FILE },
+        { code: longCallback('context'), filename: SPEC_FILE },
+        // Modifier / table dialects resolve to the same base container name.
+        { code: longCallback('describe.only'), filename: SPEC_FILE },
+        { code: longCallback('describe.skip'), filename: SPEC_FILE },
+        { code: longCallback('describe.each([1, 2])'), filename: SPEC_FILE },
+        // Nested describes: both are containers.
+        {
+            code: `describe('outer', () => {
+${longCallback('describe', '    ')}
+});`,
+            filename: SPEC_FILE,
+        },
+        // Configurable: a project using a different container name can say so.
+        {
+            code: longCallback('featureGroup'),
+            filename: SPEC_FILE,
+            options: [{ max: 70, testContainers: ['featureGroup'] }],
+        },
+        // Configurable: a project naming test files differently can say so.
+        {
+            code: longCallback('describe'),
+            filename: 'src/thing.cases.ts',
+            options: [{ max: 70, testFilePattern: '\\.cases\\.ts$' }],
+        },
+    ],
+
+    invalid: [
+        // PRODUCTION CODE IS UNAFFECTED: identical describe() call in a non-test file.
+        {
+            code: longCallback('describe'),
+            filename: PROD_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        // A single 102-line `it` is a real finding - the exemption does NOT reach inside.
+        {
+            code: `describe('outer', () => {
+${longCallback('it', '    ')}
+});`,
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        // ...and so is a 102-line `test`.
+        {
+            code: longCallback('test'),
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        // Hooks are logic, not containers - still counted.
+        {
+            code: longCallback('beforeEach'),
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        {
+            code: longCallback('beforeAll'),
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        {
+            code: longCallback('afterAll'),
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        // A long named helper inside a spec file is still a long method.
+        {
+            code: `function buildFixture() {
+${bodyLines(100, '    ')}
+}`,
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'buildFixture', actual: '102', max: '70' } }],
+        },
+        // A long arrow helper declared INSIDE an exempt describe is still counted.
+        {
+            code: `describe('outer', () => {
+    const buildFixture = () => {
+${bodyLines(100, '        ')}
+    };
+    buildFixture();
+});`,
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+        // Not an argument to the container call - `describe` used as a plain variable name
+        // must not launder a long function through the carve-out.
+        {
+            code: `const describeLocal = () => {
+${bodyLines(100, '    ')}
+};`,
+            filename: SPEC_FILE,
+            errors: [{ messageId: 'tooLong', data: { name: 'anonymous', actual: '102', max: '70' } }],
+        },
+    ],
+});
+
+console.log('All max-method-lines test-container tests passed!');
+
 // Test documentation file creation
 const docPath = path.join(process.cwd(), 'tmp', 'webpieces', 'webpieces.methods.md');
 
