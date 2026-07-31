@@ -64,9 +64,13 @@ function ctx(command: string): BashContext {
 }
 
 // A merged-branches cache with `deletable` entries — the shape the detached refresher writes.
-function cacheWith(deletable: string[], keep: string[] = [], worktrees: object[] = []): string {
+//
+// The timestamp is NOW by default. A cache is only quotable as fact while it is fresh (the guard says
+// "the cached verdicts are stale" instead of asserting a count once it ages out), so a hardcoded date
+// would make every cap test in this file exercise the stale path. `stale()` below opts into it.
+function cacheWith(deletable: string[], keep: string[] = [], worktrees: object[] = [], timestamp: string = new Date().toISOString()): string {
     return JSON.stringify({
-        timestamp: '2026-07-14T00:00:00.000Z',
+        timestamp,
         deletable: deletable.map((b: string, i: number): object =>
             ({ branch: b, reason: `PR #${String(100 + i)} merged`, pr: 100 + i })),
         keep: keep.map((b: string): object =>
@@ -78,6 +82,11 @@ function cacheWith(deletable: string[], keep: string[] = [], worktrees: object[]
 // One worktree verdict, as the refresher writes it into the cache's `worktrees` list.
 function tree(path: string, branch: string, deletable: boolean): object {
     return { path, branch, reason: deletable ? 'PR #7 merged' : 'no merged PR found', pr: 0, deletable };
+}
+
+// The same cache, written long enough ago that nothing in it may be quoted as a present-tense fact.
+function staleCacheWith(deletable: string[], keep: string[] = [], worktrees: object[] = []): string {
+    return cacheWith(deletable, keep, worktrees, '2026-07-14T00:00:00.000Z');
 }
 
 // `git worktree list --porcelain` for the primary clone plus N linked worktrees named wt1..wtN.
@@ -251,6 +260,7 @@ describe('branch-creation-guard local-branch cap', () => {
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('5 parked local branches');
         expect(violations[0].message).toContain('3 of them are dead');
+        expect(violations[0].message).toContain('MERGED PR');
 
         const hint = r.fixHint;
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
@@ -339,7 +349,7 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
         expect(flat).toContain('turnOffRuleUntilEpoch');
         expect(flat).toContain('ONLY IF A HUMAN SAYS SO');
         expect(flat).toContain('do NOT edit webpieces.config.json instead');
-        expect(flat).toContain('5 unmerged branch(es) with real commits were deliberately SPARED');
+        expect(flat).toContain('5 branch(es) are NOT provably merged and were deliberately SPARED');
     });
 
     it('defaults the cap to 5 when unconfigured', () => {
@@ -374,7 +384,14 @@ describe('branch-creation-guard worktree cap', () => {
         expect(rule('ON_NO_SUBBRANCHES').check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(0);
     });
 
-    it('blocks a worktree add at the cap, and emits prune → remove → branch -D in that order', () => {
+    /**
+     * THE REGRESSION TEST FOR THE INCIDENT. This guard used to print
+     *   `git worktree prune && git worktree remove <a> && … && git branch -D <x> <y> <z>`
+     * and on 2026-07-30 that single line named three worktrees with live agents in them. It must never
+     * come back: a chained delete of N things has no safe partial failure, and this guard does not own
+     * reaping logic. It hands over to wp-cleanup, which archives, asks, and refuses its own tree.
+     */
+    it('blocks a worktree add at the cap and hands over to wp-cleanup — never a chained delete one-liner', () => {
         git.worktreePorcelain = porcelain(5);
         git.cacheJson = cacheWith([], [], [
             tree('/tmp/wt1', 'feat1', true),
@@ -388,17 +405,96 @@ describe('branch-creation-guard worktree cap', () => {
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('5 linked worktrees');
         expect(violations[0].message).toContain('2 of them are dead');
+        expect(violations[0].message).toContain('MERGED PR');
 
         const hint = r.fixHint;
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
-        // The order is the whole point: git refuses to delete a branch a worktree still holds.
-        expect(flat).toContain(
-            'git worktree prune && git worktree remove /tmp/wt1 && git worktree remove /tmp/wt2 && git branch -D feat1 feat2');
-        expect(flat).toContain('maxWorktrees');
-        expect(flat).toContain('1 worktree(s) were deliberately SPARED');
-        // The PREFERRED remedy is now a command that DELETES something. A guard whose only actionable
-        // options loosen its own cap is what taught an agent to edit webpieces.config.json.
+        // NOTHING destructive, in any form, chained or single.
+        expect(flat).not.toContain('git worktree remove');
+        expect(flat).not.toContain('git worktree prune');
+        expect(flat).not.toContain('git branch -D');
+        expect(flat).not.toContain('&&');
+        // …and the ONE thing it does say is the command that does this safely.
+        expect(hint.fixOptions[0].preferred).toBe(true);
         expect(hint.fixOptions[0].text).toContain('pnpm wp-cleanup');
+        // The dead ones are still NAMED, as a list a human can read — just not as a command.
+        expect(flat).toContain('/tmp/wt1');
+        expect(flat).toContain('/tmp/wt2');
+        expect(flat).toContain('maxWorktrees');
+        // A spared worktree is LIVE, not "probably fine to delete".
+        expect(flat).toContain('1 worktree(s) are NOT provably merged');
+        expect(flat).toContain('LIVE');
+    });
+
+});
+
+describe('branch-creation-guard treats an uncommitted worktree as live', () => {
+    /**
+     * The exact shape of the incident, end to end: a worktree created minutes ago with
+     * `git worktree add -b … origin/main`, no commits yet, no PR — i.e. an agent working in it. It is
+     * LIVE, and the guard must not name it as something that can be removed.
+     */
+    it('never offers a commitless, PR-less worktree for deletion — that is a live agent', () => {
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = cacheWith([], [], [
+            // As the refresher now records it: spared, classification no-commits.
+            { path: '/tmp/wt1', branch: 'dean/apipath', pr: 0, deletable: false,
+                classification: 'no-commits',
+                reason: 'no commits of its own — identical to origin/main. That is either an abandoned husk '
+                    + 'OR a worktree/branch someone is working in right now' },
+            tree('/tmp/wt2', 'feat2', false),
+        ]);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
+        expect(r.check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(1);
+
+        const hint = r.fixHint;
+        const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        expect(flat).not.toContain('dean/apipath');
+        expect(flat).not.toContain('no work can be lost');
+        expect(flat).toContain('pnpm wp-cleanup');
+        expect(flat).toContain('2 worktree(s) are NOT provably merged');
+    });
+
+});
+
+/**
+ * Ticket part 4. The guard announced "8 parked local branches" over a repo with ONE, having quoted a
+ * cache written before those branches were deleted. Two defences: entries whose subject is gone are
+ * dropped, and a cache too old to trust yields NO figure at all.
+ */
+describe('branch-creation-guard never quotes a stale or phantom count', () => {
+    it('says the cache is stale instead of asserting how many are dead', () => {
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = staleCacheWith([], [], [tree('/tmp/wt1', 'feat1', true)]);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
+        const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));
+
+        expect(violations.length).toBe(1);
+        expect(violations[0].message).toContain('NOT known right now');
+        expect(violations[0].message).toContain('stale');
+        expect(violations[0].message).not.toContain('1 of them are dead');
+        // With nothing quotable, the remedy is the recompute — and still names no dead tree.
+        const flat = r.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
+        expect(flat).toContain('recomputes the verdicts from scratch');
+        expect(flat).not.toContain('/tmp/wt1');
+    });
+
+    it('drops cached verdicts for worktrees and branches that no longer exist', () => {
+        // The cache still names two dead worktrees; only ONE of them is still in `git worktree list`.
+        git.worktreePorcelain = porcelain(5);
+        git.cacheJson = cacheWith([], [], [
+            tree('/tmp/wt1', 'feat1', true),
+            tree('/tmp/already-removed', 'feat9', true),
+        ]);
+
+        const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
+        const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));
+
+        expect(violations[0].message).toContain('1 of them are dead');
+        const flat = r.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
+        expect(flat).not.toContain('already-removed');
     });
 
     /**

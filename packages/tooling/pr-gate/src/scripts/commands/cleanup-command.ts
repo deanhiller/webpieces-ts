@@ -11,6 +11,7 @@ import {
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
+    CLASSIFICATION_NO_COMMITS,
     PROMPTABLE_CLASSIFICATIONS,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -32,11 +33,19 @@ const CLASSIFICATION_HEADINGS: Readonly<Record<string, string>> = {
     [CLASSIFICATION_NEVER_PROPOSED]:
         'NEVER PROPOSED — no PR was ever opened, and these commits may be the ONLY copy in existence.\n'
         + '  Read the unique-commit counts before answering. This is the group to say no to if unsure.',
+    [CLASSIFICATION_NO_COMMITS]:
+        'NO COMMITS YET — identical to origin/main, so deleting the REF loses nothing. But this is also\n'
+        + '  exactly what a worktree looks like while somebody is still working in it and has not committed,\n'
+        + '  so it is asked about rather than reaped. Say no to any of these you (or an agent) are using.',
 };
 
 /**
- * wp-cleanup: remove the dead WORKTREES, delete the local branches whose PR is already merged (or that
- * hold no commits), then ASK about the ones that are merely probably-dead.
+ * wp-cleanup: remove the dead WORKTREES, delete the local branches whose PR is already MERGED, then ASK
+ * about the ones that are merely probably-dead.
+ *
+ * A merged PR is the ONLY proof that reaps anything unattended. "Holds no commits" used to be a second
+ * proof and no longer is: it is equally the signature of a worktree an agent is working in right now,
+ * so it moved into the group this command ASKS about.
  *
  * WHY WORKTREES ARE PART OF THIS: they were the half that never got reaped. The verdicts existed —
  * merged-branches.ts has been writing a full `DeletableWorktree[]` into the cache all along — and their
