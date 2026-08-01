@@ -421,6 +421,35 @@ describe('enrichGraph', () => {
         expect(graph['beta'].designFile).toBeUndefined();
     });
 
+    it('records the webpieces runtime packages a project declares, and omits the field otherwise', () => {
+        const infos = setupWorkspace('runtime', [
+            new FixtureProject('serves', '# R — serves\n\nServes routes.\n', true, ['framework:node']),
+            new FixtureProject('legacy', '# R — legacy\n\nLegacy NestJS service.\n', true, [
+                'framework:express',
+            ]),
+        ]);
+        fs.writeFileSync(
+            path.join(enrichTmpRoot, 'runtime/serves/package.json'),
+            JSON.stringify({ dependencies: { '@webpieces/http-routing': 'catalog:' } }),
+            'utf-8'
+        );
+        // core-context is NOT a marker — this is the orders-manager case, and it must stay absent.
+        fs.writeFileSync(
+            path.join(enrichTmpRoot, 'runtime/legacy/package.json'),
+            JSON.stringify({ dependencies: { '@webpieces/core-context': 'catalog:', express: '4' } }),
+            'utf-8'
+        );
+        const graph: EnhancedGraph = {
+            serves: { level: 0, dependsOn: [] },
+            legacy: { level: 0, dependsOn: [] },
+        };
+
+        enrichGraph(graph, infos, enrichTmpRoot);
+
+        expect(graph['serves'].webpiecesRuntime).toEqual(['@webpieces/http-routing']);
+        expect(graph['legacy'].webpiecesRuntime).toBeUndefined();
+    });
+
     it('aggregates ALL problems across projects into one error', () => {
         const infos = setupWorkspace('bad', [
             new FixtureProject('missing', null, true, ['framework:node']),

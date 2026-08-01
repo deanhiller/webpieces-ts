@@ -27,6 +27,7 @@ import { loadRuntimeConfig } from '../../lib/runtime-config';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
+import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
 import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
@@ -63,6 +64,7 @@ function generateRuntimeGraph(
     // Every edge the derivation had to GUESS at. Loud on purpose: a fanned-out edge is committed and
     // then reasoned about as if it were derived, which is how a fictional call survives for months.
     printRuntimeWarnings(report.warnings);
+    printAutoHiddenServers(report.autoHidden);
     // Printed here, FAILED by validate-runtime-architecture: generate must still write the graph,
     // or the validator would have nothing to compare against and the error would be unfixable.
     if (report.problems.length > 0) {

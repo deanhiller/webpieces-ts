@@ -77,6 +77,40 @@ describe('a role:server with no apiRelations at all', () => {
     });
 });
 
+/**
+ * The bare server above survives because NOTHING in that graph declares webpiecesRuntime, so the
+ * auto-hide is off entirely. Add one project that does, and the same relation-less server is now
+ * judged: it speaks the webpieces runtime (via its lib), so it is still DRAWN. The point of #542 —
+ * a webpieces server with no in-repo contract stays on the diagram — survives the new filter.
+ */
+describe('a bare server that DOES speak the webpieces runtime, once markers are known', () => {
+    function graphWithMarkers(): EnhancedGraph {
+        const projects = bareServerGraph();
+        projects['lib-util'].webpiecesRuntime = ['@webpieces/http-routing'];
+        return projects;
+    }
+
+    it('is still drawn, with no relations of any kind', () => {
+        const report = deriveRuntimeGraphReport(graphWithMarkers());
+        expect(report.graph.services['crm-manager'].drawOnGraph).toBeUndefined();
+        expect(report.autoHidden).toEqual([]);
+        expect(generateRuntimeDot(report.graph)).toContain('crm-manager\\n(server, L0)');
+    });
+
+    it('is hidden from the DRAWING but KEPT in the data once the markers go away', () => {
+        const projects = graphWithMarkers();
+        // ai-chat keeps markersKnown true; crm-manager's own closure now has none.
+        projects['ai-chat'] = { level: 0, dependsOn: [], role: 'server', webpiecesRuntime: ['@webpieces/http-server'] };
+        delete projects['lib-util'].webpiecesRuntime;
+        const report = deriveRuntimeGraphReport(projects);
+        expect(report.autoHidden).toEqual(['crm-manager']);
+        expect(report.graph.services['crm-manager']).toBeDefined();
+        expect(report.graph.services['crm-manager'].role).toBe('server');
+        expect(report.graph.services['crm-manager'].drawOnGraph).toBe(false);
+        expect(checkServersPresent(projects, new Set<string>(), report.graph)).toEqual([]);
+    });
+});
+
 describe('checkServersPresent — every role:server reached the graph', () => {
     const projects = bareServerGraph();
 

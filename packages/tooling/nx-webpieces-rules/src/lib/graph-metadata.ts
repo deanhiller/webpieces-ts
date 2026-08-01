@@ -18,11 +18,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createProjectGraphAsync } from '@nx/devkit';
-import type { EnhancedGraph } from './graph-sorter';
+import type { EnhancedGraph, GraphEntry } from './graph-sorter';
 import { ProjectInfo } from './project-info';
 import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
 import { resolveDrawOnGraph } from './draw-on-graph-resolver';
+import { resolveRuntimeParticipant } from './runtime-participant-resolver';
 import { resolveCallsService, resolveServiceName, validateUniqueServiceNames } from './service-name-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
 import { toError } from '../toError';
@@ -77,31 +78,8 @@ export function enrichGraph(
             continue;
         }
 
-        const resolution = resolveFramework(info, workspaceRoot);
-        if (resolution.problem !== null) {
-            problems.push(resolution.problem);
-        } else if (resolution.frameworks !== null) {
-            entry.framework = resolution.frameworks;
-        }
-
-        const roleResolution = resolveRole(info);
-        if (roleResolution.problem !== null) {
-            problems.push(roleResolution.problem);
-        } else if (roleResolution.role !== null) {
-            entry.role = roleResolution.role;
-        }
-
+        enrichDeclarations(entry, info, workspaceRoot, problems);
         enrichClientNames(entry, info, workspaceRoot, projectName, serviceNames, problems);
-
-        // Only persist the field when hidden (false); drawn projects (the
-        // default) stay clean in dependencies.json with no drawOnGraph line.
-        const drawResolution = resolveDrawOnGraph(info);
-        if (drawResolution.problem !== null) {
-            problems.push(drawResolution.problem);
-        } else if (drawResolution.drawOnGraph === false) {
-            entry.drawOnGraph = false;
-        }
-
         enrichResponsibilities(entry, info, workspaceRoot, problems);
 
         // Set designFile ONLY when the project has a REAL generated design (a
@@ -120,6 +98,53 @@ export function enrichGraph(
 
     if (problems.length > 0) {
         throw new MetadataValidationError(problems);
+    }
+}
+
+/**
+ * The fields a project DECLARES about itself — its framework env set and role (nx tags), the
+ * webpieces runtime packages it depends on (package.json), and whether it opts out of the drawings
+ * (nx tag). Grouped because they share a shape: resolve, record the problem, or write the field.
+ *
+ * Distinct from enrichResponsibilities/designFile, which read generated or hand-written FILES.
+ */
+// webpieces-disable no-function-outside-class -- enrichGraph step helper, matching enrichClientNames/enrichResponsibilities in this file
+function enrichDeclarations(
+    entry: GraphEntry,
+    info: ProjectInfo,
+    workspaceRoot: string,
+    problems: string[]
+): void {
+    const resolution = resolveFramework(info, workspaceRoot);
+    if (resolution.problem !== null) {
+        problems.push(resolution.problem);
+    } else if (resolution.frameworks !== null) {
+        entry.framework = resolution.frameworks;
+    }
+
+    const roleResolution = resolveRole(info);
+    if (roleResolution.problem !== null) {
+        problems.push(roleResolution.problem);
+    } else if (roleResolution.role !== null) {
+        entry.role = roleResolution.role;
+    }
+
+    // Only persist when the project declares at least one — a repo full of
+    // "webpiecesRuntime": [] lines would be noise, and absence already means "declares none".
+    const participantResolution = resolveRuntimeParticipant(info, workspaceRoot);
+    if (participantResolution.problem !== null) {
+        problems.push(participantResolution.problem);
+    } else if (participantResolution.markers !== null && participantResolution.markers.length > 0) {
+        entry.webpiecesRuntime = participantResolution.markers;
+    }
+
+    // Only persist the field when hidden (false); drawn projects (the
+    // default) stay clean in dependencies.json with no drawOnGraph line.
+    const drawResolution = resolveDrawOnGraph(info);
+    if (drawResolution.problem !== null) {
+        problems.push(drawResolution.problem);
+    } else if (drawResolution.drawOnGraph === false) {
+        entry.drawOnGraph = false;
     }
 }
 
