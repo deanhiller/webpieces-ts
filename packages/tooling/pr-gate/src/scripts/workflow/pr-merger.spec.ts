@@ -3,7 +3,7 @@ import { MERGE_MODE_AUTO, MERGE_MODE_NONE } from '@webpieces/rules-config';
 import {
     PrMerger, MergeOutcome, GhResult, PrMergeState,
     MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
-    MERGE_RESULT_BEHIND, MERGE_RESULT_FAILED,
+    MERGE_RESULT_BEHIND_CLEAN, MERGE_RESULT_BEHIND_CONFLICTING, MERGE_RESULT_BEHIND_UNKNOWN, MERGE_RESULT_FAILED,
 } from './pr-merger';
 
 // A PrMerger whose `gh` seams are ALL canned, so the decision logic is exercised with NO gh, no network
@@ -61,6 +61,9 @@ afterEach((): void => {
 // A healthy PR GitHub is happy about — the default for tests that are not about BEHIND.
 const CLEAN = new PrMergeState('MERGEABLE', 'CLEAN', 'OPEN');
 const BEHIND = new PrMergeState('MERGEABLE', 'BEHIND', 'OPEN');
+const BEHIND_CONFLICTING = new PrMergeState('CONFLICTING', 'BEHIND', 'OPEN');
+// GitHub's ordinary reply in the seconds after a force-push — it computes mergeability asynchronously.
+const BEHIND_UNKNOWN = new PrMergeState('UNKNOWN', 'BEHIND', 'OPEN');
 
 const mergeState = (statuses: number[], autoAllowed: boolean, mode: string, state: PrMergeState): [MergeOutcome, string[][]] => {
     spyStdout();
@@ -136,8 +139,8 @@ describe('the PR is BEHIND its base — the outcome that never self-heals', () =
     it('is reported as BEHIND, not as a queued success, even when --auto is accepted', () => {
         const [outcome] = mergeState([1, 0], true, MERGE_MODE_AUTO, BEHIND);
         expect(outcome.merged).toBe(false);
-        expect(outcome.result).toBe(MERGE_RESULT_BEHIND);
-        expect(outcome.message).toContain('BEHIND');
+        expect(outcome.isBehind()).toBe(true);
+        expect(outcome.message).toContain('landed on main first');
         expect(outcome.message).toContain('does NOT self-heal');
         // Still queued: a repo that auto-updates branches can land it, and un-queuing helps nobody.
         expect(outcome.autoMergeEnabled).toBe(true);
@@ -145,9 +148,23 @@ describe('the PR is BEHIND its base — the outcome that never self-heals', () =
 
     it('is still BEHIND — not a generic failure — when the repo forbids auto-merge', () => {
         const [outcome] = mergeState([1], false, MERGE_MODE_AUTO, BEHIND);
-        expect(outcome.result).toBe(MERGE_RESULT_BEHIND);
+        expect(outcome.isBehind()).toBe(true);
         expect(outcome.autoMergeEnabled).toBe(false);
         expect(outcome.message).toContain('Nothing is queued');
+    });
+
+    // The split that lets the banner stop describing a queue collision as a merge conflict. `mergeable`
+    // was always fetched here; until now it was fetched and thrown away.
+    it('classifies a clean collision, a real conflict and an uncomputed answer as THREE outcomes', () => {
+        expect(mergeState([1, 0], true, MERGE_MODE_AUTO, BEHIND)[0].result).toBe(MERGE_RESULT_BEHIND_CLEAN);
+        expect(mergeState([1, 0], true, MERGE_MODE_AUTO, BEHIND_CONFLICTING)[0].result).toBe(MERGE_RESULT_BEHIND_CONFLICTING);
+        expect(mergeState([1, 0], true, MERGE_MODE_AUTO, BEHIND_UNKNOWN)[0].result).toBe(MERGE_RESULT_BEHIND_UNKNOWN);
+    });
+
+    it('never reads UNKNOWN as "no conflicts" — that would promise a clean re-run we cannot see', () => {
+        const [outcome] = mergeState([1, 0], true, MERGE_MODE_AUTO, BEHIND_UNKNOWN);
+        expect(outcome.result).not.toBe(MERGE_RESULT_BEHIND_CLEAN);
+        expect(outcome.isBehind()).toBe(true);
     });
 
     it('carries GitHub\'s own verdict verbatim, so nobody has to pattern-match gh prose', () => {
