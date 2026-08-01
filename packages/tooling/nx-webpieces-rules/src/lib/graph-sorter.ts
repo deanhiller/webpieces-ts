@@ -55,6 +55,17 @@ export interface GraphEntry {
     responsibilitiesFile?: string;
     designFile?: string;
     apiRelations?: ProjectApiRelations;
+    /**
+     * The @webpieces runtime packages this project's OWN package.json declares — http-routing,
+     * http-server, http-client-node, http-client-browser, cloudtasks-client. Omitted when it
+     * declares none, so TOTAL absence across the file means the file predates this field and
+     * nothing is auto-hidden (see runtime-graph.ts). Core/util/logging packages are deliberately
+     * not markers; see runtime-participant-resolver.ts for why.
+     *
+     * The runtime graph ORs this over a node's library closure: a server whose whole webpieces
+     * stack comes from a shared bootstrap lib participates even though it declares nothing itself.
+     */
+    webpiecesRuntime?: string[];
 }
 
 /**

@@ -36,6 +36,7 @@ export interface GraphDiff {
  */
 const METADATA_FIELDS: ReadonlyArray<keyof GraphEntry & string> = [
     'framework',
+    'webpiecesRuntime',
     'shortDescription',
     'responsibilitiesFile',
     'designFile',

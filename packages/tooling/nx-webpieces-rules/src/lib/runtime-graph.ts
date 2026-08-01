@@ -29,7 +29,7 @@
  */
 
 import { sortGraphTopologically } from './graph-sorter';
-import type { EnhancedGraph } from './graph-sorter';
+import type { EnhancedGraph, GraphEntry } from './graph-sorter';
 import type {
     ApiContracts,
     ApiMethodMeta,
@@ -38,6 +38,8 @@ import type {
     ExternalSystemDecls,
 } from './api-usage/api-relations';
 import { sortApiRefs } from './api-usage/api-relations';
+import { RelationSink } from './runtime-graph-decls';
+import type { ScanDecl } from './runtime-graph-decls';
 import { dedupApiRefs, sortedQueues, sortedRecord, sortUnresolved } from './runtime-graph-sorters';
 import { attachExternalSystems, resolveExternalSystems } from './api-usage/external-systems';
 import type {
@@ -98,6 +100,15 @@ export class RuntimeGraphReport {
          * contract, so it is `unresolvedUses`.)
          */
         public readonly problems: string[] = [],
+        /**
+         * role:server nodes omitted from the DRAWING because they declare no webpieces runtime
+         * package anywhere in their library closure and serve/call nothing in-repo. Neither a
+         * warning nor a problem — this is intended behavior, and shouting on every clean run is how
+         * warnings stop being read. Deliberately NOT persisted: a graph file that records its own
+         * omissions gets committed and stops being read. Executors print it instead, so the
+         * omission is always visible and never silent.
+         */
+        public readonly autoHidden: string[] = [],
     ) {}
 }
 
@@ -145,43 +156,6 @@ function assignLevels(adjacency: Record<string, string[]>): Record<string, numbe
     return levels;
 }
 
-/** One project's implements/uses at api-CLASS granularity, from dependencies.json apiRelations. */
-interface ScanDecl {
-    name: string;
-    implementsApis: ApiRef[];
-    usesApis: ApiRef[];
-    /** apiClassName -> the embedded LIBRARY project that declared the implements (never the node itself). */
-    implementsVia: Map<string, string>;
-}
-
-/**
- * Accumulates one node's effective relations while its dependsOn closure is walked, keeping the
- * PROVENANCE the walk would otherwise throw away: which library contributed an implements, and
- * which api-lib owns each contract.
- */
-class RelationSink {
-    readonly implementsApis: ApiRef[] = [];
-    readonly usesApis: ApiRef[] = [];
-    readonly implementsVia = new Map<string, string>();
-
-    constructor(
-        /** The runtime node these relations are attributed to. */
-        private readonly node: string,
-    ) {}
-
-    /** `from` is the project whose apiRelations declared this — the node itself, or a lib it embeds. */
-    addImplements(ref: ApiRef, from: string): void {
-        this.implementsApis.push(ref);
-        // First contributor wins, matching dedupApiRefs' keep-the-first rule on the ref list.
-        if (from !== this.node && !this.implementsVia.has(ref.api))
-            this.implementsVia.set(ref.api, from);
-    }
-
-    addUses(ref: ApiRef): void {
-        this.usesApis.push(ref);
-    }
-}
-
 /**
  * Derives the runtime microservice graph from architecture/dependencies.json `apiRelations`:
  * implementers × users per API, split by transport. An rpc edge is a direct call; a pubsub edge flows
@@ -198,6 +172,16 @@ class RuntimeGraphDeriver {
     private readonly nodeByServiceName = new Map<string, string>();
     private readonly warnings: string[] = [];
     private readonly problems: string[] = [];
+    /** role:server nodes hidden by isNonParticipantServer, in the order buildServices met them. */
+    private readonly autoHidden: string[] = [];
+    /**
+     * False when NO project in the graph carries `webpiecesRuntime`, i.e. the file was written
+     * before the field existed. Auto-hiding is then off ENTIRELY, so an old dependencies.json
+     * renders exactly as it did — absence of the field must never be read as "declares none".
+     * Any repo regenerated after this change has at least one webpieces project, so the guard
+     * cannot wrongly suppress the feature.
+     */
+    private readonly markersKnown: boolean;
 
     constructor(
         private readonly projects: EnhancedGraph,
@@ -215,6 +199,9 @@ class RuntimeGraphDeriver {
          */
         private readonly externalSystemDecls: ExternalSystemDecls = {},
     ) {
+        this.markersKnown = Object.values(projects).some(
+            (entry: GraphEntry) => entry.webpiecesRuntime !== undefined,
+        );
         // A node ALWAYS answers to its own module name, so a repo whose deployed names match its
         // project names needs no declaration at all — and no alias can ever redirect 'ai-chat' away
         // from the ai-chat module. Module names are therefore claimed FIRST and are unshadowable.
@@ -255,7 +242,7 @@ class RuntimeGraphDeriver {
             triggers: this.buildTriggers(decls),
         };
         attachExternalSystems(graph, resolveExternalSystems(this.externalSystemDecls, services));
-        return new RuntimeGraphReport(graph, this.warnings, this.problems);
+        return new RuntimeGraphReport(graph, this.warnings, this.problems, [...this.autoHidden].sort());
     }
 
     /**
@@ -326,6 +313,7 @@ class RuntimeGraphDeriver {
                 implementsApis: dedupApiRefs(sortApiRefs(sink.implementsApis)),
                 usesApis: dedupApiRefs(sortApiRefs(sink.usesApis)),
                 implementsVia: sink.implementsVia,
+                markerVia: sink.markerVia,
             });
         }
         return decls;
@@ -335,6 +323,33 @@ class RuntimeGraphDeriver {
     private isNode(name: string): boolean {
         const role = this.projects[name]?.role;
         return role === 'server' || role === 'client';
+    }
+
+    /**
+     * True for a role:server that speaks NO webpieces runtime package anywhere in its library
+     * closure AND serves/calls no in-repo contract — a legacy Express/NestJS service sitting in the
+     * same monorepo. This graph is built entirely out of webpieces contracts, so such a service can
+     * only ever draw as a disconnected box: it has no edges by construction and never will.
+     *
+     * It stays a NODE and stays in runtime-dependencies.json (drawOnGraph:false), which is the whole
+     * difference between hiding it and the silent deletion #542 removed — the data view still shows
+     * a deployed role:server, only the picture drops it. Removing it from isNode() instead would
+     * also drop it from nodeByServiceName, so a targeted ClientConfig('orders-manager') from a drawn
+     * service would stop resolving and decay into an unresolved use: a graph that got quietly WORSE
+     * while looking cleaner. The COMPILE-TIME graph (dependencies.html) still draws these projects;
+     * they genuinely exist, and only the runtime drawing claims to show webpieces services.
+     *
+     * role:client is deliberately never auto-hidden: a browser app can legitimately declare no
+     * marker at all, and nothing checks clients for presence the way checkServersPresent checks
+     * servers, so there is no equivalent failure to prevent.
+     */
+    private isNonParticipantServer(decl: ScanDecl): boolean {
+        if (!this.markersKnown) return false;
+        if (this.projects[decl.name]?.role !== 'server') return false;
+        if (decl.markerVia.size > 0) return false;
+        // Belt-and-braces: serving or calling an in-repo contract IS participation, whatever the
+        // package list says. This is what keeps a mechanism we did not anticipate from being blanked.
+        return decl.implementsApis.length === 0 && decl.usesApis.length === 0;
     }
 
     /**
@@ -349,6 +364,7 @@ class RuntimeGraphDeriver {
     ): void {
         const entry = this.projects[name];
         if (entry === undefined) return;
+        sink.addMarkers(entry.webpiecesRuntime, name);
         const relations = entry.apiRelations;
         if (relations !== undefined) {
             for (const owner of Object.keys(relations).sort()) {
@@ -630,7 +646,13 @@ class RuntimeGraphDeriver {
                 dependsOn,
             };
             services[decl.name] = service;
-            if (this.hiddenProjects.has(decl.name)) services[decl.name].drawOnGraph = false;
+            // The explicit tag wins and is NOT reported as auto-hidden — somebody asked for it.
+            if (this.hiddenProjects.has(decl.name)) {
+                service.drawOnGraph = false;
+            } else if (this.isNonParticipantServer(decl)) {
+                service.drawOnGraph = false;
+                this.autoHidden.push(decl.name);
+            }
         }
         const levels = assignLevels(adjacencyFromEdges(Object.keys(services), edges));
         for (const name of Object.keys(services)) services[name].level = levels[name] ?? 0;

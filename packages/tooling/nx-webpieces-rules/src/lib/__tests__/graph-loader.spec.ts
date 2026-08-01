@@ -46,6 +46,48 @@ function makeEnrichedGraph(): EnhancedGraph {
     };
 }
 
+describe('webpiecesRuntime persistence', () => {
+    /**
+     * MUST round-trip: validate re-derives the runtime graph from this file, so a field written
+     * only in memory by generate would make the two derive different graphs — and a server would
+     * appear or vanish depending on which command ran.
+     */
+    it('round-trips, and omits the line entirely for a project that declares none', () => {
+        const graph = makeEnrichedGraph();
+        graph['http-routing'].role = 'server';
+        graph['http-routing'].webpiecesRuntime = [
+            '@webpieces/http-routing',
+            '@webpieces/http-server',
+        ];
+
+        saveGraph(graph, tmpRoot);
+        const raw = JSON.parse(fs.readFileSync(path.join(tmpRoot, DEFAULT_GRAPH_PATH), 'utf-8'));
+
+        expect(raw.projects['http-routing'].webpiecesRuntime).toEqual([
+            '@webpieces/http-routing',
+            '@webpieces/http-server',
+        ]);
+        expect('webpiecesRuntime' in raw.projects['core-util']).toBe(false);
+        expect(loadBlessedGraph(tmpRoot).projects['http-routing'].webpiecesRuntime).toEqual([
+            '@webpieces/http-routing',
+            '@webpieces/http-server',
+        ]);
+    });
+
+    it('is written right after role — what the project IS, then what runtime it speaks', () => {
+        const graph = makeEnrichedGraph();
+        graph['http-routing'].role = 'server';
+        graph['http-routing'].serviceName = 'router-svc';
+        graph['http-routing'].webpiecesRuntime = ['@webpieces/http-routing'];
+
+        saveGraph(graph, tmpRoot);
+        const text = fs.readFileSync(path.join(tmpRoot, DEFAULT_GRAPH_PATH), 'utf-8');
+
+        expect(text.indexOf('"role"')).toBeLessThan(text.indexOf('"webpiecesRuntime"'));
+        expect(text.indexOf('"webpiecesRuntime"')).toBeLessThan(text.indexOf('"serviceName"'));
+    });
+});
+
 describe('graph-loader wrapper format', () => {
     it('round-trips an enriched graph with aiInstructions', () => {
         const graph = makeEnrichedGraph();

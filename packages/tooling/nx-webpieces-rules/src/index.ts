@@ -6,6 +6,7 @@ export * from './lib/graph-loader';
 export * from './lib/graph-visualizer';
 export * from './lib/graph-metadata';
 export * from './lib/framework-resolver';
+export * from './lib/runtime-participant-resolver';
 export * from './lib/project-info';
 export * from './lib/responsibilities';
 export * from './lib/di-graph/dot';

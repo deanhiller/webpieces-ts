@@ -25,6 +25,7 @@ import {
 } from '../../lib/runtime-graph';
 import type { RuntimeGraph } from '../../lib/runtime-graph';
 import { findRuntimeCycles, cycleKey } from '../../lib/runtime-cycles';
+import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
 import type { AllowedCycle } from '../../lib/runtime-config';
 import { loadRuntimeConfig, runtimeReportOnly, RUNTIME_RULE_NAME } from '../../lib/runtime-config';
 
@@ -137,6 +138,7 @@ export default async function runExecutor(
     );
     const graph = report.graph;
     for (const warning of report.warnings) console.warn(`⚠️  ${warning}`);
+    printAutoHiddenServers(report.autoHidden);
 
     // A call site naming a service no module answers to FAILS: the contract is served in-repo, so
     // the name is a typo or a stale rename, and the graph only ever hid it by fanning the edge out.

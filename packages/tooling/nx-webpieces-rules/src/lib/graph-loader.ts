@@ -46,7 +46,10 @@ export const AI_INSTRUCTIONS =
     'or display any of the graphs in a browser. To hide a project (its box AND every ' +
     "edge touching it) from BOTH rendered architecture graphs, add the nx tag " +
     "'drawOnGraph:false' to that project's project.json tags and regenerate; it stays " +
-    'in this file (marked "drawOnGraph": false) but is omitted from the HTML.';
+    'in this file (marked "drawOnGraph": false) but is omitted from the HTML. A role:server ' +
+    'with no webpiecesRuntime package anywhere in its dependency closure and no apiRelations is ' +
+    'omitted from the RUNTIME drawing the same way — it speaks none of the webpieces runtime, so ' +
+    'it can only ever draw as a disconnected box; it stays in both JSON files.';
 
 /**
  * Named command → "command — what it does" map embedded in dependencies.json.
@@ -227,6 +230,10 @@ function formatEntryLines(entry: GraphEntry): string[] {
 
     pushOptionalArrayField(lines, 'framework', entry.framework);
     pushOptionalField(lines, 'role', entry.role);
+    // Right after role — role says what the project IS, this says what runtime it speaks. MUST be
+    // persisted: validate re-derives the runtime graph from this file, so a field written only
+    // in-memory by generate would make the two derive different graphs.
+    pushOptionalArrayField(lines, 'webpiecesRuntime', entry.webpiecesRuntime);
     pushOptionalField(lines, 'serviceName', entry.serviceName);
     pushOptionalCallsServiceField(lines, entry.callsService);
     pushOptionalBooleanField(lines, 'drawOnGraph', entry.drawOnGraph);
