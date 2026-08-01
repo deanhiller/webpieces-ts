@@ -19,11 +19,34 @@ export const MERGE_RESULT_LEFT_TO_HUMAN = 'LEFT_TO_HUMAN';
  * green "✅ PR finished" and get abandoned.
  */
 export const MERGE_RESULT_BEHIND = 'BEHIND';
+/**
+ * BEHIND *and* GitHub says the tree merges cleanly (`mergeable: MERGEABLE`). Nobody touched the same
+ * lines — somebody simply landed on main first. One clean re-run of ①②③ converges. Split out from the
+ * conflicting case because the two need completely different sentences: this one is not the author's
+ * problem to solve, it is a queue collision, and telling them "resolve the conflict" is a lie.
+ */
+export const MERGE_RESULT_BEHIND_CLEAN = 'BEHIND_CLEAN';
+/**
+ * BEHIND *and* `mergeable: CONFLICTING` — the landed work and this branch touch the same lines. Real
+ * human/AI judgement is owed, and if others keep landing first it genuinely repeats. That is inherent to
+ * concurrent editing, not a defect, and the banner says so rather than pretending a re-run is free.
+ */
+export const MERGE_RESULT_BEHIND_CONFLICTING = 'BEHIND_CONFLICTING';
+/**
+ * BEHIND but `mergeable: UNKNOWN` (or unreadable). GitHub computes mergeability ASYNCHRONOUSLY and we ask
+ * moments after a force-push, so UNKNOWN is the EXPECTED answer, not an error. Diagnosing from it would be
+ * guessing, so this outcome asks for a re-check instead of prescribing a remedy.
+ */
+export const MERGE_RESULT_BEHIND_UNKNOWN = 'BEHIND_UNKNOWN';
 /** Not merged for some other reason (config mismatch, gh error, no PR at all). Read `message`. */
 export const MERGE_RESULT_FAILED = 'FAILED';
 
 // The `mergeStateStatus` value GitHub reports for "head branch is not up to date with the base branch".
 const GH_STATE_BEHIND = 'BEHIND';
+// `mergeable` values. GitHub returns UNKNOWN while it is still computing the merge — which is most of the
+// time in the seconds after a push — so UNKNOWN must never be read as "no conflicts".
+const GH_MERGEABLE_CLEAN = 'MERGEABLE';
+const GH_MERGEABLE_CONFLICTING = 'CONFLICTING';
 
 // What actually happened when we tried to land the squash merge. `message` is printed VERBATIM in the
 // final wp-finish-upsert-pr summary, so a merge that did not happen can never be reported as done —
@@ -44,6 +67,17 @@ export class MergeOutcome {
         this.message = message;
         this.result = result;
     }
+
+    // TRUE for every flavour of "the branch is out of date with main", so the banner can ask that one
+    // question once instead of listing four constants at each branch point. Kept here rather than as a
+    // module function because `no-function-outside-class` forbids the latter — and PrMergeState below
+    // already sets the precedent that a verdict class answers questions about itself.
+    isBehind(): boolean {
+        return this.result === MERGE_RESULT_BEHIND
+            || this.result === MERGE_RESULT_BEHIND_CLEAN
+            || this.result === MERGE_RESULT_BEHIND_CONFLICTING
+            || this.result === MERGE_RESULT_BEHIND_UNKNOWN;
+    }
 }
 
 // GitHub's own verdict on the PR, straight from `gh pr view --json mergeable,mergeStateStatus,state`.
@@ -61,6 +95,24 @@ export class PrMergeState {
 
     isBehind(): boolean {
         return this.mergeStateStatus === GH_STATE_BEHIND;
+    }
+
+    /**
+     * WHICH kind of BEHIND this is, from the `mergeable` field we have always fetched and never read.
+     *
+     * This is the whole point of the split. "Out of date" and "conflicting" are different situations with
+     * different costs, and collapsing them told every author the expensive story: a clean queue collision
+     * — nobody touched your lines, somebody just landed first — got reported in the same alarming words as
+     * a genuine textual conflict.
+     *
+     * UNKNOWN is its own answer, never folded into CLEAN. GitHub computes mergeability asynchronously and
+     * we ask seconds after a force-push, so UNKNOWN is the ordinary reply in exactly our situation.
+     * Treating it as "no conflicts" would promise a clean re-run we cannot see.
+     */
+    behindKind(): string {
+        if (this.mergeable === GH_MERGEABLE_CLEAN) return MERGE_RESULT_BEHIND_CLEAN;
+        if (this.mergeable === GH_MERGEABLE_CONFLICTING) return MERGE_RESULT_BEHIND_CONFLICTING;
+        return MERGE_RESULT_BEHIND_UNKNOWN;
     }
 
     // One-line rendering for the failure message, or '' when GitHub could not be asked.
@@ -168,16 +220,21 @@ export class PrMerger {
             MERGE_RESULT_AUTO_QUEUED);
     }
 
-    // The one outcome that looks queued but is stranded. `queued` says whether auto-merge did get
-    // enabled, because "parked forever" and "not queued at all" need different sentences — but neither
-    // of them is done, so both carry MERGE_RESULT_BEHIND.
+    /**
+     * The one outcome that looks queued but is stranded. `queued` says whether auto-merge did get enabled,
+     * because "parked forever" and "not queued at all" need different sentences — but neither is done.
+     *
+     * The `result` now carries WHICH kind of behind, so the banner can stop describing a queue collision
+     * in the vocabulary of a merge conflict. The wording here is deliberately blame-free: nothing the
+     * author did caused this, and the PR itself is in perfectly good shape — pushed, bodied, gate-green.
+     */
     private behindOutcome(state: PrMergeState, queued: boolean): MergeOutcome {
+        const parked = queued ? 'Auto-merge is enabled but parked.' : 'Nothing is queued.';
         return new MergeOutcome(false, queued,
-            `⛔ did NOT merge — the head branch is BEHIND its base (${state.describe()}).\n` +
-            `      BEHIND does NOT self-heal: auto-merge never updates your branch, so nothing will land\n` +
-            `      this PR until it is re-synced from main. ` +
-            (queued ? 'Auto-merge is enabled but parked.' : 'Nothing is queued.'),
-            MERGE_RESULT_BEHIND);
+            `did NOT merge — someone else landed on main first, so GitHub wants this branch rebuilt on\n` +
+            `      top of theirs before it will merge (${state.describe()}).\n` +
+            `      This does NOT self-heal: auto-merge never updates your branch. ${parked}`,
+            state.behindKind());
     }
 
     // Reprint the expected first-attempt failure as CONTEXT, not as a verdict. gh's own `X …` line is

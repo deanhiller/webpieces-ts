@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
 import {
     MergeOutcome, MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
-    MERGE_RESULT_BEHIND, MERGE_RESULT_FAILED,
+    MERGE_RESULT_BEHIND_CLEAN, MERGE_RESULT_BEHIND_CONFLICTING, MERGE_RESULT_BEHIND_UNKNOWN,
+    MERGE_RESULT_FAILED,
 } from './pr-merger';
 
 const banner = new FinishBanner();
@@ -16,7 +17,10 @@ const directive = (outcome: MergeOutcome): string =>
 const MERGED = new MergeOutcome(true, false, 'squash-merged the PR as: "My PR title (#511)"', MERGE_RESULT_MERGED);
 const QUEUED = new MergeOutcome(false, true, 'enabled auto-merge — it will squash-merge when the checks pass', MERGE_RESULT_AUTO_QUEUED);
 const HUMAN = new MergeOutcome(false, false, 'did NOT merge — pr-gate.mergeMode is NONE', MERGE_RESULT_LEFT_TO_HUMAN);
-const BEHIND = new MergeOutcome(false, true, '⛔ did NOT merge — the head branch is BEHIND its base (mergeStateStatus=BEHIND)', MERGE_RESULT_BEHIND);
+const behindMsg = 'did NOT merge — someone else landed on main first (mergeStateStatus=BEHIND)';
+const BEHIND = new MergeOutcome(false, true, behindMsg, MERGE_RESULT_BEHIND_CLEAN);
+const CONFLICTING = new MergeOutcome(false, true, behindMsg, MERGE_RESULT_BEHIND_CONFLICTING);
+const UNKNOWN_BEHIND = new MergeOutcome(false, true, behindMsg, MERGE_RESULT_BEHIND_UNKNOWN);
 const FAILED = new MergeOutcome(false, false, '⚠️  did NOT merge and could NOT enable auto-merge either', MERGE_RESULT_FAILED);
 
 describe('a merged PR', () => {
@@ -47,31 +51,70 @@ describe('mergeMode NONE — a human merges', () => {
     });
 });
 
-describe('BEHIND — the outcome that used to print a green checkmark', () => {
-    it('does NOT print "✅ PR finished"', () => {
-        const out = render(BEHIND);
-        expect(out).not.toContain('✅');
-        expect(out).toContain('⛔ PR NOT FINISHED');
-        expect(out).toContain('BEHIND');
+describe('BEHIND — not done, but not the author\'s failure either', () => {
+    it('never claims success, and never blames the author with "PR NOT FINISHED"', () => {
+        for (const outcome of [BEHIND, CONFLICTING, UNKNOWN_BEHIND]) {
+            const out = render(outcome);
+            expect(out).not.toContain('✅');
+            expect(out).not.toContain('PR NOT FINISHED');
+            // What DID happen: everything this command owns succeeded.
+            expect(out).toContain('PR IS UP AND GREEN');
+            expect(out).toContain('someone');
+        }
     });
 
-    it('prints the exact re-run remedy, in order, so an agent recovers without a human', () => {
+    it('prints the FULL three-stage remedy — skipping ② is what published an ungated tree', () => {
         const out = render(BEHIND);
         expect(out).toContain('pnpm wp-start-upsert-pr');
+        expect(out).toContain('pnpm wp-review-upsert-pr');
         expect(out).toContain('pnpm wp-finish-upsert-pr');
-        expect(out.indexOf('pnpm wp-start-upsert-pr')).toBeLessThan(out.indexOf('pnpm wp-finish-upsert-pr'));
-        expect(out).toContain('DO NOT WALK AWAY');
-        expect(out).toContain('gh pr view 511 --json mergeable,mergeStateStatus,state');
+        expect(out.indexOf('wp-start-upsert-pr')).toBeLessThan(out.indexOf('wp-review-upsert-pr'));
+        expect(out.indexOf('wp-review-upsert-pr')).toBeLessThan(out.indexOf('wp-finish-upsert-pr'));
+        expect(out).toContain('Do NOT skip ②');
+    });
+
+    it('warns off `gh pr update-branch` — it rewrites the REMOTE, which stage ③ then force-pushes over', () => {
+        const out = render(BEHIND);
+        expect(out).toContain('gh pr update-branch');
+        expect(out).toContain('force-pushes over');
+    });
+
+    it('ASKS rather than orders — an imperative list is what turned an agent into a loop', () => {
+        const out = render(BEHIND);
+        expect(out).toContain('STOP HERE AND ASK THE HUMAN');
+        expect(out).toContain('May I start the wp-*-upsert-pr process over again?');
+        expect(out).not.toContain('DO NOT WALK AWAY');
+    });
+
+    it('tells a clean queue collision apart from a real conflict — they are different situations', () => {
+        expect(render(BEHIND)).toContain('There are NO conflicts');
+        // ...and says the out-of-date state may not even block anything on this repo.
+        expect(render(BEHIND)).toContain('REQUIRE\n   branches be up to date');
+
+        expect(render(CONFLICTING)).toContain('CONFLICTS with yours');
+        expect(render(CONFLICTING)).toContain('not something you did wrong');
+    });
+
+    it('refuses to diagnose UNKNOWN — GitHub computes mergeability asynchronously', () => {
+        const out = render(UNKNOWN_BEHIND);
+        expect(out).toContain('not\n   finished computing mergeability');
+        expect(out).toContain('Re-check before doing anything');
+        expect(out).not.toContain('There are NO conflicts');
+        // ...and the ASK matches: proposing a full re-run for work we cannot yet show is needed is wrong.
+        expect(out).toContain('Shall I re-check in a moment');
+        expect(out).not.toContain('May I start the wp-*-upsert-pr process over again?');
     });
 
     it('still relays PrMerger\'s own message verbatim', () => {
         expect(render(BEHIND)).toContain(BEHIND.message);
     });
 
-    it('cannot end on a link that implies completion — the link text carries the truth', () => {
+    it('carries the truth INSIDE the link, and orders the AI to end by asking', () => {
         const out = directive(BEHIND);
         expect(out).toContain('this PR is NOT done');
-        expect(out).toContain('[#511 My PR title — NOT MERGED — BEHIND main, needs a re-sync](https://github.com/o/r/pull/511)');
+        expect(out).toContain('MUST END BY ASKING the human');
+        expect(out).toContain('[#511 My PR title — NOT MERGED — main moved (no conflicts), needs your OK to re-sync](https://github.com/o/r/pull/511)');
+        expect(directive(CONFLICTING)).toContain('main moved and it conflicts, needs your OK to re-sync');
     });
 });
 
