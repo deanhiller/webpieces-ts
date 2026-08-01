@@ -206,6 +206,18 @@ export class PrContext {
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
 
+// Where `wp-finish-upsert-pr` retires the review.json it just consumed, and the note it stamps on the way.
+// The key sorts first in the written JSON because it is written first — an AI that opens the file to see
+// whether it can reuse the review reads what the file IS before it reads a title it might be tempted to keep.
+const OLD_REVIEW_FILE = 'old-review.json';
+const ARCHIVE_NOTE_KEY = '_ARCHIVED_AUDIT_ONLY';
+const ARCHIVE_NOTE =
+    'ARCHIVE — this is the review from the PREVIOUS wp-finish-upsert-pr run on this branch, kept for audit ' +
+    'purposes only. It is NOT the review for a new review round: it describes the code as of the last PR ' +
+    'update, which has since moved. If you are reviewing again, write a FRESH review.json at the path ' +
+    'pnpm wp-review-upsert-pr prints; do not copy this file\'s title, summary or risk level forward without ' +
+    're-deciding each one. Overwritten by every finish, so only the most recent review is ever here.';
+
 /** Locates + loads/validates the AI-authored review.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
 @injectable(bindingScopeValues.Singleton)
 export class ReviewJsonService {
@@ -225,6 +237,68 @@ export class ReviewJsonService {
     // Absolute path of the pr-context.json for a feature (the diff base/head + changed files).
     prContextPath(repoRoot: string, featureName: string): string {
         return path.join(this.prDirFor(repoRoot, featureName), 'pr-context.json');
+    }
+
+    // Where a consumed review.json is archived to, beside it. Always the SAME path — it holds the last
+    // review and only the last one, so it can never be mistaken for a series that means something.
+    oldReviewJsonPath(reviewJsonFilePath: string): string {
+        return path.join(path.dirname(reviewJsonFilePath), OLD_REVIEW_FILE);
+    }
+
+    /**
+     * Retire the review `wp-finish-upsert-pr` just used: move review.json to old-review.json, stamped with a
+     * note saying what it is. Returns the archive path, or '' when there was nothing to archive.
+     *
+     * The point is the MOVE, not the copy. review.json left in place after a PR is posted is a live-looking
+     * file describing a review that already happened, and the next run of stage ② on this branch finds it
+     * sitting there — so a reviewer subagent that judges the PR's stated intent (its title, summary or risk
+     * level) can read the previous run's review and return GREEN against a title that no longer exists.
+     * Nothing in the verdict distinguishes that from a real pass. Moving it means the only way to reach
+     * finish again is to write a fresh one, and {@link loadReviewJson} points at the archive when it is
+     * missing so the archive reads as an audit trail rather than as a lost file.
+     *
+     * Called only after the PR is actually up: a finish that failed before publishing must stay re-runnable.
+     */
+    archiveReviewJson(reviewJsonFilePath: string): string {
+        if (!fs.existsSync(reviewJsonFilePath)) return '';
+        const archivePath = this.oldReviewJsonPath(reviewJsonFilePath);
+        const raw = fs.readFileSync(reviewJsonFilePath, 'utf8');
+        fs.writeFileSync(archivePath, this.archivedBody(raw));
+        fs.rmSync(reviewJsonFilePath);
+        return archivePath;
+    }
+
+    /**
+     * The archived bytes: the original review with the AUDIT-ONLY note as its FIRST key, so anything that
+     * opens the file — human or AI — reads what it is before it reads any of its content.
+     *
+     * Falls back to the raw bytes when they do not parse. By here `loadReviewJson` has already accepted the
+     * file, so that is close to impossible; preserving the original beats losing it to a stamping failure.
+     */
+    private archivedBody(raw: string): string {
+        const parsed = this.tryParseObject(raw);
+        if (parsed === null) return raw;
+        // webpieces-disable no-any-unknown -- re-serializing opaque review fields verbatim; only the key ORDER is ours
+        const stamped: Record<string, unknown> = {};
+        stamped[ARCHIVE_NOTE_KEY] = ARCHIVE_NOTE;
+        for (const key of Object.keys(parsed)) stamped[key] = parsed[key];
+        return JSON.stringify(stamped, null, 2) + '\n';
+    }
+
+    // webpieces-disable no-any-unknown -- opaque parsed JSON; the caller only re-serializes it
+    private tryParseObject(raw: string): Record<string, unknown> | null {
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: unparseable bytes are archived verbatim, never fatal
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            // webpieces-disable no-any-unknown -- parsed JSON is opaque; only its key order is used
+            const parsed = JSON.parse(raw) as Record<string, unknown>;
+            if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+            return parsed;
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+            return null;
+        }
     }
 
     /**
@@ -299,6 +373,18 @@ export class ReviewJsonService {
         );
     }
 
+    /**
+     * The extra line the "no review.json" complaint carries when a PREVIOUS review was archived here. It
+     * turns a bare "not found" — which reads as data loss, and invites hunting for the file — into the fact:
+     * the last finish consumed it, and the archive is audit material, not a review to reuse.
+     */
+    private archivedReviewHint(filePath: string): string {
+        const archive = this.oldReviewJsonPath(filePath);
+        if (!fs.existsSync(archive)) return '';
+        return `\nA PREVIOUS review was archived to ${archive} when the last pnpm wp-finish-upsert-pr consumed it.\n` +
+            `That file is for AUDIT ONLY — it reviews code this branch has since moved past. Write a fresh one:`;
+    }
+
     // The per-checklist review file path that sits beside review.json: review-<id>.json.
     checklistResultPath(reviewJsonFilePath: string, checklistId: string): string {
         return path.join(path.dirname(reviewJsonFilePath), `review-${checklistId}.json`);
@@ -314,7 +400,8 @@ export class ReviewJsonService {
     loadReviewJson(filePath: string, required: readonly RequiredChecklist[] = []): ReviewJson {
         if (!fs.existsSync(filePath)) {
             throw new InformAiError(
-                `Required review.json not found.\n\n${this.reviewJsonSchemaHint(filePath)}\n\n` +
+                `Required review.json not found.${this.archivedReviewHint(filePath)}\n\n` +
+                `${this.reviewJsonSchemaHint(filePath)}\n\n` +
                 `Then re-run: pnpm wp-finish-upsert-pr`,
             );
         }

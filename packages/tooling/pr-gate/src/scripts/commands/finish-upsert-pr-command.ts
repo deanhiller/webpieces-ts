@@ -6,7 +6,7 @@ import {
     writeTemplate, RepoRootFinder, ReviewJsonService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ProvenanceResult, ReviewerEvidence, EvidenceRequest, PrGateConfig,
-    ChecklistInstructionsService, InformAiError,
+    ChecklistInstructionsService, InformAiError, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -151,6 +151,7 @@ export class FinishUpsertPrCommand {
         // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
         // fatal — the PR is already up by now, so a comment failure only warns.
         this.postChecklistComment(repoRoot, result.prNumber, scan, review, provenance);
+        this.archiveConsumedReview(repoRoot, featureName, result);
 
         // The closing recap + the clickable-link directive, BOTH derived from the real merge outcome.
         // Nothing here may hard-code success: a stranded PR under a green checkmark is how PRs got
@@ -274,6 +275,34 @@ export class FinishUpsertPrCommand {
             `(Each reviewer's generated instructions file is already written — re-running pnpm wp-review-upsert-pr\n` +
             ` is only needed if the code changed since it ran.)`,
         );
+    }
+
+    /**
+     * Retire the review this run just used — move review.json to old-review.json beside it, stamped as
+     * audit-only (see ReviewJsonService.archiveReviewJson).
+     *
+     * WHY it moves rather than staying put: review.json left behind is a live-looking file describing a
+     * review that has already shipped, and the next `wp-review-upsert-pr` on this branch finds it sitting
+     * there. A reviewer subagent that judges the PR's stated INTENT — its title, summary or risk level —
+     * then reads the previous round's review and can return GREEN against a title that no longer exists,
+     * with nothing in the verdict distinguishing that from a real pass. Moving it makes the only route back
+     * to this command a freshly-written review.
+     *
+     * ONLY on a PR that actually went up. A run that died before publishing must stay re-runnable without
+     * making the AI rewrite a review that was never used, and prNumber === '' is exactly that case.
+     * Non-fatal: the PR is live by here, so an unwritable archive warns rather than failing the command.
+     */
+    private archiveConsumedReview(repoRoot: string, featureName: string, result: UpsertResult): void {
+        if (result.prNumber === '') return;
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: the PR is already up; a failed archive must not fail the command
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const archived = this.reviewJsonService.archiveReviewJson(reviewJsonPath(repoRoot, featureName));
+            if (archived !== '') process.stdout.write(`   archived this run's review.json → ${archived} (audit only) ✓\n`);
+        } catch (err: unknown) {
+            const error = toError(err);
+            process.stderr.write(`⚠️  Could not archive review.json (non-fatal — the PR is already up): ${error.message}\n`);
+        }
     }
 
     private gitOut(args: string[]): string {

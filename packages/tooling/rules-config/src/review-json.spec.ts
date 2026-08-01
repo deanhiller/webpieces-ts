@@ -6,6 +6,7 @@ import { loadReviewJson, prDirFor, reviewJsonPath, reviewJsonSchemaHint, Require
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from './constants';
 import { InformAiError } from './inform-ai-error';
+import { toError } from './to-error';
 
 function tmpFile(contents: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-review-'));
@@ -23,6 +24,99 @@ describe('reviewJsonPath', () => {
     it('prDirFor returns the pr-review home for a feature', () => {
         const p = prDirFor('/repo', 'dean-feat');
         expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat'));
+    });
+});
+
+/**
+ * Archiving is the STALE half of the same bug as the stage-② reordering: a review.json left in place after
+ * a PR is posted is a live-looking file describing a review that already shipped, and the next stage-② run
+ * on the branch finds it there. A reviewer whose checklist judges the PR's stated intent then validates the
+ * PREVIOUS round's title and returns GREEN on content that no longer exists. The move is what makes that
+ * impossible; the note is what stops the archive being copied forward as if it were current.
+ */
+describe('archiveReviewJson', () => {
+    const svc = new ReviewJsonService();
+    const aReview = (title: string): string => JSON.stringify({
+        title, riskScore: 10, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
+    });
+
+    it('moves review.json to old-review.json — the original no longer exists', () => {
+        const file = tmpFile(aReview('First round'));
+        const archived = svc.archiveReviewJson(file);
+        expect(archived).toBe(path.join(path.dirname(file), 'old-review.json'));
+        expect(fs.existsSync(file)).toBe(false);
+        expect(fs.existsSync(archived)).toBe(true);
+    });
+
+    it('stamps the audit-only note as the FIRST key, ahead of the review content', () => {
+        const file = tmpFile(aReview('First round'));
+        const body = fs.readFileSync(svc.archiveReviewJson(file), 'utf8');
+        const keys = Object.keys(JSON.parse(body) as Record<string, unknown>);
+        expect(keys[0]).toBe('_ARCHIVED_AUDIT_ONLY');
+        expect(keys).toContain('title');
+        expect(body).toContain('AUDIT');
+        expect(body).toContain('write a FRESH review.json');
+    });
+
+    it('preserves the reviewed content so the archive is usable as an audit trail', () => {
+        const file = tmpFile(aReview('First round'));
+        const parsed = JSON.parse(fs.readFileSync(svc.archiveReviewJson(file), 'utf8')) as Record<string, unknown>;
+        expect(parsed['title']).toBe('First round');
+        expect(parsed['riskLevel']).toBe('green');
+    });
+
+    // Always the same path — the archive holds the LAST review and only the last one, never a series.
+    it('overwrites a previous archive rather than accumulating files', () => {
+        const first = tmpFile(aReview('First round'));
+        const dir = path.dirname(first);
+        svc.archiveReviewJson(first);
+        fs.writeFileSync(first, aReview('Second round'));
+        svc.archiveReviewJson(first);
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'old-review.json'), 'utf8')) as Record<string, unknown>;
+        expect(parsed['title']).toBe('Second round');
+        expect(fs.readdirSync(dir)).toEqual(['old-review.json']);
+    });
+
+    it('is a no-op when there is nothing to archive', () => {
+        const file = tmpFile(aReview('gone'));
+        fs.rmSync(file);
+        expect(svc.archiveReviewJson(file)).toBe('');
+    });
+
+    // THE point of the whole thing: after a finish, the next round cannot silently reuse the old review.
+    it('leaves the branch unable to reach finish again without a fresh review', () => {
+        const file = tmpFile(aReview('First round'));
+        svc.archiveReviewJson(file);
+        expect((): unknown => loadReviewJson(file)).toThrow(InformAiError);
+    });
+
+    it('points the "not found" complaint at the archive instead of reading as data loss', () => {
+        const file = tmpFile(aReview('First round'));
+        svc.archiveReviewJson(file);
+        // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            loadReviewJson(file);
+            expect.fail('expected loadReviewJson to refuse');
+        } catch (err: unknown) {
+            const error = toError(err);
+            expect(error.message).toContain('old-review.json');
+            expect(error.message).toContain('AUDIT ONLY');
+        }
+    });
+
+    it('says nothing about an archive when none was ever written', () => {
+        const file = tmpFile(aReview('x'));
+        fs.rmSync(file);
+        // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            loadReviewJson(file);
+            expect.fail('expected loadReviewJson to refuse');
+        } catch (err: unknown) {
+            const error = toError(err);
+            expect(error.message).not.toContain('old-review.json');
+        }
     });
 });
 

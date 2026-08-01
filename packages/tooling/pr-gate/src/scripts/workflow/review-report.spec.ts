@@ -68,6 +68,46 @@ describe('exactly one "what to do next", in the right order', () => {
     });
 });
 
+/**
+ * THE regression this ordering exists for. The block used to print the spawn blocks and THEN say to write
+ * review.json "WHILE any reviewer subagents above are still running" — an instruction to spawn first. A
+ * reviewer whose checklist judges the PR's stated intent (title / summary / risk level) reads review.json
+ * itself, so spawning first means it reads nothing (false RED, wasted run) or, on a second stage-② run on
+ * the same branch, the PREVIOUS run's file (false GREEN against a title that no longer exists). Asserted on
+ * the rendered string because the ordering IS the contract.
+ */
+describe('review.json is written BEFORE any reviewer is spawned', () => {
+    it('puts the review.json instruction before the first spawn block', () => {
+        const text = oneOwed();
+        expect(text.indexOf('Write your PR review to:')).toBeLessThan(text.indexOf('subagent_type:'));
+    });
+
+    it('numbers writing the review file as step 1 and spawning as step 2', () => {
+        const text = oneOwed();
+        expect(text.indexOf('STEP 1')).toBeLessThan(text.indexOf('STEP 2'));
+        expect(text).toMatch(/STEP 2 — only once that file is written, spawn/);
+        expect(text).toContain('STEP 3');
+    });
+
+    it('never tells the AI to write the review while the reviewers run', () => {
+        for (const text of [noChecklists(), nothingMatched(), oneOwed()]) {
+            expect(text).not.toMatch(/WHILE any reviewer subagents/i);
+        }
+    });
+
+    // Nothing to spawn ⇒ no step 2 to number, so finish must be step 2 rather than a step 3 with a hole.
+    it('drops the spawn step entirely when no reviewer is owed', () => {
+        const text = nothingMatched();
+        expect(text).toContain('▶ NEXT — 2 steps');
+        expect(text).not.toContain('STEP 3');
+        expect(text).not.toContain('subagent_type:');
+    });
+
+    it('counts three steps when a reviewer is owed', () => {
+        expect(oneOwed()).toContain('▶ NEXT — 3 steps');
+    });
+});
+
 describe('a repo with zero checklists gets the verdict first, not a tutorial', () => {
     it('gives the all-clear before any configuration guidance', () => {
         const text = noChecklists();
