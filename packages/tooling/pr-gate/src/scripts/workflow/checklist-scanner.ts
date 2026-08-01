@@ -1,6 +1,6 @@
 import {
-    ChangedFilesOptions, ChecklistDefinition, ChecklistReviewContext, DiffScope, RequiredChecklist,
-    ReviewJsonService, reviewJsonPath,
+    ChangedFilesOptions, ChecklistDefinition, ChecklistResult, ChecklistReviewContext, DiffScope,
+    RequiredChecklist, ReviewJsonService, reviewJsonPath,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
@@ -67,6 +67,17 @@ export class ChecklistScan {
      */
     basis: DiffBasis;
     changedFiles: string[];              // the full changed-file set the matching ran against
+    /**
+     * The verdict files the scan ALREADY read, carried out rather than dropped.
+     *
+     * `outstanding` answers "who still owes a verdict?" but not "why" — and the two reasons demand opposite
+     * actions from the reader: a reviewer that never ran must be SPAWNED, a reviewer that ran and REFUSED
+     * must not be (it will refuse again; the finding has to be fixed first). Telling them apart means
+     * resolving each checklist's verdict, and without the results here every caller either re-reads the same
+     * files off disk — a second read that can disagree with this one — or merges the two cases into one
+     * message, which is exactly the loop this field exists to break.
+     */
+    results: ChecklistResult[];
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -81,6 +92,9 @@ export class ChecklistScan {
         formatErrors: string[],
         basis: DiffBasis = new DiffBasis(),
         changedFiles: string[] = [],
+        // Defaulted so a caller that only cares about the X/N/Z counts (and every existing test construction)
+        // stays a one-liner; the scanner itself always passes the real set.
+        results: ChecklistResult[] = [],
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -93,6 +107,7 @@ export class ChecklistScan {
         this.formatErrors = formatErrors;
         this.basis = basis;
         this.changedFiles = changedFiles;
+        this.results = results;
     }
 }
 
@@ -166,6 +181,7 @@ export class ChecklistScanner {
             this.reviewJsonService.checklistFormatErrors(applicable, results),
             basis,
             changedFiles,
+            results,
         );
     }
 

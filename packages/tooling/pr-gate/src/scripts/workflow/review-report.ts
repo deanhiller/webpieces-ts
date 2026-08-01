@@ -5,6 +5,29 @@ import { ChecklistNotice } from './checklist-notice';
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
+ * One reviewer that ALREADY ANSWERED on this branch and refused, with the refusal rendered by
+ * `ReviewJsonService.refusalError` — the ONE wording, shared with `wp-finish-upsert-pr`. Data-only.
+ *
+ * Stage ② carries these because it had the same defect finish did: a refused checklist has no passing
+ * verdict, so it is "owed", so it got an ordinary spawn block identical to a reviewer that never ran. An
+ * agent obeys that block, the reviewer re-reads unchanged code, refuses again — the loop, one stage earlier.
+ *
+ * The message is rendered by the COMMAND rather than in here for one reason: stage ② must not archive
+ * anything. `refusalError` called with no archive path says "fix it, then re-run; or set an override in
+ * review-<id>.json", which is only true while that file is still live — and at stage ② it is. Retiring a
+ * verdict is finish's act, on the refusal it is actually acting on.
+ */
+export class RefusedReviewer {
+    checklistId: string;
+    message: string;
+
+    constructor(checklistId: string, message: string) {
+        this.checklistId = checklistId;
+        this.message = message;
+    }
+}
+
+/**
  * Everything the closing block of `wp-review-upsert-pr` needs. Data-only, and a class rather than an
  * object literal per CLAUDE.md. The three identifying paths are constructor args; the rest are optional
  * facts about the scan that default to "nothing", so a repo with no checklists constructs it in one line.
@@ -18,6 +41,7 @@ export class ReviewReportInput {
     reviewed: RequiredChecklist[];  // already have a passing verdict on this branch
     formatErrors: string[];         // verdict files that exist but cannot be read as verdicts
     briefings: ReviewerBriefing[];  // one per applicable checklist, already written to disk
+    refused: RefusedReviewer[];     // of the owed ones, those that already ran and said no (see RefusedReviewer)
 
     constructor(repoRoot: string, featureName: string, reviewPath: string) {
         this.repoRoot = repoRoot;
@@ -28,6 +52,7 @@ export class ReviewReportInput {
         this.reviewed = [];
         this.formatErrors = [];
         this.briefings = [];
+        this.refused = [];
     }
 }
 
@@ -148,6 +173,14 @@ export class ReviewReport {
             '         file on its behalf.',
             '',
         ];
+        // Said up front, not only beside the block: an agent that has decided to spawn everything listed here
+        // needs to know BEFORE it starts that one of these entries is not a spawn-shaped task.
+        if (input.refused.length > 0) {
+            lines.push(
+                `         ${input.refused.length} of them already ANSWERED and refused (marked ⛔ below). Do not spawn`,
+                '         those against unchanged code — fix what they found first; the fix is the prerequisite.',
+                '');
+        }
         for (const b of owed) lines.push(...this.oneSpawnBlock(input, b));
         lines.push('');
         return lines.join('\n');
@@ -170,13 +203,37 @@ export class ReviewReport {
         return input.briefings.filter((b: ReviewerBriefing): boolean => !reviewedIds.has(b.checklistId));
     }
 
+    /**
+     * One reviewer's block. A reviewer that already REFUSED gets the SAME spawn coordinates but a different
+     * lead-in, because the action before spawning is different: its own words are printed, and the spawn is
+     * explicitly conditioned on having fixed the finding first.
+     *
+     * It keeps its spawn block rather than being dropped from the list, because the reviewer genuinely does
+     * still owe a fresh verdict — dropping it would leave nothing anywhere saying how to get one. What must
+     * not happen is a bare "spawn this" that reads identically to a reviewer that never ran, which is the
+     * loop this exists to break.
+     */
     private oneSpawnBlock(input: ReviewReportInput, b: ReviewerBriefing): string[] {
+        const instructionsFile = this.reviewerInstructions.pathFor(input.repoRoot, input.featureName, b.subagent);
         return [
-            `  ▶ ${b.subagent} — ${this.why(b)}`,
+            ...this.leadIn(input, b),
             `      subagent_type: ${b.subagent}`,
             '      prompt:        Read your instructions file FIRST and follow it exactly:',
-            `                     ${this.reviewerInstructions.pathFor(input.repoRoot, input.featureName, b.subagent)}`,
+            `                     ${instructionsFile}`,
             '',
+        ];
+    }
+
+    // The lines above the spawn coordinates: normally just why this reviewer is in scope; for one that
+    // already refused, its verdict verbatim plus the order the two actions must happen in.
+    private leadIn(input: ReviewReportInput, b: ReviewerBriefing): string[] {
+        const refusal = input.refused.find((r: RefusedReviewer): boolean => r.checklistId === b.checklistId);
+        if (!refusal) return [`  ▶ ${b.subagent} — ${this.why(b)}`];
+        return [
+            `  ⛔ ${b.subagent} — ALREADY REVIEWED THIS BRANCH AND REFUSED. It will refuse again on unchanged code.`,
+            `      ${refusal.message}`,
+            '      FIX THE FINDING FIRST (or record a human-authored override). ONLY THEN spawn it again, to',
+            '      write a fresh verdict:',
         ];
     }
 

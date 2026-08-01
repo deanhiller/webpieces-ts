@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import {
-    loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder,
-    ReviewerBriefing, ReviewerInstructionsService,
+    loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist,
+    ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -15,7 +15,7 @@ import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeState } from '../workflow/merge-state';
 import { PrContextWriter } from '../workflow/pr-context-writer';
 import { ReviewerBriefingBuilder } from '../workflow/reviewer-briefing-builder';
-import { ReviewReport, ReviewReportInput } from '../workflow/review-report';
+import { RefusedReviewer, ReviewReport, ReviewReportInput } from '../workflow/review-report';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -61,6 +61,8 @@ export class ReviewUpsertPrCommand {
         private readonly briefingBuilder: ReviewerBriefingBuilder,
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly receipts: ReviewStageReceiptService,
+        // Injected only to RESOLVE + RENDER refusals (see refusals()). This stage never archives a verdict.
+        private readonly reviewJsonService: ReviewJsonService,
     ) {}
 
     async run(): Promise<void> {
@@ -172,6 +174,27 @@ export class ReviewUpsertPrCommand {
         input.reviewed = scan.reviewed.slice();
         input.formatErrors = scan.formatErrors.slice();
         input.briefings = briefings.slice();
+        input.refused = this.refusals(scan);
         process.stdout.write(this.reviewReport.render(input));
+    }
+
+    /**
+     * The applicable checklists that ALREADY ANSWERED and refused, each with its refusal rendered by the ONE
+     * renderer `wp-finish-upsert-pr` also uses.
+     *
+     * Stage ② had the identical defect finish did: a refused checklist has no passing verdict, so it is not
+     * in `scan.reviewed`, so it was printed as an ordinary owed reviewer and re-instructed word for word —
+     * and an agent that obeys spawns it against unchanged code, gets the same refusal, and loops one stage
+     * earlier than the loop that was reported.
+     *
+     * NO archive path is passed, deliberately, and this stage moves nothing. Retiring a verdict is finish's
+     * act on the refusal it is actually enforcing; doing it here would delete the live verdict of a branch
+     * that has not even been asked to finish yet, and `refusalError`'s un-archived wording — "set an override
+     * in review-<id>.json" — is only correct while that file is still there, which here it is.
+     */
+    private refusals(scan: ChecklistScan): RefusedReviewer[] {
+        const refused = this.reviewJsonService.refusedChecklists(scan.applicable, scan.results);
+        return refused.map((req: RequiredChecklist): RefusedReviewer => new RefusedReviewer(
+            req.id, this.reviewJsonService.refusalError(req, this.reviewJsonService.resolveVerdict(req, scan.results))));
     }
 }

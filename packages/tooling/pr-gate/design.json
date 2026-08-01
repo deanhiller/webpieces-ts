@@ -94,7 +94,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/checklist-instructions.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "ChecklistNotice",
@@ -399,6 +399,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/reviewer-instructions.ts",
                     "level": 3
+                },
+                {
+                    "id": "ReviewerVerdictGate",
+                    "className": "ReviewerVerdictGate",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/reviewer-verdict-gate.ts",
+                    "level": 2
                 },
                 {
                     "id": "RunUpdate",
@@ -783,15 +791,6 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
-                    "to": "ChecklistInstructionsService",
-                    "injection": "type",
-                    "token": "ChecklistInstructionsService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
-                    "paramName": "instructions",
-                    "paramType": "ChecklistInstructionsService"
-                },
-                {
-                    "from": "FinishUpsertPrCommand",
                     "to": "ChecklistScanner",
                     "injection": "type",
                     "token": "ChecklistScanner",
@@ -888,6 +887,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
                     "paramName": "receipts",
                     "paramType": "ReviewStageReceiptService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ReviewerVerdictGate",
+                    "injection": "type",
+                    "token": "ReviewerVerdictGate",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/reviewer-verdict-gate.ts#ReviewerVerdictGate",
+                    "paramName": "verdictGate",
+                    "paramType": "ReviewerVerdictGate"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1458,6 +1466,15 @@
                 },
                 {
                     "from": "ReviewUpsertPrCommand",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ReviewUpsertPrCommand",
                     "to": "ReviewReport",
                     "injection": "type",
                     "token": "ReviewReport",
@@ -1503,6 +1520,24 @@
                 },
                 {
                     "from": "ReviewerInstructionsService",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJsonService",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "ReviewerVerdictGate",
+                    "to": "ChecklistInstructionsService",
+                    "injection": "type",
+                    "token": "ChecklistInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/checklist-instructions.ts#ChecklistInstructionsService",
+                    "paramName": "instructions",
+                    "paramType": "ChecklistInstructionsService"
+                },
+                {
+                    "from": "ReviewerVerdictGate",
                     "to": "ReviewJsonService",
                     "injection": "type",
                     "token": "ReviewJsonService",
