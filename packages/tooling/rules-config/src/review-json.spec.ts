@@ -464,3 +464,137 @@ describe('ChecklistInstructionsService — scope wording and lossless lists', ()
         expect(inst.names(two)).toBe('a-reviewer, b-reviewer');
     });
 });
+
+/**
+ * The verdict-file half of the archiving story. `review.json` already gets a one-generation archive; its
+ * siblings got none, so the healthy workflow — reviewer refuses → author fixes it → reviewer re-runs and
+ * passes — ERASED the refusal by writing over the same path. The refusal is the interesting event and the
+ * pass is the expected one, so the tree ended up keeping exactly the wrong half.
+ */
+describe('archiveChecklistResult', () => {
+    const svc = new ReviewJsonService();
+    // A real ChecklistResult, not an object literal (CLAUDE.md), serialized by tmpReviewWith.
+    const redVerdict = (output: string): ChecklistResult => new ChecklistResult('migrations', 'red', output, '');
+
+    it('moves a red verdict to review-<id>.json.old — the live file no longer exists', () => {
+        const file = tmpReviewWith({ migrations: redVerdict('NOT NULL without backfill') });
+        const archived = svc.archiveChecklistResult(file, 'migrations');
+        expect(archived).toBe(path.join(path.dirname(file), 'review-migrations.json.old'));
+        expect(fs.existsSync(svc.checklistResultPath(file, 'migrations'))).toBe(false);
+        const parsed = JSON.parse(fs.readFileSync(archived, 'utf8')) as Record<string, unknown>;
+        expect(parsed['status']).toBe('red');
+        expect(parsed['output']).toBe('NOT NULL without backfill');
+    });
+
+    it('stamps the audit-only note as the FIRST key, saying it is not a live verdict', () => {
+        const file = tmpReviewWith({ migrations: redVerdict('bad') });
+        const body = fs.readFileSync(svc.archiveChecklistResult(file, 'migrations'), 'utf8');
+        const keys = Object.keys(JSON.parse(body) as Record<string, unknown>);
+        expect(keys[0]).toBe('_ARCHIVED_AUDIT_ONLY');
+        expect(keys).toContain('status');
+        expect(body).toContain('audit');
+        expect(body).toContain('NOT a live verdict');
+    });
+
+    /**
+     * ONE slot is the design. An accumulating `.old.old` series is the failure mode being avoided: it reads
+     * as though the NUMBER of retirements meant something, and nothing downstream can interpret that.
+     */
+    it('overwrites the .old on a second cycle — no .old.old, and the newer body wins', () => {
+        const file = tmpReviewWith({ migrations: redVerdict('first refusal') });
+        const dir = path.dirname(file);
+        svc.archiveChecklistResult(file, 'migrations');
+        fs.writeFileSync(svc.checklistResultPath(file, 'migrations'), JSON.stringify(redVerdict('second refusal')));
+        svc.archiveChecklistResult(file, 'migrations');
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'review-migrations.json.old'), 'utf8')) as Record<string, unknown>;
+        expect(parsed['output']).toBe('second refusal');
+        expect(fs.existsSync(path.join(dir, 'review-migrations.json.old.old'))).toBe(false);
+        expect(fs.readdirSync(dir).sort()).toEqual(['review-migrations.json.old', 'review.json']);
+    });
+
+    it('is a no-op returning "" when there is no live verdict to retire', () => {
+        const file = tmpReviewWith({});
+        expect(svc.archiveChecklistResult(file, 'migrations')).toBe('');
+        expect(fs.readdirSync(path.dirname(file))).toEqual(['review.json']);
+    });
+
+    // The archive exists to BE the record, so unstampable bytes are kept verbatim rather than dropped.
+    it('archives non-object / unparseable verdict bytes verbatim rather than losing them', () => {
+        const file = tmpReviewWith({});
+        fs.writeFileSync(svc.checklistResultPath(file, 'migrations'), '{ half-writ');
+        expect(fs.readFileSync(svc.archiveChecklistResult(file, 'migrations'), 'utf8')).toBe('{ half-writ');
+    });
+
+    /**
+     * THE containment guarantee for the move. `loadChecklistResults` looks up the exact `review-<id>.json`
+     * name, never a scan of the directory — so a retired refusal sitting right beside the live path can
+     * never be handed back as the current state, which would undo the entire point of retiring it.
+     */
+    it('loadChecklistResults ignores a .old file beside it — with no live file it is still MISSING', () => {
+        const file = tmpReviewWith({ migrations: redVerdict('refused') });
+        svc.archiveChecklistResult(file, 'migrations');
+        expect(svc.loadChecklistResults(file, [REQ('migrations')])).toEqual([]);
+        expect(() => loadReviewJson(file, [REQ('migrations')])).toThrowError(/has no verdict/);
+    });
+});
+
+// A refusal is a RESULT, not a missing step. These two exist so every command says so in the same words —
+// when "refused" was computed ad hoc it merged with "never ran" and produced "you MUST run these N reviewer
+// subagent(s)", which an AI obeys by re-spawning a reviewer that already answered, forever.
+describe('refusedChecklists / refusalError', () => {
+    const svc = new ReviewJsonService();
+    const req = (id: string): RequiredChecklist => new RequiredChecklist(id, `${id}-reviewer`, '', ['x.sql'], ['**/*.sql']);
+
+    it('selects exactly the CK_FAIL ones — not MISSING, BAD_FORMAT, WARN, PASS or OVERRIDDEN', () => {
+        const required = [req('failed'), req('missing'), req('bad'), req('warn'), req('pass'), req('over')];
+        const results = [
+            new ChecklistResult('failed', 'red', 'refused', ''),
+            new ChecklistResult('bad', '', 'ok', '', 'uses the removed "success" field'),
+            new ChecklistResult('warn', 'yellow', 'a concern', ''),
+            new ChecklistResult('pass', 'green', 'ok', ''),
+            new ChecklistResult('over', 'red', 'refused', 'accepted, tracked in JIRA-1'),
+        ];
+        expect(svc.refusedChecklists(required, results).map((r): string => r.id)).toEqual(['failed']);
+    });
+
+    it('quotes the reviewer\'s own output — the finding is the whole point', () => {
+        const results = [new ChecklistResult('a', 'red', 'gate 1: title names no ticket', '')];
+        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results));
+        expect(text).toContain('gate 1: title names no ticket');
+        expect(text).toContain('a-reviewer');
+        expect(text).toContain('FAILED review');
+    });
+
+    /**
+     * With an archive path the escape hatch must change. "Set override in review-<id>.json" is unfollowable
+     * after the move — that file does not exist — so the text has to ask for a FRESH verdict file instead.
+     */
+    it('names the archive and asks for a FRESH verdict file when the verdict was retired', () => {
+        const results = [new ChecklistResult('a', 'red', 'refused', '')];
+        const archived = '/repo/.webpieces/pr-review/feat/review-a.json.old';
+        const text = svc.refusalError(req('a'), svc.resolveVerdict(req('a'), results), archived);
+        expect(text).toContain(archived);
+        expect(text).toContain('RETIRED');
+        expect(text).toContain('FRESH review-a.json');
+        expect(text).toContain('HUMAN');
+        expect(text).not.toContain(`set a non-empty "override" in review-a.json`);
+    });
+
+    // No regression in the review.json validation path: it now renders through refusalError, and must still
+    // produce the same FAIL wording it always did, un-archived form.
+    it('requiredChecklistErrors still produces the same FAIL wording via the extracted renderer', () => {
+        const file = tmpReviewWith({ migrations: { status: 'red', output: 'NOT NULL without backfill' } });
+        // webpieces-disable no-unmanaged-exceptions -- the assertion IS the thrown message
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            loadReviewJson(file, [REQ('migrations')]);
+            expect.fail('expected loadReviewJson to refuse');
+        } catch (err: unknown) {
+            const error = toError(err);
+            expect(error.message).toContain('FAILED review (status:"red")');
+            expect(error.message).toContain('NOT NULL without backfill');
+            expect(error.message).toContain('set a non-empty "override" in review-migrations.json');
+            expect(error.message).not.toContain('RETIRED');
+        }
+    });
+});

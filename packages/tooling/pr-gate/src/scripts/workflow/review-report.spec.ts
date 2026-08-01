@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
-import { ReviewReport, ReviewReportInput } from './review-report';
+import { RefusedReviewer, ReviewReport, ReviewReportInput } from './review-report';
 
 const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/review.json';
 const report = new ReviewReport(new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()));
@@ -153,5 +153,59 @@ describe('reviewers still owed', () => {
         const input = withOneOwedReviewer();
         input.formatErrors = ['review-db-migration-reviewer.json: missing "status"'];
         expect(report.render(input)).toContain('missing "status"');
+    });
+});
+
+/**
+ * Stage ② had the SAME defect `wp-finish-upsert-pr` did: a refused checklist has no passing verdict, so it
+ * is not in `reviewed`, so it was printed as an ordinary owed reviewer with an ordinary spawn block — word
+ * for word what a reviewer that never ran gets. An agent obeys that, the reviewer re-reads unchanged code
+ * and refuses again, and the loop starts one stage earlier than the loop that was reported.
+ *
+ * The refusal text itself is NOT re-worded here: it comes from ReviewJsonService.refusalError, the one
+ * renderer, so these assertions are about placement and framing, which is what stage ② got wrong.
+ */
+describe('a reviewer that already REFUSED is not re-instructed as one that never ran', () => {
+    const REFUSAL = 'Checklist "db-migration-reviewer" FAILED review (status:"red"). The reviewer wrote:\n      no backfill';
+
+    const withRefusal = (): ReviewReportInput => {
+        const input = withOneOwedReviewer();
+        input.refused = [new RefusedReviewer('db-migration-reviewer', REFUSAL)];
+        return input;
+    };
+
+    it("prints the reviewer's own finding instead of only a spawn block", () => {
+        const text = report.render(withRefusal());
+        expect(text).toContain('no backfill');
+        expect(text).toContain('ALREADY REVIEWED THIS BRANCH AND REFUSED');
+    });
+
+    it('conditions the re-spawn on fixing the finding FIRST, and says so before the coordinates', () => {
+        const text = report.render(withRefusal());
+        expect(text.indexOf('FIX THE FINDING FIRST')).toBeLessThan(text.indexOf('subagent_type:'));
+    });
+
+    it('warns at the top of the step, before an agent starts spawning everything listed', () => {
+        const text = report.render(withRefusal());
+        expect(text.indexOf('already ANSWERED and refused')).toBeLessThan(text.indexOf('⛔ db-migration-reviewer'));
+    });
+
+    // It still owes a FRESH verdict, so dropping its spawn block would leave nothing saying how to get one.
+    it('keeps the spawn coordinates, for after the fix', () => {
+        expect(report.render(withRefusal())).toContain('subagent_type: db-migration-reviewer');
+    });
+
+    // Stage ② enforces nothing and must therefore destroy nothing: retiring the verdict is finish's act on
+    // the refusal it is actually enforcing (asserted here as the absence of any claim that it moved).
+    it('never claims the verdict was retired — stage ② archives nothing', () => {
+        const text = report.render(withRefusal());
+        expect(text).not.toContain('RETIRED');
+        expect(text).not.toContain('.json.old');
+    });
+
+    it('leaves the ordinary spawn block alone when nothing refused', () => {
+        const text = oneOwed();
+        expect(text).not.toContain('REFUSED');
+        expect(text).toContain('▶ db-migration-reviewer — 0 file(s) matched "**/*.sql"');
     });
 });

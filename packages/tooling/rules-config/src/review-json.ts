@@ -5,203 +5,46 @@ import { PR_REVIEW_DIR } from './constants';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { InformAiError } from './inform-ai-error';
 import { toError } from './to-error';
+import {
+    VERDICT_GREEN,
+    VERDICT_YELLOW,
+    VERDICT_RED,
+    VERDICT_STATUSES,
+    ChecklistResult,
+    RequiredChecklist,
+    ChecklistReviewContext,
+    ReviewJson,
+    CK_PASS,
+    CK_WARN,
+    CK_OVERRIDDEN,
+    CK_FAIL,
+    CK_MISSING,
+    CK_BAD_FORMAT,
+    ChecklistVerdict,
+    PrContext,
+} from './review-json-data';
 
-// The three colors a reviewer subagent may report in `review-<id>.json`. A TRI-state, not a boolean,
-// because the boolean it replaced gave a reviewer no way to say "this passes, but a human should look at
-// X" — the only way to raise a concern was to FAIL the PR and then override your own failure, which reads
-// on the dashboard as a deliberately-accepted defect rather than as a note.
-export const VERDICT_GREEN = 'green';
-export const VERDICT_YELLOW = 'yellow';
-export const VERDICT_RED = 'red';
-export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
-
-// The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<branch>/review-<id>.json`, one per
-// matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
-// file. It records the OUTCOME:
-//   status:'green'                  → PASS
-//   status:'yellow'                 → WARN (passes; the concern is published on the PR, nothing is blocked)
-//   status:'red' + override non-empty → OVERRIDDEN (pass; the free-text justification reaches the PR)
-//   status:'red' + no override      → FAIL (refuse; `output` is printed verbatim)
-// `override` is deliberately free text, not a boolean — it forces the ship-anyway decision to be stated
-// in words and surfaces it on the dashboard, where a human sees it. Data-only (per CLAUDE.md).
-export class ChecklistResult {
-    id: string;
-    status: string;    // one of VERDICT_STATUSES; anything else is reported via `problem`
-    output: string;    // what the reviewer found; printed verbatim when the checklist fails
-    override: string;  // '' = no override; non-empty = ship-anyway justification (renders 🟠 overridden)
-    // '' = a well-formed verdict. Non-empty = the file exists and parses but its verdict cannot be READ
-    // (most often: it still uses the removed `success` field). Carried as data rather than thrown so the
-    // complaint can be reported by BOTH wp-review-upsert-pr and wp-finish-upsert-pr in identical words, and so a
-    // legacy file is never silently mistaken for a missing one.
-    problem: string;
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, status: string, output: string, override: string, problem = '') {
-        this.id = id;
-        this.status = status;
-        this.output = output;
-        this.override = override;
-        this.problem = problem;
-    }
-}
-
-// What the pr-gate command computed from the diff: a checklist this branch MATCHED (its patterns hit the
-// diff, so its reviewer subagent must run). Drives review-<id>.json enforcement, provenance, the schema
-// hint, and the dashboard. Data-only.
-export class RequiredChecklist {
-    id: string;             // = subagent name; keys review-<id>.json
-    subagent: string;       // reviewer agent that must run (agentType the harness stamps)
-    doc: string;            // REPO-RELATIVE guidance doc the reviewer reads ('' → it just reads the diff)
-    matchedFiles: string[]; // the changed files that matched it (for the dashboard + hint)
-    // Which of the checklist's OWN globs actually fired. Printed so a reviewer can judge how coarse the
-    // match was — a precise `db/migrations/**` hit means something different from a blanket `**` — and the
-    // template tells reviewers that matching IS deliberately coarse. [] = no patterns (matches every PR).
-    matchedPatterns: string[];
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, subagent: string, doc: string, matchedFiles: string[], matchedPatterns: string[] = []) {
-        this.id = id;
-        this.subagent = subagent;
-        this.doc = doc;
-        this.matchedFiles = matchedFiles;
-        this.matchedPatterns = matchedPatterns;
-    }
-}
-
-/**
- * The per-PR facts every reviewer subagent needs GIVEN to it, alongside its own checklist: the exact base
- * sha the gate diffs against and the file holding the complete changed-file set. Both used to live only in
- * a doc the printed instruction told the AI to go read, one indirection away from the instruction to hand
- * them over — so the printed block could not stand on its own. Data-only; empty = omit those lines.
- */
-export class ChecklistReviewContext {
-    baseSha: string;        // the 3-point merge-base sha
-    prContextPath: string;  // path of pr-context.json — the AUTHORITATIVE full changed-file set
-    /**
-     * The exact command that reproduces ONE file's diff, with a `-- <file>` tail — NOT assembled by the
-     * caller. This used to be hardcoded as `git diff <baseSha> HEAD -- <file>`, which returns NOTHING on a
-     * dirty tree because the changed-file set is computed base→working-tree. See DiffBasis, which derives
-     * this string from the same range the file set came from.
-     */
-    fileDiffCommand: string;
-    diffDir: string;        // dir of the MATERIALIZED diff (diff/ALL.diff + diff/files/…); '' when not written
-    dirty: boolean;         // true ⇒ the range includes uncommitted + untracked work, and must be said out loud
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(baseSha = '', prContextPath = '', fileDiffCommand = '', diffDir = '', dirty = false) {
-        this.baseSha = baseSha;
-        this.prContextPath = prContextPath;
-        this.fileDiffCommand = fileDiffCommand;
-        this.diffDir = diffDir;
-        this.dirty = dirty;
-    }
-}
-
-// The AI-authored review for a PR. The AI writes review.json itself between `wp-start-upsert-pr` (which
-// prints the schema) and `wp-finish-upsert-pr` (which reads it); reviewer subagents write the per-checklist
-// review-<id>.json files. Data-only (per CLAUDE.md).
-export class ReviewJson {
-    title: string; // human PR title describing the change; used as the `gh pr` title (empty → caller falls back)
-    riskScore: number; // 0–100, drives the risk bar
-    riskLevel: string; // 'green' | 'yellow' | 'red'
-    riskEmoji: string; // '🟢' | '🟡' | '🔴' — derived from riskLevel when omitted
-    summary: string; // rendered in the dashboard Summary section
-    violations: string[]; // pattern/architecture violations; length = the Pattern Violations count
-    risks: string[];
-    filesToReview: string[];
-    results: ChecklistResult[]; // resolved per-checklist verdicts (from review-<id>.json); [] when none
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        title: string,
-        riskScore: number,
-        riskLevel: string,
-        riskEmoji: string,
-        summary: string,
-        violations: string[],
-        risks: string[],
-        filesToReview: string[],
-        results: ChecklistResult[] = [],
-    ) {
-        this.title = title;
-        this.riskScore = riskScore;
-        this.riskLevel = riskLevel;
-        this.riskEmoji = riskEmoji;
-        this.summary = summary;
-        this.violations = violations;
-        this.risks = risks;
-        this.filesToReview = filesToReview;
-        this.results = results;
-    }
-}
-
-// A checklist's resolved outcome, shared by review.json enforcement and the dashboard so both agree.
-// PASS, WARN and OVERRIDDEN all ship; FAIL, MISSING and BAD_FORMAT all refuse the PR.
-export const CK_PASS = 'pass';               // review-<id>.json status:'green'
-export const CK_WARN = 'warn';               // review-<id>.json status:'yellow' → 🟡 passes WITH concerns
-export const CK_OVERRIDDEN = 'overridden';   // review-<id>.json status:'red' + non-empty override → 🟠
-export const CK_FAIL = 'fail';               // review-<id>.json status:'red' + no override → refuse
-export const CK_MISSING = 'missing';         // no review-<id>.json written → refuse
-export const CK_BAD_FORMAT = 'bad-format';   // written, but its verdict is unreadable (e.g. legacy `success`)
-
-export class ChecklistVerdict {
-    id: string;
-    status: string; // one of CK_PASS | CK_WARN | CK_OVERRIDDEN | CK_FAIL | CK_MISSING | CK_BAD_FORMAT
-    detail: string; // reviewer output / override justification / format complaint (dashboard + errors)
-
-    constructor(id: string, status: string, detail: string) {
-        this.id = id;
-        this.status = status;
-        this.detail = detail;
-    }
-}
-
-// The PR's diff context, written by wp-start-upsert-pr into `.webpieces/pr-review/<branch>/pr-context.json`
-// so a reviewer subagent knows the exact 3-point base the gate used and the full changed-file set — then
-// reads any file's actual diff with `git diff <base> HEAD -- <file>`. This is what lets a checklist match
-// coarsely by path (in the config) while the subagent makes the fine, content-level judgment. Data-only.
-export class PrContext {
-    base: string;          // the 3-point merge-base sha the gate diffs against
-    /**
-     * The real HEAD sha. This was once the literal string 'HEAD', which is not a fact — it cannot be
-     * compared later to detect that the tree moved under a review, and it reads as a range that was never
-     * actually diffed. Its only reader (reviewContextFor) takes `base`, so recording the sha is free.
-     */
-    head: string;
-    changedFiles: string[]; // every file changed in the range (NOT tsOnly — includes .sql/.gql/Dockerfile/…)
-    dirty: boolean;         // true ⇒ changedFiles includes uncommitted + untracked work
-    dirtyFiles: string[];   // exactly which paths are uncommitted/untracked — why `dirty` is true
-    diffCommand: string;    // the command that reproduces the WHOLE diff (see DiffBasis; correct when dirty)
-    diffDir: string;        // dir holding the materialized per-file diffs + ALL.diff; '' when not materialized
-    generatedAt: string;    // ISO timestamp, so a stale context is detectable rather than silently trusted
-    /**
-     * Main's head as this clone last saw it — the THIRD hash point, matching the trio the 3-point merge
-     * records in `merge-info/<branch>/updatemain-hashes.json`. `base`/`head` above are points A and B
-     * under the review side's older names.
-     *
-     * The review side used to record only A and B, so nothing could answer "did main move while this was
-     * under review?" — the question you most want answered when a review looks stale. '' when origin/main
-     * is unresolvable. Purely informational; nothing gates on it.
-     */
-    hashMainHead: string;
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        base: string, head: string, changedFiles: string[],
-        dirty = false, dirtyFiles: string[] = [], diffCommand = '', diffDir = '', generatedAt = '',
-        hashMainHead = '',
-    ) {
-        this.hashMainHead = hashMainHead;
-        this.base = base;
-        this.head = head;
-        this.changedFiles = changedFiles;
-        this.dirty = dirty;
-        this.dirtyFiles = dirtyFiles;
-        this.diffCommand = diffCommand;
-        this.diffDir = diffDir;
-        this.generatedAt = generatedAt;
-    }
-}
+// Re-exported so review-json.ts stays the single import site for the whole review vocabulary: the data
+// classes moved out to keep this file under the file-size limit, NOT to give callers a second module to
+// learn. Every existing `from './review-json'` import keeps resolving.
+export {
+    VERDICT_GREEN,
+    VERDICT_YELLOW,
+    VERDICT_RED,
+    VERDICT_STATUSES,
+    ChecklistResult,
+    RequiredChecklist,
+    ChecklistReviewContext,
+    ReviewJson,
+    CK_PASS,
+    CK_WARN,
+    CK_OVERRIDDEN,
+    CK_FAIL,
+    CK_MISSING,
+    CK_BAD_FORMAT,
+    ChecklistVerdict,
+    PrContext,
+};
 
 const RISK_LEVELS = ['green', 'yellow', 'red'] as const;
 const EMOJI_FOR_LEVEL: Record<string, string> = { green: '🟢', yellow: '🟡', red: '🔴' };
@@ -217,6 +60,17 @@ const ARCHIVE_NOTE =
     'update, which has since moved. If you are reviewing again, write a FRESH review.json at the path ' +
     'pnpm wp-review-upsert-pr prints; do not copy this file\'s title, summary or risk level forward without ' +
     're-deciding each one. Overwritten by every finish, so only the most recent review is ever here.';
+
+// The same stamp, for a retired per-checklist verdict. Verdict files get their OWN wording because the two
+// archives answer different questions: old-review.json holds a description of the code, this holds a
+// REVIEWER'S DECISION. The one thing that must not happen is a reader treating an archived red as the live
+// verdict — the whole reason the file was moved rather than copied — so the note says that outright.
+const CHECKLIST_ARCHIVE_NOTE =
+    'ARCHIVE — this is a checklist verdict from a PREVIOUS reviewer run on this branch, kept for audit ' +
+    'purposes only. It is NOT a live verdict and must never be read back as one: it was RETIRED because it ' +
+    'refused the PR, and the gate moved it here so the only way forward is a FRESH review-<id>.json written ' +
+    'by a real reviewer run. Do not copy its status back onto the live path to get past the gate. ' +
+    'Overwritten by every retirement, so only the most recently retired verdict is ever here.';
 
 /** Locates + loads/validates the AI-authored review.json. `@injectable(bindingScopeValues.Singleton)` so it's drawn in the design. */
 @injectable(bindingScopeValues.Singleton)
@@ -263,24 +117,31 @@ export class ReviewJsonService {
         if (!fs.existsSync(reviewJsonFilePath)) return '';
         const archivePath = this.oldReviewJsonPath(reviewJsonFilePath);
         const raw = fs.readFileSync(reviewJsonFilePath, 'utf8');
-        fs.writeFileSync(archivePath, this.archivedBody(raw));
+        fs.writeFileSync(archivePath, this.archivedBody(raw, ARCHIVE_NOTE));
         fs.rmSync(reviewJsonFilePath);
         return archivePath;
     }
 
     /**
-     * The archived bytes: the original review with the AUDIT-ONLY note as its FIRST key, so anything that
-     * opens the file — human or AI — reads what it is before it reads any of its content.
+     * The archived bytes: the original JSON with an AUDIT-ONLY note as its FIRST key, so anything that opens
+     * the file — human or AI — reads what it is before it reads any of its content.
      *
-     * Falls back to the raw bytes when they do not parse. By here `loadReviewJson` has already accepted the
-     * file, so that is close to impossible; preserving the original beats losing it to a stamping failure.
+     * `note` is a parameter rather than a constant because two different files are archived here (review.json
+     * and review-<id>.json) and they need to say different things, while the stamping MECHANICS — parse,
+     * note first, original keys in order, fall back to raw — are identical. One implementation, two texts;
+     * a second copy of this method would be the thing that drifts.
+     *
+     * Falls back to the raw bytes when they do not parse. For review.json `loadReviewJson` has already
+     * accepted the file so that is close to impossible, but a verdict file is written by a subagent and may
+     * be half-written or not an object at all — and preserving the original always beats losing it to a
+     * stamping failure, since the archive exists precisely to be the record.
      */
-    private archivedBody(raw: string): string {
+    private archivedBody(raw: string, note: string): string {
         const parsed = this.tryParseObject(raw);
         if (parsed === null) return raw;
         // webpieces-disable no-any-unknown -- re-serializing opaque review fields verbatim; only the key ORDER is ours
         const stamped: Record<string, unknown> = {};
-        stamped[ARCHIVE_NOTE_KEY] = ARCHIVE_NOTE;
+        stamped[ARCHIVE_NOTE_KEY] = note;
         for (const key of Object.keys(parsed)) stamped[key] = parsed[key];
         return JSON.stringify(stamped, null, 2) + '\n';
     }
@@ -391,6 +252,44 @@ export class ReviewJsonService {
     }
 
     /**
+     * Where a RETIRED verdict for one checklist goes: `review-<id>.json.old`, beside the live path.
+     *
+     * Mirrors {@link oldReviewJsonPath} deliberately, including its single-slot rule: ALWAYS the same path,
+     * so it holds the last retired verdict and only the last one. A series (`.old.old`, `.old.1`) would read
+     * as though the number of retirements meant something, and nothing downstream can interpret that — the
+     * one fact worth keeping is "this checklist refused before, here is what it said".
+     */
+    oldChecklistResultPath(reviewJsonFilePath: string, checklistId: string): string {
+        return `${this.checklistResultPath(reviewJsonFilePath, checklistId)}.old`;
+    }
+
+    /**
+     * Retire one checklist's verdict: MOVE review-<id>.json to review-<id>.json.old, stamped with a note
+     * saying what it is. Returns the archive path, or '' when there was nothing to archive.
+     *
+     * The point is the MOVE, exactly as in {@link archiveReviewJson}. A red verdict left on the live path is
+     * re-read by the next run and re-reported as the CURRENT state of the branch, so the branch keeps being
+     * refused for a finding that may already be fixed — and the fix, when it comes, silently overwrites the
+     * only record that the gate ever refused anything. Moving it makes the refusal durable and makes a fresh
+     * reviewer run the only way forward, which is the honest requirement: the old verdict judged code that
+     * has since changed.
+     *
+     * Safe by construction for RED verdicts specifically, which is why the caller only archives on CK_FAIL:
+     * a red verdict is never reusable — it always blocks — so nothing is lost by moving it. Green and yellow
+     * verdicts ARE deliberately reused across finish attempts, and retiring one would force a needless (and
+     * expensive) subagent re-run.
+     */
+    archiveChecklistResult(reviewJsonFilePath: string, checklistId: string): string {
+        const livePath = this.checklistResultPath(reviewJsonFilePath, checklistId);
+        if (!fs.existsSync(livePath)) return '';
+        const archivePath = this.oldChecklistResultPath(reviewJsonFilePath, checklistId);
+        const raw = fs.readFileSync(livePath, 'utf8');
+        fs.writeFileSync(archivePath, this.archivedBody(raw, CHECKLIST_ARCHIVE_NOTE));
+        fs.rmSync(livePath);
+        return archivePath;
+    }
+
+    /**
      * Load + validate the AI-authored review.json. Throws InformAiError (with the schema) when missing,
      * unparseable, or structurally wrong. `required` is the set of checklists the diff matched: every one
      * must have a well-formed, passing (or overridden) review-<id>.json or a validation error is raised
@@ -474,9 +373,63 @@ export class ReviewJsonService {
         });
     }
 
+    /**
+     * The checklists that REFUSED: a reviewer ran, judged the change, and said no (CK_FAIL — status red with
+     * no override). A strict subset of {@link pendingChecklists}, split out because it demands a completely
+     * different action from the reader.
+     *
+     * Public so every command agrees on the set. When "refused" was computed ad hoc, a refusal and a
+     * never-ran reviewer landed in one bucket and produced one message — "you MUST run these N reviewer
+     * subagent(s)" — handed to an AI, which obediently re-spawned a reviewer that had already answered. It
+     * refused again for the same reason, and the loop cost a full subagent run per pass while the reviewer's
+     * actual finding was never shown to anyone. A refusal is a RESULT, not a missing step.
+     */
+    refusedChecklists(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): RequiredChecklist[] {
+        return required.filter((req: RequiredChecklist): boolean =>
+            this.resolveVerdict(req, results).status === CK_FAIL);
+    }
+
+    /**
+     * THE renderer for "this reviewer refused" — one wording, wherever the refusal surfaces. It exists as a
+     * method because the text was previously inlined in {@link requiredChecklistErrors}, reachable only
+     * through review.json validation, while the command layer refused earlier with its own generic message.
+     * Two messages for one event is how the useful one became unreachable; there is now exactly one.
+     *
+     * It always quotes the reviewer's own `output` verbatim: the finding is the whole point, and an error
+     * that names a checklist without saying what it objected to gives the reader nothing to fix.
+     *
+     * `archivedPath` non-empty ⇒ the verdict has just been RETIRED (moved) to that path, so the message must
+     * change in two ways. It says where the record went — otherwise the move reads as data loss — and,
+     * critically, it must NOT tell the reader to "set override in review-<id>.json", because that file no
+     * longer exists. The escape hatch is therefore worded as writing a FRESH verdict file (the body can be
+     * copied back out of the archive) with a human-authored override.
+     */
+    refusalError(req: RequiredChecklist, verdict: ChecklistVerdict, archivedPath = ''): string {
+        const finding = `${verdict.detail.split('\n').join('\n      ')}\n`;
+        const head = `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.subagent}) wrote:\n      ` + finding;
+        if (archivedPath === '') {
+            return head +
+                `      Fix it, then re-run; or set a non-empty "override" in ${this.checklistFileName(req.id)} to ship anyway with a stated justification.`;
+        }
+        // Re-spawning is the LAST thing said, and only after the finding, because an instruction to spawn a
+        // subagent is the one line an AI acts on first — see refusedChecklists for what that cost.
+        return head +
+            `      That verdict has been RETIRED to ${archivedPath} (audit only — it is not a live verdict).\n` +
+            `      A FRESH ${this.checklistFileName(req.id)} is now required. Fix the finding first, then have the ` +
+            `"${req.subagent}" subagent review again and write a new verdict.\n` +
+            `      To ship anyway, a HUMAN must decide it: write a fresh ${this.checklistFileName(req.id)} (you may copy the ` +
+            `body back from the archive) carrying a non-empty, human-authored "override" justification.`;
+    }
+
     // Read the per-checklist verdict files `review-<id>.json` beside review.json — one per matched checklist.
     // A missing file is simply absent from the result (→ counts as MISSING for that checklist); a malformed
     // one is skipped (a stale review-<id>.json never wedges the branch).
+    //
+    // It looks up the EXACT `review-<id>.json` name per required id — never a directory scan, never a prefix
+    // match. That is what guarantees an archived `review-<id>.json.old` can never resolve as a live verdict:
+    // the retired file sits right beside the live path, and a scan that swept the directory would hand a
+    // RETIRED refusal (or worse, a retired pass) back as the current state, undoing the whole point of the
+    // move in {@link archiveChecklistResult}.
     loadChecklistResults(reviewJsonFilePath: string, required: readonly RequiredChecklist[]): ChecklistResult[] {
         const results: ChecklistResult[] = [];
         for (const req of required) {
@@ -527,11 +480,9 @@ export class ReviewJsonService {
             // CK_WARN ('yellow' — passed with concerns) is deliberately absent from this chain: it SHIPS.
             // The concern still reaches the PR, published in the checklist comment. Do not "fix" this.
             if (verdict.status === CK_FAIL) {
-                errors.push(
-                    `Checklist "${req.id}" FAILED review (status:"${VERDICT_RED}"). The reviewer (${req.subagent}) wrote:\n      ` +
-                    `${verdict.detail.split('\n').join('\n      ')}\n` +
-                    `      Fix it, then re-run; or set a non-empty "override" in ${this.checklistFileName(req.id)} to ship anyway with a stated justification.`,
-                );
+                // Through the ONE renderer, so this path and the command layer's refusal say the same thing.
+                // No archive path here: this is validation, not the act of retiring the verdict.
+                errors.push(this.refusalError(req, verdict));
             } else if (verdict.status === CK_MISSING) {
                 const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
                 errors.push(

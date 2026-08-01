@@ -61,6 +61,7 @@ graph TD
     ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
     ReviewerBriefingBuilder["ReviewerBriefingBuilder"]
     ReviewerInstructionsService["ReviewerInstructionsService"]
+    ReviewerVerdictGate["ReviewerVerdictGate"]
     RunUpdate["RunUpdate"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
@@ -104,7 +105,6 @@ graph TD
     FinishUpsertPrCommand --> AiBranchName
     FinishUpsertPrCommand --> BranchNaming
     FinishUpsertPrCommand --> BuildAffected
-    FinishUpsertPrCommand --> ChecklistInstructionsService
     FinishUpsertPrCommand --> ChecklistScanner
     FinishUpsertPrCommand --> Dashboard
     FinishUpsertPrCommand --> FinishBanner
@@ -116,6 +116,7 @@ graph TD
     FinishUpsertPrCommand --> RepoRootFinder
     FinishUpsertPrCommand --> ReviewJsonService
     FinishUpsertPrCommand --> ReviewStageReceiptService
+    FinishUpsertPrCommand --> ReviewerVerdictGate
     FinishUpsertPrCommand --> SubagentProvenanceService
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
@@ -179,12 +180,15 @@ graph TD
     ReviewUpsertPrCommand --> MergeState
     ReviewUpsertPrCommand --> PrContextWriter
     ReviewUpsertPrCommand --> RepoRootFinder
+    ReviewUpsertPrCommand --> ReviewJsonService
     ReviewUpsertPrCommand --> ReviewReport
     ReviewUpsertPrCommand --> ReviewStageReceiptService
     ReviewUpsertPrCommand --> ReviewerBriefingBuilder
     ReviewUpsertPrCommand --> ReviewerInstructionsService
     ReviewerBriefingBuilder --> ReviewJsonService
     ReviewerInstructionsService --> ReviewJsonService
+    ReviewerVerdictGate --> ChecklistInstructionsService
+    ReviewerVerdictGate --> ReviewJsonService
     RunUpdate --> AiBranchName
     RunUpdate --> MergeEnd
     RunUpdate --> MergeStart

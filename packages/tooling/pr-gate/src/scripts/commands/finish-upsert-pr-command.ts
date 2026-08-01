@@ -6,12 +6,13 @@ import {
     writeTemplate, RepoRootFinder, ReviewJsonService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ProvenanceResult, ReviewerEvidence, EvidenceRequest, PrGateConfig,
-    ChecklistInstructionsService, InformAiError, toError,
+    InformAiError, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
+import { ReviewerVerdictGate } from '../workflow/reviewer-verdict-gate';
 import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
@@ -89,10 +90,13 @@ export class FinishUpsertPrCommand {
         private readonly publisher: GatedPrPublisher,
         private readonly dashboard: Dashboard,
         private readonly checklistScanner: ChecklistScanner,
+        private readonly verdictGate: ReviewerVerdictGate,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly gateTokenService: GateTokenService,
         private readonly provenance: SubagentProvenanceService,
-        private readonly instructions: ChecklistInstructionsService,
+        // NOTE: ChecklistInstructionsService is deliberately NOT injected here any more. Its "You MUST run
+        // these N reviewer subagent(s)" block is now rendered by ReviewerVerdictGate and ONLY for checklists
+        // that genuinely never ran, so no other code path in this command can print it at a refusal.
         private readonly receipts: ReviewStageReceiptService,
         private readonly banner: FinishBanner,
     ) {}
@@ -117,10 +121,11 @@ export class FinishUpsertPrCommand {
         const featureName = this.aiBranchName.getFeatureName();
         const scan = this.checklistScanner.scan(repoRoot, loadAndValidate(repoRoot).prGate.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
         const required = scan.applicable;
-        // FAIL FAST on missing reviewers, BEFORE review.json is parsed and before the build gate runs. A
+        // FAIL FAST on an unclear checklist, BEFORE review.json is parsed and before the build gate runs. A
         // missing reviewer is not a review.json defect (folding it in made the AI fix the wrong thing), and
-        // nobody should wait on a build to be told a reviewer never ran.
-        this.assertEveryReviewerRan(scan);
+        // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
+        // distinction between unreadable / REFUSED / never-ran, and retires the red verdicts it acts on.
+        this.verdictGate.assertEveryReviewerRan(scan);
         const review = this.reviewJsonService.loadReviewJson(reviewJsonPath(repoRoot, featureName), required);
 
         // 2c. For any BLOCK checklist that names a reviewer `subagent`, VERIFY (from the harness's own
@@ -251,33 +256,6 @@ export class FinishUpsertPrCommand {
     }
 
     /**
-     * Refuse the PR while ANY applicable checklist still owes a verdict, naming exactly those reviewers and
-     * exactly what to tell them — via the same renderer `wp-review-upsert-pr` uses, so the AI sees the identical
-     * block it would have seen there. Lists ONLY the outstanding ones: re-instructing an already-reviewed
-     * checklist invites a redundant second run and reads as though the earlier verdict did not count.
-     * No-op for a repo with no applicable checklists.
-     */
-    private assertEveryReviewerRan(scan: ChecklistScan): void {
-        if (scan.outstanding.length === 0) return;
-        // Unreadable verdict files come FIRST. A reviewer that wrote its verdict in the removed `success`
-        // format is otherwise indistinguishable from one that never ran, and the AI would go re-run a
-        // subagent instead of correcting four characters of JSON.
-        const format = scan.formatErrors.length === 0
-            ? ''
-            : `${scan.formatErrors.length} verdict file(s) are in an UNREADABLE format:\n\n` +
-              scan.formatErrors.map((e: string): string => `  • ${e}`).join('\n') + '\n\n';
-        throw new InformAiError(
-            `⛔ NO PR — ${scan.outstanding.length} of ${scan.applicable.length} review checklist(s) that apply to this ` +
-            `branch have no passing verdict yet: ${this.instructions.names(scan.outstanding)}\n\n` +
-            format +
-            `${this.instructions.render(scan.outstanding, scan.reviewPath, scan.context)}\n\n` +
-            `Then re-run: pnpm wp-finish-upsert-pr\n` +
-            `(Each reviewer's generated instructions file is already written — re-running pnpm wp-review-upsert-pr\n` +
-            ` is only needed if the code changed since it ran.)`,
-        );
-    }
-
-    /**
      * Retire the review this run just used — move review.json to old-review.json beside it, stamped as
      * audit-only (see ReviewJsonService.archiveReviewJson).
      *
@@ -333,8 +311,14 @@ export class FinishUpsertPrCommand {
         return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows);
     }
 
-    // Pair each matched checklist with its resolved verdict for the dashboard. (A checklist reaching this
-    // point is always PASS/OVERRIDDEN — loadReviewJson already threw on FAIL/MISSING.)
+    // Pair each matched checklist with its resolved verdict for the dashboard.
+    //
+    // A checklist reaching this point is always PASS, WARN or OVERRIDDEN, and the reason is ReviewerVerdictGate
+    // — NOT loadReviewJson. The gate runs one line earlier and throws on every other state (FAIL, MISSING,
+    // BAD_FORMAT), so loadReviewJson's own checklist validation can no longer be the thing that rejects them;
+    // it re-validates the same set and finds it clean. This comment used to credit loadReviewJson, which made
+    // the ordering look deliberate while the gate's generic "no verdict yet" message masked every refusal.
+    // WARN belongs in that list: yellow SHIPS, so it is not outstanding and reaches the dashboard.
     private checklistRows(required: readonly RequiredChecklist[], review: ReviewJson): ChecklistRow[] {
         return required.map((req: RequiredChecklist): ChecklistRow => {
             const verdict = this.reviewJsonService.resolveVerdict(req, review.results);
