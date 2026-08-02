@@ -11,7 +11,8 @@ import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
-import { INSTALLER_ALLOW_JS } from '../bin/shim';
+import { L0_ALLOW_JS } from '../bin/shim';
+import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
     Rule, Violation, RuleGroup, RuleFailError, InformAiError,
@@ -63,10 +64,14 @@ function maybeRefreshMainSync(rules: readonly Rule[], workspaceRoot: string): vo
     }
 }
 
-const CONFIG_MISSING_REPORT =
-    'webpieces.config.json not found.\n' +
-    'Tell the human: run `./node_modules/.bin/wp-setup-ai-hooks` to initialize the project configuration.\n' +
-    'Do not proceed until the human has done this.';
+// Fault C (webpieces.config.json missing) — the deny text lives in ./l0-matrix beside the rest of the
+// L0 fault table, so the message and the allowlist can never prescribe different cures. `cwd` is used
+// only to drop the matrix doc where the AI can read it (the config root does not exist yet here).
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function configMissingBlock(cwd: string): BlockedResult {
+    const root = new RepoRootFinder().resolveRepoRoot(cwd);
+    return new BlockedResult(CONFIG_MISSING_REPORT + guardMatrixPointer(writeGuardMatrixDoc(root)));
+}
 
 export function run(
     toolKind: ToolKind,
@@ -84,7 +89,7 @@ function runInternal(
     mode: HookMode,
 ): BlockedResult | null {
     const loaded = loadAndValidate(cwd);
-    if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
+    if (loaded.configPath === null) return configMissingBlock(cwd);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
@@ -175,15 +180,20 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
     return new BlockedResult(formatReport(relativePath, groups, READ_SUBJECT));
 }
 
-// Installer bypass — package-manager install commands ALWAYS pass, ahead of any config load. A
+// L0 cure bypass — every command on THE L0 allowlist passes here, ahead of any config load. A
 // webpieces.config.json that is ahead of the installed validator (new rule tokens the published
 // binary doesn't know yet) makes loadAndValidate() throw and would deny `pnpm install` — the very
-// command that updates the validator (deadlock). Mirrors the fail-closed shim's INSTALLER_ALLOW_ERE
-// (missing-bin case); INSTALLER_ALLOW_JS is its locked JS twin. Match is tight (`pnpm install` /
-// `npm i` + `--flags`, plus an optional LEADING `cd <path> &&` so the cure is typable from a
-// worktree) so `pnpm install && rm -rf /` still falls to the guards.
-function isInstallerCommand(command: string): boolean {
-    return INSTALLER_ALLOW_JS.test(command.trim());
+// command that updates the validator (deadlock).
+//
+// This used to test INSTALLER_ALLOW_JS alone, which made the config faults (C = config missing,
+// Y = config out of sync) accept a bare `pnpm install` while denying `rm -rf node_modules && pnpm
+// install` — the one cure that works when node_modules is CORRUPT rather than merely stale. Same
+// intent, opposite verdict, for no reason anyone recorded. L0_ALLOW_JS is the single list every L0
+// fault consults; see its block comment in ../bin/shim. Each alternative is still anchored at both
+// ends, so `pnpm install && rm -rf /` still falls to the guards.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function isL0CureCommand(command: string): boolean {
+    return L0_ALLOW_JS.test(command.trim());
 }
 
 // Force-to-root: git/gh commands must run from the repo root of the tree they act on, where the guards
@@ -213,14 +223,14 @@ function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult
     return new BlockedResult(report);
 }
 
-// The installer bypass's audit line. Anchored at the repo root that owns `.webpieces` — RepoRootFinder
+// The L0 cure bypass's audit line. Anchored at the repo root that owns `.webpieces` — RepoRootFinder
 // (config-walk-up first, then git toplevel) is the authority for that, and it is correct in a linked
 // worktree because each worktree checks out its own webpieces.config.json. This runs BEFORE
 // loadAndValidate, which is why it resolves the root itself rather than using workspaceRoot.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function logInstallerBypass(command: string, cwd: string): void {
+function logL0CureBypass(command: string, cwd: string): void {
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'installer bypass (always allowed)'));
+    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)'));
 }
 
 /**
@@ -255,15 +265,15 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
 }
 
 function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
-    if (isInstallerCommand(command)) {
-        logInstallerBypass(command, cwd);
+    if (isL0CureCommand(command)) {
+        logL0CureBypass(command, cwd);
         return null;
     }
 
     const loaded = loadConfigOrAllowInspection(command, cwd);
     // null = the config would not load AND this command only inspects → allow, see the helper.
     if (loaded === null) return null;
-    if (loaded.configPath === null) return new BlockedResult(CONFIG_MISSING_REPORT);
+    if (loaded.configPath === null) return configMissingBlock(cwd);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
@@ -359,7 +369,9 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
     if (unconfiguredRules.length === 0) return null;
 
     const lines = [
-        'webpieces.config.json is out of sync — new built-in rules are present that have no entry in webpieces.config.json.',
+        // Fault Y's header lives in ./l0-matrix beside the rest of the L0 fault table (same reason as
+        // CONFIG_MISSING_REPORT: one place states what this fault is and what cures it).
+        CONFIG_OUT_OF_SYNC_HEADER,
         '',
         'Tell the human: the following rules need to be configured. Ask for each one:',
         '  - Should this rule be ON, OFF, NEW_AND_MODIFIED_CODE, or NEW_AND_MODIFIED_FILES?',
