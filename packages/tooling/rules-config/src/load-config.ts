@@ -2,6 +2,7 @@ import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
+import { formatConfigErrorsBanner } from './config-error-banner';
 import { ConfigFile } from './config-file';
 import { defaultRules } from './default-rules';
 import { ExcludePaths } from './exclude-hook-paths';
@@ -182,25 +183,10 @@ export class ConfigLoader {
         return typed;
     }
 
-    // Assemble the validation-failure banner. Most of these errors are version skew, not bad config.
+    // Assemble the validation-failure banner. Every error here came from validating this ONE file, so
+    // the cure is always "edit it" — see config-error-banner.ts for why nothing else belongs in it.
     private formatConfigErrorsBanner(errors: string[]): string {
-        return (
-            `webpieces.config.json has ${errors.length} validation error(s) — fix ALL, then retry:\n\n` +
-            errors.map(e => `  • ${e}`).join('\n') +
-            `\n\n👉 FIX ORDER (do NOT start by deleting keys — that usually deletes VALID config):\n` +
-            `  1. Run \`pnpm install\`. It is ALWAYS allowed through the guard (installer bypass), even ` +
-            `while this config is invalid. This is the #1 cause: your installed @webpieces guard is a ` +
-            `release BEHIND webpieces.config.json (a dep bump updated the config + lockfile, but ` +
-            `node_modules here was never re-installed), so the running validator doesn't know the newer ` +
-            `rule names/values yet. \`pnpm install\` syncs node_modules to the pinned version.\n` +
-            `  2. Retry your command. If the errors are gone, you're DONE — do not touch webpieces.config.json.\n` +
-            `  3. ONLY if an error survives a fresh install is it a genuine typo / removed / renamed rule. ` +
-            `Then edit webpieces.config.json (edits to it are ALWAYS allowed) to fix each • above.\n` +
-            `  4. A "RETIRED key" error above already names where the value moved — apply that instruction ` +
-            `literally; there is no fallback that will accept the old shape. ` +
-            `\`pnpm wp-install-ai-hooks --sync\` performs the mechanical migrations. Background: ` +
-            `.webpieces/instruct-ai/webpieces.config-policy.md`
-        );
+        return formatConfigErrorsBanner(errors);
     }
 }
 

@@ -6,6 +6,16 @@ export { CliUsage, CliArgsCheck, CliArgs } from './cli-args';
 export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
+// The validation-failure banner: ONE cure (edit the file), plus the markers that decide whether the
+// optional bulk migrator is even mentioned.
+export {
+    formatConfigErrorsBanner,
+    migratorCoveredCount,
+    MIGRATOR_COVERED_MARKERS,
+    RETIRED_KEY_MARKER,
+    RETIRED_TOP_LEVEL_MARKER,
+    SECTION_PLACEMENT_MARKER,
+} from './config-error-banner';
 export { findConfigFile, CONFIG_FILENAME, ConfigFile, ConfigParseAttempt, CONFIG_PARSE_ATTEMPTS, CONFIG_PARSE_RETRY_MILLIS } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 // The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two

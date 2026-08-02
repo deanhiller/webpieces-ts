@@ -87,7 +87,7 @@ hurt it, and gating each entry on a fault is what produced four real defects.
 | 5 | `git pull` / `git fetch` — **merge is NOT on the list** | ALLOW |
 | 6 | `pnpm exec wp-upgrade-shim` | ALLOW |
 | 7 | the `cp` of the shipped template over `.claude/webpieces/ai-hook.sh` | ALLOW |
-| 8 | `pnpm exec wp-install-ai-hooks` | ALLOW |
+| 8 | `pnpm exec wp-install-ai-hooks` — **flags allowed**, e.g. `--sync`, `--target=project` | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a downstream
@@ -100,23 +100,99 @@ command and it is rejected again — that is not the guard refusing its own cure
 `git merge` is deliberately absent. Main is merged ONLY through the 3-point fork merge
 (`pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is already open).
 
+## The config-validation invariant — every config problem cures to ONE action
+
+**Every problem with `webpieces.config.json` — a validation error, a syntax error, or the file being
+absent — has exactly one cure: MAKE THE FILE RIGHT. Edit it (or create it) so the reported errors go
+away.** There is no class of config problem cured by running something else first.
+
+This is not a style preference, it is forced by the code, and it is written down here because an
+ordered list of general advice is how an AI picks the wrong step. It has already happened: an agent
+read a 4-step "FIX ORDER", skipped to step 4, and chased a command that was itself blocked, while
+step 3 — edit the file — was the whole answer.
+
+Why every other candidate cure is disqualified as the primary instruction:
+
+- **`pnpm install` can never be the cure.** `templates/ai-hook.sh` gates the guard bin on
+  `[ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]`, and `DRIFT_PKG` is set by comparing every exact-pinned
+  `@webpieces/*` in root `package.json` against the installed version (`catalog:` specs resolved
+  through `pnpm-lock.yaml` first). So the validator only ever RUNS when `package.json` and
+  `node_modules` already agree — meaning that whenever you are reading a config validation error,
+  there is provably nothing for an install to bring into sync. *Sole caveat:* the drift check skips
+  range specs (`^`, `~`, `workspace:*` hit `*) continue ;;`), so a repo pinning with ranges is outside
+  this guarantee. This repo pins exactly — `validate-versions-locked` enforces it.
+- **`pnpm wp-install-ai-hooks --sync` is not a cure, it is an optional BULK EDITOR** that performs the
+  same edit for you. It must never lead, because `migrate()` is not surgical: it rewrites the whole
+  file, appends every missing built-in as `OFF`, and reformats. Its diff is far larger than the error
+  being fixed. Offer it only when MANY retired keys are listed at once (an upgrade sweep), and say
+  what it costs.
+- **Bumping the `@webpieces` pin** is a secondary *check*, not a step: relevant only when the config
+  was deliberately written for a newer release than `package.json` pins (e.g. a key copied out of
+  newer docs). Then the fix is bump-then-install — never a bare install.
+
+So the guidance an agent is handed must be: *fix each bullet by editing `webpieces.config.json`;
+editing it is allowed even right now while it is invalid.* Plus the two negatives, which carry as much
+weight as the positive: **do not run `pnpm install`** (it cannot help), and **do not delete a key just
+because it is unknown** (first check whether the pin is older than the config expects).
+
+### Fault `C` (no config at all) is the same invariant — write the file
+
+A valid config must carry every built-in rule with its required fields, so "just write it" looks
+daunting. It is not, because **the validator reports every error at once** — like a compiler printing
+ten errors, not one. So the loop converges in a couple of passes: write a minimal file, get back the
+full list of what is missing (each with its copy-paste snippet), fix them all in one edit. That is the
+intended flow, and it is why nothing needs to seed the file for you.
+
+Which matters, because none of the installer spellings is a clean fit here anyway:
+
+| command | on a missing config |
+|---|---|
+| `pnpm wp-install-ai-hooks --sync` | does NOTHING — "No webpieces.config.json found — nothing to sync" |
+| bare `pnpm wp-install-ai-hooks` | seeds it, then PROMPTS twice (`wireHook` ×2) — hangs a non-interactive agent |
+| `pnpm wp-install-ai-hooks --target=<x>` | seeds it, but also re-points the hooks — which are already wired, or `C` would not have fired |
+
+`CONFIG_MISSING_REPORT` led with the bare form — i.e. the one that prompts, which stalls a
+non-interactive agent. **Do not "fix" this by teaching `--sync` to seed the file.** That would hand the
+agent a tool to lean on where the invariant already gives it a working, self-correcting loop, and a
+seeded file is a large opaque diff nobody reviewed. Fault `C`'s reliable answer is its Option 2 —
+write the file yourself, which allowlist entry 2 always permits — and let the aggregated error list
+drive the remaining passes. What SHOULD change is the message's ordering: Option 2 is the agent-safe
+one and should lead.
+
+**Done (2026-08-02).** That ordering is now the shipped one: `CONFIG_MISSING_REPORT` leads with "create
+the file yourself", and the bare installer is Option 2, carrying the condition under which it is safe
+(an interactive terminal). `--sync` still does not seed, on purpose.
+
 ## L0 use cases
 
-| # | case | fault | trigger | cure |
-|---|---|---|---|---|
-| 1 | pin **newer** than `node_modules` | `D` | pulled/switched to a commit that bumped the pin, before installing | `pnpm install` |
-| 2 | pin **older** than `node_modules` | `D` | checkout is behind origin — the *pin* is the stale side | `git pull` **then** `pnpm install`; a bare install would downgrade |
-| 3 | bin missing | `X` | fresh clone before install, **or a new `git worktree`** (copies no `node_modules`) — the common way to land here with a perfectly healthy repo | `pnpm install` |
-| 4 | bin present but crashed | `K` | corrupt `node_modules`. Captures the first `Cannot find module` line; reports orphaned pnpm staging dirs without auto-cleaning | `rm -rf node_modules && pnpm install` |
-| 5 | committed shim != `renderShim()` | `S` | **normal:** an upgrade brought new shim logic. **abnormal:** reverted / hand-edited / tampered | `pnpm exec wp-install-ai-hooks` |
-| 6 | `webpieces.config.json` missing | `C` | fresh adoption with hooks wired but no config, or config deleted | `wp-install-ai-hooks`, or just write it — entry 2 always permits that |
-| 7 | loaded rule has no config key | `Y` | `node_modules` newer than the config — the one-release-lag trap | add the key (always-allowed write) |
-| 8 | **no fault** | — | — | → L1 |
-| 9 | fault present **and** call is on the allowlist | — | the entire row 2 of the matrix; what keeps recovery reachable | PASS or ALLOW |
-| 10 | fault is `D`/`X`/`K` **and** the call is a Read | — | PASS degenerates to a **terminal allow** — the bin never ran, so there is nothing to fall through to | reads are unguarded during those three |
+Every row encodes a real incident. The **Fix** column is deliberately LITERAL — a command you can
+copy, never a description of one — because prose is what let an agent read "sync the config" and
+invent a spelling the allowlist rejected. Where two options exist, the discriminator says which is
+yours; where a specific wrong turn exists, it is named.
 
-**Consumers trip `S` on every upgrade that changes shim logic, and must run `pnpm wp-install-ai-hooks`
-before continuing. That is the designed inline-upgrade forcing function working, not a regression.**
+The per-fault Fix column is also rendered from code, from `L0_FAULTS[].cures`, into
+`webpieces.guard-matrix.md` (see "The generated L0 doc"). **That generated copy is the authority** —
+this table adds the symptom and the incident, not a second set of commands.
+
+| # | what you SEE (exact symptom) | state | verdict | Fix |
+|---|---|---|---|---|
+| 1 | `version drift: package.json pins …@X but node_modules has Y`, where **X > Y** | `D`; you pulled or switched to a commit that bumped the pin, before installing | BLOCK | Option 1 (preferred): `pnpm install` |
+| 2 | same message, but **X < Y** — the *pin* is the stale side (your checkout is behind origin) | `D`; on **main** | BLOCK | Option 1 (preferred): `git pull origin main`, then `pnpm install`<br>Option 2: check out the commit you want, branch from it, then `pnpm install` ← pick this when you deliberately want to stay on the OLD code; the downgrade is the point<br>Do NOT: a *bare* `pnpm install` on main — it clears the block but downgrades you |
+| 3 | same message, **X < Y**, on a **feature branch** | `D`; your branch pins its own version | BLOCK | Option 1 (preferred): `pnpm install` ← aligns node_modules to YOUR branch's pin, which is usually what you want<br>Option 2: `pnpm install` FIRST (that re-arms the guards), THEN `pnpm wp-start-update` ← pick this when you actually want main's newer @webpieces<br>Do NOT: run `pnpm wp-start-update` while the block is up — it is not on the allowlist and does not need to be |
+| 4 | `…-hook not found` / `is declared in package.json but is not installed` | `X`; fresh clone before install, **or a new `git worktree`** — git copies no `node_modules`, so this is the common way to land here with a perfectly healthy repo | BLOCK | Option 1 (preferred): `pnpm install` ← run it **HERE**, in this worktree; installing in the primary clone does nothing for this tree |
+| 5 | `installed but CRASHED (Cannot find module …)`, often with a count of orphaned pnpm staging dirs | `K`; corrupt / partially-written `node_modules` (an install that was killed) | BLOCK | Option 1 (preferred): `rm -rf node_modules && pnpm install` ← a *bare* install SKIPS the corrupt package: pnpm sees the right version on disk and considers it installed<br>Do NOT: `pnpm install` on its own |
+| 6 | `.claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces` | `S`; **normal:** an upgrade brought new shim logic. **abnormal:** reverted / hand-edited / tampered | BLOCK | Option 1 (preferred): `pnpm wp-install-ai-hooks --sync` ← heals the shim as step 1 and returns before the hook-wiring prompts<br>Option 2: `pnpm exec wp-upgrade-shim` ← pick this when you want the shim regenerated and nothing else (needs 0.4.408+)<br>Option 3: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` ← pick this when the installed release is older than 0.4.408<br>Do NOT: the BARE `pnpm wp-install-ai-hooks` — it prompts twice and hangs a non-interactive agent |
+| 7 | **any** complaint about `webpieces.config.json`: `not found` (`C`), `is out of sync` (`Y`), an N-error validation banner, or a parse error | `C`/`Y`/validation/syntax — one class, not four | BLOCK | Option 1 (preferred): edit `webpieces.config.json` so the reported errors go away — see "The config-validation invariant" above; that section is the authority and this row does not re-derive it<br>Do NOT: `pnpm install` (cannot help), and do NOT delete an unknown key on sight |
+| 8 | nothing — no fault | — | → L1 | — |
+| 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself |
+| 10 | Reads succeed while `D`/`X`/`K` blocks Bash | the bin never ran, so PASS degenerates to a **terminal allow** | ALLOW_FAIL_OPEN | nothing to do — but note reads are UNGUARDED during those three (see "Two known gaps") |
+
+Row 7 is the collapse: `C`, `Y`, a validation banner and a syntax error look like four problems and
+are one. They all mean the file is wrong, and they all cure to making it right.
+
+**Consumers trip `S` on every upgrade that changes shim logic, and must run
+`pnpm wp-install-ai-hooks --sync` before continuing. That is the designed inline-upgrade forcing
+function working, not a regression.**
 
 ## Two known gaps
 
@@ -129,8 +205,8 @@ before continuing. That is the designed inline-upgrade forcing function working,
 
 ## The generated L0 doc
 
-`renderGuardMatrixDoc()` (`core/l0-matrix.ts`) renders the fault table and allowlist **from
-`L0_FAULTS` + `L0_ALLOWLIST`** — the same arrays the guard consults — into
+`renderGuardMatrixDoc()` (`core/l0-matrix.ts`) renders the fault table, the **per-fault Fix sections**
+and the allowlist **from `L0_FAULTS` + `L0_ALLOWLIST`** — the same arrays the guard consults — into
 `packages/tooling/rules-config/templates/webpieces.guard-matrix.md`, which a unit test locks
 byte-identical. That copy cannot describe a guard the code does not implement.
 
@@ -140,8 +216,16 @@ an L0 BLOCK only** — two call sites, `hook-core.ts` (fault `S`) and `runner.ts
 deny can append `READ <path>`. Best-effort: a missing template degrades the deny to no pointer, never
 to a crash.
 
-**So: prefer the generated doc for the L0 table and allowlist.** The L0 section above adds the
-ordering, the use cases and the gaps, which the generated copy does not carry.
+The Fix sections come from `L0_FAULTS[].cures`, where each `L0Cure` carries the exact call, a
+`preferred` flag (exactly one per fault) and a `discriminator` — the sentence saying WHEN to pick a
+sibling instead. Two assertions in `l0-matrix.spec.ts` keep that honest: every cure must be accepted by
+`isAllowed()` AND named in its fault's deny text, and — scraping the RENDERED output, not the array —
+**every command printed in any Fix section must pass `isAllowed()`**. That second one is the assertion
+that would have caught `pnpm wp-install-ai-hooks --sync` being prescribed by config messages while the
+installer allowlist entry accepted no flags at all.
+
+**So: prefer the generated doc for the L0 table, the Fix sections and the allowlist.** The L0 section
+above adds the ordering, the symptoms/incidents and the gaps, which the generated copy does not carry.
 
 ---
 
@@ -217,21 +301,25 @@ THAT tree's branch and cache. `p` and `w` are never distinguished, hence `pw`.
 
 ## L1 use cases
 
-| # | command / action | K | G | P | row | verdict |
-|---|---|---|---|---|---|---|
-| 1 | `cd repositories/vendored && git commit` | `f` | `y` | - | 1 | exempt — jurisdiction judged on the resolved target, after the `cd` |
-| 2 | Edit `repositories/vendored/foo.ts` on stale main | — | — | — | filter | exempt — excluded path, guards dropped |
-| 3 | Edit `packages/http/foo.ts` on stale main | — | — | — | filter | → L2 → blocked (write on main) |
-| 4 | Edit `packages/http/foo.ts`, shell in `/tmp` | — | — | — | filter | judged on the target path — cwd is irrelevant for file tools |
-| 5 | `ls` from `packages/http/` | `pw` | `n` | - | 3 | → L2 |
-| 6 | `pnpm test` from `packages/http/` | `pw` | `n` | - | 3 | → L2 — untouched |
-| 7 | `git status` from `packages/http/` | `pw` | `y` | `sub` | 4 | block → `cd <root> && git status` |
-| 8 | `cd packages/http && git status` **from the root** | `pw` | `y` | `sub` | 4 | block — same destination, same answer |
-| 9 | `cd <root> && git status` from anywhere | `pw` | `y` | `root` | 5 | → L2 — the prescribed cure |
-| 10 | `echo "cd sub && git push"` | `pw` | `n` | `root` | 3 | → L2 — the quoted `cd` is not a scope escape |
-| 11 | `cd <subdir> && git push` | `pw` | `y` | `sub` | 4 | block by force-to-root, **before** the push guard's gated-flow message. Still blocked; costs one extra turn |
+Same row shape as L0: the **Fix** is literal or it is not a fix. `<root>` is the absolute workspace
+root — the messages name it explicitly rather than telling you to `cd` first, for the reason in the
+section head (neither the shell's cwd nor a `cd`'s persistence can be assumed).
 
-Use case 8 is the one that changed. It used to be ALLOWED, because the predicate was
+| # | what you SEE (exact symptom) | state (K/G/P) | verdict | Fix |
+|---|---|---|---|---|
+| 1 | `cd repositories/vendored && git commit` goes through untouched | `f` / `y` / - — row 1 | ALLOW_EXEMPT | none needed — jurisdiction is judged on the RESOLVED target, after the `cd`; a different git repo is hands-off |
+| 2 | Edit `repositories/vendored/foo.ts` allowed even on stale main | filter — the path is in `excludePaths` | ALLOW_EXEMPT | none needed |
+| 3 | Edit `packages/http/foo.ts` blocked on stale main | filter keeps the rules → L2 fires | BLOCK (at L2) | that is L2's write-on-main verdict, not L1's — follow the L2 message |
+| 4 | Edit `packages/http/foo.ts` judged even though the shell is in `/tmp` | filter, on the TARGET path | → L2 | none — for file tools the cwd is irrelevant; do NOT `cd` anywhere to "fix" it |
+| 5 | `ls` from `packages/http/` runs normally | `pw` / `n` / - — row 3 | → L2 | none — force-to-root has no jurisdiction over non-git commands |
+| 6 | `pnpm test` from `packages/http/` runs normally | `pw` / `n` / - — row 3 | → L2 | none — deliberately untouched, so package-local test runs stay natural |
+| 7 | `git status` from `packages/http/` is blocked | `pw` / `y` / `sub` — row 4 | BLOCK | Option 1 (preferred): `cd <root> && git status` |
+| 8 | `cd packages/http && git status` **typed from the root** is blocked | `pw` / `y` / `sub` — row 4 | BLOCK | Option 1 (preferred): `cd <root> && git status`<br>Do NOT: assume it is allowed because you started at the root — the predicate is `effectiveCwd === root`, i.e. the DESTINATION |
+| 9 | `cd <root> && git status` passes from anywhere | `pw` / `y` / `root` — row 5 | → L2 | none — this IS the prescribed cure |
+| 10 | `echo "cd sub && git push"` passes | `pw` / `n` / `root` — row 3 | → L2 | none — the `cd` is inside quotes, so `ShellSegmentScan` never treats it as a scope escape |
+| 11 | `cd <subdir> && git push` blocked with the force-to-root message, NOT the gated-flow one | `pw` / `y` / `sub` — row 4; force-to-root runs first | BLOCK | Option 1 (preferred): `cd <root> && git push`, which then gets the push guard's real answer ← costs one extra turn by design; still blocked |
+
+Row 8 is the one that changed. It used to be ALLOWED, because the predicate was
 `shellAtRoot || cdsToRoot` — two variables OR'd, so the same destination got opposite verdicts
 depending on where the shell happened to start. It is now one variable, `effectiveCwd === root`.
 

@@ -261,9 +261,14 @@ describe('loadAndValidate — sections & commands', () => {
 // Regression for the config-validation banner (bugReport.md, released 0.3.241): a stale/unknown rule
 // key made the guard fail closed on every Bash/Write/Edit EXCEPT edits to webpieces.config.json, but
 // the surfaced banner never said so — so an AI read "everything is blocked" and escalated to the human
-// instead of editing the config to unblock itself. The banner must (1) tell the reader that editing
-// webpieces.config.json is ALWAYS allowed through the guard, and (2) lead with `pnpm install` (the #1
-// cause is version skew), NOT with deleting the key (which destroys valid config on a stale checkout).
+// instead of editing the config to unblock itself. The banner must tell the reader that editing
+// webpieces.config.json is ALWAYS allowed through the guard, and that editing it is the whole fix.
+//
+// It used to ALSO lead with `pnpm install`, and this spec asserted that ordering. That assertion is
+// REPLACED, not preserved: the guard bin runs only when package.json and node_modules already agree
+// (ai-hook.sh gates on `[ -z "$DRIFT_PKG" ]`), so an install provably changes nothing here and naming
+// it as step 1 is the detour that started this rewrite. What survives is the reason the ordering
+// existed — do not gut valid config by deleting an unknown key — now aimed at the PIN.
 describe('loadAndValidate — config-error banner (unblock instructions)', () => {
     function bannerFor(unknownRuleKey: string): string {
         const sections = allRulesOff();
@@ -285,13 +290,17 @@ describe('loadAndValidate — config-error banner (unblock instructions)', () =>
         expect(msg).toContain('webpieces.config.json');
     });
 
-    it('leads the fix with `pnpm install` (version skew), not with deleting the key', () => {
+    it('names editing the config as THE fix, and rules `pnpm install` out instead of prescribing it', () => {
         const msg = bannerFor('totally-made-up-rule');
-        expect(msg).toContain('FIX ORDER');
-        expect(msg).toContain('pnpm install');
-        // `pnpm install` must come BEFORE any "delete/remove the key" guidance so a stale checkout
-        // syncs first instead of gutting valid config.
-        expect(msg.indexOf('pnpm install')).toBeLessThan(msg.indexOf('remove'));
+        expect(msg).toContain('THE FIX: edit webpieces.config.json');
+        expect(msg).toContain('Do NOT run `pnpm install`');
+        expect(msg).not.toContain('FIX ORDER');
+    });
+
+    it('keeps the anti-destructive warning, aimed at the @webpieces PIN', () => {
+        const msg = bannerFor('totally-made-up-rule');
+        expect(msg).toContain('Do NOT delete a key just because it is reported unknown');
+        expect(msg).toContain('package.json pins an @webpieces OLDER');
     });
 });
 

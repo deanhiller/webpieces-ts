@@ -1,6 +1,9 @@
 import { CONFIG_FILENAME, writeTemplate } from '@webpieces/rules-config';
 
-import { L0AllowEntry, L0Call, L0_ALLOWLIST, renderShim, shimStaleDenyReason } from '../bin/shim';
+import {
+    INSTALL_HOOKS_CMD, INSTALL_HOOKS_SYNC_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
+    RESTORE_SHIM_CMD, UPGRADE_SHIM_CMD, renderShim, shimStaleDenyReason,
+} from '../bin/shim';
 import { toError } from './to-error';
 
 // ---------------------------------------------------------------------------
@@ -38,10 +41,26 @@ export const GUARD_MATRIX_DOC = 'webpieces.guard-matrix.md';
  * records, and it is how the dead `wp-setup-ai-hooks` bin in the config-missing text was caught.
  */
 export class L0Cure {
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         readonly mention: string,
         readonly call: L0Call,
+        /**
+         * The one to reach for first when a fault has several. Exactly one cure per fault carries it,
+         * so the rendered Fix section never asks the reader to choose between equals.
+         */
+        readonly preferred: boolean,
+        /**
+         * WHEN to pick this cure over its siblings — the sentence that makes a list of commands
+         * actionable instead of a menu ("when the PIN is the stale side", not "an alternative").
+         */
+        readonly discriminator: string,
     ) {}
+
+    /** A Bash cure renders as a literal command; a tool-shaped one renders as the edit it stands for. */
+    isCommand(): boolean {
+        return this.call.toolName === 'Bash';
+    }
 }
 
 /** One L0 fault. Data-only → a class, per CLAUDE.md. */
@@ -69,12 +88,24 @@ export class L0Fault {
 // (b) not on the L0 allowlist in that spelling, i.e. the AI was handed a cure it could neither run nor
 // get past the guard. Now it names the installer that actually seeds the config AND is entry 8 of the
 // allowlist, and it says out loud that writing the config yourself is allowed through.
+//
+// ORDERING (2026-08-02): writing the file yourself now LEADS. The bare installer used to be OPTION 1,
+// but it seeds the config and then PROMPTS twice for a hook target, which hangs a non-interactive
+// agent — and `--sync` is no help here either ("No webpieces.config.json found — nothing to sync"), so
+// there is no non-interactive installer spelling for this fault. Writing the file is the one cure that
+// always works, and it is the same cure every other config problem has (see the config-validation
+// invariant in GUARD_MATRIX.md): the validator reports every error at once, so the write/validate loop
+// converges in a couple of passes. Do NOT "fix" this by teaching --sync to seed the file.
 export const CONFIG_MISSING_REPORT =
     `${CONFIG_FILENAME} not found — the webpieces guards cannot run without it, so every other tool call is blocked.\n` +
     'THIS IS NOT A DEADLOCK: both options below are explicitly allowed through while this guard is up.\n' +
-    'OPTION 1 - run EXACTLY this command to seed the config (it also re-arms the hooks): `pnpm exec wp-install-ai-hooks`.\n' +
-    `OPTION 2 - create ${CONFIG_FILENAME} yourself: any Read, and any Write/Edit whose target is\n` +
-    `${CONFIG_FILENAME}, is always allowed through, so you can inspect the repo and write it.\n` +
+    `OPTION 1 (preferred — it needs no other tool and it never prompts) - create ${CONFIG_FILENAME}\n` +
+    'yourself: any Read, and any Write/Edit whose target is that file, is always allowed through, so\n' +
+    'you can inspect the repo and write it. The validator reports EVERY missing/invalid entry at once\n' +
+    '(each with the snippet to paste), so a minimal first draft converges in about two passes.\n' +
+    'OPTION 2 (pick this ONLY at an interactive terminal where you can answer its two prompts) - run\n' +
+    'EXACTLY this command to seed the config: `pnpm exec wp-install-ai-hooks`. It goes on to wire the\n' +
+    'Claude Code hooks and asks for a target twice, which hangs a non-interactive session.\n' +
     'Do not append anything to the option you pick — the allowlist is anchored to the whole command.';
 
 // The first line of the fault-Y deny (built out in runner.checkConfigSync, which appends the per-rule
@@ -82,13 +113,20 @@ export const CONFIG_MISSING_REPORT =
 export const CONFIG_OUT_OF_SYNC_HEADER =
     `${CONFIG_FILENAME} is out of sync — new built-in rules are present that have no entry in ${CONFIG_FILENAME}.`;
 
-const CONFIG_WRITE_CURE = new L0Cure(CONFIG_FILENAME, new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`));
+// Writing/repairing the file yourself. PREFERRED for both config faults, per the config-validation
+// invariant in GUARD_MATRIX.md: every config problem cures to "make the file right", the validator
+// reports all errors at once so the loop converges in a couple of passes, and allowlist entry 2 permits
+// this edit unconditionally. (That section is the authority — do not restate its reasoning here.)
+const CONFIG_WRITE_CURE = new L0Cure(
+    CONFIG_FILENAME, new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`), true,
+    'this fault fires at all — it is the only cure that needs no other tool, and it is never denied',
+);
 
 // Cure calls are spelled exactly as the deny messages spell them, so the mention assertion is a real
 // string search rather than a paraphrase.
 // webpieces-disable no-function-outside-class -- pure constructor helper for the L0_FAULTS literal below, in this data module
-function bashCure(command: string): L0Cure {
-    return new L0Cure(command, new L0Call('Bash', command, ''));
+function bashCure(command: string, preferred: boolean, discriminator: string): L0Cure {
+    return new L0Cure(command, new L0Call('Bash', command, ''), preferred, discriminator);
 }
 
 /**
@@ -99,25 +137,79 @@ function bashCure(command: string): L0Cure {
 export const L0_FAULTS: readonly L0Fault[] = [
     new L0Fault('D', 'version drift — root package.json pin != installed version',
         'sh, before the bin runs', 'sh',
-        [bashCure('pnpm install'), bashCure('git pull')], renderShim()),
+        [
+            // `pnpm install` clears D in BOTH directions — it makes installed == pin by definition — so
+            // it is always the preferred cure. The direction only decides whether the PIN is the version
+            // you WANT, which is what the second cure is for.
+            bashCure('pnpm install', true,
+                'node_modules is OLDER than the pin, OR you are on a feature branch and want YOUR '
+                + 'branch pin (usually the case) — it always clears the drift'),
+            bashCure('git pull', false,
+                'node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so '
+                + 'pull first and install second; a bare install would downgrade you'),
+        ], renderShim()),
     new L0Fault('X', 'guard bin missing (fresh clone / new worktree / package removed)',
         'sh, before the bin runs', 'sh',
-        [bashCure('pnpm install')], renderShim()),
+        [bashCure('pnpm install', true,
+            'this fault fires at all — nothing is installed in THIS tree, and a new git worktree '
+            + 'copies no node_modules')],
+        renderShim()),
     new L0Fault('K', 'guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)',
         'sh, before the bin runs', 'sh',
-        [bashCure('rm -rf node_modules && pnpm install')], renderShim()),
+        [bashCure(RECOVERY_CMD, true,
+            'this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees '
+            + 'the right version on disk and considers it installed; only the delete forces a rewrite')],
+        renderShim()),
     new L0Fault('S', 'committed .claude/webpieces/ai-hook.sh != renderShim()',
         'the guard bin', 'JS',
-        [bashCure('pnpm exec wp-install-ai-hooks'), bashCure('pnpm exec wp-upgrade-shim'),
-            bashCure('cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh')],
+        [
+            // --sync, not the bare bin: runInstaller() calls healShim() as STEP 1 (before it even loads
+            // setup), and setup.main() returns on `--sync` before the two interactive wireHook prompts.
+            // So it heals and exits. The BARE spelling prompts twice and hangs a non-interactive agent,
+            // which is why it is not a cure here at all.
+            bashCure(INSTALL_HOOKS_SYNC_CMD, true,
+                'you are on a current release — it re-arms the shim as step 1 and returns before the '
+                + 'interactive hook wiring, so it is the only non-interactive spelling'),
+            bashCure(UPGRADE_SHIM_CMD, false,
+                'you want the shim regenerated and NOTHING else; needs installed '
+                + '@webpieces/ai-hook-rules 0.4.408 or newer'),
+            bashCure(RESTORE_SHIM_CMD, false,
+                'the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does '
+                + 'not exist yet — this works on every release'),
+        ],
         shimStaleDenyReason('')),
     new L0Fault('C', `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',
-        [bashCure('pnpm exec wp-install-ai-hooks'), CONFIG_WRITE_CURE], CONFIG_MISSING_REPORT),
+        [
+            CONFIG_WRITE_CURE,
+            // Kept, but demoted: it seeds the file and then PROMPTS twice. `--sync` is NOT an option for
+            // this fault — with no file to read it prints "nothing to sync" and exits.
+            bashCure(INSTALL_HOOKS_CMD, false,
+                'you are at an INTERACTIVE terminal and can answer its two hook-target prompts'),
+        ], CONFIG_MISSING_REPORT),
     new L0Fault('Y', `a loaded rule has no ${CONFIG_FILENAME} key`,
         'the guard bin', 'JS',
         [CONFIG_WRITE_CURE], CONFIG_OUT_OF_SYNC_HEADER),
 ];
+
+/**
+ * One fault's FIX section, rendered from its `cures` array — literal commands only, never prose.
+ *
+ * This is the half that used to live in hand-written docs and drift. The three fields of L0Cure map
+ * onto the three things a blocked reader needs and nothing else: WHAT to type (the call), WHETHER it is
+ * the default (preferred), and WHEN to pick a sibling instead (discriminator). A cure with no
+ * discriminator would render as a menu of equals, which is how an agent picks the wrong one.
+ */
+// webpieces-disable no-function-outside-class -- pure string builder for renderGuardMatrixDoc below, beside the arrays it reads
+function renderFixSection(fault: L0Fault): string[] {
+    const options = fault.cures.map((cure: L0Cure, i: number): string => {
+        // A Bash cure is the command verbatim; a tool-shaped one is the file it edits (allowlist entry 2).
+        const literal = cure.isCommand() ? `\`${cure.call.command}\`` : `edit \`${cure.mention}\` yourself`;
+        const label = cure.preferred ? `Option ${i + 1} (preferred)` : `Option ${i + 1}`;
+        return `- **${label}**: ${literal}  ← pick this when ${cure.discriminator}`;
+    });
+    return [`### \`${fault.code}\` — ${fault.name}`, '', ...options, ''];
+}
 
 /**
  * Render webpieces.guard-matrix.md from L0_FAULTS + L0_ALLOWLIST.
@@ -148,6 +240,25 @@ export function renderGuardMatrixDoc(): string {
         'First match wins. `D`/`X`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the',
         'guard bin runs — a stale, missing or broken validator cannot be trusted to validate itself.',
         '',
+        '## The fix, per fault',
+        '',
+        'Every command below is rendered from that fault\'s `cures` array and is asserted, by unit test,',
+        'to be accepted by `isAllowed()` — so nothing here can be a command the guard then rejects. Type',
+        'the option you pick EXACTLY as written and run nothing else on that line.',
+        '',
+        ...L0_FAULTS.flatMap(renderFixSection),
+        ...renderMatrixAndAllowlist(),
+    ].join('\n');
+}
+
+/**
+ * The second half of the doc: the three-row matrix and the ONE allowlist. Split out of
+ * renderGuardMatrixDoc solely to keep it inside the method-line budget — the join order is what makes
+ * the two halves one file, so keep them adjacent and keep the byte-lock test as the arbiter.
+ */
+// webpieces-disable no-function-outside-class -- second half of renderGuardMatrixDoc's string, beside it in this module
+function renderMatrixAndAllowlist(): string[] {
+    return [
         '## The matrix',
         '',
         'L0 has NO genuine second dimension. Every branch reduces to one question:',
@@ -193,7 +304,7 @@ export function renderGuardMatrixDoc(): string {
         'Add an entry to `L0_ALLOWLIST` in `packages/tooling/ai-hook-rules/src/bin/shim.ts`. That array is',
         'the single source for the JS allowlist, the `grep -E` inside the rendered shim, and this file.',
         '',
-    ].join('\n');
+    ];
 }
 
 /**
