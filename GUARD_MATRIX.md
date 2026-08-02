@@ -155,7 +155,11 @@ L1 answers two questions, and they are genuinely separate:
 
 1. **Do we govern this at all?** — the escape hatches, for other repos and non-governed paths.
 2. **Is the agent stranded away from the root?** — force-to-root, git/gh only. Agents forget where
-   they are constantly, and `cd` does not persist between tool calls.
+   they are constantly, and `cd` gives them two different ways to be wrong: a `cd` that stays INSIDE
+   the workspace PERSISTS to later calls (so the shell can be parked in a subdirectory left by an
+   unrelated command turns earlier), while a `cd` that LEAVES it is reset by the harness, which says
+   so — `Shell cwd was reset to <root>`. Neither can be assumed, which is why every remedy names the
+   root explicitly instead of telling the agent to `cd` first.
 
 ## Preamble — resolve the target first (Bash only)
 

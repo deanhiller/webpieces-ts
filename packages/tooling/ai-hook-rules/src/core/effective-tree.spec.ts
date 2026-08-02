@@ -10,9 +10,11 @@ import { runBash } from './runner';
 import { BlockedResult } from './types';
 
 /**
- * The bug these lock down: an agent's Bash tool does NOT persist `cd` between calls, so an agent
- * working in a linked worktree writes `cd <worktree> && …` and the shell cwd the hook is handed is
- * ALWAYS the primary clone. Every guard that reasons from that cwd judges the wrong tree.
+ * The bug these lock down: the harness RESETS a cwd that left the workspace, so an agent working in a
+ * linked worktree writes `cd <worktree> && …` and the shell cwd the hook is handed is ALWAYS the
+ * primary clone. (A `cd` that STAYS inside the workspace persists instead — so the cwd can equally be
+ * a subdirectory left behind turns earlier. Neither can be assumed.) Every guard that reasons from
+ * that raw cwd judges the wrong tree.
  */
 
 function gitIn(cwd: string, ...args: string[]): void {

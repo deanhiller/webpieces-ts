@@ -73,7 +73,7 @@ function allowed(command: string): boolean {
 }
 
 // The same guard, but for a command that runs somewhere else entirely (a leading `cd`, which is how
-// an agent reaches a linked worktree or a scratchpad — `cd` does not persist between tool calls).
+// an agent reaches a linked worktree or a scratchpad — the harness resets a cwd that left the workspace).
 function allowedFrom(command: string, effectiveCwd: string): boolean {
     return rule().check(new BashContext(command, '/tmp/x', effectiveCwd)).length === 0;
 }
