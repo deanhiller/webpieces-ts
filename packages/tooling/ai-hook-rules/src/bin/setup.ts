@@ -130,7 +130,7 @@ interface ConfigFile {
     rules: Section;
     hookGuards: Section;
     commands: Json;
-    excludePaths: Json;
+    excludePaths: string[];
     'match-rules': Json[];
     rulesDir: string[];
 }
@@ -154,10 +154,31 @@ function seedCommands(): Json {
     };
 }
 
-// Required excludePaths block: two glob lists that suppress hook enforcement per file path. Seeded
-// empty (enforce everywhere) — a client adds paths (e.g. "repositories/**") to exempt vendored trees.
-function seedExcludePaths(): Json {
-    return { rules: [], guards: [] };
+// Required excludePaths block: ONE glob list suppressing hook enforcement per file path. Seeded empty
+// (enforce everywhere) — a client adds paths (e.g. "repositories/**") to exempt vendored trees.
+// webpieces-disable no-function-outside-class -- sibling of the other seed* helpers; this module is config-shape builders by design
+function seedExcludePaths(): string[] {
+    return [];
+}
+
+// Bring an existing `excludePaths` forward to the single-list shape. Already a list → untouched.
+// Legacy `{ rules, guards }` → unioned (order preserved, duplicates dropped) and recorded as a change
+// so `wp-install-ai-hooks` is the migration path rather than a hand-edit. Anything else → seeded [].
+// webpieces-disable no-any-unknown -- `raw` is opaque consumer JSON until narrowed here
+// webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
+function migrateExcludePaths(raw: unknown, changes: string[]): string[] {
+    if (Array.isArray(raw)) return (raw as string[]).filter(p => typeof p === 'string');
+    if (typeof raw === 'object' && raw !== null) {
+        // webpieces-disable no-any-unknown -- narrowing the opaque legacy block from consumer JSON
+        const legacy = raw as Record<string, unknown>;
+        const rules = Array.isArray(legacy['rules']) ? (legacy['rules'] as string[]) : [];
+        const guards = Array.isArray(legacy['guards']) ? (legacy['guards'] as string[]) : [];
+        const merged = [...new Set([...rules, ...guards].filter(p => typeof p === 'string'))];
+        changes.push(`migrated excludePaths {rules,guards} -> one list (${merged.length} path(s))`);
+        return merged;
+    }
+    changes.push('added excludePaths ([])');
+    return [];
 }
 
 // Deep-copy the framework's default match-rules (the no-fetch guard) into plain JSON for the config
@@ -247,11 +268,11 @@ export function migrate(existing: Json): MigrateResult {
     if (commands['upsertPr'] === undefined) { commands['upsertPr'] = DEFAULT_UPSERT_PR; changes.push('added commands.upsertPr'); }
     if (commands['mergeComplete'] === undefined) { commands['mergeComplete'] = DEFAULT_MERGE_COMPLETE; changes.push('added commands.mergeComplete'); }
 
-    // Seed the now-required excludePaths block (empty = enforce everywhere) if the config predates it.
-    const excludePaths: Json = (typeof existing['excludePaths'] === 'object' && existing['excludePaths'] !== null && !Array.isArray(existing['excludePaths']))
-        ? (existing['excludePaths'] as Json) : {};
-    if (excludePaths['rules'] === undefined) { excludePaths['rules'] = []; changes.push('added excludePaths.rules ([])'); }
-    if (excludePaths['guards'] === undefined) { excludePaths['guards'] = []; changes.push('added excludePaths.guards ([])'); }
+    // Seed the now-required excludePaths list (empty = enforce everywhere) if the config predates it,
+    // and MIGRATE the legacy `{ rules: [], guards: [] }` object to the single list by unioning them.
+    // The union is behaviour-preserving for every config we have seen (both lists set identically), and
+    // widening is the safe direction anyway: a path either side excluded stays excluded.
+    const excludePaths: string[] = migrateExcludePaths(existing['excludePaths'], changes);
 
     // Seed the now-required match-rules array (with the default no-fetch guard) if the config predates
     // it. A client that has already customized it keeps their array untouched.

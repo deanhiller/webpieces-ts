@@ -67,7 +67,7 @@ export class ConfigLoader {
                 new WebpiecesRulesConfig(),
                 emptyCommands,
                 emptyCommands.prGate,
-                new ExcludePaths([], []),
+                new ExcludePaths([]),
                 [],
                 null,
             );
@@ -154,14 +154,19 @@ export class ConfigLoader {
     }
 
     // Parse the (already-validated) raw excludePaths block into the typed ExcludePaths.
+    //
+    // CANONICAL shape is a bare string[]. The legacy object form `{ rules: [...], guards: [...] }` is
+    // still accepted and UNIONED into one list — a config written for the old two-list schema keeps
+    // working, and a path excluded from either list is excluded from everything, which is what every
+    // consumer already meant by setting both to the same value.
     // webpieces-disable no-any-unknown -- `raw` is opaque consumer JSON until narrowed here
     private parseExcludePaths(raw: unknown): ExcludePaths {
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return new ExcludePaths([], []);
+        if (Array.isArray(raw)) return new ExcludePaths(raw.filter(p => typeof p === 'string'));
+        if (typeof raw !== 'object' || raw === null) return new ExcludePaths([]);
         // webpieces-disable no-any-unknown -- validateExcludePaths already proved both are string[]
         const s = raw as Record<string, string[]>;
-        const rules = Array.isArray(s['rules']) ? s['rules'].filter(p => typeof p === 'string') : [];
-        const guards = Array.isArray(s['guards']) ? s['guards'].filter(p => typeof p === 'string') : [];
-        return new ExcludePaths(rules, guards);
+        const legacy = [...(Array.isArray(s['rules']) ? s['rules'] : []), ...(Array.isArray(s['guards']) ? s['guards'] : [])];
+        return new ExcludePaths([...new Set(legacy.filter(p => typeof p === 'string'))]);
     }
 
     // Parse the (already-validated) raw match-rules array into typed MatchRuleConfig[]. The entries use

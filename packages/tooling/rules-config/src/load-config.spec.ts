@@ -148,11 +148,30 @@ describe('loadAndValidate', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
             ...allRulesOff(),
             commands: { 'pr-gate': validPrGate() },
+            excludePaths: ['repositories/**', 'vendor/**'],
+        }) });
+        expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**', 'vendor/**']);
+    });
+
+    // BACK-COMPAT: the legacy two-list object still loads, unioned into the single list. Rejecting it
+    // would deadlock every unmigrated consumer — the block is REQUIRED, so a hard error blocks every
+    // Bash/Edit including the edit that would fix it.
+    it('accepts the legacy { rules, guards } object and unions it into one list', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...allRulesOff(),
+            commands: { 'pr-gate': validPrGate() },
             excludePaths: { rules: ['repositories/**'], guards: ['vendor/**'] },
         }) });
-        const loaded = loadAndValidate(dir);
-        expect(loaded.excludePaths.rules).toEqual(['repositories/**']);
-        expect(loaded.excludePaths.guards).toEqual(['vendor/**']);
+        expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**', 'vendor/**']);
+    });
+
+    it('de-duplicates when the legacy lists overlap (the common case: both set identically)', () => {
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...allRulesOff(),
+            commands: { 'pr-gate': validPrGate() },
+            excludePaths: { rules: ['repositories/**'], guards: ['repositories/**'] },
+        }) });
+        expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**']);
     });
 });
 

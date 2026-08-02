@@ -1,12 +1,17 @@
-// Top-level `excludePaths` block from webpieces.config.json. Two independently-varying glob lists
-// that suppress hook enforcement for matching files (matched against the workspace-relative path):
-//  - `rules`  — paths where code-style rules are skipped (e.g. vendored repos under repositories/**).
-//  - `guards` — paths where FILE-scoped guards (e.g. feature-branch-guard) are skipped. Bash git/PR
-//               guards are unaffected — they reason about git state, not a file location.
+// Top-level `excludePaths` block from webpieces.config.json: ONE glob list that suppresses hook
+// enforcement for matching files (matched against the workspace-relative path). A path listed here is
+// hands-off for everything — code-style rules AND file-scoped guards alike.
+//
+// It used to be TWO independently-varying lists, `rules` and `guards`. The split never earned its
+// keep: every consumer set both to the same value, and the one case that would need them to differ
+// (exclude a generated tree from style rules but keep the git guards on it) is already served better
+// one level down, by a rule's OWN `excludePaths` inside its config block. A path is governed by
+// webpieces or it is not, so the top-level block is a single list.
+//
+// BACK-COMPAT: the object form `{ "rules": [...], "guards": [...] }` is still accepted and UNIONED
+// into one list, so a config written for the old schema keeps working unchanged. See
+// LoadedConfigReader.parseExcludePaths.
 // Data-only (per CLAUDE.md, classes for data). Built once by loadAndValidate after validation.
 export class ExcludePaths {
-    constructor(
-        readonly rules: string[],
-        readonly guards: string[],
-    ) {}
+    constructor(readonly paths: string[]) {}
 }

@@ -23,33 +23,27 @@ function names(rules: readonly Rule[]): string[] {
 }
 
 describe('filterByExcludedPaths', () => {
-    it('drops code rules on an excluded rules path but keeps guards (lists vary independently)', () => {
-        const ex = new ExcludePaths(['repositories/**'], []);
-        const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', ex);
-        expect(names(kept)).toEqual(['feature-branch-guard']);
-    });
-
-    it('drops guards on an excluded guards path but keeps code rules (lists vary independently)', () => {
-        const ex = new ExcludePaths([], ['repositories/**']);
-        const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', ex);
-        expect(names(kept)).toEqual(['max-file-lines']);
+    // ONE list now: an excluded path is hands-off for code rules and guards alike. The old two-list
+    // form let them vary independently; no consumer ever did, and a per-rule carve-out is served by
+    // the rule's OWN excludePaths instead.
+    it('drops EVERY rule — code rules and guards — on an excluded path', () => {
+        const ex = new ExcludePaths(['repositories/**']);
+        expect(filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', ex)).toEqual([]);
     });
 
     it('keeps every rule for a path that matches no exclusion', () => {
-        const ex = new ExcludePaths(['repositories/**'], ['repositories/**']);
+        const ex = new ExcludePaths(['repositories/**']);
         const kept = filterByExcludedPaths([codeRule, guard], 'src/app/service.ts', ex);
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
     });
 
-    it('drops both categories when both lists match the path', () => {
-        const ex = new ExcludePaths(['vendor/**'], ['vendor/**']);
-        const kept = filterByExcludedPaths([codeRule, guard], 'vendor/lib/x.ts', ex);
-        expect(kept).toEqual([]);
+    it('keeps every rule when the list is empty (enforce everywhere — the seeded default)', () => {
+        const kept = filterByExcludedPaths([codeRule, guard], 'vendor/lib/x.ts', new ExcludePaths([]));
+        expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
     });
 
-    it('keeps everything when both lists are empty (default behavior)', () => {
-        const ex = new ExcludePaths([], []);
-        const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', ex);
+    it('keeps everything when the list is empty even on a would-be-excluded path', () => {
+        const kept = filterByExcludedPaths([codeRule, guard], 'repositories/foo/bar.ts', new ExcludePaths([]));
         expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
     });
 });
@@ -267,7 +261,12 @@ describe('runBash — foreign-repo boundary and excludePaths on the bash path (d
         writeGuardConfig(outer, []);       // plain is a subdir of the governed repo, no exclusion
         const result = runBash(`cd ${plainSubdir} && git push origin HEAD`, outer, 'guards');
         expect(result).toBeInstanceOf(BlockedResult);
-        expect((result as BlockedResult).report).toContain('gated flow');
+        // Blocked by force-to-root, which runs BEFORE the bash guards (gitFromSubdirBlock precedes
+        // runBashRules) and now judges the cd'd-into directory rather than the shell's own. It used to
+        // fall through to the push guard's "gated flow" message because the shell sat at the root.
+        // Still blocked either way; the cost is one extra turn — the agent is steered back to the root
+        // first, and the gated-flow message lands when it re-runs there.
+        expect((result as BlockedResult).report).toContain('Run git/gh commands from the repo root');
     });
 
     it('6: `echo "cd repositories/plain && git push"` is NOT waved through via the quoted cd', () => {
@@ -329,10 +328,19 @@ describe('runBash — force-to-root uses the effective cwd (defect C)', () => {
         expect(report).not.toContain('Run git/gh commands from the repo root');  // NOT force-to-root
     });
 
-    it('at the root, `cd src && git status` (governed subdir) → ALLOW (no new force-to-root block)', () => {
-        // The regression the naive one-line fix would cause: an in-command cd into a governed subdir
-        // must not trip force-to-root when the shell itself is at the root.
-        expect(runBash(`cd ${governedSubdir} && git status`, outer, 'guards')).toBeNull();
+    it('at the root, `cd src && git status` (governed subdir) → force-to-root BLOCK', () => {
+        // INVERTED deliberately. This used to assert ALLOW, on the reasoning that an in-command `cd`
+        // into a governed subdir "must not trip force-to-root when the shell itself is at the root" —
+        // but that made the guard answer the same DESTINATION two different ways depending on where
+        // the shell happened to start: blocked when stranded in src/, allowed when cd'ing into it.
+        //
+        // One variable decides it now: the directory the command actually runs in. The guard exists to
+        // keep the agent's git work at the root, and an agent that cd's INTO a subdir to run git has
+        // the same broken mental model as one stranded there — git behaves identically from any subdir
+        // of the repo, so there is no legitimate reason to cd in first.
+        const result = runBash(`cd ${governedSubdir} && git status`, outer, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
+        expect((result as BlockedResult).report).toContain('Run git/gh commands from the repo root');
     });
 
     it('shell PERSISTED in a governed subdir, bare `git status` (no cd) → force-to-root BLOCK (kept)', () => {
