@@ -97,7 +97,9 @@ export function logGuardInvocation(cwd: string, tool: string, target: string): v
     try {
         const root = new RepoRootFinder().resolveRepoRoot(cwd);
         const branch = branchForLog(root);
-        const sync = summarizeSyncStatus(readMainSyncStatus(root));
+        // The cache is branch-keyed, so the entry to log is the one for the branch we are standing on.
+        // 'unknown' (branchForLog's failure value) simply misses and logs 'sync=none'.
+        const sync = summarizeSyncStatus(readMainSyncStatus(root, branch));
 
         const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
         fs.mkdirSync(hooksDir, { recursive: true });

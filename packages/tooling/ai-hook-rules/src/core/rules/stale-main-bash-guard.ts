@@ -129,10 +129,13 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         // State A is on `main` only. A merged feature branch is merged-branch-bash-guard's job.
         if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main (state B is another guard)');
 
-        const status = readMainSyncStatus(ctx.workspaceRoot);
+        const status = readMainSyncStatus(ctx.workspaceRoot, 'main');
         if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
         const cache = this.cacheSummary(status);
+        // BELT-AND-BRACES since the cache became branch-keyed: we asked for the 'main' entry by key, so
+        // a mismatch means the map's key and the entry's own `branch` disagree — a shape bug. Kept so
+        // that degrades to an allow. Unreachable in normal operation.
         if (status.branch !== 'main') return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
         // Offline / origin unresolvable — we have nothing to be stale RELATIVE TO.
         if (status.originMain === '') return this.allow(ctx, branch, 'origin-main-unknown (fail-open)', cache);

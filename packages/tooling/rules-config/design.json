@@ -14,7 +14,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/atomic-file.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "BranchMutationLog",
@@ -54,6 +54,14 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/state-dir.ts",
+                    "level": 2
+                },
+                {
+                    "id": "MainSyncFileStore",
+                    "className": "MainSyncFileStore",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/main-sync-file.ts",
                     "level": 2
                 },
                 {
@@ -103,6 +111,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/load-template.ts",
                     "level": 1
+                },
+                {
+                    "id": "WorktreeService",
+                    "className": "WorktreeService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/worktrees.ts",
+                    "level": 2
                 }
             ],
             "edges": [
@@ -134,6 +150,15 @@
                     "paramType": "StateDirMigrator"
                 },
                 {
+                    "from": "MainSyncFileStore",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomicFile",
+                    "paramType": "AtomicFile"
+                },
+                {
                     "from": "MainSyncStatusService",
                     "to": "AtomicFile",
                     "injection": "type",
@@ -150,6 +175,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "MainSyncFileStore",
+                    "injection": "type",
+                    "token": "MainSyncFileStore",
+                    "tokenKey": "class:packages/tooling/rules-config/src/main-sync-file.ts#MainSyncFileStore",
+                    "paramName": "store",
+                    "paramType": "MainSyncFileStore"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "WorktreeService",
+                    "injection": "type",
+                    "token": "WorktreeService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "paramName": "worktrees",
+                    "paramType": "WorktreeService"
                 },
                 {
                     "from": "RepoRootFinder",

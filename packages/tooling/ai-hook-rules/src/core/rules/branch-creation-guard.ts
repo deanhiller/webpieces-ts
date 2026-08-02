@@ -469,10 +469,13 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
      * Fails toward the strict cap: no cache, a cache for another branch, or a clean branch → no yield.
      */
     private effectiveBranchCap(ctx: BashContext): number {
-        const status = readMainSyncStatus(ctx.workspaceRoot);
-        if (status === null || !status.branchAlreadyMerged) return this.maxLocalBranches;
+        // The cache is branch-keyed, so the branch we are standing on is what we look the entry up by.
+        // A branch the last refresh never saw misses (null) → the strict cap, as before.
         const current = this.currentBranchOrNull(ctx.workspaceRoot);
-        if (current === null || status.branch !== current) return this.maxLocalBranches;
+        if (current === null) return this.maxLocalBranches;
+        const status = readMainSyncStatus(ctx.workspaceRoot, current);
+        if (status === null || !status.branchAlreadyMerged) return this.maxLocalBranches;
+        if (status.branch !== current) return this.maxLocalBranches;
         return this.maxLocalBranches + 1;
     }
 

@@ -196,7 +196,7 @@ describe('main-sync lock recovery and status visibility', () => {
     it('the status file written by the winner is visible from every other worktree', () => {
         const status = service.computeMainSyncStatus(primary);
         service.writeMainSyncStatus(primary, status);
-        expect(service.readMainSyncStatus(worktreeB)).not.toBeNull();
+        expect(service.readMainSyncStatus(worktreeB, status.branch)).not.toBeNull();
         expect(service.mainSyncStatusPath(worktreeA)).toBe(service.mainSyncStatusPath(worktreeB));
     });
 });

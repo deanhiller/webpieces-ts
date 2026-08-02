@@ -18,17 +18,22 @@ graph TD
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
     DotWebpieces["DotWebpieces"]
+    MainSyncFileStore["MainSyncFileStore"]
     MainSyncStatusService["MainSyncStatusService"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
     StateDirMigrator["StateDirMigrator"]
     TemplateWriter["TemplateWriter"]
+    WorktreeService["WorktreeService"]
     BranchMutationLog --> DotWebpieces
     ConfigLoader --> ConfigFile
     DotWebpieces --> StateDirMigrator
+    MainSyncFileStore --> AtomicFile
     MainSyncStatusService --> AtomicFile
     MainSyncStatusService --> DotWebpieces
+    MainSyncStatusService --> MainSyncFileStore
+    MainSyncStatusService --> WorktreeService
     RepoRootFinder --> DotWebpieces
     ReviewJsonService --> DotWebpieces
     RulesConfigDesign --> BranchMutationLog

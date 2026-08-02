@@ -67,15 +67,16 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
         // Keep the cache warm for the next call. Detached; never blocks this edit.
         triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
 
-        const status = readMainSyncStatus(ctx.workspaceRoot);
+        const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         // No cache yet (first edit of the session) → allow; the refresh we just spawned populates it
         // for the next call. Fail-open: never block on missing data.
         if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
         const cache = this.cacheSummary(status);
-        // Stale cross-branch cache: the cached status is for a DIFFERENT branch (e.g. you just
-        // switched branches and the refresh for this one hasn't landed yet). Never block on another
-        // branch's signals — fail open; the refresh we just spawned rewrites it for this branch.
+        // BELT-AND-BRACES since the cache became branch-keyed: we looked this entry up BY `branch`, so
+        // a mismatch now means the map's key and the entry's own `branch` field disagree — a shape bug,
+        // not a normal state. Kept (rather than deleted) so such a bug degrades to an allow instead of
+        // blocking on another branch's signals. Unreachable in normal operation.
         if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
 
         // State 2: this feature branch was already merged into main.

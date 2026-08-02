@@ -29,19 +29,39 @@ describe('logGuardInvocation', () => {
         expect(content.trim().split('\n').length).toBe(1);
     });
 
+    // The cache is branch-KEYED, so the entry folded in is the one for the branch we are standing on.
+    // These temp dirs are not git repos, so branchForLog reports 'unknown' — writing the entry under
+    // that name is how the test names the branch the logger will actually look up. The sibling entry
+    // proves it takes ITS branch's row rather than whatever happens to be in the file.
     it('folds the main-sync-status.json fields (branch, merged PR, fork, conflict) into the line', () => {
         const root = tmpRoot();
         writeMainSyncStatus(
             root,
-            new MainSyncStatus('dean/foo', true, '271', true, 'abc123', 'o', 'f', false, [], '2026-07-06T00:00:00.000Z'),
+            new MainSyncStatus('dean/other', false, '', true, 'zzz', 'o', 'f', true, ['a.ts'], 'ts'),
+        );
+        writeMainSyncStatus(
+            root,
+            new MainSyncStatus('unknown', true, '271', true, 'abc123', 'o', 'f', false, [], '2026-07-06T00:00:00.000Z'),
         );
         logGuardInvocation(root, 'Edit', 'src/x.ts');
         const content = fs.readFileSync(path.join(root, LOG_REL), 'utf8');
         expect(content).toContain('\tEdit\t');
-        expect(content).toContain('sync=dean/foo');
+        expect(content).toContain('sync=unknown');
         expect(content).toContain('merged=PR#271');
         expect(content).toContain('fork=true');
         expect(content).toContain('conflict=false');
+    });
+
+    // A cache that describes only OTHER branches is a MISS for this one — sync=none, the same
+    // fail-open the logger already showed for a cache that had not been written yet.
+    it('logs sync=none when the cache describes only other branches', () => {
+        const root = tmpRoot();
+        writeMainSyncStatus(
+            root,
+            new MainSyncStatus('dean/other', true, '271', true, 'abc', 'o', 'f', false, [], 'ts'),
+        );
+        logGuardInvocation(root, 'Edit', 'src/x.ts');
+        expect(fs.readFileSync(path.join(root, LOG_REL), 'utf8')).toContain('sync=none');
     });
 
     it('collapses newlines/tabs in the target so one invocation is always one line', () => {

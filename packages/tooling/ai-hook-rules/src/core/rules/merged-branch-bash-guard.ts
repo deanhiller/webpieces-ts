@@ -81,14 +81,15 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         // guard is self-sufficient when that one is off.)
         triggerMainSyncRefresh(ctx.workspaceRoot, this.config.hangTimeoutMinutes ?? DEFAULT_HANG_TIMEOUT_MINUTES);
 
-        const status = readMainSyncStatus(ctx.workspaceRoot);
-        // No cache yet (first command of the session) → allow; the refresh we just spawned populates it.
+        const status = readMainSyncStatus(ctx.workspaceRoot, branch);
+        // No cache yet (first command of the session), or a branch this refresh has not seen → allow;
+        // the refresh we just spawned populates it.
         if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
         const cache = this.cacheSummary(status);
-        // Cache computed for a DIFFERENT branch (just switched; the refresh for this one hasn't landed).
-        // Never block on another branch's signals — this is also what un-blocks the instant the agent
-        // follows the cure and checks out a fresh branch.
+        // BELT-AND-BRACES since the cache became branch-keyed: the entry was looked up BY `branch`, so
+        // a mismatch is a shape bug rather than the old "cache is for another branch" state. Kept so
+        // such a bug degrades to an allow. Unreachable in normal operation.
         if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
 
         if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);

@@ -123,7 +123,7 @@ describe('main-sync status IO', () => {
     it('round-trips a status', () => {
         const status = new MainSyncStatus('dean/x', false, '', true, 'aaa', 'bbb', 'ccc', true, ['p/q.ts'], '2026-06-30T00:00:00.000Z');
         writeMainSyncStatus(root, status);
-        const read = readMainSyncStatus(root);
+        const read = readMainSyncStatus(root, 'dean/x');
         expect(read).not.toBeNull();
         expect(read?.conflict).toBe(true);
         expect(read?.conflictFiles).toEqual(['p/q.ts']);
@@ -135,7 +135,7 @@ describe('main-sync status IO', () => {
     it('round-trips branchAlreadyMerged + mergedPr', () => {
         const status = new MainSyncStatus('dean/x', true, '42', true, 'aaa', 'bbb', 'ccc', false, [], 'ts');
         writeMainSyncStatus(root, status);
-        const read = readMainSyncStatus(root);
+        const read = readMainSyncStatus(root, 'dean/x');
         expect(read?.branchAlreadyMerged).toBe(true);
         expect(read?.mergedPr).toBe('42');
     });
@@ -144,19 +144,19 @@ describe('main-sync status IO', () => {
         const status = new MainSyncStatus('dean/x', false, '', true, 'aaa', 'bbb', 'ccc', true, ['q.ts'], 'ts');
         status.openPr = '303';
         writeMainSyncStatus(root, status);
-        expect(readMainSyncStatus(root)?.openPr).toBe('303');
+        expect(readMainSyncStatus(root, 'dean/x')?.openPr).toBe('303');
         // A legacy cache with no openPr key reads back as '' (fail-safe default).
         expect(new MainSyncStatus('b', false, '', true, null, '', '', false, [], 'ts').openPr).toBe('');
     });
 
     it('returns null for a missing file', () => {
-        expect(readMainSyncStatus(root)).toBeNull();
+        expect(readMainSyncStatus(root, 'dean/x')).toBeNull();
     });
 
     it('returns null for malformed JSON (fail-open)', () => {
         fs.mkdirSync(path.join(root, '.webpieces'), { recursive: true });
         fs.writeFileSync(path.join(root, '.webpieces', 'main-sync-status.json'), '{ not json');
-        expect(readMainSyncStatus(root)).toBeNull();
+        expect(readMainSyncStatus(root, 'dean/x')).toBeNull();
     });
 });
 

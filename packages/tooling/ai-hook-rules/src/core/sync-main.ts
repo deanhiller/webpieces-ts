@@ -1,12 +1,13 @@
 import {
     BranchReaper,
     DEFAULT_HANG_TIMEOUT_MINUTES,
+    MainSyncStatusFile,
     MergedBranchesCache,
     MergedBranchesService,
     ReapResult,
     loadAndValidate,
-    computeMainSyncStatus,
-    writeMainSyncStatus,
+    computeAllMainSyncStatuses,
+    writeMainSyncStatusFile,
     writeMainSyncLock,
     tryAcquireMainSyncLock,
     finishedLock,
@@ -29,13 +30,24 @@ import { logSyncEvent, SyncLogEvent } from './main-sync-log';
  * argv: [, , repoRoot, hangTimeoutMinutes]
  */
 export function main(): void {
-    const repoRoot = process.argv[2] ?? process.cwd();
-    const hangTimeoutMinutes = Number(process.argv[3]) || DEFAULT_HANG_TIMEOUT_MINUTES;
+    refreshMainSync(
+        process.argv[2] ?? process.cwd(),
+        Number(process.argv[3]) || DEFAULT_HANG_TIMEOUT_MINUTES,
+        process.argv.slice(2).join(' '),
+    );
+}
+
+/**
+ * The refresh itself, argv-free so it can be driven by a test. `main()` is only the argv parse — a
+ * test importing another module's `main` is what no-process-exit-outside-main exists to prevent.
+ */
+// webpieces-disable no-function-outside-class -- module-level entry point of this detached refresher, matching the file's existing shape
+export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, argvDetail: string = ''): void {
     const startedMs = Date.now();
 
     // First action: prove the detached child actually started. If guard-async-work.log has no START line
     // for a spawn, the child never launched (or died before this point).
-    logSyncEvent(repoRoot, new SyncLogEvent('START', process.pid, '-', `argv=${process.argv.slice(2).join(' ')}`));
+    logSyncEvent(repoRoot, new SyncLogEvent('START', process.pid, '-', `argv=${argvDetail}`));
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -48,8 +60,12 @@ export function main(): void {
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const status = computeMainSyncStatus(repoRoot);
-            writeMainSyncStatus(repoRoot, status);
+            // EVERY worktree's branch, not just ours. The cache is shared by the whole repo but used
+            // to describe only the branch of whichever tree won this lock, so every other worktree's
+            // guards read a cross-branch cache and abstained. One fetch + one `gh` call now arms all
+            // of them; the map is rebuilt from the live worktree set, so dead branches drop out.
+            const file = computeAllMainSyncStatuses(repoRoot);
+            writeMainSyncStatusFile(repoRoot, file);
 
             // Second slow signal, same lock, same detached run: which local branches are dead. One bulk
             // `gh pr list --state merged` call. The branch-creation-guard reads the result to enforce its
@@ -65,9 +81,10 @@ export function main(): void {
             const reaped = autoReap(repoRoot, cache);
 
             // FINISH after a successful write — START-without-FINISH means we were killed mid-run.
+            const names = Object.keys(file.branches);
             logSyncEvent(repoRoot, new SyncLogEvent(
-                'FINISH', process.pid, status.branch,
-                `merged=${String(status.branchAlreadyMerged)} mergedPr=${status.mergedPr} forkPoint=${String(status.hasForkPoint)} conflict=${String(status.conflict)} deletableBranches=${String(cache.deletable.length)} reaped=${String(reaped)} ms=${String(Date.now() - startedMs)}`,
+                'FINISH', process.pid, names.join(','),
+                `branches=${String(names.length)} ${names.map(summarize(file)).join(' ')} deletableBranches=${String(cache.deletable.length)} reaped=${String(reaped)} ms=${String(Date.now() - startedMs)}`,
             ));
         } finally {
             // Always flip the lock off so a compute failure can't wedge the guard until the
@@ -80,6 +97,20 @@ export function main(): void {
         // spawns a fresh refresher) — but record WHY it died so the failure isn't invisible.
         logSyncEvent(repoRoot, new SyncLogEvent('ERROR', process.pid, '-', `${error.message} | ${error.stack ?? ''}`));
     }
+}
+
+/**
+ * One `branch(merged/forkPoint/conflict)` token per recorded branch, for the FINISH log line. The log
+ * is the only evidence that a given worktree's branch was actually armed by a refresh, so it has to
+ * name every branch written, not just the tree the refresher happened to run in.
+ */
+// webpieces-disable no-function-outside-class -- module-level log formatter of this detached main(), matching the file's existing shape
+function summarize(file: MainSyncStatusFile): (branch: string) => string {
+    return (branch: string): string => {
+        const status = file.branches[branch];
+        if (status === undefined) return `${branch}(?)`;
+        return `${branch}(merged=${String(status.branchAlreadyMerged)}:${status.mergedPr} fork=${String(status.hasForkPoint)} conflict=${String(status.conflict)})`;
+    };
 }
 
 /**

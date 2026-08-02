@@ -4,8 +4,20 @@ import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { AtomicFile } from './atomic-file';
+import {
+    MAIN_SYNC_STATUS_VERSION,
+    MainSyncFileStore,
+    MainSyncStatus,
+    MainSyncStatusFile,
+    PullRequestIndex,
+} from './main-sync-file';
 import { DotWebpieces, dotWebpieces } from './state-dir';
 import { toError } from './to-error';
+import { WorktreeService } from './worktrees';
+
+// The on-disk shape lives in main-sync-file.ts; re-exported so every existing importer of
+// `MainSyncStatus` from this module keeps working.
+export { MainSyncStatus, MainSyncStatusFile, PullRequestIndex, MAIN_SYNC_STATUS_VERSION };
 
 // Shared "is my feature branch healthy relative to origin/main?" state. The SLOW signals (git fetch +
 // merge-base + same-file-overlap + a merged-PR lookup) are computed by the ai-hook-rules refresher in a
@@ -21,51 +33,6 @@ const MAIN_SYNC_LOCK_FILE = 'main-sync.lock.json';
 const LOCK_STATE_INPROCESS = 'inprocess';
 const LOCK_STATE_FINISHED = 'finished';
 
-// Data-only (per CLAUDE.md, classes for data).
-export class MainSyncStatus {
-    branch: string;
-    branchAlreadyMerged: boolean;
-    mergedPr: string;
-    hasForkPoint: boolean;
-    forkPoint: string | null;
-    originMain: string;
-    featureHead: string;
-    conflict: boolean;
-    conflictFiles: string[];
-    timestamp: string;
-    // An OPEN (not merged) PR tracking this branch, if any — '' = none or not-yet-known. Advisory.
-    // Kept OUT of the positional constructor (a defaulted field) so existing call sites don't churn.
-    openPr: string = '';
-    // The LOCAL refs/heads/main hash — '' = main does not exist locally (fresh clone / worktree) or
-    // could not be read. Paired with `originMain`, this is what tells the read-stale-guard whether a
-    // checked-out `main` is behind its remote. Defaulted field for the same reason as `openPr`.
-    localMain: string = '';
-
-    constructor(
-        branch: string,
-        branchAlreadyMerged: boolean,
-        mergedPr: string,
-        hasForkPoint: boolean,
-        forkPoint: string | null,
-        originMain: string,
-        featureHead: string,
-        conflict: boolean,
-        conflictFiles: string[],
-        timestamp: string,
-    ) {
-        this.branch = branch;
-        this.branchAlreadyMerged = branchAlreadyMerged;
-        this.mergedPr = mergedPr;
-        this.hasForkPoint = hasForkPoint;
-        this.forkPoint = forkPoint;
-        this.originMain = originMain;
-        this.featureHead = featureHead;
-        this.conflict = conflict;
-        this.conflictFiles = conflictFiles;
-        this.timestamp = timestamp;
-    }
-}
-
 // Concurrency state machine for the detached refresher. `started` is epoch ms. `pid` is the refresher
 // process's pid (0 = unknown) — used so a KILLED refresher doesn't wedge `inprocess` for the timeout.
 export class MainSyncLock {
@@ -80,22 +47,7 @@ export class MainSyncLock {
     }
 }
 
-// Raw JSON shapes for the cast at the parse boundary.
-interface RawStatus {
-    branch?: string;
-    branchAlreadyMerged?: boolean;
-    mergedPr?: string;
-    hasForkPoint?: boolean;
-    forkPoint?: string | null;
-    originMain?: string;
-    featureHead?: string;
-    conflict?: boolean;
-    conflictFiles?: string[];
-    timestamp?: string;
-    openPr?: string;
-    localMain?: string;
-}
-
+// Raw JSON shape for the cast at the parse boundary.
 interface RawLock {
     state?: string;
     started?: number;
@@ -117,6 +69,8 @@ export class MainSyncStatusService {
     constructor(
         private readonly dotDir: DotWebpieces = dotWebpieces,
         private readonly atomicFile: AtomicFile = new AtomicFile(),
+        private readonly store: MainSyncFileStore = new MainSyncFileStore(atomicFile),
+        private readonly worktrees: WorktreeService = new WorktreeService(),
     ) {}
 
     /**
@@ -126,14 +80,13 @@ export class MainSyncStatusService {
      * one `.git`, one `origin/main`, one fetch, one answer. A per-worktree copy under single-flight
      * would only ever be written for whichever worktree won the lock anyway.
      *
-     * KNOWN CONSEQUENCE, stated plainly rather than discovered later: the file's CONTENT is keyed to
-     * one branch (`branch`, `featureHead`, `conflict`, `conflictFiles`), and every reader fails OPEN
-     * when the cached branch is not the branch being judged (`merged-branch-bash-guard` and
-     * `stale-main-bash-guard` both log `stale-cross-branch-cache (fail-open)`). With several worktrees
-     * on several branches, the losers of the lock therefore see a cross-branch cache and their guards
-     * allow rather than block. That is the fail-SAFE direction and it is inherent to single-flight, not
-     * to the shared path — but making the entries branch-keyed (a map of branch → status, written
-     * atomically) is the obvious follow-up.
+     * FORMERLY a known defect, now fixed: the file's CONTENT used to be keyed to ONE branch, and every
+     * reader fails OPEN when the cached branch is not the branch being judged (`stale-cross-branch-cache
+     * (fail-open)`). With several worktrees on several branches, only the winner of the lock was ever
+     * described, so every other worktree's guards abstained — and which one was armed thrashed as the
+     * lock changed hands. The file is now a MAP of branch -> status (see MainSyncStatusFile): the single
+     * winning refresher enumerates every worktree and records all of their branches in one atomic write,
+     * so one fetch arms everyone. Single-flight is unchanged; only what the winner writes changed.
      */
     mainSyncStatusPath(repoRoot: string): string {
         return this.dotDir.sharedFile(repoRoot, MAIN_SYNC_STATUS_FILE);
@@ -157,43 +110,44 @@ export class MainSyncStatusService {
         return this.dotDir.sharedFile(repoRoot, MAIN_SYNC_LOCK_FILE);
     }
 
-    // Pure read — any error (missing file, malformed JSON) returns null so the guard fails OPEN.
-    readMainSyncStatus(repoRoot: string): MainSyncStatus | null {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const statusPath = this.mainSyncStatusPath(repoRoot);
-            if (!fs.existsSync(statusPath)) return null;
-            const raw = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as RawStatus;
-            const status = new MainSyncStatus(
-                raw.branch ?? '',
-                raw.branchAlreadyMerged ?? false,
-                raw.mergedPr ?? '',
-                raw.hasForkPoint ?? true,
-                raw.forkPoint ?? null,
-                raw.originMain ?? '',
-                raw.featureHead ?? '',
-                raw.conflict ?? false,
-                raw.conflictFiles ?? [],
-                raw.timestamp ?? '',
-            );
-            status.openPr = raw.openPr ?? '';
-            status.localMain = raw.localMain ?? '';
-            return status;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return null;
-        }
+    /**
+     * The cached status FOR ONE BRANCH — the only read the four main-sync guards perform.
+     *
+     * `branch` is mandatory and is the branch being judged. A branch the last refresh never saw
+     * returns null, which every guard already treats as `no-sync-cache (fail-open)`, so an unknown
+     * branch degrades exactly as a missing file did. Any error (missing, truncated, malformed JSON)
+     * also returns null — this must never throw on the blocking path.
+     */
+    readMainSyncStatus(repoRoot: string, branch: string): MainSyncStatus | null {
+        return this.store.branchStatus(this.readMainSyncStatusFile(repoRoot), branch);
+    }
+
+    // The whole branch-keyed document, or null. Callers that need more than one branch use this.
+    readMainSyncStatusFile(repoRoot: string): MainSyncStatusFile | null {
+        return this.store.readFile(this.mainSyncStatusPath(repoRoot));
     }
 
     /**
-     * ATOMIC write (temp file + `rename()` in the same directory). The refresher writes this file while
-     * guards on the blocking path read it; a plain `writeFileSync` truncates first, so a reader landing
-     * in that window gets a torn document. Now that the file is repo-wide the reader may be in another
-     * worktree entirely, which widens the window rather than creating it. See AtomicFile.
+     * Merge ONE branch's entry into the existing map, atomically, leaving siblings untouched.
+     *
+     * Read-modify-write rather than replace: this is the writer used by everyone who is NOT the
+     * single-flight refresher (notably pr-gate's post-merge stamp, which holds no lock and knows about
+     * exactly one branch). Replacing the document from there would erase every other worktree's entry
+     * and silently disarm their guards until the next refresh.
      */
     writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void {
-        this.atomicFile.writeJsonAtomic(this.mainSyncStatusPath(repoRoot), status);
+        this.store.mergeBranch(this.mainSyncStatusPath(repoRoot), status);
+    }
+
+    /**
+     * Replace the WHOLE document — only the winning refresher may do this.
+     *
+     * ATOMIC (temp file + `rename()` in the same directory). The refresher writes this file while
+     * guards on the blocking path read it, possibly from another worktree; a plain `writeFileSync`
+     * truncates first, so a reader landing in that window gets a torn document. See AtomicFile.
+     */
+    writeMainSyncStatusFile(repoRoot: string, file: MainSyncStatusFile): void {
+        this.store.writeFile(this.mainSyncStatusPath(repoRoot), file);
     }
 
     readMainSyncLock(repoRoot: string): MainSyncLock | null {
@@ -297,17 +251,60 @@ export class MainSyncStatusService {
     }
 
     /**
-     * The SLOW path, run only inside the detached refresher. Computes every cached signal the
-     * feature-branch-guard needs. Never run on the hook's blocking path.
+     * The SLOW path for ONE branch: the branch checked out in `repoRoot`. Runs its own fetch and its
+     * own `gh` query, so it is the right entry point for a single-worktree caller and for tests.
+     * The refresher uses computeAllMainSyncStatuses instead — see there for why.
      */
-    // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
     computeMainSyncStatus(repoRoot: string): MainSyncStatus {
-        const branch = this.gitBranch(repoRoot);
-        const mergedPr = this.detectMergedPr(repoRoot, branch);
-        const openPr = this.detectOpenPr(repoRoot, branch);
-
         // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
         this.fetchOriginMain(repoRoot);
+        return this.computeBranchStatus(repoRoot, this.gitBranch(repoRoot), this.loadPullRequestIndex(repoRoot));
+    }
+
+    /**
+     * The SLOW path for EVERY branch this repo has checked out — what the detached refresher runs.
+     *
+     * The cache is shared by all worktrees but was written for one branch, so only one worktree's
+     * guards were ever armed. Enumerating the worktrees here and writing all of their branches in one
+     * atomic map arms every worktree off a single refresh.
+     *
+     * NETWORK COST DOES NOT SCALE WITH BRANCH COUNT, which is the whole reason this is a separate
+     * method: ONE `git fetch` and ONE repo-wide `gh pr list` for all N branches (the old code asked
+     * `gh` twice per branch, so looping it would have cost 2N round trips). Everything after that is
+     * local git in each worktree — merge-base, rev-parse, diff, ls-files.
+     *
+     * The map is rebuilt from the LIVE worktree set every refresh, so a deleted branch or removed
+     * worktree simply stops appearing. No pruning pass, no unbounded growth.
+     */
+    computeAllMainSyncStatuses(repoRoot: string): MainSyncStatusFile {
+        this.fetchOriginMain(repoRoot);
+        const index = this.loadPullRequestIndex(repoRoot);
+        const branches: Record<string, MainSyncStatus> = {};
+        for (const tree of this.worktrees.listWorktrees(repoRoot)) {
+            // Detached HEAD (and a bare worktree) has no branch to key an entry on. Skipping it must
+            // not stop the others being recorded, which is why this is a `continue`, not a bail-out.
+            if (tree.branch === '' || this.hasBranch(branches, tree.branch)) continue;
+            branches[tree.branch] = this.computeBranchStatus(tree.path, tree.branch, index);
+        }
+        // `main` always present, even with no worktree on it: read-stale-guard's state A looks itself
+        // up under 'main', and an absent entry there would silently disarm the stale-main block.
+        if (!this.hasBranch(branches, 'main')) branches['main'] = this.mainOnlyStatus(repoRoot);
+        return new MainSyncStatusFile(MAIN_SYNC_STATUS_VERSION, new Date().toISOString(), branches);
+    }
+
+    private hasBranch(branches: Record<string, MainSyncStatus>, branch: string): boolean {
+        return Object.prototype.hasOwnProperty.call(branches, branch);
+    }
+
+    /**
+     * One branch's status, computed in `worktreePath` (the tree that has it checked out — the
+     * working-tree overlap signals are only correct from there). Does NOT fetch and does NOT call
+     * `gh`: both are done once per refresh by the caller.
+     */
+    // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
+    private computeBranchStatus(repoRoot: string, branch: string, index: PullRequestIndex): MainSyncStatus {
+        const mergedPr = index.mergedFor(branch);
+        const openPr = index.openFor(branch);
 
         const head = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
         const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
@@ -368,7 +365,13 @@ export class MainSyncStatusService {
         ];
     }
 
-    // Synchronously stamp a clean "up to date with main" status — call right after a successful merge.
+    /**
+     * Synchronously stamp a clean "up to date with main" status — call right after a successful merge.
+     *
+     * This is the one writer that takes NO lock, and it knows about exactly one branch. It therefore
+     * goes through writeMainSyncStatus, which MERGES its entry into the existing map; writing a whole
+     * document from here would wipe every other worktree's entry.
+     */
     stampCleanMainSyncStatus(repoRoot: string): void {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -479,18 +482,34 @@ export class MainSyncStatusService {
         return [...out];
     }
 
-    // Has this feature branch already been merged into main? Reliable signal: a MERGED PR exists.
-    private detectMergedPr(repoRoot: string, branch: string): string {
-        if (!branch || branch === 'main') return '';
-        const result = this.capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number']);
-        return result.ok ? result.out : '';
+    /**
+     * ONE repo-wide `gh pr list` giving every branch's merged/open PR — replaces the two per-branch
+     * `--head <branch>` queries. `--limit 200` bounds it; a branch whose only PR is older than that
+     * falls out of the index and reads as "no PR", which is the fail-OPEN direction (no merged PR =
+     * no block), the same way a missing `gh` or an offline machine already degraded.
+     */
+    private loadPullRequestIndex(repoRoot: string): PullRequestIndex {
+        const result = this.capture(repoRoot, 'gh', [
+            'pr', 'list', '--state', 'all', '--json', 'number,headRefName,state', '--limit', '200',
+        ]);
+        if (!result.ok || result.out === '') return new PullRequestIndex({}, {});
+        return this.store.indexPullRequests(result.out);
     }
 
-    // An OPEN PR tracking this branch, if any. Best-effort/advisory.
-    private detectOpenPr(repoRoot: string, branch: string): string {
-        if (!branch || branch === 'main') return '';
-        const result = this.capture(repoRoot, 'gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number', '--jq', '.[0].number']);
-        return result.ok ? result.out : '';
+    /**
+     * A `main` entry synthesised WITHOUT a worktree standing on main. Carries only the two hashes
+     * read-stale-guard / stale-main-bash-guard actually compare (originMain vs the live tree's
+     * ancestry) — never merged, never conflicting, so it can only ever produce the stale-main verdict.
+     */
+    private mainOnlyStatus(repoRoot: string): MainSyncStatus {
+        const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
+        const localMain = this.localMainHash(repoRoot);
+        const status = new MainSyncStatus(
+            'main', false, '', true, localMain === '' ? null : localMain,
+            originMain.ok ? originMain.out : '', localMain, false, [], new Date().toISOString(),
+        );
+        status.localMain = localMain;
+        return status;
     }
 
     // A benign status that never blocks — used when origin/main can't be resolved.
@@ -507,9 +526,13 @@ export function mainSyncStatusPath(repoRoot: string): string { return mainSyncSv
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function mainSyncLockPath(repoRoot: string): string { return mainSyncSvc.mainSyncLockPath(repoRoot); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function readMainSyncStatus(repoRoot: string): MainSyncStatus | null { return mainSyncSvc.readMainSyncStatus(repoRoot); }
+export function readMainSyncStatus(repoRoot: string, branch: string): MainSyncStatus | null { return mainSyncSvc.readMainSyncStatus(repoRoot, branch); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function readMainSyncStatusFile(repoRoot: string): MainSyncStatusFile | null { return mainSyncSvc.readMainSyncStatusFile(repoRoot); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void { mainSyncSvc.writeMainSyncStatus(repoRoot, status); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function writeMainSyncStatusFile(repoRoot: string, file: MainSyncStatusFile): void { mainSyncSvc.writeMainSyncStatusFile(repoRoot, file); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function readMainSyncLock(repoRoot: string): MainSyncLock | null { return mainSyncSvc.readMainSyncLock(repoRoot); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
@@ -526,6 +549,8 @@ export function inProcessLock(now: number = Date.now(), pid: number = process.pi
 export function finishedLock(started: number): MainSyncLock { return mainSyncSvc.finishedLock(started); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function computeMainSyncStatus(repoRoot: string): MainSyncStatus { return mainSyncSvc.computeMainSyncStatus(repoRoot); }
+// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
+export function computeAllMainSyncStatuses(repoRoot: string): MainSyncStatusFile { return mainSyncSvc.computeAllMainSyncStatuses(repoRoot); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function squashRecoverySteps(currentBranch: string): string[] { return mainSyncSvc.squashRecoverySteps(currentBranch); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
