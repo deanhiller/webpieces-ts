@@ -36,15 +36,21 @@ export class ReviewerEvidence {
     readDoc: boolean;        // opened its checklist's guidance doc
     toolCallCount: number;
     offRepoSearches: number; // tool calls that reached into node_modules — the archaeology signal
+    // Absolute path of the transcript these counters were read out of, '' when it could not be resolved.
+    // Carried out rather than recomputed because a reviewer subagent cannot learn its own transcript path
+    // (the environment exposes the PARENT session id and no agent id), so this is the only place it is
+    // known — see ReviewProvenanceService, which records it as the audit link for the verdict.
+    transcriptPath: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0) {
+    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '') {
         this.agentType = agentType;
         this.agentId = agentId;
         this.readDiff = readDiff;
         this.readDoc = readDoc;
         this.toolCallCount = toolCallCount;
         this.offRepoSearches = offRepoSearches;
+        this.transcriptPath = transcriptPath;
     }
 }
 
@@ -174,6 +180,7 @@ export class SubagentProvenanceService {
             docPath !== '' && this.mentions(inputs, docPath),
             inputs.length,
             inputs.filter((i: string): boolean => i.includes('node_modules')).length,
+            jsonl,
         );
     }
 

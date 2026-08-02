@@ -361,6 +361,14 @@
                     "level": 4
                 },
                 {
+                    "id": "ReviewProvenanceService",
+                    "className": "ReviewProvenanceService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/review-provenance.ts",
+                    "level": 2
+                },
+                {
                     "id": "ReviewReport",
                     "className": "ReviewReport",
                     "kind": "class",
@@ -881,12 +889,30 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "ReviewProvenanceService",
+                    "injection": "type",
+                    "token": "ReviewProvenanceService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-provenance.ts#ReviewProvenanceService",
+                    "paramName": "provenanceRecord",
+                    "paramType": "ReviewProvenanceService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "ReviewStageReceiptService",
                     "injection": "type",
                     "token": "ReviewStageReceiptService",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-stage-receipt.ts#ReviewStageReceiptService",
                     "paramName": "receipts",
                     "paramType": "ReviewStageReceiptService"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "ReviewerInstructionsService",
+                    "injection": "type",
+                    "token": "ReviewerInstructionsService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/reviewer-instructions.ts#ReviewerInstructionsService",
+                    "paramName": "reviewerInstructions",
+                    "paramType": "ReviewerInstructionsService"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
