@@ -29,15 +29,12 @@ function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     return rules.filter((r: Rule): boolean => !isHookGuard(r.name));
 }
 
-// Drop rules whose category is excluded for this file path (webpieces.config.json → excludePaths).
-// Two independent glob lists: `guards` suppresses file-scoped guards (e.g. feature-branch-guard),
-// `rules` suppresses code-style rules — so a vendored tree can be exempt from one but not the other.
-// Only file tools reach here; bash git/PR guards (no file path) are never affected.
+// Drop every rule excluded for this path (webpieces.config.json → excludePaths). ONE glob list: a path
+// listed there is hands-off for code-style rules and file-scoped guards alike, because webpieces either
+// governs a path or it does not. Per-rule carve-outs live in the rule's own `excludePaths`.
 export function filterByExcludedPaths(rules: readonly Rule[], relativePath: string, ex: ExcludePaths): readonly Rule[] {
-    return rules.filter((r: Rule): boolean => {
-        const patterns = isHookGuard(r.name) ? ex.guards : ex.rules;
-        return !patterns.some((p: string): boolean => globMatches(p, relativePath));
-    });
+    if (ex.paths.some((p: string): boolean => globMatches(p, relativePath))) return [];
+    return rules;
 }
 
 // The cwd a command actually runs from, after its own leading `cd`/`pushd` run. Thin delegate kept
@@ -197,10 +194,17 @@ function isL0CureCommand(command: string): boolean {
 }
 
 // Force-to-root: git/gh commands must run from the repo root of the tree they act on, where the guards
-// can reason about git state coherently. Fires ONLY when the shell is STUCK in a governed subdir — the
-// shell persists in a subdir AND the command does not `cd` to a tree root (`tree.root`, which is the
-// linked worktree's root when the command cd's into one). A command that explicitly cd's to a root is
-// judged by the normal guards, never here.
+// can reason about git state coherently.
+//
+// ONE variable decides it: `tree.effectiveCwd` — the directory the command actually runs in, which is
+// the shell's cwd unless the command leads with `cd <dir> &&`. Root or not-root, nothing else.
+//
+// It used to be `shellAtRoot || cdsToRoot`, two variables OR'd, and that produced opposite verdicts for
+// the same destination: `git status` with the shell in packages/http/ was BLOCKED, while
+// `cd packages/http && git status` from the root was ALLOWED, because shellAtRoot short-circuited
+// before the destination was ever considered. The point of this guard is to keep the agent's git work
+// at the root — an agent that cd's INTO a subdir has the same broken mental model as one that is
+// stranded there, so it gets the same answer now.
 //
 // The remedy is emitted as ONE runnable line, `cd <root> && <the original command>`, because `cd` does
 // not persist between tool calls: telling the agent to "cd first, then re-run" costs a turn and the
@@ -208,12 +212,11 @@ function isL0CureCommand(command: string): boolean {
 // print the very command it had just rejected.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult | null {
-    const shellAtRoot = path.resolve(tree.shellCwd) === path.resolve(tree.root);
-    const cdsToRoot = path.resolve(tree.effectiveCwd) === path.resolve(tree.root);
-    if (!isGitOrGhCommand(command) || shellAtRoot || cdsToRoot) return null;
+    const targetAtRoot = path.resolve(tree.effectiveCwd) === path.resolve(tree.root);
+    if (!isGitOrGhCommand(command) || targetAtRoot) return null;
     const report =
         `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
-        `   You are in: ${tree.shellCwd}\n` +
+        `   Command runs in: ${tree.effectiveCwd}\n` +
         `   Judged against: ${tree.root}\n` +
         `   Run EXACTLY this instead (one line — \`cd\` does NOT persist between tool calls):\n` +
         `     ${atRoot(tree.root, command)}\n` +
@@ -292,7 +295,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
         return null;
     }
 
-    // Honour excludePaths.guards on the bash path too (not just Read/Edit): a command whose effective
+    // Honour excludePaths on the bash path too (not just Read/Edit): a command whose effective
     // cwd sits under an excluded tree (e.g. repositories/**) drops the whole guard set — matching how
     // runInternal/runRead treat file paths. The relative path is '' when there is no `cd` (root), which
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
@@ -331,7 +334,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
     logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'));
-    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.guards);
+    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }
 

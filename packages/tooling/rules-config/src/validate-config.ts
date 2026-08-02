@@ -429,13 +429,11 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
 }
 
 function excludePathsExample(): string {
-    return '"excludePaths": {\n' +
-        '    "rules":  ["repositories/**"],\n' +
-        '    "guards": []\n' +
-        '  }';
+    return '"excludePaths": ["repositories/**"]';
 }
 
-// One of the two excludePaths lists: required, must be a string[] (may be empty).
+// A glob list: must be a string[] (may be empty). `key` names it for the error, so the legacy
+// two-list form can report which of its lists is malformed.
 // webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed here
 function validateExcludeList(value: unknown, key: string): string[] {
     if (!(Array.isArray(value) && value.every(p => typeof p === 'string'))) {
@@ -445,27 +443,38 @@ function validateExcludeList(value: unknown, key: string): string[] {
 }
 
 /**
- * Validate the REQUIRED top-level `excludePaths` block: two independent glob lists (`rules`,
- * `guards`) that suppress hook enforcement per file path. Required so every client upgrading is
+ * Validate the REQUIRED top-level `excludePaths` block: ONE glob list suppressing hook enforcement per
+ * file path, for code-style rules and file-scoped guards alike. Required so every client upgrading is
  * forced to declare it (as [] to keep today's behavior, or with real paths). Returns copy-paste
  * friendly errors and never throws — same contract as validatePrGateSection.
+ *
+ * The legacy object form `{ "rules": [...], "guards": [...] }` is STILL ACCEPTED and unioned into one
+ * list by parseExcludePaths, so an unmigrated config validates and behaves identically. Rejecting it
+ * would deadlock every consumer on upgrade: the block is required, so a hard error here blocks every
+ * Bash/Edit including the edit that would fix it.
  */
 // webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed below
 export function validateExcludePaths(section: unknown): string[] {
     if (section === undefined || section === null) {
         return [
             `[excludePaths] Not configured in webpieces.config.json. Add this REQUIRED block ` +
-            `(use empty arrays to keep enforcing everywhere):\n\n  ${excludePathsExample()}`,
+            `(use an empty array to keep enforcing everywhere):\n\n  ${excludePathsExample()}`,
         ];
     }
-    if (typeof section !== 'object' || Array.isArray(section)) {
-        return [`[excludePaths] Must be an object with "rules" and "guards" string arrays. Example:\n\n  ${excludePathsExample()}`];
+    if (Array.isArray(section)) return validateExcludeList(section, 'excludePaths');
+    if (typeof section !== 'object') {
+        return [`[excludePaths] Must be a string[] of glob paths. Example:\n\n  ${excludePathsExample()}`];
     }
+    // Legacy two-list form — validate each list it actually declares, then let parseExcludePaths union
+    // them. An object carrying neither key is a typo, not a legacy config, so say so.
     // webpieces-disable no-any-unknown -- narrowing the opaque excludePaths section from consumer JSON
     const s = section as Record<string, unknown>;
+    if (s['rules'] === undefined && s['guards'] === undefined) {
+        return [`[excludePaths] Must be a string[] of glob paths. Example:\n\n  ${excludePathsExample()}`];
+    }
     return [
-        ...validateExcludeList(s['rules'], 'rules'),
-        ...validateExcludeList(s['guards'], 'guards'),
+        ...(s['rules'] === undefined ? [] : validateExcludeList(s['rules'], 'rules')),
+        ...(s['guards'] === undefined ? [] : validateExcludeList(s['guards'], 'guards')),
     ];
 }
 

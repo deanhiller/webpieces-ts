@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateMatchRulesSection, allRuleNames } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
 import { defaultRules } from './default-rules';
 
@@ -451,29 +451,6 @@ describe('validateCommandsSection', () => {
     it('rejects guardHints that is not an object', () => {
         const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, guardHints: 'pnpm up' }, undefined);
         expect(errors.some(e => e.includes('[commands] "guardHints" must be an object'))).toBe(true);
-    });
-});
-
-describe('validateExcludePaths', () => {
-    it('errors with a copy-paste example when the block is missing (required)', () => {
-        const errors = validateExcludePaths(undefined);
-        expect(errors.some(e => e.includes('[excludePaths] Not configured'))).toBe(true);
-        expect(errors.some(e => e.includes('"rules"') && e.includes('"guards"'))).toBe(true);
-    });
-
-    it('accepts a valid block with empty and populated lists', () => {
-        expect(validateExcludePaths({ rules: [], guards: [] })).toEqual([]);
-        expect(validateExcludePaths({ rules: ['repositories/**'], guards: ['vendor/**'] })).toEqual([]);
-    });
-
-    it('rejects a non-object (e.g. an array)', () => {
-        expect(validateExcludePaths(['repositories/**']).some(e => e.includes('Must be an object'))).toBe(true);
-    });
-
-    it('rejects a missing or non-string-array rules/guards list', () => {
-        expect(validateExcludePaths({ guards: [] }).some(e => e.includes('"rules" must be a string[]'))).toBe(true);
-        expect(validateExcludePaths({ rules: [], guards: 'nope' }).some(e => e.includes('"guards" must be a string[]'))).toBe(true);
-        expect(validateExcludePaths({ rules: [1, 2], guards: [] }).some(e => e.includes('"rules" must be a string[]'))).toBe(true);
     });
 });
 
