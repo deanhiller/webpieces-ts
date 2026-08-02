@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
 import { defaultRules } from './default-rules';
 
@@ -625,5 +625,62 @@ describe('validatePrGateSection rejects every non-array checklists value', () =>
             const errors = validatePrGateSection(validPrGate(bad));
             expect(errors.some((e: string): boolean => /"checklists" must be an ARRAY/.test(e))).toBe(true);
         }
+    });
+});
+
+
+// recommendedSeedMode is the ONE source of truth for "what mode should this rule arrive as" — used by
+// the validator's copy-paste snippet, by the installer's seeding, and by fault Y's deny.
+describe('recommendedSeedMode', () => {
+    it('prefers the narrowest gradual mode a rule supports', () => {
+        expect(recommendedSeedModeFor(['OFF', 'ON', 'NEW_AND_MODIFIED_FILES', 'NEW_AND_MODIFIED_CODE'])).toEqual('NEW_AND_MODIFIED_CODE');
+        expect(recommendedSeedModeFor(['OFF', 'ON', 'MODIFIED_CLASS', 'MODIFIED_PROJECTS'])).toEqual('MODIFIED_PROJECTS');
+    });
+
+    it('falls back ON -> RUN_EVERY_TIME -> OFF when no gradual mode is offered', () => {
+        expect(recommendedSeedModeFor(['OFF', 'ON'])).toEqual('ON');
+        expect(recommendedSeedModeFor(['OFF', 'RUN_EVERY_TIME'])).toEqual('RUN_EVERY_TIME');
+        expect(recommendedSeedModeFor(['OFF'])).toEqual('OFF');
+        expect(recommendedSeedModeFor([])).toEqual('OFF');
+    });
+
+    it('never recommends OFF for a built-in rule — seeding a fresh config leaves everything enforcing', () => {
+        for (const name of allRuleNames()) {
+            expect(recommendedSeedMode(name), name).not.toEqual('OFF');
+        }
+    });
+
+    it('returns OFF for an unknown (custom) rule — no schema, so no modes are known to be accepted', () => {
+        expect(recommendedSeedMode('some-custom-rule')).toEqual('OFF');
+    });
+});
+
+
+// seedEntryForRule is what the installer writes, so it must satisfy the validator that reads the same
+// schema. The end-to-end version of this lives in ai-hook-rules/src/bin/setup.spec.ts (it runs a real
+// migrate() through validateWebpiecesConfig); this one pins the per-field default selection.
+describe('seedEntryForRule', () => {
+    it('emits EVERY schema-required field, not just mode + the two hatches', () => {
+        // The gap this closed: a seeded branch-creation-guard had no autoReapMergedBranches, so a fresh
+        // install wrote a config that failed to load. false is the documented default — an upgrade must
+        // never start deleting branches unattended.
+        expect(seedEntryForRule('branch-creation-guard')).toEqual({
+            mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
+            autoReapMergedBranches: false,
+        });
+    });
+
+    it('always carries both escape hatches in their active state, at the recommended mode', () => {
+        for (const name of allRuleNames()) {
+            const entry = seedEntryForRule(name);
+            expect(entry['mode'], name).toEqual(recommendedSeedMode(name));
+            expect(entry['turnOffRuleUntilEpoch'], name).toEqual(0);
+            expect(entry['turnOffRuleWhileOnBranch'], name).toEqual(null);
+        }
+    });
+
+    it('gives an unknown (custom) rule the minimal entry — no schema to enumerate', () => {
+        expect(seedEntryForRule('some-custom-rule')).toEqual(
+            { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
     });
 });

@@ -30,7 +30,7 @@ export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
-export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
 export { validateCommandsSection } from './commands-section-validators';
 export { unknownKeyErrors, isCommentKey, validateTopLevelKeys, COMMENT_KEY_SUFFIX } from './config-key-rules';
 // The retired-key table + the no-back-compat policy it enforces. Exported so the installer can migrate
