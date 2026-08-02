@@ -406,8 +406,30 @@ describe('renderShim fallback — audit log', () => {
         runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm install')); // allowed
         runShim(root, 'wp-ai-guards-hook', bashPayload('git status')); // denied
         const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
-        expect(log).toContain('ALLOW-INSTALL\tpnpm install');
+        expect(log).toContain('ALLOW-CURE\tpnpm install');
         expect(log).toContain('DENY\tgit status');
+    });
+
+    /**
+     * The sh half of isAllowed(), end to end. These two entries are what keep a broken tree RECOVERABLE:
+     * you must be able to read to work out the fix, and to edit the one file every guard is configured
+     * from. Both were denied under D/X/K before the allowlist went global — you could not read the
+     * config that would have turned the guard off.
+     *
+     * NOTE the asymmetry this locks in, and why it is accepted: here the bin is never executed, so an
+     * allowed Read is TERMINAL and read-stale-guard does not run. Under the bin-enforced faults (S/C/Y)
+     * the same entry falls THROUGH and stale-main protection still holds. Narrowing this entry to a path
+     * pattern is the fix for that, and is deliberately left for a follow-up.
+     */
+    it('lets a Read and a webpieces.config.json edit through while the guards are DOWN', () => {
+        const root = mktmp();
+        expect(runShim(root, 'wp-ai-guards-hook', kit.readPayload(path.join(root, 'src/anything.ts'))).status).toBe(0);
+        expect(runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', path.join(root, 'webpieces.config.json'))).status).toBe(0);
+        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
+        expect(log).toContain('ALLOW-READ');
+        expect(log).toContain('ALLOW-CONFIG');
+        // ...while a real WRITE to anything else still fails closed.
+        expect(runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', path.join(root, 'src/app.ts'))).stdout).toContain('"deny"');
     });
 });
 
@@ -552,5 +574,32 @@ describe('healShim — self-heal the committed shim from the running binary', ()
         fs.writeFileSync(target, renderShim(), { mode: 0o755 });
         healShim(root);
         expect(fs.readFileSync(target, 'utf8')).toBe(renderShim());
+    });
+});
+
+/**
+ * MATCHER-SUPERSET INVARIANT — the guards matcher must cover every tool the rules matcher covers.
+ *
+ * The rules hook deliberately SKIPS the committed-shim self-guard ("guards owns the shim", see
+ * enforceCommittedShim's `mode === 'rules'` early return). That is only safe while every tool the
+ * rules hook sees is ALSO seen by the guards hook. Narrow the guards matcher — drop Write, say — and
+ * fault S silently stops being enforced for exactly the tools that fell out: no error, no test, just
+ * a guard that quietly no longer runs on the writes it was written for.
+ *
+ * Nothing asserted this until now, and a matcher is a string literal one careless edit away.
+ */
+describe('hook matchers — guards ⊇ rules', () => {
+    const toolsOf = (matcher: string): Set<string> => new Set(matcher.split('|'));
+
+    it('the guards matcher is a superset of the rules matcher', () => {
+        const guards = toolsOf(GUARDS_HOOK.matcher);
+        const missing = [...toolsOf(RULES_HOOK.matcher)].filter((t: string): boolean => !guards.has(t));
+        expect(missing, `guards hook does not match: ${missing.join('|')} — fault S stops being enforced there`).toEqual([]);
+    });
+
+    it('the guards matcher additionally covers Bash and Read', () => {
+        const guards = toolsOf(GUARDS_HOOK.matcher);
+        expect(guards.has('Bash')).toBe(true);   // the git/PR guards
+        expect(guards.has('Read')).toBe(true);   // the log-and-allow audit + read-stale-guard
     });
 });
