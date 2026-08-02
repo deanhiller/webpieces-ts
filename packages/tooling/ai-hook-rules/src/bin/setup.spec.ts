@@ -11,6 +11,7 @@ import {
     RECOVERY_CMD, healShim, shimPath,
 } from './shim';
 import { ShimTestkit } from './shim-testkit';
+import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSectionPlacement } from '@webpieces/rules-config';
 
 const kit = new ShimTestkit();
 const mktmp = (): string => kit.mktmp();
@@ -91,11 +92,45 @@ describe('migrate', () => {
         expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
     });
 
-    it('adds every missing built-in into its correct section (OFF)', () => {
+    it('adds every missing built-in into its correct section, ENFORCING at its recommended mode', () => {
         const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
         // A code rule and a guard both get seeded into the right section, with BOTH escape hatches shown.
-        expect(result.config.rules['max-file-lines']).toEqual({ mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
-        expect(result.config.hookGuards['branch-creation-guard']).toEqual({ mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
+        // The mode is rules-config's recommendedSeedMode() — NOT 'OFF'. Seeding OFF is what left adopters
+        // with a fully installed webpieces that enforced nothing.
+        expect(result.config.rules['max-file-lines']).toMatchObject(
+            { mode: recommendedSeedMode('max-file-lines'), turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
+        // toMatchObject, not toEqual: a seeded entry also carries every OTHER schema-required field —
+        // here autoReapMergedBranches, which ships false so an install never reaps branches unattended.
+        expect(result.config.hookGuards['branch-creation-guard']).toMatchObject(
+            { mode: recommendedSeedMode('branch-creation-guard'), turnOffRuleUntilEpoch: 0,
+              turnOffRuleWhileOnBranch: null, autoReapMergedBranches: false });
+        expect(result.config.rules['max-file-lines']['mode']).not.toEqual('OFF');
+        expect(result.config.hookGuards['branch-creation-guard']['mode']).not.toEqual('OFF');
+    });
+
+    it('seeds NO built-in as OFF — every rule arrives enforcing (gradual where the rule supports it)', () => {
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        const seeded = { ...result.config.rules, ...result.config.hookGuards };
+        for (const name of allRuleNames()) {
+            expect(seeded[name]['mode'], `${name} seeded OFF`).not.toEqual('OFF');
+        }
+    });
+
+    // THE structural guard: whatever the installer writes must be a config the LOADER accepts. Both
+    // sides read the same schema (seedEntryForRule -> RULE_SCHEMAS <- validateWebpiecesConfig), and
+    // this assertion is what keeps them wired together — it makes "the installer cannot emit a config
+    // the loader rejects" a build-time fact instead of something a consumer rediscovers on first run.
+    //
+    // It caught a PRE-EXISTING gap: seeding emitted only mode + the two hatches, so every fresh
+    // install wrote `"branch-creation-guard": {...}` with no `autoReapMergedBranches` and the config
+    // failed validation immediately. That was equally broken back when seeding was OFF — the
+    // missing-required-field check does not care what mode says.
+    it('seeds/migrates a config that validates with ZERO errors', () => {
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        const merged = { ...result.config.rules, ...result.config.hookGuards };
+        expect(validateWebpiecesConfig(merged, false)).toEqual([]);
+        // ...and every rule landed in the section the loader expects it in.
+        expect(validateSectionPlacement(result.config.rules, result.config.hookGuards)).toEqual([]);
     });
 
     it('reports no changes for an already-migrated config', () => {

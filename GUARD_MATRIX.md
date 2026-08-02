@@ -123,7 +123,8 @@ Why every other candidate cure is disqualified as the primary instruction:
   this guarantee. This repo pins exactly — `validate-versions-locked` enforces it.
 - **There is no installer spelling in this cure at all** (2026-08-02). A "migrate my config" flag used
   to be offered here as an optional bulk editor. It is DELETED: `migrate()` is not surgical (it
-  rewrites the whole file, appends every missing built-in as `OFF`, and reformats), so its diff is far
+  rewrites the whole file, appends every missing built-in at its `recommendedSeedMode()` — enforcing,
+  not `OFF` — and reformats), so its diff is far
   larger than the error being fixed — and offering a second command at all is what makes an agent
   believe the one stated cure is a choice. The banner now names no installer command, for one error or
   twenty.

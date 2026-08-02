@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
+import { allRuleNames, seedEntryForRule, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -140,10 +140,19 @@ interface MigrateResult {
     changes: string[];
 }
 
-function seedRule(): RuleEntry {
+// webpieces-disable no-function-outside-class -- sibling of the other seed* helpers; this module is config-shape builders by design
+function seedRule(ruleName: string): RuleEntry {
     // Both escape hatches are seeded (and REQUIRED) so every rule block shows them: 0 = active,
     // null = no branch scoping. A human/AI edits these to time-box or branch-scope a rule off.
-    return { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+    //
+    // The ENTIRE entry comes from rules-config's seedEntryForRule() — the same module that owns the
+    // schema the loader validates against, so the installer can never emit an entry the loader
+    // rejects. It supplies: the recommended mode (the SAME recommendation the validator prints in its
+    // copy-paste snippet, so seed and advice cannot disagree), both hatches, and a default for every
+    // other schema-REQUIRED field. Seeding used to be a flat 'OFF' plus the two hatches, which was
+    // wrong twice over: adopters got nothing enforced, AND the entry was missing required fields
+    // (e.g. branch-creation-guard.autoReapMergedBranches), so the config failed to load on first run.
+    return seedEntryForRule(ruleName);
 }
 
 // The guard-hint command strings live under `guardHints`. The flat `upsertPr`/`mergeComplete` keys this
@@ -261,8 +270,8 @@ function buildSeedConfig(): ConfigFile {
     const rules: Section = {};
     const hookGuards: Section = {};
     for (const name of allRuleNames()) {
-        if (sectionForRule(name) === 'hookGuards') hookGuards[name] = seedRule();
-        else rules[name] = seedRule();
+        if (sectionForRule(name) === 'hookGuards') hookGuards[name] = seedRule(name);
+        else rules[name] = seedRule(name);
     }
     return {
         rules, hookGuards, commands: seedCommands(), excludePaths: seedExcludePaths(),
@@ -327,12 +336,13 @@ export function migrate(existing: Json): MigrateResult {
             changes.push(`moved "${name}" from hookGuards → rules`);
         }
     }
-    // Add any missing built-in into its correct section (OFF).
+    // Add any missing built-in into its correct section, ENFORCING at its recommended mode (not OFF).
     for (const name of allRuleNames()) {
         const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
         if (!(name in target)) {
-            target[name] = seedRule();
-            changes.push(`added "${name}" (OFF) to ${sectionForRule(name)}`);
+            const entry = seedRule(name);
+            target[name] = entry;
+            changes.push(`added "${name}" (${String(entry['mode'])}) to ${sectionForRule(name)}`);
         }
     }
     // Fill command defaults.
@@ -376,7 +386,7 @@ function seedOrSyncConfig(projectRoot: string): void {
     const configPath = path.join(projectRoot, CONFIG_FILENAME);
     if (!fs.existsSync(configPath)) {
         writeConfig(configPath, buildSeedConfig());
-        console.log(`  [ai-hooks] Created ${CONFIG_FILENAME} (rules / hookGuards / commands), all rules OFF.`);
+        console.log(`  [ai-hooks] Created ${CONFIG_FILENAME} (rules / hookGuards / commands); each rule seeded at its recommended mode — gradual where supported, so only code you change is enforced.`);
         console.log('  Enable the ones you want by changing "mode".');
         return;
     }

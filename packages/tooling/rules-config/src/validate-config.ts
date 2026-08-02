@@ -5,113 +5,19 @@ import { FieldDef } from './field-def';
 // this marker is how it recognizes a placement error. See config-error-banner.ts.
 import { SECTION_PLACEMENT_MARKER } from './config-error-banner';
 import { sectionForRule, isHookGuard } from './sections';
+import { RULE_SCHEMAS, allRuleNames } from './rule-schemas';
+import { recommendedSeedModeFor, isGradualMode } from './seed-entry';
 import { MODIFIED_CODE_MODES } from './rule-configs';
-import {
-    FeatureBranchGuardConfig,
-    ReadStaleGuardConfig,
-    MergedBranchBashGuardConfig,
-    StaleMainBashGuardConfig,
-} from './main-sync-guard-configs';
 import { validateChecklistsSection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
 import { retiredEntry, retiredKeyError, retiredRuleFor } from './retired-config-keys';
 
 // Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
 export { validateChecklistsSection };
+// Re-exported from their new homes: this module was the historical entry point for both.
+export { allRuleNames } from './rule-schemas';
+export { recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './seed-entry';
 import { DEFAULT_MATCH_RULES } from './match-rules-config';
 import { toError } from './to-error';
-import {
-    MaxMethodLinesConfig,
-    MaxFileLinesConfig,
-    RequireReturnTypeConfig,
-    NoInlineTypeLiteralsConfig,
-    NoAnyUnknownConfig,
-    NoImplicitAnyConfig,
-    PrismaValidateDtosConfig,
-    PrismaConverterConfig,
-    NoDestructureConfig,
-    NoUnmanagedExceptionsConfig,
-    CatchErrorPatternConfig,
-    ThrowCauseRequiredConfig,
-    AngularNoDirectApiInResolverConfig,
-    NoSymbolDiTokensConfig,
-    NoCustomCssConfig,
-    NoProcessExitOutsideMainConfig,
-    NoFunctionOutsideClassConfig,
-    InjectAnnotationNotNeededForConcreteClassConfig,
-    FrameworkTagConfig,
-    RoleTagConfig,
-    BranchCreationGuardConfig,
-    PrCreationOrPushGuardConfig,
-    MergeInProgressGuardConfig,
-    PrMergeGuardConfig,
-    RedirectHowToMergeMainConfig,
-    NoFileImportCyclesConfig,
-    RuntimeArchitectureConfig,
-    NxWiringConfig,
-    DiGraphConfig,
-    MissingDesignAnnotationConfig,
-    NoJsFilesConfig,
-    ValidateTsInSrcConfig,
-    ValidateArchitectureUnchangedConfig,
-    ValidateNoArchitectureCyclesConfig,
-    ValidatePackageJsonConfig,
-    ValidateVersionsLockedConfig,
-    ValidateEslintSyncConfig,
-} from './rule-configs';
-import { NoClientCreationOutsideServerOrClientConfig } from './no-client-creation-config';
-
-// Thin lookup table — each entry delegates to the class's own SCHEMA.
-// No field lists here; all schemas live with their config class.
-const RULE_SCHEMAS: Record<string, Record<string, FieldDef>> = {
-    'max-method-lines': MaxMethodLinesConfig.SCHEMA,
-    'max-file-lines': MaxFileLinesConfig.SCHEMA,
-    'require-return-type': RequireReturnTypeConfig.SCHEMA,
-    'no-inline-type-literals': NoInlineTypeLiteralsConfig.SCHEMA,
-    'no-any-unknown': NoAnyUnknownConfig.SCHEMA,
-    'no-implicit-any': NoImplicitAnyConfig.SCHEMA,
-    'prisma-validate-dtos': PrismaValidateDtosConfig.SCHEMA,
-    'prisma-converter': PrismaConverterConfig.SCHEMA,
-    'no-destructure': NoDestructureConfig.SCHEMA,
-    'no-unmanaged-exceptions': NoUnmanagedExceptionsConfig.SCHEMA,
-    'catch-error-pattern': CatchErrorPatternConfig.SCHEMA,
-    'throw-cause-required': ThrowCauseRequiredConfig.SCHEMA,
-    'angular-no-direct-api-in-resolver': AngularNoDirectApiInResolverConfig.SCHEMA,
-    'no-symbol-di-tokens': NoSymbolDiTokensConfig.SCHEMA,
-    'no-client-creation-outside-server-or-client': NoClientCreationOutsideServerOrClientConfig.SCHEMA,
-    'no-custom-css': NoCustomCssConfig.SCHEMA,
-    'no-process-exit-outside-main': NoProcessExitOutsideMainConfig.SCHEMA,
-    'no-function-outside-class': NoFunctionOutsideClassConfig.SCHEMA,
-    'inject-annotation-not-needed-for-concrete-class': InjectAnnotationNotNeededForConcreteClassConfig.SCHEMA,
-    'framework-tag': FrameworkTagConfig.SCHEMA,
-    'role-tag': RoleTagConfig.SCHEMA,
-    'branch-creation-guard': BranchCreationGuardConfig.SCHEMA,
-    'pr-creation-or-push-guard': PrCreationOrPushGuardConfig.SCHEMA,
-    'merge-in-progress-guard': MergeInProgressGuardConfig.SCHEMA,
-    'pr-merge-guard': PrMergeGuardConfig.SCHEMA,
-    'redirect-how-to-merge-main': RedirectHowToMergeMainConfig.SCHEMA,
-    'feature-branch-guard': FeatureBranchGuardConfig.SCHEMA,
-    'read-stale-guard': ReadStaleGuardConfig.SCHEMA,
-    'merged-branch-bash-guard': MergedBranchBashGuardConfig.SCHEMA,
-    'stale-main-bash-guard': StaleMainBashGuardConfig.SCHEMA,
-    'no-file-import-cycles': NoFileImportCyclesConfig.SCHEMA,
-    'runtime-architecture': RuntimeArchitectureConfig.SCHEMA,
-    'nx-wiring': NxWiringConfig.SCHEMA,
-    'di-graph': DiGraphConfig.SCHEMA,
-    'missing-design-annotation': MissingDesignAnnotationConfig.SCHEMA,
-    'no-js-files': NoJsFilesConfig.SCHEMA,
-    'validate-ts-in-src': ValidateTsInSrcConfig.SCHEMA,
-    'validate-architecture-unchanged': ValidateArchitectureUnchangedConfig.SCHEMA,
-    'validate-no-architecture-cycles': ValidateNoArchitectureCyclesConfig.SCHEMA,
-    'validate-packagejson': ValidatePackageJsonConfig.SCHEMA,
-    'validate-versions-locked': ValidateVersionsLockedConfig.SCHEMA,
-    'validate-eslint-sync': ValidateEslintSyncConfig.SCHEMA,
-};
-
-// Every built-in rule name that has a typed schema (code rules + bash guards). The installer uses
-// this (with sectionForRule) to seed a fresh webpieces.config.json with every rule in its section.
-export function allRuleNames(): readonly string[] {
-    return Object.keys(RULE_SCHEMAS);
-}
 
 function valueHint(def: FieldDef, key?: string): string {
     // The two universal escape hatches, REQUIRED on every rule so they're always visible. Spell out the
@@ -126,23 +32,13 @@ function valueHint(def: FieldDef, key?: string): string {
         : '"<string>"';
 }
 
-// Scoped modes (narrowest → broadest) that enforce ONLY on what changed, so a rule can be
-// adopted gradually instead of all-at-once. When a rule offers one, recommend the first it
-// supports so a fresh config opts into a low-friction rollout rather than reflexively OFF.
-const GRADUAL_MODE_PREFERENCE = [
-    'MODIFIED_PROJECTS',
-    'NEW_AND_MODIFIED_CODE',
-    'NEW_AND_MODIFIED_METHODS',
-    'MODIFIED_CLASS',
-    'NEW_METHODS',
-    'NEW_AND_MODIFIED_FILES',
-];
-
 /** A rollout hint for the copy-paste snippet: recommend the narrowest gradual mode the rule supports. */
 function rolloutTip(schema: Record<string, FieldDef>): string {
     const modes = schema['mode']?.enumValues ?? [];
-    const recommended = GRADUAL_MODE_PREFERENCE.find((m: string) => modes.includes(m));
-    if (!recommended) return '';
+    // Same source of truth as the seeder; only a GRADUAL recommendation gets the rollout prose, so a
+    // rule whose recommendation falls through to ON/RUN_EVERY_TIME/OFF prints no tip (as before).
+    const recommended = recommendedSeedModeFor(modes);
+    if (!isGradualMode(recommended)) return '';
     const optOut = modes.includes('OFF') ? ' Set "mode": "OFF" to opt out entirely.' : '';
     return (
         `\n\n💡 Recommended: start with "mode": "${recommended}" — it enforces only on what you ` +

@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
@@ -375,17 +375,27 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
     const unconfiguredRules = rules.filter((r: Rule) => !configured.has(r.name));
     if (unconfiguredRules.length === 0) return null;
 
+    // ONE action, no menu, no escalation — the config-validation invariant (GUARD_MATRIX.md): every
+    // config problem cures to "make the file right", and editing it is never denied. This message used
+    // to tell the agent to interview the human about each rule; agents did not do it, so the block just
+    // stalled. Each rule now ships a paste-ready entry at its recommended mode.
+    //
+    // Note this is the CONFIG-BEHIND-CODE direction. The opposite one — the config names a rule the
+    // installed validator has no schema for — is unknownRuleError() in rules-config/validate-config.ts
+    // and surfaces in the validation banner, not here.
     const lines = [
         // Fault Y's header lives in ./l0-matrix beside the rest of the L0 fault table (same reason as
         // CONFIG_MISSING_REPORT: one place states what this fault is and what cures it).
         CONFIG_OUT_OF_SYNC_HEADER,
         '',
-        'Tell the human: the following rules need to be configured. Ask for each one:',
-        '  - Should this rule be ON, OFF, NEW_AND_MODIFIED_CODE, or NEW_AND_MODIFIED_FILES?',
-        '  - What values do you want for the options listed below?',
-        'Then update webpieces.config.json and retry.',
+        `Add an entry for each rule below to ${CONFIG_FILENAME}. Editing that file is ALWAYS allowed through`,
+        'the guard — including right now, while this block is up — so paste the entries and retry.',
         '',
-        'Do NOT proceed until webpieces.config.json has an entry for every rule below.',
+        'Each entry below is ready to paste at its recommended mode; adjust the option values if your',
+        'project needs different ones.',
+        '',
+        `Do NOT delete a rule from ${CONFIG_FILENAME} to silence it — an entry is REQUIRED for every rule,`,
+        'and "mode": "OFF" is how a rule is turned off.',
         '',
     ];
 
@@ -402,8 +412,10 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
         } else {
             lines.push('Available options: none beyond mode');
         }
-        lines.push(`Example entry for webpieces.config.json:`);
-        lines.push(`  "${rule.name}": { "mode": "ON" }`);
+        // The SAME entry the installer would seed: recommended mode, both hatches, and every other
+        // schema-required field — so pasting it satisfies the loader in one pass.
+        lines.push(`Entry to add to ${CONFIG_FILENAME}:`);
+        lines.push(`  "${rule.name}": ${JSON.stringify(seedEntryForRule(rule.name))}`);
         lines.push('');
     }
 
