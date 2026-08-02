@@ -2,6 +2,7 @@
     "services": {
         "angular-site": {
             "level": 2,
+            "role": "client",
             "implements": [],
             "uses": [
                 "PublicApi",
@@ -12,8 +13,17 @@
                 "legacy-server"
             ]
         },
+        "app-example-e2e": {
+            "level": 0,
+            "role": "server",
+            "implements": [],
+            "uses": [],
+            "dependsOn": [],
+            "drawOnGraph": false
+        },
         "client-server": {
             "level": 1,
+            "role": "server",
             "serviceName": "client-server",
             "implements": [
                 "PublicApi",
@@ -29,6 +39,7 @@
         },
         "legacy-server": {
             "level": 1,
+            "role": "server",
             "implements": [
                 "PublicApi",
                 "SaveApi"
@@ -42,6 +53,7 @@
         },
         "server2": {
             "level": 0,
+            "role": "server",
             "serviceName": "server2",
             "implements": [
                 "Server2Api"

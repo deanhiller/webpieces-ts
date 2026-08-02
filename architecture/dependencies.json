@@ -1,5 +1,5 @@
 {
-    "aiInstructions": "Each project's shortDescription is only a summary. BEFORE adding code to a project, read its responsibilitiesFile for the full responsibilities (what belongs in that project and what does not), and read its designFile to understand the DI design before reading the code. Use the entries in `commands` to regenerate these files or display any of the graphs in a browser. To hide a project (its box AND every edge touching it) from BOTH rendered architecture graphs, add the nx tag 'drawOnGraph:false' to that project's project.json tags and regenerate; it stays in this file (marked \"drawOnGraph\": false) but is omitted from the HTML.",
+    "aiInstructions": "Each project's shortDescription is only a summary. BEFORE adding code to a project, read its responsibilitiesFile for the full responsibilities (what belongs in that project and what does not), and read its designFile to understand the DI design before reading the code. Use the entries in `commands` to regenerate these files or display any of the graphs in a browser. To hide a project (its box AND every edge touching it) from BOTH rendered architecture graphs, add the nx tag 'drawOnGraph:false' to that project's project.json tags and regenerate; it stays in this file (marked \"drawOnGraph\": false) but is omitted from the HTML. A role:server with no webpiecesRuntime package anywhere in its dependency closure and no apiRelations is omitted from the RUNTIME drawing the same way — it speaks none of the webpieces runtime, so it can only ever draw as a disconnected box; it stays in both JSON files.",
     "commands": {
         "regenerateArchitecture": "pnpm nx run architecture:generate — rewrites architecture/dependencies.json and architecture/runtime-dependencies.json; run after adding/removing project dependencies",
         "visualizeArchitecture": "pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) as HTML in a browser",
@@ -231,6 +231,7 @@
             "level": 5,
             "framework": ["express"],
             "role": "lib",
+            "webpiecesRuntime": ["@webpieces/http-routing","@webpieces/http-server"],
             "shortDescription": "Company-wide shared SERVER core (node-only, `framework:express`). Holds the single shared server bootstrap and shared server DI so every express service starts the same way. It is the node-only counterpart to the browser-safe `company-core` and is NOT imported by Angular.",
             "responsibilitiesFile": "apps/app-example/company-svc-core/responsibilities.md",
             "dependsOn": [
@@ -332,6 +333,7 @@
             "level": 4,
             "framework": ["express"],
             "role": "lib",
+            "webpiecesRuntime": ["@webpieces/http-routing"],
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "dependsOn": [
