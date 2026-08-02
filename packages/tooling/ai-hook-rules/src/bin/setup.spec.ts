@@ -521,7 +521,7 @@ describe('installer allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'pnpm install --frozen-lockfile',
             'npm install --no-audit',
             'pnpm install --reporter=silent',
-            'cd /x && pnpm install',                  // the worktree spelling — cd does not persist between calls
+            'cd /x && pnpm install',                  // the worktree spelling — a cwd that left the workspace is reset
             'cd ../wt-2 && pnpm i --frozen-lockfile',
         ];
         const deny = [

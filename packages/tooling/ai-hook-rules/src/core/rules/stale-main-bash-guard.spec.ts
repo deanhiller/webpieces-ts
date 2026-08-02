@@ -74,7 +74,7 @@ function blocked(command: string): boolean {
 }
 
 // The same guard, for a command that runs somewhere else entirely (a leading `cd` — the only way an
-// agent reaches a worktree or a scratchpad, since `cd` does not persist between tool calls).
+// agent reaches a worktree or a scratchpad, since the harness resets a cwd that left the workspace).
 function blockedFrom(command: string, effectiveCwd: string): boolean {
     return rule().check(new BashContext(command, '/repo', effectiveCwd)).length > 0;
 }
