@@ -17,7 +17,16 @@ import { toError } from './to-error';
 // deny messages point the AI at. Doc and code come from the SAME arrays, so they cannot drift.
 // ---------------------------------------------------------------------------
 
-/** The doc L0's deny messages point at. Lives in @webpieces/rules-config/templates alongside the others. */
+/**
+ * The doc L0's deny messages point at. Lives in @webpieces/rules-config/templates alongside the others,
+ * and is written to <root>/.webpieces/instruct-ai/ lazily, only on an L0 BLOCK.
+ *
+ * That generated doc is the AUTHORITY for the fault table and the allowlist (same arrays, cannot
+ * drift). GUARD_MATRIX.md at this repo's root is the hand-written companion: it adds L0's evaluation
+ * ORDER, the use cases and the known gaps, and it documents L1, none of which are rendered from code.
+ * Change L0_FAULTS or L0_ALLOWLIST and the generated doc follows automatically — GUARD_MATRIX.md does
+ * not, so update it in the same PR.
+ */
 export const GUARD_MATRIX_DOC = 'webpieces.guard-matrix.md';
 
 /**
