@@ -127,7 +127,9 @@ describe('LandedWorktreeReaper — planning the hand-off', () => {
         expect(handoff.blockedBecause).toContain('not on disk');
         expect(world.spawns.length).toBe(0);
         const notice = reaper.manualNotice(handoff);
-        expect(notice).toContain(`cd ${PRIMARY} && pnpm wp-cleanup`);
+        // Single-quoted (atRoot's format): a primary clone under a path with a space — "Google Drive",
+        // "My Documents", `/Users/dean hiller/…` — makes a bare `cd` two arguments and it fails.
+        expect(notice).toContain(`cd '${PRIMARY}' && pnpm wp-cleanup`);
         expect(notice).toContain(LINKED);
     });
 
@@ -151,7 +153,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
         const out = reaper.handOff(reaper.plan(LINKED, BRANCH) as WorktreeReapHandoff);
 
         expect(out).toContain('NO LONGER EXISTS');
-        expect(out).toContain(`cd ${PRIMARY}`);
+        expect(out).toContain(`cd '${PRIMARY}'`);   // quoted for the same reason as the manual notice
         expect(out).toContain('✓ removed');
     });
 
@@ -169,7 +171,7 @@ describe('LandedWorktreeReaper — reporting what the child did', () => {
 
         expect(out).toContain('contains modified or untracked files');
         expect(out).toContain('Nothing was forced');
-        expect(out).toContain(`cd ${PRIMARY} && pnpm wp-cleanup`);
+        expect(out).toContain(`cd '${PRIMARY}' && pnpm wp-cleanup`);
         expect(out).not.toContain('--force');
     });
 

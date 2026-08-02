@@ -1,4 +1,4 @@
-import { WorktreeService } from '@webpieces/rules-config';
+import { WorktreeService, atRoot } from '@webpieces/rules-config';
 
 /**
  * Renders the "get onto a healthy tree" commands, in the flavour of the tree the AI is standing in.
@@ -47,9 +47,11 @@ export class TreeRecovery {
         return this.worktrees.isLinkedWorktree(root) ? 'worktree' : 'branch';
     }
 
-    // Render one command in the form that survives a tool call: `cd <root> && <command>`.
+    // Render one command in the form that survives a tool call: `cd '<root>' && <command>`. The
+    // formatting (single quotes included, so a repo path with a space still runs) is atRoot's, shared
+    // with every other remedy builder — see its header.
     private at(command: string): string {
-        return this.treeRoot === '' ? command : `cd ${this.treeRoot} && ${command}`;
+        return this.treeRoot === '' ? command : atRoot(this.treeRoot, command);
     }
 
     /**

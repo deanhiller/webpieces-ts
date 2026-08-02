@@ -549,13 +549,26 @@ describe('leading `cd <path> &&` on every fail-closed escape hatch (ERE ↔ JS t
                 `cd /abs/path/worktree && ${base}`,
                 `cd ../wt-2 && ${base}`,
                 `cd /abs/path/worktree && ${base} 2>&1 | tail -20`,
+                // SPACES IN THE REPO PATH (2026-08-02). A checkout under `/Users/dean hiller/…`,
+                // "Google Drive" or an iCloud path could not use the prefix at all, so on those
+                // machines EVERY L0 cure was untypable from a linked worktree. Single quotes fix it,
+                // and single quotes are also why it stays safe — sh expands nothing inside them.
+                `cd '/Users/dean hiller/repo' && ${base}`,
+                `cd '/Users/dean hiller/repo' && ${base} 2>&1 | tail -20`,
             ];
             const deny = [
                 `cd /abs/path && ${base} && rm -rf /`,     // the prefix widens nothing beyond itself
                 `cd $(curl evil) && ${base}`,              // no substitution can ride in as the path
                 `cd /abs/path; ${base}`,                   // only `&&`, never a bare separator
                 `cd /abs/path && ${base} | sh`,
-                `cd "/abs path" && ${base}`,               // no quoting/whitespace in the path token
+                // DOUBLE quotes stay denied, deliberately: `$` and backticks still expand inside them,
+                // so `cd "$(curl evil)"` would be a real command substitution. Only the single-quoted
+                // form — where nothing expands — is accepted, so a spaced path has exactly ONE spelling.
+                `cd "/abs path" && ${base}`,
+                `cd "$(curl evil)" && ${base}`,
+                `cd /abs path && ${base}`,                 // unquoted whitespace is still two arguments
+                `cd '/abs/path' && ${base} && rm -rf /`,   // quoting the path opens no chaining door
+                `cd '/abs/path'; ${base}`,
                 `pushd /abs/path && ${base}`,              // one spelling only, and it is `cd`
             ];
             expectEngineTwins(ere, js, allow, deny);

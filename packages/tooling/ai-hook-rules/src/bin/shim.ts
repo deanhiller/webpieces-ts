@@ -5,7 +5,7 @@ import { SyncFlowGuidance, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import {
-    L0_ALLOW_ERE, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
+    L0_ALLOW_ERE_SH, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
     INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
 } from './l0-allowlist';
 
@@ -217,7 +217,7 @@ case "\$FILE" in
     wp_log ALLOW-CONFIG      # the always-allowed recovery target — every guard is configured from it
     exit 0 ;;
 esac
-if printf '%s' "\$CMD" | grep -Eq '${L0_ALLOW_ERE}'; then
+if printf '%s' "\$CMD" | grep -Eq '${L0_ALLOW_ERE_SH}'; then
   wp_log ALLOW-CURE          # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi

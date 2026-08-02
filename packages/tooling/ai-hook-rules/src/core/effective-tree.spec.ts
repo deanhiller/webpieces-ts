@@ -5,7 +5,8 @@ import * as nodePath from 'path';
 
 import { migrate } from '../bin/setup';
 import { buildBashContext } from './build-context';
-import { EffectiveTreeResolver } from './effective-tree';
+import { isAllowed } from '../bin/shim';
+import { EffectiveTreeResolver, atRoot } from './effective-tree';
 import { runBash } from './runner';
 import { BlockedResult } from './types';
 
@@ -167,7 +168,54 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
         const report = (result as BlockedResult).report;
         // It names the tree it judged (a wrong judgement must be visible, not baffling) …
         expect(report).toContain(`Judged against: ${e2eWorktree}`);
-        // … and the remedy is the exact command to run, not "cd first, then re-run".
-        expect(report).toContain(`cd ${e2eWorktree} && ${command}`);
+        // … and the remedy is the exact command to run, not "cd first, then re-run". Single-quoted,
+        // so it is still one runnable line when the tree lives under a path containing a space.
+        expect(report).toContain(`cd '${e2eWorktree}' && ${command}`);
+    });
+});
+
+/**
+ * `atRoot()` — the ONE formatter for a remedy that must run in a named directory.
+ *
+ * WHY THE QUOTES (2026-08-02). It used to emit `cd <root> && <command>` UNQUOTED, which is broken
+ * shell the moment the repo lives under `/Users/dean hiller/…`, "Google Drive", "My Documents" or an
+ * iCloud path: `cd` gets two arguments and fails before the command ever runs. The L0 allowlist could
+ * not have accepted such a line either, so on those machines a fault D/X/K in a linked worktree left
+ * NO reachable cure at all.
+ *
+ * SINGLE quotes, never double: sh expands nothing inside '' — `$(…)`, backticks, `$VAR`, `&&`, `;`,
+ * `|` are all literal — so a quoted root can smuggle nothing, by construction. Inside "" a `$` still
+ * expands, which is why the double-quoted form is neither emitted nor accepted.
+ */
+describe('atRoot() emits a remedy that is runnable AND allowlisted', () => {
+    const spaced = '/Users/dean hiller/repo';
+
+    it('single-quotes the root so a path with a space stays one argument', () => {
+        expect(atRoot(spaced, 'pnpm install')).toBe("cd '/Users/dean hiller/repo' && pnpm install");
+    });
+
+    it('quotes ordinary paths the same way — one spelling, no branch to get wrong', () => {
+        expect(atRoot('/repo', 'git status')).toBe("cd '/repo' && git status");
+    });
+
+    it('never emits DOUBLE quotes (inside "" a $ or backtick would still expand)', () => {
+        expect(atRoot('/repo', 'pnpm install')).not.toContain('"');
+    });
+
+    /**
+     * The pathological root — one containing a single quote itself, which essentially never happens on
+     * a macOS/Linux dev machine. We emit it UNQUOTED, exactly as this function always behaved, rather
+     * than doing the `'\''` dance: that would render correct sh which the allowlist's `'[^']+'` branch
+     * then could NOT match, i.e. a remedy the guard refuses — the deadlock shape this area exists to
+     * prevent. Unquoted is no worse than the long-standing status quo for that path.
+     */
+    it("falls back to the old unquoted form when the root itself contains a single quote", () => {
+        expect(atRoot("/Users/o'brien/repo", 'pnpm install')).toBe("cd /Users/o'brien/repo && pnpm install");
+    });
+
+    it('produces a line the L0 allowlist ACCEPTS — the round trip that matters', () => {
+        expect(isAllowed('Bash', atRoot(spaced, 'pnpm install'), '')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'git pull origin main'), '')).toBe('allow');
+        expect(isAllowed('Bash', atRoot(spaced, 'pnpm exec wp-upgrade-shim'), '')).toBe('allow');
     });
 });

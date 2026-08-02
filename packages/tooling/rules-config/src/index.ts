@@ -21,6 +21,9 @@ export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 export { DotWebpieces, dotWebpieces, GitDirs, WORKTREE_STATE_DIR } from './state-dir';
 export { StateDirMigrator, StateMigrationReport } from './state-dir-migration';
 export { AtomicFile } from './atomic-file';
+// The ONE formatter for a remedy that must run in a named directory: `cd '<root>' && <command>`.
+// Single-quoted so a repo path containing a space is still runnable (and still un-smuggleable).
+export { atRoot } from './at-root';
 export { RulesConfigDesign } from './rules-config-design';
 export { DocumentDesign, isDocumentDesign, DESIGN_METADATA_KEYS } from './di';
 export { ExcludePaths } from './exclude-hook-paths';
