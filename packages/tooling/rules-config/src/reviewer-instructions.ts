@@ -15,14 +15,30 @@ export class ContextEntry {
     }
 }
 
-/** One reviewer's matched file and the extracted diff for it. Data-only. */
+/**
+ * One reviewer's matched file, the extracted diff for it, AND the absolute path of the file itself.
+ *
+ * `sourcePath` exists because of a measured 0/4: four reviewers on one PR read the diff and not one opened a
+ * single full source file. The instructions handed them an absolute path per diff and only a parent DIRECTORY
+ * per source, so reading the diff was a paste and reading the source was "join this dir to that filename
+ * yourself". Identical affordance, or the cheaper one wins every time. Data-only.
+ */
 export class BriefedFile {
-    file: string;      // repo-relative source path
-    diffPath: string;  // ABSOLUTE path of the extracted .diff
+    file: string;        // repo-relative source path
+    diffPath: string;    // ABSOLUTE path of the extracted .diff
+    sourcePath: string;  // ABSOLUTE path of the file itself; '' for a deleted file, which has no after-state
+    status: string;      // 'M' | 'A' | 'D' | 'U' (untracked) | 'X' (excluded by config)
+    diffBytes: number;
+    truncated: boolean;
 
-    constructor(file: string, diffPath: string) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(file: string, diffPath: string, sourcePath = '', status = 'M', diffBytes = 0, truncated = false) {
         this.file = file;
         this.diffPath = diffPath;
+        this.sourcePath = sourcePath;
+        this.status = status;
+        this.diffBytes = diffBytes;
+        this.truncated = truncated;
     }
 }
 
@@ -48,6 +64,18 @@ export class ReviewerBriefing {
     checklistId: string;
     fileDiffCommand: string;
     dirty: boolean;
+    // Facts ABOUT the manifest, surfaced inline so a reviewer learns the diff is complete without opening it.
+    changedFileCount: number;
+    truncatedCount: number;
+    excludedCount: number;
+    allDiffLines: number;
+    allDiffBytes: number;
+    // The three shas, by the names DiffManifest already uses. Printing two bare shas told a reviewer nothing
+    // about WHAT the diff is taken against; C beside A makes "main has moved since the fork" self-evident.
+    hashForkPoint: string;
+    hashFeatureHead: string;
+    hashMainHead: string;
+    ownAgentFileInDiff: string;   // ABSOLUTE path when this diff edits THIS reviewer's own agent file; '' otherwise
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(subagent: string, checklistId: string, repoRoot: string) {
@@ -65,8 +93,26 @@ export class ReviewerBriefing {
         this.verdictPath = '';
         this.fileDiffCommand = '';
         this.dirty = false;
+        this.changedFileCount = 0;
+        this.truncatedCount = 0;
+        this.excludedCount = 0;
+        this.allDiffLines = 0;
+        this.allDiffBytes = 0;
+        this.hashForkPoint = '';
+        this.hashFeatureHead = '';
+        this.hashMainHead = '';
+        this.ownAgentFileInDiff = '';
     }
 }
+
+/**
+ * The Read tool truncates at roughly this many lines, silently. Any path this file prints alongside a bigger
+ * line count has to say so, or a reviewer reviews a fraction of a change and reports on all of it.
+ */
+export const READ_TRUNCATION_LINES = 2000;
+
+/** Comfortably under {@link READ_TRUNCATION_LINES} — the size at which ALL.diff really is one clean Read. */
+export const ALL_DIFF_ONE_READ_LINES = 1500;
 
 /**
  * Renders the per-reviewer instructions file that `wp-review-upsert-pr` writes to
@@ -120,11 +166,30 @@ export class ReviewerInstructionsService {
             `# You are \`${b.subagent}\``,
             '',
             'Review as YOURSELF, against your own checklist — not as a general code reviewer.',
-            'You may not review your own authorship, and you may not write another reviewer\'s verdict file.',
+            'You may not write another reviewer\'s verdict file.',
+            '',
+            '"You may not review your own authorship" means: you did not write this diff, so review it — but if',
+            'the diff CHANGES YOU, say so in `output` rather than pretending the conflict is not there.',
+            ...this.selfEditWarning(b),
             '',
             '_Generated per run by `wp-review-upsert-pr`. Everything below is already resolved for you; the',
             'paths are absolute because your working directory is not guaranteed to be the repo root._',
             '',
+        ];
+    }
+
+    /**
+     * Every PR that edits the review gate hits this: on the measured run, 5 of 8 changed files were the
+     * reviewer agent files themselves, two reviewers reviewed their OWN definition, and neither flagged it —
+     * neither had any guidance to. Detected by the tooling rather than left to the reviewer to notice.
+     */
+    private selfEditWarning(b: ReviewerBriefing): string[] {
+        if (b.ownAgentFileInDiff === '') return [];
+        return [
+            '',
+            `⚠️  THIS DIFF MODIFIES YOUR OWN AGENT FILE: \`${b.ownAgentFileInDiff}\``,
+            'You are reviewing a change to your own definition. Review it anyway — and state that fact in',
+            '`output`, so a human reading your verdict knows the reviewer and the reviewed were the same thing.',
         ];
     }
 
@@ -136,8 +201,14 @@ export class ReviewerInstructionsService {
     }
 
     /**
-     * The change itself. The materialized diff leads because it is ONE Read instead of a shell-out per file,
-     * and because a hand-assembled range can come back empty (it did — see DiffBasis).
+     * The change itself. The MANIFEST leads, and the per-file table with it; `ALL.diff` is demoted to one
+     * option among several, recommended only where it is actually the right read.
+     *
+     * That ordering is the fix for a measured 4/4 failure. `ALL.diff` used to be bolded, first, and framed as
+     * "everything", with the manifest one unbolded line below it called a "path map" — which reads like a
+     * lookup aid, not something to open. All four reviewers on that PR read `ALL.diff`, none opened the
+     * manifest, and none could therefore have established that the combined view was complete. Reviewers did
+     * exactly what the emphasis told them to; so the emphasis moved.
      */
     private diffSection(b: ReviewerBriefing): string[] {
         const lines = ['## The change you are reviewing', ''];
@@ -146,15 +217,7 @@ export class ReviewerInstructionsService {
             lines.push('> commit-to-commit range would show. Judge it anyway — it is what your checklist matched.');
             lines.push('');
         }
-        if (b.allDiffPath !== '') {
-            lines.push(`**Everything on this branch, already extracted:** \`${b.allDiffPath}\``);
-            lines.push('');
-        }
-        lines.push(...this.myFilesTable(b));
-        if (b.manifestPath !== '') {
-            lines.push(`Path map (authoritative; records truncated + excluded files): \`${b.manifestPath}\``);
-            lines.push('');
-        }
+        lines.push(...this.manifestLines(b), ...this.basisLines(b), ...this.myFilesTable(b), ...this.allDiffLines(b));
         if (b.fileDiffCommand !== '') {
             lines.push(`Reproduce any single file: \`${b.fileDiffCommand}\``);
             lines.push('');
@@ -165,25 +228,117 @@ export class ReviewerInstructionsService {
         return lines;
     }
 
+    /**
+     * The manifest, named as the authority AND with its own headline facts inlined. Inlining them is the
+     * point: a reviewer that never opens the manifest still learns whether anything was truncated or
+     * excluded, which is the one thing it could not otherwise have known it was missing.
+     */
+    private manifestLines(b: ReviewerBriefing): string[] {
+        if (b.manifestPath === '') return [];
+        const warn = b.truncatedCount + b.excludedCount > 0 ? '  ⚠️ NOT everything is materialized — see the table.' : '';
+        return [
+            `**Path map — AUTHORITATIVE. Read this first:** \`${b.manifestPath}\``,
+            `  ${b.changedFileCount} file(s) · ${b.truncatedCount} truncated · ${b.excludedCount} excluded${warn}`,
+            '  Per file it carries: `status` (M/A/D/U/X), `bytes`, `file`/`fileAbs`, `diffFile`/`diffAbs`, and the',
+            '  three shas below. It is the only place that records what was truncated or left out.',
+            '',
+        ];
+    }
+
+    /**
+     * What the diff is taken AGAINST. Two bare shas in a `git diff` command said nothing about this, so a
+     * reviewer could not tell a fork-point diff from a diff against main's current tip — and therefore could
+     * not tell that anything merged to main since the fork is simply absent from what it is judging.
+     * Rendering C beside A makes "main has moved" self-evident exactly when it has.
+     */
+    private basisLines(b: ReviewerBriefing): string[] {
+        if (b.hashForkPoint === '') return [];
+        const sameAsFork = b.hashMainHead === b.hashForkPoint;
+        const cNote = b.hashMainHead === '' ? '(unresolved)'
+            : sameAsFork ? `${b.hashMainHead}   ← same as A, so main has not moved since the fork`
+            : `${b.hashMainHead}   ← main HAS MOVED since the fork`;
+        return [
+            'This diff is **fork-point → feature-head**, NOT a diff against main\'s current tip:',
+            '```',
+            `fork point   (A)  ${b.hashForkPoint}`,
+            `feature head (B)  ${b.hashFeatureHead}`,
+            `main head    (C)  ${cNote}`,
+            '```',
+            'Anything merged to main after A is NOT in this diff.',
+            '',
+        ];
+    }
+
+    /**
+     * Source and diff get IDENTICAL affordance — an absolute path each, in adjacent columns. The previous
+     * table gave an absolute path for the diff and nothing for the source, and the source went unread 4/4.
+     */
     private myFilesTable(b: ReviewerBriefing): string[] {
         if (b.myFiles.length === 0) return ['_No files matched your patterns._', ''];
         const why = b.matchedPatterns.length === 0
             ? `**In scope: ALL ${b.myFiles.length} changed file(s)** — your checklist has no \`patterns\`, so the whole diff is yours.`
             : `**In scope: ${b.myFiles.length} file(s)** matching ${b.matchedPatterns.map((p: string): string => `\`${p}\``).join(', ')}:`;
-        const rows = b.myFiles.map((f: BriefedFile): string => `| \`${f.file}\` | \`${f.diffPath}\` |`);
-        return [why, '', '| file | its diff |', '|---|---|', ...rows, ''];
+        const rows = b.myFiles.map((f: BriefedFile): string => this.fileRow(f));
+        return [why, '', '| file | status | its diff | full source |', '|---|---|---|---|', ...rows, ''];
     }
 
+    /**
+     * One row. A truncated or excluded diff is flagged HERE, in the row, not left as a field inside a file the
+     * reviewer has to think to open — and an oversized diff states the line count that makes a single Read
+     * come back silently incomplete.
+     */
+    private fileRow(f: BriefedFile): string {
+        const flags: string[] = [];
+        if (f.truncated) flags.push('⚠️ diff TRUNCATED — read the source');
+        if (f.status === 'X') flags.push('⚠️ EXCLUDED, not materialized — read the source');
+        const status = [`\`${f.status}\``, ...flags].join(' ');
+        const source = f.sourcePath === '' ? '_deleted — no file on disk_' : `\`${f.sourcePath}\``;
+        return `| \`${f.file}\` | ${status} | \`${f.diffPath}\` (${f.diffBytes} bytes) | ${source} |`;
+    }
+
+    /**
+     * `ALL.diff`, recommended ONLY where it is the right read. It is kept — for a patternless reviewer on a
+     * small diff it is genuinely one Read instead of N, which is why all four used it — but the blanket
+     * "everything on this branch" line was wrong in two different ways at once: it invited a pattern-scoped
+     * reviewer to spend its budget on files it was explicitly not asked about, and it pointed a reviewer on a
+     * large PR at a file that cannot survive one Read.
+     */
+    private allDiffLines(b: ReviewerBriefing): string[] {
+        if (b.allDiffPath === '') return [];
+        const size = b.allDiffLines === 0 ? '' : ` — ${b.allDiffLines} lines / ${b.allDiffBytes} bytes`;
+        if (b.matchedPatterns.length > 0) {
+            return [`The whole branch${size}, for CROSS-FILE CONTEXT if you need it: \`${b.allDiffPath}\``,
+                'Your own files above are what you are reviewing; the rest of the branch is someone else\'s checklist.', ''];
+        }
+        if (b.allDiffLines > ALL_DIFF_ONE_READ_LINES) {
+            return [`⚠️ The combined diff is ${b.allDiffLines} lines and will NOT survive a single Read (the Read tool`,
+                `truncates at ~${READ_TRUNCATION_LINES} lines, silently). Read the per-file diffs above instead, or page it:`,
+                `\`${b.allDiffPath}\``, ''];
+        }
+        return [`Whole-branch diff${size} — convenient at this size, but the per-file table above is authoritative:`,
+            `\`${b.allDiffPath}\``, ''];
+    }
+
+    /**
+     * The rule that used to say "when you need to", and lost 4/4 to the more emphatic budget section 40 lines
+     * later. "When you need to" delegates the judgment to a reviewer that, by construction, does not yet know
+     * what it is missing. It has no opt-out now.
+     */
     private sourceSection(b: ReviewerBriefing): string[] {
-        const lines = ['## Where the source lives', '', `Repo root: \`${b.repoRoot}\``, ''];
+        const lines = ['## Read the full source — every file, every time', '', `Repo root: \`${b.repoRoot}\``, ''];
+        lines.push('**READ THE FULL SOURCE OF EVERY FILE IN YOUR TABLE.** Not "if you need to" — every time.');
+        lines.push('A hunk shows what changed; only the whole file shows what it changed INTO, and a change that');
+        lines.push('looks fine in isolation can still be wrong in place.');
+        lines.push('');
+        lines.push('The `full source` column above is the path. For files marked `A` (added) you have already done');
+        lines.push('this: an add-diff IS the complete file, byte for byte, so its diff and its source are the same');
+        lines.push('text. For `M` (modified) and `D` (deleted) files the diff is a fragment — open the file.');
+        lines.push('');
         if (b.sourceDirs.length > 0) {
-            lines.push('Your matched files live under:');
+            lines.push('The neighbouring code lives under:');
             for (const dir of b.sourceDirs) lines.push(`- \`${dir}\``);
             lines.push('');
         }
-        lines.push('Read whole files around the diff when you need to. The diff is the SUBJECT; the surrounding');
-        lines.push('code is the CONTEXT — a change that looks fine in isolation can still be wrong in place.');
-        lines.push('');
         return lines;
     }
 
@@ -193,7 +348,14 @@ export class ReviewerInstructionsService {
      * installed to, and it must never drop an entry silently: a missing path is stated as missing.
      */
     private contextSection(b: ReviewerBriefing): string[] {
-        if (b.contextEntries.length === 0) return [];
+        // Emitting NOTHING made the section this class exists for look like a feature that does not exist.
+        // One line naming the config keys costs nothing and is the only hint a repo will ever get.
+        if (b.contextEntries.length === 0) {
+            return ['## Pre-resolved context', '',
+                '_None configured for this repo. If you find yourself hunting for the same path on every review,',
+                'it belongs in `pr-gate.reviewContext` / `pr-gate.reviewContextPackages` in `webpieces.config.json`._',
+                ''];
+        }
         const lines = ['## Pre-resolved context (do not go hunting for these)', ''];
         for (const entry of b.contextEntries) {
             const suffix = entry.note === '' ? '' : `  ${entry.note}`;
@@ -220,15 +382,27 @@ export class ReviewerInstructionsService {
         ];
     }
 
+    /**
+     * The anti-hunting rule, with the changed files carved out explicitly.
+     *
+     * It used to read as "stay inside what you were given" and, being the LAST thing in the file, it beat
+     * the source-reading instruction 4 times out of 4. It never distinguished HUNTING — greps into
+     * `node_modules`, re-deriving the dependency graph — from OPENING A FILE IT WAS EXPLICITLY HANDED. The
+     * distinction is now stated, because where two instructions conflict the later and more emphatic one wins.
+     */
     private budgetSection(): string[] {
         return [
             '## Budget',
             '',
-            'Everything you need is listed above. Do NOT search `node_modules`, do NOT re-derive the dependency',
-            'graph, and do NOT hunt the repo for infrastructure config — those paths are either given above or',
-            'were not configured. If something you genuinely need is missing, name it in `output` and give your',
-            'verdict on what you could actually see. A reviewer that spends its budget searching produces a',
-            'thinner review than one that spends it reading.',
+            'Do NOT search `node_modules`, do NOT re-derive the dependency graph, and do NOT hunt the repo for',
+            'infrastructure config. That is hunting, and it is what wastes a review budget — those paths are',
+            'either given above or were not configured.',
+            '',
+            'Reading the full text of a file that is IN your table is NOT hunting — it is the review. Budget for',
+            'it: read the diff to see what changed, and the source to judge whether it is right in place.',
+            '',
+            'If something you genuinely need is missing, name it in `output` and give your verdict on what you',
+            'could actually see.',
             '',
             'Open your diff files before writing a verdict. `wp-finish-upsert-pr` reads your own transcript and',
             'reports a verdict written without opening the diff. It also records the path of that transcript,',

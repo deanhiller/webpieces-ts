@@ -10,18 +10,31 @@ export const FILE_DIFF_MAX_BYTES = 256 * 1024;
 // Cap for the combined ALL.diff. Over it, whole files are omitted — again, named, never silently.
 export const ALL_DIFF_MAX_BYTES = 2 * 1024 * 1024;
 
-/** One materialized file's diff. Data-only (per CLAUDE.md). */
+/**
+ * One materialized file's diff. Data-only (per CLAUDE.md).
+ *
+ * Both paths are recorded TWICE, relative and absolute, deliberately. Relative is the stable identity that
+ * survives the repo being cloned somewhere else; absolute is the only form a reviewer subagent can actually
+ * open, because its working directory is not guaranteed to be the repo root. Recording only the relative
+ * form is what turned "read this file" back into a search — the exact cost this whole feature removes.
+ */
 export class DiffManifestEntry {
     file: string;       // repo-relative source path
+    fileAbs: string;    // ABSOLUTE working-tree path; '' for a deleted file, which has no after-state
     diffFile: string;   // repo-relative path of the .diff under diff/files/
+    diffAbs: string;    // ABSOLUTE path of the same .diff
     status: string;     // 'M' | 'A' | 'D' | 'U' (untracked) | 'X' (excluded by config)
     bytes: number;
     truncated: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(file: string, diffFile: string, status: string, bytes: number, truncated = false) {
+    constructor(repoRoot: string, file: string, diffFile: string, status: string, bytes: number, truncated = false) {
         this.file = file;
+        // Not `gitTrackedSourceFileAfterChanges`: `status` already says what happened, and a compound name
+        // would lie for 'U' (untracked) and for 'D' (no after-state). The path field answers only WHERE.
+        this.fileAbs = status === 'D' ? '' : path.join(repoRoot, file);
         this.diffFile = diffFile;
+        this.diffAbs = path.resolve(repoRoot, diffFile);
         this.status = status;
         this.bytes = bytes;
         this.truncated = truncated;
@@ -42,6 +55,11 @@ export class DiffManifest {
     entries: DiffManifestEntry[];
     excluded: string[];          // matched pr-gate.reviewDiffExclude — present, stubbed, NOT materialized
     omittedFromAllDiff: string[]; // too big for ALL.diff; their per-file .diff still exists
+    // Size of the combined view, measured once HERE so the instructions renderer and any future consumer
+    // read one number instead of each running its own `wc -l`. A reviewer needs the LINE count specifically:
+    // the Read tool truncates at ~2000 lines, silently, which is how a fraction of a change gets reviewed.
+    allDiffLines: number;
+    allDiffBytes: number;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -60,6 +78,8 @@ export class DiffManifest {
         this.entries = entries;
         this.excluded = excluded;
         this.omittedFromAllDiff = omittedFromAllDiff;
+        this.allDiffLines = 0;
+        this.allDiffBytes = 0;
     }
 }
 
@@ -176,14 +196,14 @@ export class DiffMaterializer {
             const stub = `[excluded from materialization by pr-gate.reviewDiffExclude]\nIf you need it:  git diff ${manifest.base} -- ${file}\n`;
             fs.writeFileSync(abs, stub);
             manifest.excluded.push(file);
-            manifest.entries.push(new DiffManifestEntry(file, rel, 'X', stub.length));
+            manifest.entries.push(new DiffManifestEntry(repoRoot, file, rel, 'X', stub.length));
             return;
         }
         const raw = byFile.get(file) ?? '';
         const status = this.statusOf(file, raw, repoRoot);
         const body = this.capped(raw, file, manifest.base);
         fs.writeFileSync(abs, body);
-        manifest.entries.push(new DiffManifestEntry(file, rel, status, body.length, body !== raw));
+        manifest.entries.push(new DiffManifestEntry(repoRoot, file, rel, status, body.length, body !== raw));
     }
 
     private statusOf(file: string, raw: string, repoRoot: string): string {
@@ -206,7 +226,14 @@ export class DiffMaterializer {
 
     /**
      * `ALL.diff` — the single Read that answers "what changed on this branch?". Files are appended smallest
-     * first so a cap drops the fewest of them, and anything dropped is named in a footer AND in the manifest.
+     * first so a cap drops the fewest of them, and anything dropped is named in a HEADER as well as in the
+     * manifest.
+     *
+     * The header used to be a footer, and that was a live correctness bug. `ALL_DIFF_MAX_BYTES` is 2 MB —
+     * roughly 30–50k lines — while the Read tool truncates at ~2000. So on the exact PR where files were
+     * dropped, a reviewer Reads the first ~5% and the notice telling it files are missing sits in the 95% it
+     * never reaches: the in-band signal went invisible precisely when it mattered. A reviewer reads a diff
+     * from the start, so the top is the only position that survives a truncated read.
      */
     private writeAllDiff(dir: string, filesDir: string, manifest: DiffManifest): void {
         const ordered = [...manifest.entries].sort((a: DiffManifestEntry, b: DiffManifestEntry): number => a.bytes - b.bytes);
@@ -221,13 +248,31 @@ export class DiffMaterializer {
             parts.push(body);
             total += body.length;
         }
-        let out = parts.join('\n');
-        if (manifest.omittedFromAllDiff.length > 0) {
-            out += `\n\n… ${manifest.omittedFromAllDiff.length} file(s) OMITTED from this combined view (it hit the ` +
-                `${ALL_DIFF_MAX_BYTES}-byte cap). Each still has its own diff under files/ — see manifest.json:\n` +
-                manifest.omittedFromAllDiff.map((f: string): string => `   ${f}`).join('\n') + '\n';
-        }
+        const out = this.allDiffHeader(manifest) + parts.join('\n');
+        manifest.allDiffBytes = out.length;
+        manifest.allDiffLines = out === '' ? 0 : out.split('\n').length;
         fs.writeFileSync(path.join(dir, 'ALL.diff'), out);
+    }
+
+    /**
+     * The "this combined view is NOT the whole change" notice, at the TOP (see {@link writeAllDiff}). Emitted
+     * only when something really is missing — a header on every diff trains a reader to skip the header.
+     */
+    private allDiffHeader(manifest: DiffManifest): string {
+        const truncated = manifest.entries.filter((e: DiffManifestEntry): boolean => e.truncated);
+        if (manifest.omittedFromAllDiff.length === 0 && truncated.length === 0) return '';
+        const lines = ['=== ⚠️  THIS COMBINED VIEW IS INCOMPLETE — read this notice before the diff below ==='];
+        if (manifest.omittedFromAllDiff.length > 0) {
+            lines.push(`${manifest.omittedFromAllDiff.length} file(s) are OMITTED here (this view hit the ` +
+                `${ALL_DIFF_MAX_BYTES}-byte cap). Each still has its OWN complete diff`, 'under files/ — open those, and see manifest.json:');
+            for (const f of manifest.omittedFromAllDiff) lines.push(`   ${f}`);
+        }
+        if (truncated.length > 0) {
+            lines.push(`${truncated.length} file(s) below are TRUNCATED at ${FILE_DIFF_MAX_BYTES} bytes; each says so inline where it cuts off:`);
+            for (const e of truncated) lines.push(`   ${e.file}`);
+        }
+        lines.push('=== end of notice ===', '');
+        return lines.join('\n') + '\n';
     }
 
     /**

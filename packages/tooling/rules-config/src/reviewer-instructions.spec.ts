@@ -11,11 +11,18 @@ function briefing(): ReviewerBriefing {
     b.diffDir = '/repo/.webpieces/pr-review/feat/diff';
     b.allDiffPath = '/repo/.webpieces/pr-review/feat/diff/ALL.diff';
     b.manifestPath = '/repo/.webpieces/pr-review/feat/diff/manifest.json';
-    b.myFiles = [new BriefedFile('db/001.sql', '/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff')];
+    b.myFiles = [new BriefedFile(
+        'db/001.sql', '/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff', '/repo/db/001.sql', 'M', 4096)];
     b.matchedPatterns = ['db/**/*.sql'];
     b.sourceDirs = ['/repo/db'];
     b.verdictPath = '/repo/.webpieces/pr-review/feat/review-db-reviewer.json';
     b.fileDiffCommand = 'git diff abc123 def456 -- <file>';
+    b.changedFileCount = 1;
+    b.allDiffLines = 582;
+    b.allDiffBytes = 35534;
+    b.hashForkPoint = 'abc123';
+    b.hashFeatureHead = 'def456';
+    b.hashMainHead = 'abc123';
     return b;
 }
 
@@ -102,6 +109,16 @@ describe('ReviewerInstructionsService — pre-resolved context and scope wording
         expect(svc.render(briefing())).toContain('`db/**/*.sql`');
     });
 
+    /**
+     * The empty-context path used to emit NOTHING, which made the feature this class exists for look like a
+     * feature that does not exist. Silence is not the same statement as "none configured".
+     */
+    it('says so, and names the config keys, when no context is configured', () => {
+        const md = svc.render(briefing());
+        expect(md).toContain('None configured for this repo');
+        expect(md).toContain('pr-gate.reviewContext');
+    });
+
     it('places the instructions file beside review.json, under instructions/', () => {
         expect(svc.pathFor('/repo', 'feat', 'db-reviewer'))
             .toBe(path.join('/repo', '.webpieces', 'pr-review', 'feat', 'instructions', 'db-reviewer.instructions.md'));
@@ -114,5 +131,102 @@ describe('ReviewerInstructionsService — pre-resolved context and scope wording
         const md = svc.render(b);
         expect(md).toContain('no guidance doc');
         expect(md).not.toContain('Read this FIRST: ``');
+    });
+});
+
+/**
+ * The emphasis fixes, each pinned to the measurement that motivated it: on one PR, 4 of 4 reviewers read
+ * `ALL.diff`, 0 of 4 opened `manifest.json`, and 0 of 4 opened a single full source file.
+ */
+describe('ReviewerInstructionsService — what the reviewer is pushed to open FIRST', () => {
+    it('puts the manifest ahead of ALL.diff, and calls it authoritative', () => {
+        const md = svc.render(briefing());
+        const manifestAt = md.indexOf('/repo/.webpieces/pr-review/feat/diff/manifest.json');
+        const allDiffAt = md.indexOf('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
+        expect(manifestAt).toBeGreaterThan(-1);
+        expect(manifestAt).toBeLessThan(allDiffAt);
+        expect(md).toContain('AUTHORITATIVE');
+    });
+
+    // The one fact a reviewer that never opens the manifest could not otherwise learn it was missing.
+    it('states the truncated + excluded counts inline, and warns when either is non-zero', () => {
+        const clean = svc.render(briefing());
+        expect(clean).toContain('1 file(s) · 0 truncated · 0 excluded');
+        expect(clean).not.toContain('NOT everything is materialized');
+        const b = briefing();
+        b.truncatedCount = 1;
+        b.myFiles[0].truncated = true;
+        const md = svc.render(b);
+        expect(md).toContain('NOT everything is materialized');
+        expect(md).toContain('⚠️ diff TRUNCATED');
+    });
+
+    // Identical affordance for source and diff — an absolute path each, side by side.
+    it('gives the absolute source path its own column and makes reading it unconditional', () => {
+        const md = svc.render(briefing());
+        expect(md).toContain('| file | status | its diff | full source |');
+        expect(md).toContain('`/repo/db/001.sql`');
+        expect(md).toContain('READ THE FULL SOURCE OF EVERY FILE IN YOUR TABLE');
+        expect(md).not.toContain('Read whole files around the diff when you need to');
+    });
+
+    it('renders a deleted file as having no source, rather than a path that cannot be opened', () => {
+        const b = briefing();
+        b.myFiles = [new BriefedFile('db/gone.sql', '/repo/diff/db__gone.sql.diff', '', 'D', 12)];
+        expect(svc.render(b)).toContain('_deleted — no file on disk_');
+    });
+
+    // The one with a live correctness risk: over ~2000 lines a single Read comes back silently truncated.
+    it('warns that an oversized ALL.diff will not survive one Read, only for a patternless reviewer', () => {
+        const b = briefing();
+        b.matchedPatterns = [];
+        b.allDiffLines = 9000;
+        const md = svc.render(b);
+        expect(md).toContain('will NOT survive a single Read');
+        expect(md).toContain('9000 lines');
+    });
+
+    // A pattern-scoped reviewer owns a slice. Pointing it at the combined view invites it to spend its
+    // budget on files it was explicitly not asked about — and to hit the Read cap before reaching its own.
+    it('offers ALL.diff to a scoped reviewer only as cross-file context, never as the thing to read', () => {
+        const scoped = svc.render(briefing());
+        expect(scoped).toContain('for CROSS-FILE CONTEXT if you need it');
+        expect(scoped).not.toContain('will NOT survive a single Read');
+        const b = briefing();
+        b.matchedPatterns = [];
+        expect(svc.render(b)).toContain('the per-file table above is authoritative');
+    });
+
+    /**
+     * Two bare shas told a reviewer nothing about what the diff was taken against — so it could not tell
+     * that changes landed on main since the fork are simply absent from what it is judging.
+     */
+    it('names the three shas and says out loud whether main has moved since the fork', () => {
+        const same = svc.render(briefing());
+        expect(same).toContain('fork-point → feature-head');
+        expect(same).toContain('main has not moved since the fork');
+        const b = briefing();
+        b.hashMainHead = 'ffff999';
+        expect(svc.render(b)).toContain('main HAS MOVED since the fork');
+    });
+
+    // Every PR that edits the review gate hits this; on the measured run, 2 reviewers reviewed their own
+    // definition and neither said so, because nothing told them to.
+    it('warns a reviewer when the diff modifies its own agent file', () => {
+        expect(svc.render(briefing())).not.toContain('MODIFIES YOUR OWN AGENT FILE');
+        const b = briefing();
+        b.ownAgentFileInDiff = '/repo/.claude/agents/db-reviewer.md';
+        const md = svc.render(b);
+        expect(md).toContain('MODIFIES YOUR OWN AGENT FILE');
+        expect(md).toContain('/repo/.claude/agents/db-reviewer.md');
+    });
+
+    // The budget section is the LAST thing read and beat the source rule 4/4. It must no longer read as a
+    // prohibition on opening a file the reviewer was explicitly handed.
+    it('keeps the anti-hunting rule but carves out reading a file that is in the table', () => {
+        const md = svc.render(briefing());
+        expect(md).toContain('Do NOT search `node_modules`');
+        expect(md).toContain('is NOT hunting — it is the review');
+        expect(md).not.toContain('Everything you need is listed above');
     });
 });
