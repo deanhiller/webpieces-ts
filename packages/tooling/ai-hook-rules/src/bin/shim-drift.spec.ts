@@ -383,7 +383,7 @@ describe('sync allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'git fetch',
             'git fetch origin main',
             'git fetch --prune origin main',          // the sanctioned cure for "multiple branches" (see deny below)
-            'cd /x && git pull',                      // the worktree spelling — cd does not persist between calls
+            'cd /x && git pull',                      // the worktree spelling — a cwd that left the workspace is reset
         ];
         const deny = [
             // `git merge` in EVERY form. It was on this list until the allowlist went global, purely so a
@@ -468,8 +468,9 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
 });
 
 /**
- * The DIRECTORY PREFIX every escape hatch now tolerates (2026-07-30). A Bash tool call does not persist
- * `cd`, so an agent working in a linked worktree can only reach that tree with `cd <worktree> && …`.
+ * The DIRECTORY PREFIX every escape hatch now tolerates (2026-07-30). The harness RESETS a cwd that
+ * left the workspace, so an agent working in a linked worktree can only reach that tree with a
+ * self-contained `cd <worktree> && …`.
  * The drift guard demanded a BARE `pnpm install` and said in words "do NOT put a cd in front of it" —
  * while the install was needed in the worktree. The cure was untypable from the one place that needed
  * it. The prefix cannot change what the command does to the repo, so it is not a safety property; the
