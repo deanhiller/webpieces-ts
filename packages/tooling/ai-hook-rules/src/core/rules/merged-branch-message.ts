@@ -27,9 +27,9 @@ export class MergedBranchMessage {
 
     /**
      * `treeRoot` is the tree the guard judged — pass it and every prescribed command comes out as
-     * `cd <treeRoot> && …`. That form is the only one that is correct across tool calls, because a
-     * Bash call does not persist `cd`: an agent in a linked worktree is back in the primary clone by
-     * the time it runs the cure, and a bare `git checkout -b` would then branch the WRONG tree.
+     * `cd <treeRoot> && …`. That form is the only one that is correct across tool calls: the harness
+     * RESETS a cwd that left the workspace, so an agent in a linked worktree is back in the primary
+     * clone by the time it runs the cure, and a bare `git checkout -b` would branch the WRONG tree.
      */
     constructor(private readonly treeRoot: string = '') {
         this.recovery = new TreeRecovery(treeRoot);

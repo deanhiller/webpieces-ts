@@ -10,11 +10,25 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  * WHICH TREE does a Bash command actually act on? The ONE resolver every bash guard and the
  * force-to-root check share.
  *
- * WHY it has to exist at all: an agent's Bash tool does NOT persist `cd` between calls (verified —
- * a standalone `cd <worktree>` followed by `pwd` in the next call reports the primary clone again).
- * So an agent working in a linked worktree writes self-contained `cd <worktree> && …` commands, and
- * the shell cwd the PreToolUse hook is handed is ALWAYS the primary clone. Every guard that reasons
- * from that cwd judges the wrong tree on every single call. Three field sightings in one session:
+ * WHY it has to exist at all: the shell cwd a PreToolUse hook is handed does not tell you which tree
+ * the command acts on. `cd` behaves TWO different ways, and both break a cwd-based guard:
+ *
+ *   - A `cd` that stays INSIDE the session's working directory PERSISTS to later calls. So the cwd
+ *     can be a subdirectory of the governed root, left there by an unrelated command several turns
+ *     earlier — a relative path then resolves somewhere other than the root while still being in the
+ *     governed tree.
+ *   - A `cd` that LEAVES it is reset by the harness, which says so (`Shell cwd was reset to <root>`).
+ *     So an agent working in a linked worktree is back in the primary clone by the next call and must
+ *     write self-contained `cd <worktree> && …` commands — and the cwd the hook sees is the primary
+ *     clone, not the worktree the command targets.
+ *
+ * (Measured on 2026-08-02: `cd backlog && pwd` → `…/backlog`, then a bare `pwd` in a FRESH call →
+ * still `…/backlog`. But `cd ../<linked-worktree> && pwd` → the worktree, then a bare `pwd` → back at
+ * the primary clone. An earlier version of this comment asserted `cd` never persists; that was the
+ * worktree case generalized. The conclusion below is unchanged — only the reason was wrong.)
+ *
+ * Either way a guard that reasons from the raw cwd judges the wrong tree. Three field sightings in
+ * one session:
  * an `ls` of a path outside every repo blocked as "this branch is merged"; a version-drift cure
  * (`pnpm install`) that could not be typed from the directory that needed it; and a command aimed at
  * `/private/tmp` blocked because the PRIMARY clone's main was behind — with a remedy (`git pull` in
@@ -155,8 +169,9 @@ class TreeClassification {
     }
 }
 
-/** The steering prefix every remedy needs: `cd` does not persist between tool calls, so a bare
- *  remedy runs in whatever directory the NEXT call starts in — which is never the tree we judged. */
+/** The steering prefix every remedy needs: a bare remedy runs in whatever directory the NEXT call
+ *  starts in, which is not the tree we judged — the harness resets a cwd that left the workspace, and
+ *  keeps one that stayed inside it, so neither case can be assumed. Naming the root removes the guess. */
 // webpieces-disable no-function-outside-class -- one-line path/string formatter shared by the guards' message builders; a class around it would be ceremony
 export function atRoot(root: string, command: string): string {
     return `cd ${root} && ${command}`;

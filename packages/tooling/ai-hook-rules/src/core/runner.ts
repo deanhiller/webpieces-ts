@@ -208,10 +208,11 @@ function isL0CureCommand(command: string): boolean {
 // at the root — an agent that cd's INTO a subdir has the same broken mental model as one that is
 // stranded there, so it gets the same answer now.
 //
-// The remedy is emitted as ONE runnable line, `cd <root> && <the original command>`, because `cd` does
-// not persist between tool calls: telling the agent to "cd first, then re-run" costs a turn and the
-// next call starts back in the old directory anyway. The bare-`cd` advice is what made this guard
-// print the very command it had just rejected.
+// The remedy is emitted as ONE runnable line, `cd <root> && <the original command>`, rather than as
+// "cd first, then re-run". That advice is what made this guard print the very command it had just
+// rejected, and it is unreliable in both directions: a `cd` INTO this repo sticks (so the next call
+// may start somewhere unexpected), while a `cd` OUT of it is reset by the harness (so a separate
+// `cd <worktree>` call buys nothing). One self-contained line is correct either way.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult | null {
     const targetAtRoot = path.resolve(tree.effectiveCwd) === path.resolve(tree.root);
@@ -220,7 +221,8 @@ function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult
         `❌ Run git/gh commands from the repo root, not a subdirectory.\n` +
         `   Command runs in: ${tree.effectiveCwd}\n` +
         `   Judged against: ${tree.root}\n` +
-        `   Run EXACTLY this instead (one line — \`cd\` does NOT persist between tool calls):\n` +
+        `   Run EXACTLY this instead, as ONE line (a bare \`cd\` in a separate call is not equivalent —\n` +
+        `   a \`cd\` inside this repo STICKS for later calls, and a \`cd\` out of it is reset by the harness):\n` +
         `     ${atRoot(tree.root, command)}\n` +
         `   A leading \`cd <path> &&\` is ACCEPTED by the guards — it cannot change what the command\n` +
         `   does to the repo. (The webpieces guards evaluate the repo's git state at its root.)`;
@@ -282,8 +284,8 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
-    // WHICH TREE does this command act on? Not necessarily the shell's cwd — an agent working in a
-    // linked worktree writes `cd <worktree> && …` because `cd` does not persist between tool calls.
+    // WHICH TREE does this command act on? Not the shell's cwd: a `cd` OUT of the workspace is reset
+    // by the harness and one INSIDE it persists, so neither can be assumed (see EffectiveTree).
     // ONE resolver answers this for the guards AND for force-to-root below, so the two can never
     // disagree about which tree you are in.
     const tree = new EffectiveTreeResolver().resolve(command, cwd, workspaceRoot);

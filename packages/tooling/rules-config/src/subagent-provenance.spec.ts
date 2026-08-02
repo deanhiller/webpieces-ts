@@ -134,3 +134,74 @@ describe('SubagentProvenanceService.evidenceFor', () => {
         expect(evidence[0]?.transcriptPath).toBe('');
     });
 });
+
+// Append assistant records to the fake transcript, so a test can say what served the reviewer.
+function appendRecords(home: string, sessionId: string, records: readonly object[]): void {
+    const jsonl = path.join(home, '.claude', 'projects', '-Some-Slug', sessionId, 'subagents', 'agent-abc.jsonl');
+    fs.appendFileSync(jsonl, records.map((r: object): string => JSON.stringify(r)).join('\n') + '\n');
+}
+
+function modelsFor(sessionId: string, records: readonly object[]): string[] {
+    const home = fakeHarness(sessionId, 'envvars-reviewer', 'dean/feat');
+    appendRecords(home, sessionId, records);
+    process.env['HOME'] = home;
+    process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
+    const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
+    return svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds))[0]?.models ?? [];
+}
+
+/**
+ * The OBSERVED model, never the configured one and never a self-report.
+ *
+ * A `.claude/agents/<subagent>.md` declaring `model: sonnet` was measured running opus — a 2.5x price
+ * difference the configured value cannot show. Asking the reviewer instead would be worse: a model is
+ * unreliable about its own identity, so the field would be usually right and silently wrong.
+ */
+describe('SubagentProvenanceService.evidenceFor — which model actually reviewed', () => {
+    it('records the model the harness wrote, deduped, in first-seen order', () => {
+        expect(modelsFor('sess-m1', [
+            { message: { model: 'claude-sonnet-5', content: [] } },
+            { message: { model: 'claude-sonnet-5', content: [] } },
+        ])).toEqual(['claude-sonnet-5']);
+    });
+
+    // An ARRAY because one run can span models — a fallback after a refusal, a mid-run config change.
+    // Collapsing to one value would force a lossy choice at read time.
+    it('keeps every model when a run spans more than one', () => {
+        expect(modelsFor('sess-m2', [
+            { message: { model: 'claude-sonnet-5', content: [] } },
+            { message: { model: 'claude-opus-5', content: [] } },
+        ])).toEqual(['claude-sonnet-5', 'claude-opus-5']);
+    });
+
+    // `<synthetic>` records are written by the harness for messages no model produced. Counting one
+    // would put a non-model in the field, on every single reviewer.
+    it('skips <synthetic> records rather than filing them as a model', () => {
+        expect(modelsFor('sess-m3', [
+            { message: { model: '<synthetic>', content: [] } },
+            { message: { model: 'claude-opus-5', content: [] } },
+        ])).toEqual(['claude-opus-5']);
+    });
+
+    /**
+     * Best-effort, like every other read of this file: this is quality telemetry, not an integrity
+     * gate, so a transcript with no model field must yield empty and never block a PR.
+     */
+    it('yields no models rather than throwing when the field is absent', () => {
+        expect(modelsFor('sess-m4', [{ message: { content: [] } }, { message: {} }])).toEqual([]);
+    });
+
+    // One pass, both answers: the models must not cost a second read of the largest file this opens.
+    it('still counts tool calls from the same pass that collected the models', () => {
+        const home = fakeHarness('sess-m5', 'envvars-reviewer', 'dean/feat');
+        appendRecords(home, 'sess-m5', [
+            { message: { model: 'claude-opus-5', content: [{ type: 'tool_use', input: { file_path: '/repo/x.ts' } }] } },
+        ]);
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-m5';
+        const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
+        const evidence = svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds))[0];
+        expect(evidence?.models).toEqual(['claude-opus-5']);
+        expect(evidence?.toolCallCount).toBe(1);
+    });
+});

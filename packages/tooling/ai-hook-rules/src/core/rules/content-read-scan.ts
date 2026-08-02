@@ -26,7 +26,7 @@ export class ContentReadScan {
 
     /**
      * `effectiveCwd` is the directory the command really runs in — after its own leading `cd`, which
-     * is how an agent reaches a linked worktree, since `cd` does not persist between tool calls.
+     * is how an agent reaches a linked worktree, since the harness resets a cwd that left the workspace.
      * RELATIVE operands are resolved against it, not against workspaceRoot: `cd /tmp/scratch && cat
      * notes.md` reads `/tmp/scratch/notes.md`, which is nothing to do with this repo's staleness,
      * while `cd /tmp/scratch && cat /repo/src/x.ts` still names repo content and is still caught.

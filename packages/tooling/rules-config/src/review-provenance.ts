@@ -58,6 +58,14 @@ export class ReviewerTranscript {
     readDoc: boolean;
     toolCallCount: number;
     offRepoSearches: number;
+    /**
+     * The model(s) that ACTUALLY served this reviewer, observed in its transcript — not the `model:` its
+     * agent file requested, which can silently disagree, and not anything the reviewer claimed.
+     *
+     * Copied here for the reason the whole class exists: the transcript is a wasting asset (~30 days),
+     * and after it expires this row is the only surviving answer to "which model reviewed this?".
+     */
+    models: string[];
 
     constructor(evidence: ReviewerEvidence, paths: ReviewerPaths) {
         this.id = evidence.agentType; // a checklist's id IS its subagent name (see ChecklistDefinition)
@@ -72,6 +80,7 @@ export class ReviewerTranscript {
         this.readDoc = evidence.readDoc;
         this.toolCallCount = evidence.toolCallCount;
         this.offRepoSearches = evidence.offRepoSearches;
+        this.models = evidence.models;
     }
 }
 

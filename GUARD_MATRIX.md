@@ -115,7 +115,7 @@ command and it is rejected again — that is not the guard refusing its own cure
 | 9 | fault present **and** call is on the allowlist | — | the entire row 2 of the matrix; what keeps recovery reachable | PASS or ALLOW |
 | 10 | fault is `D`/`X`/`K` **and** the call is a Read | — | PASS degenerates to a **terminal allow** — the bin never ran, so there is nothing to fall through to | reads are unguarded during those three |
 
-**Consumers trip `S` on every upgrade that changes shim logic, and must run `wp-install-ai-hooks`
+**Consumers trip `S` on every upgrade that changes shim logic, and must run `pnpm wp-install-ai-hooks`
 before continuing. That is the designed inline-upgrade forcing function working, not a regression.**
 
 ## Two known gaps

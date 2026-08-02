@@ -36,6 +36,28 @@ export class ReviewerEvidence {
     readDoc: boolean;        // opened its checklist's guidance doc
     toolCallCount: number;
     offRepoSearches: number; // tool calls that reached into node_modules — the archaeology signal
+    /**
+     * Distinct `message.model` values OBSERVED in the transcript, in first-seen order.
+     *
+     * The model that actually ran, never the one that was configured — and never anything the reviewer
+     * says about itself. A checklist's `.claude/agents/<subagent>.md` declares `model:`, but that is the
+     * REQUESTED value and it can silently disagree with what served the request: a repo was measured
+     * running opus for a reviewer whose agent file said `model: sonnet`. Asking the model instead would
+     * be worse — a model is unreliable about its own identity, naming a family instead of a version or
+     * repeating whatever the system prompt implied, so a self-reported field is usually right and
+     * silently wrong, which is the worst kind of telemetry because it looks authoritative.
+     * `message.model` is written by the harness, so this inherits the anti-forgery property the rest of
+     * this class documents.
+     *
+     * An ARRAY, not a string: one reviewer run can span more than one model (a fallback after a refusal,
+     * a mid-run config change). Collapsing to one value forces a lossy choice at read time; recording
+     * what happened lets the renderer decide.
+     *
+     * Token counts and cost are deliberately NOT here. Prices change, vary by platform and differ under
+     * intro pricing, so a rate table in this package would rot silently — and the question this answers
+     * is "which model reviewed this?", not "what did it cost?".
+     */
+    models: string[];
     // Absolute path of the transcript these counters were read out of, '' when it could not be resolved.
     // Carried out rather than recomputed because a reviewer subagent cannot learn its own transcript path
     // (the environment exposes the PARENT session id and no agent id), so this is the only place it is
@@ -43,7 +65,7 @@ export class ReviewerEvidence {
     transcriptPath: string;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '') {
+    constructor(agentType: string, agentId: string, readDiff = false, readDoc = false, toolCallCount = 0, offRepoSearches = 0, transcriptPath = '', models: string[] = []) {
         this.agentType = agentType;
         this.agentId = agentId;
         this.readDiff = readDiff;
@@ -51,6 +73,25 @@ export class ReviewerEvidence {
         this.toolCallCount = toolCallCount;
         this.offRepoSearches = offRepoSearches;
         this.transcriptPath = transcriptPath;
+        this.models = models;
+    }
+}
+
+/**
+ * One pass over one transcript: the tool inputs AND the models that served it. Data-only.
+ *
+ * They are gathered together rather than in two passes because they come from the SAME records — the
+ * inputs from `message.content[].input`, the model from `message.model` one level up — and a transcript
+ * is the largest file this service opens. Two reads of it to answer two questions about the same lines
+ * would be the duplicate-work trap the diff materializer documents at length.
+ */
+export class TranscriptScan {
+    inputs: string[];   // every tool_use input, JSON-stringified
+    models: string[];   // distinct message.model values, first-seen order
+
+    constructor(inputs: string[] = [], models: string[] = []) {
+        this.inputs = inputs;
+        this.models = models;
     }
 }
 
@@ -169,7 +210,8 @@ export class SubagentProvenanceService {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     private evidenceFromTranscript(agentType: string, agentId: string, jsonl: string, request: EvidenceRequest): ReviewerEvidence {
-        const inputs = this.toolInputsOf(jsonl);
+        const scan = this.scanTranscript(jsonl);
+        const inputs = scan.inputs;
         const docPath = request.docPaths[agentType] ?? '';
         // The instructions file counts as "read the diff": it lives in the same per-branch dir, it is what
         // the reviewer is told to open first, and it inlines the diff paths. A reviewer that opened it and
@@ -181,7 +223,22 @@ export class SubagentProvenanceService {
             inputs.length,
             inputs.filter((i: string): boolean => i.includes('node_modules')).length,
             jsonl,
+            scan.models,
         );
+    }
+
+    /**
+     * Record this line's `message.model`, deduped, in first-seen order.
+     *
+     * `<synthetic>` records are SKIPPED. The harness writes them for messages no model produced (tool
+     * results, injected notices); counting one would put a non-model in a field whose entire purpose is
+     * "which model reviewed this", and it would show up on every single reviewer.
+     */
+    // webpieces-disable no-any-unknown -- opaque transcript record, only `model` is read and it is type-guarded below
+    private collectModel(message: Record<string, unknown>, models: string[]): void {
+        const model = message['model'];
+        if (typeof model !== 'string' || model === '' || model === '<synthetic>') return;
+        if (!models.includes(model)) models.push(model);
     }
 
     // The absolute path of agent-<id>.jsonl across all session dirs, or '' if it is not there.
@@ -194,12 +251,19 @@ export class SubagentProvenanceService {
     }
 
     /**
-     * Every tool_use input in a transcript, JSON-stringified. Stringified rather than walked field-by-field
-     * because the shape differs per tool (Read takes file_path, Bash takes command, Grep takes path) and a
-     * substring test over the serialized input is both simpler and robust to a tool we have not seen.
+     * ONE pass over the transcript for both answers (see {@link TranscriptScan}).
+     *
+     * Tool inputs are JSON-stringified rather than walked field-by-field because the shape differs per
+     * tool (Read takes file_path, Bash takes command, Grep takes path) and a substring test over the
+     * serialized input is both simpler and robust to a tool we have not seen.
+     *
+     * Best-effort, like everything else that parses this file: a format change must never wedge the
+     * gate, so an unreadable transcript yields empty rather than throwing. That matters more for the
+     * models than for the counters — this is quality telemetry, not an integrity check, and a missing
+     * `model` field must not be able to block a PR.
      */
-    private toolInputsOf(jsonl: string): string[] {
-        const out: string[] = [];
+    private scanTranscript(jsonl: string): TranscriptScan {
+        const scan = new TranscriptScan();
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: an unreadable transcript yields no evidence, never a crash
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
@@ -209,19 +273,21 @@ export class SubagentProvenanceService {
                 const message = rec?.['message'];
                 if (typeof message !== 'object' || message === null) continue;
                 // webpieces-disable no-any-unknown -- opaque transcript record, narrowed by the guard above
-                const content = (message as Record<string, unknown>)['content'];
+                const msg = message as Record<string, unknown>;
+                this.collectModel(msg, scan.models);
+                const content = msg['content'];
                 if (!Array.isArray(content)) continue;
                 for (const block of content) {
                     // webpieces-disable no-any-unknown -- opaque content block, only `type`/`input` are read
                     const b = block as Record<string, unknown>;
-                    if (b['type'] === 'tool_use') out.push(JSON.stringify(b['input'] ?? {}));
+                    if (b['type'] === 'tool_use') scan.inputs.push(JSON.stringify(b['input'] ?? {}));
                 }
             }
         } catch (err: unknown) {
             const error = toError(err);
             void error;
         }
-        return out;
+        return scan;
     }
 
     private mentions(inputs: readonly string[], needle: string): boolean {
