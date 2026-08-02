@@ -22,6 +22,40 @@ reading this, one of the six faults below fired and named this file.
 First match wins. `D`/`X`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the
 guard bin runs — a stale, missing or broken validator cannot be trusted to validate itself.
 
+## The fix, per fault
+
+Every command below is rendered from that fault's `cures` array and is asserted, by unit test,
+to be accepted by `isAllowed()` — so nothing here can be a command the guard then rejects. Type
+the option you pick EXACTLY as written and run nothing else on that line.
+
+### `D` — version drift — root package.json pin != installed version
+
+- **Option 1 (preferred)**: `pnpm install`  ← pick this when node_modules is OLDER than the pin, OR you are on a feature branch and want YOUR branch pin (usually the case) — it always clears the drift
+- **Option 2**: `git pull`  ← pick this when node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so pull first and install second; a bare install would downgrade you
+
+### `X` — guard bin missing (fresh clone / new worktree / package removed)
+
+- **Option 1 (preferred)**: `pnpm install`  ← pick this when this fault fires at all — nothing is installed in THIS tree, and a new git worktree copies no node_modules
+
+### `K` — guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)
+
+- **Option 1 (preferred)**: `rm -rf node_modules && pnpm install`  ← pick this when this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees the right version on disk and considers it installed; only the delete forces a rewrite
+
+### `S` — committed .claude/webpieces/ai-hook.sh != renderShim()
+
+- **Option 1 (preferred)**: `pnpm wp-install-ai-hooks --sync`  ← pick this when you are on a current release — it re-arms the shim as step 1 and returns before the interactive hook wiring, so it is the only non-interactive spelling
+- **Option 2**: `pnpm exec wp-upgrade-shim`  ← pick this when you want the shim regenerated and NOTHING else; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
+- **Option 3**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — this works on every release
+
+### `C` — webpieces.config.json missing
+
+- **Option 1 (preferred)**: edit `webpieces.config.json` yourself  ← pick this when this fault fires at all — it is the only cure that needs no other tool, and it is never denied
+- **Option 2**: `pnpm exec wp-install-ai-hooks`  ← pick this when you are at an INTERACTIVE terminal and can answer its two hook-target prompts
+
+### `Y` — a loaded rule has no webpieces.config.json key
+
+- **Option 1 (preferred)**: edit `webpieces.config.json` yourself  ← pick this when this fault fires at all — it is the only cure that needs no other tool, and it is never denied
+
 ## The matrix
 
 L0 has NO genuine second dimension. Every branch reduces to one question:
@@ -50,7 +84,7 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 5 | git pull / git fetch - merge is NOT on the list | ALLOW |
 | 6 | pnpm exec wp-upgrade-shim | ALLOW |
 | 7 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
-| 8 | pnpm exec wp-install-ai-hooks | ALLOW |
+| 8 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --sync) | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

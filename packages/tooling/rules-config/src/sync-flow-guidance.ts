@@ -99,7 +99,21 @@ export class SyncFlowGuidance {
             + '\'git fetch origin main\' and branch off origin/main. Do NOT reach for git merge '
             + '--ff-only / git reset --hard / git checkout -B main: merge and rebase are blocked in '
             + 'EVERY form by redirect-how-to-merge-main, and the reset/-B forms silently throw away '
-            + 'commits. To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or '
+            + 'commits.';
+    }
+
+    /**
+     * The FEATURE-BRANCH half, split out of updateMainAdvice() on purpose.
+     *
+     * It names `wp-start-update` / `wp-start-upsert-pr`, and NEITHER is on the L0 allowlist — correctly
+     * so, since a 3-point merge is not a tooling-integrity cure. While an L0 fault is up, printing this
+     * sentence unqualified hands the reader a command the guard will reject, which is the deadlock shape
+     * the whole L0 module exists to prevent. So a caller printing this from inside an L0 deny must first
+     * say how to CLEAR the fault (for drift: `pnpm install`), and only then offer this. Same free of
+     * backticks / `$` / `"` as its sibling, so it stays safe inside the shim's double-quoted REASON.
+     */
+    featureBranchSyncAdvice(): string {
+        return 'To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or '
             + 'pnpm wp-start-upsert-pr (a PR is open).';
     }
 

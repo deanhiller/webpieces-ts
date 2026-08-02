@@ -16,6 +16,9 @@ const NOT_ALLOWED: readonly L0Call[] = [
     new L0Call('Bash', 'git merge origin/main', ''),
     new L0Call('Bash', 'git push', ''),
     new L0Call('Bash', 'pnpm install && rm -rf /', ''),
+    // The flags allowance on the installer entry widens the FLAGS, nothing else: an operator still
+    // cannot ride along behind one.
+    new L0Call('Bash', 'pnpm wp-install-ai-hooks --sync && rm -rf /', ''),
     new L0Call('Bash', 'pnpm build', ''),
     new L0Call('Edit', '', '/repo/src/index.ts'),
     new L0Call('Write', '', '/repo/package.json'),
@@ -30,7 +33,10 @@ const NOT_ALLOWED: readonly L0Call[] = [
  * per-fault carve-out, this fails on the first cell.
  */
 describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the fault never changes it', () => {
-    const allCalls: readonly L0Call[] = [...L0_ALLOWLIST.map((e: L0AllowEntry): L0Call => e.sample), ...NOT_ALLOWED];
+    const allCalls: readonly L0Call[] = [
+        ...L0_ALLOWLIST.flatMap((e: L0AllowEntry): readonly L0Call[] => e.allSamples()),
+        ...NOT_ALLOWED,
+    ];
 
     it('has six faults with unique codes', () => {
         expect(L0_FAULTS).toHaveLength(6);
@@ -50,10 +56,14 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
         }
     });
 
-    it('gives every allowlist entry its declared outcome, and blocks everything else', () => {
+    it('gives every allowlist entry its declared outcome — for EVERY spelling it pins', () => {
         for (const entry of L0_ALLOWLIST) {
-            const s = entry.sample;
-            expect(isAllowed(s.toolName, s.command, s.filePath), `entry: ${entry.label}`).toBe(entry.kind);
+            // allSamples(), not just `sample`: a spelling some deny message PRESCRIBES (e.g.
+            // `pnpm wp-install-ai-hooks --sync`, which the config-validation banner names) is pinned as
+            // an extra sample precisely so a later tightening of the pattern cannot make it untypable.
+            for (const s of entry.allSamples()) {
+                expect(isAllowed(s.toolName, s.command, s.filePath), `entry: ${entry.label} / ${s.command || s.filePath}`).toBe(entry.kind);
+            }
         }
         for (const call of NOT_ALLOWED) {
             expect(isAllowed(call.toolName, call.command, call.filePath), `must block: ${call.command || call.filePath}`).toBeNull();
@@ -114,6 +124,43 @@ describe('cure reachability — every fault names at least one cure the allowlis
             expect(fault.denyText, `fault ${fault.code}`).not.toContain('wp-setup-ai-hooks');
         }
     });
+
+    // Exactly ONE preferred cure per fault. Zero leaves the reader choosing between equals; two is the
+    // same defect wearing a label, and it is what "two options that are the same action spelled
+    // differently" looked like before the cures became data.
+    it('names exactly one preferred cure per fault, and gives every cure a discriminator', () => {
+        for (const fault of L0_FAULTS) {
+            const preferred = fault.cures.filter((c: L0Cure): boolean => c.preferred);
+            expect(preferred, `fault ${fault.code}`).toHaveLength(1);
+            expect(fault.cures[0].preferred, `fault ${fault.code}: preferred cure must lead`).toBe(true);
+            for (const cure of fault.cures) {
+                expect(cure.discriminator.length, `fault ${fault.code} / ${cure.mention}`).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    /**
+     * THE ASSERTION THAT WOULD HAVE CAUGHT `--sync`.
+     *
+     * Before this, the guidance and the allowlist were only linked through L0Cure.call. The RENDERED
+     * doc could still print a command nobody had run isAllowed() on — and it did: messages prescribed
+     * `pnpm wp-install-ai-hooks --sync` while INSTALL_HOOKS_BODY_ERE accepted no flags at all, so the
+     * one command the deny named was denied. Scraping the rendered output (not the array) is the point:
+     * whatever a reader can literally copy out of the Fix sections must pass the guard.
+     */
+    it('every command printed in a rendered Fix section is accepted by the allowlist', () => {
+        const fixLines = renderGuardMatrixDoc().split('\n').filter((l: string): boolean => l.startsWith('- **Option'));
+        expect(fixLines.length).toBeGreaterThanOrEqual(L0_FAULTS.length);
+        for (const line of fixLines) {
+            const literal = /`([^`]+)`/.exec(line)?.[1] ?? '';
+            expect(literal, `no literal in Fix line: ${line}`).not.toBe('');
+            // "edit `<file>` yourself" is the tool-shaped cure — judged as the Edit it stands for.
+            const outcome = line.includes('edit `')
+                ? isAllowed('Edit', '', `/repo/${literal}`)
+                : isAllowed('Bash', literal, '');
+            expect(outcome, `Fix output prescribes a DENIED call: ${literal}`).not.toBeNull();
+        }
+    });
 });
 
 /**
@@ -155,6 +202,21 @@ describe('webpieces.guard-matrix.md is generated from the same arrays the guard 
         for (const entry of L0_ALLOWLIST) expect(doc).toContain(entry.label);
     });
 
+    // The FIX sections are the part a blocked reader acts on, so they are rendered from the cures rather
+    // than written next to them: a fault whose cures change and whose doc does not is the drift this
+    // whole generated-doc arrangement exists to make impossible.
+    it('renders a Fix section per fault, with each cure literal and its discriminator', () => {
+        const doc = renderGuardMatrixDoc();
+        for (const fault of L0_FAULTS) {
+            expect(doc, `fault ${fault.code} heading`).toContain(`### \`${fault.code}\``);
+            for (const cure of fault.cures) {
+                expect(doc, `cure literal: ${cure.mention}`).toContain(cure.mention);
+                expect(doc, `discriminator for: ${cure.mention}`).toContain(cure.discriminator);
+            }
+        }
+        expect(doc).toContain('Option 1 (preferred)');
+    });
+
     it('points the reader at the doc only when it was actually written', () => {
         expect(guardMatrixPointer('')).toBe('');
         expect(guardMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.guard-matrix.md'))
@@ -172,9 +234,17 @@ describe('webpieces.guard-matrix.md is generated from the same arrays the guard 
 
 /** Guards the one place a cure can be declared: L0Cure carries both halves or the test above is vacuous. */
 describe('L0Cure', () => {
-    it('keeps the mention and the call together', () => {
-        const cure = new L0Cure('pnpm install', new L0Call('Bash', 'pnpm install', ''));
+    it('keeps the mention, the call and the guidance fields together', () => {
+        const cure = new L0Cure('pnpm install', new L0Call('Bash', 'pnpm install', ''), true, 'always');
         expect(cure.mention).toBe('pnpm install');
         expect(cure.call.command).toBe('pnpm install');
+        expect(cure.preferred).toBe(true);
+        expect(cure.discriminator).toBe('always');
+        expect(cure.isCommand()).toBe(true);
+    });
+
+    it('classifies a tool-shaped cure as NOT a command, so it renders as the edit it stands for', () => {
+        const cure = new L0Cure('webpieces.config.json', new L0Call('Edit', '', '/repo/webpieces.config.json'), true, 'always');
+        expect(cure.isCommand()).toBe(false);
     });
 });

@@ -33,6 +33,8 @@
  * future fallback that silently swallows a retired key turns it red.
  */
 
+import { RETIRED_KEY_MARKER } from './config-error-banner';
+
 // A retired key is matched one of two ways, because config keys live at two very different levels.
 // RULE — a rule/guard NAME, which may sit under either `rules` or `hookGuards`, so it is matched by bare
 //        name rather than by a fixed path.
@@ -121,13 +123,16 @@ export const RETIRED_CONFIG_KEYS: readonly RetiredConfigKey[] = [
 /**
  * The shared message. Leads with the retirement, then the destination, then the edit — an agent reading this
  * should not have to infer anything.
+ *
+ * RETIRED_KEY_MARKER is the phrase the banner classifier keys off to call this error DEFINITIVE (no
+ * install can revive a key this table names), so the marker is IMPORTED rather than re-typed here.
  */
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this package
 export function retiredKeyError(entry: RetiredConfigKey): string {
     const destination = entry.movedTo === ''
         ? 'It was removed with no replacement.'
         : `It moved to "${entry.movedTo}".`;
-    return `${entry.label} "${entry.key}" is a RETIRED webpieces.config.json key. ${destination} ${entry.instruction}`;
+    return `${entry.label} "${entry.key}" ${RETIRED_KEY_MARKER}. ${destination} ${entry.instruction}`;
 }
 
 /**

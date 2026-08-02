@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { FieldDef } from './field-def';
+// Imported, never re-typed: the banner offers the bulk migrator only for errors it actually covers, and
+// this marker is how it recognizes a placement error. See config-error-banner.ts.
+import { SECTION_PLACEMENT_MARKER } from './config-error-banner';
 import { sectionForRule, isHookGuard } from './sections';
 import { MODIFIED_CODE_MODES } from './rule-configs';
 import {
@@ -614,7 +617,7 @@ export function validateSectionPlacement(
     for (const name of Object.keys(rulesSection)) {
         if (isHookGuard(name)) {
             errors.push(
-                `[${name}] is a hook guard and belongs in the "hookGuards" section, not "rules". ` +
+                `[${name}] is a hook guard and ${SECTION_PLACEMENT_MARKER} "hookGuards" section, not "rules". ` +
                 `Move it (or run \`pnpm wp-install-ai-hooks --sync\` to migrate automatically).`,
             );
         }
@@ -623,7 +626,7 @@ export function validateSectionPlacement(
         // Only flag KNOWN code rules misplaced into hookGuards; unknown names may be custom rules.
         if (!isHookGuard(name) && RULE_SCHEMAS[name]) {
             errors.push(
-                `[${name}] is a code rule and belongs in the "rules" section, not "hookGuards". ` +
+                `[${name}] is a code rule and ${SECTION_PLACEMENT_MARKER} "rules" section, not "hookGuards". ` +
                 `Move it (or run \`pnpm wp-install-ai-hooks --sync\` to migrate automatically).`,
             );
         }

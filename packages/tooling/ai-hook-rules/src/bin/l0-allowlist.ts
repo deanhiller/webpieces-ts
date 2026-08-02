@@ -221,19 +221,43 @@ export const RESTORE_SHIM_CMD =
 // now leads with it: the `cp` is version-agnostic too, but Claude Code's own permission classifier
 // treats a bare cp over a repo file as something to confirm, while a named bin reads as a tool call.
 //
-// Kept as tight as the other escape hatches: anchored at both ends, bare bin name, no flags, so no
-// shell operator can ride along. Keep in sync with INSTALL_HOOKS_ALLOW_JS below (locked by a unit test).
-const INSTALL_HOOKS_BODY_ERE = '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks';
+// FLAGS ARE ACCEPTED (added for `--sync`, 2026-08-02). Two messages that fire while the config is
+// INVALID — i.e. exactly when every Bash call is denied — prescribe `pnpm wp-install-ai-hooks --sync`:
+// the section-placement errors ("[x] belongs in the hookGuards section … or run …") and the retired
+// top-level `pr-gate` block. `migrate()` in setup.ts really does perform both edits, so the cure is
+// correct; it was simply untypable, because this pattern accepted no flags at all. That is the same
+// deadlock shape as the missing `2>&1 | tail` and the missing `cd` prefix: a deny naming a command the
+// allowlist rejects. The flag token is the identical one INSTALLER_BODY_ERE already allows — `--word`
+// / `--word=value`, no whitespace, no operator — so it widens nothing else:
+// `pnpm wp-install-ai-hooks --sync && rm -rf /` still FAILS CLOSED.
+//
+// Kept as tight as the other escape hatches: anchored at both ends, bare bin name plus `--flag` tokens
+// only, so no shell operator can ride along. Keep in sync with INSTALL_HOOKS_ALLOW_JS (locked by a unit test).
+const INSTALL_HOOKS_BODY_ERE =
+    '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*';
 export const INSTALL_HOOKS_ALLOW_ERE =
     CD_PREFIX_ERE_ANCHORED + INSTALL_HOOKS_BODY_ERE + CAPTURE_TAIL_ERE;
 
 // JS-regex twin of INSTALL_HOOKS_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-const INSTALL_HOOKS_BODY_JS = '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-install-ai-hooks';
+const INSTALL_HOOKS_BODY_JS =
+    '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-install-ai-hooks(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*';
 export const INSTALL_HOOKS_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + INSTALL_HOOKS_BODY_JS + CAPTURE_TAIL_JS_SRC);
 
 // The exact command the self-guard's deny names FIRST. Present in every release that has a shim.
 export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
+
+// The MIGRATION spelling, named by every config-validation error an agent can be handed while the
+// config is INVALID (a misplaced section, a retired key, a missing rule entry) — i.e. while every other
+// Bash call is denied. It is also the only NON-INTERACTIVE spelling: `--sync` runs seedOrSyncConfig and
+// returns, whereas the bare bin goes on to wire the Claude Code hooks and PROMPTS for a target, which
+// hangs a non-interactive agent. Pinned as a sample on the allowlist entry so a coverage test locks it.
+export const INSTALL_HOOKS_SYNC_CMD = 'pnpm wp-install-ai-hooks --sync';
+
+// The non-interactive spelling of the FULL install (config + CI gate + hook wiring): the `--target`
+// flag is what replaces the interactive prompt. `--flag=value` is accepted by the same token
+// INSTALLER_BODY_ERE uses, so this spelling is pinned as a sample rather than given its own pattern.
+export const INSTALL_HOOKS_TARGET_CMD = 'pnpm wp-install-ai-hooks --target=project';
 
 // ---------------------------------------------------------------------------
 // THE L0 ALLOWLIST — one list, consulted identically by every tooling-integrity fault.
@@ -279,15 +303,26 @@ export class L0Call {
  * `ere`/`js` are the twin regex BODIES for a Bash entry, or null for a tool-shaped entry (Read, the
  * webpieces.config.json target) that no regex can express. `sample` is a call this entry must accept —
  * it is what the matrix-coverage and cure-reachability tests drive isAllowed() with.
+ *
+ * `extraSamples` pins ADDITIONAL spellings the same entry must accept. A spelling that some deny
+ * message prescribes belongs here, or nothing stops a later tightening of the pattern from making that
+ * message's cure untypable again — which is the deadlock shape this whole module exists to prevent.
  */
 export class L0AllowEntry {
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         readonly label: string,
         readonly kind: 'pass' | 'allow',
         readonly ere: string | null,
         readonly js: string | null,
         readonly sample: L0Call,
+        readonly extraSamples: readonly L0Call[] = [],
     ) {}
+
+    /** Every call this entry pins: the canonical sample plus every extra spelling. */
+    allSamples(): readonly L0Call[] {
+        return [this.sample, ...this.extraSamples];
+    }
 }
 
 export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
@@ -305,8 +340,9 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
     new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,
         new L0Call('Bash', RESTORE_SHIM_CMD, '')),
-    new L0AllowEntry(INSTALL_HOOKS_CMD, 'allow', INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
-        new L0Call('Bash', INSTALL_HOOKS_CMD, '')),
+    new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --sync)`, 'allow', INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
+        new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
+        [new L0Call('Bash', INSTALL_HOOKS_SYNC_CMD, ''), new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
 ];
 
 const L0_BODIES_ERE = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] => (e.ere === null ? [] : [e.ere]));
