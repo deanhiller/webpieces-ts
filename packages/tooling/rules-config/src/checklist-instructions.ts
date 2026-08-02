@@ -106,11 +106,16 @@ export class ChecklistInstructionsService {
             ];
         }
         const lines = ['Also give EACH one the real diff — path matching is COARSE, so judge the change, not the path:'];
-        // The MATERIALIZED diff first when it exists: it is one Read instead of a shell-out per file, and it
-        // cannot go empty the way a hand-assembled range can.
+        // The MATERIALIZED diff when it exists: it cannot go empty the way a hand-assembled range can. The
+        // MANIFEST leads, and ALL.diff follows it, for the same reason the per-reviewer instructions were
+        // reordered: whichever one is printed first and framed as "everything" is the only one that gets
+        // opened — measured 4/4 — and ALL.diff is the one that can be silently incomplete.
         if (context.diffDir.trim() !== '') {
-            lines.push(`  everything, already extracted:  ${context.diffDir}/ALL.diff`);
-            lines.push(`  per-file diffs + path map:      ${context.diffDir}/files/  (see manifest.json)`);
+            lines.push(`  path map, AUTHORITATIVE:        ${context.diffDir}/manifest.json`);
+            lines.push('                                  per file: status, bytes, absolute source + diff paths,');
+            lines.push('                                  plus what was truncated or excluded');
+            lines.push(`  per-file diffs:                 ${context.diffDir}/files/`);
+            lines.push(`  combined view (may be capped):  ${context.diffDir}/ALL.diff`);
         }
         // NEVER hand-assemble `<baseSha> HEAD` here. On a dirty tree the changed-file set is base→working
         // tree, so that range is empty and the reviewer is handed a command that shows it nothing — the

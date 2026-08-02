@@ -127,6 +127,9 @@ describe('DiffMaterializer — one extraction, many readers', () => {
         const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
         const entry = entryFor(manifest.entries, 'src/keep.ts');
         expect(entry.status).toBe('D');
+        // No source path: a deleted file has no after-state to open, and a path that cannot resolve turns
+        // straight back into a search.
+        expect(entry.fileAbs).toBe('');
         expect(fs.readFileSync(path.join(dir, entry.diffFile), 'utf8')).toContain('-keep');
     });
 
@@ -171,6 +174,54 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
         const body = fs.readFileSync(path.join(dir, entry.diffFile), 'utf8');
         expect(body).toContain('TRUNCATED');
         expect(body).toContain('git diff');
+    });
+
+    /**
+     * The incompleteness notice must be at the TOP of ALL.diff. As a footer it was unreachable exactly when
+     * it mattered: the cap is 2 MB (~30-50k lines) and a Read truncates at ~2000, so on the one PR where
+     * files were dropped the reviewer got the first ~5% and the notice sat in the 95% it never reached.
+     */
+    it('puts the incompleteness notice at the TOP of ALL.diff, where a truncated Read still sees it', () => {
+        const dir = repoOnFeatureBranch();
+        const huge = 'x'.repeat(FILE_DIFF_MAX_BYTES + 5000).split('').join('\n');
+        fs.writeFileSync(path.join(dir, 'src', 'huge.ts'), huge);
+        git(dir, 'git add -A && git commit -q -m huge');
+
+        materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/huge.ts'], []);
+        const all = fs.readFileSync(path.join(materializerFor().diffDirFor(dir, 'feat'), 'ALL.diff'), 'utf8');
+        expect(all.split('\n')[0]).toContain('THIS COMBINED VIEW IS INCOMPLETE');
+        expect(all).toContain('src/huge.ts');
+    });
+
+    // A complete view gets NO header: a notice on every diff trains a reader to skip the notice.
+    it('emits no header when nothing was truncated or omitted, and measures the view once', () => {
+        const dir = repoOnFeatureBranch();
+        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nCHANGED\n');
+        git(dir, 'git add -A && git commit -q -m work');
+
+        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
+        const all = fs.readFileSync(path.join(materializerFor().diffDirFor(dir, 'feat'), 'ALL.diff'), 'utf8');
+        expect(all).not.toContain('INCOMPLETE');
+        // Measured HERE so the instructions renderer reads one number instead of running its own `wc -l`.
+        expect(manifest.allDiffBytes).toBe(all.length);
+        expect(manifest.allDiffLines).toBe(all.split('\n').length);
+    });
+
+    /**
+     * Both paths, relative AND absolute. Relative is the identity that survives a re-clone; absolute is the
+     * only form a reviewer subagent can open, since its cwd is not guaranteed to be the repo root. A deleted
+     * file gets no source path at all — it has no after-state to open.
+     */
+    it('records an absolute path for the source and the diff', () => {
+        const dir = repoOnFeatureBranch();
+        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nCHANGED\n');
+        git(dir, 'git add -A && git commit -q -m work');
+
+        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
+        const entry = entryFor(manifest.entries, 'src/keep.ts');
+        expect(entry.fileAbs).toBe(path.join(dir, 'src', 'keep.ts'));
+        expect(path.isAbsolute(entry.diffAbs)).toBe(true);
+        expect(fs.existsSync(entry.diffAbs)).toBe(true);
     });
 
     // A stale diff read as current is worse than none, so a re-run must not leave last run's files behind.
