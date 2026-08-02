@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 
 import {
     formatConfigErrorsBanner,
-    migratorCoveredCount,
     RETIRED_KEY_MARKER,
     RETIRED_TOP_LEVEL_MARKER,
     SECTION_PLACEMENT_MARKER,
@@ -57,79 +56,67 @@ describe('config-error banner — one cure, stated once', () => {
 });
 
 /**
- * The ONE conditional line. `--sync` is not a different cure, it is a bulk editor — so it is offered
- * only for the errors migrate() actually performs, and never for a config whose errors it cannot touch
- * (advertising it there is exactly how the old step 4 misled).
+ * NO INSTALLER COMMAND, EVER — and no error count that could bring one back.
+ *
+ * The banner used to grow an OPTIONAL paragraph naming an installer flag once enough errors looked like
+ * ones a bulk migrator could apply. That flag is gone, and so is the branch: an optional second command
+ * is precisely how a reader comes to believe the one stated cure is a choice. These assert the banner is
+ * identical in KIND for one retired key and for a sweep of them.
  */
-describe('config-error banner — the optional bulk editor', () => {
-    it('is omitted entirely when no error is one the migrator covers', () => {
-        const banner = formatConfigErrorsBanner(['[some-rule] Unknown field "x". Valid fields: [mode].']);
-        expect(banner).not.toContain('--sync');
+describe('config-error banner — never names an installer command', () => {
+    it('omits it for a SINGLE retired key', () => {
+        const banner = formatConfigErrorsBanner([retiredKeyError(RETIRED_CONFIG_KEYS[0])]);
+        expect(banner).not.toContain('wp-install-ai-hooks');
         expect(banner).not.toContain('OPTIONAL');
     });
 
-    // For ONE key the bullet already names a one-line edit, and `--sync` would rewrite the whole file
-    // to make it. The bulk editor is a sweep tool, so it stays silent below the threshold.
-    it('is omitted for a SINGLE retired key', () => {
-        const banner = formatConfigErrorsBanner([retiredKeyError(RETIRED_CONFIG_KEYS[0])]);
-        expect(banner).not.toContain('--sync');
+    it('omits it for TWO retired keys — a sweep earns no extra paragraph', () => {
+        const banner = formatConfigErrorsBanner([
+            retiredKeyError(RETIRED_CONFIG_KEYS[0]),
+            retiredKeyError(RETIRED_CONFIG_KEYS[1]),
+        ]);
+        expect(banner).not.toContain('wp-install-ai-hooks');
+        expect(banner).not.toContain('OPTIONAL');
     });
 
-    it('is offered — with its whole-file cost, and never as the bare bin — on a sweep of retired keys', () => {
-        const retired = retiredKeyError(RETIRED_CONFIG_KEYS[0]);
-        const banner = formatConfigErrorsBanner([retired, retiredKeyError(RETIRED_CONFIG_KEYS[1])]);
-        expect(banner).toContain('`pnpm wp-install-ai-hooks --sync`');
-        expect(banner).toContain('rewrites the WHOLE');
-        expect(banner).toContain('PROMPTS for a target');
-        // Still the same single cure: the edit instruction leads, the bulk option follows.
-        expect(banner.indexOf('THE FIX')).toBeLessThan(banner.indexOf('--sync'));
-    });
-
-    it('counts only the covered errors', () => {
-        const retired = retiredKeyError(RETIRED_CONFIG_KEYS[0]);
-        expect(migratorCoveredCount([retired, 'unrelated error'])).toBe(1);
-        expect(migratorCoveredCount(['unrelated error'])).toBe(0);
+    // The two banners differ ONLY in the bullets, which is the whole claim: nothing is conditional.
+    it('says the same thing either way, bullets aside', () => {
+        const one = formatConfigErrorsBanner(['first error']);
+        const two = formatConfigErrorsBanner(['first error', 'second error']);
+        expect(two.replace('  • second error\n', '').replace('has 2 validation', 'has 1 validation'))
+            .toBe(one);
     });
 });
 
 /**
  * ANTI-DRIFT. The markers are imported by the message builders rather than re-typed, but that only
  * proves the string is shared — not that the builder still EMITS it. So drive REAL validator output
- * through the counter: if a message is reworded away from its marker, these go red.
+ * through them: if a message is reworded away from its marker, these go red.
  */
-describe('config-error banner — the migrator markers match what the validators actually emit', () => {
-    it('recognizes every RETIRED_CONFIG_KEYS message', () => {
+describe('config-error banner — the markers match what the validators actually emit', () => {
+    it('every RETIRED_CONFIG_KEYS message carries its marker', () => {
         for (const entry of RETIRED_CONFIG_KEYS) {
-            const message = retiredKeyError(entry);
-            expect(message, `entry ${entry.key}`).toContain(RETIRED_KEY_MARKER);
-            expect(migratorCoveredCount([message]), `entry ${entry.key}`).toBe(1);
+            expect(retiredKeyError(entry), `entry ${entry.key}`).toContain(RETIRED_KEY_MARKER);
         }
     });
 
-    it('recognizes a guard left in `rules` and a code rule left in `hookGuards`', () => {
+    it('a guard left in `rules` and a code rule left in `hookGuards` both carry the marker', () => {
         const guardInRules = validateSectionPlacement({ 'pr-merge-guard': {} }, {});
         const ruleInGuards = validateSectionPlacement({}, { 'max-file-lines': {} });
         expect(guardInRules).toHaveLength(1);
         expect(ruleInGuards).toHaveLength(1);
         for (const message of [...guardInRules, ...ruleInGuards]) {
             expect(message).toContain(SECTION_PLACEMENT_MARKER);
-            expect(migratorCoveredCount([message])).toBe(1);
         }
     });
 
-    it('recognizes the retired TOP-LEVEL pr-gate block', () => {
+    it('the retired TOP-LEVEL pr-gate block carries its marker', () => {
         const errors = validateCommandsSection(undefined, { mode: 'OFF' });
         const topLevel = errors.filter((e: string): boolean => e.includes(RETIRED_TOP_LEVEL_MARKER));
         expect(topLevel).toHaveLength(1);
-        expect(migratorCoveredCount(topLevel)).toBe(1);
     });
 
-    it('does not claim to cover an error the migrator cannot perform', () => {
-        // A malformed gate is a hand-edit: migrate() never touches the contents of pr-gate.gates.
-        expect(migratorCoveredCount(['[pr-gate] gates[0].name must be a string.'])).toBe(0);
-    });
-
-    // The retired table is the migrator's own worklist; a scope it stops covering must be caught here.
+    // The retired table is the migration worklist; a scope it stops covering must be caught here.
     it('every retired entry carries a destination the banner can point at', () => {
         for (const entry of RETIRED_CONFIG_KEYS) {
             const typed: RetiredConfigKey = entry;

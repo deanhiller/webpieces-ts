@@ -6,12 +6,10 @@ export { CliUsage, CliArgsCheck, CliArgs } from './cli-args';
 export { runMain } from './run-main';
 export { toError } from './to-error';
 export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
-// The validation-failure banner: ONE cure (edit the file), plus the markers that decide whether the
-// optional bulk migrator is even mentioned.
+// The validation-failure banner: ONE cure (edit the file), plus the marker phrases the validator
+// messages embed rather than re-type.
 export {
     formatConfigErrorsBanner,
-    migratorCoveredCount,
-    MIGRATOR_COVERED_MARKERS,
     RETIRED_KEY_MARKER,
     RETIRED_TOP_LEVEL_MARKER,
     SECTION_PLACEMENT_MARKER,

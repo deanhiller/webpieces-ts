@@ -364,13 +364,17 @@ export function migrate(existing: Json): MigrateResult {
     return { config, changes };
 }
 
-function seedOrSyncConfig(projectRoot: string, syncOnly: boolean): void {
+// Seed the config when it is missing, migrate it when it is not. ONE behaviour, always — there is no
+// "migrate but stop here" mode any more. The flag that used to select it was never NECESSARY (the validator prints
+// the exact edit for every error at once, and editing webpieces.config.json is always allowed through the
+// guard — the documented primary cure), it REFUSED to act when the config was missing (useless in the one
+// case automation would have helped), and it gave deny messages a second competing path when they are
+// supposed to end in exactly one action. Readers also mistook it for the shim-repair command, which it
+// never was — `wp-upgrade-shim` is that.
+// webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
+function seedOrSyncConfig(projectRoot: string): void {
     const configPath = path.join(projectRoot, CONFIG_FILENAME);
     if (!fs.existsSync(configPath)) {
-        if (syncOnly) {
-            console.log(`  [ai-hooks] No ${CONFIG_FILENAME} found — nothing to sync.`);
-            return;
-        }
         writeConfig(configPath, buildSeedConfig());
         console.log(`  [ai-hooks] Created ${CONFIG_FILENAME} (rules / hookGuards / commands), all rules OFF.`);
         console.log('  Enable the ones you want by changing "mode".');
@@ -538,17 +542,15 @@ function scaffoldCiGate(projectRoot: string): void {
 
 export async function main(): Promise<void> {
     const args = process.argv.slice(2);
-    const syncOnly = args.includes('--sync');
     // Anchor the install at the repo root (git toplevel — webpieces.config.json may not exist yet on
     // a first install), never a subdir cwd, so `.webpieces`/hooks/config all land at the root.
     const projectRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
 
-    seedOrSyncConfig(projectRoot, syncOnly);
-    // Refreshed on BOTH paths (--sync included): it explains why a retired key is rejected rather than
-    // accepted, and what to do about it — which is exactly what an agent needs on the run where a sync
-    // just moved keys out from under its config.
+    seedOrSyncConfig(projectRoot);
+    // Always refreshed: it explains why a retired key is rejected rather than accepted, and what to do
+    // about it — which is exactly what an agent needs on the run where a migration just moved keys out
+    // from under its config.
     writeTemplate(projectRoot, 'webpieces.config-policy.md');
-    if (syncOnly) return;
 
     scaffoldCiGate(projectRoot);
 

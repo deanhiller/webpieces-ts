@@ -485,7 +485,7 @@ describe('rule registry consistency', () => {
 
     it('allRuleNames is exactly the schema keys, so the installer seeds every known rule', () => {
         // allRuleNames drives buildSeedConfig; a name missing here can never be seeded and a repo
-        // could not add it via `wp-install-ai-hooks --sync`.
+        // could not add it via `wp-install-ai-hooks`.
         expect(allRuleNames().length).toBeGreaterThan(0);
         expect(new Set(allRuleNames()).has('read-stale-guard')).toBe(true);
     });

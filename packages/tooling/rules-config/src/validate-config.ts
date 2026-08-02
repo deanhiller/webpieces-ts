@@ -618,7 +618,7 @@ export function validateSectionPlacement(
         if (isHookGuard(name)) {
             errors.push(
                 `[${name}] is a hook guard and ${SECTION_PLACEMENT_MARKER} "hookGuards" section, not "rules". ` +
-                `Move it (or run \`pnpm wp-install-ai-hooks --sync\` to migrate automatically).`,
+                `Move it.`,
             );
         }
     }
@@ -627,7 +627,7 @@ export function validateSectionPlacement(
         if (!isHookGuard(name) && RULE_SCHEMAS[name]) {
             errors.push(
                 `[${name}] is a code rule and ${SECTION_PLACEMENT_MARKER} "rules" section, not "hookGuards". ` +
-                `Move it (or run \`pnpm wp-install-ai-hooks --sync\` to migrate automatically).`,
+                `Move it.`,
             );
         }
     }
