@@ -357,6 +357,35 @@ Almost everything else runs the **published** copy:
 - If a validator rejects config keys that look correct, the fix is **`pnpm install`** (the validator is
   stale), not deleting the keys.
 
+### webpieces.config.json is NEVER released backwards-compatible
+
+**RULE: when a config key moves, is renamed, or is deleted, the loader REJECTS the old shape with an error
+naming the destination. Never add a fallback that accepts both.**
+
+No `?? legacyKey` chain, no alias table applied before validation, no "still accepted for back-compat until
+every consumer migrates". This is safe here in a way it is not for a normal library, because of who the
+consumer is: **every reader of this file is a coding agent.** The config is validated on startup, the agent
+is handed the exact edit, and it applies it in one pass — so the upgrade is seamless *without* shipping a
+compatibility layer. Error text SHOULD say "X moved to Y"; that instruction is what makes the fallback
+unnecessary.
+
+A hard rejection can never wedge a repo, which is what makes this safe:
+- editing `webpieces.config.json` is **always** permitted, even while the config is invalid,
+- `pnpm install` is **always** permitted (installer bypass), and it fixes the far more common cause of a
+  validation failure — a validator lagging the config by a release.
+
+So **"rejecting it would deadlock the consumer" is not a reason to add a fallback.** It is not true, and it
+is the exact argument that licensed the fallbacks which then kept this repo's own config on dead shapes for
+releases (an accepted shape is never migrated).
+
+**Where it lives:** retirements go in `RETIRED_CONFIG_KEYS` (`packages/tooling/rules-config/src/retired-config-keys.ts`)
+— the ONE place a dead key may be named — and you delete its read path in the same change.
+`retired-config-keys.spec.ts` and the end-to-end loop in `load-config.spec.ts` assert every entry actually
+fails the load, so re-adding a fallback turns them red.
+
+This is about config SHAPE, and does not soften the release-ordering rule above: source and the config that
+uses it still ship in separate PRs, because the running validator is a release behind.
+
 **Corollary for instructions generally:** webpieces owns the `wp-*` workflow, and this file must POINT
 AT it rather than restate it. Any path, filename or command output hand-copied into CLAUDE.md drifts
 out from under us silently on the next release — a copied `review.json` path did exactly that and sent

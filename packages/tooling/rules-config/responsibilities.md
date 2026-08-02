@@ -18,4 +18,10 @@ Shared config/schema layer: loads and validates webpieces.config.json, defines e
 
 ## Notes (optional)
 
-Pure config + schema + shared utilities with no execution engine — this is why both the edit-time and build-time engines depend on it, never the reverse. Keep mode-token changes here backward-compatible since published validators lag one release.
+Pure config + schema + shared utilities with no execution engine — this is why both the edit-time and build-time engines depend on it, never the reverse.
+
+**webpieces.config.json is never released backwards-compatible.** When a key moves, is renamed, or is deleted, the loader REJECTS the old shape with an error naming the destination — no fallback, no alias applied before validation, no "still accepted until every consumer migrates". Every reader of this file is a coding agent: it is handed the exact edit and applies it in one pass, so the upgrade is seamless without a compatibility layer. Retirements live in exactly one place, `RETIRED_CONFIG_KEYS` in `src/retired-config-keys.ts`, and `retired-config-keys.spec.ts` plus the end-to-end loop in `load-config.spec.ts` assert each one actually fails the load.
+
+Do not add a fallback because rejection "would deadlock the consumer" — it cannot. Editing `webpieces.config.json` is permitted even while it is invalid, and `pnpm install` is always permitted, so a rejected config is always repairable in place.
+
+Note this is about config SHAPE, not release ordering: published validators still lag local source by a release, so a new key and the config that uses it must ship in separate PRs (see CLAUDE.md, "Published vs local source").

@@ -27,7 +27,7 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
         rules,
         hookGuards,
         commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO' } },
-        excludePaths: { rules: [], guards: [] },
+        excludePaths: [],
         'match-rules': [],
     }));
     return dir;

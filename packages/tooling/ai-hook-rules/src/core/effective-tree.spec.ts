@@ -39,7 +39,7 @@ function writeGuardConfig(root: string): void {
     for (const name of Object.keys(config.hookGuards)) {
         config.hookGuards[name].mode = name === 'pr-creation-or-push-guard' ? 'ON' : 'OFF';
     }
-    config.excludePaths = { rules: [], guards: [] };
+    config.excludePaths = [];
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));
 }
 

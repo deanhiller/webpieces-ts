@@ -8,7 +8,9 @@ import { ExcludePaths } from './exclude-hook-paths';
 import { InformAiError } from './inform-ai-error';
 import { PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
-import { validateCommandsSection, validateExcludePaths, validateMatchRulesSection, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
+import { validateCommandsSection } from './commands-section-validators';
+import { validateTopLevelKeys } from './config-key-rules';
+import { validateExcludePaths, validateMatchRulesSection, validateSectionPlacement, validateWebpiecesConfig } from './validate-config';
 import { MatchRuleConfig } from './match-rules-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 
@@ -29,19 +31,10 @@ export class LoadedConfig {
     ) {}
 }
 
-// Config keys that were renamed. A project's webpieces.config.json may still use the OLD key (it can
-// legitimately lag the published rules-config by a release), so normalize any deprecated key to its
-// canonical name BEFORE validation/placement/loading — every downstream consumer then sees one name.
-const DEPRECATED_RULE_ALIASES: Readonly<Record<string, string>> = {
-    'pr-merge-cleanup': 'pr-merge-guard',
-    'pr-creation-guard': 'pr-creation-or-push-guard',
-    // Renamed once the guard grew a second blocked state (already-merged feature branch): it is no
-    // longer about `main` at all, it is THE guard that can block a Read.
-    'main-stale-guard': 'read-stale-guard',
-};
-
-// webpieces-disable no-any-unknown -- opaque per-rule option bags from consumer JSON, validated later
-type RuleSectionMap = Record<string, Record<string, unknown>>;
+// Renamed rules used to be normalized here — a DEPRECATED_RULE_ALIASES table rewrote the old key to its
+// canonical name BEFORE validation, so no validator ever saw it and no consumer was ever told. That is why
+// the aliases could never be removed: the old names kept working forever. The renames now live in
+// RETIRED_CONFIG_KEYS as hard errors naming the new key. See retired-config-keys.ts for the policy.
 
 /**
  * The single load+validate entry point for ALL consumers (ai-hook-rules, code-rules,
@@ -74,8 +67,10 @@ export class ConfigLoader {
         }
 
         const consumerConfig = this.configFile.readRawConfig(configPath);
-        const rulesSection = this.normalizeDeprecatedKeys(consumerConfig.rules || {});
-        const hookGuardsSection = this.normalizeDeprecatedKeys(consumerConfig.hookGuards || {});
+        const rulesSection = consumerConfig.rules || {};
+        const hookGuardsSection = consumerConfig.hookGuards || {};
+        // Read only so validateCommandsSection can REJECT it. There is no fallback to it — a config
+        // carrying the retired top-level block never loads, so reading it as a value would be dead code.
         const legacyPrGate = consumerConfig['pr-gate'];
 
         // rules + hookGuards are validated/loaded as one flat name→config map (the runtime dispatches
@@ -87,6 +82,8 @@ export class ConfigLoader {
         // The repo root (dir holding webpieces.config.json) lets checklists[].docs existence be checked.
         const repoRoot = path.dirname(configPath);
         const errors = [
+            // webpieces-disable no-any-unknown -- the raw parsed config is opaque; only key names are read
+            ...validateTopLevelKeys(consumerConfig as unknown as Record<string, unknown>),
             ...validateWebpiecesConfig(overrideRules, rulesDir.length > 0),
             ...validateSectionPlacement(rulesSection, hookGuardsSection),
             ...validateCommandsSection(consumerConfig.commands, legacyPrGate, repoRoot),
@@ -97,7 +94,7 @@ export class ConfigLoader {
             throw new InformAiError(this.formatConfigErrorsBanner(errors));
         }
 
-        const commands = buildCommandsConfig(consumerConfig.commands, legacyPrGate);
+        const commands = buildCommandsConfig(consumerConfig.commands);
         this.applyCommandDefaults(overrideRules, commands);
 
         const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
@@ -153,20 +150,13 @@ export class ConfigLoader {
         return new ResolvedRuleConfig(merged as RuleOptions);
     }
 
-    // Parse the (already-validated) raw excludePaths block into the typed ExcludePaths.
-    //
-    // CANONICAL shape is a bare string[]. The legacy object form `{ rules: [...], guards: [...] }` is
-    // still accepted and UNIONED into one list — a config written for the old two-list schema keeps
-    // working, and a path excluded from either list is excluded from everything, which is what every
-    // consumer already meant by setting both to the same value.
+    // Parse the (already-validated) raw excludePaths block into the typed ExcludePaths. The ONLY accepted
+    // shape is a bare string[]; the retired two-list object cannot reach here, because validateExcludePaths
+    // has already failed the load with the migration instruction.
     // webpieces-disable no-any-unknown -- `raw` is opaque consumer JSON until narrowed here
     private parseExcludePaths(raw: unknown): ExcludePaths {
-        if (Array.isArray(raw)) return new ExcludePaths(raw.filter(p => typeof p === 'string'));
-        if (typeof raw !== 'object' || raw === null) return new ExcludePaths([]);
-        // webpieces-disable no-any-unknown -- validateExcludePaths already proved both are string[]
-        const s = raw as Record<string, string[]>;
-        const legacy = [...(Array.isArray(s['rules']) ? s['rules'] : []), ...(Array.isArray(s['guards']) ? s['guards'] : [])];
-        return new ExcludePaths([...new Set(legacy.filter(p => typeof p === 'string'))]);
+        if (!Array.isArray(raw)) return new ExcludePaths([]);
+        return new ExcludePaths(raw.filter(p => typeof p === 'string'));
     }
 
     // Parse the (already-validated) raw match-rules array into typed MatchRuleConfig[]. The entries use
@@ -192,14 +182,6 @@ export class ConfigLoader {
         return typed;
     }
 
-    private normalizeDeprecatedKeys(section: RuleSectionMap): RuleSectionMap {
-        const out: RuleSectionMap = {};
-        for (const key of Object.keys(section)) {
-            out[DEPRECATED_RULE_ALIASES[key] ?? key] = section[key];
-        }
-        return out;
-    }
-
     // Assemble the validation-failure banner. Most of these errors are version skew, not bad config.
     private formatConfigErrorsBanner(errors: string[]): string {
         return (
@@ -213,7 +195,11 @@ export class ConfigLoader {
             `rule names/values yet. \`pnpm install\` syncs node_modules to the pinned version.\n` +
             `  2. Retry your command. If the errors are gone, you're DONE — do not touch webpieces.config.json.\n` +
             `  3. ONLY if an error survives a fresh install is it a genuine typo / removed / renamed rule. ` +
-            `Then edit webpieces.config.json (edits to it are ALWAYS allowed) to fix each • above.`
+            `Then edit webpieces.config.json (edits to it are ALWAYS allowed) to fix each • above.\n` +
+            `  4. A "RETIRED key" error above already names where the value moved — apply that instruction ` +
+            `literally; there is no fallback that will accept the old shape. ` +
+            `\`pnpm wp-install-ai-hooks --sync\` performs the mechanical migrations. Background: ` +
+            `.webpieces/instruct-ai/webpieces.config-policy.md`
         );
     }
 }
