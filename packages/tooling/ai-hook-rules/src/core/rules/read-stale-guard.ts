@@ -115,10 +115,13 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
 
     // State A — on main, possibly behind origin/main.
     private checkStaleMain(ctx: FileContext, branch: string): readonly Violation[] {
-        const status = readMainSyncStatus(ctx.workspaceRoot);
+        const status = readMainSyncStatus(ctx.workspaceRoot, 'main');
         if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
         const cache = this.cacheSummary(status);
+        // BELT-AND-BRACES since the cache became branch-keyed: we asked for the 'main' entry by key, so
+        // a mismatch means the map's key and the entry's own `branch` disagree — a shape bug. Kept so
+        // that degrades to an allow. Unreachable in normal operation.
         if (status.branch !== 'main') return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
         // Offline / origin unresolvable, or no local main to compare against.
         if (status.originMain === '') return this.allow(ctx, branch, 'origin-main-unknown (fail-open)', cache);
@@ -153,13 +156,14 @@ export class ReadStaleGuardRule extends FileRuleBase<ReadStaleGuardConfig> {
      * surfaced loudly either way; we just refuse to cut off the rescue path.
      */
     private checkMergedBranch(ctx: FileContext, branch: string): readonly Violation[] {
-        const status = readMainSyncStatus(ctx.workspaceRoot);
+        const status = readMainSyncStatus(ctx.workspaceRoot, branch);
         if (status === null) return this.allow(ctx, branch, 'no-sync-cache (fail-open)', 'cache=none');
 
         const cache = this.cacheSummary(status);
-        // Cache written for a DIFFERENT branch (just switched; the refresh for this one hasn't landed).
-        // Never block on another branch's signals — this is also what un-blocks the instant the agent
-        // follows the cure and checks out a fresh branch.
+        // BELT-AND-BRACES since the cache became branch-keyed: the entry was looked up BY `branch`, so
+        // a mismatch is a shape bug rather than the old "cache is for another branch" state. Kept so
+        // such a bug degrades to an allow. Unreachable in normal operation. (A branch the refresh has
+        // not seen yet is the `status === null` case above — still fail-open.)
         if (status.branch !== branch) return this.allow(ctx, branch, 'stale-cross-branch-cache (fail-open)', cache);
         if (!status.branchAlreadyMerged) return this.allow(ctx, branch, 'clean-feature-branch', cache);
         if (this.isDirty(ctx.workspaceRoot)) {

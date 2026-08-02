@@ -231,13 +231,22 @@ export {
 } from './review-json';
 export {
     MainSyncStatus,
+    MainSyncStatusFile,
+    MainSyncFileStore,
+    PullRequestIndex,
+    MAIN_SYNC_STATUS_VERSION,
+} from './main-sync-file';
+export {
     MainSyncLock,
     MainSyncStatusService,
     DEFAULT_HANG_TIMEOUT_MINUTES,
     mainSyncStatusPath,
     mainSyncLockPath,
     readMainSyncStatus,
+    readMainSyncStatusFile,
     writeMainSyncStatus,
+    writeMainSyncStatusFile,
+    computeAllMainSyncStatuses,
     readMainSyncLock,
     writeMainSyncLock,
     isLockStale,
