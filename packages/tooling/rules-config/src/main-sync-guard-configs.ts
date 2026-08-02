@@ -82,6 +82,11 @@ export class MergedBranchBashGuardConfig extends BaseRuleConfig {
 // METADATA stay open, and only CONTENT reads of workspace files are blocked. Shares the same
 // precomputed cache (main-sync-status.json → localMain vs originMain) the file guards read;
 // hangTimeoutMinutes tunes the detached refresher's stale-lock reclaim window, as on those guards.
+//
+// It also carries the PREVENTIVE half of the same protection — blocking a bare `git checkout main`
+// unless the pull rides along in the same command — under this one key rather than a second guard,
+// because it is the same failure being stopped one step earlier and one on/off switch should govern
+// both. That half needs no cache and no timeout, so the config shape is unchanged.
 export class StaleMainBashGuardConfig extends BaseRuleConfig {
     declare mode?: OnOffMode;
     hangTimeoutMinutes?: number;

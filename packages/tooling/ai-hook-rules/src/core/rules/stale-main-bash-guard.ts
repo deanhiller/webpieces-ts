@@ -17,9 +17,47 @@ import { logGuardDecision, GuardDecision } from '../decision-log';
 import { CommandScanner } from '../command-scan';
 import { StaleMainMessage } from './stale-main-message';
 import { ContentReadScan } from './content-read-scan';
+import { TreeRecovery } from './tree-recovery';
 
 /**
- * The BASH half of the STALE-MAIN protection (read-stale-guard's State A).
+ * The BASH half of the STALE-MAIN protection (read-stale-guard's State A), in two halves of its own:
+ * a PREVENTIVE check that stops a session landing on a stale `main`, and the REACTIVE check that
+ * contains the damage once it is already there.
+ *
+ * ── PREVENTIVE: a bare `git checkout main` is blocked; the pull must ride along ──────────────────
+ *
+ * Everything below this paragraph fires only once the session is ALREADY sitting on a stale `main`.
+ * Nothing stopped it ARRIVING there, and arriving is one keystroke. In the incident that added this
+ * half, an agent ran `git checkout main` after a merge, in a clone whose local `main` was **157
+ * commits behind** origin. That checkout did not merely produce stale files — it reverted:
+ *
+ *   1. `package.json`'s `@webpieces` pin, to a version OLDER than the installed `node_modules`;
+ *   2. `.claude/webpieces/ai-hook.sh` — the version-drift guard ITSELF — to a 157-commit-old copy
+ *      whose message stated the drift BACKWARDS ("your installed webpieces is older than required")
+ *      and named a single cure, `pnpm install`;
+ *   3. and so the agent's judgment: it ran that `pnpm install`, DOWNGRADING `node_modules` to match
+ *      the stale pin, and had to undo it with the `git pull` that should have come first.
+ *
+ * The shim on current main already diagnoses drift correctly — it distinguishes "the pin is newer"
+ * from "the pin is stale, and `pnpm install` would downgrade you". None of that helped, because the
+ * checkout had replaced the shim with the version that could not say it. **A guard a stale checkout
+ * can revert cannot be relied on to catch a stale checkout**, which is why this check is preventive
+ * and why it lives here rather than in a second rule: same failure, one step earlier, one switch.
+ *
+ * It matches on command TEXT alone and asks git nothing. That is not laziness — this runs BEFORE the
+ * checkout, so the only `main` it could measure is the one it is about to leave. The interesting
+ * `main` does not exist yet, and consulting HEAD-at-hook-time is the exact trap
+ * `redirect-how-to-merge-main` documents at length. Pairing is unconditionally correct instead: when
+ * `main` is already current the chained pull is a sub-second no-op, so no exception is worth carving.
+ *
+ *   BLOCKED   `git checkout main`, `git switch main` — with or without flags — when no `git pull`
+ *             appears anywhere in the SAME command.
+ *   ALLOWED   `git checkout main && git pull origin main`, the pairing this forces, which is the
+ *             exact line the post-merge cleanup flow already prescribes.
+ *   ALLOWED   `git checkout -b <x> origin/main` (current by construction), `git checkout <sha>`,
+ *             `git checkout -- <file>`, and any other branch.
+ *
+ * ── REACTIVE: content-reading Bash on a stale `main` ─────────────────────────────────────────────
  *
  * read-stale-guard blocks the Read tool when local `main` is behind origin/main — but it looks at
  * nothing else, deliberately: "every cure is a Bash command, so Bash is the escape hatch — never
@@ -52,24 +90,36 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
     constructor(config: StaleMainBashGuardConfig) { super(config, 'stale-main-bash-guard'); }
 
     private readonly scanner = new CommandScanner();
+    private readonly recovery = new TreeRecovery();
 
     readonly description =
-        'Block content-reading Bash (cat/grep/ls/…) while local main is behind origin/main, so a ' +
-        'session cannot reason over a stale tree through the side door the Read-tool block leaves open.';
+        'Block a bare `git checkout main` (chain the pull into the same command), and block ' +
+        'content-reading Bash (cat/grep/ls/…) while local main is behind origin/main — so a session ' +
+        'neither lands on a stale main nor reasons over one through the side door the Read block leaves.';
     override readonly defaultOptions = {
         hangTimeoutMinutes: DEFAULT_HANG_TIMEOUT_MINUTES,
     };
     readonly fixHint = new FixHint(
-        'You are on main and main is behind origin/main — reading files here gives you stale content.',
-        'Update main first, then re-run your command:',
+        'Landing on `main` without pulling, or reading files while main is behind origin/main, both give you stale content.',
+        'Pair the checkout with the pull, or update main and re-run:',
         [
-            new Option('git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.', true),
-            new Option('Still allowed right now: builds, tests, installs, the pull itself, all git/gh METADATA (status|log|diff|show|branch), every Write/Edit, and reading webpieces.config.json.'),
+            new Option('git checkout main && git pull origin main (the pull must be in the SAME command).', true),
+            new Option('Already on main: git pull --ff-only origin main (then re-run). If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD has a duplicate line — run git fetch --prune origin main first.'),
+            new Option('In a linked worktree `git checkout main` FATALS ("main is already checked out at <primary clone>") — branch off fresh main instead: git fetch origin main && git checkout -b <name> origin/main'),
+            new Option('NOT blocked: `git checkout <sha>`, `git checkout -b <x> origin/main`, `git checkout -- <file>`, any other branch. Also still allowed: builds, tests, installs, the pull itself, all git/gh METADATA (status|log|diff|show|branch), every Write/Edit, and reading webpieces.config.json.'),
             new Option('Disable in webpieces.config.json under hookGuards → stale-main-bash-guard (mode OFF) if intentional.'),
         ],
     );
 
     check(ctx: BashContext): readonly Violation[] {
+        // PREVENTIVE half, FIRST and unconditional. Deliberately ahead of every fail-open bailout
+        // below: those all ask "is the main we are ON stale?", and this asks about the main we are
+        // about to MOVE TO — a different branch, and one no cache can describe yet.
+        const bare = this.bareCheckoutOfMain(ctx);
+        if (bare !== null) {
+            return this.block(ctx, 'any', `bare checkout of main (${bare})`, this.pairingMessage(ctx), '-');
+        }
+
         const branch = this.currentBranch(ctx.workspaceRoot);
         if (branch === null) return this.allow(ctx, branch, 'branch-undeterminable (fail-open)');
 
@@ -102,6 +152,47 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         if (reader === null) return this.allow(ctx, branch, 'not-a-content-read (cure/build/metadata)', cache);
 
         return this.block(ctx, branch, `stale-main content read (${reader})`, this.staleMessage(ctx.workspaceRoot), cache);
+    }
+
+    /**
+     * The first segment that switches to the `main` BRANCH with no `git pull` anywhere in the same
+     * command, or null. The pull is looked for across the WHOLE command, not the matched segment,
+     * because `git checkout main && git pull origin main` splits into two segments and the pairing is
+     * the point.
+     */
+    private bareCheckoutOfMain(ctx: BashContext): string | null {
+        for (const segment of this.scanner.commandSegments(ctx.command)) {
+            if (!this.scanner.invokesGit(segment, 'checkout') && !this.scanner.invokesGit(segment, 'switch')) continue;
+            if (!this.switchesToMainBranch(segment)) continue;
+            return this.scanner.commandInvokesAnyGit(ctx.command, ['pull']) ? null : segment;
+        }
+        return null;
+    }
+
+    /**
+     * True only for landing ON the branch. `-b`/`-B`/`-c`/`-C` CREATE a branch, so
+     * `git checkout -b x origin/main` is current by construction and never blocked; a `--` turns the
+     * rest into pathspecs, so `git checkout -- main` restores a FILE named main and moves no branch.
+     */
+    private switchesToMainBranch(segment: string): boolean {
+        const words = this.scanner.words(segment);
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            if (word === '--') return false;
+            if (/^-[bBcC]$/.test(word)) return false;
+            if (i > 1 && word === 'main') return true;
+        }
+        return false;
+    }
+
+    private pairingMessage(ctx: BashContext): string {
+        const steps = this.recovery.updateMainSteps(this.recovery.kindOf(ctx.workspaceRoot)).join('\n');
+        return 'Blocked: a bare `git checkout main` lands you on whatever local `main` you last had. '
+            + 'That is not only stale FILES — it also reverts `package.json`\'s @webpieces pin and the '
+            + 'guard shim under `.claude/webpieces/`, so the very hook that would diagnose the resulting '
+            + 'version drift is replaced by an older copy that reports it BACKWARDS and names the cure '
+            + 'that makes it worse. Chain the pull into the same command, leaving no window in which you '
+            + 'are on a stale main:\n' + steps;
     }
 
     // The first segment that would read stale workspace content, or null when none does. The RAW

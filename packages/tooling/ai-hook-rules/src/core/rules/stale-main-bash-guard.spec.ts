@@ -249,3 +249,73 @@ describe('stale-main-bash-guard — only reads of THIS tree count as stale reads
         expect(blockedFrom('cd /repo/src && cat app.ts', '/repo/src')).toBe(true);
     });
 });
+
+/**
+ * The PREVENTIVE half. Everything above fires once the session is already ON a stale main; this
+ * stops it getting there.
+ *
+ * The incident: `git checkout main` onto a main 157 commits behind reverted the @webpieces pin AND
+ * `.claude/webpieces/ai-hook.sh` — the drift guard itself — to a copy that reported the drift
+ * backwards and named `pnpm install`, which downgraded node_modules and had to be undone by the
+ * `git pull` that should have come first. A guard a stale checkout can revert cannot catch one.
+ */
+describe('stale-main-bash-guard — a bare checkout of main is blocked before it happens', () => {
+    it('blocks the bare forms', () => {
+        expect(blocked('git checkout main')).toBe(true);
+        expect(blocked('git switch main')).toBe(true);
+    });
+
+    // The pairing this rule exists to force — and the exact line the post-merge cleanup prescribes.
+    it('allows the checkout when the pull rides along in the SAME command', () => {
+        expect(blocked('git checkout main && git pull origin main')).toBe(false);
+        expect(blocked('git switch main && git pull --ff-only origin main')).toBe(false);
+        expect(blocked('gh pr merge --squash && git checkout main && git pull origin main && pnpm wp-cleanup')).toBe(false);
+    });
+
+    /**
+     * The whole point is that a SEPARATE pull is not good enough: between the two tool calls the
+     * session is on a stale main, running a stale shim, with a stale pin — which is the window the
+     * incident happened in. Only same-command pairing closes it.
+     */
+    it('is not satisfied by a pull that is not in this command', () => {
+        expect(blocked('git checkout main')).toBe(true);
+        expect(blocked('git checkout main; echo done')).toBe(true);
+    });
+
+    // Narrow by design: only landing ON the branch. Creating a branch off origin/main is current by
+    // construction, a sha is a deliberate historical read, and `--` makes the rest pathspecs.
+    it('leaves every other flavour of checkout alone', () => {
+        expect(blocked('git checkout -b deanhiller/feat origin/main')).toBe(false);
+        expect(blocked('git checkout -B main origin/main')).toBe(false);
+        expect(blocked('git switch -c deanhiller/feat origin/main')).toBe(false);
+        expect(blocked('git checkout 2b151db')).toBe(false);
+        expect(blocked('git checkout -- main')).toBe(false);
+        expect(blocked('git checkout deanhiller/some-branch')).toBe(false);
+    });
+
+    /**
+     * Unconditional, ahead of every fail-open valve below it. Those all ask "is the main we are ON
+     * stale?"; this asks about the main we are about to MOVE TO — a different branch, and one no
+     * cache can describe yet. So a missing cache, a clean main, or being on a feature branch (the
+     * NORMAL case for `git checkout main`) must not wave it through.
+     */
+    it('fires regardless of the cache, the current branch, or how current the main we are leaving is', () => {
+        state.branch = 'deanhiller/feat';
+        expect(blocked('git checkout main')).toBe(true);
+        state.status = null;
+        expect(blocked('git checkout main')).toBe(true);
+        state.status = staleMainStatus();
+        state.containsExit = 0;      // the main we are LEAVING is perfectly current — irrelevant
+        expect(blocked('git checkout main')).toBe(true);
+        state.dirty = ' M src/app.ts';
+        expect(blocked('git checkout main')).toBe(true);
+    });
+
+    // It names the pin/shim revert, because "you'll have stale files" understates it and was not
+    // what actually cost the session.
+    it('explains that the checkout reverts the guard that would have caught the drift', () => {
+        const message = rule().check(ctx('git checkout main'))[0].message;
+        expect(message).toContain('@webpieces pin');
+        expect(message).toContain('BACKWARDS');
+    });
+});
