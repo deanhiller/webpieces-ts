@@ -6,6 +6,8 @@ import {
     writeTemplate, RepoRootFinder, ReviewJsonService,
     GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ProvenanceResult, ReviewerEvidence, EvidenceRequest, PrGateConfig,
+    ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext,
+    ReviewerInstructionsService,
     InformAiError, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -94,6 +96,8 @@ export class FinishUpsertPrCommand {
         private readonly reviewJsonService: ReviewJsonService,
         private readonly gateTokenService: GateTokenService,
         private readonly provenance: SubagentProvenanceService,
+        private readonly provenanceRecord: ReviewProvenanceService,
+        private readonly reviewerInstructions: ReviewerInstructionsService,
         // NOTE: ChecklistInstructionsService is deliberately NOT injected here any more. Its "You MUST run
         // these N reviewer subagent(s)" block is now rendered by ReviewerVerdictGate and ONLY for checklists
         // that genuinely never ran, so no other code path in this command can print it at a refusal.
@@ -277,6 +281,9 @@ export class FinishUpsertPrCommand {
         try {
             const archived = this.reviewJsonService.archiveReviewJson(reviewJsonPath(repoRoot, featureName));
             if (archived !== '') process.stdout.write(`   archived this run's review.json → ${archived} (audit only) ✓\n`);
+            // Beside it, so an archived review keeps the transcript links belonging to the round that
+            // produced it — a review whose provenance was overwritten by the NEXT round audits nothing.
+            this.provenanceRecord.archive(prDirFor(repoRoot, featureName));
         } catch (err: unknown) {
             const error = toError(err);
             process.stderr.write(`⚠️  Could not archive review.json (non-fatal — the PR is already up): ${error.message}\n`);
@@ -369,17 +376,20 @@ export class FinishUpsertPrCommand {
         const errors: string[] = [];
         const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
         const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
-        if (subagents.length > 0) {
-            const result = this.provenance.verifyDistinct(subagents, branch);
-            report.verified = result.status === PROVENANCE_OK;
-            if (result.status === PROVENANCE_MISSING) {
-                errors.push(result.detail);
-            } else if (result.status === PROVENANCE_SKIPPED) {
-                process.stderr.write(`⚠️  ${result.detail}\n`);
-            }
-            report.evidence = this.gatherEvidence(repoRoot, required, result, branch);
-            errors.push(...this.evidenceErrors(report.evidence, config));
+        // verifyDistinct short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
+        // checklists still gets a provenance record naming the session and the main agent's own transcript.
+        const result = this.provenance.verifyDistinct(subagents, branch);
+        report.verified = result.status === PROVENANCE_OK;
+        if (result.status === PROVENANCE_MISSING) {
+            errors.push(result.detail);
+        } else if (result.status === PROVENANCE_SKIPPED) {
+            process.stderr.write(`⚠️  ${result.detail}\n`);
         }
+        report.evidence = this.gatherEvidence(repoRoot, required, result, branch);
+        errors.push(...this.evidenceErrors(report.evidence, config));
+        // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
+        // that only ever appeared on success could not answer what the reviewers did the time it was refused.
+        this.writeProvenanceRecord(repoRoot, required, result, report.evidence);
         if (errors.length > 0) {
             throw new InformAiError(
                 `${errors.length} checklist(s) require an independent reviewer subagent that did not run — fix, then re-run pnpm wp-finish-upsert-pr:\n\n` +
@@ -402,6 +412,44 @@ export class FinishUpsertPrCommand {
         }
         const diffDir = path.join(prDirFor(repoRoot, this.aiBranchName.getFeatureName()), 'diff');
         return this.provenance.evidenceFor(new EvidenceRequest(branch, result.agentIds, diffDir, docPaths));
+    }
+
+    /**
+     * Write this round's audit record: `.webpieces/pr-review/<branch>/provenance.json`, linking each verdict
+     * to the transcript of the subagent that produced it.
+     *
+     * A SEPARATE file rather than a field inside review.json / review-<id>.json, for two reasons. The
+     * reviewer cannot supply this itself — a subagent's environment exposes the PARENT session id and no
+     * agent id, so a self-reported transcript link would be invented — and keeping the AI-authored files
+     * byte-untouched means nothing in the record can be mistaken for something a reviewer claimed about
+     * itself. Every path here is derived by the tooling from the harness's own artifacts.
+     *
+     * Never fatal: an unwritable record is a lost audit trail, not a reason to refuse a PR.
+     */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private writeProvenanceRecord(repoRoot: string, required: readonly RequiredChecklist[], result: ProvenanceResult, evidence: readonly ReviewerEvidence[]): void {
+        const featureName = this.aiBranchName.getFeatureName();
+        const prDir = prDirFor(repoRoot, featureName);
+        const request = new ProvenanceWriteRequest(prDir, featureName, this.gitOut(['rev-parse', 'HEAD']), result.status);
+        request.offered = new OfferedContext(
+            path.join(prDir, 'diff'), this.reviewerInstructions.instructionsDirFor(repoRoot, featureName));
+        request.reviewers = evidence.map((e: ReviewerEvidence): ReviewerTranscript =>
+            new ReviewerTranscript(e, this.reviewerPathsFor(repoRoot, featureName, required, e.agentType)));
+        const written = this.provenanceRecord.write(request);
+        if (written !== '') process.stdout.write(`   transcript provenance → ${written}\n`);
+    }
+
+    // Where ONE reviewer's verdict, instructions and checklist doc live. Keyed by agentType, which IS the
+    // checklist id: ChecklistDefinition sets `id = subagent`, so the two never diverge.
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private reviewerPathsFor(repoRoot: string, featureName: string, required: readonly RequiredChecklist[], agentType: string): ReviewerPaths {
+        const req = required.find((r: RequiredChecklist): boolean => r.subagent.trim() === agentType);
+        const doc = req !== undefined && req.doc.trim() !== '' ? path.resolve(repoRoot, req.doc) : '';
+        return new ReviewerPaths(
+            this.reviewJsonService.checklistResultPath(reviewJsonPath(repoRoot, featureName), req?.id ?? agentType),
+            this.reviewerInstructions.pathFor(repoRoot, featureName, agentType),
+            doc,
+        );
     }
 
     /**

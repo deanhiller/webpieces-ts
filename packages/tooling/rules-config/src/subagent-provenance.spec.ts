@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
+    SubagentProvenanceService, EvidenceRequest, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
 } from './subagent-provenance';
 
 const svc = new SubagentProvenanceService();
@@ -111,5 +111,26 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
     it('SKIPPED without a session id', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
         expect(svc.verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_SKIPPED);
+    });
+});
+
+describe('SubagentProvenanceService.evidenceFor', () => {
+    it('carries out the transcript path it read the counters from — the only place it is knowable', () => {
+        process.env['HOME'] = fakeHarness('sess-e1', 'envvars-reviewer', 'dean/feat');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-e1';
+        const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
+        const evidence = svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds));
+        expect(evidence).toHaveLength(1);
+        expect(evidence[0]?.transcriptPath).toMatch(/subagents[/\\]agent-abc\.jsonl$/);
+    });
+
+    it('leaves the transcript path empty when the jsonl is not there', () => {
+        const home = fakeHarness('sess-e2', 'envvars-reviewer', 'dean/feat');
+        fs.rmSync(path.join(home, '.claude', 'projects', '-Some-Slug', 'sess-e2', 'subagents', 'agent-abc.jsonl'));
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-e2';
+        const result = svc.verifyDistinct(['envvars-reviewer'], 'dean/feat');
+        const evidence = svc.evidenceFor(new EvidenceRequest('dean/feat', result.agentIds));
+        expect(evidence[0]?.transcriptPath).toBe('');
     });
 });

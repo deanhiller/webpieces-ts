@@ -195,6 +195,15 @@ export {
     PROVENANCE_SKIPPED,
 } from './subagent-provenance';
 export {
+    ReviewProvenanceService,
+    ReviewProvenance,
+    ReviewerTranscript,
+    ReviewerPaths,
+    OfferedContext,
+    ProvenanceWriteRequest,
+    DEFAULT_RETENTION_DAYS,
+} from './review-provenance';
+export {
     ReviewJson,
     PrContext,
     ChecklistResult,

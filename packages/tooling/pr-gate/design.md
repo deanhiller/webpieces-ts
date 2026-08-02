@@ -56,6 +56,7 @@ graph TD
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
+    ReviewProvenanceService["ReviewProvenanceService"]
     ReviewReport["ReviewReport"]
     ReviewStageReceiptService["ReviewStageReceiptService"]
     ReviewUpsertPrCommand["ReviewUpsertPrCommand"]
@@ -115,7 +116,9 @@ graph TD
     FinishUpsertPrCommand --> PrMerger
     FinishUpsertPrCommand --> RepoRootFinder
     FinishUpsertPrCommand --> ReviewJsonService
+    FinishUpsertPrCommand --> ReviewProvenanceService
     FinishUpsertPrCommand --> ReviewStageReceiptService
+    FinishUpsertPrCommand --> ReviewerInstructionsService
     FinishUpsertPrCommand --> ReviewerVerdictGate
     FinishUpsertPrCommand --> SubagentProvenanceService
     ForkPoint --> AiBranchName

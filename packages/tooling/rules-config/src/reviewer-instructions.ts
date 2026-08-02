@@ -231,7 +231,9 @@ export class ReviewerInstructionsService {
             'thinner review than one that spends it reading.',
             '',
             'Open your diff files before writing a verdict. `wp-finish-upsert-pr` reads your own transcript and',
-            'reports a verdict written without opening the diff.',
+            'reports a verdict written without opening the diff. It also records the path of that transcript,',
+            'beside what you were offered and what you read, in `provenance.json` next to your verdict file —',
+            'so the review is auditable after the fact. You do not write that file; the tooling does.',
         ];
     }
 }

@@ -133,3 +133,24 @@ only then opens/updates the PR.
 > Provenance is verified from Claude Code's own subagent records — it is not tamper-proof (a determined
 > agent could forge a record), and outside a Claude Code session (plain terminal / CI) it can only warn,
 > not verify. It raises the bar from "trust the model's word" to "deliberate, auditable forgery."
+
+## `provenance.json` (the tooling writes this; you never do)
+
+`wp-finish-upsert-pr` writes `.webpieces/pr-review/<branch>/provenance.json` — the audit record of **how
+the review was done**, as opposed to what it concluded. Per reviewer it links the verdict to the
+transcript of the subagent that produced it, plus what that reviewer was *offered* (its instructions file,
+the diff dir, its checklist doc) against what it demonstrably *read*, and its tool-call counts.
+
+**Open this when auditing the review process itself** — e.g. "did the reviewer that passed this checklist
+actually open the diff, or did it write a verdict having read nothing?" It is written on every finish,
+including one that REFUSES for a missing reviewer, and copied to `old-provenance.json` beside
+`old-review.json` when a review is consumed.
+
+Never author or edit it. A reviewer subagent physically cannot know its own transcript path — the
+environment exposes the *parent* session id and no agent id — so any AI-written link would be invented.
+Every path in the file is derived by the tooling from Claude Code's own artifacts.
+
+> The linked transcripts are a **wasting asset**: Claude Code deletes them after `cleanupPeriodDays`
+> (default 30). `transcriptsExpireOn` records when the first link goes dead. The counters recorded
+> alongside (`readDiff`, `readDoc`, `toolCallCount`, `offRepoSearches`) stay accurate forever, so an
+> expired transcript costs you the raw conversation, not the finding.
