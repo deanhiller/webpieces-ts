@@ -28,11 +28,13 @@ export function validateChecklistDocs(cwd: string): string[] {
         return [`[pr-gate] ${path.basename(configPath)} is not valid JSON: ${error.message}`];
     }
     const repoRoot = path.dirname(configPath);
-    // The pr-gate section lives under commands["pr-gate"] (current) or a legacy top-level pr-gate.
+    // ONE location: commands["pr-gate"]. This function parses the config itself rather than going through
+    // loadAndValidate, so it used to also read the retired top-level `pr-gate` — which meant a config on the
+    // dead layout validated its checklists silently here while loadAndValidate rejected it everywhere else.
     // webpieces-disable no-any-unknown -- narrowing the opaque command section
     const commands = raw['commands'] as Record<string, unknown> | undefined;
     // webpieces-disable no-any-unknown -- narrowing the opaque pr-gate section
-    const prGate = (commands?.['pr-gate'] ?? raw['pr-gate']) as Record<string, unknown> | undefined;
+    const prGate = commands?.['pr-gate'] as Record<string, unknown> | undefined;
     if (!prGate || !('checklists' in prGate)) return [];
     return validateChecklistsSection(prGate['checklists'], repoRoot);
 }

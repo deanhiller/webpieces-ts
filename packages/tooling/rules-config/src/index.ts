@@ -19,7 +19,12 @@ export { ExcludePaths } from './exclude-hook-paths';
 export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
 export { defaultRules, defaultRulesDir } from './default-rules';
 export { loadTemplate, writeTemplateIfMissing, writeTemplate, TemplateWriter } from './load-template';
-export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateCommandsSection, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+export { validateWebpiecesConfig, validatePrGateSection, validateChecklistsSection, validateSectionPlacement, validateExcludePaths, validateMatchRulesSection, allRuleNames } from './validate-config';
+export { validateCommandsSection } from './commands-section-validators';
+export { unknownKeyErrors, isCommentKey, validateTopLevelKeys, COMMENT_KEY_SUFFIX } from './config-key-rules';
+// The retired-key table + the no-back-compat policy it enforces. Exported so the installer can migrate
+// what the errors instruct, and so consumers can enumerate retirements.
+export { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, RetiredConfigKey, isRetiredKey, retiredEntry, retiredKeyError, retiredKeyErrorsIn, retiredRuleFor } from './retired-config-keys';
 export { validateChecklistDocs } from './checklist-docs-validator';
 export {
     MatchRuleConfig,

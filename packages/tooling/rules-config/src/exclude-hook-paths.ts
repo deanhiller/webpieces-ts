@@ -8,9 +8,9 @@
 // one level down, by a rule's OWN `excludePaths` inside its config block. A path is governed by
 // webpieces or it is not, so the top-level block is a single list.
 //
-// BACK-COMPAT: the object form `{ "rules": [...], "guards": [...] }` is still accepted and UNIONED
-// into one list, so a config written for the old schema keeps working unchanged. See
-// LoadedConfigReader.parseExcludePaths.
+// The object form `{ "rules": [...], "guards": [...] }` is RETIRED, not accepted — validateExcludePaths
+// rejects it with the union instruction. It was tolerated once, which is precisely why consumer configs
+// (this repo's included) stayed on it: an accepted shape is never migrated. See retired-config-keys.ts.
 // Data-only (per CLAUDE.md, classes for data). Built once by loadAndValidate after validation.
 export class ExcludePaths {
     constructor(readonly paths: string[]) {}

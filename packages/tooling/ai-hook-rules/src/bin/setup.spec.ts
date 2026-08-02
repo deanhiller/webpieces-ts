@@ -45,8 +45,50 @@ describe('migrate', () => {
         expect(result.config.hookGuards['pr-creation-or-push-guard']).toBeDefined();
         expect(result.config.commands['pr-gate']).toBeDefined();
         expect((result.config as { 'pr-gate'?: unknown })['pr-gate']).toBeUndefined();
-        expect(result.config.commands['upsertPr']).toBe('pnpm wp-start-upsert-pr');
-        expect(result.config.commands['mergeComplete']).toBe('pnpm wp-finish-upsert-pr');
+        const hints = result.config.commands['guardHints'] as Record<string, unknown>;
+        expect(hints['prCreationOrPush']).toBe('pnpm wp-start-upsert-pr');
+        expect(hints['mergeInProgress']).toBe('pnpm wp-finish-upsert-pr');
+    });
+
+    // `--sync` has to actually migrate what the validator's errors tell people it migrates. It used to
+    // SEED the flat keys and know nothing of the guard renames, so "run `pnpm wp-install-ai-hooks --sync`" was a
+    // false promise for both — the sync reported success and the config still failed to load.
+    it('moves the retired flat command strings into guardHints and deletes them', () => {
+        const result = migrate({
+            rules: {}, hookGuards: {},
+            commands: { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm my-upsert', mergeComplete: 'pnpm my-finish' },
+        });
+        expect(result.config.commands['upsertPr']).toBeUndefined();
+        expect(result.config.commands['mergeComplete']).toBeUndefined();
+        const hints = result.config.commands['guardHints'] as Record<string, unknown>;
+        // The consumer's own value wins over the default — a renamed gated command survives the migration.
+        expect(hints['prCreationOrPush']).toBe('pnpm my-upsert');
+        expect(hints['mergeInProgress']).toBe('pnpm my-finish');
+        expect(result.changes.some(c => c.includes('moved retired commands.upsertPr'))).toBe(true);
+    });
+
+    it('renames retired guard keys instead of leaving them to fail validation', () => {
+        const result = migrate({
+            rules: {},
+            hookGuards: { 'main-stale-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 } },
+            commands: { 'pr-gate': { mode: 'OFF' } },
+        });
+        expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
+        expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
+        expect(result.changes.some(c => c.includes('renamed retired "main-stale-guard"'))).toBe(true);
+    });
+
+    it('drops a retired name rather than clobbering an explicit entry under the new name', () => {
+        const result = migrate({
+            rules: {},
+            hookGuards: {
+                'main-stale-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0 },
+                'read-stale-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
+            },
+            commands: { 'pr-gate': { mode: 'OFF' } },
+        });
+        expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
+        expect(result.config.hookGuards['read-stale-guard']).toEqual({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
     });
 
     it('adds every missing built-in into its correct section (OFF)', () => {

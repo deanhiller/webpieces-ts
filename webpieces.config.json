@@ -1,4 +1,5 @@
 {
+    "upgradePolicyWhy": "THIS FILE IS NEVER RELEASED BACKWARDS-COMPATIBLE, AND THAT IS DELIBERATE. webpieces validates it on startup, so when a key moves or is renamed the loader REJECTS the old shape and hands you an error naming the destination ('X moved to Y'). Apply that edit and re-run — the error IS the migration. Every reader of this file is an AI agent, so upgrades are seamless without webpieces shipping a compatibility layer for every old shape. Never add a fallback that accepts both shapes: two accepted shapes means two code paths forever, and an accepted shape is NEVER migrated, so the dead one lives here indefinitely. You cannot get stuck — editing this file is always allowed even while it is invalid, and `pnpm install` is always allowed (a validator lagging this file by a release is the most common failure; install first, do NOT start by deleting keys). `pnpm wp-install-ai-hooks --sync` performs the mechanical migrations. Any key ending in 'Why' is a rationale note like this one; unknown keys are rejected, so name notes '<key>Why'. Full policy: .webpieces/instruct-ai/webpieces.config-policy.md",
     "rules": {
         "max-method-lines": {
             "limit": 80,
@@ -369,8 +370,11 @@
                 }
             ]
         },
-        "upsertPr": "pnpm wp-start-upsert-pr",
-        "mergeComplete": "pnpm wp-finish-upsert-pr"
+        "guardHintsWhy": "The command strings the bash guards print in their fix hints — each name binds to exactly one guard (prCreationOrPush -> pr-creation-or-push-guard, mergeInProgress -> merge-in-progress-guard). Rename a gated command here and every guard message follows. These were the flat commands.upsertPr / commands.mergeComplete keys, which are now RETIRED.",
+        "guardHints": {
+            "prCreationOrPush": "pnpm wp-start-upsert-pr",
+            "mergeInProgress": "pnpm wp-finish-upsert-pr"
+        }
     },
     "excludePaths": [
         "repositories/**"

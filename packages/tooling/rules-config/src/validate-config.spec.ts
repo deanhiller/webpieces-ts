@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateCommandsSection, validateMatchRulesSection, allRuleNames } from './validate-config';
+import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
 import { defaultRules } from './default-rules';
 
@@ -408,49 +408,6 @@ describe('validateSectionPlacement', () => {
     it('ignores unknown/custom names in hookGuards', () => {
         const errors = validateSectionPlacement({}, { 'my-custom-guard': { mode: 'ON' } });
         expect(errors).toEqual([]);
-    });
-});
-
-describe('validateCommandsSection', () => {
-    it('errors on a deprecated top-level pr-gate block', () => {
-        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' } }, { mode: 'OFF' });
-        expect(errors.some(e => e.includes('top-level "pr-gate" block is deprecated'))).toBe(true);
-    });
-
-    it('validates commands.pr-gate (missing → error)', () => {
-        const errors = validateCommandsSection({}, undefined);
-        expect(errors.some(e => e.includes('[pr-gate] Not configured'))).toBe(true);
-    });
-
-    it('accepts a valid commands section with string command overrides', () => {
-        const errors = validateCommandsSection(
-            { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm my-upsert-pr', mergeComplete: 'pnpm my-merge-complete' },
-            undefined,
-        );
-        expect(errors).toEqual([]);
-    });
-
-    it('rejects a non-string command field', () => {
-        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, upsertPr: 123 }, undefined);
-        expect(errors.some(e => e.includes('[commands] "upsertPr" must be a string'))).toBe(true);
-    });
-
-    it('accepts a commands.guardHints object with valid command strings', () => {
-        const errors = validateCommandsSection(
-            { 'pr-gate': { mode: 'OFF' }, guardHints: { prCreationOrPush: 'pnpm up', mergeInProgress: 'pnpm fin' } },
-            undefined,
-        );
-        expect(errors).toEqual([]);
-    });
-
-    it('rejects an empty guardHints command string', () => {
-        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, guardHints: { prCreationOrPush: '  ' } }, undefined);
-        expect(errors.some(e => e.includes('[commands] "guardHints.prCreationOrPush" must be a non-empty string'))).toBe(true);
-    });
-
-    it('rejects guardHints that is not an object', () => {
-        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, guardHints: 'pnpm up' }, undefined);
-        expect(errors.some(e => e.includes('[commands] "guardHints" must be an object'))).toBe(true);
     });
 });
 

@@ -179,10 +179,17 @@ segment and its quoted `cd` is never picked up.
 Read/Write/Edit, `effectiveCwd` for Bash. An empty rule list means allow. This is a filter, not a row:
 "exempt" is what emerges when the list empties.
 
-`excludePaths` is **ONE glob list** (canonical: `"excludePaths": ["repositories/**"]`). The legacy
-`{ rules: [...], guards: [...] }` object is still accepted and unioned — the block is REQUIRED, so
-rejecting it would block every Bash/Edit in an unmigrated consumer, including the edit that would fix
-it. `wp-install-ai-hooks` migrates it in place.
+`excludePaths` is **ONE glob list** (canonical: `"excludePaths": ["repositories/**"]`). The
+`{ rules: [...], guards: [...] }` object is **retired and rejected**, with the union it must become
+named in the error. `wp-install-ai-hooks --sync` migrates it in place.
+
+This used to be a tolerated fallback, justified here by "rejecting it would block every Bash/Edit
+including the edit that would fix it." **That was never true**, and the fallback it licensed is why
+consumer configs — this repo's own included — sat on the dead shape for releases. A Write/Edit whose
+target is `webpieces.config.json` is an unconditional **PASS** (see the L0 table above), and
+`pnpm install` has an installer bypass, so an invalid config can always be repaired from inside the
+block. Config rejection is self-recoverable by construction; see `retired-config-keys.ts` for the
+policy and the reasoning.
 
 ## Legend
 

@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { CONFIG_FILENAME } from './config-file';
 import { loadAndValidate } from './load-config';
+import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RetiredConfigKey } from './retired-config-keys';
 import { toError } from './to-error';
 
 function mktmp(contents: Record<string, string>): string {
@@ -69,8 +70,9 @@ function validPrGate(): Record<string, unknown> {
 
 // `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate + the required
 // excludePaths block are added here so the fixture always validates.
-function validExcludePaths(): Record<string, unknown> {
-    return { rules: [], guards: [] };
+// The canonical shape: ONE flat glob list. The retired { rules, guards } object is rejected outright.
+function validExcludePaths(): string[] {
+    return [];
 }
 function writeConfig(sections: Record<string, unknown>, prGate: unknown = validPrGate()): string {
     return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
@@ -153,25 +155,16 @@ describe('loadAndValidate', () => {
         expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**', 'vendor/**']);
     });
 
-    // BACK-COMPAT: the legacy two-list object still loads, unioned into the single list. Rejecting it
-    // would deadlock every unmigrated consumer — the block is REQUIRED, so a hard error blocks every
-    // Bash/Edit including the edit that would fix it.
-    it('accepts the legacy { rules, guards } object and unions it into one list', () => {
+    // The retired two-list object fails the LOAD, it is not unioned. Tolerating it is what kept consumer
+    // configs (this repo's included) on the dead shape release after release.
+    it('throws on the retired { rules, guards } object, naming the union it must become', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
             ...allRulesOff(),
             commands: { 'pr-gate': validPrGate() },
             excludePaths: { rules: ['repositories/**'], guards: ['vendor/**'] },
         }) });
-        expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**', 'vendor/**']);
-    });
-
-    it('de-duplicates when the legacy lists overlap (the common case: both set identically)', () => {
-        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
-            ...allRulesOff(),
-            commands: { 'pr-gate': validPrGate() },
-            excludePaths: { rules: ['repositories/**'], guards: ['repositories/**'] },
-        }) });
-        expect(loadAndValidate(dir).excludePaths.paths).toEqual(['repositories/**']);
+        expect(() => loadAndValidate(dir)).toThrow('RETIRED');
+        expect(() => loadAndValidate(dir)).toThrow('ONE array holding the union');
     });
 });
 
@@ -204,22 +197,20 @@ describe('loadAndValidate — sections & commands', () => {
         expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
     });
 
-    it('errors on a deprecated top-level pr-gate block', () => {
+    it('errors on a retired top-level pr-gate block', () => {
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({ ...allRulesOff(), 'pr-gate': validPrGate() }) });
-        expect(() => loadAndValidate(dir)).toThrow('top-level "pr-gate" block is deprecated');
+        expect(() => loadAndValidate(dir)).toThrow('top-level "pr-gate" block is RETIRED');
     });
 
-    it('injects commands.upsertPr as the pr-creation-or-push-guard default', () => {
+    it('throws on the retired flat commands.upsertPr instead of injecting it into the guard', () => {
         const sections = allRulesOff();
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
             ...sections,
             commands: { 'pr-gate': validPrGate(), upsertPr: 'pnpm my-upsert' },
             excludePaths: validExcludePaths(),
         }) });
-        const loaded = loadAndValidate(dir);
-        expect(loaded.commands.upsertPr).toBe('pnpm my-upsert');
-        const guard = loaded.rulesConfig['pr-creation-or-push-guard'] as Record<string, unknown>;
-        expect(guard['upsertPrCommand']).toBe('pnpm my-upsert');
+        expect(() => loadAndValidate(dir)).toThrow('"upsertPr" is a RETIRED');
+        expect(() => loadAndValidate(dir)).toThrow('commands.guardHints.prCreationOrPush');
     });
 
     it('sources both guard hints from commands.guardHints (canonical) into their guards', () => {
@@ -241,15 +232,29 @@ describe('loadAndValidate — sections & commands', () => {
         expect(mergeGuard['mergeCompleteCommand']).toBe('pnpm gh-finish');
     });
 
-    it('prefers commands.guardHints over the legacy flat command string', () => {
+    // There is no precedence chain to test any more: a half-migrated file does not quietly resolve to the
+    // canonical value, it fails until the retired key is gone. That is the point — a file that keeps
+    // working with both keys present is a file nobody ever finishes migrating.
+    it('still throws when guardHints is present but the retired flat key was left behind', () => {
         const sections = allRulesOff();
         const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
             ...sections,
-            // Both present: guardHints wins, flat upsertPr is the back-compat fallback only.
             commands: { 'pr-gate': validPrGate(), guardHints: { prCreationOrPush: 'pnpm canonical' }, upsertPr: 'pnpm legacy' },
             excludePaths: validExcludePaths(),
         }) });
-        expect(loadAndValidate(dir).commands.upsertPr).toBe('pnpm canonical');
+        expect(() => loadAndValidate(dir)).toThrow('"upsertPr" is a RETIRED');
+    });
+
+    it('falls back to the built-in default when guardHints omits a name', () => {
+        const sections = allRulesOff();
+        const dir = mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...sections,
+            commands: { 'pr-gate': validPrGate(), guardHints: { prCreationOrPush: 'pnpm canonical' } },
+            excludePaths: validExcludePaths(),
+        }) });
+        const loaded = loadAndValidate(dir);
+        expect(loaded.commands.upsertPr).toBe('pnpm canonical');
+        expect(loaded.commands.mergeComplete).toBe('pnpm wp-finish-upsert-pr');
     });
 });
 
@@ -290,43 +295,82 @@ describe('loadAndValidate — config-error banner (unblock instructions)', () =>
     });
 });
 
-describe('loadAndValidate — deprecated key aliasing', () => {
-    it('accepts the deprecated pr-merge-cleanup key and normalizes it to pr-merge-guard', () => {
-        const sections = allRulesOff();
-        // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
-        const guards = sections['hookGuards'] as Record<string, unknown>;
-        guards['pr-merge-cleanup'] = guards['pr-merge-guard'];
-        delete guards['pr-merge-guard'];
-        const dir = writeConfig(sections);
-        const loaded = loadAndValidate(dir); // must NOT throw on the deprecated key
-        expect(loaded.rulesConfig['pr-merge-guard']).toBeDefined();
-        expect(loaded.resolved.userConfiguredRuleNames.has('pr-merge-guard')).toBe(true);
-        expect(loaded.resolved.userConfiguredRuleNames.has('pr-merge-cleanup')).toBe(false);
-    });
+/**
+ * Renamed guards used to be rewritten SILENTLY before validation, so the old name kept working forever and
+ * no consumer was ever told to change it — which is why the alias table could never be deleted. Each rename
+ * is now a hard error naming the new key. The rename itself is a one-line config edit.
+ */
+describe('loadAndValidate — retired guard names', () => {
+    const RENAMES: readonly (readonly [string, string])[] = [
+        ['pr-merge-cleanup', 'pr-merge-guard'],
+        ['pr-creation-guard', 'pr-creation-or-push-guard'],
+        ['main-stale-guard', 'read-stale-guard'],
+    ];
 
-    it('accepts the deprecated pr-creation-guard key and normalizes it to pr-creation-or-push-guard', () => {
-        const sections = allRulesOff();
-        // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
-        const guards = sections['hookGuards'] as Record<string, unknown>;
-        guards['pr-creation-guard'] = guards['pr-creation-or-push-guard'];
-        delete guards['pr-creation-or-push-guard'];
-        const dir = writeConfig(sections);
-        const loaded = loadAndValidate(dir); // must NOT throw on the deprecated key
-        expect(loaded.rulesConfig['pr-creation-or-push-guard']).toBeDefined();
-        expect(loaded.resolved.userConfiguredRuleNames.has('pr-creation-or-push-guard')).toBe(true);
-        expect(loaded.resolved.userConfiguredRuleNames.has('pr-creation-guard')).toBe(false);
-    });
+    for (const rename of RENAMES) {
+        const oldName = rename[0];
+        const newName = rename[1];
+        it(`throws on the retired ${oldName} key and names ${newName}`, () => {
+            const sections = allRulesOff();
+            // Simulate a webpieces.config.json that still uses the OLD guard name.
+            const guards = sections['hookGuards'] as Record<string, unknown>;
+            guards[oldName] = guards[newName];
+            delete guards[newName];
+            const dir = writeConfig(sections);
+            expect(() => loadAndValidate(dir)).toThrow(`"${oldName}" is a RETIRED`);
+            expect(() => loadAndValidate(dir)).toThrow(newName);
+        });
+    }
 
-    it('accepts the deprecated main-stale-guard key and normalizes it to read-stale-guard', () => {
+    // The unknown-rule message leads with "run `pnpm install`, your validator may be stale" — correct for a
+    // key the validator has not learned yet, and precisely wrong for a name we know is dead.
+    it('does not send a retired name down the "your validator is stale" path', () => {
         const sections = allRulesOff();
-        // Simulate a webpieces.config.json that still uses the OLD guard name (lagging a release).
         const guards = sections['hookGuards'] as Record<string, unknown>;
         guards['main-stale-guard'] = guards['read-stale-guard'];
         delete guards['read-stale-guard'];
         const dir = writeConfig(sections);
-        const loaded = loadAndValidate(dir); // must NOT throw on the deprecated key
-        expect(loaded.rulesConfig['read-stale-guard']).toBeDefined();
-        expect(loaded.resolved.userConfiguredRuleNames.has('read-stale-guard')).toBe(true);
-        expect(loaded.resolved.userConfiguredRuleNames.has('main-stale-guard')).toBe(false);
+        expect(() => loadAndValidate(dir)).not.toThrow('[main-stale-guard] Unknown rule');
     });
+});
+
+/**
+ * THE POLICY GUARD, end to end. Every entry in RETIRED_CONFIG_KEYS must actually FAIL the load with its
+ * destination named — that is the whole contract that lets webpieces ship config changes with no
+ * backwards-compatible release: the agent is handed the edit and applies it.
+ *
+ * This loop is what makes the policy structural instead of aspirational. Re-add a `??` fallback that
+ * quietly accepts a retired key — the exact thing that kept `commands.upsertPr` and the two-list
+ * `excludePaths` alive in this repo's own config for releases — and the matching case goes red.
+ */
+describe('loadAndValidate — every retired key fails the load', () => {
+    // Build the minimal config that still carries `entry`, so the ONLY reason to throw is the retirement.
+    function configCarrying(entry: RetiredConfigKey): string {
+        const sections = allRulesOff();
+        if (entry.scope === RETIRED_SCOPE_RULE) {
+            const guards = sections['hookGuards'] as Record<string, unknown>;
+            guards[entry.key] = { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+            return writeConfig(sections);
+        }
+        if (entry.label === '[excludePaths]') {
+            return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+                ...sections,
+                commands: { 'pr-gate': validPrGate() },
+                excludePaths: { rules: [], guards: [] },
+            }) });
+        }
+        return mktmp({ [CONFIG_FILENAME]: JSON.stringify({
+            ...sections,
+            commands: { 'pr-gate': validPrGate(), [entry.key]: 'pnpm something' },
+            excludePaths: validExcludePaths(),
+        }) });
+    }
+
+    for (const entry of RETIRED_CONFIG_KEYS) {
+        it(`rejects ${entry.label} "${entry.key}" and names where it went`, () => {
+            const dir = configCarrying(entry);
+            expect(() => loadAndValidate(dir)).toThrow(`"${entry.key}" is a RETIRED`);
+            if (entry.movedTo !== '') expect(() => loadAndValidate(dir)).toThrow(entry.movedTo);
+        });
+    }
 });
