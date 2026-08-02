@@ -215,8 +215,8 @@ re-rolling the same dice against a deadline that load had already made unreachab
 ## 7. Cross-agent interference beyond CPU
 
 **Confirmed: one agent's `pnpm install` ran in the primary clone.** `forkpoint` L59 07:13:04 issued a
-bare `pnpm install` with **no `cd` prefix**. Because the Bash tool does not persist `cd`, it executed in
-the persisted cwd — the primary clone. The agent caught it two calls later (L62 07:13:16):
+bare `pnpm install` with **no `cd` prefix**, and it executed in the primary clone. The agent caught it
+two calls later (L62 07:13:16):
 
 ```
 pwd; ls -d …/webpieces-ts40/node_modules …/webpieces-ts40-forkpoint/node_modules
@@ -229,6 +229,14 @@ Its own report: *"a consistent prune it did not ask for. Nothing else in the pri
 sibling worktrees was touched."* The primary clone's `node_modules` is shared by every worktree's
 `wp-*` binaries, so this is a shared-state mutation with a blast radius of all eight agents. It appears
 to have been benign here, but only by luck.
+
+> **Correction (2026-08-02).** This paragraph originally explained the primary-clone install with
+> *"the Bash tool does not persist `cd`"*. That claim is **false and has been removed** — it was a
+> repo-wide misconception, corrected in PR #558 and #562. The measured behaviour: a `cd` that stays
+> INSIDE the workspace **persists** to later calls, while one that **leaves** it is reset by the
+> harness, which announces `Shell cwd was reset to <root>`. A linked worktree is outside, so a bare
+> command issued from one really does run in the primary clone — **the observation above stands, only
+> its stated reason was wrong.** The fix is unchanged: emit every remedy as `cd <root> && …`.
 
 **Confirmed: version-drift guard fired on shared `node_modules`.** `forkpoint` L47 07:12:18:
 

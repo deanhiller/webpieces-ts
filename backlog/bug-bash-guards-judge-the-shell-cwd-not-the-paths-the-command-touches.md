@@ -15,8 +15,14 @@ This one adds the multi-worktree case and the impossible-remedy case.
 
 ## Why it is structural, not incidental
 
-An agent's Bash tool does **not persist `cd` between calls** — verified directly: a standalone
-`cd <worktree>` followed by `pwd` in the next call returns the primary clone. So an agent working in a
+> ⚠️ **The claim in this section is FALSE as written — see ADDENDUM 2 at the bottom before relying on
+> it.** It is kept, struck through, because two later sections argue *from* it and the record of what
+> was believed matters. Corrected rule: a `cd` that stays INSIDE the workspace **persists**; one that
+> **leaves** it is reset by the harness. The section's CONCLUSION survives — a worktree is outside, so
+> a command issued from one is judged against the primary clone — but not for the reason given here.
+
+~~An agent's Bash tool does **not persist `cd` between calls** — verified directly: a standalone
+`cd <worktree>` followed by `pwd` in the next call returns the primary clone.~~ So an agent working in a
 worktree issues either absolute paths or `cd X && …` compounds, and the shell's cwd is *always* the
 primary clone. Every guard that reasons from cwd therefore judges the wrong tree on every call.
 
@@ -86,9 +92,9 @@ So the prescribed cure is unreachable from a worktree, and a bare `cd <worktree>
 allowlist entry MUST tolerate a leading `cd <path> &&` for the commands it prescribes; the `cd` cannot
 change what the command does to the repo, so it cannot be a safety concern.
 
-Because a Bash tool call does not persist `cd`, **every** prescribed remedy should be emitted in the
-`cd <root> && …` form — an agent cannot rely on already being there, and the next tool call will have
-reset to the primary clone regardless.
+Because the next tool call's cwd cannot be predicted — a `cd` inside the workspace STICKS, one that
+leaves it is RESET (see ADDENDUM 2) — **every** prescribed remedy should be emitted in the
+`cd <root> && …` form. An agent cannot rely on already being in the right place in either direction.
 
 ### Remaining fixes
 - **Judge each segment against the paths it actually touches.** `content-read-scan` already extracts read
@@ -135,7 +141,9 @@ The earlier observation may have been accurate against an older harness (this re
 `0.4.499`), so this is a re-measurement rather than an accusation — but the current behavior is
 unambiguous and the sections above should be re-derived from it.
 
-## The guard's own message asserts the false premise — and refutes itself doing so
+## The guard's own message asserted the false premise — and refuted itself doing so
+
+**FIXED in PR #558/#562 — the block below is the OLD text, quoted as evidence, not current behaviour.**
 
 Verbatim, from a block hit three times in one session:
 
@@ -250,11 +258,13 @@ than the shell's cwd, and the `git -C` / `gh -R` win below. Do not close this ti
 
 ## The message text that was corrected, and why the obvious replacement was also wrong
 
-`runner.ts:223` says `cd` does NOT persist between tool calls; the premise is asserted in **9 places**
-(`effective-tree.ts:13,158`, `runner.ts:212,223,286`, `merged-branch-message.ts:31`,
-`content-read-scan.ts:29`, `tree-recovery.ts:34`, `l0-allowlist.ts:38`, `shim.ts:73`). Addendum 1's
-proposed replacement ("`cd` **persists**…") would be just as wrong in the other direction. The honest
-version:
+`runner.ts:223` USED TO say `cd` does NOT persist between tool calls. The premise was asserted in **19
+places** — 11 in non-spec source (`effective-tree.ts`, `runner.ts`, `merged-branch-message.ts`,
+`content-read-scan.ts`, `tree-recovery.ts`, `l0-allowlist.ts`, `shim.ts`), plus `GUARD_MATRIX.md` and 7
+spec files. **All 19 are fixed** (PR #558 took the first 11; PR #562 took the 8 that a directory-scoped
+grep had missed, including the human-facing `GUARD_MATRIX.md`). Addendum 1's proposed replacement
+("`cd` **persists**…") would have been just as wrong in the other direction. The honest version, now
+shipped:
 
 > `cd` persists between tool calls while it stays inside this workspace, and is reset when a command
 > leaves it. So an earlier command may have left you in a SUBDIRECTORY — prefix this one with
