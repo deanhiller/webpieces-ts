@@ -70,7 +70,8 @@ export const NO_CHAINING_RULE =
     'makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. ' +
     'If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. ' +
     'The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since ' +
-    'cd does not persist between tool calls - that one IS accepted), a trailing 2>&1, and a pipe into tail/head ' +
+    'the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS ' +
+    'accepted), a trailing 2>&1, and a pipe into tail/head ' +
     '(e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20).';
 
 // Normal template literal (not String.raw): it carries #235's shell escapes verbatim (\${BIN_NAME},

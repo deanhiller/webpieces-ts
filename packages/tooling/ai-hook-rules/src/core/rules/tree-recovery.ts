@@ -31,7 +31,7 @@ export class TreeRecovery {
      * `treeRoot` is the tree the guard JUDGED. When it is given, every command below is rendered as
      * `cd <treeRoot> && <command>`.
      *
-     * WHY: a Bash tool call does NOT persist `cd` between calls, so an agent working in a linked
+     * WHY: the harness RESETS a cwd that left the workspace, so an agent working in a linked
      * worktree starts every call back in the primary clone. A bare `git fetch origin main` therefore
      * runs against the WRONG tree — and in the field a guard prescribed `git pull` in a primary clone
      * the agent had been explicitly forbidden to touch. Naming the directory in the command itself is

@@ -35,9 +35,12 @@ export const CAPTURE_TAIL_JS_SRC =
 
 // The DIRECTORY PREFIX every escape hatch tolerates — the 2026-07-30 worktree deadlock.
 //
-// A Bash tool call does NOT persist `cd`: a standalone `cd <worktree>` followed by `pwd` in the next
-// call reports the primary clone again. So an agent working in a linked worktree can only reach that
-// tree with a self-contained `cd <worktree> && …`. The drift guard demanded a BARE `pnpm install`
+// The harness RESETS a cwd that left the workspace — a standalone `cd <worktree>` followed by `pwd` in
+// the next call reports the primary clone again, and the harness prints `Shell cwd was reset to <root>`
+// when it happens. So an agent working in a linked worktree can only reach that tree with a
+// self-contained `cd <worktree> && …`. (A `cd` that STAYS inside the workspace persists instead, so
+// "cd never persists" — which this comment used to assert — is the worktree case over-generalized.)
+// The drift guard demanded a BARE `pnpm install`
 // ("do NOT put a cd in front of it") while the install was needed in the worktree — the cure was
 // literally untypable from the place that needed it, and a bare `cd <worktree>` was itself blocked.
 //
@@ -71,7 +74,7 @@ const CD_PREFIX_JS_ANCHORED = '^' + CD_PREFIX_JS_SRC;
 // An optional LEADING `cd <path> &&` (CD_PREFIX_ERE) — added 2026-07-30. The old comment here argued a
 // `cd` is never needed because Claude Code starts at the repo root. That is false in a LINKED WORKTREE:
 // git copies no node_modules into a new worktree, so the very first call there needs an install in THAT
-// tree, and `cd` does not persist between tool calls, so `cd <worktree> && pnpm install` is the only
+// tree, and the harness resets a cwd that left the workspace, so `cd <worktree> && pnpm install` is the only
 // spelling that reaches it. Denying the prefix made the cure unreachable from the one place it was
 // needed. It widens nothing: the prefix cannot change what the install does, and the path token admits
 // no operator (see CD_PREFIX_ERE).

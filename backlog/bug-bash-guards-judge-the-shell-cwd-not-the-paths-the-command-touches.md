@@ -238,7 +238,17 @@ the same repo). Neither was wrong about what it ran; both over-generalized.
   repo root.** That is the one case where `cd` genuinely sticks, so a relative path resolves against
   somewhere other than the root while still being inside the governed tree.
 
-## The message text still needs correcting, just differently
+## ✅ RESOLVED — the message text (the rest of this report is still OPEN)
+
+The false premise is **gone from the source**: all 11 assertions across `runner.ts`, `effective-tree.ts`,
+`tree-recovery.ts`, `merged-branch-message.ts`, `content-read-scan.ts`, `l0-allowlist.ts` and `shim.ts`
+now state the two-case rule instead, and the user-facing block at `runner.ts` no longer tells the AI
+the thing that is not true. The `cd <root> && …` conclusion is unchanged — only its reason was wrong.
+
+Still open, and the substance of this report: **judging the paths a command actually touches** rather
+than the shell's cwd, and the `git -C` / `gh -R` win below. Do not close this ticket on the message fix.
+
+## The message text that was corrected, and why the obvious replacement was also wrong
 
 `runner.ts:223` says `cd` does NOT persist between tool calls; the premise is asserted in **9 places**
 (`effective-tree.ts:13,158`, `runner.ts:212,223,286`, `merged-branch-message.ts:31`,
