@@ -110,3 +110,146 @@ Parallel ticket work runs several subagents at once, each in its own worktree, s
 
 Both keys are already on `origin/main`, so you inherit them: **change nothing.** If you hit a conflict on
 those lines while syncing, take main's value.
+
+---
+
+# ADDENDUM (2026-08-02) — the "does not persist `cd`" premise is FALSE, and the guard message says so out loud
+
+**Read this before acting on the sections above.** The load-bearing premise in *"Why it is structural,
+not incidental"* — that an agent's Bash tool does not persist `cd` between calls — **does not hold on
+the current harness.** It was measured directly this session, in both command shapes:
+
+| # | tool call | command | result |
+|---|---|---|---|
+| 1 | A | `pwd` | `…/monorepo-nx4` |
+| 2 | B | `cd docs && pwd` | `…/monorepo-nx4/docs` |
+| 3 | C | `pwd` *(fresh call, no `cd`)* | **`…/monorepo-nx4/docs`** |
+| 4 | D | `cd …/monorepo-nx4/docs` *(standalone, no `&&`)* | *(no output)* |
+| 5 | E | `pwd` *(fresh call)* | **`…/monorepo-nx4/docs`** |
+
+Rows 3 and 5 are separate tool invocations containing no `cd` at all, and both report the subdirectory.
+**`cd` persists — compound and standalone alike.** The Claude Code Bash tool documents this explicitly:
+*"Working directory persists between calls."*
+
+The earlier observation may have been accurate against an older harness (this report was written at
+`0.4.499`), so this is a re-measurement rather than an accusation — but the current behavior is
+unambiguous and the sections above should be re-derived from it.
+
+## The guard's own message asserts the false premise — and refutes itself doing so
+
+Verbatim, from a block hit three times in one session:
+
+```
+Run EXACTLY this instead (one line — `cd` does NOT persist between tool calls):
+  git -C /other/repo status
+```
+
+The remedy is *"prefix with `cd <repo-root> &&`."* That remedy is only necessary **because** cwd
+persisted and left the agent in a subdirectory. If `cd` genuinely did not persist, every call would
+start at the repo root and this guard could never fire at all. The parenthetical contradicts the fix it
+is attached to, and it actively misleads: it tells the reader the exact state that produced the error is
+impossible.
+
+**How the state arose, concretely.** An earlier, unrelated command read some verdict files:
+
+```
+cd .../.webpieces/pr-review/feature-ONE-2252-.../ && for f in review-*.json; do …; done
+```
+
+That `cd` persisted. The *next* command targeted a different repo entirely
+(`git -C /Users/deanhiller/workspace/personal/webpieces-ts50 status`) and was blocked — judged against
+`monorepo-nx4` because the shell happened to still be sitting inside it.
+
+## This makes the underlying bug worse, not better
+
+The report currently argues cwd is *predictably wrong* (always the primary clone). The truth is cwd is
+**arbitrarily** wrong — it is wherever the last `cd` in the session left it, which no guard, and no
+agent reading the guard's message, can predict. Concretely:
+
+- A remedy emitted as bare `pnpm install` may run in a **subdirectory** rather than the primary clone —
+  not merely "the wrong worktree." The existing advice to always emit `cd <root> && …` is therefore
+  **more** important than the report claims, not less; the stated reason for it is just wrong.
+- `--force-to-root` and every "pre-`cd` cwd" behavior described in the sibling reports needs re-checking
+  against persistence, because their expected-cwd assumption no longer holds.
+- Sighting 1 (`ls -la ~/.claude/projects/…` blocked by a merged-branch guard) is now explained more
+  simply: cwd was a merged-branch repo *left over from an earlier call*, not the tool's default.
+
+## Two fixes
+
+**1. Correct the message text.** Replace the parenthetical with something true:
+
+> `cd` **persists** between tool calls, so an earlier command may have left you in a subdirectory.
+> Prefix this one with `cd <repo-root> &&` — and add that prefix again on later commands, since this
+> one does not permanently move you back either.
+
+Also worth surfacing the judged tree in the same block (already listed under *Remaining fixes*): a line
+like `evaluated against <path> (cwd <cwd>)` would have made this diagnosable in seconds instead of
+turns.
+
+**2. Prefer the command's explicit target over cwd — `git -C` is the easy win.** Every blocked command
+in this session's sightings named its repo explicitly:
+
+```
+git -C /Users/deanhiller/workspace/personal/webpieces-ts50 status --short
+```
+
+`git -C <path>` is unambiguous about which repo it touches regardless of cwd; the same holds for
+`git --git-dir`/`--work-tree` and for `gh -R <owner/repo>`. A guard that parsed those flags could judge
+the actual target and would not have fired on any of the three sightings. This is the concrete,
+low-risk version of *"Judge each segment against the paths it actually touches"* already listed above —
+it needs no path-resolution heuristics, just reading a flag the command already carries.
+
+**Frequency note:** three hits in one session, every one a false positive, and every one triggered by a
+`cd` made for an unrelated read several turns earlier.
+
+---
+
+# ADDENDUM 2 (2026-08-02) — BOTH of the above are right, about different cases: `cd` persists WITHIN the working dir and is RESET when it leaves
+
+**Read this before acting on either section above.** The original report says `cd` never persists.
+Addendum 1 says it always persists. Re-measured on `webpieces-ts50`, both are half-right, and the
+distinction is exactly the one the guards care about:
+
+| # | tool call | command | result |
+|---|---|---|---|
+| A | 1 | `pwd` | `…/webpieces-ts50` |
+| B | 2 | `cd backlog && pwd` | `…/webpieces-ts50/backlog` |
+| C | 3 | `pwd` *(fresh call, no `cd`)* | **`…/webpieces-ts50/backlog`** ← persisted |
+| D | 4 | `cd /Users/…/ts50-reports && pwd` *(a LINKED WORKTREE)* | `…/ts50-reports`, then the harness printed **`Shell cwd was reset to /Users/…/webpieces-ts50`** |
+| E | 5 | `pwd` *(fresh call)* | **`…/webpieces-ts50`** ← reset, did NOT persist |
+
+**The rule: `cd` persists while it stays inside the session's working directory, and the harness
+resets it — announcing `Shell cwd was reset to <root>` — the moment a command leaves that tree.** A
+linked worktree is outside it, which is why the original report measured "never persists" (it was
+working in worktrees) and Addendum 1 measured "always persists" (it `cd`-ed into a subdirectory of
+the same repo). Neither was wrong about what it ran; both over-generalized.
+
+## What this changes for the fix
+
+- **cwd is NOT arbitrary** (Addendum 1's central claim). Its range is exactly: the session root, or a
+  SUBDIRECTORY of it. It can never be another worktree or `/tmp`, because the harness resets those.
+  That is a much smaller space to reason about than "wherever the last `cd` left it".
+- **The original report's Sighting 3 stands and is now explained.** An agent working in a worktree
+  really does get judged against the primary clone, every time — not by accident of an earlier `cd`,
+  but because worktree `cd`s are structurally reset. The impossible-remedy problem is real.
+- **`cd <worktree> && …` remains mandatory, and the allowlist must accept it** — Addendum 1's
+  conclusion holds, for the original report's reason rather than its own.
+- **New requirement neither section states: a guard must tolerate cwd being a SUBDIRECTORY of the
+  repo root.** That is the one case where `cd` genuinely sticks, so a relative path resolves against
+  somewhere other than the root while still being inside the governed tree.
+
+## The message text still needs correcting, just differently
+
+`runner.ts:223` says `cd` does NOT persist between tool calls; the premise is asserted in **9 places**
+(`effective-tree.ts:13,158`, `runner.ts:212,223,286`, `merged-branch-message.ts:31`,
+`content-read-scan.ts:29`, `tree-recovery.ts:34`, `l0-allowlist.ts:38`, `shim.ts:73`). Addendum 1's
+proposed replacement ("`cd` **persists**…") would be just as wrong in the other direction. The honest
+version:
+
+> `cd` persists between tool calls while it stays inside this workspace, and is reset when a command
+> leaves it. So an earlier command may have left you in a SUBDIRECTORY — prefix this one with
+> `cd <repo-root> &&`. For a linked worktree the prefix is required every time, since the harness
+> resets you out of it after each call.
+
+Surfacing the judged tree AND the cwd in the block (`evaluated against <path> (cwd <cwd>)`) is still
+the single highest-value line, and is what let this be measured in three tool calls.
