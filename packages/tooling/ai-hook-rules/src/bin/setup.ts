@@ -3,7 +3,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RepoRootFinder, writeTemplate, writeTemplateIfMissing } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import { SHIM_MARKER, shimPath, renderShim } from './shim';
@@ -146,11 +146,13 @@ function seedRule(): RuleEntry {
     return { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
 }
 
+// The guard-hint command strings live under `guardHints`. The flat `upsertPr`/`mergeComplete` keys this
+// used to seed are RETIRED and now fail validation — seeding them meant every freshly installed repo was
+// born on a shape the validator rejects.
 function seedCommands(): Json {
     return {
         'pr-gate': { mode: 'OFF', buildCommand: DEFAULT_BUILD_COMMAND, gates: [] },
-        upsertPr: DEFAULT_UPSERT_PR,
-        mergeComplete: DEFAULT_MERGE_COMPLETE,
+        guardHints: { prCreationOrPush: DEFAULT_UPSERT_PR, mergeInProgress: DEFAULT_MERGE_COMPLETE },
     };
 }
 
@@ -179,6 +181,74 @@ function migrateExcludePaths(raw: unknown, changes: string[]): string[] {
     }
     changes.push('added excludePaths ([])');
     return [];
+}
+
+/** One retired flat command string and the guardHints field it becomes. Data-only (per CLAUDE.md). */
+class GuardHintMove {
+    retiredKey: string;
+    hintKey: string;
+    fallback: string;
+
+    constructor(retiredKey: string, hintKey: string, fallback: string) {
+        this.retiredKey = retiredKey;
+        this.hintKey = hintKey;
+        this.fallback = fallback;
+    }
+}
+
+/**
+ * Bring `commands` forward to the `guardHints` shape, moving the RETIRED flat `upsertPr`/`mergeComplete`
+ * strings and DELETING them. Deleting is the point: the validator now rejects them, so leaving them behind
+ * would keep the config failing after a "successful" sync.
+ *
+ * The consumer's own value wins over the default — a repo that renamed its gated command keeps that name.
+ */
+// webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
+function migrateGuardHints(commands: Json, changes: string[]): void {
+    const hints: Json = (typeof commands['guardHints'] === 'object' && commands['guardHints'] !== null)
+        ? (commands['guardHints'] as Json) : {};
+    const moves: readonly GuardHintMove[] = [
+        new GuardHintMove('upsertPr', 'prCreationOrPush', DEFAULT_UPSERT_PR),
+        new GuardHintMove('mergeComplete', 'mergeInProgress', DEFAULT_MERGE_COMPLETE),
+    ];
+    for (const move of moves) {
+        const retiredKey = move.retiredKey;
+        const hintKey = move.hintKey;
+        const fallback = move.fallback;
+        const carried = commands[retiredKey];
+        if (carried !== undefined) {
+            delete commands[retiredKey];
+            if (hints[hintKey] === undefined) hints[hintKey] = carried;
+            changes.push(`moved retired commands.${retiredKey} -> commands.guardHints.${hintKey}`);
+        }
+        if (hints[hintKey] === undefined) {
+            hints[hintKey] = fallback;
+            changes.push(`added commands.guardHints.${hintKey}`);
+        }
+    }
+    commands['guardHints'] = hints;
+}
+
+/**
+ * Apply the RETIRED rule/guard renames in place. These used to be rewritten silently at load time, so a
+ * consumer's file kept the dead name forever; the loader now rejects it, which makes this the one command
+ * that can fix the file. Skips a rename when the new name is already configured, so an explicit entry is
+ * never clobbered by a stale one.
+ */
+// webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
+function migrateRetiredRuleNames(section: Section, changes: string[]): void {
+    for (const entry of RETIRED_CONFIG_KEYS) {
+        if (entry.scope !== RETIRED_SCOPE_RULE) continue;
+        if (!(entry.key in section)) continue;
+        if (entry.movedTo in section) {
+            delete section[entry.key];
+            changes.push(`dropped retired "${entry.key}" ("${entry.movedTo}" is already configured)`);
+            continue;
+        }
+        section[entry.movedTo] = section[entry.key];
+        delete section[entry.key];
+        changes.push(`renamed retired "${entry.key}" -> "${entry.movedTo}"`);
+    }
 }
 
 // Deep-copy the framework's default match-rules (the no-fetch guard) into plain JSON for the config
@@ -236,6 +306,11 @@ export function migrate(existing: Json): MigrateResult {
         commands['pr-gate'] = existing['pr-gate'];
         changes.push('moved top-level "pr-gate" → commands["pr-gate"]');
     }
+    // Apply retired RENAMES first, so a renamed guard is placed and presence-checked under its new name
+    // rather than being treated as unknown and re-added alongside its own stale entry.
+    migrateRetiredRuleNames(rules, changes);
+    migrateRetiredRuleNames(hookGuards, changes);
+
     // Move guards mistakenly left in rules into hookGuards.
     for (const name of Object.keys(rules)) {
         if (isHookGuard(name)) {
@@ -265,8 +340,7 @@ export function migrate(existing: Json): MigrateResult {
         commands['pr-gate'] = { mode: 'OFF', buildCommand: DEFAULT_BUILD_COMMAND, gates: [] };
         changes.push('added commands["pr-gate"] (OFF)');
     }
-    if (commands['upsertPr'] === undefined) { commands['upsertPr'] = DEFAULT_UPSERT_PR; changes.push('added commands.upsertPr'); }
-    if (commands['mergeComplete'] === undefined) { commands['mergeComplete'] = DEFAULT_MERGE_COMPLETE; changes.push('added commands.mergeComplete'); }
+    migrateGuardHints(commands, changes);
 
     // Seed the now-required excludePaths list (empty = enforce everywhere) if the config predates it,
     // and MIGRATE the legacy `{ rules: [], guards: [] }` object to the single list by unioning them.
@@ -470,6 +544,10 @@ export async function main(): Promise<void> {
     const projectRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
 
     seedOrSyncConfig(projectRoot, syncOnly);
+    // Refreshed on BOTH paths (--sync included): it explains why a retired key is rejected rather than
+    // accepted, and what to do about it — which is exactly what an agent needs on the run where a sync
+    // just moved keys out from under its config.
+    writeTemplate(projectRoot, 'webpieces.config-policy.md');
     if (syncOnly) return;
 
     scaffoldCiGate(projectRoot);

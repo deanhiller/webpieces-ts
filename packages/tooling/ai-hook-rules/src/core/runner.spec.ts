@@ -204,7 +204,7 @@ function writeGuardConfig(root: string, guardsExclude: readonly string[]): void 
     for (const name of Object.keys(config.hookGuards)) {
         config.hookGuards[name].mode = name === 'pr-creation-or-push-guard' ? 'ON' : 'OFF';
     }
-    config.excludePaths = { rules: [], guards: [...guardsExclude] };
+    config.excludePaths = [...guardsExclude];
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));
 }
 

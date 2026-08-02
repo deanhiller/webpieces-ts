@@ -10,6 +10,7 @@ import {
     StaleMainBashGuardConfig,
 } from './main-sync-guard-configs';
 import { validateChecklistsSection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
+import { retiredEntry, retiredKeyError, retiredRuleFor } from './retired-config-keys';
 
 // Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
 export { validateChecklistsSection };
@@ -212,6 +213,7 @@ const RENAMED_FIELD_ALIASES: Record<string, string> = {
     ignoreRuleWhileOnBranch: 'turnOffRuleWhileOnBranch',
 };
 
+
 // The renamed-field message shared by keyed rules and match-rules.
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 function renamedFieldError(scope: string, oldKey: string, newKey: string): string {
@@ -229,6 +231,14 @@ export function validateWebpiecesConfig(
     for (const [ruleName, entry] of Object.entries(rawRules)) {
         const schema = RULE_SCHEMAS[ruleName];
         if (!schema) {
+            // A name we KNOW is retired beats the unknown-rule message, which leads with "run `pnpm
+            // install`, your validator may be stale" — precisely the wrong advice for a dead name. It
+            // fires even when a rulesDir is set, because a custom rule must not reuse a retired name.
+            const retired = retiredRuleFor(ruleName);
+            if (retired) {
+                errors.push(retiredKeyError(retired));
+                continue;
+            }
             // No built-in schema. With no rulesDir there are no custom rules, so this key is a
             // dead/typo'd entry — tell the AI to remove it (a removed rule like no-shell-substitution
             // lingers here otherwise). With a rulesDir it may be a legitimate custom rule → skip.
@@ -432,8 +442,7 @@ function excludePathsExample(): string {
     return '"excludePaths": ["repositories/**"]';
 }
 
-// A glob list: must be a string[] (may be empty). `key` names it for the error, so the legacy
-// two-list form can report which of its lists is malformed.
+// A glob list: must be a string[] (may be empty). `key` names it for the error.
 // webpieces-disable no-any-unknown -- `value` is opaque consumer JSON until narrowed here
 function validateExcludeList(value: unknown, key: string): string[] {
     if (!(Array.isArray(value) && value.every(p => typeof p === 'string'))) {
@@ -448,10 +457,10 @@ function validateExcludeList(value: unknown, key: string): string[] {
  * forced to declare it (as [] to keep today's behavior, or with real paths). Returns copy-paste
  * friendly errors and never throws — same contract as validatePrGateSection.
  *
- * The legacy object form `{ "rules": [...], "guards": [...] }` is STILL ACCEPTED and unioned into one
- * list by parseExcludePaths, so an unmigrated config validates and behaves identically. Rejecting it
- * would deadlock every consumer on upgrade: the block is required, so a hard error here blocks every
- * Bash/Edit including the edit that would fix it.
+ * The two-list object form `{ "rules": [...], "guards": [...] }` is RETIRED, not tolerated. It used to be
+ * accepted and silently unioned, which is why this repo's own config sat on the dead shape for releases: an
+ * accepted shape is never migrated. Rejecting it cannot wedge a consumer — editing webpieces.config.json is
+ * always permitted, even while it is invalid. See retired-config-keys.ts.
  */
 // webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed below
 export function validateExcludePaths(section: unknown): string[] {
@@ -465,17 +474,14 @@ export function validateExcludePaths(section: unknown): string[] {
     if (typeof section !== 'object') {
         return [`[excludePaths] Must be a string[] of glob paths. Example:\n\n  ${excludePathsExample()}`];
     }
-    // Legacy two-list form — validate each list it actually declares, then let parseExcludePaths union
-    // them. An object carrying neither key is a typo, not a legacy config, so say so.
     // webpieces-disable no-any-unknown -- narrowing the opaque excludePaths section from consumer JSON
     const s = section as Record<string, unknown>;
-    if (s['rules'] === undefined && s['guards'] === undefined) {
-        return [`[excludePaths] Must be a string[] of glob paths. Example:\n\n  ${excludePathsExample()}`];
+    // The retired two-list object. One table row owns the message for either key present.
+    const retired = retiredEntry('rules', '[excludePaths]');
+    if (retired && (s['rules'] !== undefined || s['guards'] !== undefined)) {
+        return [`${retiredKeyError(retired)}\n\n  ${excludePathsExample()}`];
     }
-    return [
-        ...(s['rules'] === undefined ? [] : validateExcludeList(s['rules'], 'rules')),
-        ...(s['guards'] === undefined ? [] : validateExcludeList(s['guards'], 'guards')),
-    ];
+    return [`[excludePaths] Must be a string[] of glob paths. Example:\n\n  ${excludePathsExample()}`];
 }
 
 // ---------------------------------------------------------------------------
@@ -622,62 +628,5 @@ export function validateSectionPlacement(
             );
         }
     }
-    return errors;
-}
-
-/**
- * Validate the `commands` section: its `pr-gate` block (delegated to validatePrGateSection) plus the
- * optional command-string fields. Also surfaces a migration error if a DEPRECATED top-level `pr-gate`
- * block is still present, telling the consumer to move it under `commands`.
- */
-// webpieces-disable no-any-unknown -- `commands`/`legacyPrGate` are opaque consumer JSON
-// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
-export function validateCommandsSection(commands: unknown, legacyPrGate: unknown, repoRoot?: string): string[] {
-    const errors: string[] = [];
-
-    if (legacyPrGate !== undefined) {
-        errors.push(
-            `[pr-gate] The top-level "pr-gate" block is deprecated. Move it under the "commands" ` +
-            `section as commands["pr-gate"] (run \`pnpm wp-install-ai-hooks --sync\` to migrate automatically).`,
-        );
-    }
-
-    if (commands !== undefined && (typeof commands !== 'object' || commands === null || Array.isArray(commands))) {
-        errors.push(`[commands] Must be an object { "pr-gate": {...}, "upsertPr": "...", "mergeComplete": "..." }.`);
-        return errors;
-    }
-
-    // webpieces-disable no-any-unknown -- narrowing the opaque commands section from consumer JSON
-    const c = (commands ?? {}) as Record<string, unknown>;
-
-    // pr-gate is required (set mode OFF to opt out). Prefer commands["pr-gate"]; fall back to the
-    // legacy top-level block so an un-migrated file still validates its gate config.
-    errors.push(...validatePrGateSection(c['pr-gate'] ?? legacyPrGate, repoRoot));
-
-    // Canonical guard-hint strings live under commands.guardHints; each value, when present, must be a
-    // non-empty command string. The two names bind to the two guards that surface them in fix hints.
-    const hints = c['guardHints'];
-    if (hints !== undefined) {
-        if (typeof hints !== 'object' || hints === null || Array.isArray(hints)) {
-            errors.push(`[commands] "guardHints" must be an object { "prCreationOrPush": "...", "mergeInProgress": "..." }.`);
-        } else {
-            // webpieces-disable no-any-unknown -- narrowing the opaque guardHints object from consumer JSON
-            const h = hints as Record<string, unknown>;
-            for (const field of ['prCreationOrPush', 'mergeInProgress']) {
-                if (field in h && (typeof h[field] !== 'string' || (h[field] as string).trim() === '')) {
-                    errors.push(`[commands] "guardHints.${field}" must be a non-empty string (the gated command to run).`);
-                }
-            }
-        }
-    }
-
-    // Legacy FLAT command strings (pre-guardHints). Still accepted for back-compat; a migrated file
-    // uses commands.guardHints instead.
-    for (const field of ['upsertPr', 'mergeComplete']) {
-        if (field in c && typeof c[field] !== 'string') {
-            errors.push(`[commands] "${field}" must be a string (the gated command to run).`);
-        }
-    }
-
     return errors;
 }
