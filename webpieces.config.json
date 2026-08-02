@@ -372,14 +372,9 @@
         "upsertPr": "pnpm wp-start-upsert-pr",
         "mergeComplete": "pnpm wp-finish-upsert-pr"
     },
-    "excludePaths": {
-        "rules": [
-            "repositories/**"
-        ],
-        "guards": [
-            "repositories/**"
-        ]
-    },
+    "excludePaths": [
+        "repositories/**"
+    ],
     "match-rules": [
         {
             "mode": "NEW_AND_MODIFIED_CODE",
