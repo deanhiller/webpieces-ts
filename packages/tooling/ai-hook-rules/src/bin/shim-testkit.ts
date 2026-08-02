@@ -80,6 +80,16 @@ export class ShimTestkit {
         return JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
     }
 
+    /** A Read payload — the L0 allowlist entry that keeps a broken tree inspectable. */
+    readPayload(filePath: string): string {
+        return JSON.stringify({ tool_name: 'Read', tool_input: { file_path: filePath } });
+    }
+
+    /** A file-tool payload, for the always-allowed webpieces.config.json recovery target. */
+    filePayload(toolName: string, filePath: string): string {
+        return JSON.stringify({ tool_name: toolName, tool_input: { file_path: filePath } });
+    }
+
     /** True when `cmd` matches a POSIX ERE, judged by the SAME `grep -E` the shim itself runs. */
     ereMatches(ere: string, cmd: string): boolean {
         return this.ereMatchSet(ere, [cmd]).matched(cmd);

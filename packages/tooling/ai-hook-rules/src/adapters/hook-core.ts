@@ -9,7 +9,8 @@ import { RepoRootFinder } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
-import { committedShimStale, isShimCureCommand, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
+import { committedShimStale, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
+import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -177,14 +178,34 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     emitDeny(result.report, toolKind);
 }
 
-// What a stale committed shim lets through. Pure (no cwd / no emit) so it is unit-testable — the
-// RECOVERY carve-out is the load-bearing part. A stale shim must NEVER trap the actions needed to
-// recover: the original "block everything but the cures" version also shadowed the always-allowed
+// What a stale committed shim lets through — now a thin adapter over the ONE L0 allowlist (isAllowed in
+// ../bin/shim), not a list of its own. A stale shim must NEVER trap the actions needed to recover: the
+// original "block everything but the cures" version also shadowed the always-allowed
 // webpieces.config.json edit (handleFileTool) and blocked reads, so a repo that ALSO needed its config
 // fixed would deadlock — blocked from editing the one file whose edit is normally always allowed, and
-// blocked from reading it to know how. So on a stale shim we block real WORK but keep recovery open:
-//   - 'allow-cure' → a Bash shim cure (wp-install-ai-hooks / wp-upgrade-shim / cp): emitAllow directly,
-//                    bypassing the git guards, exactly as the old shim did for the cures.
+// blocked from reading it to know how.
+//
+// It used to carry its OWN narrower list (isShimCureCommand: the three shim cures only), and that
+// narrowness was a defect, not a safety property: `pnpm install` and `git pull` — the two commands that
+// resolve the version disagreement underneath a stale shim — were denied. Consulting the shared
+// allowlist fixes that by construction.
+//
+// What is NOT a defect, and must not be "fixed": those cures rewrite the committed shim from the
+// INSTALLED binary's renderShim(), overwriting whatever was there. That is the invariant, not
+// collateral damage. The shim (D/X/K, in POSIX sh, pre-binary) and this binary (S/C/Y, in JS) are two
+// halves of ONE L0 and they exchange assumptions — the shim parses file_path and carries ALLOW-READ /
+// ALLOW-CONFIG entries this binary relies on. Pair a binary with a shim rendered by a DIFFERENT
+// release and L0 acquires holes that nothing reports. So the rule is absolute: the committed shim
+// equals renderShim() of the binary in node_modules, and a cure that forces that is the cure working.
+// See healShim's header, which states the same invariant from the other side.
+//
+// Corollary for anyone regenerating the shim in a webpieces PR: commit `templates/ai-hook.sh` (source,
+// locked to renderShim() by unit test) and leave `.claude/webpieces/ai-hook.sh` (generated artifact)
+// alone. In THIS repo the local source runs ahead of the pinned node_modules, so committing a shim
+// rendered from local source produces a commit whose shim and whose @webpieces pin come from different
+// releases — precisely the mismatch above. The artifact heals on the next upgrade; that is its job.
+//
+//   - 'allow-cure' → a Bash cure on the allowlist: emitAllow directly, bypassing the git guards.
 //   - 'pass'       → a recovery action the normal flow already permits, so fall THROUGH and let it: ANY
 //                    Read (you must read to know how to fix — see handleRead, which itself fails open),
 //                    or an edit to webpieces.config.json (the always-allowed recovery target).
@@ -192,9 +213,9 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
 export type ShimStaleDecision = 'allow-cure' | 'pass' | 'deny';
 // webpieces-disable no-function-outside-class -- pure decision helper beside the adapter's other module-scope functions; exported for direct unit testing.
 export function shimStaleRecoveryDecision(toolName: string, command: string, filePath: string): ShimStaleDecision {
-    if (READ_ONLY_TOOLS.has(toolName)) return 'pass';                       // any read: needed to recover
-    if (isShimCureCommand(command)) return 'allow-cure';                    // a Bash shim cure
-    if (path.basename(filePath) === CONFIG_FILENAME) return 'pass';         // the always-allowed config edit
+    const allowed = isAllowed(toolName, command, filePath);
+    if (allowed === 'pass') return 'pass';
+    if (allowed === 'allow') return 'allow-cure';
     return 'deny';
 }
 
@@ -205,7 +226,7 @@ export function shimStaleRecoveryDecision(toolName: string, command: string, fil
 // instead of the (possibly stale) shim. It used to `cmp` itself inside the shim: a double-edged trap,
 // since the check lived in the very file it guarded and a fix could only ship by regenerating that
 // file. Now we fail closed on all real WORK while always leaving the recovery path open (see
-// shimStaleRecoveryDecision): the three cures, any Read, and editing webpieces.config.json. We deny +
+// shimStaleRecoveryDecision): the whole L0 allowlist, any Read, and editing webpieces.config.json. We deny +
 // tell the AI; we do NOT silently rewrite the file under it. 'rules' hook skips it (guards owns the
 // shim). Returns normally (pass / nothing to do) or exits via emitAllow/emitDeny.
 // webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
@@ -214,7 +235,10 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const decision = shimStaleRecoveryDecision(payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '');
     if (decision === 'pass') return;
     if (decision === 'allow-cure') emitAllow();
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion()), payload.tool_name);
+    // Drop the L0 matrix doc where the AI can read it and point the deny at it — a Read is entry 1 of
+    // the same allowlist, so the pointer is always followable. Best-effort: no doc → no pointer.
+    const docPath = writeGuardMatrixDoc(new RepoRootFinder().resolveRepoRoot(cwd));
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion()) + guardMatrixPointer(docPath), payload.tool_name);
 }
 
 /**
