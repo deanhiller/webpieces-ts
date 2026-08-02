@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Worktree, WorktreeService } from '@webpieces/rules-config';
+import { Worktree, WorktreeService, atRoot } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**
@@ -137,7 +137,7 @@ export class LandedWorktreeReaper {
         const why = handoff.blockedBecause !== '' ? `         (${handoff.blockedBecause})\n` : '';
         return '   Next: this branch is checked out in THIS worktree, so neither it nor the worktree can\n'
             + '         be removed from in here. Run cleanup from the primary clone instead:\n'
-            + `           cd ${handoff.primaryPath} && pnpm wp-cleanup\n`
+            + `           ${atRoot(handoff.primaryPath, 'pnpm wp-cleanup')}\n`
             + why
             + `         It archives ${handoff.branch} as a tag, removes ${handoff.worktreePath}, then deletes the branch.\n`;
     }
@@ -150,7 +150,9 @@ export class LandedWorktreeReaper {
     private afterReap(handoff: WorktreeReapHandoff): string {
         return `\n   ⚠️  ${handoff.worktreePath} NO LONGER EXISTS — your shell is standing in a deleted\n`
             + '       directory, and every following command will fail until you move:\n'
-            + `           cd ${handoff.primaryPath}\n`;
+            // Single-quoted for the same reason atRoot() quotes: a primary clone under a path with a
+            // space (`/Users/dean hiller/…`, "Google Drive", iCloud) makes a bare `cd` two arguments.
+            + `           cd '${handoff.primaryPath}'\n`;
     }
 
     /**

@@ -169,13 +169,13 @@ class TreeClassification {
     }
 }
 
-/** The steering prefix every remedy needs: a bare remedy runs in whatever directory the NEXT call
- *  starts in, which is not the tree we judged — the harness resets a cwd that left the workspace, and
- *  keeps one that stayed inside it, so neither case can be assumed. Naming the root removes the guess. */
-// webpieces-disable no-function-outside-class -- one-line path/string formatter shared by the guards' message builders; a class around it would be ceremony
-export function atRoot(root: string, command: string): string {
-    return `cd ${root} && ${command}`;
-}
+/**
+ * The steering prefix every remedy needs, re-exported from @webpieces/rules-config so the guards, the
+ * message builders and pr-gate's worktree notices all emit the IDENTICAL string — including the single
+ * quotes that keep it runnable when the repo path contains a space. See atRoot's own header for why the
+ * quotes are single and never double.
+ */
+export { atRoot } from '@webpieces/rules-config';
 
 // The git repo root of `dir`, or null when it is not in a git repo / git is unavailable. `status !== 0`
 // IS the expected "not a repo" answer (spawnSync does not throw on a non-zero exit), so no try/catch.

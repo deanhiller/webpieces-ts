@@ -1,3 +1,5 @@
+import { atRoot } from '@webpieces/rules-config';
+
 /**
  * The "you are on a stale main" text, shared by the TWO guards that detect the state from the same
  * cached signal (`MainSyncStatus.localMain` vs `originMain`):
@@ -37,7 +39,7 @@ export class StaleMainMessage {
             'longer exists upstream.',
             '',
             'Run exactly this, then retry:',
-            `  ${this.treeRoot !== '' ? `cd ${this.treeRoot} && ${pull}` : pull}`,
+            `  ${this.treeRoot !== '' ? atRoot(this.treeRoot, pull) : pull}`,
             '',
             'If that fatals with "Cannot fast-forward to multiple branches", .git/FETCH_HEAD holds a',
             'duplicate entry — clear it with `git fetch --prune origin main`, then pull again.',
