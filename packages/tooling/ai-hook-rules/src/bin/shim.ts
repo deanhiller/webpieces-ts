@@ -5,7 +5,7 @@ import { SyncFlowGuidance, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import {
-    L0_ALLOW_ERE, RECOVERY_CMD, INSTALL_HOOKS_CMD, INSTALL_HOOKS_SYNC_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
+    L0_ALLOW_ERE, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
     INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
 } from './l0-allowlist';
 
@@ -419,8 +419,9 @@ export function committedShimStale(cwd: string): boolean {
     }
 }
 
-// True when `command` is one of the three self-guard cures — the ONLY commands allowed through while a
-// stale committed shim blocks everything else, so the AI can re-arm it. Each JS twin already tolerates
+// True when `command` re-arms the committed shim — the two prescribed cures plus the installer, which
+// also heals the shim as its first step. These are the only commands allowed through while a stale
+// committed shim blocks everything else, so the AI can re-arm it. Each JS twin already tolerates
 // a trailing `2>&1 | tail -N` and rejects any `&&`-chained tail (see CAPTURE_TAIL_JS_SRC).
 // webpieces-disable no-function-outside-class -- pure predicate over the exported allowlist twins; belongs beside them in the shim module.
 export function isShimCureCommand(command: string): boolean {
@@ -436,7 +437,7 @@ export function isShimCureCommand(command: string): boolean {
 // webpieces-disable no-function-outside-class -- pure string builder over exported constants; the single source of the self-guard deny text now that the sh copy is gone.
 export function shimStaleDenyReason(installedVersion: string): string {
     const verNote = installedVersion ? ` (installed version ${installedVersion})` : '';
-    return `❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces/ai-hook-rules${verNote} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: all three options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred, and the only NON-INTERACTIVE spelling) - run EXACTLY this command: '${INSTALL_HOOKS_SYNC_CMD}'. The installer re-arms the shim as its FIRST step, before it loads anything else, and --sync returns right after the config sync instead of going on to wire the hooks - so it heals and exits cleanly. Do NOT use the BARE '${INSTALL_HOOKS_CMD}' here: it goes on to wire both hooks and PROMPTS for a target twice, which hangs a non-interactive session. OPTION 2 (shim regen and nothing else; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${UPGRADE_SHIM_CMD}'. OPTION 3 (pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet - it works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite, and that prompt is NOT this guard) - run EXACTLY this command: '${RESTORE_SHIM_CMD}'. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.`;
+    return `❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces/ai-hook-rules${verNote} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: both options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - it is the SURGICAL tool: it regenerates the shim and touches NOTHING else, no config and no settings.json, and it imports only fs/path so it runs on a broken tree; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${UPGRADE_SHIM_CMD}'. OPTION 2 (pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet - it works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite, and that prompt is NOT this guard) - run EXACTLY this command: '${RESTORE_SHIM_CMD}'. Do NOT use the bare '${INSTALL_HOOKS_CMD}' here: this fault is shim-only, and the installer also migrates your config and wires BOTH hooks, PROMPTING for a target twice, which hangs a non-interactive session. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.`;
 }
 
 // The shape of the fields we read out of this package's package.json.

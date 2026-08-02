@@ -43,9 +43,8 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 ### `S` — committed .claude/webpieces/ai-hook.sh != renderShim()
 
-- **Option 1 (preferred)**: `pnpm wp-install-ai-hooks --sync`  ← pick this when you are on a current release — it re-arms the shim as step 1 and returns before the interactive hook wiring, so it is the only non-interactive spelling
-- **Option 2**: `pnpm exec wp-upgrade-shim`  ← pick this when you want the shim regenerated and NOTHING else; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
-- **Option 3**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — this works on every release
+- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it regenerates the shim and NOTHING else (no config, no settings.json); needs installed @webpieces/ai-hook-rules 0.4.408 or newer
+- **Option 2**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — this works on every release, though Claude Code may ask you to confirm the overwrite, and that prompt is NOT this guard
 
 ### `C` — webpieces.config.json missing
 
@@ -84,7 +83,7 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 5 | git pull / git fetch - merge is NOT on the list | ALLOW |
 | 6 | pnpm exec wp-upgrade-shim | ALLOW |
 | 7 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
-| 8 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --sync) | ALLOW |
+| 8 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

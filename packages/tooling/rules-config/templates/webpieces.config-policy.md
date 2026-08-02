@@ -45,9 +45,6 @@ Do these in order. **Do not start by deleting keys** — that usually deletes va
 3. **Only if an error survives a fresh install** is it a genuine retired / renamed / typo'd key. Now edit
    `webpieces.config.json`, applying each error's instruction literally.
 
-`pnpm wp-install-ai-hooks --sync` performs the mechanical migrations for you (retired guard renames, the
-`commands.guardHints` move, the `excludePaths` union) and prints what it changed.
-
 ## Documenting your own config: the `*Why` convention
 
 JSON has no comments, so any key ending in **`Why`** is free-form rationale kept beside the key it explains,

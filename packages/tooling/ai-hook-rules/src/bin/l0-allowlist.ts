@@ -221,15 +221,11 @@ export const RESTORE_SHIM_CMD =
 // now leads with it: the `cp` is version-agnostic too, but Claude Code's own permission classifier
 // treats a bare cp over a repo file as something to confirm, while a named bin reads as a tool call.
 //
-// FLAGS ARE ACCEPTED (added for `--sync`, 2026-08-02). Two messages that fire while the config is
-// INVALID — i.e. exactly when every Bash call is denied — prescribe `pnpm wp-install-ai-hooks --sync`:
-// the section-placement errors ("[x] belongs in the hookGuards section … or run …") and the retired
-// top-level `pr-gate` block. `migrate()` in setup.ts really does perform both edits, so the cure is
-// correct; it was simply untypable, because this pattern accepted no flags at all. That is the same
-// deadlock shape as the missing `2>&1 | tail` and the missing `cd` prefix: a deny naming a command the
-// allowlist rejects. The flag token is the identical one INSTALLER_BODY_ERE already allows — `--word`
-// / `--word=value`, no whitespace, no operator — so it widens nothing else:
-// `pnpm wp-install-ai-hooks --sync && rm -rf /` still FAILS CLOSED.
+// FLAGS ARE ACCEPTED. The installer's non-interactive spelling is `--target=project`, and a pattern that
+// accepted no flags at all made it untypable — the same deadlock shape as the missing `2>&1 | tail` and
+// the missing `cd` prefix: a deny naming a command the allowlist rejects. The flag token is the identical
+// one INSTALLER_BODY_ERE already allows — `--word` / `--word=value`, no whitespace, no operator — so it
+// widens nothing else: `pnpm wp-install-ai-hooks --target=project && rm -rf /` still FAILS CLOSED.
 //
 // Kept as tight as the other escape hatches: anchored at both ends, bare bin name plus `--flag` tokens
 // only, so no shell operator can ride along. Keep in sync with INSTALL_HOOKS_ALLOW_JS (locked by a unit test).
@@ -246,13 +242,6 @@ export const INSTALL_HOOKS_ALLOW_JS =
 
 // The exact command the self-guard's deny names FIRST. Present in every release that has a shim.
 export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
-
-// The MIGRATION spelling, named by every config-validation error an agent can be handed while the
-// config is INVALID (a misplaced section, a retired key, a missing rule entry) — i.e. while every other
-// Bash call is denied. It is also the only NON-INTERACTIVE spelling: `--sync` runs seedOrSyncConfig and
-// returns, whereas the bare bin goes on to wire the Claude Code hooks and PROMPTS for a target, which
-// hangs a non-interactive agent. Pinned as a sample on the allowlist entry so a coverage test locks it.
-export const INSTALL_HOOKS_SYNC_CMD = 'pnpm wp-install-ai-hooks --sync';
 
 // The non-interactive spelling of the FULL install (config + CI gate + hook wiring): the `--target`
 // flag is what replaces the interactive prompt. `--flag=value` is accepted by the same token
@@ -340,9 +329,9 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
     new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,
         new L0Call('Bash', RESTORE_SHIM_CMD, '')),
-    new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --sync)`, 'allow', INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
+    new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
         new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
-        [new L0Call('Bash', INSTALL_HOOKS_SYNC_CMD, ''), new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
+        [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
 ];
 
 const L0_BODIES_ERE = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] => (e.ere === null ? [] : [e.ere]));

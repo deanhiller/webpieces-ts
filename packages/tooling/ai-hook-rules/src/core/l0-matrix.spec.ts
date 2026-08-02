@@ -18,7 +18,7 @@ const NOT_ALLOWED: readonly L0Call[] = [
     new L0Call('Bash', 'pnpm install && rm -rf /', ''),
     // The flags allowance on the installer entry widens the FLAGS, nothing else: an operator still
     // cannot ride along behind one.
-    new L0Call('Bash', 'pnpm wp-install-ai-hooks --sync && rm -rf /', ''),
+    new L0Call('Bash', 'pnpm wp-install-ai-hooks --target=project && rm -rf /', ''),
     new L0Call('Bash', 'pnpm build', ''),
     new L0Call('Edit', '', '/repo/src/index.ts'),
     new L0Call('Write', '', '/repo/package.json'),
@@ -59,8 +59,8 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
     it('gives every allowlist entry its declared outcome — for EVERY spelling it pins', () => {
         for (const entry of L0_ALLOWLIST) {
             // allSamples(), not just `sample`: a spelling some deny message PRESCRIBES (e.g.
-            // `pnpm wp-install-ai-hooks --sync`, which the config-validation banner names) is pinned as
-            // an extra sample precisely so a later tightening of the pattern cannot make it untypable.
+            // `pnpm wp-install-ai-hooks --target=project`, the non-interactive form) is pinned as an
+            // extra sample precisely so a later tightening of the pattern cannot make it untypable.
             for (const s of entry.allSamples()) {
                 expect(isAllowed(s.toolName, s.command, s.filePath), `entry: ${entry.label} / ${s.command || s.filePath}`).toBe(entry.kind);
             }
@@ -140,11 +140,11 @@ describe('cure reachability — every fault names at least one cure the allowlis
     });
 
     /**
-     * THE ASSERTION THAT WOULD HAVE CAUGHT `--sync`.
+     * THE ASSERTION THAT WOULD HAVE CAUGHT A FLAGGED INSTALLER SPELLING.
      *
      * Before this, the guidance and the allowlist were only linked through L0Cure.call. The RENDERED
-     * doc could still print a command nobody had run isAllowed() on — and it did: messages prescribed
-     * `pnpm wp-install-ai-hooks --sync` while INSTALL_HOOKS_BODY_ERE accepted no flags at all, so the
+     * doc could still print a command nobody had run isAllowed() on — and it did: messages prescribed a
+     * flagged `pnpm wp-install-ai-hooks` while INSTALL_HOOKS_BODY_ERE accepted no flags at all, so the
      * one command the deny named was denied. Scraping the rendered output (not the array) is the point:
      * whatever a reader can literally copy out of the Fix sections must pass the guard.
      */

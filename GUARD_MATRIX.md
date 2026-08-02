@@ -87,7 +87,7 @@ hurt it, and gating each entry on a fault is what produced four real defects.
 | 5 | `git pull` / `git fetch` — **merge is NOT on the list** | ALLOW |
 | 6 | `pnpm exec wp-upgrade-shim` | ALLOW |
 | 7 | the `cp` of the shipped template over `.claude/webpieces/ai-hook.sh` | ALLOW |
-| 8 | `pnpm exec wp-install-ai-hooks` — **flags allowed**, e.g. `--sync`, `--target=project` | ALLOW |
+| 8 | `pnpm exec wp-install-ai-hooks` — **flags allowed**, e.g. `--target=project` | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a downstream
@@ -121,11 +121,12 @@ Why every other candidate cure is disqualified as the primary instruction:
   there is provably nothing for an install to bring into sync. *Sole caveat:* the drift check skips
   range specs (`^`, `~`, `workspace:*` hit `*) continue ;;`), so a repo pinning with ranges is outside
   this guarantee. This repo pins exactly — `validate-versions-locked` enforces it.
-- **`pnpm wp-install-ai-hooks --sync` is not a cure, it is an optional BULK EDITOR** that performs the
-  same edit for you. It must never lead, because `migrate()` is not surgical: it rewrites the whole
-  file, appends every missing built-in as `OFF`, and reformats. Its diff is far larger than the error
-  being fixed. Offer it only when MANY retired keys are listed at once (an upgrade sweep), and say
-  what it costs.
+- **There is no installer spelling in this cure at all** (2026-08-02). A "migrate my config" flag used
+  to be offered here as an optional bulk editor. It is DELETED: `migrate()` is not surgical (it
+  rewrites the whole file, appends every missing built-in as `OFF`, and reformats), so its diff is far
+  larger than the error being fixed — and offering a second command at all is what makes an agent
+  believe the one stated cure is a choice. The banner now names no installer command, for one error or
+  twenty.
 - **Bumping the `@webpieces` pin** is a secondary *check*, not a step: relevant only when the config
   was deliberately written for a newer release than `package.json` pins (e.g. a key copied out of
   newer docs). Then the fix is bump-then-install — never a bare install.
@@ -143,25 +144,21 @@ ten errors, not one. So the loop converges in a couple of passes: write a minima
 full list of what is missing (each with its copy-paste snippet), fix them all in one edit. That is the
 intended flow, and it is why nothing needs to seed the file for you.
 
-Which matters, because none of the installer spellings is a clean fit here anyway:
+Which matters, because neither installer spelling is a clean fit here anyway:
 
 | command | on a missing config |
 |---|---|
-| `pnpm wp-install-ai-hooks --sync` | does NOTHING — "No webpieces.config.json found — nothing to sync" |
 | bare `pnpm wp-install-ai-hooks` | seeds it, then PROMPTS twice (`wireHook` ×2) — hangs a non-interactive agent |
 | `pnpm wp-install-ai-hooks --target=<x>` | seeds it, but also re-points the hooks — which are already wired, or `C` would not have fired |
 
 `CONFIG_MISSING_REPORT` led with the bare form — i.e. the one that prompts, which stalls a
-non-interactive agent. **Do not "fix" this by teaching `--sync` to seed the file.** That would hand the
-agent a tool to lean on where the invariant already gives it a working, self-correcting loop, and a
-seeded file is a large opaque diff nobody reviewed. Fault `C`'s reliable answer is its Option 2 —
-write the file yourself, which allowlist entry 2 always permits — and let the aggregated error list
-drive the remaining passes. What SHOULD change is the message's ordering: Option 2 is the agent-safe
-one and should lead.
+non-interactive agent. Fault `C`'s reliable answer is its Option 2 — write the file yourself, which
+allowlist entry 2 always permits — and let the aggregated error list drive the remaining passes. What
+SHOULD change is the message's ordering: Option 2 is the agent-safe one and should lead.
 
 **Done (2026-08-02).** That ordering is now the shipped one: `CONFIG_MISSING_REPORT` leads with "create
 the file yourself", and the bare installer is Option 2, carrying the condition under which it is safe
-(an interactive terminal). `--sync` still does not seed, on purpose.
+(an interactive terminal).
 
 ## L0 use cases
 
@@ -181,7 +178,7 @@ this table adds the symptom and the incident, not a second set of commands.
 | 3 | same message, **X < Y**, on a **feature branch** | `D`; your branch pins its own version | BLOCK | Option 1 (preferred): `pnpm install` ← aligns node_modules to YOUR branch's pin, which is usually what you want<br>Option 2: `pnpm install` FIRST (that re-arms the guards), THEN `pnpm wp-start-update` ← pick this when you actually want main's newer @webpieces<br>Do NOT: run `pnpm wp-start-update` while the block is up — it is not on the allowlist and does not need to be |
 | 4 | `…-hook not found` / `is declared in package.json but is not installed` | `X`; fresh clone before install, **or a new `git worktree`** — git copies no `node_modules`, so this is the common way to land here with a perfectly healthy repo | BLOCK | Option 1 (preferred): `pnpm install` ← run it **HERE**, in this worktree; installing in the primary clone does nothing for this tree |
 | 5 | `installed but CRASHED (Cannot find module …)`, often with a count of orphaned pnpm staging dirs | `K`; corrupt / partially-written `node_modules` (an install that was killed) | BLOCK | Option 1 (preferred): `rm -rf node_modules && pnpm install` ← a *bare* install SKIPS the corrupt package: pnpm sees the right version on disk and considers it installed<br>Do NOT: `pnpm install` on its own |
-| 6 | `.claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces` | `S`; **normal:** an upgrade brought new shim logic. **abnormal:** reverted / hand-edited / tampered | BLOCK | Option 1 (preferred): `pnpm wp-install-ai-hooks --sync` ← heals the shim as step 1 and returns before the hook-wiring prompts<br>Option 2: `pnpm exec wp-upgrade-shim` ← pick this when you want the shim regenerated and nothing else (needs 0.4.408+)<br>Option 3: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` ← pick this when the installed release is older than 0.4.408<br>Do NOT: the BARE `pnpm wp-install-ai-hooks` — it prompts twice and hangs a non-interactive agent |
+| 6 | `.claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces` | `S`; **normal:** an upgrade brought new shim logic. **abnormal:** reverted / hand-edited / tampered | BLOCK | Option 1 (preferred): `pnpm exec wp-upgrade-shim` ← the SURGICAL tool: it regenerates the shim and touches nothing else — no config, no settings.json — and imports only fs/path, so it runs on a broken tree (needs 0.4.408+)<br>Option 2: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` ← pick this when the installed release is older than 0.4.408, where `wp-upgrade-shim` does not exist yet (that gap caused a real "command not found" deadlock, 2026-07-21); Claude Code's own permission prompt may ask you to confirm the overwrite, and that prompt is NOT this guard<br>Do NOT: `pnpm exec wp-install-ai-hooks` — this fault is shim-only, and the installer also migrates your config and wires both hooks, prompting twice, which hangs a non-interactive agent |
 | 7 | **any** complaint about `webpieces.config.json`: `not found` (`C`), `is out of sync` (`Y`), an N-error validation banner, or a parse error | `C`/`Y`/validation/syntax — one class, not four | BLOCK | Option 1 (preferred): edit `webpieces.config.json` so the reported errors go away — see "The config-validation invariant" above; that section is the authority and this row does not re-derive it<br>Do NOT: `pnpm install` (cannot help), and do NOT delete an unknown key on sight |
 | 8 | nothing — no fault | — | → L1 | — |
 | 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself |
@@ -191,7 +188,7 @@ Row 7 is the collapse: `C`, `Y`, a validation banner and a syntax error look lik
 are one. They all mean the file is wrong, and they all cure to making it right.
 
 **Consumers trip `S` on every upgrade that changes shim logic, and must run
-`pnpm wp-install-ai-hooks --sync` before continuing. That is the designed inline-upgrade forcing
+`pnpm exec wp-upgrade-shim` before continuing. That is the designed inline-upgrade forcing
 function working, not a regression.**
 
 ## Two known gaps
@@ -221,8 +218,8 @@ The Fix sections come from `L0_FAULTS[].cures`, where each `L0Cure` carries the 
 sibling instead. Two assertions in `l0-matrix.spec.ts` keep that honest: every cure must be accepted by
 `isAllowed()` AND named in its fault's deny text, and — scraping the RENDERED output, not the array —
 **every command printed in any Fix section must pass `isAllowed()`**. That second one is the assertion
-that would have caught `pnpm wp-install-ai-hooks --sync` being prescribed by config messages while the
-installer allowlist entry accepted no flags at all.
+that would have caught a FLAGGED `pnpm wp-install-ai-hooks` being prescribed by config messages while
+the installer allowlist entry accepted no flags at all.
 
 **So: prefer the generated doc for the L0 table, the Fix sections and the allowlist.** The L0 section
 above adds the ordering, the symptoms/incidents and the gaps, which the generated copy does not carry.
@@ -265,7 +262,7 @@ Read/Write/Edit, `effectiveCwd` for Bash. An empty rule list means allow. This i
 
 `excludePaths` is **ONE glob list** (canonical: `"excludePaths": ["repositories/**"]`). The
 `{ rules: [...], guards: [...] }` object is **retired and rejected**, with the union it must become
-named in the error. `wp-install-ai-hooks --sync` migrates it in place.
+named in the error. `wp-install-ai-hooks` migrates it in place.
 
 This used to be a tolerated fallback, justified here by "rejecting it would block every Bash/Edit
 including the edit that would fix it." **That was never true**, and the fallback it licensed is why

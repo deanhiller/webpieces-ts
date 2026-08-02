@@ -32,7 +32,7 @@ export function validateCommandsSection(commands: unknown, legacyPrGate: unknown
             // RETIRED_TOP_LEVEL_MARKER is imported, not re-typed: it is what the banner classifier keys off
             // to call this DEFINITIVE (a shape no version of the validator accepts).
             `[pr-gate] The top-level "pr-gate" ${RETIRED_TOP_LEVEL_MARKER}. Move it under the "commands" ` +
-            `section as commands["pr-gate"] (run \`pnpm wp-install-ai-hooks --sync\` to migrate automatically).`,
+            `section as commands["pr-gate"].`,
         );
     }
 

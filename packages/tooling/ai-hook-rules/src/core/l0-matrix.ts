@@ -1,7 +1,7 @@
 import { CONFIG_FILENAME, writeTemplate } from '@webpieces/rules-config';
 
 import {
-    INSTALL_HOOKS_CMD, INSTALL_HOOKS_SYNC_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
+    INSTALL_HOOKS_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
     RESTORE_SHIM_CMD, UPGRADE_SHIM_CMD, renderShim, shimStaleDenyReason,
 } from '../bin/shim';
 import { toError } from './to-error';
@@ -91,11 +91,9 @@ export class L0Fault {
 //
 // ORDERING (2026-08-02): writing the file yourself now LEADS. The bare installer used to be OPTION 1,
 // but it seeds the config and then PROMPTS twice for a hook target, which hangs a non-interactive
-// agent — and `--sync` is no help here either ("No webpieces.config.json found — nothing to sync"), so
-// there is no non-interactive installer spelling for this fault. Writing the file is the one cure that
-// always works, and it is the same cure every other config problem has (see the config-validation
-// invariant in GUARD_MATRIX.md): the validator reports every error at once, so the write/validate loop
-// converges in a couple of passes. Do NOT "fix" this by teaching --sync to seed the file.
+// agent. Writing the file is the one cure that always works, and it is the same cure every other config
+// problem has (see the config-validation invariant in GUARD_MATRIX.md): the validator reports every
+// error at once, so the write/validate loop converges in a couple of passes.
 export const CONFIG_MISSING_REPORT =
     `${CONFIG_FILENAME} not found — the webpieces guards cannot run without it, so every other tool call is blocked.\n` +
     'THIS IS NOT A DEADLOCK: both options below are explicitly allowed through while this guard is up.\n' +
@@ -163,27 +161,26 @@ export const L0_FAULTS: readonly L0Fault[] = [
     new L0Fault('S', 'committed .claude/webpieces/ai-hook.sh != renderShim()',
         'the guard bin', 'JS',
         [
-            // --sync, not the bare bin: runInstaller() calls healShim() as STEP 1 (before it even loads
-            // setup), and setup.main() returns on `--sync` before the two interactive wireHook prompts.
-            // So it heals and exits. The BARE spelling prompts twice and hangs a non-interactive agent,
-            // which is why it is not a cure here at all.
-            bashCure(INSTALL_HOOKS_SYNC_CMD, true,
-                'you are on a current release — it re-arms the shim as step 1 and returns before the '
-                + 'interactive hook wiring, so it is the only non-interactive spelling'),
-            bashCure(UPGRADE_SHIM_CMD, false,
-                'you want the shim regenerated and NOTHING else; needs installed '
-                + '@webpieces/ai-hook-rules 0.4.408 or newer'),
+            // wp-upgrade-shim is the SURGICAL tool and therefore leads: upgrade-shim.ts writes
+            // renderShim() to .claude/webpieces/ai-hook.sh and touches nothing else — no config, no
+            // settings.json — and it imports only fs/path, so it runs on a tree too broken to load the
+            // rule engine. The INSTALLER is deliberately NOT a cure here: it also migrates the config
+            // and wires BOTH hooks, prompting for a target twice, which hangs a non-interactive agent.
+            bashCure(UPGRADE_SHIM_CMD, true,
+                'this fault fires at all — it regenerates the shim and NOTHING else (no config, no '
+                + 'settings.json); needs installed @webpieces/ai-hook-rules 0.4.408 or newer'),
+            // 2026-07-21: the version gap below caused a real "command not found" deadlock.
             bashCure(RESTORE_SHIM_CMD, false,
                 'the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does '
-                + 'not exist yet — this works on every release'),
+                + 'not exist yet — this works on every release, though Claude Code may ask you to '
+                + 'confirm the overwrite, and that prompt is NOT this guard'),
         ],
         shimStaleDenyReason('')),
     new L0Fault('C', `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',
         [
             CONFIG_WRITE_CURE,
-            // Kept, but demoted: it seeds the file and then PROMPTS twice. `--sync` is NOT an option for
-            // this fault — with no file to read it prints "nothing to sync" and exits.
+            // Kept, but demoted: it seeds the file and then PROMPTS twice for a hook target.
             bashCure(INSTALL_HOOKS_CMD, false,
                 'you are at an INTERACTIVE terminal and can answer its two hook-target prompts'),
         ], CONFIG_MISSING_REPORT),

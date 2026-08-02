@@ -50,9 +50,9 @@ describe('migrate', () => {
         expect(hints['mergeInProgress']).toBe('pnpm wp-finish-upsert-pr');
     });
 
-    // `--sync` has to actually migrate what the validator's errors tell people it migrates. It used to
-    // SEED the flat keys and know nothing of the guard renames, so "run `pnpm wp-install-ai-hooks --sync`" was a
-    // false promise for both — the sync reported success and the config still failed to load.
+    // migrate() has to actually move what the validator's errors say is retired. It used to SEED the
+    // flat keys and know nothing of the guard renames, so the installer reported success and the config
+    // still failed to load.
     it('moves the retired flat command strings into guardHints and deletes them', () => {
         const result = migrate({
             rules: {}, hookGuards: {},
@@ -227,9 +227,9 @@ describe('--target flag parsing (non-interactive install)', () => {
     });
 
     it('extracts --target=<name> from argv (null when absent)', () => {
-        expect(parseTargetArg(['--sync', '--target=project'])).toBe('project');
+        expect(parseTargetArg(['--verbose', '--target=project'])).toBe('project');
         expect(parseTargetArg(['--target=global'])).toBe('global');
-        expect(parseTargetArg(['--sync'])).toBeNull();
+        expect(parseTargetArg(['--verbose'])).toBeNull();
         expect(parseTargetArg([])).toBeNull();
     });
 });
