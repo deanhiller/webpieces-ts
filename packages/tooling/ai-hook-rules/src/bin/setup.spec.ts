@@ -100,10 +100,11 @@ describe('migrate', () => {
         expect(result.config.rules['max-file-lines']).toMatchObject(
             { mode: recommendedSeedMode('max-file-lines'), turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
         // toMatchObject, not toEqual: a seeded entry also carries every OTHER schema-required field —
-        // here autoReapMergedBranches, which ships false so an install never reaps branches unattended.
+        // here autoReapMergedBranches, which ships TRUE so dead branches are reaped without anyone
+        // having to opt in. Every reap is logged with a `recover=` command, so it is one paste to undo.
         expect(result.config.hookGuards['branch-creation-guard']).toMatchObject(
             { mode: recommendedSeedMode('branch-creation-guard'), turnOffRuleUntilEpoch: 0,
-              turnOffRuleWhileOnBranch: null, autoReapMergedBranches: false });
+              turnOffRuleWhileOnBranch: null, autoReapMergedBranches: true });
         expect(result.config.rules['max-file-lines']['mode']).not.toEqual('OFF');
         expect(result.config.hookGuards['branch-creation-guard']['mode']).not.toEqual('OFF');
     });
