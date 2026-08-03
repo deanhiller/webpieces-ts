@@ -121,6 +121,21 @@ describe('runBash installer bypass (deadlock escape: installs pass even with no/
         // Falls through to config handling instead of short-circuiting to allow.
         expect(runBash('pnpm install && rm -rf /', dir, 'guards')).toBeInstanceOf(BlockedResult);
     });
+
+    /**
+     * Fault C, the JS-side twin of the shim's `pwd`-under-drift test. Orientation is on the L0 list,
+     * so it must survive the config-missing block: you have to be able to see which tree you are in
+     * BEFORE you can decide where to write the config.
+     */
+    it('lets read-only orientation through the config-missing block, but not a mutation', () => {
+        const dir = tmpDirOutsideRepo();
+        for (const cmd of ['pwd', 'git status', 'git rev-parse --show-toplevel', 'git worktree list']) {
+            expect(runBash(cmd, dir, 'guards'), `should survive fault C: ${cmd}`).toBeNull();
+        }
+        for (const cmd of ['git worktree add ../x', 'git worktree prune', 'git status && rm -rf /']) {
+            expect(runBash(cmd, dir, 'guards'), `must stay blocked under fault C: ${cmd}`).toBeInstanceOf(BlockedResult);
+        }
+    });
 });
 
 // The bash gate must key its git-boundary and excludePaths decisions off the directory the command

