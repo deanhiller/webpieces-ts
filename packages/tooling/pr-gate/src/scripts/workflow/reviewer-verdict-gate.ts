@@ -76,7 +76,23 @@ export class ReviewerVerdictGate {
         if (neverRan.length > 0) {
             lines.push(`  • ${neverRan.length} never ran — no verdict has been written yet: ${this.instructions.names(neverRan)}`);
         }
-        return lines.join('\n') + '\n\n';
+        return lines.join('\n') + this.skippedNote(scan) + '\n\n';
+    }
+
+    /**
+     * The optional checklists nobody ran, stated OUT LOUD on the refusal.
+     *
+     * They are not why the PR is being refused and this block says so — but a message that lists only what
+     * blocked reads as "everything else was reviewed", and here that is false: those reviews were declined,
+     * not passed. The one moment a human is looking at the review state is the moment to be honest about
+     * which reviews did not happen, and it is also the prompt an AI needs to offer them again if the human
+     * has changed their mind now that something else came back red.
+     */
+    private skippedNote(scan: ChecklistScan): string {
+        if (scan.optionalNotRun.length === 0) return '';
+        return `\n  (Not blocking: ${scan.optionalNotRun.length} OPTIONAL checklist(s) were not run — `
+            + `${this.instructions.names(scan.optionalNotRun)}. They do not have to run; re-run\n`
+            + '   pnpm wp-review-upsert-pr if you now want to offer them.)';
     }
 
     // Unreadable verdict files come FIRST. A reviewer that wrote its verdict in the removed `success` format

@@ -24,8 +24,9 @@ import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import {
-    Dashboard, DashboardInput, ChecklistRow, ChecklistCommentRow, CHECKLIST_COMMENT_MARKER,
+    Dashboard, DashboardInput, ChecklistRow, CHECKLIST_COMMENT_MARKER,
 } from '../../dashboard/dashboard';
+import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -125,6 +126,12 @@ export class FinishUpsertPrCommand {
         const featureName = this.aiBranchName.getFeatureName();
         const scan = this.checklistScanner.scan(repoRoot, loadAndValidate(repoRoot).prGate.checklists, new ChecklistScanOptions(true, 'stage3-finish'));
         const required = scan.applicable;
+        // The applicable checklists that are supposed to HAVE a verdict — everything except the optional ones
+        // nobody ran. Used for provenance and for the dashboard rows, both of which ask "who reviewed this?"
+        // and would otherwise demand an answer from a review the human declined: provenance would refuse the
+        // PR because a subagent that was never meant to run cannot be proven to have run, and the dashboard
+        // would render a MISSING verdict for it.
+        const verdicted = this.verdictedOf(scan);
         // FAIL FAST on an unclear checklist, BEFORE review.json is parsed and before the build gate runs. A
         // missing reviewer is not a review.json defect (folding it in made the AI fix the wrong thing), and
         // nobody should wait on a build to be told a reviewer never ran. ReviewerVerdictGate owns the
@@ -136,7 +143,7 @@ export class FinishUpsertPrCommand {
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const provenance = this.enforceProvenance(required, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
+        const provenance = this.enforceProvenance(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -147,7 +154,7 @@ export class FinishUpsertPrCommand {
 
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
-        const input = this.computeDashboardInput(repoRoot, true, review, title, required);
+        const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted);
         // Append the hidden HMAC gate token bound to the LOCAL HEAD sha — computed BEFORE the push, because
         // GatedPrPublisher writes the body first so CI's `synchronize` read can never see a stale token. A
         // valid token in the PR body is proof this gated flow ran + passed on this exact commit, which CI
@@ -318,6 +325,19 @@ export class FinishUpsertPrCommand {
         return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows);
     }
 
+    /**
+     * The applicable checklists MINUS the optional ones nobody ran.
+     *
+     * Not folded into `ChecklistScan` as yet another field: `applicable` (what matched) and `optionalNotRun`
+     * (what was declined) are both facts about the scan, whereas this is one command's view of them, and the
+     * roster comment deliberately wants the OTHER view — it lists the declined ones precisely so the PR does
+     * not imply they passed.
+     */
+    private verdictedOf(scan: ChecklistScan): RequiredChecklist[] {
+        const skipped = new Set(scan.optionalNotRun.map((r: RequiredChecklist): string => r.id));
+        return scan.applicable.filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
+    }
+
     // Pair each matched checklist with its resolved verdict for the dashboard.
     //
     // A checklist reaching this point is always PASS, WARN or OVERRIDDEN, and the reason is ReviewerVerdictGate
@@ -346,7 +366,8 @@ export class FinishUpsertPrCommand {
         return scan.roster.entries.map((entry: TriggeredChecklist): ChecklistCommentRow => {
             const ran = entry.matchedFiles.length > 0;
             const req = new RequiredChecklist(
-                entry.def.id, entry.def.subagent, entry.def.doc, entry.matchedFiles, entry.matchedPatterns);
+                entry.def.id, entry.def.subagent, entry.def.doc, entry.matchedFiles, entry.matchedPatterns,
+                entry.def.required);
             // A skipped checklist has no verdict to resolve — asking for one would report it as MISSING,
             // i.e. as an unreviewed obligation, when in fact it never had one.
             const verdict = ran
@@ -355,6 +376,7 @@ export class FinishUpsertPrCommand {
             const row = new ChecklistCommentRow(
                 entry.def.subagent, verdict.status, verdict.detail, ran,
                 entry.def.patterns, entry.matchedPatterns, entry.matchedFiles, scan.roster.changedFileCount);
+            row.required = entry.def.required;
             const read = readByAgent.get(entry.def.subagent);
             row.diffRead = read === undefined ? '' : (read ? 'yes' : 'no');
             return row;

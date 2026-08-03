@@ -40,6 +40,7 @@ export class ReviewerBriefingBuilder {
         b.manifestPath = diffDir === '' ? '' : path.join(diffDir, 'manifest.json');
         b.myFiles = req.matchedFiles.map((f: string): BriefedFile => this.briefedFile(repoRoot, f, entryByFile));
         b.matchedPatterns = req.matchedPatterns;
+        b.required = req.required;
         b.sourceDirs = this.sourceDirsFor(repoRoot, req.matchedFiles);
         b.contextEntries = shared;
         b.verdictPath = this.reviewJsonService.checklistResultPath(scan.reviewPath, req.id);

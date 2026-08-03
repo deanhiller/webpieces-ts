@@ -7,7 +7,7 @@ import { FinishUpsertPrCommand } from './commands/finish-upsert-pr-command';
 import { CleanupCommand } from './commands/cleanup-command';
 import { LandPrCommand } from './commands/land-pr-command';
 import { CheckPrCommand } from './commands/check-pr-command';
-import { ReviewUpsertPrCommand } from './commands/review-upsert-pr-command';
+import { ReviewUpsertPrCommand, ReviewUpsertPrOptions } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 
 /**
@@ -75,8 +75,8 @@ export class PrGateApp {
      * branch's diff, and brief the reviewer subagents. Unlike the report-only command it replaces, this CAN
      * fail — before any reviewer is spawned, so a broken branch costs no reviewer tokens.
      */
-    reviewUpsertPr(): Promise<void> {
-        return this.reviewUpsertPrCommand.run();
+    reviewUpsertPr(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
+        return this.reviewUpsertPrCommand.run(opts);
     }
 
     /** `wp-check-pr`: READ-ONLY CI check — verify the PR body carries a valid HMAC gate token for its head sha. */

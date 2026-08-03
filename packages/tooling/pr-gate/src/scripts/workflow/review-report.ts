@@ -42,6 +42,12 @@ export class ReviewReportInput {
     formatErrors: string[];         // verdict files that exist but cannot be read as verdicts
     briefings: ReviewerBriefing[];  // one per applicable checklist, already written to disk
     refused: RefusedReviewer[];     // of the owed ones, those that already ran and said no (see RefusedReviewer)
+    /**
+     * `--no-optional` was passed: the human has already said to submit without the optional reviews, so the
+     * block that offers them is replaced by a one-line statement that they were skipped. It never suppresses
+     * a REQUIRED reviewer, and it is not a gate — nothing about what blocks the PR changes.
+     */
+    skipOptional: boolean;
 
     constructor(repoRoot: string, featureName: string, reviewPath: string) {
         this.repoRoot = repoRoot;
@@ -53,6 +59,7 @@ export class ReviewReportInput {
         this.formatErrors = [];
         this.briefings = [];
         this.refused = [];
+        this.skipOptional = false;
     }
 }
 
@@ -71,6 +78,9 @@ export class ReviewReportInput {
  *   1. `wp-finish-upsert-pr` is named as a thing to run EXACTLY ONCE in the whole block.
  *   2. The review.json instruction comes BEFORE it — and BEFORE the spawn blocks (see nextSteps).
  *   3. With zero checklists the all-clear precedes any configuration guidance.
+ *   4. REQUIRED reviewers are spawned unasked; OPTIONAL ones are only ever OFFERED, in one batched
+ *      question. The two never share a step, because one instruction says "do it" and the other says
+ *      "ask first", and an agent reading a merged list will act on the stronger of the two.
  *
  * Pure string building, no I/O. `@injectable(bindingScopeValues.Singleton)` so it is injected by type.
  */
@@ -87,13 +97,21 @@ export class ReviewReport {
             + this.nextSteps(input);
     }
 
-    // Name what this block is actually about. A repo with reviewers owed is being told to SPAWN; a repo
-    // with none is not, and promising subagents it does not have is the same kind of noise as explaining
-    // checklist configuration to a repo that configured none. Keyed on what is actually OWED rather than on
-    // the applicable count: every applicable checklist already having a verdict means nothing to spawn.
+    /**
+     * Name what this block is actually about. A repo with reviewers owed is being told to SPAWN; a repo with
+     * none is not, and promising subagents it does not have is the same kind of noise as explaining checklist
+     * configuration to a repo that configured none. Keyed on what is actually ACTIONABLE rather than on the
+     * applicable count: every applicable checklist already having a verdict means nothing to spawn, and so
+     * does a branch whose only outstanding reviews are optional ones the human already waved off.
+     *
+     * "spawn" and "ask about" are separate headings because they are separate obligations. A branch owing
+     * only optional reviews has nothing the AI may do unilaterally, and a heading that says SPAWN is the
+     * single line most likely to make it do exactly that.
+     */
     private header(input: ReviewReportInput): string {
-        if (this.owedReviewers(input).length === 0) return '② Review, then finish\n';
-        return '② Review, spawn subagent reviewers, then finish\n';
+        if (this.requiredOwed(input).length > 0) return '② Review, spawn subagent reviewers, then finish\n';
+        if (this.offerableOwed(input).length > 0) return '② Review, offer the optional reviewers, then finish\n';
+        return '② Review, then finish\n';
     }
 
     /**
@@ -111,11 +129,35 @@ export class ReviewReport {
         // reports the checklist as simply owed, and the AI re-runs a reviewer that already ran instead of
         // correcting the file sitting right there.
         for (const e of input.formatErrors) lines.push(`  ⛔ ${e}`);
-        if (this.owedReviewers(input).length === 0) {
-            lines.push('', '✅ Every checklist that applies is already reviewed — nothing to spawn.');
-        }
+        lines.push(...this.skippedLines(input));
+        if (this.actionableOwed(input).length === 0) lines.push('', this.allClear(input));
         if (lines.length === 0) return '';
         return '\n' + lines.join('\n') + '\n';
+    }
+
+    /**
+     * `--no-optional`, stated as a VERDICT rather than left silent. Named individually, not just counted: the
+     * whole reason the human is allowed to skip these is that they know this diff, and the only way they can
+     * catch "wait, not THAT one" is to see which ones went unreviewed.
+     */
+    private skippedLines(input: ReviewReportInput): string[] {
+        const skipped = this.optionalOwed(input);
+        if (!input.skipOptional || skipped.length === 0) return [];
+        return [
+            '',
+            `  ⏭️  ${skipped.length} OPTIONAL checklist(s) matched this diff and were SKIPPED (--no-optional):`,
+            ...skipped.map((b: ReviewerBriefing): string => `       ${b.subagent} — ${this.why(b)}`),
+            '      Not blocking. Drop the flag and re-run this command to offer them after all.',
+        ];
+    }
+
+    // The all-clear. It must NOT claim everything was reviewed when optional reviews were skipped — that is
+    // the one sentence that would turn a deliberate skip into a false record of a review that happened.
+    private allClear(input: ReviewReportInput): string {
+        if (input.skipOptional && this.optionalOwed(input).length > 0) {
+            return '✅ Nothing left to spawn — every REQUIRED checklist is reviewed (optional ones skipped above).';
+        }
+        return '✅ Every checklist that applies is already reviewed — nothing to spawn.';
     }
 
     /**
@@ -139,18 +181,22 @@ export class ReviewReport {
      * can never drift from the shape `wp-finish-upsert-pr` validates.
      */
     private nextSteps(input: ReviewReportInput): string {
-        const owed = this.owedReviewers(input);
-        const stepCount = owed.length === 0 ? 2 : 3;
+        const required = this.requiredOwed(input);
+        const offerable = this.offerableOwed(input);
+        // Numbered by what is actually PRINTED, so the numbers a reader sees are 1..n with no gaps: write
+        // review.json, then a spawn step only if anything must run, then an offer step only if anything may.
+        let step = 1;
+        const write = this.writeReviewStep(input.reviewPath, step++);
+        const spawn = required.length === 0 ? '' : this.spawnStep(input, required, step++);
+        const offer = offerable.length === 0 ? '' : this.offerStep(input, offerable, step++);
         return '\n' + SEP
-            + `▶ NEXT — ${stepCount} steps, in this order. Step 1 is NOT optional:\n` + SEP + '\n'
-            + this.writeReviewStep(input.reviewPath)
-            + this.spawnStep(input, owed)
-            + this.finishStep(stepCount);
+            + `▶ NEXT — ${step} steps, in this order. Step 1 is NOT optional:\n` + SEP + '\n'
+            + write + spawn + offer + this.finishStep(step, required.length + offerable.length > 0);
     }
 
-    private writeReviewStep(reviewPath: string): string {
+    private writeReviewStep(reviewPath: string, step: number): string {
         return (
-            'STEP 1 — review your own changes, then write the review file. Write it FIRST — BEFORE you spawn\n' +
+            `STEP ${step} — review your own changes, then write the review file. Write it FIRST — BEFORE you spawn\n` +
             '         anything below. finish REFUSES without it, and a reviewer subagent may READ it: a\n' +
             '         checklist that judges the PR title, summary or risk level reads exactly this file, so\n' +
             '         writing it afterwards races that reviewer into seeing nothing — or, on a re-run of this\n' +
@@ -160,35 +206,87 @@ export class ReviewReport {
     }
 
     /**
-     * STEP 2 — one copy-paste block per owed reviewer, and nothing at all when none is owed. The prompt is
+     * The REQUIRED reviewers — one copy-paste block each, and nothing at all when none is owed. The prompt is
      * deliberately a POINTER and nothing else: the generated instructions file is the contract, so anything
      * restated here is a second copy that can go stale — which is exactly how a removed `success` field
      * outlived its own removal in print.
+     *
+     * These are spawned WITHOUT asking. They are the checklists the repo declared `required: true`, which is
+     * the repo saying the decision was already made; putting them to the human again would re-open a question
+     * the config exists to settle.
      */
-    private spawnStep(input: ReviewReportInput, owed: readonly ReviewerBriefing[]): string {
-        if (owed.length === 0) return '';
+    private spawnStep(input: ReviewReportInput, owed: readonly ReviewerBriefing[], step: number): string {
         const lines: string[] = [
-            `STEP 2 — only once that file is written, spawn these ${owed.length} reviewer subagent(s) — a SEPARATE`,
-            '         one each. You may NOT review your own work, and you may NOT write a reviewer\'s verdict',
-            '         file on its behalf.',
+            `STEP ${step} — only once that file is written, spawn these ${owed.length} REQUIRED reviewer subagent(s) — a`,
+            '         SEPARATE one each. They block the PR, so do NOT ask whether to run them. You may NOT',
+            '         review your own work, and you may NOT write a reviewer\'s verdict file on its behalf.',
             '',
         ];
-        // Said up front, not only beside the block: an agent that has decided to spawn everything listed here
-        // needs to know BEFORE it starts that one of these entries is not a spawn-shaped task.
-        if (input.refused.length > 0) {
-            lines.push(
-                `         ${input.refused.length} of them already ANSWERED and refused (marked ⛔ below). Do not spawn`,
-                '         those against unchanged code — fix what they found first; the fix is the prerequisite.',
-                '');
-        }
+        lines.push(...this.refusedWarning(input, owed));
         for (const b of owed) lines.push(...this.oneSpawnBlock(input, b));
         lines.push('');
         return lines.join('\n');
     }
 
-    private finishStep(stepNumber: number): string {
-        const precondition = stepNumber === 3
-            ? 'once every reviewer above has written its verdict file'
+    /**
+     * STEP n — the OPTIONAL reviewers: listed, never spawned unasked.
+     *
+     * This is the whole point of `required: false`. A one-line bug fix in a repo whose checklists key on a
+     * glob as broad as every TypeScript file otherwise pays for a dozen subagent reviews, and the only party
+     * who can judge whether this particular diff is worth them is the human looking at it.
+     *
+     * ONE batched multi-select question, explicitly. Asked one at a time, a human answering "no" nine times
+     * is being worn down rather than consulted, and by the third question the cheap thing is to say yes to
+     * everything — which is the state this feature exists to leave. The "None" option has to be spelled out
+     * too: an agent that offers a list without an explicit way to decline it has not really offered a choice.
+     *
+     * The blocking consequence is stated because it is the one non-obvious part of the contract: `required`
+     * governs whether a reviewer must RUN, not whether its answer counts. Choosing to run one and then
+     * shrugging off a red verdict would make the whole exercise theater.
+     */
+    private offerStep(input: ReviewReportInput, offerable: readonly ReviewerBriefing[], step: number): string {
+        const lines: string[] = [
+            `STEP ${step} — these ${offerable.length} OPTIONAL review checklist(s) matched this diff. They do NOT block the`,
+            '         PR, and you may NOT decide for the human whether to run them.',
+            '',
+            '         ASK THE HUMAN, in ONE multi-select question listing all of them plus an explicit',
+            '         "None — required only" choice. Do not ask one question per reviewer. Then spawn ONLY',
+            '         what they picked, the same way as any other reviewer.',
+            '',
+            '         If they pick none, that is a complete answer: go straight to the final step. If they',
+            '         told you up front to submit without reviews, re-run this stage as',
+            '         `pnpm wp-review-upsert-pr --no-optional` and this step disappears.',
+            '',
+            '         NOTE: whichever ones you DO run, their verdicts count in full — a red verdict from an',
+            '         optional reviewer blocks the PR exactly like a required one.',
+            '',
+        ];
+        lines.push(...this.refusedWarning(input, offerable));
+        for (const b of offerable) lines.push(...this.oneSpawnBlock(input, b));
+        lines.push('');
+        return lines.join('\n');
+    }
+
+    // Said up front, not only beside the block: an agent that has decided to spawn everything listed here
+    // needs to know BEFORE it starts that one of these entries is not a spawn-shaped task. Scoped to the
+    // group being printed — a refusal among the REQUIRED reviewers is not a caveat on the optional list.
+    private refusedWarning(input: ReviewReportInput, group: readonly ReviewerBriefing[]): string[] {
+        const ids = new Set(group.map((b: ReviewerBriefing): string => b.checklistId));
+        const n = input.refused.filter((r: RefusedReviewer): boolean => ids.has(r.checklistId)).length;
+        if (n === 0) return [];
+        return [
+            `         ${n} of them already ANSWERED and refused (marked ⛔ below). Do not spawn`,
+            '         those against unchanged code — fix what they found first; the fix is the prerequisite.',
+            '',
+        ];
+    }
+
+    private finishStep(stepNumber: number, anyReviewers: boolean): string {
+        // "every reviewer you ran" rather than "every reviewer above": with an optional list the human may
+        // legitimately have run none of them, and a precondition naming reviewers that were declined reads as
+        // an unmeetable one.
+        const precondition = anyReviewers
+            ? 'once every reviewer you ran has written its verdict file'
             : 'once that file exists';
         return (
             `STEP ${stepNumber} — only ${precondition}, run:  pnpm wp-finish-upsert-pr\n` +
@@ -201,6 +299,28 @@ export class ReviewReport {
     private owedReviewers(input: ReviewReportInput): ReviewerBriefing[] {
         const reviewedIds = new Set(input.reviewed.map((r: RequiredChecklist): string => r.id));
         return input.briefings.filter((b: ReviewerBriefing): boolean => !reviewedIds.has(b.checklistId));
+    }
+
+    // Owed AND blocking — spawned without asking.
+    private requiredOwed(input: ReviewReportInput): ReviewerBriefing[] {
+        return this.owedReviewers(input).filter((b: ReviewerBriefing): boolean => b.required);
+    }
+
+    // Owed and optional. Still listed under `--no-optional` (as a skip verdict), just never as a step.
+    private optionalOwed(input: ReviewReportInput): ReviewerBriefing[] {
+        return this.owedReviewers(input).filter((b: ReviewerBriefing): boolean => !b.required);
+    }
+
+    // The optional ones the human is actually to be ASKED about — none, once they have already answered.
+    private offerableOwed(input: ReviewReportInput): ReviewerBriefing[] {
+        return input.skipOptional ? [] : this.optionalOwed(input);
+    }
+
+    // Everything the AI still has to act on. Distinct from `owedReviewers`: a skipped optional checklist is
+    // owed a verdict it will never get, and treating it as pending work is what would print a spawn
+    // instruction for a review the human just declined.
+    private actionableOwed(input: ReviewReportInput): ReviewerBriefing[] {
+        return [...this.requiredOwed(input), ...this.offerableOwed(input)];
     }
 
     /**
@@ -228,13 +348,25 @@ export class ReviewReport {
     // already refused, its verdict verbatim plus the order the two actions must happen in.
     private leadIn(input: ReviewReportInput, b: ReviewerBriefing): string[] {
         const refusal = input.refused.find((r: RefusedReviewer): boolean => r.checklistId === b.checklistId);
-        if (!refusal) return [`  ▶ ${b.subagent} — ${this.why(b)}`];
+        if (!refusal) return [`  ▶ ${b.subagent} — ${this.why(b)}`, ...this.docLine(b)];
         return [
             `  ⛔ ${b.subagent} — ALREADY REVIEWED THIS BRANCH AND REFUSED. It will refuse again on unchanged code.`,
             `      ${refusal.message}`,
             '      FIX THE FINDING FIRST (or record a human-authored override). ONLY THEN spawn it again, to',
             '      write a fresh verdict:',
         ];
+    }
+
+    /**
+     * The checklist's guidance doc, for OPTIONAL reviewers only.
+     *
+     * "4 file(s) matched" plus a broad glob does not tell a human what the review would actually look AT,
+     * and they are being asked to decide exactly that. Omitted for required reviewers: there is no decision
+     * to inform there — the reviewer runs either way, and the doc is already in its instructions file.
+     */
+    private docLine(b: ReviewerBriefing): string[] {
+        if (b.required || b.docPath === '') return [];
+        return [`      reviews against: ${b.docPath}`];
     }
 
     // Why this one is in scope. A patternless checklist is NOT "matched" — it always runs, over the whole

@@ -33,12 +33,20 @@ function repoOnBranch(): string {
     return dir;
 }
 
+/** One raw config entry as a fixture. `required` is omitted by most tests — see {@link defs}. */
+interface RawItem { subagent?: string; doc?: string; patterns?: string[]; required?: boolean }
+
 /**
  * The already-validated `prGate.checklists` a command would hand the scanner. Built through the real
  * `toChecklist` narrowing so the fixture cannot drift from how config entries actually become definitions.
+ *
+ * `required` defaults to TRUE here, unlike in the config itself where it is mandatory and has no default.
+ * That is not a divergence: this helper stands in for config that has ALREADY passed validation, and true
+ * is the behavior every one of these tests was written against. A test that cares about the optional path
+ * says `required: false` explicitly.
  */
-function defs(items: readonly { subagent?: string; doc?: string; patterns?: string[] }[]): ChecklistDefinition[] {
-    return items.map((i: { subagent?: string; doc?: string; patterns?: string[] }): ChecklistDefinition => toChecklist(i));
+function defs(items: readonly RawItem[]): ChecklistDefinition[] {
+    return items.map((i: RawItem): ChecklistDefinition => toChecklist({ required: true, ...i }));
 }
 
 function newAiBranchName(): AiBranchName {
@@ -348,6 +356,67 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
     });
 });
 
+/**
+ * `required: false` — the reviewer may be declined, but its ANSWER still counts.
+ *
+ * These pin the one asymmetry the whole feature turns on: a matched optional checklist with NO verdict is
+ * exempt from `outstanding` (nobody ran it, and nobody had to), while the same checklist with a RED verdict
+ * is not (it ran, it objected, and choosing to ignore that would make running it pointless).
+ */
+describe('ChecklistScanner — optional checklists', () => {
+    // Both match the fixture repo. One blocks, one is offered.
+    const MIXED = defs([
+        { subagent: 'db-reviewer', patterns: ['**/*.sql'], required: true },
+        { subagent: 'ops-reviewer', patterns: ['**/Dockerfile'], required: false },
+    ]);
+
+    it('carries `required` from config through to the matched set', () => {
+        const scan = scannerFor().scan(repoForRoster(), MIXED, new ChecklistScanOptions(false));
+        expect(scan.applicable.map((r: RequiredChecklist): boolean => r.required)).toEqual([true, false]);
+    });
+
+    it('does NOT owe a verdict for an optional checklist nobody ran — that is the whole point', () => {
+        const dir = repoForRoster();
+        fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
+            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok', override: '' }));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        expect(scan.outstanding).toEqual([]);
+        // Reported as NOT RUN — never folded into `reviewed`, which would put a ✓ on a review that never happened.
+        expect(scan.optionalNotRun.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
+        expect(scan.reviewed.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
+    });
+
+    it('STILL owes it once that optional reviewer has run and gone red — running one is not ignoring one', () => {
+        const dir = repoForRoster();
+        fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
+            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok', override: '' }));
+        fs.writeFileSync(verdictPath(dir, 'ops-reviewer'),
+            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'runs as root', override: '' }));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
+        expect(scan.optionalNotRun).toEqual([]);
+    });
+
+    it('a REQUIRED checklist with no verdict is still outstanding — the exemption is optional-only', () => {
+        const scan = scannerFor().scan(repoForRoster(), MIXED, new ChecklistScanOptions(true));
+        expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
+    });
+
+    // An unreadable verdict file is not "not run": the reviewer left something behind, and it has to be
+    // fixed rather than silently forgiven because the checklist happened to be optional.
+    it('does not exempt an optional checklist whose verdict file is UNREADABLE', () => {
+        const dir = repoForRoster();
+        fs.writeFileSync(verdictPath(dir, 'db-reviewer'),
+            JSON.stringify({ id: 'db-reviewer', status: 'green', output: 'ok', override: '' }));
+        fs.writeFileSync(verdictPath(dir, 'ops-reviewer'),
+            JSON.stringify({ id: 'ops-reviewer', success: true, output: 'ok', override: '' }));
+        const scan = scannerFor().scan(dir, MIXED, new ChecklistScanOptions(true));
+        expect(scan.formatErrors).toHaveLength(1);
+        expect(scan.outstanding.map((r: RequiredChecklist): string => r.id)).toEqual(['ops-reviewer']);
+        expect(scan.optionalNotRun).toEqual([]);
+    });
+});
+
 describe('ChecklistScanner — verdict file formats', () => {
     // A verdict file in the removed `success` format must not masquerade as a missing one, or the AI re-runs
     // a reviewer that already ran instead of correcting four characters of JSON.
@@ -385,7 +454,7 @@ describe('ChecklistScanner — patternless checklists always apply', () => {
     });
 
     it('keeps the ChecklistDefinition contract the scanner relies on (id == subagent)', () => {
-        const def = new ChecklistDefinition('r', 'r', '.claude/review/r.md', ['**/*.sql']);
+        const def = new ChecklistDefinition('r', 'r', '.claude/review/r.md', ['**/*.sql'], true);
         expect(def.id).toBe(def.subagent);
     });
 });

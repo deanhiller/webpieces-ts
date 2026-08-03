@@ -8,9 +8,10 @@ import { ChecklistDetector } from './checklist-detector';
 
 const detector = new ChecklistDetector(new DiffScope());
 
-// id = subagent name; doc + patterns configurable.
-function def(subagent = 'migrations-reviewer', patterns: string[] = ['**/*.sql']): ChecklistDefinition {
-    return new ChecklistDefinition(subagent, subagent, `.claude/review/${subagent}.md`, patterns);
+// id = subagent name; doc + patterns + required configurable. `required` defaults to true because that is
+// the blocking behavior every test here predates the flag with; the optional path says false explicitly.
+function def(subagent = 'migrations-reviewer', patterns: string[] = ['**/*.sql'], required = true): ChecklistDefinition {
+    return new ChecklistDefinition(subagent, subagent, `.claude/review/${subagent}.md`, patterns, required);
 }
 
 describe('ChecklistDetector.detect', () => {
