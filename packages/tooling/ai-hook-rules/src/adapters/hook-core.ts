@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { run, runBash, runRead } from '../core/runner';
+import { AgentIdentity } from '../core/coordinator-worktree';
 import { logRejection } from '../core/rejection-log';
 import { logGuardDecision, GuardDecision, branchForLog, logGuardInvocation } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
@@ -36,6 +37,10 @@ interface ClaudeCodePayload {
     // Claude Code sends the session's current working directory (follows a persisted `cd`). Used to
     // scope guards to the git repo the AI is actually in — see runner git-repo-boundary governance.
     cwd?: string;
+    // Present ONLY when the hook fires inside a SUBAGENT. Absent = the coordinator (the main agent
+    // loop) — there is no positive coordinator field to read. See AgentIdentity.
+    agent_id?: string;
+    agent_type?: string;
 }
 
 interface ClaudeCodeToolInput {
@@ -101,10 +106,17 @@ function normalizeToolInput(toolKind: ToolKind, toolInput: ClaudeCodeToolInput):
     return null;
 }
 
+// The caller behind this payload. Both fields are sent only inside a subagent, so BOTH absent (or
+// empty) is the coordinator — the one distinction CoordinatorWorktreeGuard turns on.
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
+function agentIdentityOf(payload: ClaudeCodePayload): AgentIdentity {
+    return new AgentIdentity(payload.agent_id ?? '', payload.agent_type ?? '');
+}
+
 function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const command = payload.tool_input.command;
     if (!command || command.trim() === '') { emitAllow(); }
-    const result = runBash(command, cwd, mode);
+    const result = runBash(command, cwd, mode, agentIdentityOf(payload));
     if (!result) { emitAllow(); }
     // Persist the block + WHY. File-tool denies go to hook-rejection.log via logRejection, but a Bash
     // deny had no audit trail — record it in guard-sync-decisions.log so "blocked and why" is complete
