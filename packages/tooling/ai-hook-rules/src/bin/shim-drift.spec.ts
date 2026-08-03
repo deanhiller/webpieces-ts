@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { SyncFlowGuidance } from '@webpieces/rules-config';
 import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, NO_CHAINING_RULE, renderShim, shimPath, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
@@ -67,31 +66,64 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
         expect(reason).toContain('version drift');
         expect(reason).toContain('@webpieces/pr-gate@0.3.272'); // declared pin
         expect(reason).toContain('0.3.270'); // installed
-        expect(reason).toContain("run EXACTLY this command and you are done: 'pnpm install'");
-        // The lead sentence, added 2026-08-02: an install clears D in BOTH directions by definition, so
-        // the reader never has to wonder whether it is even permitted here. The DIRECTION only decides
-        // whether the pin is the version they want.
-        expect(reason).toContain("'pnpm install' ALWAYS clears this block, in BOTH directions");
+        // D#1 — the direction is DECIDED here (2026-08-03), not handed to the reader as OPTION 1/2/3.
+        // node_modules is the older side, so there is exactly one instruction and no menu.
+        expect(reason).toContain('node_modules is OLDER, so the pin is what you want');
+        expect(reason).toContain("Run EXACTLY: 'pnpm install'");
+        expect(reason).not.toContain('OPTION');
+        expect(reason).not.toContain('DOWNGRADE'); // the other direction's warning must not appear here
     });
 
     /**
-     * The INVERSE drift, which had NO test — which is precisely how the bug shipped. The comparison is
-     * a plain `!=`, so it fires just as hard when node_modules is the NEWER side (you checked out a
-     * branch behind origin, so the PIN is stale). The old message asserted "installed is older" in
-     * BOTH cases and sent the reader to `pnpm install` — which here DOWNGRADES node_modules, moving
-     * them further from correct, while denying the actual cure.
+     * The INVERSE drift. The comparison is a plain `!=`, so it fires just as hard when node_modules is
+     * the NEWER side (you checked out a branch behind origin, so the PIN is stale). It used to share
+     * ONE message with the common case, leaving the reader to self-select an OPTION; now the awk
+     * semver compare picks the message, and this one must warn about the downgrade instead of hiding it.
      */
-    it('describes the INVERSE drift (installed > pinned) without claiming node_modules is older', () => {
+    it('emits the NEWER-side message (installed > pinned), warning that a bare install downgrades', () => {
         const out = kit.runShim(stageDriftRoot('0.3.270', '0.3.272'), 'wp-ai-guards-hook', kit.bashPayload('git status'));
         expect(out.isDenied()).toBe(true);
         const reason = out.denyReason();
         expect(reason).not.toContain('installed webpieces is older'); // the old, wrong claim
         expect(reason).toContain('@webpieces/pr-gate@0.3.270');       // the (stale) pin
         expect(reason).toContain('0.3.272');                          // the (newer) installed
-        // It must warn that installing here is the WRONG move, and name the real cure.
-        expect(reason).toContain('DOWNGRADE');
-        expect(reason).toContain('get the checkout current FIRST');
+        expect(reason).toContain('node_modules is NEWER, so the PIN is the stale side');
+        expect(reason).toContain('DOWNGRADES you to 0.3.270');
+        expect(reason).toContain("run 'git pull origin main', then 'pnpm install'");
+        expect(reason).toContain('That may be exactly what you want');
+        expect(reason).not.toContain('node_modules is OLDER'); // the other direction's claim
     });
+
+    /**
+     * The awk compare decides the direction, and it must decide it on the SEMVER order, not on string
+     * order — `0.3.9` vs `0.3.10` is the classic case a lexical compare gets backwards.
+     */
+    it.each([
+        ['0.3.10', '0.3.9', 'node_modules is OLDER'],
+        ['0.3.9', '0.3.10', 'node_modules is NEWER'],
+        ['0.4.0', '0.3.999', 'node_modules is OLDER'],
+        ['1.2.3', '1.2', 'node_modules is OLDER'],       // a short version is not padded wrong
+        ['0.4.500', '0.4.500-rc.1', 'node_modules is OLDER'], // a pre-release sorts BELOW its release
+        ['0.4.500-rc.1', '0.4.500', 'node_modules is NEWER'],
+    ])('orders pin %s vs installed %s as: %s', (declared: string, installed: string, expected: string) => {
+        const reason = kit.runShim(stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+        expect(reason).toContain(expected);
+    });
+
+    /**
+     * UNDECIDABLE pairs (a non-numeric spec like a dist-tag, two different pre-releases, build metadata
+     * that carries no precedence) must NOT be guessed. They fall back to the NEWER-side message with its
+     * direction claim replaced by "compare them yourself" — the branch that names all three choices, so
+     * a reader is never steered into a downgrade by a compare that could not actually decide.
+     */
+    it.each([['0.4.500-rc.1', '0.4.500-rc.2'], ['0.4.500', '0.4.500+build9'], ['0.4.abc', '0.4.500']])(
+        'falls back to the ambiguous wording rather than guessing: pin %s vs installed %s',
+        (declared: string, installed: string) => {
+            const reason = kit.runShim(stageDriftRoot(declared, installed), 'wp-ai-guards-hook', kit.bashPayload('git status')).denyReason();
+            expect(reason).toContain('could not be ordered automatically - compare them yourself');
+            expect(reason).not.toContain('node_modules is OLDER, so the pin is what you want');
+            expect(reason).toContain("run 'git pull origin main', then 'pnpm install'"); // all three choices stay
+        });
 
     it('does not false-positive on a range pin (^ / ~ / workspace:*) — only exact pins are compared', () => {
         for (const spec of ['^0.3.0', '~0.3.0', 'workspace:*']) {
@@ -308,7 +340,7 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
 
     it('carries the no-chaining rule and states plainly it is NOT a deadlock', () => {
         expect(reason).toContain(NO_CHAINING_RULE);
-        expect(reason).toContain('do NOT append && anything');
+        expect(reason).toContain('appending anything (even && git status)');
         expect(reason).toContain('NOT A DEADLOCK');
         expect(reason).toContain('ALLOWED');
         expect(reason).not.toContain('Every tool call is blocked'); // the unqualified claim that read as deadlock
@@ -433,56 +465,56 @@ describe('sync allowlist (POSIX ERE ↔ JS regex twins)', () => {
 });
 
 /**
- * The drift guard fires on a plain `!=`, so it triggers in BOTH directions — but it used to describe
- * only one, always claiming node_modules was the older side. When the PIN is actually the stale side,
- * that text sent the reader to `pnpm install`, which downgrades them further from correct, while the
- * real cure (`git pull`) was denied. Both halves of that bug are asserted here.
+ * The drift guard fires on a plain `!=`, so it triggers in BOTH directions — and it now SPLITS on the
+ * direction rather than printing one message that covers every case. What is asserted here is the
+ * shape of the rendered shim: two REASON strings, the deleted paragraphs staying deleted, and one
+ * shared chaining rule rather than three copies that can drift.
  */
-describe('version-drift deny — describes BOTH directions and permits the cure for each', () => {
+describe('version-drift deny — one message per direction, and the deletions stay deleted', () => {
     const shim = renderShim();
 
-    it('never asserts that node_modules is the older side', () => {
+    it('never asserts that node_modules is the older side unconditionally', () => {
         // The old text: "your installed webpieces is older than webpieces.config.json requires".
         expect(shim).not.toContain('installed webpieces is older');
     });
 
-    it('names both directions and both cures, so the reader can tell which applies', () => {
-        expect(shim).toContain('The only question is whether the PIN is the version you WANT');
-        expect(shim).toContain('DOWNGRADE');       // warns a BARE install is wrong when the pin is stale
-        expect(shim).toContain('git pull');        // ...and names the cure for that direction
-        expect(shim).toContain("run EXACTLY this command and you are done: 'pnpm install'");
-    });
-
-    // The half the old text left out: `pnpm install` makes installed == pin BY DEFINITION, so it clears
-    // fault D whichever side is stale. Without that sentence a reader on the pin-is-stale branch cannot
-    // tell whether installing is permitted at all, and the DOWNGRADE warning reads as "do not install".
-    it('says an install ALWAYS clears the drift, and separates that from whether you WANT the pin', () => {
-        expect(shim).toContain("'pnpm install' ALWAYS clears this block, in BOTH directions");
-        expect(shim).toContain('it makes node_modules match the pin by definition');
-    });
-
-    // Staying on old code is a CHOICE, not a mistake. Naming it stops it being improvised as a
-    // `git reset --hard`, which is what happens when the only documented direction is forward.
-    it('offers the deliberate downgrade — checkout, branch, install — as legitimate', () => {
-        expect(shim).toContain('you deliberately want to stay on the OLD code');
-        expect(shim).toContain('create a feature branch from it');
-        expect(shim).toContain('That is a legitimate choice, not a mistake');
+    it('renders BOTH direction messages, each with the one instruction for that direction', () => {
+        expect(shim).toContain('node_modules is OLDER, so the pin is what you want');
+        expect(shim).toContain('node_modules is NEWER, so the PIN is the stale side');
+        expect(shim).toContain("run 'git pull origin main', then 'pnpm install'");
     });
 
     /**
-     * FEATURE BRANCHES. `wp-start-update` / `wp-start-upsert-pr` are NOT on the L0 allowlist — correctly,
-     * a 3-point merge is not a tooling-integrity cure — so the drift deny may only name them AFTER the
-     * install that clears the block and re-arms the guards. Prescribing them while D is up is the same
-     * deny-names-a-denied-command deadlock the L0 module exists to prevent, which is why the sentence
-     * lives in SyncFlowGuidance.featureBranchSyncAdvice() apart from the always-safe main advice.
+     * WHAT WAS DELETED (2026-08-03), asserted so it cannot creep back. The merge/reset paragraph and the
+     * "how do I get main current" paragraph belong to redirect-how-to-merge-main, which fires on its own
+     * with its own message; and naming `wp-start-update` / `wp-start-upsert-pr` ONLY to forbid them
+     * while D is up is pure cost — the install that clears D comes first either way.
      */
-    it('tells a feature branch to install FIRST, and never prescribes wp-start-update while D is up', () => {
-        expect(shim).toContain('ON A FEATURE BRANCH: a bare \'pnpm install\' aligns node_modules to YOUR BRANCH pin');
-        expect(shim).toContain('still run \'pnpm install\' FIRST to clear the drift and re-arm the guards, and only THEN sync from main');
-        expect(shim).toContain('Do NOT try to run those two while this block is up: they are not on the allowlist');
-        // Both halves of the shared guidance are present, and the always-safe one is unchanged.
-        expect(shim).toContain(new SyncFlowGuidance().featureBranchSyncAdvice());
-        expect(shim).toContain(new SyncFlowGuidance().updateMainAdvice());
+    it('no longer carries the merge/reset paragraph, the update-main paragraph, or the OPTION menu', () => {
+        // Only the lines that BUILD the deny text — the surrounding shell comments record what was
+        // removed and why, on purpose, and a whole-file scan would trip over that history.
+        const driftText = shim.split('\n')
+            .filter((l: string): boolean => l.includes('REASON="❌ webpieces version drift') || l.includes('DRIFT_NOTE='))
+            .join('\n');
+        expect(driftText).not.toBe('');
+        for (const gone of [
+            'To get main itself current',
+            'git reset --hard',
+            'git checkout -B main',
+            '3-point fork merge',
+            'wp-start-upsert-pr',
+            'OPTION 1 (node_modules is OLDER',
+            'That is a legitimate choice, not a mistake',
+        ]) {
+            expect(driftText, `deleted text is back: ${gone}`).not.toContain(gone);
+        }
+    });
+
+    // ONE copy of the chaining rule, spliced into D, X and K — it used to be 820 chars repeated three
+    // times, which in X was ~85% of the message. Three literal copies also drift; one constant cannot.
+    it('splices the SAME chaining rule into every fault, from one constant', () => {
+        expect(NO_CHAINING_RULE.length).toBeLessThan(450);
+        expect(shim.split(NO_CHAINING_RULE).length - 1).toBeGreaterThanOrEqual(4); // D#1, D#2, X, K
     });
 
     // Deliberately INVERTED (this used to assert git sync was allowed ONLY on the drift path). The
@@ -605,27 +637,33 @@ describe('shim carries NO version stamp (so it does not drift per release)', () 
 // The drift message used to name `git merge --ff-only origin/main` and assert "git pull/fetch/merge
 // are allowed" — the one command redirect-how-to-merge-main blocks in EVERY form. An AI that obeyed it
 // hit a second guard with no way forward, which is how `git reset --hard` workarounds get invented.
-// The "how do I get current" half now comes from SyncFlowGuidance so the two cannot disagree again.
+// It no longer discusses merging AT ALL: redirect-how-to-merge-main owns that question and fires on its
+// own, so the two can no longer disagree — there is nothing left here to disagree with.
 describe('the version-drift message does not contradict redirect-how-to-merge-main', () => {
-    // Only the REASON line the AI is shown — the surrounding shell comments discuss the old wording
+    // Only the REASON lines the AI is shown — the surrounding shell comments discuss the old wording
     // on purpose, and a whole-file scan would trip over that history.
-    const reasonLine = renderShim('wp-ai-rules-hook')
+    const reasonLines = renderShim()
         .split('\n')
-        .find((l: string): boolean => l.includes('webpieces version drift')) ?? '';
+        .filter((l: string): boolean => l.includes('REASON="❌ webpieces version drift'));
 
-    it('never prescribes a merge as the cure', () => {
-        expect(reasonLine).not.toBe('');
-        expect(reasonLine).not.toContain('git merge --ff-only origin/main');
-        expect(reasonLine).not.toContain('git pull/fetch/merge are allowed');
+    it('renders one REASON per direction', () => {
+        expect(reasonLines).toHaveLength(2);
     });
 
-    it('renders the shared update-main advice verbatim', () => {
-        expect(reasonLine).toContain(new SyncFlowGuidance().updateMainAdvice());
+    it('never prescribes (or forbids, or even mentions) a merge', () => {
+        for (const line of reasonLines) {
+            expect(line).not.toContain('git merge');
+            expect(line).not.toContain('git pull/fetch/merge are allowed');
+        }
     });
 
-    it('keeps that advice shell-safe inside the double-quoted REASON string', () => {
-        const advice = new SyncFlowGuidance().updateMainAdvice();
-        // A backtick, `$` or `"` here would command-substitute or terminate REASON in the rendered sh.
-        expect(advice).not.toMatch(/[`$"\\]/);
+    it('keeps every REASON shell-safe and JSON-safe (no backtick, no double quote, no backslash)', () => {
+        for (const line of reasonLines) {
+            // A backtick or `"` would command-substitute or terminate REASON in the rendered sh; a
+            // backslash would corrupt the PreToolUse decision JSON. `$` IS expected — the versions are
+            // interpolated — so it is excluded from this check on purpose.
+            const body = line.slice(line.indexOf('="') + 2, line.lastIndexOf('"'));
+            expect(body).not.toMatch(/[`"\\]/);
+        }
     });
 });

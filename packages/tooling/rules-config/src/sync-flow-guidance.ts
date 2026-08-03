@@ -87,35 +87,11 @@ export class SyncFlowGuidance {
         return finishCommand;
     }
 
-    /**
-     * "How do I get main itself current?" — a DIFFERENT question from syncing a feature branch, and
-     * the one that had no answer in the merge block (which sent readers to reset --hard for lack of
-     * one). Single line, and deliberately free of backticks / `$` / double quotes so it can be
-     * interpolated straight into the shim's double-quoted shell REASON string.
-     */
-    updateMainAdvice(): string {
-        return 'To get main itself current: ON main, run \'git pull origin main\'. In a linked worktree '
-            + '(main is checked out in the primary clone, so checkout main fatals there), run '
-            + '\'git fetch origin main\' and branch off origin/main. Do NOT reach for git merge '
-            + '--ff-only / git reset --hard / git checkout -B main: merge and rebase are blocked in '
-            + 'EVERY form by redirect-how-to-merge-main, and the reset/-B forms silently throw away '
-            + 'commits.';
-    }
-
-    /**
-     * The FEATURE-BRANCH half, split out of updateMainAdvice() on purpose.
-     *
-     * It names `wp-start-update` / `wp-start-upsert-pr`, and NEITHER is on the L0 allowlist — correctly
-     * so, since a 3-point merge is not a tooling-integrity cure. While an L0 fault is up, printing this
-     * sentence unqualified hands the reader a command the guard will reject, which is the deadlock shape
-     * the whole L0 module exists to prevent. So a caller printing this from inside an L0 deny must first
-     * say how to CLEAR the fault (for drift: `pnpm install`), and only then offer this. Same free of
-     * backticks / `$` / `"` as its sibling, so it stays safe inside the shim's double-quoted REASON.
-     */
-    featureBranchSyncAdvice(): string {
-        return 'To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or '
-            + 'pnpm wp-start-upsert-pr (a PR is open).';
-    }
+    // updateMainAdvice() / featureBranchSyncAdvice() were DELETED 2026-08-03. Their only caller was the
+    // shim's fault-D deny, and both paragraphs were another guard's job: redirect-how-to-merge-main
+    // fires on its own, with its own message, on exactly the commands they warned about — and
+    // featureBranchSyncAdvice() named wp-start-update / wp-start-upsert-pr only to say "not while this
+    // block is up", which is pure cost in a message whose one instruction is `pnpm install`.
 
     /**
      * The read-only alternatives, for when the AI only wanted to LOOK at how it stands vs main. This

@@ -196,7 +196,7 @@ describe('applyHook — checked-in shim management', () => {
         // Generic shim: no hard-coded bin, reads it from $1 and degrades gracefully.
         const body = fs.readFileSync(shim, 'utf8');
         expect(body).toContain('BIN_NAME="$1"');
-        expect(body).toContain("run EXACTLY this command to enable the webpieces AI guards, then retry: 'pnpm install'");
+        expect(body).toContain("Run EXACTLY: 'pnpm install'");
         // Fail closed when the bin is missing: deny via the PreToolUse JSON protocol (blocks the call
         // AND surfaces the reason), not a bare exit 2 (blocks but hides the reason in the UI).
         expect(body).toContain('"permissionDecision":"deny"');
@@ -297,7 +297,7 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
         expect(decision.hookSpecificOutput.hookEventName).toBe('PreToolUse');
         expect(decision.hookSpecificOutput.permissionDecision).toBe('deny');
         const reason = decision.hookSpecificOutput.permissionDecisionReason;
-        expect(reason).toContain("run EXACTLY this command to enable the webpieces AI guards, then retry: 'pnpm install'");
+        expect(reason).toContain("Run EXACTLY: 'pnpm install'");
         expect(reason).toContain('not installed');
         expect(reason).toContain('wp-ai-guards-hook');
     });
@@ -377,7 +377,7 @@ describe('renderShim broken-bin guard (corrupt node_modules → MODULE_NOT_FOUND
         expect(reason).toContain(RECOVERY_CMD);                  // rm -rf node_modules && pnpm install
         // A plain `pnpm install` does NOT heal a corrupt package (pnpm sees the right version and skips
         // it) — the message must say so, or the assistant will loop on a command that cannot work.
-        expect(reason).toContain("a plain 'pnpm install' will NOT fix this");
+        expect(reason).toContain("A bare 'pnpm install' will NOT fix this");
     });
 
     it('blocks Write/Edit too — both hooks route through this one shim', () => {
@@ -528,7 +528,7 @@ describe('renderShim fallback — tool-conditional deny visibility', () => {
         expect(decision.systemMessage).toBeDefined();
         expect(decision.systemMessage!.startsWith(`${ESC}[31`)).toBe(true);
         expect(decision.systemMessage!.endsWith(`${ESC}[0m`)).toBe(true);
-        expect(decision.systemMessage).toContain("run EXACTLY this command to enable the webpieces AI guards, then retry: 'pnpm install'");
+        expect(decision.systemMessage).toContain("Run EXACTLY: 'pnpm install'");
         // The reason the model reads stays plain (no ANSI), and BIN_NAME substituted cleanly.
         expect(decision.hookSpecificOutput.permissionDecisionReason).toContain('wp-ai-guards-hook');
         expect(decision.hookSpecificOutput.permissionDecisionReason.includes(ESC)).toBe(false);

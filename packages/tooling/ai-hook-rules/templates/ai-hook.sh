@@ -146,34 +146,51 @@ if [ -n "$BROKEN_BIN" ]; then
   STAGING_N="$(ls "$ROOT/node_modules" 2>/dev/null | grep -Ec '_[0-9a-f]+_[0-9a-f]+$' || true)"
   STAGING_NOTE=""
   if [ "${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
-    STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
+    STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."   # only when N > 0
   fi
-  REASON="❌ webpieces guards are DOWN and every OTHER tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. THIS IS NOT A DEADLOCK: the option below is explicitly ALLOWED through while this guard is up, so run it YOURSELF rather than handing it to the human. OPTION 1 - run EXACTLY this command, then retry: 'rm -rf node_modules && pnpm install'. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS accepted), a trailing 2>&1, and a pipe into tail/head (e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20).${STAGING_NOTE}"
+  REASON="❌ webpieces guards are DOWN and every other call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must not be silently skipped. Run EXACTLY: 'rm -rf node_modules && pnpm install'. A bare 'pnpm install' will NOT fix this: pnpm sees the correct version on disk and skips the broken package.${STAGING_NOTE} Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
 elif [ -n "$DRIFT_PKG" ]; then
-  # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
-  # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
-  # is up — the ONE command redirect-how-to-merge-main blocks in every form. An AI that obeyed the
-  # drift message got hard-blocked by the other guard with no path forward, which is how improvised
-  # 'git reset --hard' workarounds get invented. The SYNC allowlist no longer accepts merge either, so
-  # the text and the allowlist now agree instead of the text warning against what the list permits.
+  # DECIDE THE DIRECTION, do not make the reader do it (2026-08-03). The detection is a plain !=, so it
+  # fires BOTH ways, and the message used to carry OPTION 1/2/3 covering every direction at once — 3343
+  # chars of which only about a third was the decision. A reader on the wrong branch of that menu was
+  # one misread away from a downgrade. So compare the two versions HERE and emit only the relevant half.
   #
-  # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
-  # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
-  # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
-  # to 'pnpm install', which DOWNGRADES them further from correct.
+  # WITH AWK, not `sort -V`: -V is a GNU extension (absent/different on BSD sort), while the shim
+  # already runs an awk pass to resolve catalog: specs, so awk adds no dependency. The program compares
+  # the numeric cores component-by-component; a pre-release/build suffix (-rc.1, +sha) is stripped from
+  # the core, and when the cores are EQUAL the side carrying a PRE-RELEASE suffix is the older one
+  # (semver precedence). Build metadata (+sha) carries NO precedence, so two versions differing only
+  # there come back undecidable rather than ordered. Anything it cannot parse prints NOTHING, and an
+  # empty answer falls through to the ambiguous wording below rather than guessing a direction.
   #
-  # But "which side is stale" is NOT the same question as "what clears the block". 'pnpm install' clears
-  # fault D in BOTH directions by definition — it makes installed == pin. The old text never said so, so
-  # a reader on the OPTION 2 branch could not tell whether it was even permitted to install. The only
-  # real question is whether the PIN is the version you WANT, and that has three legitimate answers,
-  # including deliberately staying on the older code (a checkout + feature branch + install to
-  # downgrade). Saying that out loud stops it being improvised as a reset --hard.
-  #
-  # The FEATURE-BRANCH case is why featureBranchSyncAdvice() is a separate method: wp-start-update is
-  # NOT on the L0 allowlist (a 3-point merge is not a tooling-integrity cure), so it can only be offered
-  # AFTER the install that clears this block and re-arms the guards. Prescribing it while the block is
-  # up would be the same deny-names-a-denied-command deadlock this module exists to prevent.
-  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every OTHER call is blocked until they agree. 'pnpm install' ALWAYS clears this block, in BOTH directions - it makes node_modules match the pin by definition, and it is allowed through while this guard is up. The only question is whether the PIN is the version you WANT, so compare the two versions above. OPTION 1 (node_modules is OLDER than the pin - you just pulled or switched to a branch pinning a newer webpieces) - run EXACTLY this command and you are done: 'pnpm install'. OPTION 2 (node_modules is NEWER than the pin - your checkout is behind origin, so the PIN is the stale side, and a bare 'pnpm install' would DOWNGRADE you) - if you are ON MAIN, get the checkout current FIRST and then install: run 'git pull origin main', and after it succeeds run 'pnpm install'. OPTION 3 (node_modules is NEWER than the pin and you deliberately want to stay on the OLD code) - check out the exact commit you want, create a feature branch from it, then run 'pnpm install' to bring node_modules DOWN to the version that commit pinned. That is a legitimate choice, not a mistake - the downgrade is the point. ON A FEATURE BRANCH: a bare 'pnpm install' aligns node_modules to YOUR BRANCH pin, which is usually what you want, and it clears this block. If you actually want main's newer @webpieces, still run 'pnpm install' FIRST to clear the drift and re-arm the guards, and only THEN sync from main normally. To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or pnpm wp-start-upsert-pr (a PR is open). Do NOT try to run those two while this block is up: they are not on the allowlist, and they do not need to be - the install comes first. To get main itself current: ON main, run 'git pull origin main'. In a linked worktree (main is checked out in the primary clone, so checkout main fatals there), run 'git fetch origin main' and branch off origin/main. Do NOT reach for git merge --ff-only / git reset --hard / git checkout -B main: merge and rebase are blocked in EVERY form by redirect-how-to-merge-main, and the reset/-B forms silently throw away commits. git pull and git fetch are allowed while this guard is up and are the cure here. git merge is NOT allowed - not by this guard and not by redirect-how-to-merge-main once the guards are back - because main is merged ONLY through the 3-point fork merge: 'pnpm wp-start-update', or 'pnpm wp-start-upsert-pr' when a PR is already open. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS accepted), a trailing 2>&1, and a pipe into tail/head (e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20)."
+  # WHAT WAS DELETED, so it does not creep back: the "how to get main itself current" paragraph and the
+  # "do NOT reach for git merge --ff-only / reset --hard / checkout -B main" paragraph both belong to
+  # redirect-how-to-merge-main, which fires on its own with its own message; and the sentence that named
+  # wp-start-update / wp-start-upsert-pr ONLY to forbid them while the block is up — naming a command
+  # purely to forbid it is pure cost, and the install that clears this fault comes first regardless.
+  DRIFT_DIR="$(awk -v i="$DRIFT_INSTALLED" -v d="$DRIFT_DECLARED" 'BEGIN {
+    iv = i; sub(/\+.*/, "", iv); ic = iv; sub(/-.*/, "", ic); ip = substr(iv, length(ic) + 1)
+    dv = d; sub(/\+.*/, "", dv); dc = dv; sub(/-.*/, "", dc); dp = substr(dv, length(dc) + 1)
+    if (ic !~ /^[0-9]+(\.[0-9]+)*$/ || dc !~ /^[0-9]+(\.[0-9]+)*$/) exit
+    n = split(ic, ia, "."); m = split(dc, da, "."); k = (n > m) ? n : m
+    for (x = 1; x <= k; x++) {
+      av = (x <= n) ? ia[x] + 0 : 0; bv = (x <= m) ? da[x] + 0 : 0
+      if (av < bv) { print "older"; exit }
+      if (av > bv) { print "newer"; exit }
+    }
+    if (ip == dp) exit
+    if (ip != "" && dp == "") print "older"
+    if (ip == "" && dp != "") print "newer"
+  }' 2>/dev/null)"
+  if [ "$DRIFT_DIR" = older ]; then
+    REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED - node_modules is OLDER, so the pin is what you want. Every other call is blocked until they agree. Run EXACTLY: 'pnpm install'. Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+  else
+    # NEWER, or undecidable — the same three choices apply either way, so the only thing the ambiguous
+    # case changes is the claim about which side is stale.
+    DRIFT_NOTE="node_modules is NEWER, so the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
+    [ "$DRIFT_DIR" = newer ] || DRIFT_NOTE="these two versions could not be ordered automatically - compare them yourself: if node_modules is the NEWER side then the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
+    REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED - $DRIFT_NOTE. That may be exactly what you want. Every other call is blocked until they agree. Pick one: - move forward to what origin pins: run 'git pull origin main', then 'pnpm install'. - stay on this code deliberately: run 'pnpm install' (the downgrade is the point). - on a feature branch: run 'pnpm install' (aligns to YOUR branch pin - usually right). Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+  fi
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
   # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no
@@ -182,9 +199,9 @@ else
   # load-bearing: installing in the primary clone does nothing for this tree.
   WORKTREE_NOTE=""
   if [ -f "$ROOT/.git" ]; then
-    WORKTREE_NOTE=" NOTE: $ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run 'pnpm install' HERE (in this worktree), not in the primary clone."
+    WORKTREE_NOTE=" NOTE: $ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run it HERE, in this worktree, not in the primary clone."
   fi
-  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). OPTION 1 - run EXACTLY this command to enable the webpieces AI guards, then retry: 'pnpm install'. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS accepted), a trailing 2>&1, and a pipe into tail/head (e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20).${WORKTREE_NOTE} (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
+  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). Run EXACTLY: 'pnpm install'.${WORKTREE_NOTE} Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
 fi
 if [ "$TOOL" = "Bash" ]; then
   BS='\'                     # one literal backslash, so the \u001b escape never sits in this source
