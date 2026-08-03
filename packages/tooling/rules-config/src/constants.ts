@@ -58,6 +58,17 @@ export const MERGE_INFO_DIR = 'merge-info';
 export const PR_REVIEW_DIR = 'pr-review';
 export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 
+// The dev-deploy resolve state file, written by `wp-push-dev --resolve` and cleared by
+// `wp-finish-push-dev` (or `--abort`). Named here for the same reason MERGE_IN_PROGRESS_FILE is: the
+// pr-gate commands WRITE it and things outside pr-gate READ it to decide whether a resolve is
+// half-finished, and neither side may depend on the other.
+//
+// It lives directly under `.webpieces/` local state (NOT under merge-info/), because a dev-deploy
+// resolve is not a 3-point merge: it never touches the feature branch, never produces merge-info
+// context, and must NOT be picked up by merge-in-progress-guard's marker scan — that guard's remedy
+// is `pnpm wp-finish-upsert-pr`, which is the wrong command here and would strand the tmp branch.
+export const PUSH_DEV_STATE_FILE = 'push-dev-in-progress.json';
+
 // Proof-of-work the AI must produce for every conflicted file it resolves during a 3-point
 // merge: a short explanation written NEXT TO that file's 3-point context (the same
 // `updatemain-<safe_path>/` dir that holds A-forkpoint.txt / B-A.diff / C-A.diff). The

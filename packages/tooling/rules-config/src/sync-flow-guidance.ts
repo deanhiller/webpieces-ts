@@ -12,6 +12,11 @@ export const WP_FINISH_UPDATE = 'pnpm wp-finish-update';
 export const WP_START_UPSERT_PR = 'pnpm wp-start-upsert-pr';
 export const WP_FINISH_UPSERT_PR = 'pnpm wp-finish-upsert-pr';
 
+// The dev-deploy pair. NOT a way to land anything — it publishes a DISPOSABLE copy of the branch so a
+// shared dev environment can build it, and never touches the feature branch or any PR.
+export const WP_PUSH_DEV = 'pnpm wp-push-dev';
+export const WP_FINISH_PUSH_DEV = 'pnpm wp-finish-push-dev';
+
 /**
  * Renders the canonical guidance blocks. Methods return string[] (not a joined string) so callers can
  * indent//interleave them into their own message without re-wrapping.
@@ -53,6 +58,25 @@ export class SyncFlowGuidance {
             `     1. ${WP_START_UPSERT_PR}   ← same 3-point merge, then push`,
             '     2. /wp-merge                 ← resolve conflicts (ONLY if step 1 reported any)',
             `     3. ${WP_FINISH_UPSERT_PR}  ← authoritative build gate, then create/update the PR`,
+        ];
+    }
+
+    /**
+     * Flow C — get this branch onto the shared dev server WITHOUT landing it on main.
+     *
+     * Deliberately printed as a THIRD destination rather than folded into flow B, because the two are
+     * opposites and an AI shown only the PR flow will open a PR when it was asked to deploy. Landing on
+     * main ships to production; this publishes a throwaway copy that the dev environment's CI composes
+     * and rebuilds. It never moves the feature branch and never opens a PR.
+     */
+    devDeployFlow(): string[] {
+        return [
+            '  C. You just want it on the SHARED DEV SERVER — no PR, not landing on main:',
+            `     1. ${WP_PUSH_DEV}            ← publish a DISPOSABLE copy of this branch for dev CI`,
+            '     2. resolve conflicts in the files it lists (ONLY if it reported any)',
+            `     3. ${WP_FINISH_PUSH_DEV}     ← finalize (ONLY on the conflict path)`,
+            '     Your feature branch is NEVER moved and never acquires another dev\'s commits — that is',
+            '     the whole reason the copy exists.',
         ];
     }
 

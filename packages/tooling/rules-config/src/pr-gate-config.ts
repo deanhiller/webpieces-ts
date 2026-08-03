@@ -71,6 +71,53 @@ export function defaultLandPrConfig(): LandPrConfig {
     return new LandPrConfig(BRANCH_RETENTION_ARCHIVE_TAG);
 }
 
+// The two literal ref names the dev-deploy flow derives everything else from. Defaults, not policy —
+// `pr-gate.devDeploy` overrides both, because a consumer whose shared environment is called `staging`
+// must not be forced onto webpieces' vocabulary.
+export const DEFAULT_DEV_BRANCH_NAMESPACE = 'dev-include';
+export const DEFAULT_DEV_BRANCH = 'dev';
+
+/**
+ * `pr-gate.devDeploy` — where `wp-push-dev` publishes the throwaway copy of a feature branch, and which
+ * ref is the shared dev branch itself.
+ *
+ * WHY A NAMESPACE AT ALL, i.e. why the copy is not just the feature branch: the feature branch is the PR
+ * head, and landing that PR ships whatever is on it. The moment a conflict between two devs has to be
+ * resolved SOMEWHERE for the shared environment to build, that resolution needs a home that is not the PR
+ * branch — otherwise "test it in dev" silently ships another dev's unreviewed work to production. The
+ * `<branchNamespace>/<feature>` copy is that home, and it is disposable by construction.
+ *
+ * `devBranch` is REFUSED as a source branch (you never push the composed branch back into itself); it is
+ * written by the consumer's CI only, which recomputes it from `origin/main` on every run.
+ */
+export class DevDeployConfig {
+    // Literal prefix on the feature branch name: `dev-include/dean/ONE-2275`. Git refs allow slashes, and
+    // nobody ever types this — the command derives it.
+    branchNamespace: string;
+    // The composed, CI-owned branch that actually deploys. Never a source, never pushed to by this flow.
+    devBranch: string;
+
+    constructor(branchNamespace: string = DEFAULT_DEV_BRANCH_NAMESPACE, devBranch: string = DEFAULT_DEV_BRANCH) {
+        this.branchNamespace = branchNamespace;
+        this.devBranch = devBranch;
+    }
+
+    /** `<branchNamespace>/<branch>` — the remote ref holding the disposable copy of `branch`. */
+    copyRefFor(branch: string): string {
+        return `${this.branchNamespace}/${branch}`;
+    }
+
+    /** The `git ls-remote --heads origin <pattern>` pattern matching every live copy. */
+    copyRefGlob(): string {
+        return `${this.branchNamespace}/*`;
+    }
+}
+
+// webpieces-disable no-function-outside-class -- module-level config default, matches defaultGates/defaultPrGateConfig in this file
+export function defaultDevDeployConfig(): DevDeployConfig {
+    return new DevDeployConfig(DEFAULT_DEV_BRANCH_NAMESPACE, DEFAULT_DEV_BRANCH);
+}
+
 export class PrGateConfig {
     mode: string;
     /**
@@ -162,6 +209,11 @@ export class PrGateConfig {
      * wedge every PR in the repo with no self-service way out.
      */
     requireDiffEvidence = false;
+    /**
+     * Where `wp-push-dev` publishes the disposable copy. Omitted ⇒ `dev-include` / `dev`, which is what
+     * makes the whole flow work with NO config edit at all.
+     */
+    devDeploy: DevDeployConfig = defaultDevDeployConfig();
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(mode: string, buildCommand: string, gates: GateDefinition[], mergeMode: string, checklists: ChecklistDefinition[] = [], gateSalt = '', checklistComments = true) {
@@ -212,6 +264,12 @@ interface RawPrGateSection {
     reviewContext?: RawReviewContext[];
     reviewContextPackages?: string[];
     requireDiffEvidence?: boolean;
+    devDeploy?: RawDevDeploy;
+}
+
+interface RawDevDeploy {
+    branchNamespace?: string;
+    devBranch?: string;
 }
 
 interface RawLandPr {
@@ -264,7 +322,24 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
         ? raw.reviewContext.map((e: RawReviewContext): ReviewContextEntry => new ReviewContextEntry(e.label ?? '', e.path ?? ''))
         : defaults.reviewContext;
     built.requireDiffEvidence = raw.requireDiffEvidence ?? defaults.requireDiffEvidence;
+    built.devDeploy = buildDevDeployConfig(raw.devDeploy);
     return built;
+}
+
+/**
+ * Build the `pr-gate.devDeploy` block. Omitted (the state of every consumer config today) ⇒ the
+ * `dev-include` / `dev` defaults. An invalid value cannot reach here — validateDevDeploySection has
+ * already failed the load.
+ */
+// webpieces-disable no-function-outside-class -- module-level config transform, matches buildPrGateConfig above
+export function buildDevDeployConfig(raw: RawDevDeploy | undefined): DevDeployConfig {
+    const defaults = defaultDevDeployConfig();
+    if (raw === undefined || raw === null || typeof raw !== 'object') return defaults;
+    const namespace = typeof raw.branchNamespace === 'string' && raw.branchNamespace.trim() !== ''
+        ? raw.branchNamespace.trim() : defaults.branchNamespace;
+    const devBranch = typeof raw.devBranch === 'string' && raw.devBranch.trim() !== ''
+        ? raw.devBranch.trim() : defaults.devBranch;
+    return new DevDeployConfig(namespace, devBranch);
 }
 
 /**

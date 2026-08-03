@@ -8,7 +8,7 @@ import { sectionForRule, isHookGuard } from './sections';
 import { RULE_SCHEMAS, allRuleNames } from './rule-schemas';
 import { recommendedSeedModeFor, isGradualMode } from './seed-entry';
 import { MODIFIED_CODE_MODES } from './rule-configs';
-import { validateChecklistsSection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
+import { validateChecklistsSection, validateDevDeploySection, validateLandPrSection, validateNoGateSaltRationale } from './pr-gate-section-validators';
 import { retiredEntry, retiredKeyError, retiredRuleFor } from './retired-config-keys';
 
 // Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
@@ -326,6 +326,9 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
 
     // Optional: what happens to the LOCAL branch once its PR lands. Absent ⇒ "archive-tag".
     if ('landPr' in s) errors.push(...validateLandPrSection(s['landPr']));
+
+    // Optional: where wp-push-dev publishes the disposable copy. Absent ⇒ "dev-include" / "dev".
+    if ('devDeploy' in s) errors.push(...validateDevDeploySection(s['devDeploy']));
 
     errors.push(...validateNoGateSaltRationale(s));
 

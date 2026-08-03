@@ -190,3 +190,53 @@ describe('built-in rule registry is validatable', () => {
         expect(missing).toEqual([]);
     });
 });
+
+/**
+ * Acceptance criterion 9 of the dev-deploy feature: a blocked push whose REFSPEC targets the dev
+ * namespace or the dev branch surfaces the `wp-push-dev` remedy, not the `wp-start-upsert-pr` one.
+ *
+ * This is the half that makes the feature exist at all rather than being polish. An AI told "put my
+ * branch on dev" tries `git push`, gets blocked, and does whatever the hint says. With one flat hint it
+ * opens a PR to main — the opposite of what it was asked, and the destructive direction of the two.
+ */
+describe('pr-creation-or-push-guard steers by the destination of the blocked push', () => {
+    function messageFor(command: string): string {
+        const root = tempRoot();
+        const violations = prCreationOrPushGuard.check(ctx(command, root));
+        expect(violations.length).toBe(1);
+        const message = violations[0].message ?? '';
+        fs.rmSync(root, { recursive: true, force: true });
+        return message;
+    }
+
+    it('offers wp-push-dev for a push into the dev namespace', () => {
+        const message = messageFor('git push origin HEAD:dev-include/dean/ONE-2275');
+        expect(message).toContain('pnpm wp-push-dev');
+        expect(message).toContain('Do NOT use pnpm wp-start-upsert-pr');
+    });
+
+    it('offers wp-push-dev for a push at the dev branch itself, in either refspec form', () => {
+        expect(messageFor('git push origin dev')).toContain('pnpm wp-push-dev');
+        expect(messageFor('git push origin HEAD:dev')).toContain('pnpm wp-push-dev');
+        expect(messageFor('git push origin HEAD:refs/heads/dev')).toContain('pnpm wp-push-dev');
+    });
+
+    it('keeps the PR-flow remedy for every other push', () => {
+        const message = messageFor('git push origin HEAD');
+        expect(message).toContain('pnpm wp-start-upsert-pr');
+        expect(message).not.toContain('wp-push-dev');
+    });
+
+    it('does not mistake a branch merely NAMED like the dev branch for the dev branch', () => {
+        const message = messageFor('git push origin HEAD:developer-notes');
+        expect(message).not.toContain('wp-push-dev');
+    });
+
+    it('names both destinations in the rule-level fix hint, so neither is invisible', () => {
+        const hint = prCreationOrPushGuard.fixHint.mainMessage;
+        expect(hint).toContain('pnpm wp-start-upsert-pr');
+        expect(hint).toContain('pnpm wp-push-dev');
+        expect(hint).toContain('LANDING ON MAIN');
+        expect(hint).toContain('SHARED DEV SERVER');
+    });
+});

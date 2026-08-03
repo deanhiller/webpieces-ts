@@ -12,7 +12,9 @@
         "wp-cleanup": "./bin/wp-cleanup.js",
         "wp-land-pr": "./bin/wp-land-pr.js",
         "wp-check-pr": "./bin/wp-check-pr.js",
-        "wp-review-upsert-pr": "./bin/wp-review-upsert-pr.js"
+        "wp-review-upsert-pr": "./bin/wp-review-upsert-pr.js",
+        "wp-push-dev": "./bin/wp-push-dev.js",
+        "wp-finish-push-dev": "./bin/wp-finish-push-dev.js"
     },
     "files": [
         "src/**/*",

@@ -596,3 +596,49 @@ describe('seedEntryForRule', () => {
             { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
     });
 });
+
+/**
+ * `pr-gate.devDeploy` — where wp-push-dev publishes the disposable copy. Optional with defaults, so
+ * every existing consumer config keeps validating untouched; present, it has to be usable as a git ref,
+ * because these two values are concatenated into a ref that a command then force-pushes.
+ */
+describe('validatePrGateSection — devDeploy', () => {
+    const base = { mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO' };
+
+    it('accepts a config that omits it entirely', () => {
+        expect(validatePrGateSection(base)).toEqual([]);
+    });
+
+    it('accepts explicit names', () => {
+        expect(validatePrGateSection({ ...base, devDeploy: { branchNamespace: 'staging-include', devBranch: 'staging' } }))
+            .toEqual([]);
+    });
+
+    it('accepts overriding only one of the two', () => {
+        expect(validatePrGateSection({ ...base, devDeploy: { devBranch: 'staging' } })).toEqual([]);
+    });
+
+    it('rejects a name git could not use as a ref', () => {
+        const bad = validatePrGateSection({ ...base, devDeploy: { branchNamespace: 'dev include!' } });
+        expect(bad.length).toBe(1);
+        expect(bad[0]).toContain('not a usable git ref name');
+    });
+
+    it('rejects an empty name rather than silently falling back to the default', () => {
+        expect(validatePrGateSection({ ...base, devDeploy: { devBranch: '  ' } })[0]).toContain('non-empty string');
+    });
+
+    it('rejects a devBranch with a slash — it is a branch, not a namespace', () => {
+        expect(validatePrGateSection({ ...base, devDeploy: { devBranch: 'shared/dev' } })[0])
+            .toContain('single ref name with no "/"');
+    });
+
+    it('rejects a devBranch nested inside the namespace, which would make --list enumerate it', () => {
+        const bad = validatePrGateSection({ ...base, devDeploy: { branchNamespace: 'dev', devBranch: 'dev' } });
+        expect(bad[0]).toContain('must not contain one another');
+    });
+
+    it('rejects a non-object', () => {
+        expect(validatePrGateSection({ ...base, devDeploy: 'dev-include' })[0]).toContain('must be an object');
+    });
+});

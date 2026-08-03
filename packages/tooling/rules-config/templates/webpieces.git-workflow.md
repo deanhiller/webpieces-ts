@@ -130,6 +130,23 @@ git diff --stat origin/main...HEAD                    # what you changed since t
 cat .webpieces/main-sync-status.json                  # the tooling's own answer + predicted conflicts
 ```
 
+## Where is this going? Ask that BEFORE asking about the PR
+
+There are **two destinations**, and they are opposites. Answer this first:
+
+| You want… | Use | It touches |
+|---|---|---|
+| the change **landed on `main`** (prod-quality, reviewed) | the PR flow below | your branch, a PR, eventually `main` |
+| the change **running on the shared dev server**, no PR | `pnpm wp-push-dev` | a disposable copy, and nothing else |
+
+**Do NOT open a PR to `main` just to test something in a shared dev environment.** That is the single
+most expensive mistake available here: it ships unreviewed work toward production to answer a question
+the dev environment exists to answer. `pnpm wp-push-dev` is the answer to "get my branch onto dev", and
+the push guard's block message will say so when your `git push` targets the dev refs.
+
+See "Publishing to the shared dev server" below. Everything from here to that section is the **main**
+destination.
+
 ## Which flow? Two pairs, decided by one question
 
 **Is there an OPEN PR for this branch?** That single question picks the flow, and the two halves of a
@@ -180,6 +197,56 @@ flow are not interchangeable.
    verdicts itself, deletes one branch per command, spares anything a human should rule on, and logs
    every deletion with its pre-delete SHA plus a `recover=` command in
    `.webpieces/logs/branch-mutations.log`. **Use this instead of `git branch -D`.**
+7. **`pnpm wp-push-dev`** — publish a **disposable copy** of this branch so a shared dev environment can
+   build it. No PR, no build gate, and your feature branch is never moved. See below.
+8. **`pnpm wp-finish-push-dev`** — finalize a dev composition after you resolved its conflicts. Only
+   needed on the conflict path; a clean `pnpm wp-push-dev --resolve` finalizes itself.
+
+## Publishing to the shared dev server (no PR, nothing lands on main)
+
+Some repos deploy a shared `dev` branch that is a **build artifact, not a source of truth**: CI resets it
+to `origin/main`, merges every published copy, builds the composed tree, and force-pushes — every run.
+Nobody ever checks it out, so the wipe is a non-event, and it can never be stale.
+
+```bash
+pnpm wp-push-dev            # publish this branch as dev-include/<your-branch>
+pnpm wp-push-dev --list     # what is currently in the pool
+pnpm wp-push-dev --remove   # take your branch back out (this is the rollback)
+```
+
+**The cardinal rule, and the reason a COPY exists at all:** your feature branch is the PR head, so it
+must **never** acquire another developer's commits — landing that PR would ship their unreviewed work to
+production. Conflict resolutions therefore live on the throwaway copy, never on your branch. After any
+command here, `git log <your-branch>` shows it did not move.
+
+### When two branches conflict in the composition
+
+CI will name the branch you conflict with. Compose locally, so what you resolve is what CI will build:
+
+```bash
+pnpm wp-push-dev --resolve                 # merge every OTHER copy, in CI's order
+pnpm wp-push-dev --resolve <their-branch>  # or just the one CI named
+# clean  → it publishes the copy itself; you are done
+# CONFLICT → it stops on a THROWAWAY branch and lists the files
+#   resolve them, `git add` each one, then:
+pnpm wp-finish-push-dev                    # commits, resumes the queue, publishes
+pnpm wp-finish-push-dev --abort            # or throw it all away
+```
+
+While a resolve is half-finished the other `wp-*` commands refuse (you are parked on a throwaway branch,
+not your feature branch). The block message lists exactly which ones and how to get out.
+
+**Do not run `git merge --continue`, `git commit` or `git push` yourself** — they are blocked, and
+`wp-finish-push-dev` does all three. Your only job is editing the conflicted files and `git add`-ing
+them; neither is blocked.
+
+### If your copy already holds a resolution
+
+`wp-push-dev` **refuses** rather than force-pushing over commits the copy has and your branch does not —
+that is somebody's real conflict resolution, and it exists only there, by design. Two ways forward:
+
+- `pnpm wp-push-dev --rebase-resolution` — replay it on top of your new commits (keeps the work)
+- `pnpm wp-push-dev --force` — discard it (somebody re-resolves the composition afterwards)
 
 ## Worktrees (works the same as a primary clone)
 
