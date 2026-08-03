@@ -32,7 +32,7 @@ function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
 // Drop every rule excluded for this path (webpieces.config.json → excludePaths). ONE glob list: a path
 // listed there is hands-off for code-style rules and file-scoped guards alike, because webpieces either
 // governs a path or it does not. Per-rule carve-outs live in the rule's own `excludePaths`.
-// This is L1's FILTER (not a table row) — see GUARD_MATRIX.md at the repo root.
+// This is L1's FILTER (not a table row) — see guards/L1-location.md.
 export function filterByExcludedPaths(rules: readonly Rule[], relativePath: string, ex: ExcludePaths): readonly Rule[] {
     if (ex.paths.some((p: string): boolean => globMatches(p, relativePath))) return [];
     return rules;
@@ -195,7 +195,7 @@ function isL0CureCommand(command: string): boolean {
 }
 
 // Force-to-root: git/gh commands must run from the repo root of the tree they act on, where the guards
-// can reason about git state coherently. L1 row 4 — see GUARD_MATRIX.md at the repo root for the table
+// can reason about git state coherently. L1 row 4 — see guards/L1-location.md for the table
 // and the use cases; change this predicate and that file is stale until you update it.
 //
 // ONE variable decides it: `tree.effectiveCwd` — the directory the command actually runs in, which is
