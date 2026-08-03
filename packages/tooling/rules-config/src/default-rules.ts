@@ -62,7 +62,7 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     // pile up, and the pile is what makes a real branch hard to find. The reap is also NOT destructive
     // in the way the old comment implied — BranchReaper deletes only provably-dead branches (a merged
     // PR, a squash-merge backup of one, or no commits of their own), spares everything else for a
-    // human, and logs each deletion to .webpieces/hooks/branch-mutations.log with the pre-delete SHA
+    // human, and logs each deletion to .webpieces/logs/branch-mutations.log with the pre-delete SHA
     // and a ready-made `recover=` command. So the worst case is one paste to undo, which a human can
     // resolve; the previous default's worst case was unbounded accumulation nobody ever cleaned.
     //

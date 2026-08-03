@@ -11,6 +11,17 @@ import { StateDirMigrator } from './state-dir-migration';
 // `<primary>/.webpieces/` directly, exactly as it always has.
 export const WORKTREE_STATE_DIR = 'worktrees';
 
+// The ONE directory every webpieces `.log` lives in — `<state>/logs/`, for the primary clone and for
+// each worktree namespace alike. It used to be `hooks/`, which also holds NON-log state (the dated
+// `hooks/<YYYY-MM-DD>/writeInfo-*.md` rejection details), while the L0 sh shim wrote to `logs/`. Two
+// directories, one of them mixed — so "where are the logs?" had two answers and neither was complete.
+// Every writer now goes through dotWebpieces.logs()/logsFile(), so the layout cannot drift apart again.
+export const LOGS_STATE_DIR = 'logs';
+
+// Non-log hook state: the dated rejection-detail directories. Named here (rather than re-spelled in
+// each consumer) so the hooks/logs split has exactly one definition.
+export const HOOKS_STATE_DIR = 'hooks';
+
 // git prints the shared git dir as `<primary>/.git` for a conventional clone. Anything else (a bare
 // repo, `--separate-git-dir`) is a layout we decline to derive a working tree from.
 const GIT_DIR_NAME = '.git';
@@ -70,12 +81,12 @@ export class GitDirs {
  *   • main-sync-status.json AND main-sync.lock.json — there is one `main` and one `.git`, so there is
  *     one refresher. A lock inside a per-worktree directory locks nothing.
  * local():
- *   • hooks/*.log, INCLUDING branch-mutations.log. A shared append-only log genuinely corrupts:
+ *   • logs/*.log, INCLUDING branch-mutations.log. A shared append-only log genuinely corrupts:
  *     `O_APPEND` writes are indivisible only under PIPE_BUF, which is 512 bytes on macOS, and a
  *     `recover=git worktree add -b <branch> <abs-path> <tag>` line with real paths exceeds that. A
  *     per-worktree log has exactly ONE writer and cannot tear, and under this layout it already
  *     survives the worktree's deletion — recovery is one glob over
- *     `<primary>/.webpieces/worktrees/＊/hooks/branch-mutations.log`.
+ *     `<primary>/.webpieces/worktrees/＊/logs/branch-mutations.log`.
  *   • merge-info/staged|merged/<branch>/ and its index.json, pr-review/<branch>/, instruct-ai/, and
  *     every other per-tree scratch file.
  *
@@ -111,6 +122,8 @@ export class DotWebpieces {
     private readonly gitDirsByRoot = new Map<string, GitDirs | null>();
     // Roots whose legacy per-worktree `.webpieces/` has already been considered for migration.
     private readonly migrated = new Set<string>();
+    // Roots whose legacy `hooks/*.log` files have already been considered for relocation into `logs/`.
+    private readonly logsMigrated = new Set<string>();
 
     constructor(private readonly migrator: StateDirMigrator = new StateDirMigrator()) {}
 
@@ -149,6 +162,26 @@ export class DotWebpieces {
     /** A path beneath this worktree's private state dir. */
     localFile(startDir: string, ...segments: string[]): string {
         return path.join(this.local(startDir), ...segments);
+    }
+
+    /**
+     * THE log directory — `<local()>/logs` — and the only place a webpieces `.log` may be written, in
+     * the primary clone and in every worktree namespace alike.
+     *
+     * The first call per tree also RELOCATES any `hooks/*.log` written by an older release (or by the
+     * still-published build during the transition window) into `logs/`, so upgrading does not orphan
+     * the history a human is mid-way through reading. Same safety rule as StateDirMigrator.migrate:
+     * an occupied destination is never overwritten — the old copy is left where it is.
+     */
+    logs(startDir: string): string {
+        const target = path.join(this.local(startDir), LOGS_STATE_DIR);
+        this.migrateLogsOnce(startDir, target);
+        return target;
+    }
+
+    /** A path beneath the log directory — `dotWebpieces.logsFile(root, 'guard-invocations.log')`. */
+    logsFile(startDir: string, ...segments: string[]): string {
+        return path.join(this.logs(startDir), ...segments);
     }
 
     /** True when `startDir` sits in a LINKED worktree rather than the primary clone. */
@@ -198,6 +231,14 @@ export class DotWebpieces {
         const toplevel = this.gitToplevel(startDir);
         if (toplevel === null) return;
         this.migrator.migrate(this.legacyDir(toplevel), target);
+    }
+
+    // Drain `hooks/*.log` into `logs/`, at most once per tree per process. Idempotent, but it touches
+    // the filesystem on the hook's blocking path, so it must not run per log line.
+    private migrateLogsOnce(startDir: string, target: string): void {
+        if (this.logsMigrated.has(startDir)) return;
+        this.logsMigrated.add(startDir);
+        this.migrator.migrateLogFiles(path.join(this.local(startDir), HOOKS_STATE_DIR), target);
     }
 
     // Both git dirs for `startDir`, cached, or null when this is not a git repo / git is unavailable.

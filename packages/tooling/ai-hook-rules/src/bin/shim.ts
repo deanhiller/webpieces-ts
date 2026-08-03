@@ -8,10 +8,13 @@ import {
     L0_ALLOW_ERE_SH, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
     INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
 } from './l0-allowlist';
+import { WP_LOG_SH } from './shim-audit-log';
 
 // The allowlist moved to ./l0-allowlist (this module was over the file-size limit); re-exported here so
 // every existing `from './shim'` import keeps working and there is still ONE name to import L0 by.
 export * from './l0-allowlist';
+// Same treatment for the audit-log fragment: one name to import the whole rendered shim by.
+export * from './shim-audit-log';
 
 // ---------------------------------------------------------------------------
 // The single checked-in shim (.claude/webpieces/ai-hook.sh). Both project hooks point at it, passing
@@ -170,6 +173,14 @@ const RUN_BIN_SH = `if [ -x "\$BIN" ] && [ -z "\$DRIFT_PKG" ]; then
     cat "\$OUT_FILE"                      # the guard's real decision — verbatim
     cat "\$ERR_FILE" >&2
     rm -f "\$OUT_FILE" "\$ERR_FILE" 2>/dev/null
+    # THE HEALTHY CALL, which this log used to be silent about (see WP_LOG_SH's header). No sh-side
+    # fault, the bin ran, and its own exit code says how it ended — 0 allow, 2 block. Logged AFTER the
+    # decision bytes are already on stdout, so the audit trail never sits between the guard and Claude
+    # Code. Without this line, "no entry" meant either healthy or never-ran, and those are the two
+    # answers a reader most needs to tell apart.
+    WP_VERDICT=PASS-BIN-ALLOW
+    [ "\$RC" = 2 ] && WP_VERDICT=PASS-BIN-BLOCK
+    wp_log - "\$WP_VERDICT"
     exit "\$RC"
   fi
   # Crashed. Keep the most useful stderr line for the human. Strip " and backslash so the text stays a
@@ -181,8 +192,25 @@ const RUN_BIN_SH = `if [ -x "\$BIN" ] && [ -z "\$DRIFT_PKG" ]; then
   BROKEN_BIN=1
 fi`;
 
-// Shell fragment: the guards are DOWN (missing | stale | crashed). Parse the payload, audit-log the
-// decision, and let THE L0 ALLOWLIST through — everything else falls to the deny below.
+// Shell fragment: pull the four fields the shim itself reasons about out of the tool payload.
+//
+// MOVED AHEAD OF THE BIN (it used to sit inside TRIAGE_SH, i.e. only on the fail-closed path) because
+// the audit log now covers the HEALTHY call too, and a log line needs the tool and the command whether
+// or not anything went wrong.
+//
+// `cwd` is Claude Code's documented "current working directory when the hook is invoked". It is used
+// for ONE thing: deciding which tree's log directory this line belongs in (see RESOLVE_LOG_DIR_SH).
+// It deliberately does NOT change what the drift guard MEASURES — that stays anchored to $ROOT, the
+// tree the shim FILE lives in. Where a call is logged and what a call is judged against are separate
+// questions and are kept separate here.
+const PARSE_PAYLOAD_SH = `CMD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+TOOL="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+FILE="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+WP_CWD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+[ -n "\$WP_CWD" ] || WP_CWD="\$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree`;
+
+// Shell fragment: the guards are DOWN (missing | stale | crashed). Classify the fault, then let THE L0
+// ALLOWLIST through — everything else falls to the deny below.
 //
 // This asks the identical question isAllowed() asks in JS, in the same order: Read, then the
 // webpieces.config.json target, then the one command union (L0_ALLOW_ERE). The sh and JS halves exist
@@ -191,18 +219,11 @@ fi`;
 //
 // NOTE the documented asymmetry: here the bin is never executed, so an allowed Read is TERMINAL and
 // read-stale-guard does not run. In JS the same entry falls through and it does. See isAllowed().
-const TRIAGE_SH = `CMD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
-TOOL="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
-FILE="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
-# Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
-# human can inspect after something odd (an install that was denied, or one that slipped through). One
-# tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
-# blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
-# the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
-LOG_DIR="\$ROOT/.webpieces/logs"
-wp_log() {                   # \$1 = label (ALLOW-CURE|ALLOW-READ|ALLOW-CONFIG|DENY|DENY-STALE|DENY-BROKEN)
-  { mkdir -p "\$LOG_DIR" 2>/dev/null && printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "\$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "\$BIN_NAME" "\$TOOL" "\$1" "\$CMD" >> "\$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
-}
+const TRIAGE_SH = `# WHICH of the six guards/L0-tooling.md faults fired, in the doc's own letters. Only the three sh-side
+# codes can be decided here; S/C/Y live in the binary, which never got to run on this path.
+WP_FAULT=X                                            # X — bin missing (fresh clone, new worktree)
+[ -n "\$DRIFT_PKG" ] && WP_FAULT=D                     # D — version drift; D and K are mutually exclusive
+[ -n "\$BROKEN_BIN" ] && WP_FAULT=K                    # K — bin present but CRASHED (corrupt node_modules)
 DENY_LABEL="DENY"
 [ -n "\$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "\$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
@@ -210,19 +231,19 @@ DENY_LABEL="DENY"
 # help a given fault also cannot hurt it, and gating each entry on a fault is what produced the four
 # defects recorded above L0_ALLOW_ERE.
 if [ "\$TOOL" = "Read" ]; then
-  wp_log ALLOW-READ          # you must be able to read to work out how to fix this
+  wp_log "\$WP_FAULT" ALLOW-READ   # you must be able to read to work out how to fix this
   exit 0
 fi
 case "\$FILE" in
   */${CONFIG_FILENAME}|${CONFIG_FILENAME})
-    wp_log ALLOW-CONFIG      # the always-allowed recovery target — every guard is configured from it
+    wp_log "\$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
     exit 0 ;;
 esac
 if printf '%s' "\$CMD" | grep -Eq '${L0_ALLOW_ERE_SH}'; then
-  wp_log ALLOW-CURE          # record the self-heal we let through (re-enables the guards)
+  wp_log "\$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi
-wp_log "\$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection`;
+wp_log "\$WP_FAULT" "\$DENY_LABEL"  # every fail-closed block, with the fault that caused it`;
 
 // Shell fragment: emit the deny. FAIL CLOSED via Claude Code's PreToolUse JSON protocol
 // (permissionDecision "deny" on stdout, then exit 0) rather than a bare "exit 2". BOTH block the call,
@@ -335,6 +356,13 @@ ${VERSION_DRIFT_GUARD_SH}
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
+${PARSE_PAYLOAD_SH}
+# Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
+# tab-separated line per invocation into this TREE's own logs/ai-hook-shim.log (gitignored), so the
+# observed behaviour can be diffed against the matrix in guards/L0-tooling.md. NEVER breaks or blocks the
+# hook: every write is swallowed, and nothing ever goes to stdout (stdout is the PreToolUse decision
+# channel — a stray byte there would corrupt allow/deny).
+${WP_LOG_SH}
 BROKEN_BIN=""
 CRASH_MSG=""
 ${RUN_BIN_SH}

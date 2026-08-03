@@ -19,7 +19,7 @@ let root: string;
 const service = new MainSyncStatusService();
 
 function asyncLog(): string {
-    const logPath = path.join(root, '.webpieces', 'hooks', 'guard-async-work.log');
+    const logPath = path.join(root, '.webpieces', 'logs', 'guard-async-work.log');
     return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
 }
 

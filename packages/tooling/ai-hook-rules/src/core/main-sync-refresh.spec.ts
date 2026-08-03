@@ -5,7 +5,7 @@ import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest } from './main-sync-refresh';
 
-const LOG_REL = '.webpieces/hooks/guard-async-work.log';
+const LOG_REL = '.webpieces/logs/guard-async-work.log';
 
 function spawnAttempts(root: string): number {
     const logPath = path.join(root, LOG_REL);

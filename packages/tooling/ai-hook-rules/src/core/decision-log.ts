@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder } from '@webpieces/rules-config';
+import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
 
@@ -10,12 +10,12 @@ import { toError } from './to-error';
 // the ASYNC log (guard-async-work.log, written by the detached refresher in main-sync-log.ts). This
 // one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
-// traceable to a stale or missing async write. Writes to `.webpieces/hooks/guard-sync-decisions.log`.
-const HOOKS_DIR = 'hooks';
+// traceable to a stale or missing async write. Writes to `.webpieces/logs/guard-sync-decisions.log`
+// (see LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside `hooks/`'s non-log state).
 const LOG_FILE = 'guard-sync-decisions.log';
 const LOG_FILE_PREV = 'guard-sync-decisions.1.log';
 // The per-INVOCATION stream (companion to the per-DECISION log above): one line for every guards-hook
-// call, so cleanup automation can mine tool + branch + sync-status over time. See logGuardInvocation.
+// call, so cleanup automation can mine tool + branch + sync-status + OUTCOME over time. See InvocationLog.
 const INVOCATION_LOG_FILE = 'guard-invocations.log';
 const INVOCATION_LOG_FILE_PREV = 'guard-invocations.1.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
@@ -48,7 +48,7 @@ export class GuardDecision {
 }
 
 /**
- * Append one tab-separated line per decision to `.webpieces/hooks/guard-sync-decisions.log`. `root` is
+ * Append one tab-separated line per decision to `.webpieces/logs/guard-sync-decisions.log`. `root` is
  * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or a
  * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
  * logged from a subdir never scatters a stray `.webpieces`). Swallows all errors — logging must never
@@ -60,11 +60,11 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
         const timestamp = new Date().toISOString();
         // LOCAL scope: a guard decision belongs to the tree it judged, and a per-worktree log has one
         // writer, so appends cannot interleave with another agent's.
-        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
-        fs.mkdirSync(hooksDir, { recursive: true });
+        const logsDir = dotWebpieces.logs(root);
+        fs.mkdirSync(logsDir, { recursive: true });
 
-        const logPath = path.join(hooksDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(hooksDir, LOG_FILE_PREV));
+        const logPath = path.join(logsDir, LOG_FILE);
+        rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
 
         const line = [
             `[${timestamp}]`,
@@ -75,6 +75,11 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
             decision.rule,
             oneLine(decision.reason),
             oneLine(decision.cache),
+            // The tree this decision was actually made against, and what Claude Code told the hook the
+            // project was. Appended (never reordered) for the same reason as on the invocation line —
+            // see ClaudeEnv: when these two disagree, that disagreement is the bug.
+            `root=${root}`,
+            `projectDir=${claudeEnv.projectDirForLog()}`,
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {
@@ -84,35 +89,107 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
 }
 
 /**
- * Append one line per GUARDS-hook invocation to `.webpieces/hooks/guard-invocations.log` — the raw
- * "what did the guard see" stream, written on EVERY call (allow or block, bash or file), unlike
- * guard-sync-decisions.log which only records actual decisions. Captures the tool, the command/file,
- * the live git branch, and the async-written main-sync-status.json (branch / merged / fork-point /
- * conflict) so cleanup automation can later mine it — e.g. "on an already-merged branch, a
- * `git checkout main` should also delete the branch". `cwd` is the AI's working dir; the repo root
- * that owns `.webpieces` is resolved from it. Swallows all errors — logging never blocks a hook.
+ * What the guard SAW on one invocation, captured up front and held until the outcome is known.
+ * Data-only (per CLAUDE.md: classes for data, explicit construction).
  */
-export function logGuardInvocation(cwd: string, tool: string, target: string): void {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        const root = new RepoRootFinder().resolveRepoRoot(cwd);
-        const branch = branchForLog(root);
-        // The cache is branch-keyed, so the entry to log is the one for the branch we are standing on.
-        // 'unknown' (branchForLog's failure value) simply misses and logs 'sync=none'.
-        const sync = summarizeSyncStatus(readMainSyncStatus(root, branch));
+export class GuardInvocation {
+    constructor(
+        public readonly root: string,
+        public readonly timestamp: string,
+        public readonly tool: string,
+        public readonly target: string,
+        public readonly branch: string,
+        public readonly sync: string,
+        public readonly projectDir: string,
+    ) {}
+}
 
-        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
-        fs.mkdirSync(hooksDir, { recursive: true });
-        const logPath = path.join(hooksDir, INVOCATION_LOG_FILE);
-        rotateLogFile(logPath, path.join(hooksDir, INVOCATION_LOG_FILE_PREV));
+/**
+ * The per-INVOCATION stream — `.webpieces/logs/guard-invocations.log`, one line for EVERY guards-hook
+ * call (allow or block, bash or file), unlike guard-sync-decisions.log which records only the calls a
+ * rule actually judged. It captures the tool, the command/file, the live git branch, the async-written
+ * main-sync-status.json snapshot (branch / merged / fork-point / conflict), and — since this class
+ * replaced a bare log-and-forget function — HOW THE CALL ENDED.
+ *
+ * WHY IT IS TWO CALLS. The line used to be written the moment the hook started, so it could not carry
+ * a verdict: the decision had not been made yet. Answering "what happened to this call?" therefore
+ * meant joining this file against guard-sync-decisions.log BY TIMESTAMP, which is exactly the kind of
+ * reconstruction a log exists to make unnecessary. So {@link begin} now only CAPTURES (including the
+ * git/cache reads, which must still happen while the hook is running), and {@link finish} — called
+ * from the hook's single terminal boundary, emitAllow/emitDeny — writes the whole line once the
+ * outcome is known. The two streams stay distinct in purpose: this one is "every call and how it
+ * ended", the decision log remains "every judgement and why".
+ *
+ * Every error is swallowed: logging must never block or fail a hook.
+ */
+export class InvocationLog {
+    private pending: GuardInvocation | null = null;
 
-        const line = [`[${new Date().toISOString()}]`, tool, oneLine(target), `branch=${branch}`, sync].join('\t') + '\n';
-        fs.appendFileSync(logPath, line);
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
+    /**
+     * Capture the context of one invocation. `cwd` is the AI's working dir; the repo root that owns
+     * `.webpieces` is resolved from it. Writes NOTHING — {@link finish} does that.
+     */
+    begin(cwd: string, tool: string, target: string): void {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const root = new RepoRootFinder().resolveRepoRoot(cwd);
+            const branch = branchForLog(root);
+            // The cache is branch-keyed, so the entry to log is the one for the branch we are standing
+            // on. 'unknown' (branchForLog's failure value) simply misses and logs 'sync=none'.
+            const sync = summarizeSyncStatus(readMainSyncStatus(root, branch));
+            this.pending = new GuardInvocation(root, new Date().toISOString(), tool, oneLine(target), branch, sync, claudeEnv.projectDirForLog());
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+        }
+    }
+
+    /**
+     * Write the captured line, now stamped with the outcome. A no-op when nothing was captured (the
+     * 'rules' hook, or a terminal boundary reached before begin()), and it clears the pending entry so
+     * a second emit cannot double-log.
+     *
+     * `rule` is the rule that blocked, or '-' when there is none. FIELD ORDER IS APPEND-ONLY: the five
+     * original fields keep their positions (cleanup automation mines this file), and `verdict=` /
+     * `rule=` are added at the end.
+     */
+    finish(verdict: Verdict, rule: string): void {
+        const invocation = this.pending;
+        this.pending = null;
+        if (invocation === null) return;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            const logsDir = dotWebpieces.logs(invocation.root);
+            fs.mkdirSync(logsDir, { recursive: true });
+            const logPath = path.join(logsDir, INVOCATION_LOG_FILE);
+            rotateLogFile(logPath, path.join(logsDir, INVOCATION_LOG_FILE_PREV));
+
+            const line = [
+                `[${invocation.timestamp}]`,
+                invocation.tool,
+                invocation.target,
+                `branch=${invocation.branch}`,
+                invocation.sync,
+                `verdict=${verdict}`,
+                `rule=${oneLine(rule) || '-'}`,
+                // The tree the guard ACTED in, next to what Claude Code said the project was. Both, on
+                // every line, because the diagnostic value is entirely in comparing them — see
+                // ClaudeEnv for the open question this field exists to settle empirically.
+                `root=${invocation.root}`,
+                `projectDir=${invocation.projectDir}`,
+            ].join('\t') + '\n';
+            fs.appendFileSync(logPath, line);
+        } catch (err: unknown) {
+            const error = toError(err);
+            void error;
+        }
     }
 }
+
+// Process-wide instance: one hook process handles exactly one tool call, so a single pending entry is
+// the whole state there is. Module-scope (rather than DI) because the terminal boundary that flushes
+// it — emitAllow/emitDeny — is itself module-scope protocol code with no container in reach.
+export const invocationLog = new InvocationLog();
 
 // One-field summary of main-sync-status.json for the invocation log: the branch the cache is FOR,
 // whether it is already merged (and its PR), fork-point presence, and conflict state — the signals a

@@ -179,7 +179,7 @@ flow are not interchangeable.
    branch cap blocks you. It takes no arguments and needs no judgement call from you: it recomputes the
    verdicts itself, deletes one branch per command, spares anything a human should rule on, and logs
    every deletion with its pre-delete SHA plus a `recover=` command in
-   `.webpieces/hooks/branch-mutations.log`. **Use this instead of `git branch -D`.**
+   `.webpieces/logs/branch-mutations.log`. **Use this instead of `git branch -D`.**
 
 ## Worktrees (works the same as a primary clone)
 

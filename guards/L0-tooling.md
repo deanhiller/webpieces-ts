@@ -236,6 +236,48 @@ Two blocks, two one-line cures, no deadlock. Note the trap in step 2: the shim t
 `settings.json` points at — `$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh`, i.e. **the primary
 clone**. Regenerating it inside a linked worktree re-arms the wrong copy and the fault keeps firing.
 
+## The audit log — checking observed behaviour against this document
+
+Everything above says what L0 is SUPPOSED to do. The shim writes **one tab-separated line per tool
+call** — every call, not only the broken ones — so what it actually did can be diffed against these
+tables instead of inferred:
+
+```
+<iso-ts>  <bin-name>  <tool>  tree=<name|primary>  fault=<D|X|K|->  <VERDICT>  <command>
+```
+
+| verdict | means | maps to |
+|---|---|---|
+| `PASS-BIN-ALLOW` | no sh-side fault; the bin ran and exited 0 | matrix row 1 — no fault, → L1 |
+| `PASS-BIN-BLOCK` | no sh-side fault; the bin ran and exited 2 | matrix row 1; a LATER layer blocked |
+| `ALLOW-READ` | allowlist entry 1 | PASS — terminal here, see "Two known gaps" |
+| `ALLOW-CONFIG` | allowlist entry 2 | PASS — terminal here |
+| `ALLOW-CURE` | an allowlist cure entry | ALLOW |
+| `DENY` | fault `X`, not on the allowlist | 4 `BLOCK_AI_CURE` |
+| `DENY-STALE` | fault `D`, not on the allowlist | 4 `BLOCK_AI_CURE` |
+| `DENY-BROKEN` | fault `K`, not on the allowlist | 4 `BLOCK_AI_CURE` |
+
+`fault=` carries this document's own letters, and only `D`/`X`/`K` can appear: `S`/`C`/`Y` are decided
+inside the binary — which, on a `fault=-` line, is exactly what ran — and it keeps its own streams
+(`logs/guard-invocations.log`, `logs/guard-sync-decisions.log`, both of which now carry their call's
+verdict). So `fault=-` is a statement about the **sh layer only**, never a claim that nothing was wrong.
+
+`PASS-BIN-*` is the line that used to be missing. `wp_log` fired only on the fail-closed path, so a
+healthy call recorded nothing and an absent line meant either "fine" or "the shim never ran" — the two
+answers a reader most needs to tell apart.
+
+`tree=` is git's own name for the worktree the CALL was made in (`primary` in the primary clone),
+derived from the payload's `cwd`. The line lands in **that tree's** log —
+`<primary>/.webpieces/worktrees/<name>/logs/ai-hook-shim.log`, or `<primary>/.webpieces/logs/` from
+the primary clone. Centralized under the primary on purpose: removing a worktree must not take its
+audit trail with it. Note the interaction with the trap in the worked example above — the shim runs
+from `$CLAUDE_PROJECT_DIR`, so `tree=` can name a worktree whose faults are being MEASURED against a
+different tree. That divergence is now visible in the log rather than inferred.
+
+Two properties this log must never trade away, both locked by `shim-audit-log.spec.ts`: it never
+writes to stdout (stdout is the PreToolUse decision channel — one stray byte corrupts allow/deny), and
+it never blocks or fails a hook (an unwritable log directory leaves the outcome bit-for-bit unchanged).
+
 ## Code anchors
 
 | section | file | symbol |
@@ -244,3 +286,5 @@ clone**. Regenerating it inside a linked worktree re-arms the wrong copy and the
 | the allowlist | `ai-hook-rules/src/bin/l0-allowlist.ts` | `L0_ALLOWLIST`, `isAllowed` |
 | `S` enforcement | `ai-hook-rules/src/adapters/hook-core.ts` | `enforceCommittedShim`, `shimStaleRecoveryDecision` |
 | `D`/`X`/`K` enforcement | `ai-hook-rules/templates/ai-hook.sh` | the pre-binary `sh` block |
+| the audit log | `ai-hook-rules/src/bin/shim-audit-log.ts` | `WP_LOG_SH`, `SHIM_LOG_VERDICTS`, `SHIM_LOG_FAULTS`, `RESOLVE_LOG_DIR_SH` |
+| where any log goes | `rules-config/src/state-dir.ts` | `LOGS_STATE_DIR`, `DotWebpieces.logs()` |

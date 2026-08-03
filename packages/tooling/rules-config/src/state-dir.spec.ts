@@ -164,7 +164,7 @@ describe('scope assignment from inside a linked worktree', () => {
         const log = new BranchMutationLog(new DotWebpieces());
         const logPath = log.branchMutationLogPath(worktree);
         expect(logPath).toBe(path.join(
-            primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-a', 'hooks', 'branch-mutations.log'));
+            primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-a', 'logs', 'branch-mutations.log'));
         expect(logPath).not.toBe(log.branchMutationLogPath(primary));
 
         const event = new BranchMutationEvent('wp-cleanup', 'REAP');
