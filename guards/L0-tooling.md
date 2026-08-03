@@ -65,6 +65,20 @@ hurt it, and gating each entry on a fault is what produced four real defects.
 | 6 | `pnpm exec wp-upgrade-shim` | ALLOW |
 | 7 | the `cp` of the shipped template over `.claude/webpieces/ai-hook.sh` | ALLOW |
 | 8 | `pnpm exec wp-install-ai-hooks` — **flags allowed**, e.g. `--target=project` | ALLOW |
+| 9 | read-only **orientation**: `pwd`, `git status\|log\|diff\|show\|branch\|rev-parse`, `git worktree list` | ALLOW |
+
+Entry 9 is the only one that is not a cure — it is the DIAGNOSIS the cures depend on. An agent in a
+linked worktree, blocked by a `D` measured against the primary clone, ran `pnpm install` five times
+because it could not run `pwd` to see that it was standing somewhere else (2026-08-03). Only the
+literal `list` subcommand of `git worktree` is accepted; `add` / `remove` / `prune` / `move` /
+`repair` all mutate and stay denied, as does a bare `git worktree`.
+
+Being a diagnostic rather than a cure also means entry 9 does **not** bypass L1. The other Bash
+entries repair the tooling, so they are waved through ahead of the config load — unconditionally, on a
+healthy repo too (`L0_CURE_ALLOW_JS`). Orientation repairs nothing, so on a healthy repo `git status`
+from a subdirectory still meets L1's force-to-root; it is only exempt while a fault is up. That
+`cure` flag on `L0AllowEntry` is the ONLY per-entry variation in the list, and it decides nothing
+about L0 — under a fault every entry is judged identically.
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a downstream
@@ -161,6 +175,7 @@ this table adds the symptom and the incident, not a second set of commands.
 | 8 | nothing — no fault | — | → L1 | — |
 | 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself |
 | 10 | Reads succeed while `D`/`X`/`K` blocks Bash | the bin never ran, so PASS degenerates to a **terminal allow** | ALLOW_FAIL_OPEN | nothing to do — but note reads are UNGUARDED during those three (see "Two known gaps") |
+| 11 | you are blocked in a **linked worktree** and `pnpm install` keeps succeeding without clearing it | any fault, measured against `$CLAUDE_PROJECT_DIR` (the **primary clone**) while you stand somewhere else | BLOCK, then ALLOW once you look | Option 1 (preferred): `pwd` ← allowlist entry 9; then compare it with the path the deny names. Fix the tree you are actually IN with `cd <that path> && pnpm install`.<br>Also allowed: `git worktree list`, `git rev-parse --show-toplevel`<br>Do NOT: re-run the same bare `pnpm install` a second time — it already succeeded, in the wrong tree (2026-08-03: five identical installs, then the block was handed back to the human) |
 
 Row 7 is the collapse: `C`, `Y`, a validation banner and a syntax error look like four problems and
 are one. They all mean the file is wrong, and they all cure to making it right.
@@ -176,7 +191,10 @@ function working, not a regression.**
   blindness and caused the 2026-07 `0.3.369 vs 0.4.405` incident — fixed by resolving through
   `pnpm-lock.yaml`. Ranges remain.
 - **The `D`/`X`/`K` Read asymmetry** (use case 10). Narrowing the Read entry to a path pattern is the
-  fix; deliberately deferred.
+  fix; deliberately deferred. Allowlist entry 9 (read-only orientation) sits in the same asymmetry: the
+  bin never runs under those three, so an allowed `git status` is terminal rather than falling through
+  to L1. It reads and reports only, so the exposure is disclosure, not mutation — but it is the same
+  gap, and the same narrowing closes both.
 
 ## The generated L0 doc
 

@@ -75,6 +75,29 @@ export class ShimTestkit {
         return new ShimRun(r.status, r.stdout, r.stderr);
     }
 
+    /**
+     * A repo root staged so the shim's VERSION-DRIFT check (fault D) fires: an installed guard bin, a
+     * declared @webpieces/pr-gate pin in package.json, and a different installed version in
+     * node_modules. The fake bin prints EXECED, so "the guards actually ran" is observable in stdout —
+     * pass matching versions to stage the no-drift case instead.
+     *
+     * Lives here rather than in one spec because two spec files now need the identical staging, and a
+     * second copy is a second definition of what "drift" means.
+     */
+    stageDriftRoot(declared: string, installed: string): string {
+        const root = this.mktmp();
+        const binDir = path.join(root, 'node_modules', '.bin');
+        fs.mkdirSync(binDir, { recursive: true });
+        fs.writeFileSync(path.join(binDir, 'wp-ai-guards-hook'), '#!/bin/sh\nprintf EXECED\n', { mode: 0o755 });
+        fs.writeFileSync(path.join(root, 'package.json'),
+            JSON.stringify({ dependencies: { '@webpieces/pr-gate': declared } }, null, 2) + '\n');
+        const manifestDir = path.join(root, 'node_modules', '@webpieces', 'pr-gate');
+        fs.mkdirSync(manifestDir, { recursive: true });
+        fs.writeFileSync(path.join(manifestDir, 'package.json'),
+            JSON.stringify({ name: '@webpieces/pr-gate', version: installed }, null, 2) + '\n');
+        return root;
+    }
+
     /** A Bash tool payload, as Claude Code sends it on stdin. */
     bashPayload(command: string): string {
         return JSON.stringify({ tool_name: 'Bash', tool_input: { command } });

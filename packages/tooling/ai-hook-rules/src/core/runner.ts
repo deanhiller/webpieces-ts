@@ -11,7 +11,7 @@ import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
-import { L0_ALLOW_JS } from '../bin/shim';
+import { L0_ALLOW_JS, L0_CURE_ALLOW_JS } from '../bin/shim';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
@@ -65,8 +65,14 @@ function maybeRefreshMainSync(rules: readonly Rule[], workspaceRoot: string): vo
 // Fault C (webpieces.config.json missing) — the deny text lives in ./l0-matrix beside the rest of the
 // L0 fault table, so the message and the allowlist can never prescribe different cures. `cwd` is used
 // only to drop the matrix doc where the AI can read it (the config root does not exist yet here).
+//
+// `command` is '' on the file-tool path (there is no command to judge) and the Bash command otherwise:
+// a call on the L0 allowlist survives this block, which is how read-only orientation stays available
+// under C. You have to be able to see which tree you are standing in before you can decide what to
+// write into the config. Returns null when the call is allowed through.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function configMissingBlock(cwd: string): BlockedResult {
+function configMissingBlock(cwd: string, command: string = ''): BlockedResult | null {
+    if (command !== '' && l0FaultAllows(command)) return null;
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
     return new BlockedResult(CONFIG_MISSING_REPORT + guardMatrixPointer(writeGuardMatrixDoc(root)));
 }
@@ -186,11 +192,26 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
 // This used to test INSTALLER_ALLOW_JS alone, which made the config faults (C = config missing,
 // Y = config out of sync) accept a bare `pnpm install` while denying `rm -rf node_modules && pnpm
 // install` — the one cure that works when node_modules is CORRUPT rather than merely stale. Same
-// intent, opposite verdict, for no reason anyone recorded. L0_ALLOW_JS is the single list every L0
-// fault consults; see its block comment in ../bin/shim. Each alternative is still anchored at both
+// intent, opposite verdict, for no reason anyone recorded. Each alternative is still anchored at both
 // ends, so `pnpm install && rm -rf /` still falls to the guards.
+//
+// It tests the CURE subset (L0_CURE_ALLOW_JS), not the whole list, and the distinction matters here
+// and nowhere else: this call site runs BEFORE any fault has been established, so whatever it accepts
+// is waved past the L1 guards on a perfectly healthy repo too. A repair command has to be waved past —
+// it runs before the config can be loaded at all. Read-only ORIENTATION does not: it fixes nothing, and
+// letting `git status` through here would delete force-to-root as a side effect of adding `pwd`. Under
+// an actual fault, l0FaultAllows() below consults the WHOLE list.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function isL0CureCommand(command: string): boolean {
+    return L0_CURE_ALLOW_JS.test(command.trim());
+}
+
+// The FULL L0 list, asked only where this file has actually detected an L0 fault (C = config missing,
+// Y = config out of sync). Those two are the JS-side faults; D/X/K are decided in the shim, which greps
+// the same union. Without this the orientation entry would be honoured under four faults and silently
+// dropped under the other two — precisely the per-fault carve-out the L0 rewrite removed.
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function l0FaultAllows(command: string): boolean {
     return L0_ALLOW_JS.test(command.trim());
 }
 
@@ -280,7 +301,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     const loaded = loadConfigOrAllowInspection(command, cwd);
     // null = the config would not load AND this command only inspects → allow, see the helper.
     if (loaded === null) return null;
-    if (loaded.configPath === null) return configMissingBlock(cwd);
+    if (loaded.configPath === null) return configMissingBlock(cwd, command); // fault C
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
@@ -310,8 +331,8 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     );
     if (rules.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
-    if (outOfSync) return outOfSync;
+    const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
+    if (outOfSync) return l0FaultAllows(command) ? null : outOfSync;
 
     const subdirBlock = gitFromSubdirBlock(command, tree);
     if (subdirBlock) return subdirBlock;
