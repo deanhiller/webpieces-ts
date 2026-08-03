@@ -6,13 +6,37 @@ wins, exactly like the if/else chains the code already is.
 This file is the index. Each layer has its own document, because one file grew past the point where
 anyone could find anything in it.
 
-> **These documents are hand-written and CAN go out of date.** The code is the authority. Every layer
-> file names the exact files and functions it describes, and those functions carry a comment pointing
-> back. If the two disagree, **the code wins and the document is the bug** — fix it in the same PR that
-> changed the behaviour.
+> **Where these documents come from — and where they are going.**
 >
-> One exception: L0's fault table and allowlist are also **generated** from the arrays the guard
-> actually consults, and that copy cannot drift. See [L0](guards/L0-tooling.md).
+> L0's fault table and allowlist are **generated** from the arrays the guard actually consults, and a
+> unit test byte-locks the rendered file, so that copy cannot drift.
+>
+> **Every other layer file is hand-written TODAY and is being converted to the same mechanism.** Each
+> layer becomes an ordered array of row objects in code — tools, state, action, cure, and the use cases
+> that exercise the row — the doc is rendered from that array, and a test locks the two together. The
+> array is the thing the guard consults, so the doc cannot describe a guard the code does not implement.
+>
+> Until a layer is converted, its file is hand-written and CAN go out of date. The code is the
+> authority; every layer file names the files and functions it describes, and those functions carry a
+> comment pointing back. **If the two disagree, the code wins and the document is the bug** — fix it in
+> the same PR that changed the behaviour.
+
+## Generation status
+
+| layer | source of truth | doc |
+|---|---|---|
+| L0 | `L0_FAULTS` + `L0_ALLOWLIST` | **generated, byte-locked** |
+| L1 | — | hand-written; conversion planned next |
+| L2 | — | hand-written; conversion rides with the guard collapse |
+| L3, L4 | — | stubs |
+
+**How the generated files reach this repo's root, despite the one-release lag.** The runtime copy in
+`.webpieces/instruct-ai/` comes from the PUBLISHED package and is therefore one release behind — fine
+for consumers, wrong for the copy people read on GitHub. So the root files are **not** written by the
+runtime hook. They are byte-locked by a vitest spec that calls the local `render*Doc()` — and vitest
+resolves `@webpieces/*` to local source via `tsconfig.base.json` paths, so there is no lag at all. A
+stale root doc fails `build-all`, exactly like `validate-architecture-unchanged`. No repo-detection
+hack, and consumers keep getting the published copy at block time.
 
 ## The layers
 
@@ -59,7 +83,14 @@ It has a dual that is easy to miss, and missing it is how a collapse silently di
 
 Branch identity comes from one `git rev-parse` and is always establishable. Cache state often is not.
 Order a table so the cache's fail-opens sit in front of a cache-free fact and the fail-open leaks onto
-the fact. See L2 table A, row A1 — that ordering is load-bearing.
+the fact. See L2's row 5 and the divider above it — that ordering is load-bearing.
+
+## The global allowlist
+
+One list, consulted **before every layer**: commands that are inert (cannot read repo content, cannot
+change the repo) plus the universal cures that must stay reachable or a session deadlocks. Detailed in
+[L2](guards/L2-branch-state.md), because that is where the collapse builds it, but it is not L2's — it
+precedes L0.
 
 ## Two rules that constrain every guard change
 

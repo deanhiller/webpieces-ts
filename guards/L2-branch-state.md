@@ -134,123 +134,151 @@ the fail-OPEN direction. Flipping either turns an allow into a block.
 
 # Part 2 — PROPOSED
 
-## Two policies, not one
+> **This section will be REPLACED by a generated file.** The table below becomes an ordered array in
+> code (`L2_ROWS`), the doc is rendered from it, and a unit test byte-locks the two — the same
+> mechanism that already makes L0's fault table and allowlist undriftable. Until that lands this text
+> is hand-written and can drift; the code wins.
 
-The four guards look inconsistent because they answer two different questions. Separating them is the
-whole simplification.
+## One table, ordered, first match wins
 
-- **WRITE policy** — *where will my commits land?* Only on a healthy feature branch.
-- **READ policy** — *is this content current?* Only if the tree is not a stale snapshot.
+**Tools:** `B` Bash · `R` Read · `E` Write/Edit
 
-The split is already latent in the code: `read-stale-guard` ignores `hasForkPoint` and `conflict`
-entirely, because those are write concerns and say nothing about staleness.
-
-## Table A — WRITE / MUTATE
-
-Write, Edit, and mutating Bash — **including `git commit` and `git add`**. Committing is *working here*.
-
-| # | state | cache | verdict | cure |
+| # | tools | state | act | cure |
 |---|---|---|---|---|
-| A0 | merge in progress | — | **EXEMPT** | finish the merge — L4 owns this state |
-| A1 | on `main` | **not needed** | BLOCK | branch off `origin/main` |
-| A2 | cache absent, or for another branch | — | ALLOW *(fail open)* | — |
-| A3 | on a merged branch | needed | BLOCK | branch off `origin/main` |
-| A4 | no fork point, or `main` collided with your files | needed | BLOCK | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
-| A5 | healthy feature branch | needed | ALLOW | — |
+| 1 | `B R E` | on the **global allowlist** (inert command or universal cure) | ALLOW | — |
+| 2 | `B` | bare `git checkout main`, no `git pull` chained | **BLOCK** | `git checkout main && git pull origin main` |
+| 3 | `B R E` | **merge in progress** | EXEMPT | finish the merge — L4 owns this state |
+| 4 | `B` | on the **skip list** | ALLOW | — |
+| 5 | `B E` | on `main` | **BLOCK** | `git checkout -b <new> origin/main` |
 
-**A1 sits above A2 and that ordering is load-bearing.** The on-main block is cache-free, and the cache's
-fail-opens must not preempt it. A naively ordered collapse puts `cache-absent` first and permits writes
-on `main` on the first tool call of every session — and permanently in a multi-worktree repo.
+> ─── Everything above needs **no cache** and fires on call #1. Everything below needs the main-sync
+> cache: if the branch is undeterminable, the cache is absent, or it holds another branch, **stop here
+> and ALLOW**. ───
 
-**A4 is REPAIR, not leave.** `wp-start-update` does the 3-point squash merge and rewrites the branch,
-**producing a correct fork point**, so the branch you are standing on becomes healthy. Branching off
-would abandon it. `feature-branch-guard` already picks between the two `wp-start-*` commands based on
-whether a PR is open.
-
-## Table B — READ / INSPECT
-
-Read, and content-reading Bash — **including `git grep` and `git show <rev>:<path>`**, which read tracked
-file content.
-
-| # | state | cache | verdict | cure |
+| # | tools | state | act | cure |
 |---|---|---|---|---|
-| B0 | merge in progress | — | **EXEMPT** | finish the merge |
-| B1 | cache absent, or for another branch | — | ALLOW *(fail open)* | — |
-| B2 | on `main`, behind `origin/main` | needed | BLOCK | `git pull`, or branch off `origin/main` |
-| B3 | on `main`, **current** | needed | **ALLOW** | — |
-| B4 | on a merged branch | needed | BLOCK | branch off `origin/main` |
-| B5 | broken fork point / collided | — | ALLOW | — |
-| B6 | healthy feature branch | needed | ALLOW | — |
+| 6 | `R` | on `main`, behind `origin/main` | **BLOCK** | `git pull`, or branch off |
+| 7 | `R` | on `main`, current | ALLOW | — |
+| 8 | `B R E` | on a **merged branch** | **BLOCK** | `git checkout -b <new> origin/main` |
+| 9 | `B R E` | no fork point, or `main` collided with your files | **BLOCK** | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
+| 10 | `B R E` | healthy feature branch | ALLOW | — |
 
-**B3 is deliberate.** Reading a CURRENT `main` is fine — the problem is that `main` is almost always
-behind. So staleness stays, for reads only. Writes on `main` block either way (A1), which is exactly why
-the two tables must not be merged.
+### The one rule that explains the tool column
 
-**B5 confirms the split**: a broken fork point blocks writes and says nothing about reads.
+**`B` tracks `E` everywhere. `R` is judged separately in exactly one place — rows 6/7, on `main`.**
 
-## A0/B0 — the merge-in-progress row
+A Read names exactly one file, so the guard can evaluate it precisely. A Bash command is opaque, so it
+gets the conservative answer. Reading a CURRENT `main` is fine; the problem is that `main` is almost
+always behind.
 
-While `wp-start-update` is resolving a conflict you must be able to read AND write the conflicted files.
-L2 stands down and defers to `merge-in-progress-guard` (L4), which owns that state.
+### Why row order carries the cache
 
-The code already learned this the hard way: that guard's hint used to say "do not run other commands" —
-*"an unbounded claim that forbade the reads, the `git add`, the build and the tests that finishing a
-merge actually requires."* It now renders its hint from its own blocked lists so the two cannot drift.
+L2 is armed **from the second tool call onward**. The refresher is fire-and-forget: it populates the
+cache for the NEXT call, never the current one. So the first call of a session fails open and the block
+lands a call or two later. That is deliberate — it keeps the blocking path free of network git — and it
+is fine in practice, because the agent discovers the problem within a command or two.
 
-Without this row, A4 prescribes a cure that A1–A5 would then block.
+The exception is **rows 2–5**, which need no cache: rows 1, 2 and 4 are text matches, row 3 is a
+marker-file scan, and row 5 is one `git rev-parse`. Put row 5 BELOW the divider and writes on `main` are
+permitted for the whole first call of every session — and permanently in a multi-worktree repo. That
+ordering is the single most load-bearing thing in this table.
 
-## The skip list
+### Why row 9 can block reads without trapping you
 
-The commands L2 never judges. The principle: **these get you OUT or tell you where you are** — they are
-not "working here".
+Blocking reads on a broken fork point looks like it traps the agent away from the files it must read to
+resolve the conflict. It does not, because **row 3 comes first**:
 
-**Get out**
+blocked → `pnpm wp-start-update` (row 4, skip list) → now merge-in-progress → **row 3 exempts
+everything** → read and write freely to resolve → finish.
 
-| command | why |
+The exemption row is what lets row 9 be strict.
+
+### Why row 8 can block reads on a dirty tree
+
+`git checkout -b <new> origin/main` **carries uncommitted changes onto the new branch**. The work comes
+with you, so nothing needs reading first and nothing is trapped.
+
+This is the ORIGINAL documented design, not a new policy. `read-stale-guard`'s class comment still says
+it: *"State B blocks ANYWAY, because its cure — `git checkout -b <new> origin/main` — carries
+uncommitted changes onto the fresh branch, so there is nothing to resolve and nothing to be trapped
+by."* The code then drifted and opened a dirty valve anyway. Row 8 restores the stated intent.
+
+Residual: if `origin/main` changed the same files you edited, git refuses the switch. `git stash` is on
+the skip list and clears it.
+
+Row 6 is the only place the dirty argument ever had teeth, because there the cure is `git pull`, which
+genuinely is not a clean fast-forward on a dirty tree. Even there, `git stash` → `git pull` →
+`git stash pop` works, and stash is on the skip list. **So there is no dirty row anywhere.**
+
+## The global allowlist — before every layer
+
+Not L2's; it precedes L0. Two kinds of entry, and the distinction is load-bearing:
+
+| kind | why global | entries |
+|---|---|---|
+| **Inert** | cannot read repo content, cannot change the repo | `pwd` `echo` `printf` `true` `false` `:` `cd` `date` `whoami` `which` `sleep` `test` `[` |
+| **Universal cure** | must stay reachable or the session deadlocks | `pnpm\|npm install` · `rm -rf node_modules && pnpm install` · read **and** edit `webpieces.config.json` |
+
+Today there is no such list: `pwd` is in L2's `ALWAYS_INERT` so L2 lets it through, but `L0_ALLOWLIST`
+has never heard of it — a `pwd` blocked by fault `S` was observed live.
+
+Build it as a third `kind` on the EXISTING `L0_ALLOWLIST` array, not a second array: that one array is
+already the single source for the JS `isAllowed()`, the `grep -E` inside the rendered shim, and the
+generated matrix doc.
+
+| kind | consulted | effect |
+|---|---|---|
+| `pass` | only under an L0 fault | falls THROUGH; downstream layers still judge |
+| `allow` | only under an L0 fault | terminal; the fault's cures |
+| `global` | **every call** | terminal; never reaches any layer |
+
+**Do NOT promote L0's "any Read" entry.** It is a `pass` on purpose; as a global allow it would bypass
+L2's stale-read protection entirely.
+
+The shim must carry it too — `D`/`X`/`K` are enforced in POSIX `sh` before the bin runs, so `pwd` only
+survives a missing or broken bin if the ERE is in the shim.
+
+## The skip list (row 4)
+
+Principle: **these get you OUT or tell you where you are.** They are not "working here".
+
+| group | commands |
 |---|---|
-| `git checkout -b <new> origin/main` | leave; current by construction |
-| `git switch -c <new> origin/main` | same |
-| `git switch <other-branch>` | leave |
-| `git worktree add … -b <new> origin/main` | leave |
+| get out | `git checkout -b <new> origin/main` · `git switch -c <new> origin/main` · `git switch <other>` · `git worktree add … -b <new> origin/main` |
+| make `main` current | `git pull` · `git fetch` · `git checkout main && git pull origin main` *(paired only)* |
+| orient | `git status\|log\|diff\|branch` · `gh pr view\|list\|status\|checks` |
+| park work | `git stash` |
+| repair / tooling | `pnpm wp-start-update` · `pnpm wp-start-upsert-pr` · the `wp-*` bins |
 
-**Make `main` current**
+**NOT on it:** `git commit` `add` `push` `merge` `rebase` `reset` `restore` `clean` `cherry-pick` ·
+`git grep` `show <rev>:<path>` `cat-file` `ls-files` (those read tracked content).
 
-| command | why |
-|---|---|
-| `git pull` / `git fetch` | the cure for B2 |
-| `git checkout main && git pull origin main` | **paired only** — a bare `git checkout main` is blocked, see the 157-commit incident |
+**`pnpm build` / `pnpm test` are NOT on it either.** There is no point running them on `main` or on a
+dead branch; branch off first. This replaces a hand-maintained 31-entry git allowlist with ~14 entries,
+each justified by "gets you out" rather than "seemed harmless".
 
-**Orient — needed to decide what to do**
+## Deny messages shrink to three parts
 
-| command | why |
-|---|---|
-| `git status` · `git log` · `git diff` · `git branch` | git METADATA, not file content |
-| `gh pr view\|list\|status\|checks` | is my PR merged? |
+Today's blocks run 1,500–2,000 characters and burn that much context on every hit. The shape becomes:
 
-**Park work so you can leave**
+```
+❌ <one line: why>
+   Run EXACTLY: <the cure>
+   Full matrix: <root>/.webpieces/instruct-ai/guards/L2-branch-state.md
+```
 
-| command | why |
-|---|---|
-| `git stash` | the only way to carry uncommitted work off a dead branch |
+**The cure stays literal and inline — never a pointer.** That is what preserves the anti-stuck
+property: L0's cure-reachability test asserts every named cure is actually runnable, and it caught a
+fault prescribing a bin that had been renamed away. A message saying "see the docs for your cure"
+cannot be tested that way.
 
-**Repair and tooling**
+The mechanism already exists — `writeGuardMatrixDoc()` drops the generated doc into
+`.webpieces/instruct-ai/` lazily on an L0 BLOCK and appends `READ <path>`. Extend it to every layer.
 
-| command | why |
-|---|---|
-| `pnpm wp-start-update` · `pnpm wp-start-upsert-pr` | A4's cure |
-| `pnpm install`, the `wp-*` bins | fix the tooling |
-| read **and** edit `webpieces.config.json` | the mode-OFF hatch |
-
-**NOT on the skip list — this is "working here"**
-
-`git commit` · `git add` · `git push` · `git merge` · `git rebase` · `git reset` · `git restore` ·
-`git clean` · `git cherry-pick` · `git grep` · `git show <rev>:<path>` · `git cat-file` · `git ls-files`
-
-The last four read tracked file content, so they fall under table B, not the skip list.
-
-This replaces a hand-maintained 31-entry git allowlist with ~14 entries each justified by "gets you out"
-rather than "seemed harmless".
-
+Precedent for generating the message rather than writing it: `merge-in-progress-guard`'s hint renders
+itself from its blocked lists, because the hand-written version said "do not run other commands" — *"an
+unbounded claim that forbade the reads, the `git add`, the build and the tests that finishing a merge
+actually requires, and that survived every edit to these lists."*
 ## Cannot tell
 
 Split by whether the state is *expected*:
@@ -269,26 +297,6 @@ deadlocks every session behind a network fetch. And if a guard cannot establish 
 Make `ALLOW_FAIL_OPEN` a **typed verdict** instead of today's string suffix, so abstentions are
 countable. Nothing currently reads the decision log; a `wp-*` report over it would have surfaced the
 N-worktree cache hole from telemetry rather than from reading comments.
-
-## What changes
-
-| | today | proposed |
-|---|---|---|
-| Write on `main` | BLOCK | BLOCK |
-| Read/Bash on a **current** `main` | ALLOW | ALLOW |
-| Read/Bash on a **stale** `main`, clean | BLOCK | BLOCK |
-| Read/Bash on a **stale** `main`, **dirty** | ALLOW | **BLOCK** |
-| Read on a merged branch, **dirty** | ALLOW | **BLOCK** |
-| `cat` on a merged branch, dirty | BLOCK | BLOCK |
-| `git commit` on a merged branch | BLOCK | BLOCK |
-| healthy feature branch | ALLOW | ALLOW |
-
-**Deleting the dirty valve is the ONLY behaviour change.** Cleanup stays reachable through the skip
-list — which is how `merged-branch-bash-guard` already works, and why it alone never calls `isDirty()`.
-Note the skip list has `git stash` but not `git commit`, so "tidy up first" means **stash**.
-
-Everything else in the proposal is refactor: four ladders become one classifier plus a verdict table,
-with the two Bash scope predicates referenced by name from their cells rather than buried in ladders.
 
 ## Config
 
@@ -312,37 +320,6 @@ documented above. One switch makes that unrepresentable.
 **This is a hard cut, not a fallback.** Per `CLAUDE.md`, a moved config key is REJECTED with an error
 naming the destination, recorded in `retired-config-keys.ts`, and its read path is deleted in the same
 change. Source and config still ship in separate PRs because the running validator is a release behind.
-
-## Staged PRs — never all four guards at once
-
-| PR | change | behaviour change? |
-|---|---|---|
-| 1 | Golden characterization tests over the CURRENT four guards, generated cell universe. The frozen baseline. | none |
-| 2 | Shared probe (`currentBranch` + the `.git/HEAD` fast path); adopt in `read-stale-guard` first — zero delta | none |
-| 3 | Typed `ALLOW_FAIL_OPEN`; loud logging for the two anomalous states | log only |
-| 4 | Classifier + verdict table as UNREFERENCED code, plus a differential test asserting old ladders and new table agree over the whole universe | none |
-| 5 | Switch guards one PR each: `feature-branch` → `read-stale` → `merged-branch-bash` → `stale-main-bash` | none — proven by PR 4 |
-| 6 | Formally scope `read-stale-guard` to Read | provable no-op |
-| 7 | **THE BEHAVIOUR CHANGE** — delete the dirty valve. Rewrites this file's Part 1 away. | **yes** |
-| 8 | Retire the four config keys for `branch-state-guard` (source only) | none |
-| 9 | *After publish* — migrate the live `webpieces.config.json` | config only |
-| 10 | Abstention report over the decision log | new command |
-
-PRs 1–6 are pure refactor; 7 is the only one that changes what an agent can do, so it reverts alone.
-
-## Tests
-
-**The anti-stuck guarantee, and it must be a test.** L0's cure-reachability test caught a fault
-prescribing a bin that had been renamed away. The L2 analogue: **every command named in a block message
-must be accepted by the skip list, in the state that block describes.**
-
-- **Totality** — every cell yields exactly one verdict; twice gives the same answer.
-- **No implicit default** — every (state, tool) pair has an explicit entry. A missing cell is a test
-  failure, never a fallthrough; a fallthrough default is how you get a silent allow.
-- **No shadowed row** — each row carries a witness state; assert it classifies there AND wins.
-- **Fail-open discipline** — a cannot-tell state always yields ALLOW, with a named exception list.
-- **A1 is cache-free** — Write on `main` still BLOCKS with: no cache, cache for another branch, dirty
-  tree, and `main` current. Four rows, and the highest-value test in the suite.
 
 ## Code anchors
 
