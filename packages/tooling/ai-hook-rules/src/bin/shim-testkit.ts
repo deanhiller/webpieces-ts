@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
-import { renderShim } from './shim';
+import { renderShim, shimPath } from './shim';
 
 /**
  * The shim's PreToolUse deny payload, as it prints it on stdout. Named (not an inline literal on the
@@ -95,6 +95,21 @@ export class ShimTestkit {
         fs.mkdirSync(manifestDir, { recursive: true });
         fs.writeFileSync(path.join(manifestDir, 'package.json'),
             JSON.stringify({ name: '@webpieces/pr-gate', version: installed }, null, 2) + '\n');
+        return root;
+    }
+
+    /**
+     * A throwaway repo root that OWNS a committed shim at shimPath(root) with the given contents
+     * (null = no shim at all, i.e. a fresh clone / global install). Shared by the two spec files that
+     * exercise the committed-shim self-guard, so "a root with a shim in it" has one definition.
+     */
+    stageCommittedShim(content: string | null): string {
+        const root = this.mktmp();
+        if (content !== null) {
+            const p = shimPath(root);
+            fs.mkdirSync(path.dirname(p), { recursive: true });
+            fs.writeFileSync(p, content);
+        }
         return root;
     }
 

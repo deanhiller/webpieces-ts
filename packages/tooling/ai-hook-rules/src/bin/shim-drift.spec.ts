@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, NO_CHAINING_RULE, renderShim, shimPath, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
+import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, NO_CHAINING_RULE, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -241,31 +241,23 @@ describe('version-drift guard — permitting the CURE for each direction', () =>
  * (isShimCureCommand) so the AI can re-arm it. These drive those functions directly — the binary's
  * decision is exercised via runMain in hook-core, but the LOGIC is these three pure functions.
  *
- * Stage a repo root that owns a committed shim at shimPath(root) with the given contents (null = none).
+ * Roots that own a committed shim are staged by ShimTestkit.stageCommittedShim (shared with
+ * shim-governing-root.spec.ts, which drives the same self-guard from the module-root side).
  */
-function stageCommittedShim(content: string | null): string {
-    const root = kit.mktmp();
-    if (content !== null) {
-        const p = shimPath(root);
-        fs.mkdirSync(path.dirname(p), { recursive: true });
-        fs.writeFileSync(p, content);
-    }
-    return root;
-}
-
 describe('committedShimStale — detecting a reverted/hand-edited/older committed shim', () => {
     it('false when the committed shim matches renderShim() (no tampering)', () => {
-        expect(committedShimStale(stageCommittedShim(renderShim()))).toBe(false);
+        expect(committedShimStale(kit.stageCommittedShim(renderShim()))).toBe(false);
     });
 
     it('true when the committed shim differs (revert / hand-edit / older logic)', () => {
-        expect(committedShimStale(stageCommittedShim(renderShim() + '\n# tampered\n'))).toBe(true);
+        expect(committedShimStale(kit.stageCommittedShim(renderShim() + '\n# tampered\n'))).toBe(true);
     });
 
     it('false when there is NO committed shim (fresh clone / global install — nothing to guard)', () => {
-        expect(committedShimStale(stageCommittedShim(null))).toBe(false);
+        expect(committedShimStale(kit.stageCommittedShim(null))).toBe(false);
     });
 });
+
 
 describe('isShimCureCommand — only the three cures pass while the self-guard blocks everything', () => {
     it('allows exactly the three cures, including the 2>&1 | tail spelling an assistant actually types', () => {
@@ -340,6 +332,9 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
         expect(reason).not.toContain('"');
         expect(reason).not.toContain('\\');
     });
+
+    // How the deny names the tree it judged (root= / projectDir=) lives in shim-governing-root.spec.ts,
+    // beside the governingShimRoot tests it belongs with.
 });
 
 describe('upgrade-shim cure allowlist (POSIX ERE ↔ JS regex twins)', () => {

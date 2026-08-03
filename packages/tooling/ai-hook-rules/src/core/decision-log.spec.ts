@@ -188,7 +188,9 @@ describe('InvocationLog — CLAUDE_PROJECT_DIR and the tree actually used', () =
         else process.env[CLAUDE_PROJECT_DIR_ENV] = previous;
 
         expect(unsetLine).toContain(`\tprojectDir=${CLAUDE_PROJECT_DIR_UNSET}`);
-        expect(emptyLine).toContain('\tprojectDir=\n');
+        // Delimited by TABS, not anchored to end-of-line: an empty value must read as empty wherever
+        // projectDir sits in the line, and it stopped being the last field when `tree=` was appended.
+        expect(emptyLine).toContain('\tprojectDir=\t');
         expect(emptyLine).not.toContain(CLAUDE_PROJECT_DIR_UNSET);
     });
 });

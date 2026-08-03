@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { CONFIG_FILENAME } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, claudeEnv } from '@webpieces/rules-config';
 
 import { toError } from '../core/to-error';
 import {
@@ -447,15 +447,68 @@ export function healShim(cwd: string): void {
 // shim is byte-stable across releases, so this fires only on a genuine logic change or a real tamper.
 // ---------------------------------------------------------------------------
 
+// The root whose committed shim this BINARY governs — resolved from the RUNNING MODULE's own location,
+// never from process.cwd() and never from $CLAUDE_PROJECT_DIR. Same premise as installedShimRulesVersion()
+// below: the binary IS this package, so it can point at its OWN install.
+//
+// WHY IT MUST BE THE MODULE AND NOT THE CWD (the two-tree straddle, fixed 2026-08-03).
+// committedShimStale used to resolve its root by walking up from the invocation cwd, then compare that
+// tree's shim FILE against renderShim() — which is compiled into whichever binary is actually running.
+//
+// Which tree supplies the binary? settings.json runs $CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh,
+// and that shim derives ROOT (hence BIN) from its own $0 — so the SESSION ROOT's tree supplies BOTH the
+// shim and the binary, and that pair is self-consistent by construction. A session rooted in a linked
+// worktree runs the worktree's shim and the worktree's binary; that is fine and is NOT the bug.
+//
+// The straddle appears when an agent's SESSION ROOT and its CWD are different trees — CLAUDE_PROJECT_DIR
+// is fixed at session start, so an agent that `cd`s into another checkout keeps running the session-root
+// tree's binary while findShimRoot(cwd) walks up into the OTHER tree. Each tree carries its own
+// node_modules at its own @webpieces version (seen in the wild: 0.4.545, 0.4.560 and 0.4.526 side by
+// side, every tree internally consistent). The comparison then straddles the two and can NEVER converge:
+// curing in the cwd tree renders with THAT tree's renderShim(), which the running binary's renderShim()
+// still rejects, so the cure re-fires the deny forever (observed: an agent gave up after four cures).
+//
+// Anchoring on __dirname makes the straddle UNCONSTRUCTIBLE rather than merely discouraged. It does not
+// pick a tree and privileges none: whichever tree the running binary came from is the tree whose shim it
+// compares, so the two halves of the comparison provably come from the same install either way.
+//
+// OUTERMOST node_modules wins, not innermost: under pnpm's linked layout __dirname realpaths to
+// <root>/node_modules/.pnpm/@webpieces+ai-hook-rules@X/node_modules/@webpieces/ai-hook-rules/src/bin —
+// the outermost segment lands on <root>, an innermost/first-ancestor rule lands inside the store.
+// With no node_modules segment at all we are running from a SOURCE checkout (vitest via tsconfig paths),
+// so walk up to the nearest ancestor that owns a shim. null = no committed shim to guard.
+// webpieces-disable no-function-outside-class -- pure fs+path helper in the dependency-free shim module, beside findShimRoot/healShim.
+export function governingShimRoot(moduleDir: string = __dirname): string | null {
+    const segments = moduleDir.split(path.sep);
+    const outermost = segments.indexOf('node_modules');
+    if (outermost > 0) {
+        const root = segments.slice(0, outermost).join(path.sep);
+        return fs.existsSync(shimPath(root)) ? root : null;
+    }
+    // A moduleDir that STARTS with node_modules is relative, so the root before it would be '' — i.e.
+    // cwd-relative, the exact input this function exists to refuse. Nothing to govern.
+    if (outermost === 0) return null;
+    let dir = moduleDir;
+    for (;;) {
+        if (fs.existsSync(shimPath(dir))) return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
+}
+
 // True when a committed shim EXISTS but no longer equals renderShim() (reverted, hand-edited, or a shim
 // whose LOGIC predates the installed binary). Missing shim → false: a fresh clone / global install has
 // nothing to guard, matching the old shim's `[ -f "$WP_TEMPLATE" ]` skip. Same comparison healShim
 // makes; never throws (an unreadable tree is treated as "not stale" so it can't wedge a tool call).
+//
+// The root defaults to governingShimRoot() — the decision's input is the MODULE's tree, never the cwd
+// (see governingShimRoot for the straddle this closes). The parameter exists ONLY so unit tests can
+// stage a temp root; nothing in production should pass one.
 // webpieces-disable no-function-outside-class -- pure fs+path helper in the shim module, beside healShim/renderShim.
-export function committedShimStale(cwd: string): boolean {
+export function committedShimStale(root: string | null = governingShimRoot()): boolean {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const root = findShimRoot(cwd);
         if (root === null) return false;
         return fs.readFileSync(shimPath(root), 'utf8') !== renderShim();
     } catch (err: unknown) {
@@ -477,13 +530,46 @@ export function isShimCureCommand(command: string): boolean {
 
 // The fail-closed deny text for a stale committed shim, built from the single-source cure constants +
 // NO_CHAINING_RULE. `installedVersion` names WHICH webpieces the cure re-arms to (the binary is that
-// version); pass '' to omit the note rather than print an empty one. CONSTRAINT: the returned string
-// must contain no `"` and no `\` — it is JSON-serialized by denyJson() (a stray quote/backslash would
-// corrupt the PreToolUse decision payload, not just the text). Locked by a unit test.
+// version); pass '' to omit the note rather than print an empty one. `root` is the tree the deciding
+// binary GOVERNS (governingShimRoot) — naming it, and anchoring the cure to it with a leading
+// `cd <root> &&` (which CD_PREFIX_*_ANCHORED already tolerates, locked by a unit test), is what keeps
+// the cure curable when the AI's cwd is a DIFFERENT tree than the one being judged. Pass '' to omit.
+//
+// The cause list is deliberately a LIST: it used to assert flatly "(it was reverted or hand-edited)",
+// which is frequently FALSE — the common case is a shim whose logic simply predates this binary — and
+// that false certainty sent a real agent hunting for a tamper that never happened.
+//
+// WHERE IT WAS MEASURED, in the deny itself and not only in the logs. #574 put `root=` and
+// `projectDir=` on every L1 invocation line (see decision-log / ClaudeEnv.projectDirForLog, whose
+// `<unset>` token keeps "variable absent" distinguishable from "set to empty"). The log is forensics
+// AFTER the fact; the deny is what a blocked agent reads IN the moment, and the absence of exactly
+// these two fields is what sent a real agent chasing the wrong mechanism for four cures. Same field
+// names on purpose, so the deny text and the log lines grep together.
+//
+// CONSTRAINT: the returned string must contain no `"` and no `\` — it is JSON-serialized by denyJson()
+// (a stray quote/backslash would corrupt the PreToolUse decision payload, not just the text). That is an
+// INVARIANT, not a hope, so every interpolated path is STRIPPED of both rather than trusted — a
+// Windows-style path or an odd directory name must not be able to corrupt the decision. Locked by unit
+// tests. An unusual root is also dropped from the `cd` cure rather than quoted (CD_PREFIX would reject it).
 // webpieces-disable no-function-outside-class -- pure string builder over exported constants; the single source of the self-guard deny text now that the sh copy is gone.
-export function shimStaleDenyReason(installedVersion: string): string {
+export function shimStaleDenyReason(installedVersion: string, root: string = ''): string {
     const verNote = installedVersion ? ` (installed version ${installedVersion})` : '';
-    return `❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces/ai-hook-rules${verNote} (it was reverted or hand-edited). This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: both options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - it is the SURGICAL tool: it regenerates the shim and touches NOTHING else, no config and no settings.json, and it imports only fs/path so it runs on a broken tree; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${UPGRADE_SHIM_CMD}'. OPTION 2 (pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet - it works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite, and that prompt is NOT this guard) - run EXACTLY this command: '${RESTORE_SHIM_CMD}'. Do NOT use the bare '${INSTALL_HOOKS_CMD}' here: this fault is shim-only, and the installer also migrates your config and wires BOTH hooks, PROMPTING for a target twice, which hangs a non-interactive session. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.`;
+    const safeRoot = root.replace(/["\\]/g, '');
+    const projectDir = claudeEnv.projectDirForLog().replace(/["\\]/g, '');
+    // Tested against the RAW root, never the stripped one: stripping is a display-safety measure, and
+    // cd-anchoring to a path we just mangled would prescribe a cd into a directory that does not exist.
+    // A root CD_PREFIX cannot express is simply not offered as a `cd` (raw ok ⇒ safeRoot === root).
+    const cdOk = root !== '' && /^[A-Za-z0-9._/@~+-]+$/.test(root);
+    // Agreement is the routine case; DISAGREEMENT is the signature of the session-root-vs-cwd split this
+    // guard was rewritten to make unconstructible, so it gets said out loud rather than left to inference.
+    const verdict = safeRoot === projectDir
+        ? 'These two AGREE, so this is the ordinary case - the tree you are in is the tree being judged.'
+        : 'These two DISAGREE - the tree being judged is NOT the one CLAUDE_PROJECT_DIR names, so cure the root= tree specifically and do not assume your current directory is it.';
+    const rootNote = safeRoot === '' ? '' : ` WHERE THIS WAS MEASURED: root=${safeRoot} (the tree the RUNNING guard binary itself came from - that is the tree whose shim must change), projectDir=${projectDir} (CLAUDE_PROJECT_DIR as this process sees it; <unset> means the variable is absent, which is not the same as set-but-empty). ${verdict}`;
+    const upgrade = cdOk ? `cd ${safeRoot} && ${UPGRADE_SHIM_CMD}` : UPGRADE_SHIM_CMD;
+    // OPTION 2 is a relative-path `cp`, so it is even MORE cwd-sensitive than OPTION 1 — anchor it too.
+    const restore = cdOk ? `cd ${safeRoot} && ${RESTORE_SHIM_CMD}` : RESTORE_SHIM_CMD;
+    return `❌ webpieces-managed file was changed: .claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces/ai-hook-rules${verNote} (it was reverted, hand-edited, or its logic predates this binary).${rootNote} This file is GENERATED and committed by webpieces - it must NOT be reverted or edited by hand, and its fail-closed guard logic cannot be trusted while it differs. Every OTHER tool call is blocked until the two files are byte-identical again. THIS IS NOT A DEADLOCK: both options below are explicitly ALLOWED through while this guard is up, so run one YOURSELF now - do not hand it back to the human. OPTION 1 (preferred - it is the SURGICAL tool: it regenerates the shim and touches NOTHING else, no config and no settings.json, and it imports only fs/path so it runs on a broken tree; needs installed @webpieces/ai-hook-rules 0.4.408 or newer) - run EXACTLY this command: '${upgrade}'. OPTION 2 (pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet - it works on every version, but Claude Code's own permission prompt may ask you to confirm the file overwrite, and that prompt is NOT this guard) - run EXACTLY this command: '${restore}'. Do NOT use the bare '${INSTALL_HOOKS_CMD}' here: this fault is shim-only, and the installer also migrates your config and wires BOTH hooks, PROMPTING for a target twice, which hangs a non-interactive session. ${NO_CHAINING_RULE} Do NOT revert the shim again - if you meant to remove @webpieces/ai-hook-rules, delete its hooks from .claude/settings.json instead.`;
 }
 
 // The shape of the fields we read out of this package's package.json.
