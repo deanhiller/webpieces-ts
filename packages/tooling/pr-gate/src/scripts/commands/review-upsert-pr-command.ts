@@ -20,6 +20,21 @@ import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/revie
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
+/** The `--no-optional` decision, as data (per CLAUDE.md) rather than a bare boolean parameter. */
+export class ReviewUpsertPrOptions {
+    /**
+     * true ⇒ the human ALREADY said to submit without the optional reviews, so stage ② must not print the
+     * block telling the AI to offer them. It changes nothing about what BLOCKS: required checklists are
+     * unaffected, and an optional checklist that already has a red verdict on this branch still refuses the
+     * PR at finish. This only suppresses the offer.
+     */
+    skipOptional: boolean;
+
+    constructor(skipOptional = false) {
+        this.skipOptional = skipOptional;
+    }
+}
+
 /**
  * `wp-review-upsert-pr` — STAGE ② of the three-stage PR flow, between `wp-start-upsert-pr` (sync from main)
  * and `wp-finish-upsert-pr` (post the PR).
@@ -65,7 +80,7 @@ export class ReviewUpsertPrCommand {
         private readonly reviewJsonService: ReviewJsonService,
     ) {}
 
-    async run(): Promise<void> {
+    async run(opts: ReviewUpsertPrOptions = new ReviewUpsertPrOptions()): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
@@ -82,7 +97,7 @@ export class ReviewUpsertPrCommand {
             scan.basis.headSha, mergeValidated, this.buildAffected.resolveBuildCommand(repoRoot), buildPassedAt,
             briefings.map((b: ReviewerBriefing): string => b.subagent),
         ));
-        this.report(repoRoot, featureName, scan, briefings);
+        this.report(repoRoot, featureName, scan, briefings, opts);
     }
 
     /**
@@ -167,7 +182,11 @@ export class ReviewUpsertPrCommand {
      * while the block right beneath it said to write review.json first. An agent that reads top to bottom
      * obeyed the first line and posted a PR with no review at all.
      */
-    private report(repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[]): void {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private report(
+        repoRoot: string, featureName: string, scan: ChecklistScan, briefings: readonly ReviewerBriefing[],
+        opts: ReviewUpsertPrOptions,
+    ): void {
         const input = new ReviewReportInput(repoRoot, featureName, scan.reviewPath);
         input.definedCount = scan.defined.length;
         input.applicableCount = scan.applicable.length;
@@ -175,6 +194,7 @@ export class ReviewUpsertPrCommand {
         input.formatErrors = scan.formatErrors.slice();
         input.briefings = briefings.slice();
         input.refused = this.refusals(scan);
+        input.skipOptional = opts.skipOptional;
         process.stdout.write(this.reviewReport.render(input));
     }
 

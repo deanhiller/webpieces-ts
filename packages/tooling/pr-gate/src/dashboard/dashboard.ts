@@ -11,6 +11,7 @@ import {
     CK_MISSING,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+import { ChecklistCommentRow } from './checklist-comment-row';
 
 // Hidden marker on the checklist review COMMENT, so wp-finish can find + PATCH its own comment on every
 // push instead of appending a new one. Versioned so the format can evolve without matching an old shape.
@@ -57,58 +58,6 @@ export class ChecklistRow {
         this.title = title;
         this.status = status;
         this.detail = detail;
-    }
-}
-
-/**
- * One roster line of the checklist COMMENT: a defined checklist, whether its reviewer ran, and the evidence
- * for WHY. Deliberately separate from {@link ChecklistRow} rather than five more fields on it — ChecklistRow
- * also feeds the PR body and the squash-commit body, and roster evidence has no business travelling into
- * main's git history or through every DashboardInput construction site.
- *
- * Kept in pr-gate, not rules-config: the shape of a GitHub comment is this package's concern, and
- * rules-config is the dependency, not the dependent.
- */
-export class ChecklistCommentRow {
-    subagent: string; // the reviewer / checklist id
-    status: string; // CK_* verdict; '' when it did not run
-    detail: string; // verbatim reviewer output
-    ran: boolean; // false = skipped, which is a NORMAL, healthy outcome
-    // The checklist's CONFIGURED globs. The only safe signal for "always runs": a patternless checklist and
-    // a skipped one both have an empty `firedPatterns`, and they mean opposite things.
-    configuredPatterns: string[];
-    firedPatterns: string[]; // which configured globs actually hit a changed file
-    matchedFiles: string[];
-    changedFileCount: number; // how many files were considered at all — "0 of N" needs the N
-    /**
-     * Whether this reviewer's own transcript shows it OPENING the extracted diff.
-     *
-     * '' = not assessed (no Claude Code session, or nothing was materialized) and prints nothing — "no
-     * evidence recorded" and "evidence says it never looked" are different claims, and conflating them
-     * would accuse a reviewer that ran perfectly well in CI. 'yes' | 'no' otherwise. Defaulted, so every
-     * existing construction site is unchanged.
-     */
-    diffRead: string = '';
-
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        subagent: string,
-        status: string,
-        detail: string,
-        ran: boolean,
-        configuredPatterns: string[],
-        firedPatterns: string[],
-        matchedFiles: string[],
-        changedFileCount: number,
-    ) {
-        this.subagent = subagent;
-        this.status = status;
-        this.detail = detail;
-        this.ran = ran;
-        this.configuredPatterns = configuredPatterns;
-        this.firedPatterns = firedPatterns;
-        this.matchedFiles = matchedFiles;
-        this.changedFileCount = changedFileCount;
     }
 }
 
@@ -285,14 +234,28 @@ export class Dashboard {
         for (const row of rows) lines.push(this.rosterBullet(row));
         const header = lines.join('\n');
         if (ran.length === 0) {
-            return (
-                `${header}\n\n_No reviewer had to run on this diff — every configured checklist was ` +
-                `evaluated and none of them applied._`
-            );
+            return `${header}\n\n${this.nothingRanNote(rows)}`;
         }
         return this.fitComment(
             `${header}\n\n### Reviews that ran`,
             ran.map((r: ChecklistCommentRow): CommentSection => this.commentSection(r)),
+        );
+    }
+
+    /**
+     * The closing note when no reviewer produced a verdict. The original wording — "every configured
+     * checklist was evaluated and none of them applied" — is an all-clear, and it becomes FALSE the moment a
+     * checklist did apply and was declined. That sentence under a PR nobody reviewed is precisely the
+     * misreport this feature could otherwise introduce, so the declined case gets its own words.
+     */
+    private nothingRanNote(rows: readonly ChecklistCommentRow[]): string {
+        const declined = rows.filter((r: ChecklistCommentRow): boolean => this.declined(r));
+        if (declined.length === 0) {
+            return '_No reviewer had to run on this diff — every configured checklist was evaluated and none of them applied._';
+        }
+        return (
+            `_No reviewer ran. ${declined.length} OPTIONAL checklist(s) DID apply to this diff and were not ` +
+            `run; the rest were evaluated and did not apply._`
         );
     }
 
@@ -307,13 +270,18 @@ export class Dashboard {
                 `anything. This is **not** an all-clear._`
             );
         }
-        const ran = rows.filter((r: ChecklistCommentRow): boolean => r.ran);
-        const skipped = rows.length - ran.length;
+        const ran = rows.filter((r: ChecklistCommentRow): boolean => this.reviewerRan(r));
+        const declined = rows.filter((r: ChecklistCommentRow): boolean => this.declined(r));
+        const skipped = rows.length - ran.length - declined.length;
         const parts: string[] = [];
         for (const pair of this.rollupCounts(ran)) parts.push(pair);
         const breakdown = parts.length > 0 ? ` (${parts.join(' · ')})` : '';
         const skip = skipped > 0 ? ` · ${skipped} skipped ✅` : '';
-        return `## 🔍 Company review checklists — ${rows.length} defined · ${ran.length} ran${breakdown}${skip}`;
+        // Counted SEPARATELY from "skipped", and without a ✅. A declined optional review is a legitimate
+        // outcome, but it is not the same good news as a checklist that had nothing to look at — folding the
+        // two together would let a PR that declined every optional review read as fully covered.
+        const notRun = declined.length > 0 ? ` · ${declined.length} optional not run` : '';
+        return `## 🔍 Company review checklists — ${rows.length} defined · ${ran.length} ran${breakdown}${skip}${notRun}`;
     }
 
     // `🟢 2 · 🟡 1` — only the non-zero buckets, so a clean run reads as one number rather than four.
@@ -331,11 +299,37 @@ export class Dashboard {
     // One roster line + its why sub-bullet. A checked box means a reviewer ran; an unchecked one means the
     // checklist was evaluated and did not apply, which the words state as the good news it is.
     private rosterBullet(row: ChecklistCommentRow): string {
-        const box = row.ran ? '- [x]' : '- [ ]';
+        const box = this.reviewerRan(row) ? '- [x]' : '- [ ]';
         return (
-            `${box} ${this.verdictEmoji(row)} **${row.subagent}** — ${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
+            `${box} ${this.verdictEmoji(row)} **${row.subagent}**${this.optionalTag(row)} — ` +
+            `${this.verdictWords(row)}${this.evidenceSuffix(row)}\n` +
             `  - ${this.whyLine(row)}`
         );
+    }
+
+    /**
+     * Did a reviewer actually produce a verdict for this row?
+     *
+     * `row.ran` is really "this checklist APPLIED to the diff" — for a required checklist the two are the
+     * same thing, because the PR cannot open otherwise, and the field was named before optional checklists
+     * existed. For a DECLINED optional one they diverge, and using `ran` alone would put a checked box and a
+     * reviewer section on a review that nobody performed.
+     */
+    private reviewerRan(row: ChecklistCommentRow): boolean {
+        return row.ran && !this.declined(row);
+    }
+
+    // Applied, optional, and carrying no verdict — i.e. the human was offered this review and said no (or
+    // `--no-optional` skipped the offer). Never true of a required checklist: one of those with no verdict
+    // does not reach a PR at all.
+    private declined(row: ChecklistCommentRow): boolean {
+        return row.ran && !row.required && (row.status === CK_MISSING || row.status === '');
+    }
+
+    // Marks which rows the human could have declined. Without it a reader cannot tell a review that was
+    // skippable from one that simply passed, and so cannot judge how much this PR was actually reviewed.
+    private optionalTag(row: ChecklistCommentRow): string {
+        return row.required ? '' : ' _(optional)_';
     }
 
     /**
@@ -344,12 +338,12 @@ export class Dashboard {
      * without reading the change" is exactly what a reader of this comment would want to weigh.
      */
     private evidenceSuffix(row: ChecklistCommentRow): string {
-        if (!row.ran || row.diffRead === '') return '';
+        if (!this.reviewerRan(row) || row.diffRead === '') return '';
         return row.diffRead === 'yes' ? ' _(diff read ✓)_' : ' _(⚠️ no diff read recorded)_';
     }
 
     private verdictEmoji(row: ChecklistCommentRow): string {
-        if (!row.ran) return '⚪';
+        if (!this.reviewerRan(row)) return '⚪';
         if (row.status === CK_PASS) return '🟢';
         if (row.status === CK_WARN) return '🟡';
         if (row.status === CK_OVERRIDDEN) return '🟠';
@@ -360,6 +354,10 @@ export class Dashboard {
     // SHORT words for a roster line / section heading. Short on purpose: the reviewer's own output and any
     // override justification get their own section below, and a roster exists to be scanned.
     private verdictWords(row: ChecklistCommentRow): string {
+        // Two different unchecked boxes, two different sentences. "Not applicable" is the diff's doing;
+        // "not run" is a person's, and reporting the second as the first would quietly credit a review that
+        // a human deliberately declined.
+        if (this.declined(row)) return 'OPTIONAL — applied to this diff but was NOT run (not selected)';
         if (!row.ran) return 'skipped, not applicable to this diff (expected ✅)';
         if (row.status === CK_PASS) return 'passed';
         if (row.status === CK_WARN) return 'passed with concerns';
@@ -406,7 +404,7 @@ export class Dashboard {
     private ranOrdered(rows: readonly ChecklistCommentRow[]): ChecklistCommentRow[] {
         const rank: string[] = [CK_OVERRIDDEN, CK_WARN, CK_PASS];
         return rows
-            .filter((r: ChecklistCommentRow): boolean => r.ran)
+            .filter((r: ChecklistCommentRow): boolean => this.reviewerRan(r))
             .slice()
             .sort(
                 (a: ChecklistCommentRow, b: ChecklistCommentRow): number =>

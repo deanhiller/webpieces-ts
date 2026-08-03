@@ -1,17 +1,56 @@
 # Webpieces review checklists — how to satisfy them
 
 Your repo defines company review checklists in `pr-gate.checklists` in `webpieces.config.json` — an
-array of `{ subagent, doc?, patterns? }`, and that is the **only** accepted shape. Each names a reviewer
-**subagent** (a `.claude/agents/<subagent>.md`, which webpieces verifies exists) and, optionally, a
-**repo-relative** detail doc and path `patterns`:
+array of `{ subagent, required, doc?, patterns? }`, and that is the **only** accepted shape. Each names a
+reviewer **subagent** (a `.claude/agents/<subagent>.md`, which webpieces verifies exists), says whether it
+**blocks**, and optionally carries a **repo-relative** detail doc and path `patterns`:
 
 ```jsonc
 "commands": { "pr-gate": { "checklists": [
   { "subagent": "db-migration-reviewer",
     "doc": ".claude/review/db-migrations.md",
-    "patterns": ["**/migrations/**", "**/*.sql"] }
+    "patterns": ["**/migrations/**", "**/*.sql"],
+    "required": true },
+  { "subagent": "frontend-reviewer",
+    "doc": ".claude/review/frontend.md",
+    "patterns": ["**/portal/**"],
+    "required": false }
 ] } }
 ```
+
+## `required` — which reviews block, and which are offered
+
+`required` is **mandatory on every entry**; there is no default in either direction, and config validation
+fails naming the edit if it is missing.
+
+| | `required: true` | `required: false` |
+| --- | --- | --- |
+| when it matches the diff | the reviewer **must** run | the human is **offered** it and may decline |
+| the AI's move | spawn it, without asking | **ask**, then spawn only what was picked |
+| no verdict at finish | ⛔ PR refused | ✅ fine — it was declined |
+| **red** verdict at finish | ⛔ PR refused | ⛔ **PR refused, identically** |
+
+That last row is the part worth reading twice: `required` governs whether a reviewer has to **run**, not
+whether its answer counts. Once an optional reviewer has been spawned it is an ordinary reviewer — running
+one and then waving off its finding would make the whole exercise theater.
+
+**Why optional checklists exist.** A repo whose checklists key on globs as broad as "every TypeScript
+file" charges a one-line bug fix the same dozen subagent reviews as a schema migration. That is the right
+answer for the migration and an absurd one for the typo, and the only party who can tell the two apart is
+the human looking at the diff. `required: false` is how they get asked.
+
+### Skipping the offer entirely
+
+If the human has **already** said to submit without the optional reviews:
+
+```bash
+pnpm wp-review-upsert-pr --no-optional
+```
+
+The offer block disappears and the skipped checklists are named in the output and on the PR. Pass this
+**only** on their instruction — never on your own judgement, and never to save a round-trip. Required
+checklists are unaffected, and an optional checklist that already carries a red verdict on this branch
+still blocks the PR.
 
 > **The old `checklists: { "doc": "..." }` shape is REMOVED.** It hid this array in a
 > `<!-- webpieces:checklists [...] -->` HTML comment inside a markdown doc, where no schema, editor, or `jq`
@@ -44,7 +83,8 @@ Checklists already reviewed on this branch are **not** re-listed — verdict fil
 start/review/finish cycle re-instructs nothing.
 
 `wp-finish-upsert-pr` recomputes the same set and **refuses to open the PR** while any reviewer still owes
-a passing verdict, naming only the ones still missing.
+a passing verdict, naming only the ones still missing. An optional checklist that was offered and declined
+owes nothing — it is reported as not run, never as passed.
 
 Note that **not every checklist is pattern-matched**: one with no `patterns` runs on EVERY PR, and the
 whole diff is in its scope. `wp-review-upsert-pr` says `ALWAYS RUNS` for those rather than calling the
@@ -61,7 +101,7 @@ The changed files + the exact base sha the gate uses are in
 { "base": "<merge-base sha>", "head": "<HEAD sha>", "changedFiles": ["path/a.ts", "db/003.sql", ...] }
 ```
 
-For EACH matched checklist you must:
+For each matched **required** checklist — and each **optional** one the human picked — you must:
 
 1. **Spawn its named subagent as a SEPARATE subagent** — a *different* one per checklist. The coding
    agent may **not** review its own work, and one reviewer may **not** stand in for several. `wp-finish`
@@ -72,6 +112,13 @@ For EACH matched checklist you must:
    `"status": "green"` when the diffs add no new route/queue.)
 3. Have it **write its verdict** to `.webpieces/pr-review/<branch>/review-<id>.json` (one file per
    checklist, so concurrent reviewers never clobber each other). `<id>` is the subagent name.
+
+**How to ask about the optional ones.** `wp-review-upsert-pr` prints them as their own step, listing each
+with the files it matched and the doc it reviews against. Put them to the human in **ONE multi-select
+question** with an explicit *"None — required only"* choice. Not one question per reviewer: a human
+answering "no" nine times in a row is being worn down rather than consulted, and by the third question the
+cheap answer is yes to everything — which is exactly the state `required: false` exists to fix. If they
+pick none, that is a complete answer; go straight to finish.
 
 **You may never write a reviewer's `review-<id>.json` yourself.** If a named subagent cannot be spawned,
 that is a config bug, not your cue to self-certify — say so and stop. (webpieces now rejects a checklist
@@ -111,6 +158,11 @@ sub-bullet naming the globs that matched, the files they matched, or how many ch
 **A skipped checklist is a normal, healthy outcome** and is shown as such; it is published so a reader can
 tell "evaluated and not applicable" from "never wired up", and so nobody has to guess why a given reviewer
 was involved. Below the roster, each reviewer that ran gets its full `output` verbatim.
+
+Optional checklists are tagged `(optional)` on the roster, and one that **applied but was not run** gets
+its own unchecked row — counted separately from the skipped ones and never with a ✅. "Nothing here
+applied" and "someone decided not to look" are different claims, and a PR that declined every optional
+review must not read as a fully-reviewed one.
 
 ## `review.json` (you, the main agent, write this once)
 

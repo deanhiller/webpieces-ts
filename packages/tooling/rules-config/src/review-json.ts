@@ -374,6 +374,23 @@ export class ReviewJsonService {
     }
 
     /**
+     * The OPTIONAL checklists (`required: false`) that matched the diff but have no verdict file at all.
+     *
+     * This is the ONE set that separates "nobody ran it" from "it failed", and the distinction is the whole
+     * feature: an optional checklist with no verdict was legitimately not run — declined by the human, or
+     * skipped via `--no-optional` — so it must NOT block. An optional checklist with a RED verdict is not in
+     * here (it resolves to CK_FAIL) and blocks exactly like a required one: choosing to run a reviewer and
+     * then ignoring its answer would make the whole thing theater.
+     *
+     * A strict subset of {@link pendingChecklists}, computed here rather than at each call site so the
+     * command that gates and the dashboard that reports cannot disagree about which checklists were skipped.
+     */
+    optionalWithoutVerdict(required: readonly RequiredChecklist[], results: readonly ChecklistResult[]): RequiredChecklist[] {
+        return required.filter((req: RequiredChecklist): boolean =>
+            !req.required && this.resolveVerdict(req, results).status === CK_MISSING);
+    }
+
+    /**
      * The checklists that REFUSED: a reviewer ran, judged the change, and said no (CK_FAIL — status red with
      * no override). A strict subset of {@link pendingChecklists}, split out because it demands a completely
      * different action from the reader.
@@ -484,6 +501,11 @@ export class ReviewJsonService {
                 // No archive path here: this is validation, not the act of retiring the verdict.
                 errors.push(this.refusalError(req, verdict));
             } else if (verdict.status === CK_MISSING) {
+                // An OPTIONAL checklist with no verdict was legitimately not run — the human was offered it
+                // and declined (or `--no-optional` skipped the offer). Demanding it here would make
+                // `required: false` mean nothing. Note the CK_FAIL branch above deliberately has no such
+                // exemption: once an optional reviewer RUNS, its refusal counts.
+                if (!req.required) continue;
                 const doc = req.doc.trim() !== '' ? ` Read: ${req.doc}.` : '';
                 errors.push(
                     `Checklist "${req.id}" MATCHED this diff but has no verdict. Spawn the "${req.subagent}" subagent to review it, ` +

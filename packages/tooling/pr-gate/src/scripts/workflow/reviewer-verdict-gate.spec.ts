@@ -40,11 +40,18 @@ function writeVerdict(dir: string, id: string, status: string, output: string, o
 function scanOver(dir: string, applicable: RequiredChecklist[]): ChecklistScan {
     const reviewPath = reviewPathIn(dir);
     const results = svc.loadChecklistResults(reviewPath, applicable);
+    // The optional-without-a-verdict subtraction is part of how `outstanding` is BUILT (ChecklistScanner
+    // owns it, so the gate needs no optional-awareness of its own). Reproduced here for the same reason the
+    // rest of this fixture is: a scan assembled differently from the real one tests a gate nobody runs.
+    const optionalNotRun = svc.optionalWithoutVerdict(applicable, results);
+    const skipped = new Set(optionalNotRun.map((r: RequiredChecklist): string => r.id));
+    const outstanding = svc.pendingChecklists(applicable, results)
+        .filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
     return new ChecklistScan(
-        [], applicable, [], svc.pendingChecklists(applicable, results),
+        [], applicable, [], outstanding,
         new ChecklistReviewContext(), reviewPath, 'abc1234',
         new ChecklistRoster([], 1, true), svc.checklistFormatErrors(applicable, results),
-        undefined, [], results,
+        undefined, [], results, optionalNotRun,
     );
 }
 
@@ -184,5 +191,51 @@ describe('one refused + one never-ran ⇒ two sections, each listing only its ow
         const refusedSection = msg.slice(msg.indexOf('⛔ REFUSED'), msg.indexOf('❓ NO VERDICT YET'));
         expect(refusedSection).toContain('db-reviewer');
         expect(refusedSection).not.toContain('ops-reviewer');
+    });
+});
+
+/**
+ * OPTIONAL checklists at the gate. The asymmetry these pin is the whole feature: not running one is fine,
+ * ignoring one you ran is not.
+ */
+describe('optional checklists — declined is fine, refused is not', () => {
+    const OPT = new RequiredChecklist(
+        'ops-reviewer', 'ops-reviewer', '', ['Dockerfile'], ['**/Dockerfile'], false);
+
+    it('opens the PR when the only unreviewed checklist is an optional one nobody ran', () => {
+        const dir = reviewDir();
+        writeVerdict(dir, 'db-reviewer', 'green', 'ok');
+        expect(refusalOf(dir, [DB, OPT])).toBe('');
+    });
+
+    it('opens the PR when EVERY checklist is optional and none of them ran', () => {
+        expect(refusalOf(reviewDir(), [OPT])).toBe('');
+    });
+
+    it('REFUSES when that optional reviewer ran and said no — running one is not ignoring one', () => {
+        const dir = reviewDir();
+        writeVerdict(dir, 'db-reviewer', 'green', 'ok');
+        writeVerdict(dir, 'ops-reviewer', 'red', 'container runs as root');
+        const message = refusalOf(dir, [DB, OPT]);
+        expect(message).toContain('container runs as root');
+        expect(message).toContain('REFUSED');
+        // Through the ONE refusal renderer — an optional refusal is not a second, softer wording.
+        expect(message).not.toContain(SPAWN_IMPERATIVE);
+    });
+
+    // The gate's message is the one moment a human is looking at review state. A refusal that lists only
+    // what blocked reads as "everything else was reviewed", which here would be false.
+    it('names the optional reviews that did NOT run, while saying they are not what blocked', () => {
+        const dir = reviewDir();
+        const message = refusalOf(dir, [DB, OPT]);
+        expect(message).toContain('Not blocking');
+        expect(message).toContain('OPTIONAL checklist(s) were not run');
+        expect(message).toContain('ops-reviewer');
+        // ...and the thing that DID block is still the required one.
+        expect(message).toContain('db-reviewer');
+    });
+
+    it('says nothing about skipped optional reviews when there are none', () => {
+        expect(refusalOf(reviewDir(), [DB])).not.toContain('Not blocking');
     });
 });

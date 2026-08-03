@@ -19,12 +19,31 @@ export class ChecklistDefinition {
     // relative to anything else is unresolvable from where that subagent stands.
     doc: string;
     patterns: string[]; // path globs (isPathExcluded semantics); [] = matches any changed file (always runs)
+    /**
+     * true  — BLOCKING. `wp-finish-upsert-pr` refuses the PR until this checklist has a passing verdict.
+     * false — OPTIONAL. When it matches, stage ② OFFERS it: the AI asks the human which optional reviewers
+     *         to run, and the human may decline every one of them. A declined optional checklist never
+     *         blocks.
+     *
+     * This governs whether the reviewer must RUN — NOT whether its verdict counts. An optional reviewer
+     * that is actually spawned and comes back red blocks finish exactly like a required one; otherwise
+     * running it would be theater.
+     *
+     * There is deliberately NO default (see the validator): a review process is the last thing that should
+     * acquire a scope silently, in either direction. Defaulting to true would leave the all-blocking status
+     * quo in place for anyone who did not read the release note; defaulting to false would quietly
+     * DOWNGRADE every existing consumer's gate on upgrade. Both are worse than one mechanical config edit
+     * that the coding agent reading the error applies in a single pass.
+     */
+    required: boolean;
 
-    constructor(id: string, subagent: string, doc: string, patterns: string[]) {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(id: string, subagent: string, doc: string, patterns: string[], required: boolean) {
         this.id = id;
         this.subagent = subagent;
         this.doc = doc;
         this.patterns = patterns;
+        this.required = required;
     }
 }
 
@@ -33,16 +52,23 @@ export interface RawChecklistItem {
     subagent?: string;
     doc?: string;
     patterns?: string[];
+    required?: boolean;
 }
 
 /**
  * Build a ChecklistDefinition from an omitting-friendly raw entry. `id` defaults to the subagent name (the
  * only stable, human-meaningful key we have).
+ *
+ * `required` is coerced with `=== true` rather than defaulted, and that is not a default in disguise:
+ * `validateChecklistArray` has already REJECTED any entry that omitted it or gave a non-boolean, so the
+ * only values that reach here are real booleans. The coercion exists so a validator that runs without a
+ * repoRoot (structure-only) still produces a well-typed def instead of `undefined` leaking through.
  */
 // webpieces-disable no-function-outside-class -- pure config transform beside its data class
 export function toChecklist(raw: RawChecklistItem): ChecklistDefinition {
     const subagent = raw.subagent ?? '';
-    return new ChecklistDefinition(subagent, subagent, normalizeChecklistDoc(raw.doc ?? ''), raw.patterns ?? []);
+    return new ChecklistDefinition(
+        subagent, subagent, normalizeChecklistDoc(raw.doc ?? ''), raw.patterns ?? [], raw.required === true);
 }
 
 /** Normalize a checklist entry's repo-relative `doc` to a POSIX path, so every printed path matches. */

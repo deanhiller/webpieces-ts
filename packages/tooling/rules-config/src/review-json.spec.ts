@@ -598,3 +598,60 @@ describe('refusedChecklists / refusalError', () => {
         }
     });
 });
+
+/**
+ * review.json validation and OPTIONAL checklists.
+ *
+ * `loadReviewJson` is the second gate (ReviewerVerdictGate is the first), and it enforced "every matched
+ * checklist has a verdict" independently. It has to learn the same exemption, or a declined optional review
+ * would sail past the gate and then be rejected here — with the OLD message, telling the AI to spawn a
+ * reviewer the human just declined.
+ */
+describe('loadReviewJson — optional checklists', () => {
+    const VALID = JSON.stringify({
+        title: 'x', riskScore: 1, riskLevel: 'green', summary: 's', violations: [], risks: [], filesToReview: [],
+    });
+    const svc = new ReviewJsonService();
+    const optional = (): RequiredChecklist =>
+        new RequiredChecklist('ops-reviewer', 'ops-reviewer', '', ['Dockerfile'], ['**/Dockerfile'], false);
+    const required = (): RequiredChecklist =>
+        new RequiredChecklist('db-reviewer', 'db-reviewer', '', ['db/1.sql'], ['**/*.sql'], true);
+
+    const errorFrom = (file: string, reqs: RequiredChecklist[]): string => {
+        // webpieces-disable no-unmanaged-exceptions -- the thrown message IS the assertion subject here
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            loadReviewJson(file, reqs);
+            return '';
+        } catch (err: unknown) {
+            const error = toError(err);
+            return error.message;
+        }
+    };
+
+    it('does not demand a verdict for an optional checklist nobody ran', () => {
+        expect(errorFrom(tmpFile(VALID), [optional()])).toBe('');
+    });
+
+    it('still demands one for a REQUIRED checklist', () => {
+        const message = errorFrom(tmpFile(VALID), [required()]);
+        expect(message).toContain('MATCHED this diff but has no verdict');
+        expect(message).toContain('db-reviewer');
+    });
+
+    it('still refuses an optional checklist that RAN and went red', () => {
+        const file = tmpFile(VALID);
+        fs.writeFileSync(svc.checklistResultPath(file, 'ops-reviewer'),
+            JSON.stringify({ id: 'ops-reviewer', status: 'red', output: 'runs as root', override: '' }));
+        const message = errorFrom(file, [optional()]);
+        expect(message).toContain('runs as root');
+        expect(message).toContain('FAILED review');
+    });
+
+    it('optionalWithoutVerdict names exactly the optional checklists with no verdict file', () => {
+        expect(svc.optionalWithoutVerdict([required(), optional()], []).map((r: RequiredChecklist): string => r.id))
+            .toEqual(['ops-reviewer']);
+        const ran = [new ChecklistResult('ops-reviewer', 'green', 'ok', '')];
+        expect(svc.optionalWithoutVerdict([required(), optional()], ran)).toEqual([]);
+    });
+});

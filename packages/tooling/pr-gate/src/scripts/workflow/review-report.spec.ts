@@ -21,6 +21,21 @@ const withOneOwedReviewer = (): ReviewReportInput => {
     return input;
 };
 
+/** One REQUIRED + one OPTIONAL reviewer, both owed — the shape the whole `required` feature turns on. */
+const withMixedReviewers = (): ReviewReportInput => {
+    const input = inputWith(2, 2);
+    const req = new ReviewerBriefing('db-migration-reviewer', 'db-migration-reviewer', '/repo');
+    req.matchedPatterns = ['**/*.sql'];
+    const opt = new ReviewerBriefing('frontend-reviewer', 'frontend-reviewer', '/repo');
+    opt.matchedPatterns = ['**/portal/**'];
+    opt.docPath = '/repo/.claude/review/frontend.md';
+    opt.required = false;
+    input.briefings = [req, opt];
+    return input;
+};
+
+const mixed = (): string => report.render(withMixedReviewers());
+
 const noChecklists = (): string => report.render(inputWith(0, 0));
 const nothingMatched = (): string => report.render(inputWith(3, 0));
 const oneOwed = (): string => report.render(withOneOwedReviewer());
@@ -207,5 +222,108 @@ describe('a reviewer that already REFUSED is not re-instructed as one that never
         const text = oneOwed();
         expect(text).not.toContain('REFUSED');
         expect(text).toContain('▶ db-migration-reviewer — 0 file(s) matched "**/*.sql"');
+    });
+});
+
+/**
+ * OPTIONAL reviewers are OFFERED, never spawned unasked — and the two instructions must never share a step.
+ *
+ * An agent reading a merged list acts on the stronger of the two verbs, which is "spawn", and the human is
+ * never asked at all. That failure is silent: the PR opens, the reviews all ran, and the only evidence that
+ * anything went wrong is a token bill. So the split is asserted structurally, not just by wording.
+ */
+describe('required reviewers are spawned; optional ones are only offered', () => {
+    it('puts the required reviewer in a spawn step and the optional one in a later ask step', () => {
+        const text = mixed();
+        expect(text).toMatch(/STEP 2 — only once that file is written, spawn these 1 REQUIRED/);
+        expect(text.indexOf('STEP 3 — these 1 OPTIONAL')).toBeGreaterThan(text.indexOf('STEP 2'));
+        // Order matters: the mandatory work is stated before the discretionary work.
+        expect(text.indexOf('db-migration-reviewer')).toBeLessThan(text.indexOf('frontend-reviewer'));
+    });
+
+    it('tells the AI to ask ONCE, multi-select, with an explicit way to decline', () => {
+        const text = mixed();
+        expect(text).toContain('ASK THE HUMAN');
+        expect(text).toContain('ONE multi-select question');
+        expect(text).toContain('"None — required only"');
+        expect(text).toContain('Do not ask one question per reviewer');
+    });
+
+    it('forbids deciding for the human, and forbids asking about the required ones', () => {
+        const text = mixed();
+        expect(text).toContain('you may NOT decide for the human');
+        expect(text).toContain('do NOT ask whether to run them');
+    });
+
+    // The one non-obvious half of the contract: `required` governs whether a reviewer must RUN, never
+    // whether its answer counts. Without this line, "optional" reads as "ignorable".
+    it('warns that an optional reviewer that IS run still blocks on red', () => {
+        expect(mixed()).toMatch(/red verdict from an\n.*optional reviewer blocks the PR exactly like a required one/);
+    });
+
+    // A human choosing between reviews needs to know what each one would look at; "4 file(s) matched" does not
+    // say that. Required reviewers get no such line — there is nothing to decide.
+    it('shows the guidance doc for an optional reviewer, and not for a required one', () => {
+        const text = mixed();
+        expect(text).toContain('reviews against: /repo/.claude/review/frontend.md');
+        expect(countOf(text, 'reviews against:')).toBe(1);
+    });
+
+    it('counts four steps with both kinds owed, and still names finish exactly once', () => {
+        const text = mixed();
+        expect(text).toContain('▶ NEXT — 4 steps');
+        expect(text).toContain('STEP 4 — only once every reviewer you ran has written its verdict file');
+        expect(countOf(text, 'wp-finish-upsert-pr')).toBe(1);
+    });
+
+    it('numbers the ask as STEP 2 when nothing is required, so there is no hole', () => {
+        const input = withMixedReviewers();
+        input.briefings = input.briefings.filter((b: ReviewerBriefing): boolean => !b.required);
+        const text = report.render(input);
+        expect(text).toContain('▶ NEXT — 3 steps');
+        expect(text).toContain('STEP 2 — these 1 OPTIONAL');
+        expect(text).toContain('② Review, offer the optional reviewers, then finish');
+    });
+});
+
+/**
+ * `--no-optional`: the human said up front to submit without the optional reviews.
+ *
+ * It removes the OFFER and nothing else. The skipped checklists are still named — a human who meant "not
+ * the slow ones" and gets "none of them" can only catch that if the output says which ones went unreviewed.
+ */
+describe('--no-optional suppresses the offer without hiding what was skipped', () => {
+    const skipped = (): string => {
+        const input = withMixedReviewers();
+        input.skipOptional = true;
+        return report.render(input);
+    };
+
+    it('prints no ask step and no spawn coordinates for the optional reviewer', () => {
+        const text = skipped();
+        expect(text).not.toContain('ASK THE HUMAN');
+        expect(text).not.toContain('subagent_type: frontend-reviewer');
+        expect(text).toContain('▶ NEXT — 3 steps');
+    });
+
+    it('still spawns the REQUIRED reviewer — the flag is not a way past the gate', () => {
+        expect(skipped()).toContain('subagent_type: db-migration-reviewer');
+    });
+
+    it('names the skipped checklists rather than only counting them', () => {
+        const text = skipped();
+        expect(text).toContain('OPTIONAL checklist(s) matched this diff and were SKIPPED (--no-optional)');
+        expect(text).toContain('frontend-reviewer');
+        expect(text).toContain('Drop the flag and re-run');
+    });
+
+    // The false all-clear this feature could most easily introduce.
+    it('never claims everything was reviewed when optional reviews were skipped', () => {
+        const input = withMixedReviewers();
+        input.skipOptional = true;
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        const text = report.render(input);
+        expect(text).not.toContain('Every checklist that applies is already reviewed');
+        expect(text).toContain('every REQUIRED checklist is reviewed (optional ones skipped above)');
     });
 });

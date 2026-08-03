@@ -78,6 +78,16 @@ export class ChecklistScan {
      * message, which is exactly the loop this field exists to break.
      */
     results: ChecklistResult[];
+    /**
+     * The OPTIONAL (`required: false`) applicable checklists carrying no verdict file — i.e. nobody ran them.
+     *
+     * Deliberately NOT in `outstanding` when filtering: that is the exemption that makes `required: false`
+     * mean something. Carried out as its own set rather than merely subtracted, because both readers need it
+     * BY NAME and neither can recover it from what is left: stage ② offers exactly these to the human, and
+     * the PR dashboard must publish them as "not run" rather than let a shorter roster imply everything
+     * passed. An optional checklist that ran and went RED is absent from here and stays in `outstanding`.
+     */
+    optionalNotRun: RequiredChecklist[];
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -95,6 +105,7 @@ export class ChecklistScan {
         // Defaulted so a caller that only cares about the X/N/Z counts (and every existing test construction)
         // stays a one-liner; the scanner itself always passes the real set.
         results: ChecklistResult[] = [],
+        optionalNotRun: RequiredChecklist[] = [],
     ) {
         this.defined = defined;
         this.applicable = applicable;
@@ -108,6 +119,7 @@ export class ChecklistScan {
         this.basis = basis;
         this.changedFiles = changedFiles;
         this.results = results;
+        this.optionalNotRun = optionalNotRun;
     }
 }
 
@@ -166,12 +178,16 @@ export class ChecklistScanner {
         const results = this.reviewJsonService.loadChecklistResults(reviewPath, applicable);
         const stillOwed = this.reviewJsonService.pendingChecklists(applicable, results);
         const owedIds = new Set(stillOwed.map((r: RequiredChecklist): string => r.id));
+        // NOT `!owedIds.has(...)`-with-the-optional-exemption-folded-in: an optional checklist nobody ran is
+        // neither reviewed nor blocking, and calling it "reviewed" would put a ✓ on the dashboard for a review
+        // that never happened.
         const reviewed = applicable.filter((r: RequiredChecklist): boolean => !owedIds.has(r.id));
+        const optionalNotRun = this.reviewJsonService.optionalWithoutVerdict(applicable, results);
         return new ChecklistScan(
             defined,
             applicable,
             reviewed,
-            opts.filterAlreadyReviewed ? stillOwed : applicable,
+            opts.filterAlreadyReviewed ? this.blocking(stillOwed, optionalNotRun) : applicable,
             opts.contextStage === ''
                 ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
                 : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles),
@@ -182,7 +198,22 @@ export class ChecklistScanner {
             basis,
             changedFiles,
             results,
+            optionalNotRun,
         );
+    }
+
+    /**
+     * What `wp-finish-upsert-pr` actually REFUSES on: everything still owing a verdict, minus the optional
+     * checklists nobody ran.
+     *
+     * The subtraction happens HERE — in the one place `outstanding` is computed — and not in the gate, so
+     * there is a single answer to "does this branch owe review?". When the gate did its own filtering, the
+     * command that lists and the command that blocks were two implementations of the same question, which is
+     * exactly the divergence this class's docstring exists to prevent.
+     */
+    private blocking(stillOwed: readonly RequiredChecklist[], optionalNotRun: readonly RequiredChecklist[]): RequiredChecklist[] {
+        const skipped = new Set(optionalNotRun.map((r: RequiredChecklist): string => r.id));
+        return stillOwed.filter((r: RequiredChecklist): boolean => !skipped.has(r.id));
     }
 
     /**

@@ -76,6 +76,12 @@ export class ReviewerBriefing {
     hashFeatureHead: string;
     hashMainHead: string;
     ownAgentFileInDiff: string;   // ABSOLUTE path when this diff edits THIS reviewer's own agent file; '' otherwise
+    // From the checklist's config `required`. Carried so the stage-② report can group the spawn blocks
+    // (must run) apart from the ones the human is merely OFFERED, without a second lookup that could
+    // disagree with the scan. The reviewer's OWN instructions do not mention it: a reviewer that has been
+    // spawned reviews the same way either way, and telling an optional one it was optional invites it to
+    // grade itself softer.
+    required: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(subagent: string, checklistId: string, repoRoot: string) {
@@ -102,6 +108,9 @@ export class ReviewerBriefing {
         this.hashFeatureHead = '';
         this.hashMainHead = '';
         this.ownAgentFileInDiff = '';
+        // Fails CLOSED, like RequiredChecklist.required: a briefing built without the flag being copied is
+        // treated as a blocking reviewer, never as a skippable one.
+        this.required = true;
     }
 }
 

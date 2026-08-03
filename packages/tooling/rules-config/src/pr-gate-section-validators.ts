@@ -43,10 +43,14 @@ const CHECKLIST_EXAMPLE = (
     '    "checklists": [\n' +
     '      { "subagent": "db-migration-reviewer",\n' +
     '        "doc": ".claude/review/db-migrations.md",\n' +
-    '        "patterns": ["**/migrations/**", "**/*.sql"] }\n' +
+    '        "patterns": ["**/migrations/**", "**/*.sql"],\n' +
+    '        "required": true }\n' +
     '    ]\n' +
     '  Each entry needs its OWN reviewer subagent (a .claude/agents/<subagent>.md) — that is how independent\n' +
-    '  review is enforced. "doc" is REPO-relative. Omit "patterns" (or use []) to run on every PR.'
+    '  review is enforced. "doc" is REPO-relative. Omit "patterns" (or use []) to run on every PR.\n' +
+    '  "required" is MANDATORY on every entry: true blocks the PR until the reviewer passes; false makes it\n' +
+    '  an OPTIONAL review the human is offered and may decline (but if they DO run it, a red verdict still\n' +
+    '  blocks).'
 );
 
 /**
@@ -92,6 +96,40 @@ function legacyManifestError(value: object): string {
     );
 }
 
+/**
+ * `required` is MANDATORY on every checklist entry — omitting it is an error, never a default.
+ *
+ * The error names the entry's own subagent, because that is what the consumer recognizes in a
+ * twelve-entry array; `checklists[7]` alone means counting braces. It also states BOTH edits, because the
+ * whole point of the key is that the answer differs per checklist and only the consumer knows which.
+ *
+ * Why a hard rejection instead of `?? true`: an accepted shape is never migrated. Defaulting to true
+ * silently keeps the all-blocking behavior this key exists to relieve, and every consumer that would have
+ * benefited stays on the old behavior forever without ever being told the dial exists. Defaulting to false
+ * is worse — it would silently DOWNGRADE a live review gate on upgrade. Per CLAUDE.md the reader of this
+ * message is a coding agent, so the migration is one mechanical pass.
+ */
+// webpieces-disable no-any-unknown -- one opaque checklist entry, narrowed by the typeof guards here
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function requiredKeyErrors(e: Record<string, unknown>, i: number): string[] {
+    const name = typeof e['subagent'] === 'string' && e['subagent'].trim() !== '' ? ` ("${e['subagent']}")` : '';
+    if (e['required'] === undefined) {
+        return [
+            `[pr-gate] checklists[${i}]${name} is missing "required". Every checklist must state one — there is\n` +
+            `  no default, in either direction.\n` +
+            `    "required": true   → BLOCKING. wp-finish-upsert-pr refuses the PR until this reviewer passes.\n` +
+            `                         This is what every checklist did before this key existed.\n` +
+            `    "required": false  → OPTIONAL. When it matches the diff, wp-review-upsert-pr offers it and the\n` +
+            `                         human may decline it. If they DO run it, a red verdict still blocks.\n` +
+            `  ${CHECKLIST_EXAMPLE}`,
+        ];
+    }
+    if (typeof e['required'] !== 'boolean') {
+        return [`[pr-gate] checklists[${i}]${name}.required must be a boolean (true = blocking, false = optional) — not a string or number.`];
+    }
+    return [];
+}
+
 // Structurally check each entry HERE — a bad `patterns` or a non-object entry is a config-file typo and
 // deserves a `checklists[i]` message — then hand the narrowed defs to ChecklistValidator for the checks only
 // the filesystem can answer (the guidance doc exists, the reviewer agent exists).
@@ -115,6 +153,7 @@ function validateChecklistArray(value: readonly unknown[], repoRoot?: string): s
         if (e['patterns'] !== undefined && !(Array.isArray(e['patterns']) && e['patterns'].every((p: unknown): boolean => typeof p === 'string'))) {
             errors.push(`[pr-gate] checklists[${i}].patterns must be a string[] of path globs (omit or [] to run on every PR).`);
         }
+        errors.push(...requiredKeyErrors(e, i));
         items.push(e as RawChecklistItem);
     });
     if (repoRoot === undefined) return errors;

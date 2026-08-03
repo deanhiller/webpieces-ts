@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CliArgs, CliUsage } from './cli-args';
+import { CliArgs, CliFlag, CliUsage } from './cli-args';
 import { CliExitError } from './cli-exit-error';
 
 const cliArgs = new CliArgs();
@@ -63,5 +63,65 @@ describe('CliArgs.assertNoArgs', () => {
             expect(() => cliArgs.assertNoArgs(usage)).toThrow(CliExitError);
             expect(() => cliArgs.assertNoArgs(usage)).toThrow(/--bogus/);
         });
+    });
+});
+
+/**
+ * Flag-accepting commands. The guard must stay exactly as strict for them: the reason this class exists is
+ * that `wp-start-upsert-pr --help` once silently launched a squash-merge, and a command that tolerates one
+ * flag must not start tolerating typos of it.
+ */
+describe('CliArgs with declared flags', () => {
+    const flagUsage = new CliUsage(
+        'wp-review-upsert-pr', 'Brief the reviewer subagents.',
+        [new CliFlag('--no-optional', 'Skip offering the optional reviews.')]);
+
+    it('accepts a DECLARED flag', () => {
+        expect(cliArgs.classify(['--no-optional'], flagUsage).ok).toBe(true);
+    });
+
+    it('still rejects an undeclared token — a typo must never be silently ignored', () => {
+        const check = cliArgs.classify(['--no-optionl'], flagUsage);
+        expect(check.ok).toBe(false);
+        expect(check.exitCode).toBe(2);
+        expect(check.message).toContain('--no-optionl');
+    });
+
+    it('rejects only the undeclared tokens, naming them and not the valid one', () => {
+        const check = cliArgs.classify(['--no-optional', '--force'], flagUsage);
+        expect(check.exitCode).toBe(2);
+        expect(check.message).toContain('Unknown argument(s): --force');
+    });
+
+    it('lists the flags in --help instead of claiming the command takes no arguments', () => {
+        const check = cliArgs.classify(['--help'], flagUsage);
+        expect(check.exitCode).toBe(0);
+        expect(check.message).not.toContain('takes no arguments');
+        expect(check.message).toContain('--no-optional');
+        expect(check.message).toContain('Skip offering the optional reviews.');
+    });
+
+    it('parse() reports which declared flags were actually passed', () => {
+        const argv = process.argv;
+        // webpieces-disable no-unmanaged-exceptions -- test fixture: argv is restored in the finally
+        try {
+            process.argv = ['node', 'wp-review-upsert-pr', '--no-optional'];
+            expect(cliArgs.parse(flagUsage).has('--no-optional')).toBe(true);
+            process.argv = ['node', 'wp-review-upsert-pr'];
+            expect(cliArgs.parse(flagUsage).has('--no-optional')).toBe(false);
+        } finally {
+            process.argv = argv;
+        }
+    });
+
+    it('parse() throws CliExitError on an undeclared token, before any flow can begin', () => {
+        const argv = process.argv;
+        // webpieces-disable no-unmanaged-exceptions -- test fixture: argv is restored in the finally
+        try {
+            process.argv = ['node', 'wp-review-upsert-pr', '--nope'];
+            expect((): unknown => cliArgs.parse(flagUsage)).toThrow(CliExitError);
+        } finally {
+            process.argv = argv;
+        }
     });
 });

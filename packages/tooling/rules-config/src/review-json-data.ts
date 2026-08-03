@@ -46,9 +46,15 @@ export class ChecklistResult {
     }
 }
 
-// What the pr-gate command computed from the diff: a checklist this branch MATCHED (its patterns hit the
-// diff, so its reviewer subagent must run). Drives review-<id>.json enforcement, provenance, the schema
-// hint, and the dashboard. Data-only.
+/**
+ * What the pr-gate command computed from the diff: a checklist this branch MATCHED (its patterns hit the
+ * diff, so its reviewer subagent is in scope). Drives review-<id>.json enforcement, provenance, the schema
+ * hint, and the dashboard. Data-only.
+ *
+ * NAME NOTE: "Required" here means MATCHED, not mandatory — it predates `required` by a long way and is
+ * the shared shape across review-json, the detector, the briefing builder, provenance and the dashboard.
+ * Whether the reviewer must actually run is the {@link RequiredChecklist.required} field below.
+ */
 export class RequiredChecklist {
     id: string;             // = subagent name; keys review-<id>.json
     subagent: string;       // reviewer agent that must run (agentType the harness stamps)
@@ -58,14 +64,24 @@ export class RequiredChecklist {
     // match was — a precise `db/migrations/**` hit means something different from a blanket `**` — and the
     // template tells reviewers that matching IS deliberately coarse. [] = no patterns (matches every PR).
     matchedPatterns: string[];
+    // Straight from the checklist's config `required`. true = blocking; false = the human is offered it and
+    // may decline. Carried on the MATCH rather than looked up from config downstream so the set that gates
+    // and the set that is reported cannot disagree about which of the two a checklist is.
+    required: boolean;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(id: string, subagent: string, doc: string, matchedFiles: string[], matchedPatterns: string[] = []) {
+    constructor(
+        id: string, subagent: string, doc: string, matchedFiles: string[], matchedPatterns: string[] = [],
+        // Defaulted to the BLOCKING value so any construction that forgets it fails closed — a test or a
+        // future call site that silently produced an optional checklist would be a hole in the gate.
+        required = true,
+    ) {
         this.id = id;
         this.subagent = subagent;
         this.doc = doc;
         this.matchedFiles = matchedFiles;
         this.matchedPatterns = matchedPatterns;
+        this.required = required;
     }
 }
 

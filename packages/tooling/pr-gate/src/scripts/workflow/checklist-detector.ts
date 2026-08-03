@@ -108,6 +108,7 @@ export class ChecklistDetector {
     // consume.
     toRequired(triggered: readonly TriggeredChecklist[]): RequiredChecklist[] {
         return triggered.map((t: TriggeredChecklist): RequiredChecklist =>
-            new RequiredChecklist(t.def.id, t.def.subagent, t.def.doc, t.matchedFiles, t.matchedPatterns));
+            new RequiredChecklist(
+                t.def.id, t.def.subagent, t.def.doc, t.matchedFiles, t.matchedPatterns, t.def.required));
     }
 }

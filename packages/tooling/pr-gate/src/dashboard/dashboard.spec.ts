@@ -6,10 +6,10 @@ import {
     GateResult,
     DisableCounts,
     ChecklistRow,
-    ChecklistCommentRow,
     CHECKLIST_COMMENT_MARKER,
 } from './dashboard';
-import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL } from '@webpieces/rules-config';
+import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
+import { ChecklistCommentRow } from './checklist-comment-row';
 
 const dash = new Dashboard();
 const computeGateResults = (g: GateDefinition[], f: string[]): GateResult[] =>
@@ -549,5 +549,83 @@ describe('renderDashboard checklists — the detail still lives in the comment',
         const body = renderCommitBody(input, '');
         expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
         expect(body).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
+    });
+});
+
+/**
+ * OPTIONAL checklists on the PR comment.
+ *
+ * The comment is the durable record of how a PR was reviewed, and the failure mode this feature could
+ * introduce is entirely a REPORTING one: an optional review that was offered and declined has the same
+ * "no verdict" state as a review that was never relevant, and rendering the two identically would let a PR
+ * that skipped every optional review read as fully covered.
+ */
+describe('renderChecklistComment — optional checklists', () => {
+    // Applied to the diff (so `ran` is true in the "this checklist matched" sense) but carrying no verdict:
+    // the human was offered this review and said no.
+    function declinedRow(subagent: string): ChecklistCommentRow {
+        const row = ranRow(subagent, CK_MISSING);
+        row.required = false;
+        return row;
+    }
+
+    function optionalRanRow(subagent: string, status: string, detail = ''): ChecklistCommentRow {
+        const row = ranRow(subagent, status, detail);
+        row.required = false;
+        return row;
+    }
+
+    it('tags optional checklists so a reader can tell skippable from simply passed', () => {
+        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok'), optionalRanRow('fe-reviewer', CK_PASS, 'ok')], true);
+        expect(md).toContain('**fe-reviewer** _(optional)_');
+        expect(md).not.toContain('**db-reviewer** _(optional)_');
+    });
+
+    it('renders a declined optional review as NOT RUN — unchecked, and never as passed', () => {
+        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok'), declinedRow('fe-reviewer')], true);
+        expect(md).toContain('- [ ] ⚪ **fe-reviewer** _(optional)_ — OPTIONAL — applied to this diff but was NOT run');
+        expect(md).toContain('- [x] 🟢 **db-reviewer**');
+    });
+
+    // "Not applicable" is the diff's doing; "not run" is a person's. Reporting the second as the first
+    // would quietly credit a review nobody performed.
+    it('does not call a declined review "skipped, not applicable"', () => {
+        const md = renderChecklistComment([declinedRow('fe-reviewer')], true);
+        expect(md).not.toContain('not applicable to this diff');
+    });
+
+    it('counts declined reviews separately from skipped ones, and without a ✅', () => {
+        const md = renderChecklistComment(
+            [ranRow('db-reviewer', CK_PASS, 'ok'), declinedRow('fe-reviewer'), skippedRow('ops-reviewer')], true);
+        expect(md).toContain('3 defined · 1 ran');
+        expect(md).toContain('1 skipped ✅');
+        expect(md).toContain('1 optional not run');
+        expect(md).not.toContain('2 skipped');
+    });
+
+    // It has no `output` to publish, so a section for it would be an empty heading claiming a review.
+    it('gives a declined review no reviewer section', () => {
+        const md = renderChecklistComment([ranRow('db-reviewer', CK_PASS, 'ok'), declinedRow('fe-reviewer')], true);
+        expect(md.indexOf('### Reviews that ran')).toBeGreaterThan(0);
+        expect(md.slice(md.indexOf('### Reviews that ran'))).not.toContain('fe-reviewer');
+    });
+
+    // THE false all-clear. This exact sentence used to be unconditional.
+    it('never claims "none of them applied" when an optional one applied and was declined', () => {
+        const md = renderChecklistComment([declinedRow('fe-reviewer'), skippedRow('ops-reviewer')], true);
+        expect(md).not.toContain('none of them applied');
+        expect(md).toContain('1 OPTIONAL checklist(s) DID apply to this diff and were not run');
+    });
+
+    it('keeps the original all-clear wording when nothing was declined', () => {
+        const md = renderChecklistComment([skippedRow('ops-reviewer')], true);
+        expect(md).toContain('every configured checklist was evaluated and none of them applied');
+    });
+
+    // An optional reviewer that RAN is an ordinary reviewer: its verdict counts, and is published in full.
+    it('publishes a red verdict from an optional reviewer exactly like any other', () => {
+        const md = renderChecklistComment([optionalRanRow('fe-reviewer', CK_FAIL, 'unbounded list render')], true);
+        expect(md).toContain('- [x] 🔴 **fe-reviewer** _(optional)_ — FAILED review');
+        expect(md).toContain('unbounded list render');
     });
 });
