@@ -125,3 +125,58 @@ describe('CliArgs with declared flags', () => {
         }
     });
 });
+
+/**
+ * A value-taking flag: `wp-push-dev --resolve [<branch>]`. The value is OPTIONAL — bare means "every
+ * other copy", with an argument means "just that one" — so the parser has to distinguish a following
+ * BRANCH NAME from a following FLAG, and neither may be mistaken for an unknown token.
+ */
+const valueUsage = new CliUsage('wp-push-dev', 'Publish a disposable dev copy.', [
+    new CliFlag('--resolve', 'Compose the other copies onto this one.', true),
+    new CliFlag('--force', 'Discard a published resolution.'),
+]);
+
+function parseArgv(...args: string[]): ReturnType<CliArgs['parse']> {
+    const argv = process.argv;
+    // webpieces-disable no-unmanaged-exceptions -- test fixture: argv is restored in the finally
+    try {
+        process.argv = ['node', 'wp-push-dev', ...args];
+        return cliArgs.parse(valueUsage);
+    } finally {
+        process.argv = argv;
+    }
+}
+
+describe('CliArgs — value-taking flags', () => {
+    it('accepts the flag bare, with no value', () => {
+        const parsed = parseArgv('--resolve');
+        expect(parsed.has('--resolve')).toBe(true);
+        expect(parsed.value('--resolve')).toBe('');
+    });
+
+    it('consumes a following non-flag token as the value', () => {
+        expect(parseArgv('--resolve', 'dean/ONE-2275').value('--resolve')).toBe('dean/ONE-2275');
+    });
+
+    it('accepts the --flag=value form', () => {
+        expect(parseArgv('--resolve=dean/ONE-2275').value('--resolve')).toBe('dean/ONE-2275');
+    });
+
+    it('does NOT swallow a following flag as the value', () => {
+        const parsed = parseArgv('--resolve', '--force');
+        expect(parsed.value('--resolve')).toBe('');
+        expect(parsed.has('--force')).toBe(true);
+    });
+
+    it('still rejects an undeclared token — a mistype must never silently run the flow', () => {
+        expect((): unknown => parseArgv('--resolv', 'x')).toThrow(CliExitError);
+    });
+
+    it('rejects a value handed to a flag that takes none, rather than dropping it', () => {
+        expect((): unknown => parseArgv('--force=yes')).toThrow(CliExitError);
+    });
+
+    it('shows the value placeholder in --help', () => {
+        expect(cliArgs.classify(['--help'], valueUsage).message).toContain('--resolve [<value>]');
+    });
+});

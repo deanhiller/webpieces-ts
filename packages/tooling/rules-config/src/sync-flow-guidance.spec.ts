@@ -72,9 +72,13 @@ describe('no doc or message names a wp-* command that does not exist', () => {
         const parsed = JSON.parse(fs.readFileSync(pkg, 'utf8')) as { bin?: Record<string, string> };
         const bins = Object.keys(parsed.bin ?? {})
             .filter((b: string): boolean => b.startsWith('wp-start-') || b.startsWith('wp-finish-'));
-        // If this ever drops below the four flow bins, the scan below has stopped protecting anything.
+        // If this ever drops below the flow bins, the scan below has stopped protecting anything.
+        // `wp-finish-push-dev` is the dev-deploy flow's stage ② — the third flow's finish half. (Its
+        // start half is `wp-push-dev`, which this filter does not see: the pattern only covers the
+        // wp-start-*/wp-finish- naming, and renaming the start bin to fit would be naming-for-the-test.)
         expect(bins.sort()).toEqual([
-            'wp-finish-update', 'wp-finish-upsert-pr', 'wp-start-update', 'wp-start-upsert-pr',
+            'wp-finish-push-dev', 'wp-finish-update', 'wp-finish-upsert-pr',
+            'wp-start-update', 'wp-start-upsert-pr',
         ]);
         return new Set(bins);
     }

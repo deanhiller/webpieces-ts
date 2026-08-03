@@ -8,6 +8,26 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 // REPO ROOT — resolved absolute so the AI opens it regardless of the cwd it reads the message from).
 const GIT_WORKFLOW_DOC_NAME = 'webpieces.git-workflow.md';
 
+/**
+ * The result of a git command that was allowed to fail. Data-only (per CLAUDE.md) so a caller asks
+ * `outcome.ok` rather than re-deriving "did it work" from a status number at every site.
+ */
+export class GitOutcome {
+    status: number;
+    stdout: string;
+    stderr: string;
+
+    constructor(status: number, stdout: string, stderr: string) {
+        this.status = status;
+        this.stdout = stdout;
+        this.stderr = stderr;
+    }
+
+    get ok(): boolean {
+        return this.status === 0;
+    }
+}
+
 /** Shared git precondition checks + push logic for the PR/merge workflow. */
 @injectable(bindingScopeValues.Singleton)
 export class GitExec {
@@ -113,9 +133,19 @@ export class GitExec {
         }
     }
 
-    // Run a read-only git query from the repo root; abort if git itself errors. Kept `cwd`-explicit
-    // because `git ls-files --others` is scoped to the cwd subtree.
-    private gitQuery(args: string[], cwd: string, failMsg: string): string {
+    /**
+     * Run a git command that MAY legitimately fail and report the outcome instead of aborting — for the
+     * questions whose "no" is an answer rather than an error (does this remote ref exist? did this merge
+     * conflict?). Distinct from {@link runGitChecked}, which exists for the commands where continuing on
+     * failure would operate on wrong state.
+     */
+    tryGit(args: string[], cwd: string): GitOutcome {
+        const out = spawnSync('git', args, { encoding: 'utf8', cwd });
+        return new GitOutcome(out.status ?? 1, (out.stdout ?? '').trim(), (out.stderr ?? '').trim());
+    }
+
+    /** Read-only git query that MUST succeed, trimmed. Public sibling of the private raw form. */
+    gitQuery(args: string[], cwd: string, failMsg: string): string {
         return this.rawGitQuery(args, cwd, failMsg).trim();
     }
 

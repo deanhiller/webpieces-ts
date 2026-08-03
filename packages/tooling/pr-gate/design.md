@@ -28,11 +28,14 @@ graph TD
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
+    DevDeployRefs["DevDeployRefs"]
+    DevResolveRunner["DevResolveRunner"]
     DiffBasisResolver["DiffBasisResolver"]
     DiffMaterializer["DiffMaterializer"]
     DiffScope["DiffScope"]
     DotWebpieces["DotWebpieces"]
     FinishBanner["FinishBanner"]
+    FinishPushDevCommand["FinishPushDevCommand"]
     FinishUpdateCommand["FinishUpdateCommand"]
     FinishUpsertPrCommand["FinishUpsertPrCommand"]
     ForkPoint["ForkPoint"]
@@ -53,6 +56,8 @@ graph TD
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
+    PushDevCommand["PushDevCommand"]
+    PushDevStateStore["PushDevStateStore"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
@@ -95,10 +100,17 @@ graph TD
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
+    DevDeployRefs --> GitExec
+    DevResolveRunner --> DevDeployRefs
+    DevResolveRunner --> GitExec
+    DevResolveRunner --> PushDevStateStore
     DiffBasisResolver --> ForkPoint
     DiffBasisResolver --> GitStatusParser
     DiffMaterializer --> ReviewJsonService
     DotWebpieces --> StateDirMigrator
+    FinishPushDevCommand --> DevResolveRunner
+    FinishPushDevCommand --> PushDevStateStore
+    FinishPushDevCommand --> RepoRootFinder
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
@@ -159,13 +171,23 @@ graph TD
     PrContextWriter --> ReviewJsonService
     PrGateApp --> CheckPrCommand
     PrGateApp --> CleanupCommand
+    PrGateApp --> FinishPushDevCommand
     PrGateApp --> FinishUpdateCommand
     PrGateApp --> FinishUpsertPrCommand
     PrGateApp --> LandPrCommand
+    PrGateApp --> PushDevCommand
+    PrGateApp --> PushDevStateStore
     PrGateApp --> ReapWorktreeCommand
+    PrGateApp --> RepoRootFinder
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
+    PushDevCommand --> DevDeployRefs
+    PushDevCommand --> DevResolveRunner
+    PushDevCommand --> GitExec
+    PushDevCommand --> PushDevStateStore
+    PushDevCommand --> RepoRootFinder
+    PushDevStateStore --> DotWebpieces
     ReapWorktreeCommand --> RepoRootFinder
     ReapWorktreeCommand --> WorktreeCleanupSection
     RepoRootFinder --> DotWebpieces

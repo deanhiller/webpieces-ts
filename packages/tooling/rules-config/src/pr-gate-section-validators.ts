@@ -186,3 +186,66 @@ export function validateLandPrSection(value: unknown): string[] {
         `  "${BRANCH_RETENTION_KEEP}"        — do not delete. Branches then accumulate until branch-creation-guard trips.`,
     ];
 }
+
+// A git ref COMPONENT this flow is willing to build a ref name out of. Deliberately much narrower than
+// git's own check-ref-format: these two values are concatenated into a ref that a command then
+// force-pushes, so anything that could be read as a flag, a path escape, or a glob is rejected outright
+// rather than trusted to `git push` argument order.
+const REF_COMPONENT = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+
+/**
+ * Validate the optional `pr-gate.devDeploy` block — where `wp-push-dev` publishes the disposable copy of
+ * a feature branch, and which ref is the shared dev branch itself. Absent ⇒ `dev-include` / `dev`.
+ *
+ * `devBranch` must NOT contain a slash and must not sit inside `branchNamespace`: the whole point of the
+ * namespace is that the composed dev branch is written by CI and the copies are written by developers, so
+ * a config where one contains the other makes `--list` enumerate the deploy branch and makes the
+ * "refused as a source branch" check ambiguous.
+ */
+// webpieces-disable no-any-unknown -- `value` is the opaque consumer devDeploy value until narrowed here
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+export function validateDevDeploySection(value: unknown): string[] {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return ['[pr-gate] "devDeploy" must be an object, e.g. { "branchNamespace": "dev-include", "devBranch": "dev" }.'];
+    }
+    // webpieces-disable no-any-unknown -- narrowing the opaque devDeploy object from consumer JSON
+    const s = value as Record<string, unknown>;
+    const errors: string[] = [];
+    errors.push(...validateRefComponent(s, 'branchNamespace', 'dev-include'));
+    errors.push(...validateRefComponent(s, 'devBranch', 'dev'));
+    if (errors.length > 0) return errors;
+
+    const namespace = typeof s['branchNamespace'] === 'string' ? s['branchNamespace'].trim() : 'dev-include';
+    const devBranch = typeof s['devBranch'] === 'string' ? s['devBranch'].trim() : 'dev';
+    if (devBranch.includes('/')) {
+        errors.push(
+            `[pr-gate] "devDeploy.devBranch" = "${devBranch}" must be a single ref name with no "/" — it is the ` +
+            `branch your CI composes and deploys, not a namespace.`);
+    }
+    if (devBranch === namespace || devBranch.startsWith(`${namespace}/`) || namespace.startsWith(`${devBranch}/`)) {
+        errors.push(
+            `[pr-gate] "devDeploy.devBranch" ("${devBranch}") and "devDeploy.branchNamespace" ("${namespace}") must not ` +
+            `contain one another. The namespace holds the DISPOSABLE per-developer copies (written by wp-push-dev); ` +
+            `devBranch is the COMPOSED branch your CI rebuilds from origin/main. Overlapping them makes wp-push-dev ` +
+            `--list enumerate the deploy branch and makes "refused as a source branch" ambiguous.`);
+    }
+    return errors;
+}
+
+// One `devDeploy` string field: present ⇒ must be a non-empty, ref-safe string. Absent ⇒ the default.
+// webpieces-disable no-any-unknown -- the already-narrowed opaque devDeploy object
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function validateRefComponent(s: Record<string, unknown>, key: string, example: string): string[] {
+    if (!(key in s)) return [];
+    const raw = s[key];
+    if (typeof raw !== 'string' || raw.trim() === '') {
+        return [`[pr-gate] "devDeploy.${key}" must be a non-empty string, e.g. "${example}". Omit the key for the "${example}" default.`];
+    }
+    if (!REF_COMPONENT.test(raw.trim())) {
+        return [
+            `[pr-gate] "devDeploy.${key}" = "${raw}" is not a usable git ref name. Use letters, digits, ".", "_", ` +
+            `"-" and "/" only, starting with a letter or digit (e.g. "${example}").`,
+        ];
+    }
+    return [];
+}

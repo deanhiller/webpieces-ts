@@ -137,6 +137,22 @@
                     "level": 2
                 },
                 {
+                    "id": "DevDeployRefs",
+                    "className": "DevDeployRefs",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts",
+                    "level": 3
+                },
+                {
+                    "id": "DevResolveRunner",
+                    "className": "DevResolveRunner",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-resolve-runner.ts",
+                    "level": 2
+                },
+                {
                     "id": "DiffBasisResolver",
                     "className": "DiffBasisResolver",
                     "kind": "class",
@@ -175,6 +191,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/finish-banner.ts",
                     "level": 2
+                },
+                {
+                    "id": "FinishPushDevCommand",
+                    "className": "FinishPushDevCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/finish-push-dev-command.ts",
+                    "level": 1
                 },
                 {
                     "id": "FinishUpdateCommand",
@@ -335,6 +359,22 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-merger.ts",
                     "level": 2
+                },
+                {
+                    "id": "PushDevCommand",
+                    "className": "PushDevCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/push-dev-command.ts",
+                    "level": 1
+                },
+                {
+                    "id": "PushDevStateStore",
+                    "className": "PushDevStateStore",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/push-dev-state.ts",
+                    "level": 3
                 },
                 {
                     "id": "ReapWorktreeCommand",
@@ -699,6 +739,42 @@
                     "paramType": "WorktreeCleanupSection"
                 },
                 {
+                    "from": "DevDeployRefs",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "DevResolveRunner",
+                    "to": "DevDeployRefs",
+                    "injection": "type",
+                    "token": "DevDeployRefs",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
+                    "paramName": "refs",
+                    "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "DevResolveRunner",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "DevResolveRunner",
+                    "to": "PushDevStateStore",
+                    "injection": "type",
+                    "token": "PushDevStateStore",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/push-dev-state.ts#PushDevStateStore",
+                    "paramName": "store",
+                    "paramType": "PushDevStateStore"
+                },
+                {
                     "from": "DiffBasisResolver",
                     "to": "ForkPoint",
                     "injection": "type",
@@ -733,6 +809,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/state-dir-migration.ts#StateDirMigrator",
                     "paramName": "migrator",
                     "paramType": "StateDirMigrator"
+                },
+                {
+                    "from": "FinishPushDevCommand",
+                    "to": "DevResolveRunner",
+                    "injection": "type",
+                    "token": "DevResolveRunner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-resolve-runner.ts#DevResolveRunner",
+                    "paramName": "runner",
+                    "paramType": "DevResolveRunner"
+                },
+                {
+                    "from": "FinishPushDevCommand",
+                    "to": "PushDevStateStore",
+                    "injection": "type",
+                    "token": "PushDevStateStore",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/push-dev-state.ts#PushDevStateStore",
+                    "paramName": "store",
+                    "paramType": "PushDevStateStore"
+                },
+                {
+                    "from": "FinishPushDevCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "FinishUpdateCommand",
@@ -1276,6 +1379,15 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "FinishPushDevCommand",
+                    "injection": "type",
+                    "token": "FinishPushDevCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/finish-push-dev-command.ts#FinishPushDevCommand",
+                    "paramName": "finishPushDevCommand",
+                    "paramType": "FinishPushDevCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "FinishUpdateCommand",
                     "injection": "type",
                     "token": "FinishUpdateCommand",
@@ -1303,12 +1415,39 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "PushDevCommand",
+                    "injection": "type",
+                    "token": "PushDevCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/push-dev-command.ts#PushDevCommand",
+                    "paramName": "pushDevCommand",
+                    "paramType": "PushDevCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "PushDevStateStore",
+                    "injection": "type",
+                    "token": "PushDevStateStore",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/push-dev-state.ts#PushDevStateStore",
+                    "paramName": "pushDevStateStore",
+                    "paramType": "PushDevStateStore"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "ReapWorktreeCommand",
                     "injection": "type",
                     "token": "ReapWorktreeCommand",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/reap-worktree-command.ts#ReapWorktreeCommand",
                     "paramName": "reapWorktreeCommand",
                     "paramType": "ReapWorktreeCommand"
+                },
+                {
+                    "from": "PrGateApp",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
                 },
                 {
                     "from": "PrGateApp",
@@ -1336,6 +1475,60 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/start-upsert-pr-command.ts#StartUpsertPrCommand",
                     "paramName": "startUpsertPrCommand",
                     "paramType": "StartUpsertPrCommand"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "DevDeployRefs",
+                    "injection": "type",
+                    "token": "DevDeployRefs",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
+                    "paramName": "refs",
+                    "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "DevResolveRunner",
+                    "injection": "type",
+                    "token": "DevResolveRunner",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-resolve-runner.ts#DevResolveRunner",
+                    "paramName": "runner",
+                    "paramType": "DevResolveRunner"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "PushDevStateStore",
+                    "injection": "type",
+                    "token": "PushDevStateStore",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/push-dev-state.ts#PushDevStateStore",
+                    "paramName": "store",
+                    "paramType": "PushDevStateStore"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "PushDevStateStore",
+                    "to": "DotWebpieces",
+                    "injection": "type",
+                    "token": "DotWebpieces",
+                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "paramName": "dotWebpieces",
+                    "paramType": "DotWebpieces"
                 },
                 {
                     "from": "ReapWorktreeCommand",
