@@ -2,8 +2,8 @@ import * as path from 'path';
 
 import { run, runBash, runRead } from '../core/runner';
 import { AgentIdentity } from '../core/coordinator-worktree';
-import { logRejection } from '../core/rejection-log';
-import { logGuardDecision, GuardDecision, branchForLog, logGuardInvocation } from '../core/decision-log';
+import { logRejection, extractRuleNames } from '../core/rejection-log';
+import { logGuardDecision, GuardDecision, branchForLog, invocationLog } from '../core/decision-log';
 import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '../core/load-config';
 import { RepoRootFinder } from '@webpieces/rules-config';
@@ -113,6 +113,15 @@ function agentIdentityOf(payload: ClaudeCodePayload): AgentIdentity {
     return new AgentIdentity(payload.agent_id ?? '', payload.agent_type ?? '');
 }
 
+// The rule name for a block's audit line: the FIRST rule the report cites, or `fallback` when the
+// report opens with no `[rule]` header (a hand-written guard message). Comma-joined when a report
+// cites several, so `rule=` never silently drops one.
+// webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
+function blockingRule(report: string, fallback: string): string {
+    const names = extractRuleNames(report);
+    return names.length > 0 ? names.join(',') : fallback;
+}
+
 function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const command = payload.tool_input.command;
     if (!command || command.trim() === '') { emitAllow(); }
@@ -125,7 +134,7 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', command ?? '', branchForLog(root), 'BLOCK', result.report));
     // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
     // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
-    emitDeny(result.report, 'Bash');
+    emitDeny(result.report, 'Bash', blockingRule(result.report, 'bash-guard'));
 }
 
 /**
@@ -150,7 +159,7 @@ function handleRead(filePath: string, cwd: string, mode: HookMode): void {
     }
     if (!result) return;
     logRejection('Read', new NormalizedToolInput(filePath, []), result, cwd);
-    emitDeny(result.report, 'Read');
+    emitDeny(result.report, 'Read', blockingRule(result.report, 'read-guard'));
 }
 
 function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
@@ -187,7 +196,7 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     logRejection(toolKind, input, result, cwd);
     // File-tool deny → pass the Write/Edit/MultiEdit kind so denyJson omits systemMessage (the reason
     // already renders red natively for these tools). See claude-code-response.ts.
-    emitDeny(result.report, toolKind);
+    emitDeny(result.report, toolKind, blockingRule(result.report, 'file-guard'));
 }
 
 // What a stale committed shim lets through — now a thin adapter over the ONE L0 allowlist (isAllowed in
@@ -250,7 +259,9 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     // Drop the L0 matrix doc where the AI can read it and point the deny at it — a Read is entry 1 of
     // the same allowlist, so the pointer is always followable. Best-effort: no doc → no pointer.
     const docPath = writeGuardMatrixDoc(new RepoRootFinder().resolveRepoRoot(cwd));
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion()) + guardMatrixPointer(docPath), payload.tool_name);
+    // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
+    // says WHAT stopped the call, not merely that something did.
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion()) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale');
 }
 
 /**
@@ -288,7 +299,7 @@ export async function runMain(mode: HookMode): Promise<void> {
         if (READ_ONLY_TOOLS.has(payload.tool_name)) {
             const readPath = payload.tool_input.file_path ?? '';
             if (mode !== 'rules') {
-                logGuardInvocation(cwd, payload.tool_name, readPath);
+                invocationLog.begin(cwd, payload.tool_name, readPath);
                 // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
                 // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
                 triggerMainSyncRefresh(cwd);
@@ -303,7 +314,7 @@ export async function runMain(mode: HookMode): Promise<void> {
         // reported by the self-guard above, not rewritten out from under the AI.)
         if (mode !== 'rules') {
             const target = payload.tool_name === 'Bash' ? (payload.tool_input.command ?? '') : (payload.tool_input.file_path ?? '');
-            logGuardInvocation(cwd, payload.tool_name, target);
+            invocationLog.begin(cwd, payload.tool_name, target);
         }
 
         if (payload.tool_name === 'Bash') {
@@ -322,11 +333,11 @@ export async function runMain(mode: HookMode): Promise<void> {
         // InformAiError (bad config/stdin) both carry an AI-readable message; anything else is an
         // unexpected bug. All three deny (fail closed) and surface their reason to the AI.
         if (error instanceof RuleFailError) {
-            emitDeny(error.aiMessage, toolName);
+            emitDeny(error.aiMessage, toolName, 'rule-crash');
         } else if (error instanceof InformAiError) {
-            emitDeny(error.message, toolName);
+            emitDeny(error.message, toolName, 'bad-config-or-stdin');
         } else {
-            emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, toolName);
+            emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, toolName, 'hook-crash');
         }
     }
 }

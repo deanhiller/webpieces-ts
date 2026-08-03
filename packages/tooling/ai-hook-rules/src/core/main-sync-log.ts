@@ -11,8 +11,8 @@ import { toError } from './to-error';
 // exited, with stdio discarded, so when it fails to update the cache there is normally no trace.
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
-// mid-run (START with no FINISH), or threw. Writes to `.webpieces/hooks/guard-async-work.log`.
-const HOOKS_DIR = 'hooks';
+// mid-run (START with no FINISH), or threw. Writes to `.webpieces/logs/guard-async-work.log` (see
+// LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside the non-log state in `hooks/`).
 const LOG_FILE = 'guard-async-work.log';
 const LOG_FILE_PREV = 'guard-async-work.1.log';
 const STDERR_FILE = 'guard-async-work.stderr.log';
@@ -37,7 +37,7 @@ export class SyncLogEvent {
 }
 
 /**
- * Append one tab-separated line per refresher event to `.webpieces/hooks/guard-async-work.log`. `root` is
+ * Append one tab-separated line per refresher event to `.webpieces/logs/guard-async-work.log`. `root` is
  * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */
@@ -47,11 +47,11 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
         const timestamp = new Date().toISOString();
         // LOCAL scope: this is the refresher's own lifecycle trace for THIS worktree. One writer per
         // log, so its appends cannot interleave with another agent's.
-        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
-        fs.mkdirSync(hooksDir, { recursive: true });
+        const logsDir = dotWebpieces.logs(root);
+        fs.mkdirSync(logsDir, { recursive: true });
 
-        const logPath = path.join(hooksDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(hooksDir, LOG_FILE_PREV));
+        const logPath = path.join(logsDir, LOG_FILE);
+        rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
 
         const line = [
             `[${timestamp}]`,
@@ -69,10 +69,10 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
 
 // Absolute path the detached child's stdout/stderr are redirected to (opened with fs.openSync(p,'a')
 // by the spawner), so even a crash BEFORE our own logging runs — e.g. a module-load failure — is
-// captured instead of vanishing into /dev/null. Callers must ensure the hooks dir exists first
+// captured instead of vanishing into /dev/null. Callers must ensure the log dir exists first
 // (logSyncEvent's mkdir, called for SPAWN_ATTEMPT, does that).
 export function syncStderrLogPath(root: string): string {
-    return dotWebpieces.localFile(root, HOOKS_DIR, STDERR_FILE);
+    return dotWebpieces.logsFile(root, STDERR_FILE);
 }
 
 // Collapse newlines/tabs and cap length so one event is always one log line.

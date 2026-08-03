@@ -90,7 +90,7 @@ export class WorktreeCleanupSection {
         }
         // Printed on success too: removing a worktree deletes real files, and a human who cannot see
         // how to undo that has to take it on trust — which is precisely what nobody should have to do.
-        out += '\nEvery removal is logged in .webpieces/hooks/branch-mutations.log (phase REAP_WORKTREE)\n'
+        out += '\nEvery removal is logged in .webpieces/logs/branch-mutations.log (phase REAP_WORKTREE)\n'
             + 'with the `recover=` command that brings back both the directory and its branch.\n';
         return out;
     }

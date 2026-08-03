@@ -26,6 +26,8 @@
 // stderr invisible to the user on Bash).
 // Refs: Claude Code GitHub issues #31592, #40380, #17356 (asymmetry "closed / not planned").
 
+import { invocationLog } from '../core/decision-log';
+
 // ANSI escape (0x1b) built at runtime so no raw ESC byte sits in source. ANSI red is a *bonus* — the
 // 🛑 prefix + reason stay meaningful if a future/CI renderer strips the color. One place = one escape.
 const ESC = String.fromCharCode(0x1b);
@@ -51,7 +53,13 @@ export function denyJson(reason: string, toolName: string): string {
 // selects whether the red `systemMessage` is added (Bash) or omitted (file tools) — see denyJson.
 // emitDeny/emitAllow are the hook's designated terminal boundary — the exit code IS the Claude Code
 // PreToolUse protocol (exit 0 + JSON = the contract), so the process.exit stays and is allowlisted.
-export function emitDeny(reason: string, toolName: string): never {
+//
+// Being the ONE boundary every path exits through is also why the per-invocation audit line is
+// flushed HERE: guard-invocations.log carries the outcome of its own call, and the outcome is not
+// known until this point. `rule` names what blocked (or '-'), for the line's `rule=` field.
+// webpieces-disable no-function-outside-class -- the Claude Code PreToolUse protocol boundary; module-scope beside denyJson/emitAllow by design, and it must stay callable from a tree too broken to build a DI container.
+export function emitDeny(reason: string, toolName: string, rule: string = '-'): never {
+    invocationLog.finish('BLOCK', rule);
     process.stdout.write(denyJson(reason, toolName) + '\n');
     // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (exit 0 + JSON = the contract); designated terminal boundary.
     process.exit(0);
@@ -59,6 +67,7 @@ export function emitDeny(reason: string, toolName: string): never {
 
 // Allow the tool call. No JSON needed — a silent exit 0 is "allow" in the PreToolUse protocol.
 export function emitAllow(): never {
+    invocationLog.finish('ALLOW', '-');
     // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (silent exit 0 = "allow"); designated terminal boundary.
     process.exit(0);
 }

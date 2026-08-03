@@ -18,8 +18,9 @@ export { findConfigFile, CONFIG_FILENAME, ConfigFile, ConfigParseAttempt, CONFIG
 export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 // The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two
 // named methods so the call site declares whether the state is repo-wide or worktree-private.
-export { DotWebpieces, dotWebpieces, GitDirs, WORKTREE_STATE_DIR } from './state-dir';
+export { DotWebpieces, dotWebpieces, GitDirs, WORKTREE_STATE_DIR, LOGS_STATE_DIR, HOOKS_STATE_DIR } from './state-dir';
 export { StateDirMigrator, StateMigrationReport } from './state-dir-migration';
+export { ClaudeEnv, claudeEnv, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from './claude-env';
 export { AtomicFile } from './atomic-file';
 // The ONE formatter for a remedy that must run in a named directory: `cd '<root>' && <command>`.
 // Single-quoted so a repo path containing a space is still runnable (and still un-smuggleable).

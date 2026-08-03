@@ -18,10 +18,10 @@ describe('branch-mutation-log', () => {
     beforeEach(() => { root = tmpRoot(); });
     afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
-    it('writes to .webpieces/hooks/branch-mutations.log', () => {
+    it('writes to .webpieces/logs/branch-mutations.log', () => {
         logBranchMutation(root, new BranchMutationEvent('wp-start-update', 'START'));
         const logPath = branchMutationLogPath(root);
-        expect(logPath.endsWith(path.join('.webpieces', 'hooks', 'branch-mutations.log'))).toBe(true);
+        expect(logPath.endsWith(path.join('.webpieces', 'logs', 'branch-mutations.log'))).toBe(true);
         expect(fs.existsSync(logPath)).toBe(true);
         const line = fs.readFileSync(logPath, 'utf8');
         expect(line).toContain('wp-start-update');

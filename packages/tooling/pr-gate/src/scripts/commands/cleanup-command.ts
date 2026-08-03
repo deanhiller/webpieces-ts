@@ -159,7 +159,7 @@ export class CleanupCommand {
 
         // Printed even on success: a deletion the human cannot undo is a deletion they have to trust
         // blindly, and the whole argument for auto-cleanup is that they never have to.
-        out += '\nEvery deletion is logged with its pre-delete SHA in .webpieces/hooks/branch-mutations.log —\n'
+        out += '\nEvery deletion is logged with its pre-delete SHA in .webpieces/logs/branch-mutations.log —\n'
             + 'recover any of them with the `recover=` command on its line.\n';
         return out;
     }

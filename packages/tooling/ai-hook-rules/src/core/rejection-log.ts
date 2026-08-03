@@ -1,11 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
+import { dotWebpieces, RepoRootFinder, HOOKS_STATE_DIR } from '@webpieces/rules-config';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 
-const HOOKS_DIR = 'hooks';
+// The rejection log SPLITS across the two state dirs on purpose: the `.log` index goes to `logs/`
+// with every other webpieces log, while the dated `hooks/<YYYY-MM-DD>/writeInfo-*.md` DETAIL files
+// are not logs and stay in `hooks/` (see LOGS_STATE_DIR).
 const LOG_FILE = 'hook-rejection.log';
 const LOG_FILE_PREV = 'hook-rejection.1.log';
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded
@@ -22,7 +24,7 @@ export function logRejection(
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // `.webpieces/` lives at the repo root, NOT the AI's cwd — resolve it so a hook fired while
-        // the AI is in a subdirectory never scatters a stray `<subdir>/.webpieces/hooks` tree.
+        // the AI is in a subdirectory never scatters a stray `<subdir>/.webpieces` tree.
         const root = new RepoRootFinder().resolveRepoRoot(cwd);
         const now = new Date();
         const timestamp = now.toISOString();
@@ -31,20 +33,25 @@ export function logRejection(
 
         // LOCAL scope — a rejection is this worktree's event, and a per-worktree log has exactly one
         // writer, so its appends and its daily detail files cannot collide with another agent's.
-        const hooksDir = dotWebpieces.localFile(root, HOOKS_DIR);
+        const hooksDir = dotWebpieces.localFile(root, HOOKS_STATE_DIR);
+        const logsDir = dotWebpieces.logs(root);
         const dayDir = path.join(hooksDir, dateStr);
         fs.mkdirSync(dayDir, { recursive: true });
+        fs.mkdirSync(logsDir, { recursive: true });
 
         const relativePath = computeRelativePath(input.filePath, root);
         const ruleNames = extractRuleNames(result.report);
         const detailFileName = `writeInfo-${epochMs}.md`;
-        const detailRelPath = `${dateStr}/${detailFileName}`;
+        // Relative to the STATE DIR, not to the log file's own directory: the index now lives in
+        // `logs/` while the detail lives in `hooks/<date>/`, so a bare `<date>/<file>` would no
+        // longer resolve from where the reader found the line.
+        const detailRelPath = `${HOOKS_STATE_DIR}/${dateStr}/${detailFileName}`;
 
         const detail = buildDetailContent(timestamp, toolKind, relativePath, ruleNames, result.report, input);
         fs.writeFileSync(path.join(dayDir, detailFileName), detail);
 
-        const logPath = path.join(hooksDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(hooksDir, LOG_FILE_PREV));
+        const logPath = path.join(logsDir, LOG_FILE);
+        rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
 
         const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\n`;
         fs.appendFileSync(logPath, logLine);
@@ -65,7 +72,14 @@ function computeRelativePath(filePath: string, cwd: string): string {
     return filePath;
 }
 
-function extractRuleNames(report: string): string[] {
+/**
+ * The rule names a block report cites — every `[<rule-name>] (` header it opens with. Exported because
+ * two audit streams need the same answer from the same regex: this file's rejection index, and the
+ * `rule=` field guard-invocations.log now carries (see InvocationLog.finish). Two scrapers would be
+ * two answers to one question.
+ */
+// webpieces-disable no-function-outside-class -- pure regex scraper beside this module's other module-scope helpers; exported so the invocation log and the rejection index scrape rule names with the SAME code.
+export function extractRuleNames(report: string): string[] {
     const names: string[] = [];
     let match = RULE_NAME_RE.exec(report);
     while (match !== null) {

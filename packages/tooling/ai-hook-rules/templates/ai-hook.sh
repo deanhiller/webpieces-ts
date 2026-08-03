@@ -80,6 +80,58 @@ fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
+CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+FILE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+WP_CWD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+[ -n "$WP_CWD" ] || WP_CWD="$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree
+# Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
+# tab-separated line per invocation into this TREE's own logs/ai-hook-shim.log (gitignored), so the
+# observed behaviour can be diffed against the matrix in guards/L0-tooling.md. NEVER breaks or blocks the
+# hook: every write is swallowed, and nothing ever goes to stdout (stdout is the PreToolUse decision
+# channel — a stray byte there would corrupt allow/deny).
+WP_TREE=""
+WP_LOG_DIR=""
+wp_resolve_log_dir() {
+  _wp_rp="$(git -C "$WP_CWD" rev-parse --git-dir --git-common-dir 2>/dev/null)"
+  _wp_gd="$(printf '%s\n' "$_wp_rp" | sed -n 1p)"
+  _wp_cd="$(printf '%s\n' "$_wp_rp" | sed -n 2p)"
+  if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
+    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces/logs"; return 0
+  fi
+  # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
+  # twin runs path.resolve(cwd, printed), so do the same before comparing or taking a basename.
+  case "$_wp_gd" in /*) : ;; *) _wp_gd="$WP_CWD/$_wp_gd" ;; esac
+  case "$_wp_cd" in /*) : ;; *) _wp_cd="$WP_CWD/$_wp_cd" ;; esac
+  # The primary clone's root is the parent of the SHARED git dir — declining any layout whose shared
+  # dir is not named .git (a bare repo, --separate-git-dir), same test as primaryRoot().
+  _wp_primary="$WP_CWD"
+  case "$_wp_cd" in
+    */.git) [ -d "${_wp_cd%/*}" ] && _wp_primary="${_wp_cd%/*}" ;;
+  esac
+  if [ "$_wp_gd" = "$_wp_cd" ]; then
+    WP_TREE=primary
+    WP_LOG_DIR="$_wp_primary/.webpieces/logs"
+  else
+    # git's OWN name for the worktree (the basename of <primary>/.git/worktrees/<name>), not the
+    # directory's basename — two worktrees under different parents may share a directory name.
+    WP_TREE="${_wp_gd##*/}"
+    WP_LOG_DIR="$_wp_primary/.webpieces/worktrees/$WP_TREE/logs"
+  fi
+}
+wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
+  {
+    [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
+    mkdir -p "$WP_LOG_DIR" 2>/dev/null || return 0
+    _wp_f="$WP_LOG_DIR/ai-hook-shim.log"
+    # Rotate at the SAME 512 KB into the SAME .1.log sibling as every JS-side webpieces log. This runs
+    # on every tool call, so it is one wc and no more; a size we cannot read counts as 0 (no rotation).
+    _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
+    case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
+    [ "$_wp_sz" -gt 524288 ] && mv -f "$_wp_f" "$WP_LOG_DIR/ai-hook-shim.1.log" 2>/dev/null
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD" >> "$_wp_f"
+  } 2>/dev/null || true
+}
 BROKEN_BIN=""
 CRASH_MSG=""
 if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
@@ -91,6 +143,14 @@ if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
     cat "$OUT_FILE"                      # the guard's real decision — verbatim
     cat "$ERR_FILE" >&2
     rm -f "$OUT_FILE" "$ERR_FILE" 2>/dev/null
+    # THE HEALTHY CALL, which this log used to be silent about (see WP_LOG_SH's header). No sh-side
+    # fault, the bin ran, and its own exit code says how it ended — 0 allow, 2 block. Logged AFTER the
+    # decision bytes are already on stdout, so the audit trail never sits between the guard and Claude
+    # Code. Without this line, "no entry" meant either healthy or never-ran, and those are the two
+    # answers a reader most needs to tell apart.
+    WP_VERDICT=PASS-BIN-ALLOW
+    [ "$RC" = 2 ] && WP_VERDICT=PASS-BIN-BLOCK
+    wp_log - "$WP_VERDICT"
     exit "$RC"
   fi
   # Crashed. Keep the most useful stderr line for the human. Strip " and backslash so the text stays a
@@ -107,18 +167,11 @@ fi
 # through: the assistant's own Bash tool routes through this hook too, so blocking everything would
 # deadlock the very commands (pnpm install / rm -rf node_modules && pnpm install) that re-enable the
 # guards. A silent exit 0 = "allow" in the PreToolUse protocol; the guards resume once the tree is sane.
-CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-FILE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-# Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
-# human can inspect after something odd (an install that was denied, or one that slipped through). One
-# tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
-# blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
-# the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
-LOG_DIR="$ROOT/.webpieces/logs"
-wp_log() {                   # $1 = label (ALLOW-CURE|ALLOW-READ|ALLOW-CONFIG|DENY|DENY-STALE|DENY-BROKEN)
-  { mkdir -p "$LOG_DIR" 2>/dev/null && printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "$1" "$CMD" >> "$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
-}
+# WHICH of the six guards/L0-tooling.md faults fired, in the doc's own letters. Only the three sh-side
+# codes can be decided here; S/C/Y live in the binary, which never got to run on this path.
+WP_FAULT=X                                            # X — bin missing (fresh clone, new worktree)
+[ -n "$DRIFT_PKG" ] && WP_FAULT=D                     # D — version drift; D and K are mutually exclusive
+[ -n "$BROKEN_BIN" ] && WP_FAULT=K                    # K — bin present but CRASHED (corrupt node_modules)
 DENY_LABEL="DENY"
 [ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
@@ -126,19 +179,19 @@ DENY_LABEL="DENY"
 # help a given fault also cannot hurt it, and gating each entry on a fault is what produced the four
 # defects recorded above L0_ALLOW_ERE.
 if [ "$TOOL" = "Read" ]; then
-  wp_log ALLOW-READ          # you must be able to read to work out how to fix this
+  wp_log "$WP_FAULT" ALLOW-READ   # you must be able to read to work out how to fix this
   exit 0
 fi
 case "$FILE" in
   */webpieces.config.json|webpieces.config.json)
-    wp_log ALLOW-CONFIG      # the always-allowed recovery target — every guard is configured from it
+    wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
     exit 0 ;;
 esac
 if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+(pull|fetch)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
-  wp_log ALLOW-CURE          # record the self-heal we let through (re-enables the guards)
+  wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi
-wp_log "$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection
+wp_log "$WP_FAULT" "$DENY_LABEL"  # every fail-closed block, with the fault that caused it
 if [ -n "$BROKEN_BIN" ]; then
   # Report (do NOT auto-clean) the orphaned pnpm staging dirs — a package pnpm was mid-way through
   # writing is left behind as <name>_<pid>_<hash>. Their presence is the fingerprint of an install that

@@ -21,7 +21,14 @@ export class StateMigrationReport {
 
 /**
  * Moves a LEGACY per-worktree `.webpieces/` REAL DIRECTORY into the worktree's namespace inside the
- * primary clone (`<primary>/.webpieces/worktrees/<name>/`), so the symlink can take its place.
+ * primary clone (`<primary>/.webpieces/worktrees/<name>/`).
+ *
+ * NO SYMLINK IS EVER CREATED in its place — an earlier draft of this design planned one and this
+ * comment still said so, which is worse than silence: it told the reader to expect an indirection
+ * that does not exist. `DotWebpieces` resolves the namespace path EXPLICITLY (see its "Why two
+ * explicit methods and not a symlink" section, which records why the link was rejected: lazy creation
+ * with three failure modes, a Windows hazard, and `rename(2)` silently REPLACING the link). After a
+ * migration the legacy `<worktree>/.webpieces/` is simply gone; nothing takes its place.
  *
  * WHY it must exist: those directories hold REAL in-flight state — a half-finished 3-point merge under
  * `merge-info/staged/<branch>/`, a written-but-not-yet-posted `pr-review/<branch>/review.json`. The
@@ -68,6 +75,48 @@ export class StateDirMigrator {
         }
 
         this.announce(legacyDir, targetDir, report);
+        return report;
+    }
+
+    /**
+     * Relocate every `*.log` FILE sitting directly in `hooksDir` into `logsDir` — the hooks/ → logs/
+     * split (see LOGS_STATE_DIR). Same shape and the same safety rule as {@link migrate}: `rename`
+     * first, an occupied destination is LEFT ALONE and reported, nothing is ever deleted or
+     * overwritten. Deliberately NON-recursive and extension-scoped, because the rest of `hooks/` is
+     * not log data — the dated `hooks/<YYYY-MM-DD>/writeInfo-*.md` rejection details stay exactly
+     * where they are, and a recursive sweep would drag them along.
+     *
+     * `hooksDir` normally still exists after this (it holds those dated dirs); it is removed only if
+     * draining the logs left it genuinely empty.
+     */
+    migrateLogFiles(hooksDir: string, logsDir: string): StateMigrationReport {
+        const report = new StateMigrationReport();
+        if (path.resolve(hooksDir) === path.resolve(logsDir)) return report;
+
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            if (!this.isRealDirectory(hooksDir)) return report;
+            const logs = fs.readdirSync(hooksDir, { withFileTypes: true })
+                .filter((entry: fs.Dirent): boolean => entry.isFile() && entry.name.endsWith('.log'));
+            if (logs.length === 0) return report;
+
+            fs.mkdirSync(logsDir, { recursive: true });
+            for (const entry of logs) {
+                const destination = path.join(logsDir, entry.name);
+                if (fs.existsSync(destination)) {
+                    report.kept.push(entry.name);
+                    continue;
+                }
+                this.relocate(path.join(hooksDir, entry.name), destination, entry.name, report);
+            }
+            this.removeIfEmpty(hooksDir);
+        } catch (err: unknown) {
+            const error = toError(err);
+            this.warn(`could not move logs from ${hooksDir} into ${logsDir}: ${error.message}`);
+            return report;
+        }
+
+        this.announce(hooksDir, logsDir, report);
         return report;
     }
 
@@ -148,8 +197,8 @@ export class StateDirMigrator {
         if (report.kept.length === 0) return;
         this.warn(
             `${String(report.kept.length)} item(s) in ${legacyDir} could NOT move into ${targetDir} because ` +
-            `that path is already occupied. NOTHING was deleted — resolve by hand if any of these is an ` +
-            `in-flight merge: ${report.kept.join(', ')}`,
+            `that path is already occupied. NOTHING was deleted — resolve by hand if any of these still ` +
+            `matters (an in-flight merge, or log history you have not read): ${report.kept.join(', ')}`,
         );
     }
 
