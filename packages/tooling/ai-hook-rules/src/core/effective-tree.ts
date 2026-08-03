@@ -52,10 +52,10 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  *      workspace content, which is what ContentReadScan uses `effectiveCwd` for.
  */
 // L1's K dimension. 'primary' and 'worktree' are never distinguished by a guard (a linked worktree is
-// the same project) — GUARD_MATRIX.md at the repo root writes them as one value, `pw`.
+// the same project) — guards/L1-location.md writes them as one value, `pw`.
 //
 // 'outside' is produced below (gitRoot === null) and consumed NOWHERE, so a command in no git repo is
-// judged against governedRoot — a repo it is not in. GUARD_MATRIX.md's "Not done" section explains why
+// judged against governedRoot — a repo it is not in. guards/L1-location.md's "Not done" section explains why
 // exempting it must ship together with target-based jurisdiction, never alone.
 export type TreeKind = 'primary' | 'worktree' | 'foreign' | 'outside';
 
