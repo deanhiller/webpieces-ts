@@ -10,7 +10,7 @@ import { RepoRootFinder } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
-import { committedShimStale, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
+import { committedShimStale, governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
@@ -252,7 +252,13 @@ export function shimStaleRecoveryDecision(toolName: string, command: string, fil
 // shim). Returns normally (pass / nothing to do) or exits via emitAllow/emitDeny.
 // webpieces-disable no-function-outside-class -- sibling of handleBash()/handleFileTool() in this module; the adapter is module-scope functions by design
 function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
-    if (mode === 'rules' || !committedShimStale(cwd)) return;
+    // ONE root for the whole decision, resolved from the RUNNING MODULE (governingShimRoot), never from
+    // `cwd`: the shim file we compare and the renderShim() we compare it TO must come from the same
+    // install, or the check straddles two trees and can never converge (see governingShimRoot's header).
+    // `cwd` still selects where the L0 matrix doc is dropped — that is a "where does the AI read" question,
+    // not part of the judgement.
+    const shimRoot = governingShimRoot();
+    if (mode === 'rules' || !committedShimStale(shimRoot)) return;
     const decision = shimStaleRecoveryDecision(payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '');
     if (decision === 'pass') return;
     if (decision === 'allow-cure') emitAllow();
@@ -261,7 +267,7 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const docPath = writeGuardMatrixDoc(new RepoRootFinder().resolveRepoRoot(cwd));
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did.
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion()) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale');
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '') + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale');
 }
 
 /**

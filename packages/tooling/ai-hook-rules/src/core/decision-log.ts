@@ -80,6 +80,10 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
             // see ClaudeEnv: when these two disagree, that disagreement is the bug.
             `root=${root}`,
             `projectDir=${claudeEnv.projectDirForLog()}`,
+            // git's name for that tree — `primary`, else the worktree name. Same literal and same
+            // derivation as the L0 shim log's `tree=` (shim-audit-log.ts), so one grep spans both
+            // streams: L0 carries tree without projectDir, L1 now carries both.
+            `tree=${dotWebpieces.worktreeName(root) || 'primary'}`,
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {
@@ -177,6 +181,10 @@ export class InvocationLog {
                 // ClaudeEnv for the open question this field exists to settle empirically.
                 `root=${invocation.root}`,
                 `projectDir=${invocation.projectDir}`,
+                // See logGuardDecision: the short tree label, so `tree=primary` with a matching
+                // projectDir reads as healthy at a glance and `tree=<worktree>` beside a projectDir
+                // pointing at the primary is the straddle, without diffing two absolute paths.
+                `tree=${dotWebpieces.worktreeName(invocation.root) || 'primary'}`,
             ].join('\t') + '\n';
             fs.appendFileSync(logPath, line);
         } catch (err: unknown) {
