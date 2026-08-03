@@ -3,6 +3,7 @@ import * as path from 'path';
 import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, ExcludePaths, isHookGuard, DEFAULT_HANG_TIMEOUT_MINUTES, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from './build-context';
+import { AgentIdentity, CoordinatorWorktreeGuard, UNKNOWN_AGENT } from './coordinator-worktree';
 import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { loadRules, loadMatchRules, globMatches } from './load-rules';
 import { MatchRule } from './rules/match-rule';
@@ -132,8 +133,13 @@ function runInternal(
     return new BlockedResult(report);
 }
 
-export function runBash(command: string, cwd: string, mode: HookMode = 'all'): BlockedResult | null {
-    return runBashInternal(command, cwd, mode);
+// `agent` defaults to UNKNOWN_AGENT — NOT the coordinator. Only the Claude Code adapter can read
+// agent_id/agent_type off the payload; every other caller (the openclaw adapter, library consumers,
+// the existing specs) genuinely does not know, and a caller who does not know must not be guessed
+// into a coordinator-only block. See UNKNOWN_AGENT.
+// webpieces-disable no-function-outside-class -- sibling of run()/runRead() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
+export function runBash(command: string, cwd: string, mode: HookMode = 'all', agent: AgentIdentity = UNKNOWN_AGENT): BlockedResult | null {
+    return runBashInternal(command, cwd, mode, agent);
 }
 
 // The name of the ONLY rule permitted to block a Read. Reads are the highest-blast-radius tool
@@ -292,7 +298,28 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
     }
 }
 
-function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedResult | null {
+// Coordinator-in-worktree: the coordinator's governance is anchored at session start and does NOT
+// follow a `cd`, so a coordinator working inside a linked worktree has its filesystem in one tree and
+// its guards in another. L1 row 3 — guards/L1-location.md carries the table and the incident; the
+// predicate and the message are CoordinatorWorktreeGuard's.
+// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
+    const report = new CoordinatorWorktreeGuard().block(command, tree, agent);
+    if (report === null) return null;
+    logGuardDecision(tree.root, new GuardDecision('coordinator-in-worktree', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'coordinator working inside a linked worktree'));
+    return new BlockedResult(report);
+}
+
+// The structural L1 blocks, in order: coordinator-in-worktree (row 3), then force-to-root (row 5).
+// Neither is a configurable rule — they are decided from the resolved tree and the caller, so they run
+// as one step here rather than as two near-identical stanzas in runBashInternal.
+// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
+    return coordinatorInWorktreeBlock(command, tree, agent) ?? gitFromSubdirBlock(command, tree);
+}
+
+// webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
+function runBashInternal(command: string, cwd: string, mode: HookMode, agent: AgentIdentity): BlockedResult | null {
     if (isL0CureCommand(command)) {
         logL0CureBypass(command, cwd);
         return null;
@@ -334,8 +361,8 @@ function runBashInternal(command: string, cwd: string, mode: HookMode): BlockedR
     const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
     if (outOfSync) return l0FaultAllows(command) ? null : outOfSync;
 
-    const subdirBlock = gitFromSubdirBlock(command, tree);
-    if (subdirBlock) return subdirBlock;
+    const locationBlock = l1LocationBlock(command, tree, agent);
+    if (locationBlock) return locationBlock;
 
     // Keep the feature-branch-guard cache warm on EVERY command (not just Write/Edit): the AI runs
     // far more bash than edits, so refreshing here means the guard's next file-edit check reads a
@@ -396,7 +423,7 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
     const unconfiguredRules = rules.filter((r: Rule) => !configured.has(r.name));
     if (unconfiguredRules.length === 0) return null;
 
-    // ONE action, no menu, no escalation — the config-validation invariant (GUARD_MATRIX.md): every
+    // ONE action, no menu, no escalation — the config-validation invariant (guards/L0-tooling.md): every
     // config problem cures to "make the file right", and editing it is never denied. This message used
     // to tell the agent to interview the human about each rule; agents did not do it, so the block just
     // stalled. Each rule now ships a paste-ready entry at its recommended mode.

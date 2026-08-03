@@ -92,7 +92,7 @@ export class L0Fault {
 // ORDERING (2026-08-02): writing the file yourself now LEADS. The bare installer used to be OPTION 1,
 // but it seeds the config and then PROMPTS twice for a hook target, which hangs a non-interactive
 // agent. Writing the file is the one cure that always works, and it is the same cure every other config
-// problem has (see the config-validation invariant in GUARD_MATRIX.md): the validator reports every
+// problem has (see the config-validation invariant in guards/L0-tooling.md): the validator reports every
 // error at once, so the write/validate loop converges in a couple of passes.
 export const CONFIG_MISSING_REPORT =
     `${CONFIG_FILENAME} not found — the webpieces guards cannot run without it, so every other tool call is blocked.\n` +
@@ -112,7 +112,7 @@ export const CONFIG_OUT_OF_SYNC_HEADER =
     `${CONFIG_FILENAME} is out of sync — new built-in rules are present that have no entry in ${CONFIG_FILENAME}.`;
 
 // Writing/repairing the file yourself. PREFERRED for both config faults, per the config-validation
-// invariant in GUARD_MATRIX.md: every config problem cures to "make the file right", the validator
+// invariant in guards/L0-tooling.md: every config problem cures to "make the file right", the validator
 // reports all errors at once so the loop converges in a couple of passes, and allowlist entry 2 permits
 // this edit unconditionally. (That section is the authority — do not restate its reasoning here.)
 const CONFIG_WRITE_CURE = new L0Cure(
