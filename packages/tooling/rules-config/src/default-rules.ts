@@ -55,14 +55,22 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'validate-packagejson': { mode: 'RUN_EVERY_TIME' },
     'validate-versions-locked': { mode: 'RUN_EVERY_TIME' },
     'validate-eslint-sync': { mode: 'RUN_EVERY_TIME' },
-    // autoReapMergedBranches ships FALSE. It is schema-required so every consumer must state a value,
-    // and the framework default must be the conservative one: an upgrade should never start deleting
-    // a project's branches unattended before a human has opted in. Set it true to let the background
-    // refresher reap dead branches on its own; `pnpm wp-cleanup` works either way.
+    // autoReapMergedBranches ships TRUE, and it is also what a fresh config is seeded with.
+    //
+    // It shipped FALSE on the reasoning that an upgrade must never delete branches unattended before a
+    // human opts in. In practice that produced the opposite of safety: nobody opts in, dead branches
+    // pile up, and the pile is what makes a real branch hard to find. The reap is also NOT destructive
+    // in the way the old comment implied — BranchReaper deletes only provably-dead branches (a merged
+    // PR, a squash-merge backup of one, or no commits of their own), spares everything else for a
+    // human, and logs each deletion to .webpieces/hooks/branch-mutations.log with the pre-delete SHA
+    // and a ready-made `recover=` command. So the worst case is one paste to undo, which a human can
+    // resolve; the previous default's worst case was unbounded accumulation nobody ever cleaned.
+    //
+    // Set it false to keep reaping manual; `pnpm wp-cleanup` works either way.
     'branch-creation-guard': {
         mode: 'ON',
         subBranchNaming: 'feature/<ticket>/<short-description>',
-        autoReapMergedBranches: false,
+        autoReapMergedBranches: true,
     },
     'pr-creation-or-push-guard': { mode: 'ON' },
     'merge-in-progress-guard': { mode: 'ON' },

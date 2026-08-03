@@ -49,7 +49,7 @@ export function recommendedSeedMode(ruleName: string): string {
 //   2. `mode` — the shared recommendation (see recommendedSeedMode);
 //   3. the framework's documented default for that rule (defaultRules) — the value the rule's own
 //      config class commits to, e.g. max-file-lines.limit: 900, branch-creation-guard
-//      .autoReapMergedBranches: false (deliberately conservative: never reap branches unattended);
+//      .autoReapMergedBranches: true (reaping is on by default — see default-rules.ts for why);
 //   4. a conservative fallback by type — null if the field accepts null, false for boolean, [] for
 //      string[], the first enum value for an enum, '' / 0 otherwise. Reaching step 4 for a NEW field
 //      means the rule forgot to give defaultRules an entry, which the seed-validates-clean spec in

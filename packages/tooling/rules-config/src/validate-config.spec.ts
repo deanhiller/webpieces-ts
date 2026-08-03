@@ -662,11 +662,11 @@ describe('recommendedSeedMode', () => {
 describe('seedEntryForRule', () => {
     it('emits EVERY schema-required field, not just mode + the two hatches', () => {
         // The gap this closed: a seeded branch-creation-guard had no autoReapMergedBranches, so a fresh
-        // install wrote a config that failed to load. false is the documented default — an upgrade must
-        // never start deleting branches unattended.
+        // install wrote a config that failed to load. The value tracks defaultRules, which now ships
+        // TRUE — reaping is on by default, and every reap is logged with a `recover=` command.
         expect(seedEntryForRule('branch-creation-guard')).toEqual({
             mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
-            autoReapMergedBranches: false,
+            autoReapMergedBranches: true,
         });
     });
 
