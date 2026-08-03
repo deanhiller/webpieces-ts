@@ -80,6 +80,58 @@ fi
 # Read the tool payload ONCE, up front. The shim no longer exec's the bin (see RUN_BIN_SH), so it must
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
+CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+FILE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+WP_CWD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+[ -n "$WP_CWD" ] || WP_CWD="$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree
+# Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
+# tab-separated line per invocation into this TREE's own logs/ai-hook-shim.log (gitignored), so the
+# observed behaviour can be diffed against the matrix in guards/L0-tooling.md. NEVER breaks or blocks the
+# hook: every write is swallowed, and nothing ever goes to stdout (stdout is the PreToolUse decision
+# channel — a stray byte there would corrupt allow/deny).
+WP_TREE=""
+WP_LOG_DIR=""
+wp_resolve_log_dir() {
+  _wp_rp="$(git -C "$WP_CWD" rev-parse --git-dir --git-common-dir 2>/dev/null)"
+  _wp_gd="$(printf '%s\n' "$_wp_rp" | sed -n 1p)"
+  _wp_cd="$(printf '%s\n' "$_wp_rp" | sed -n 2p)"
+  if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
+    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces/logs"; return 0
+  fi
+  # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
+  # twin runs path.resolve(cwd, printed), so do the same before comparing or taking a basename.
+  case "$_wp_gd" in /*) : ;; *) _wp_gd="$WP_CWD/$_wp_gd" ;; esac
+  case "$_wp_cd" in /*) : ;; *) _wp_cd="$WP_CWD/$_wp_cd" ;; esac
+  # The primary clone's root is the parent of the SHARED git dir — declining any layout whose shared
+  # dir is not named .git (a bare repo, --separate-git-dir), same test as primaryRoot().
+  _wp_primary="$WP_CWD"
+  case "$_wp_cd" in
+    */.git) [ -d "${_wp_cd%/*}" ] && _wp_primary="${_wp_cd%/*}" ;;
+  esac
+  if [ "$_wp_gd" = "$_wp_cd" ]; then
+    WP_TREE=primary
+    WP_LOG_DIR="$_wp_primary/.webpieces/logs"
+  else
+    # git's OWN name for the worktree (the basename of <primary>/.git/worktrees/<name>), not the
+    # directory's basename — two worktrees under different parents may share a directory name.
+    WP_TREE="${_wp_gd##*/}"
+    WP_LOG_DIR="$_wp_primary/.webpieces/worktrees/$WP_TREE/logs"
+  fi
+}
+wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
+  {
+    [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
+    mkdir -p "$WP_LOG_DIR" 2>/dev/null || return 0
+    _wp_f="$WP_LOG_DIR/ai-hook-shim.log"
+    # Rotate at the SAME 512 KB into the SAME .1.log sibling as every JS-side webpieces log. This runs
+    # on every tool call, so it is one wc and no more; a size we cannot read counts as 0 (no rotation).
+    _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
+    case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
+    [ "$_wp_sz" -gt 524288 ] && mv -f "$_wp_f" "$WP_LOG_DIR/ai-hook-shim.1.log" 2>/dev/null
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD" >> "$_wp_f"
+  } 2>/dev/null || true
+}
 BROKEN_BIN=""
 CRASH_MSG=""
 if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
@@ -91,6 +143,14 @@ if [ -x "$BIN" ] && [ -z "$DRIFT_PKG" ]; then
     cat "$OUT_FILE"                      # the guard's real decision — verbatim
     cat "$ERR_FILE" >&2
     rm -f "$OUT_FILE" "$ERR_FILE" 2>/dev/null
+    # THE HEALTHY CALL, which this log used to be silent about (see WP_LOG_SH's header). No sh-side
+    # fault, the bin ran, and its own exit code says how it ended — 0 allow, 2 block. Logged AFTER the
+    # decision bytes are already on stdout, so the audit trail never sits between the guard and Claude
+    # Code. Without this line, "no entry" meant either healthy or never-ran, and those are the two
+    # answers a reader most needs to tell apart.
+    WP_VERDICT=PASS-BIN-ALLOW
+    [ "$RC" = 2 ] && WP_VERDICT=PASS-BIN-BLOCK
+    wp_log - "$WP_VERDICT"
     exit "$RC"
   fi
   # Crashed. Keep the most useful stderr line for the human. Strip " and backslash so the text stays a
@@ -107,18 +167,11 @@ fi
 # through: the assistant's own Bash tool routes through this hook too, so blocking everything would
 # deadlock the very commands (pnpm install / rm -rf node_modules && pnpm install) that re-enable the
 # guards. A silent exit 0 = "allow" in the PreToolUse protocol; the guards resume once the tree is sane.
-CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-FILE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
-# Best-effort audit trail of every decision the fail-closed shim makes WHILE THE GUARDS ARE DOWN, so a
-# human can inspect after something odd (an install that was denied, or one that slipped through). One
-# tab-separated line per call → <root>/.webpieces/logs/ai-hook-shim.log (gitignored). NEVER breaks or
-# blocks the hook: all writes are best-effort (|| true) and go to a file, never to stdout (stdout is
-# the PreToolUse decision channel — a stray byte there would corrupt allow/deny).
-LOG_DIR="$ROOT/.webpieces/logs"
-wp_log() {                   # $1 = label (ALLOW-CURE|ALLOW-READ|ALLOW-CONFIG|DENY|DENY-STALE|DENY-BROKEN)
-  { mkdir -p "$LOG_DIR" 2>/dev/null && printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "$1" "$CMD" >> "$LOG_DIR/ai-hook-shim.log"; } 2>/dev/null || true
-}
+# WHICH of the six guards/L0-tooling.md faults fired, in the doc's own letters. Only the three sh-side
+# codes can be decided here; S/C/Y live in the binary, which never got to run on this path.
+WP_FAULT=X                                            # X — bin missing (fresh clone, new worktree)
+[ -n "$DRIFT_PKG" ] && WP_FAULT=D                     # D — version drift; D and K are mutually exclusive
+[ -n "$BROKEN_BIN" ] && WP_FAULT=K                    # K — bin present but CRASHED (corrupt node_modules)
 DENY_LABEL="DENY"
 [ -n "$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
@@ -126,19 +179,19 @@ DENY_LABEL="DENY"
 # help a given fault also cannot hurt it, and gating each entry on a fault is what produced the four
 # defects recorded above L0_ALLOW_ERE.
 if [ "$TOOL" = "Read" ]; then
-  wp_log ALLOW-READ          # you must be able to read to work out how to fix this
+  wp_log "$WP_FAULT" ALLOW-READ   # you must be able to read to work out how to fix this
   exit 0
 fi
 case "$FILE" in
   */webpieces.config.json|webpieces.config.json)
-    wp_log ALLOW-CONFIG      # the always-allowed recovery target — every guard is configured from it
+    wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
     exit 0 ;;
 esac
-if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+[A-Za-z0-9._/@~+-]+[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+(pull|fetch)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
-  wp_log ALLOW-CURE          # record the self-heal we let through (re-enables the guards)
+if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+(pull|fetch)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+  wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi
-wp_log "$DENY_LABEL"         # every fail-closed block (…-STALE = drift, …-BROKEN = crash) for inspection
+wp_log "$WP_FAULT" "$DENY_LABEL"  # every fail-closed block, with the fault that caused it
 if [ -n "$BROKEN_BIN" ]; then
   # Report (do NOT auto-clean) the orphaned pnpm staging dirs — a package pnpm was mid-way through
   # writing is left behind as <name>_<pid>_<hash>. Their presence is the fingerprint of an install that
@@ -146,22 +199,51 @@ if [ -n "$BROKEN_BIN" ]; then
   STAGING_N="$(ls "$ROOT/node_modules" 2>/dev/null | grep -Ec '_[0-9a-f]+_[0-9a-f]+$' || true)"
   STAGING_NOTE=""
   if [ "${STAGING_N:-0}" -gt 0 ] 2>/dev/null; then
-    STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."
+    STAGING_NOTE=" Also found $STAGING_N orphaned pnpm staging dirs (name_pid_hash) under node_modules - the fingerprint of an install that was killed mid-write."   # only when N > 0
   fi
-  REASON="❌ webpieces guards are DOWN and every OTHER tool call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must NOT be silently skipped. NOTE: a plain 'pnpm install' will NOT fix this; pnpm sees the correct version on disk and skips the broken package. THIS IS NOT A DEADLOCK: the option below is explicitly ALLOWED through while this guard is up, so run it YOURSELF rather than handing it to the human. OPTION 1 - run EXACTLY this command, then retry: 'rm -rf node_modules && pnpm install'. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS accepted), a trailing 2>&1, and a pipe into tail/head (e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20).${STAGING_NOTE}"
+  REASON="❌ webpieces guards are DOWN and every other call is BLOCKED: ${BIN_NAME} is installed but CRASHED ($CRASH_MSG). Your node_modules is corrupt or partially written, so the guards cannot run - and they must not be silently skipped. Run EXACTLY: 'rm -rf node_modules && pnpm install'. A bare 'pnpm install' will NOT fix this: pnpm sees the correct version on disk and skips the broken package.${STAGING_NOTE} Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
 elif [ -n "$DRIFT_PKG" ]; then
-  # The 'how do I get current' half comes from SyncFlowGuidance so it cannot contradict the guards.
-  # It used to name 'git merge --ff-only origin/main' and assert that merge is allowed while this guard
-  # is up — the ONE command redirect-how-to-merge-main blocks in every form. An AI that obeyed the
-  # drift message got hard-blocked by the other guard with no path forward, which is how improvised
-  # 'git reset --hard' workarounds get invented. The SYNC allowlist no longer accepts merge either, so
-  # the text and the allowlist now agree instead of the text warning against what the list permits.
+  # DECIDE THE DIRECTION, do not make the reader do it (2026-08-03). The detection is a plain !=, so it
+  # fires BOTH ways, and the message used to carry OPTION 1/2/3 covering every direction at once — 3343
+  # chars of which only about a third was the decision. A reader on the wrong branch of that menu was
+  # one misread away from a downgrade. So compare the two versions HERE and emit only the relevant half.
   #
-  # State the two versions and let the reader judge which is stale — do NOT assert a direction. The
-  # check is a plain !=, so it fires BOTH ways, and the old text always claimed node_modules was the
-  # older side. When it is actually the NEWER side (a checkout behind origin), that text sent people
-  # to 'pnpm install', which DOWNGRADES them further from correct.
-  REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED. Every OTHER call is blocked until they agree. WHICH ONE IS STALE decides which option is yours - compare the two versions above. OPTION 1 (the pin is NEWER than node_modules - you just pulled or switched to a branch pinning a newer webpieces) - run EXACTLY this command to catch node_modules up: 'pnpm install'. OPTION 2 (the pin is OLDER than node_modules - your checkout is behind origin, so the PIN is the stale side, and 'pnpm install' on its own would DOWNGRADE you) - get the checkout current FIRST, THEN run 'pnpm install'. To get main itself current: ON main, run 'git pull origin main'. In a linked worktree (main is checked out in the primary clone, so checkout main fatals there), run 'git fetch origin main' and branch off origin/main. Do NOT reach for git merge --ff-only / git reset --hard / git checkout -B main: merge and rebase are blocked in EVERY form by redirect-how-to-merge-main, and the reset/-B forms silently throw away commits. To sync a FEATURE branch from main use pnpm wp-start-update (no PR open) or pnpm wp-start-upsert-pr (a PR is open). git pull and git fetch are allowed while this guard is up and are the cure here. git merge is NOT allowed - not by this guard and not by redirect-how-to-merge-main once the guards are back - because main is merged ONLY through the 3-point fork merge: 'pnpm wp-start-update', or 'pnpm wp-start-upsert-pr' when a PR is already open. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS accepted), a trailing 2>&1, and a pipe into tail/head (e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20)."
+  # WITH AWK, not `sort -V`: -V is a GNU extension (absent/different on BSD sort), while the shim
+  # already runs an awk pass to resolve catalog: specs, so awk adds no dependency. The program compares
+  # the numeric cores component-by-component; a pre-release/build suffix (-rc.1, +sha) is stripped from
+  # the core, and when the cores are EQUAL the side carrying a PRE-RELEASE suffix is the older one
+  # (semver precedence). Build metadata (+sha) carries NO precedence, so two versions differing only
+  # there come back undecidable rather than ordered. Anything it cannot parse prints NOTHING, and an
+  # empty answer falls through to the ambiguous wording below rather than guessing a direction.
+  #
+  # WHAT WAS DELETED, so it does not creep back: the "how to get main itself current" paragraph and the
+  # "do NOT reach for git merge --ff-only / reset --hard / checkout -B main" paragraph both belong to
+  # redirect-how-to-merge-main, which fires on its own with its own message; and the sentence that named
+  # wp-start-update / wp-start-upsert-pr ONLY to forbid them while the block is up — naming a command
+  # purely to forbid it is pure cost, and the install that clears this fault comes first regardless.
+  DRIFT_DIR="$(awk -v i="$DRIFT_INSTALLED" -v d="$DRIFT_DECLARED" 'BEGIN {
+    iv = i; sub(/\+.*/, "", iv); ic = iv; sub(/-.*/, "", ic); ip = substr(iv, length(ic) + 1)
+    dv = d; sub(/\+.*/, "", dv); dc = dv; sub(/-.*/, "", dc); dp = substr(dv, length(dc) + 1)
+    if (ic !~ /^[0-9]+(\.[0-9]+)*$/ || dc !~ /^[0-9]+(\.[0-9]+)*$/) exit
+    n = split(ic, ia, "."); m = split(dc, da, "."); k = (n > m) ? n : m
+    for (x = 1; x <= k; x++) {
+      av = (x <= n) ? ia[x] + 0 : 0; bv = (x <= m) ? da[x] + 0 : 0
+      if (av < bv) { print "older"; exit }
+      if (av > bv) { print "newer"; exit }
+    }
+    if (ip == dp) exit
+    if (ip != "" && dp == "") print "older"
+    if (ip == "" && dp != "") print "newer"
+  }' 2>/dev/null)"
+  if [ "$DRIFT_DIR" = older ]; then
+    REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED - node_modules is OLDER, so the pin is what you want. Every other call is blocked until they agree. Run EXACTLY: 'pnpm install'. Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+  else
+    # NEWER, or undecidable — the same three choices apply either way, so the only thing the ambiguous
+    # case changes is the claim about which side is stale.
+    DRIFT_NOTE="node_modules is NEWER, so the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
+    [ "$DRIFT_DIR" = newer ] || DRIFT_NOTE="these two versions could not be ordered automatically - compare them yourself: if node_modules is the NEWER side then the PIN is the stale side and a bare 'pnpm install' DOWNGRADES you to $DRIFT_DECLARED"
+    REASON="❌ webpieces version drift: package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED - $DRIFT_NOTE. That may be exactly what you want. Every other call is blocked until they agree. Pick one: - move forward to what origin pins: run 'git pull origin main', then 'pnpm install'. - stay on this code deliberately: run 'pnpm install' (the downgrade is the point). - on a feature branch: run 'pnpm install' (aligns to YOUR branch pin - usually right). Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+  fi
 else
   # A LINKED WORKTREE is the overwhelmingly common way to land here with a perfectly healthy repo:
   # git gives the new worktree a .git FILE (the primary clone has a .git directory) and copies no
@@ -170,9 +252,9 @@ else
   # load-bearing: installing in the primary clone does nothing for this tree.
   WORKTREE_NOTE=""
   if [ -f "$ROOT/.git" ]; then
-    WORKTREE_NOTE=" NOTE: $ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run 'pnpm install' HERE (in this worktree), not in the primary clone."
+    WORKTREE_NOTE=" NOTE: $ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run it HERE, in this worktree, not in the primary clone."
   fi
-  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). OPTION 1 - run EXACTLY this command to enable the webpieces AI guards, then retry: 'pnpm install'. Type the option you pick EXACTLY as written, character for character, and run NOTHING else on that line. Seriously: do NOT append && anything (not even a harmless && git status), do NOT wrap it in a subshell. The allowlist is anchored to the ENTIRE command, so anything you bolt on makes it a DIFFERENT command and it WILL be rejected again - which is not the guard refusing its own cure. If an option already contains &&, that && is part of the command: keep it, and still add nothing beyond it. The only additions tolerated are a LEADING cd <dir> && (needed to run the cure in a linked worktree, since the harness resets a cwd that left the workspace and puts you back in the primary clone - that one IS accepted), a trailing 2>&1, and a pipe into tail/head (e.g. cd /path/to/worktree && pnpm install 2>&1 | tail -20).${WORKTREE_NOTE} (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
+  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found). Run EXACTLY: 'pnpm install'.${WORKTREE_NOTE} Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N. (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
 fi
 if [ "$TOOL" = "Bash" ]; then
   BS='\'                     # one literal backslash, so the \u001b escape never sits in this source
