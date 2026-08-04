@@ -45,6 +45,20 @@ export class ReapedBranch {
      * reflog expiry. Field-with-default so every existing `new ReapedBranch(...)` call site still builds.
      */
     archiveTag: string = '';
+    /**
+     * The branch was ALREADY GONE when we reached it — someone else reaped it first.
+     *
+     * Not a failure, and the distinction is not cosmetic. `wp-cleanup` and the detached refresher's
+     * `auto-reap` both act on their own fresh verdicts, and the hooks kick off the refresher on the
+     * same commands a human runs wp-cleanup from, so the two race by design. Observed 2026-08-04:
+     * auto-reap deleted both dead branches at 14:30:58.207 and 14:30:59.035, wp-cleanup reached them
+     * 300ms later and reported "⚠️ 2 branch(es) could not be deleted — could not archive it first:
+     * unknown revision", i.e. it announced a failure for the exact outcome it wanted. Whoever wins,
+     * the branch is gone, archived and logged by the winner.
+     *
+     * Field-with-default so every existing `new ReapedBranch(...)` call site still builds.
+     */
+    alreadyGone: boolean = false;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(branch: string, sha: string, reason: string, pr: number, ok: boolean, error: string) {
@@ -66,11 +80,26 @@ export class ReapResult {
     reaped: ReapedBranch[];
     failed: ReapedBranch[];
     spared: DeletableBranch[];
+    /**
+     * Branches a CONCURRENT reaper got to first (see ReapedBranch.alreadyGone). A separate bucket
+     * because they belong in neither of the other two: counting them as `reaped` would credit this
+     * run with a delete and an archive tag it did not write, and counting them as `failed` is the bug
+     * this fixes — a red warning about branches that are, in fact, gone.
+     *
+     * Optional so every existing `new ReapResult(...)` call site still builds.
+     */
+    alreadyGone: ReapedBranch[];
 
-    constructor(reaped: ReapedBranch[], failed: ReapedBranch[], spared: DeletableBranch[]) {
+    constructor(
+        reaped: ReapedBranch[],
+        failed: ReapedBranch[],
+        spared: DeletableBranch[],
+        alreadyGone: ReapedBranch[] = [],
+    ) {
         this.reaped = reaped;
         this.failed = failed;
         this.spared = spared;
+        this.alreadyGone = alreadyGone;
     }
 }
 
@@ -131,12 +160,14 @@ export class BranchReaper {
         if (retention === BRANCH_RETENTION_KEEP) return new ReapResult([], [], approved);
         const reaped: ReapedBranch[] = [];
         const failed: ReapedBranch[] = [];
+        const alreadyGone: ReapedBranch[] = [];
         for (const entry of approved) {
             const outcome = this.deleteOne(repoRoot, verb, entry, retention);
             if (outcome.ok) reaped.push(outcome);
+            else if (outcome.alreadyGone) alreadyGone.push(outcome);
             else failed.push(outcome);
         }
-        return new ReapResult(reaped, failed, []);
+        return new ReapResult(reaped, failed, [], alreadyGone);
     }
 
     private reapBranches(
@@ -148,14 +179,18 @@ export class BranchReaper {
     ): ReapResult {
         const reaped: ReapedBranch[] = [];
         const failed: ReapedBranch[] = [];
+        const alreadyGone: ReapedBranch[] = [];
         for (const entry of targets) {
             const outcome = this.deleteOne(repoRoot, verb, entry, retention);
             if (outcome.ok) reaped.push(outcome);
+            else if (outcome.alreadyGone) alreadyGone.push(outcome);
             else failed.push(outcome);
         }
 
+        // Only genuine failures stay in the cache's `deletable`. An already-gone branch is not there
+        // to delete on the next pass, and leaving it in would make the cap keep counting a ghost.
         this.rewriteCache(repoRoot, verdicts, failed);
-        return new ReapResult(reaped, failed, verdicts.keep);
+        return new ReapResult(reaped, failed, verdicts.keep, alreadyGone);
     }
 
     /**
@@ -179,6 +214,12 @@ export class BranchReaper {
         const resolved = this.capture(repoRoot, ['rev-parse', entry.branch]);
         const sha = resolved.ok ? resolved.out : '';
 
+        // It does not resolve ⇒ it is already gone, reaped by whoever won the race (see
+        // ReapedBranch.alreadyGone). Report that outcome honestly instead of letting it fall through
+        // to the archive, which fails on the same missing ref and calls a successful cleanup a
+        // failure. Nothing to archive and nothing to delete: the winner did both, and logged them.
+        if (!resolved.ok) return this.alreadyGone(repoRoot, verb, entry);
+
         const archive = retention === BRANCH_RETENTION_ARCHIVE_TAG
             ? this.archiver.archive(repoRoot, entry.branch)
             : new ArchiveResult('', sha, true, '');
@@ -196,6 +237,26 @@ export class BranchReaper {
         event.outcome = deleted.ok ? `deleted (${entry.reason})` : `FAILED (${deleted.err})`;
         this.mutationLog.logBranchMutation(repoRoot, event);
 
+        return result;
+    }
+
+    /**
+     * The branch vanished between the verdict and the reap — a concurrent reaper got it.
+     *
+     * Logged like every other outcome (a mutation nobody logs is a mutation nobody can audit), but
+     * as ALREADY_GONE rather than SKIPPED/FAILED, and carried in its own bucket so the report can
+     * say "already gone" instead of warning about a branch that is exactly as dead as intended.
+     */
+    private alreadyGone(repoRoot: string, verb: MutationVerb, entry: DeletableBranch): ReapedBranch {
+        const event = new BranchMutationEvent(verb, 'REAP');
+        event.fromBranch = entry.branch;
+        event.outcome = 'ALREADY GONE (a concurrent reap deleted and archived it first)';
+        this.mutationLog.logBranchMutation(repoRoot, event);
+
+        const result = new ReapedBranch(
+            entry.branch, '', entry.reason, entry.pr, false,
+            'already gone — a concurrent reap deleted and archived it first');
+        result.alreadyGone = true;
         return result;
     }
 

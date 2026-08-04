@@ -24,6 +24,10 @@ export class CapRemedies {
      * Deliberately takes no cache and quotes no figures. The cache is allowed to be stale by design,
      * and a stale table is worse than no table when the reader's next move is `wp-cleanup` — which
      * recomputes from scratch — either way.
+     *
+     * "ASK THE HUMAN" stays spelled out. Shortening it to a bare "ask" saves two words and loses the
+     * object of the verb — and the reader is an agent, which can satisfy a bare "ask" by asking
+     * itself. Every other guard in this codebase says ASK THE HUMAN for the same reason.
      */
     branchCap(): FixHint {
         return new FixHint(
@@ -32,9 +36,9 @@ export class CapRemedies {
             [
                 new Option('Run: pnpm wp-cleanup — reaps the dead branches, prompts about the rest.', true),
                 new Option(
-                    'Only if that leaves you at the cap: ask which of the branches it spared may go. ' +
-                    'Never delete a spared branch or edit webpieces.config.json ' +
-                    '(maxLocalBranches / turnOffRuleUntilEpoch) without an explicit yes.',
+                    'Only if that leaves you at the cap: ASK THE HUMAN which of the branches it spared ' +
+                    'may go. Never delete a spared branch or edit webpieces.config.json ' +
+                    '(maxLocalBranches / turnOffRuleUntilEpoch) without their explicit yes.',
                 ),
             ],
         );
@@ -53,9 +57,9 @@ export class CapRemedies {
             [
                 new Option('Run: pnpm wp-cleanup — removes the dead worktrees, prompts about the rest.', true),
                 new Option(
-                    'Only if that leaves you at the cap: ask which of the worktrees it spared may go. ' +
-                    'Never edit webpieces.config.json (maxWorktrees / turnOffRuleUntilEpoch) without ' +
-                    'an explicit yes.',
+                    'Only if that leaves you at the cap: ASK THE HUMAN which of the worktrees it spared ' +
+                    'may go. Never edit webpieces.config.json (maxWorktrees / turnOffRuleUntilEpoch) ' +
+                    'without their explicit yes.',
                 ),
             ],
         );
