@@ -9,6 +9,10 @@
  *   design.md   — Mermaid diagram rendered by GitHub/IDEs in PRs
  *   design.html — clickable viz.js page (linked from architecture/dependencies.html)
  *
+ * A project with NO design root writes NO files, and any stale ones are removed — see
+ * writeDesignFiles for why an empty `{ "designs": [] }` is noise rather than information, and why
+ * nothing downstream can tell "empty" from "absent".
+ *
  * Runs on every build (cache:false; `ci` dependsOn this target directly).
  * Unrecognized DI patterns become "unresolved" nodes rather than failing the build.
  *
@@ -115,7 +119,53 @@ function architectureBackHref(projectRoot: string): string {
     return path.posix.relative(projectRoot.replace(/\\/g, '/'), 'architecture/dependencies.html');
 }
 
-function writeDesignFiles(projectRootAbs: string, projectRoot: string, graph: DiGraph): void {
+/** The three checked-in artifacts, named once so writing and reaping can never cover different sets. */
+const DESIGN_FILES = ['design.json', 'design.md', 'design.html'];
+
+/**
+ * Delete this project's design artifacts, returning the names actually removed.
+ *
+ * Reaping rather than leaving them is the point: a project that USED to have a `@DocumentDesign` root
+ * and lost it would otherwise keep serving a stale committed design that describes code no longer
+ * there, which is worse than having none.
+ */
+// webpieces-disable no-function-outside-class -- nx executor module: nx resolves a default-export function here, and every helper in this file is module-scope by that contract
+export function removeDesignFiles(projectRootAbs: string): string[] {
+    const removed: string[] = [];
+    for (const name of DESIGN_FILES) {
+        const file = path.join(projectRootAbs, name);
+        if (!fs.existsSync(file)) continue;
+        fs.rmSync(file);
+        removed.push(name);
+    }
+    return removed;
+}
+
+/**
+ * Write the design artifacts — or, when there is NO design, make sure none exist.
+ *
+ * WHY AN EMPTY GRAPH WRITES NOTHING: `{ "designs": [] }` carries no information, and every project
+ * without an Inversify/Angular DI root produced one — legacy Express services, plain libs, api-libs,
+ * bundles. That is most of a monorepo carrying three committed files apiece that say nothing, showing
+ * up in diffs and PR file lists forever.
+ *
+ * This is safe because nothing downstream distinguishes "empty file" from "no file", and that is by
+ * design rather than luck: `graph-metadata.ts:hasGeneratedDesign()` documents that a MISSING or
+ * unparseable design.json reads as "no design", so the architecture viz makes a box clickable only
+ * when `designs[]` is non-empty either way. `wp-design-visualize` likewise only fails when ZERO
+ * design.json exist repo-wide.
+ *
+ * The ONE-TIME cost is a commit deleting the empty files a repo already carries — surfaced by the
+ * usual "build left the tree committed" gate, exactly like any other regenerated artifact.
+ */
+// webpieces-disable no-function-outside-class -- nx executor module: nx resolves a default-export function here, and every helper in this file is module-scope by that contract
+export function writeDesignFiles(projectRootAbs: string, projectRoot: string, graph: DiGraph): void {
+    if (graph.designs.length === 0) {
+        const removed = removeDesignFiles(projectRootAbs);
+        const detail = removed.length > 0 ? `removed stale ${removed.join(', ')}` : 'nothing to write or remove';
+        console.log(`   No DI design for this project — ${detail}`);
+        return;
+    }
     // toDesignJson sorts the graph in place, so design.md/design.html below all
     // see the same deterministic ordering (no git churn on re-run).
     fs.writeFileSync(path.join(projectRootAbs, 'design.json'), toDesignJson(graph));
@@ -217,14 +267,14 @@ export default async function runExecutor(
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- chokepoint: a generator crash must produce an actionable failure, not a stack trace mid-build
     try {
         if (!sourceHasDiMarkers(srcDir)) {
-            console.log('   No DI markers found — writing empty design graph');
+            console.log('   No DI markers found');
             writeDesignFiles(projectRootAbs, projectRoot, new DiGraph(projectName));
             return { success: true };
         }
 
         const program = createProjectProgram(projectRootAbs);
         if (!program) {
-            console.log('   No usable tsconfig/source — writing empty design graph');
+            console.log('   No usable tsconfig/source');
             writeDesignFiles(projectRootAbs, projectRoot, new DiGraph(projectName));
             return { success: true };
         }
@@ -238,12 +288,14 @@ export default async function runExecutor(
 
         writeDesignFiles(projectRootAbs, projectRoot, graph);
 
-        const nodeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.nodes.length, 0);
-        const edgeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.edges.length, 0);
-        console.log(
-            `✅ Wrote ${projectRoot}/design.json + design.md + design.html ` +
-                `(${graph.designs.length} design(s), ${nodeCount} node(s), ${edgeCount} edge(s))`,
-        );
+        if (graph.designs.length > 0) {
+            const nodeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.nodes.length, 0);
+            const edgeCount = graph.designs.reduce((sum: number, d: DiDesign) => sum + d.edges.length, 0);
+            console.log(
+                `✅ Wrote ${projectRoot}/design.json + design.md + design.html ` +
+                    `(${graph.designs.length} design(s), ${nodeCount} node(s), ${edgeCount} edge(s))`,
+            );
+        }
         const unresolved = [...new Set(graph.designs.flatMap((d: DiDesign) => d.unresolved))];
         if (unresolved.length > 0) {
             console.warn(`⚠️  ${unresolved.length} unresolved token(s)/type(s): ${unresolved.join(', ')}`);
