@@ -122,8 +122,11 @@ export class ReviewReport {
     private scanVerdict(input: ReviewReportInput): string {
         if (input.applicableCount === 0) return '\n' + this.checklistNotice.build(input.definedCount);
         const lines: string[] = [];
+        // The prohibition rides on the REUSE line itself, not only in the all-clear below, because the
+        // all-clear is not printed when anything is still owed — and "some reviewers are reused, others
+        // must be spawned" is exactly the shape in which an agent re-spawns the reused ones too.
         for (const r of input.reviewed) {
-            lines.push(`  ✓ ${r.subagent} — already reviewed on this branch (reusing its review-${r.id}.json)`);
+            lines.push(`  ✓ ${r.subagent} — already reviewed on this branch; verdict STANDS, do NOT re-spawn (review-${r.id}.json)`);
         }
         // A verdict file that EXISTS but is unreadable as a verdict is called out here. Without it this
         // reports the checklist as simply owed, and the AI re-runs a reviewer that already ran instead of
@@ -151,13 +154,43 @@ export class ReviewReport {
         ];
     }
 
-    // The all-clear. It must NOT claim everything was reviewed when optional reviews were skipped — that is
-    // the one sentence that would turn a deliberate skip into a false record of a review that happened.
+    /**
+     * The all-clear, then the RULE that makes it actionable.
+     *
+     * "nothing to spawn" on its own is a description of the current state, and an agent that has just been
+     * told a state — rather than a rule — treats re-spawning as a judgement call it is entitled to make. It
+     * then makes it, reasoning (correctly, on the facts) that the carried-forward verdicts judged an earlier
+     * tree. Reviews here are once per branch BY CONSTRUCTION: a passing review-<id>.json satisfies its
+     * checklist for the branch's whole life, and `wp-finish-upsert-pr` never archives one the way it archives
+     * review.json. So the reuse is deliberate — it is what keeps post-PR iteration from re-paying for every
+     * matched reviewer — and the output has to say so, because the alternative reading is the expensive one.
+     *
+     * The overwrite warning is not decoration. A re-spawned reviewer writes to the SAME verdict path, so a
+     * gratuitous re-run does not merely cost a subagent — it destroys the verdict that was already banked.
+     *
+     * It must NOT claim everything was reviewed when optional reviews were skipped — that is the one sentence
+     * that would turn a deliberate skip into a false record of a review that happened.
+     */
     private allClear(input: ReviewReportInput): string {
-        if (input.skipOptional && this.optionalOwed(input).length > 0) {
-            return '✅ Nothing left to spawn — every REQUIRED checklist is reviewed (optional ones skipped above).';
-        }
-        return '✅ Every checklist that applies is already reviewed — nothing to spawn.';
+        const headline = input.skipOptional && this.optionalOwed(input).length > 0
+            ? '✅ Nothing left to spawn — every REQUIRED checklist is reviewed (optional ones skipped above).'
+            : '✅ Every checklist that applies is already reviewed — nothing to spawn.';
+        return headline + '\n' + this.oncePerBranchRule();
+    }
+
+    /**
+     * The once-per-branch rule, stated as a prohibition rather than left to be inferred from a ✅.
+     *
+     * Printed whenever verdicts are being reused — which is every iteration of a PR after the first, i.e. the
+     * majority of stage-② runs on any branch that gets review feedback.
+     */
+    private oncePerBranchRule(): string {
+        return (
+            '   Reviews here are ONCE PER BRANCH: a passing verdict carries forward to every later iteration\n' +
+            '   of this PR, deliberately, so post-PR edits cost no reviewer tokens. Do NOT re-spawn a reviewer\n' +
+            '   listed above to "re-check" the newer code — it burns a full subagent run AND overwrites the\n' +
+            '   verdict file it already wrote. The only reviewers you may spawn are ones a STEP below names.'
+        );
     }
 
     /**
