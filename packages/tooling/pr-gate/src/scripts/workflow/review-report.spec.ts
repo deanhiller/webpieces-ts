@@ -327,3 +327,48 @@ describe('--no-optional suppresses the offer without hiding what was skipped', (
         expect(text).toContain('every REQUIRED checklist is reviewed (optional ones skipped above)');
     });
 });
+
+/**
+ * Reuse must be stated as a RULE, not merely as a state. A ✅ reading "nothing to spawn" describes the
+ * present; an agent that notices the reused verdicts judged an earlier tree then re-spawns them on its own
+ * initiative, which costs a full subagent run per reviewer AND destroys a verdict that was already banked (a
+ * re-spawned reviewer writes to the same review-<id>.json). Reviews are once per branch by construction —
+ * a passing verdict is never archived the way review.json is — so the output has to say so out loud.
+ */
+describe('the once-per-branch rule is stated, not left to be inferred', () => {
+    const reusedOnly = (): string => {
+        const input = withOneOwedReviewer();
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        return report.render(input);
+    };
+
+    it('names the rule and forbids re-spawning when everything is reused', () => {
+        const text = reusedOnly();
+        expect(text).toContain('ONCE PER BRANCH');
+        expect(text).toContain('Do NOT re-spawn');
+    });
+
+    it('warns that a re-spawn overwrites the banked verdict, not just that it costs tokens', () => {
+        expect(reusedOnly()).toContain('overwrites the');
+    });
+
+    // The all-clear is NOT printed while anything is still owed, so a mixed run would otherwise carry the
+    // rule nowhere — and "spawn these two, reuse that one" is precisely the shape that invites re-spawning
+    // the reused one along with the rest.
+    it('still forbids re-spawning on the reuse line when other reviewers ARE owed', () => {
+        const input = withMixedReviewers();
+        input.reviewed = [new RequiredChecklist('frontend-reviewer', 'frontend-reviewer', '', [])];
+        const text = report.render(input);
+        expect(text).not.toContain('nothing to spawn');
+        expect(text).toContain('verdict STANDS, do NOT re-spawn');
+        expect(text).toContain('subagent_type: db-migration-reviewer');
+    });
+
+    // Skipping optional reviews and reusing verdicts are different things; the rule belongs to the reuse.
+    it('carries the rule in the --no-optional all-clear too', () => {
+        const input = withMixedReviewers();
+        input.skipOptional = true;
+        input.reviewed = [new RequiredChecklist('db-migration-reviewer', 'db-migration-reviewer', '', [])];
+        expect(report.render(input)).toContain('ONCE PER BRANCH');
+    });
+});
