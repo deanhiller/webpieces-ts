@@ -357,6 +357,35 @@ Almost everything else runs the **published** copy:
 - If a validator rejects config keys that look correct, the fix is **`pnpm install`** (the validator is
   stale), not deleting the keys.
 
+### No bin shims — `bin` points at compiled TypeScript
+
+**RULE: a `bin` entry points at its compiled `.ts` entry point (`./src/**/<entry>.js`). A committed
+plain-JS shim under `bin/` is allowed ONLY for a package another workspace package genuinely imports.**
+
+The goal is that the base commands are TypeScript, so every rule this repo enforces applies to them. A
+`.js` shim is code that must be allow-listed out of `no-js-files` and carries none of them.
+
+The hazard a shim addresses is narrow and workspace-only. pnpm `chmod`s each `bin` target while linking a
+package; a `workspace:` sibling is linked from its **source** dir, where `src/` holds only `.ts` until the
+build runs. A `bin` pointing at compiled output *there* makes every `pnpm install` print
+`WARN Failed to create bin ... ENOENT ... chmod`. It never affects consumers: they install the tarball,
+where tsc compiled in place, so the target exists. Put `#!/usr/bin/env node` as the first line of the
+`.ts` entry — tsc preserves it — and the compiled file is directly executable.
+
+So the shim question is decided by ONE fact: **does another workspace package declare this one with a
+`workspace:` specifier?** Only then does the pre-build window exist.
+
+- **Before adding a `workspace:` dep between tooling packages, confirm a real `import`/`require`.** A
+  mention in a comment is not a use. Phantom deps manufacture shims for nothing: `nx-webpieces-rules`
+  declared `ai-hook-rules` and `pr-gate` while importing neither, and those two lines are why **15 of 17**
+  shims existed (PR #585 deleted them).
+- `bin-targets-exist.spec.ts` (nx-webpieces-rules) enforces both directions and needs no maintenance: a
+  source-linked package's bins must exist in git, and a package nobody links must NOT carry a shim. Adding
+  a `workspace:` dep on a package whose bins point into `src/` turns it red and names both cures.
+- `code-rules` keeps its two shims — `nx-webpieces-rules` imports it for real, so the hazard is real there.
+- `setupDebugging.md` is a HISTORICAL journal of an abandoned postinstall approach. Its Attempt 5 shim
+  advice is superseded by this section; read it for the pnpm-v10 lessons, not for policy.
+
 ### webpieces.config.json is NEVER released backwards-compatible
 
 **RULE: when a config key moves, is renamed, or is deleted, the loader REJECTS the old shape with an error
