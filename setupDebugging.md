@@ -55,7 +55,15 @@ When a consumer runs `pnpm install` in their project, `@webpieces/ai-hook-rules`
 > (no install-time need), pointing `bin` at the compiled `.js` is viable for consumers — the
 > shim was only ever guarding the workspace pre-build window.
 
-## Attempt 5: Plain JS shim as bin entry (CURRENT)
+## Attempt 5: Plain JS shim as bin entry (SUPERSEDED — see CLAUDE.md "No bin shims")
+
+> **⚠️ This was rolled back for all but one package.** The clarification directly above is the part that
+> held up: the ENOENT is workspace-only, so the shim only ever guarded packages a `workspace:` sibling
+> links from source. Fifteen of the seventeen shims guarded nothing — two of `nx-webpieces-rules`'
+> `workspace:*` deps were declared but never imported — and were deleted in PR #585. `bin` now points at
+> the compiled `.ts` entry everywhere except `code-rules`, which really is source-linked. The rule and
+> its rationale live in **CLAUDE.md → "No bin shims — `bin` points at compiled TypeScript"**; this
+> section is the history, not the instruction.
 **What we did:** Same pattern as TypeScript's own `bin/tsc` → `lib/tsc.js`:
 - `bin/wp-setup-ai-hooks.js` — plain JS file that always exists (not compiled from TS)
 - `"bin": { "wp-setup-ai-hooks": "./bin/wp-setup-ai-hooks.js" }`
