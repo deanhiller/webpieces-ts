@@ -217,25 +217,60 @@ export class CleanupCommand {
      * Ask which of the classified branches to delete. Answers: `all`, `none` (default), or a
      * comma/space-separated list of the numbers shown.
      *
-     * NON-INTERACTIVE (no TTY — CI, a hook, a piped agent shell) answers NONE and says so. A prompt
-     * nobody can see must never be read as consent, and this is the one place in the tooling where a
-     * deletion is not backed by a proof.
+     * NON-INTERACTIVE (no TTY — CI, a hook, an AGENT'S piped shell) takes everything except
+     * NEVER PROPOSED, and says exactly what it took.
+     *
+     * It used to take nothing at all, on the reasoning that "a prompt nobody can see must never be
+     * read as consent". Correct about consent, wrong about who is standing there: the overwhelmingly
+     * common non-TTY caller is an agent that was TOLD to clean up, and for it the prompt was a dead
+     * end — wp-cleanup deleted nothing, the branch cap still blocked, and the only path left was to
+     * hand the human a table of branches to adjudicate. The human's response to receiving one of
+     * those: "I am tired of AI asking me to cleanup things it can do by itself".
+     *
+     * So consent is honoured where it is actually needed rather than everywhere. NEVER PROPOSED is
+     * the group whose commits may be the only copy in existence; it is never taken unattended and is
+     * the one thing left to ask about. The rest — a closed-unmerged PR superseded by later merges,
+     * commits already patch-equivalent in main, a ref identical to origin/main — are redundant by
+     * evidence, and every one of them is archived to an `archive/<date>/<branch>` tag with a
+     * `recover=` command logged before it is touched. An interactive human still gets the full
+     * prompt, including NEVER PROPOSED.
      */
     private async askWhichToDelete<T extends DeletableBranch | DeletableWorktree>(
         promptable: T[], kind: string,
     ): Promise<T[]> {
-        if (process.stdin.isTTY !== true) {
-            process.stdout.write(
-                `\nNot a terminal — no ${kind} was deleted and nothing was assumed.\n`
-                + 'Run `pnpm wp-cleanup` in an interactive shell to answer, or delete individually.\n',
-            );
-            return [];
-        }
+        if (process.stdin.isTTY !== true) return this.unattendedPicks(promptable, kind);
         const answer = (await this.question(
             `\nDelete which ${kind}(s)? [all / none / e.g. "1,3"] (default none): `)).trim().toLowerCase();
         if (answer === '' || answer === 'none' || answer === 'n') return [];
         if (answer === 'all' || answer === 'a') return promptable;
         return this.pickByNumber(promptable, answer);
+    }
+
+    /**
+     * What an unattended run takes: everything promptable except NEVER PROPOSED (see above).
+     *
+     * Prints the split either way, because a cleanup that deletes silently is a cleanup nobody can
+     * audit — and the leftover NEVER PROPOSED names are exactly the short question an agent should
+     * put to a human, in place of the six-branch table this replaced.
+     */
+    private unattendedPicks<T extends DeletableBranch | DeletableWorktree>(
+        promptable: T[], kind: string,
+    ): T[] {
+        const taken = promptable.filter(
+            (entry: T): boolean => entry.classification !== CLASSIFICATION_NEVER_PROPOSED);
+        const left = promptable.filter(
+            (entry: T): boolean => entry.classification === CLASSIFICATION_NEVER_PROPOSED);
+
+        process.stdout.write(`\nNot a terminal, so no prompt — taking the ${String(taken.length)} redundant `
+            + `${kind}(s) above (each archived to a tag first, every delete recoverable).\n`);
+        if (left.length > 0) {
+            // Both verdict classes carry `branch` — a worktree's is the branch it holds.
+            const names = left.map((entry: T): string => entry.branch || '(detached)').join(', ');
+            process.stdout.write(
+                `Left alone — NEVER PROPOSED, may be the only copy: ${names}\n`
+                + 'Ask a human about those specifically; do not delete them yourself.\n');
+        }
+        return taken;
     }
 
     // Parse `1,3` / `1 3` into branches, ignoring anything out of range. An unparseable answer selects

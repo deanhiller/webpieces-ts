@@ -467,7 +467,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
         world.localBranches = ['main', 'dean/feature', 'dean/featurePreMerge1', 'dean/featurePreMerge2'];
 
         const cache = svc.computeMergedBranches('/repo');
-        const byBranch = new Map(cache.keep
+        const byBranch = new Map(cache.deletable
             .map((entry: DeletableBranch): [string, DeletableBranch] => [entry.branch, entry]));
 
         for (const snapshot of ['dean/featurePreMerge1', 'dean/featurePreMerge2']) {
@@ -483,7 +483,7 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
     it('still classifies it as a live snapshot when the base has no PR at all', () => {
         world.localBranches = ['main', 'dean/feature', 'dean/featureSquash'];
 
-        const entry = svc.computeMergedBranches('/repo').keep
+        const entry = svc.computeMergedBranches('/repo').deletable
             .find((row: DeletableBranch): boolean => row.branch === 'dean/featureSquash')!;
 
         expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_LIVE);
@@ -518,11 +518,14 @@ describe('a snapshot whose base is still alive is not the only copy', () => {
         expect(entry.classification).toBe(CLASSIFICATION_BACKUP_OF_MERGED);
     });
 
-    // Promptable, and FIRST — it is the easiest yes in the list, because the base is the proof.
-    it('is promptable and ordered ahead of the judgement-call groups', () => {
-        expect(PROMPTABLE_CLASSIFICATIONS).toContain(CLASSIFICATION_BACKUP_OF_LIVE);
-        expect(PROMPTABLE_CLASSIFICATIONS.indexOf(CLASSIFICATION_BACKUP_OF_LIVE))
-            .toBeLessThan(PROMPTABLE_CLASSIFICATIONS.indexOf(CLASSIFICATION_NEVER_PROPOSED));
+    /**
+     * NOT promptable — auto-reaped. It was once the FIRST promptable group, described in its own doc
+     * as "the easiest yes in the list", which is the tell: a question whose only honest answer is yes
+     * is toil, not consent. `wp-start-upsert-pr` mints one of these per run, so they were the bulk of
+     * every "which of these 6 branches may I delete?" the tooling put to a human.
+     */
+    it('is auto-reaped rather than put to a human', () => {
+        expect(PROMPTABLE_CLASSIFICATIONS).not.toContain(CLASSIFICATION_BACKUP_OF_LIVE);
     });
 });
 

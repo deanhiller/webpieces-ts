@@ -425,12 +425,20 @@ export class MergedBranchesService {
             // long as the base still exists this branch is provably not the only copy of anything.
             // Falling through to classifySpared told the human the opposite ("may be the only copy in
             // existence"), which is unanswerable-by-design and is why these accumulated.
+            //
+            // DELETABLE, not merely promptable. Asking about it was still asking a question with only
+            // one honest answer — the base branch is right there holding the same work — and every
+            // ask lands on a human who is being asked to authorise a delete the tooling can already
+            // PROVE is lossless. That is the pile: `wp-start-upsert-pr` mints another snapshot on
+            // every run, so the branch cap fills with copies nobody can be bothered to adjudicate.
+            // The proof here is as strong as a merged PR (a live sibling ref holds the content), and
+            // the reap archives to an `archive/<date>/<branch>` tag and logs a `recover=` first.
             if (this.branchExists(repoRoot, base)) {
                 const basePrState = prs.state.get(base);
                 const liveness = basePrState
                     ? `PR #${String(basePrState.number)} ${basePrState.state}`
                     : 'no PR yet';
-                return new Verdict(false, new DeletableBranch(
+                return new Verdict(true, new DeletableBranch(
                     branch,
                     `pre-merge snapshot of '${base}' (${liveness}) — '${base}' still exists and holds ` +
                     `this work, so this is a spare copy, not the only one`,

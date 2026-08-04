@@ -2,9 +2,7 @@ import { execSync } from 'child_process';
 
 import {
     BranchCreationGuardConfig,
-    CacheFreshness,
     DeletableBranch,
-    DeletableWorktree,
     MergedBranchesCache,
     MergedBranchesService,
     WorktreeService,
@@ -163,10 +161,6 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     private capCache: MergedBranchesCache | null = null;
     private worktreeCapCache: MergedBranchesCache | null = null;
 
-    // How old the cache backing whichever cap fired was, so the hint can SAY "these verdicts are stale"
-    // instead of quoting them as present-tense fact. Null until a cap fires.
-    private capFreshness: CacheFreshness | null = null;
-
     // True when the blocked command was a `git worktree add`, so the recovery command we hand back is
     // a worktree command and not a `git checkout -b` the user cannot use here.
     private worktreeAdd = false;
@@ -198,9 +192,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
     // hard-blocks it and points instead at the turnOffRuleUntilEpoch escape hatch.
     get fixHint(): FixHint {
-        const remedies = new CapRemedies(this.capFreshness);
-        if (this.worktreeCapCache) return remedies.worktreeCap(this.worktreeCapCache);
-        if (this.capCache) return remedies.branchCap(this.capCache);
+        const remedies = new CapRemedies();
+        if (this.worktreeCapCache) return remedies.worktreeCap();
+        if (this.capCache) return remedies.branchCap();
 
         const create = this.worktreeAdd
             ? 'Create it off fresh main: git fetch origin main && git worktree add ../<dir> -b <name> origin/main'
@@ -245,7 +239,6 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     check(ctx: BashContext): readonly Violation[] {
         this.capCache = null;
         this.worktreeCapCache = null;
-        this.capFreshness = null;
         // Match against the command with heredoc bodies and prose-in-quotes removed (BashContext
         // computes it for every guard now — this rule's private copy was the original).
         const command = ctx.commandCode;
@@ -400,24 +393,21 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (!cache) return null;
 
         this.capCache = cache;
-        // Only branches that are BOTH still on disk (reconcile guaranteed that) and parked can be
-        // reaped to make room. A cached verdict about a branch a worktree now holds is not a figure
-        // this message may quote at someone.
-        const parkedSet = new Set(parked);
-        const reapable = cache.deletable
-            .filter((entry: DeletableBranch): boolean => parkedSet.has(entry.branch)).length;
 
+        // No count of "how many are dead" any more. It was read off a cache that is stale BY DESIGN,
+        // so every branch of that sentence had to hedge ("None of them are dead", "NOT known right
+        // now — the cached verdicts are stale"), and none of the three variants changed the next
+        // move: run pnpm wp-cleanup, which recomputes from scratch. Say the one thing that is true.
         return new V(
             1,
             truncate(ctx.command),
-            `You have ${String(count)} parked local branches (not counting any checked out in a worktree); ` +
-            `the cap (branch-creation-guard.maxLocalBranches) is ${String(this.maxLocalBranches)}. ` +
-            `${this.deadDetail(reapable, 'dead (a MERGED PR backs them)')} Clean up before creating another.`,
+            `You have ${String(count)} parked local branches (worktree-held ones not counted); the cap ` +
+            `(branch-creation-guard.maxLocalBranches) is ${String(this.maxLocalBranches)}. Run pnpm wp-cleanup.`,
         );
     }
 
     /**
-     * The cache, with entries for branches/worktrees that no longer exist dropped, plus its age recorded.
+     * The cache, with entries for branches/worktrees that no longer exist dropped.
      *
      * Reconciling is the fix for the phantom count: the file is written by a detached refresher and is
      * DELIBERATELY allowed to go stale, so it keeps naming branches deleted minutes ago and worktrees
@@ -425,33 +415,14 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
      * them are dead" over a repo that had ONE, and then blocked a legitimate `git worktree add` on that
      * figure. `reconcile` re-checks existence with instant local git reads; it does NOT re-derive any
      * verdict (that needs the network and belongs in the refresher).
+     *
+     * Its AGE is no longer read here. The cap messages stopped quoting verdict counts entirely, so
+     * there is nothing left for a freshness caveat to qualify — `wp-cleanup` recomputes from scratch.
      */
     private loadReconciledCache(ctx: BashContext): MergedBranchesCache | null {
         const raw = this.mergedBranches.readMergedBranches(ctx.workspaceRoot);
         if (!raw) return null;
-        this.capFreshness = this.mergedBranches.freshness(raw);
         return this.mergedBranches.reconcile(ctx.workspaceRoot, raw);
-    }
-
-    /**
-     * The "N of them are dead" sentence — or an honest refusal to say a number.
-     *
-     * A count read off a stale file is a claim the guard cannot stand behind, and this guard's numbers
-     * are acted on: they decide whether an agent goes and deletes things. When the cache is too old,
-     * say so and point at the command that recomputes from scratch, rather than asserting a figure.
-     */
-    private deadDetail(reapable: number, what: string): string {
-        const freshness = this.capFreshness;
-        if (freshness !== null && freshness.stale) {
-            const age = freshness.ageMinutes >= 0
-                ? `${String(freshness.ageMinutes)} minute(s) old`
-                : 'carrying no usable timestamp';
-            return `How many are dead is NOT known right now — the cached verdicts ` +
-                `(.webpieces/merged-branches.json, ${age}) are stale, so no count is asserted. ` +
-                '`pnpm wp-cleanup` recomputes them from scratch.';
-        }
-        if (reapable === 0) return 'None of them are dead, so none can be auto-reaped — see the options below.';
-        return `${String(reapable)} of them are ${what} and wp-cleanup can reap them.`;
     }
 
     /**
@@ -507,15 +478,12 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (!cache) return null;
 
         this.worktreeCapCache = cache;
-        const reapable = cache.worktrees.filter((tree: DeletableWorktree): boolean => tree.deletable).length;
 
         return new V(
             1,
             truncate(ctx.command),
             `You have ${String(count)} linked worktrees; the cap (branch-creation-guard.maxWorktrees) ` +
-            `is ${String(this.maxWorktrees)}. ` +
-            `${this.deadDetail(reapable, 'dead (a MERGED PR backs the branch, or the directory is already gone)')} ` +
-            'Clean up before creating another.',
+            `is ${String(this.maxWorktrees)}. Run pnpm wp-cleanup.`,
         );
     }
 

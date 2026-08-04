@@ -259,18 +259,17 @@ describe('branch-creation-guard local-branch cap', () => {
 
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('5 parked local branches');
-        expect(violations[0].message).toContain('3 of them are dead');
-        expect(violations[0].message).toContain('MERGED PR');
+        expect(violations[0].message).toContain('pnpm wp-cleanup');
 
         const hint = r.fixHint;
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
         // `pnpm wp-cleanup`, NOT `git branch -D a b c`: the multi-name form aborts wholesale on the
         // first branch git refuses, and a bare `-D` makes agents stop and ask instead of cleaning.
-        // The dead branches are still NAMED so the human can see what is about to go.
+        // The dead branches are NOT named here — wp-cleanup names them, from fresh verdicts, as it
+        // deletes them. Naming them twice was how this message grew to forty lines.
         expect(flat).toContain('pnpm wp-cleanup');
-        expect(flat).toContain('a b c');
         expect(flat).not.toContain('git branch -D');
-        expect(flat).toContain('merged-branches.json');
+        expect(flat).not.toContain('merged-branches.json');
         expect(flat).toContain('maxLocalBranches');
     });
 
@@ -318,38 +317,39 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
     });
 
     /**
-     * Legitimately 6 live branches, nothing reapable — the shape that produced the incident this
-     * remedy exists for. Both printed remedies used to LOOSEN the rule ("raise maxLocalBranches",
-     * "set turnOffRuleUntilEpoch"), so an agent with no human present edited webpieces.config.json to
-     * escape: the exact failure the cap exists to prevent. The preferred remedy must now be to SHOW
-     * the spared branches and ASK, with the config edits demoted to human-approved.
+     * SHORT. This is the whole remedy, and it fits in two options.
+     *
+     * It used to print, inline in a blocked-Bash report, every spared branch with its SHA, PR state,
+     * unique-commit count and prose reason, plus instructions to paste that table at the human and
+     * ask which may go. The human who received one: "I am tired of AI asking me to cleanup things it
+     * can do by itself". Two things changed — pnpm wp-cleanup now reaps the redundant groups
+     * unattended (so an agent can just run it), and the guard says one line instead of forty.
      */
-    it('at the cap with nothing reapable, PREFERS asking the human which spared branch may go', () => {
+    it('at the cap, says one short thing: run pnpm wp-cleanup — and never pastes a branch table', () => {
         git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
         git.cacheJson = cacheWith([], ['a', 'b', 'c', 'd', 'e']);
 
         const r = rule('ON', { maxLocalBranches: 5 });
         const violations = r.check(ctx('git checkout -b dean/next origin/main'));
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('None of them are dead');
+        expect(violations[0].message).toContain('5 parked local branches');
+        expect(violations[0].message).toContain('pnpm wp-cleanup');
 
         const hint = r.fixHint;
         const preferred = hint.fixOptions.filter((o: { preferred: boolean }): boolean => o.preferred);
         expect(preferred.length).toBe(1);
-        expect(preferred[0].text).toContain('ASK THE HUMAN');
-        // The candidates are NAMED, so the human has something to adjudicate.
-        expect(preferred[0].text).toContain('a');
-        expect(preferred[0].text).toContain('e');
+        expect(preferred[0].text).toContain('pnpm wp-cleanup');
 
         const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
-        expect(flat).toContain('git branch -D <approved-branch>');
-        expect(flat).toContain('git branch <name> <sha>');   // the delete is reversible
-        // The loosening escapes survive, but only as HUMAN-approved ones.
+        // Two options, and no per-branch table: the spared branches are wp-cleanup's to report.
+        expect(hint.fixOptions.length).toBe(2);
+        expect(flat).not.toContain('git branch -D');
+        expect(flat).not.toContain('commit(s) of its own');
+        expect(flat.length).toBeLessThan(400);
+        // The config knobs are still named, still gated on a human.
         expect(flat).toContain('maxLocalBranches');
         expect(flat).toContain('turnOffRuleUntilEpoch');
-        expect(flat).toContain('ONLY IF A HUMAN SAYS SO');
-        expect(flat).toContain('do NOT edit webpieces.config.json instead');
-        expect(flat).toContain('5 branch(es) are NOT provably merged and were deliberately SPARED');
+        expect(flat).toContain('explicit yes');
     });
 
     it('defaults the cap to 5 when unconfigured', () => {
@@ -404,11 +404,11 @@ describe('branch-creation-guard worktree cap', () => {
 
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('5 linked worktrees');
-        expect(violations[0].message).toContain('2 of them are dead');
-        expect(violations[0].message).toContain('MERGED PR');
+        expect(violations[0].message).toContain('pnpm wp-cleanup');
 
         const hint = r.fixHint;
-        const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        const flat = [hint.violation, hint.mainMessage,
+            ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
         // NOTHING destructive, in any form, chained or single.
         expect(flat).not.toContain('git worktree remove');
         expect(flat).not.toContain('git worktree prune');
@@ -417,13 +417,12 @@ describe('branch-creation-guard worktree cap', () => {
         // …and the ONE thing it does say is the command that does this safely.
         expect(hint.fixOptions[0].preferred).toBe(true);
         expect(hint.fixOptions[0].text).toContain('pnpm wp-cleanup');
-        // The dead ones are still NAMED, as a list a human can read — just not as a command.
-        expect(flat).toContain('/tmp/wt1');
-        expect(flat).toContain('/tmp/wt2');
         expect(flat).toContain('maxWorktrees');
-        // A spared worktree is LIVE, not "probably fine to delete".
-        expect(flat).toContain('1 worktree(s) are NOT provably merged');
-        expect(flat).toContain('LIVE');
+        // Short, and the per-worktree inventory belongs to wp-cleanup, not to a blocked-Bash report.
+        expect(flat).not.toContain('/tmp/wt1');
+        expect(flat.length).toBeLessThan(400);
+        // Removing one by hand is still the thing an agent must not do.
+        expect(flat).toContain('working in it right now');
     });
 
 });
@@ -449,22 +448,26 @@ describe('branch-creation-guard treats an uncommitted worktree as live', () => {
         expect(r.check(ctx('git worktree add ../f -b dean/next origin/main')).length).toBe(1);
 
         const hint = r.fixHint;
-        const flat = [hint.mainMessage, ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
+        const flat = [hint.violation, hint.mainMessage,
+            ...hint.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
         expect(flat).not.toContain('dean/apipath');
         expect(flat).not.toContain('no work can be lost');
         expect(flat).toContain('pnpm wp-cleanup');
-        expect(flat).toContain('2 worktree(s) are NOT provably merged');
+        expect(flat).toContain('working in it right now');
     });
 
 });
 
 /**
  * Ticket part 4. The guard announced "8 parked local branches" over a repo with ONE, having quoted a
- * cache written before those branches were deleted. Two defences: entries whose subject is gone are
- * dropped, and a cache too old to trust yields NO figure at all.
+ * cache written before those branches were deleted. The defence is now absolute rather than
+ * conditional: the cap messages quote NO cache-derived figure, stale or fresh. There is nothing to
+ * caveat, because `pnpm wp-cleanup` — the one thing both messages say — recomputes from scratch.
+ *
+ * The counts that DO survive (5 parked branches, 5 linked worktrees) come from live git, not the cache.
  */
-describe('branch-creation-guard never quotes a stale or phantom count', () => {
-    it('says the cache is stale instead of asserting how many are dead', () => {
+describe('branch-creation-guard never quotes a cache-derived count', () => {
+    it('quotes no verdict figure on the worktree cap, however stale the cache', () => {
         git.worktreePorcelain = porcelain(5);
         git.cacheJson = staleCacheWith([], [], [tree('/tmp/wt1', 'feat1', true)]);
 
@@ -472,18 +475,16 @@ describe('branch-creation-guard never quotes a stale or phantom count', () => {
         const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));
 
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('NOT known right now');
-        expect(violations[0].message).toContain('stale');
-        expect(violations[0].message).not.toContain('1 of them are dead');
-        // With nothing quotable, the remedy is the recompute — and still names no dead tree.
+        expect(violations[0].message).toContain('5 linked worktrees');
+        expect(violations[0].message).not.toContain('of them are dead');
+        // …and it names no tree out of that cache either.
         const flat = r.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
-        expect(flat).toContain('recomputes the verdicts from scratch');
+        expect(flat).toContain('pnpm wp-cleanup');
         expect(flat).not.toContain('/tmp/wt1');
     });
 
-    // Same rule on the BRANCH cap, and the hint must not contradict the message by naming branches to
-    // delete out of the very cache the message just said it cannot quote.
-    it('withholds the branch-cap figure and the delete list when the cache is stale', () => {
+    // Same on the BRANCH cap: the live count, the command, nothing quoted out of the cache.
+    it('quotes no verdict figure and no branch names on the branch cap', () => {
         git.localBranches = ['main', 'a', 'b', 'c', 'd', 'e'];
         git.cacheJson = staleCacheWith(['a', 'b', 'c']);
 
@@ -492,17 +493,17 @@ describe('branch-creation-guard never quotes a stale or phantom count', () => {
 
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('5 parked local branches');
-        expect(violations[0].message).toContain('NOT known right now');
+        expect(violations[0].message).not.toContain('of them are dead');
 
         const flat = r.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
-        expect(flat).toContain('the cached verdicts are stale');
+        expect(flat).toContain('pnpm wp-cleanup');
         expect(flat).not.toContain('it deletes these');
     });
 
 });
 
 describe('branch-creation-guard drops phantom cache entries', () => {
-    it('drops cached verdicts for worktrees and branches that no longer exist', () => {
+    it('names no cached worktree, including ones already removed', () => {
         // The cache still names two dead worktrees; only ONE of them is still in `git worktree list`.
         git.worktreePorcelain = porcelain(5);
         git.cacheJson = cacheWith([], [], [
@@ -513,9 +514,10 @@ describe('branch-creation-guard drops phantom cache entries', () => {
         const r = rule('ON_NO_SUBBRANCHES', { maxWorktrees: 5 });
         const violations = r.check(ctx('git worktree add ../f -b dean/next origin/main'));
 
-        expect(violations[0].message).toContain('1 of them are dead');
+        expect(violations.length).toBe(1);
         const flat = r.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
         expect(flat).not.toContain('already-removed');
+        expect(flat).not.toContain('/tmp/wt1');
     });
 
     /**
