@@ -83,10 +83,12 @@ export function enrichGraph(
         enrichResponsibilities(entry, info, workspaceRoot, problems);
 
         // Set designFile ONLY when the project has a REAL generated design (a
-        // non-empty `designs[]`), i.e. it has a @DocumentDesign root. Every
-        // project.json project gets a design.json written, but plain libs get an
-        // empty `{ designs: [] }` — those must NOT become clickable in the arch
-        // viz (designHtmlHref keys off designFile). See graph-visualizer.ts.
+        // non-empty `designs[]`), i.e. it has a @DocumentDesign root. A project
+        // without one has NO design.json at all (di-graph-generate stopped writing
+        // empty ones and reaps stale ones), and legacy repos may still carry an
+        // empty `{ designs: [] }` until their next build — both must read the same
+        // way, and neither becomes clickable in the arch viz (designHtmlHref keys
+        // off designFile). See graph-visualizer.ts.
         if (hasGeneratedDesign(workspaceRoot, info.root)) {
             entry.designFile = toRepoRelative(info.root, 'design.json');
         }
@@ -320,10 +322,14 @@ function toRepoRelative(projectRoot: string, fileName: string): string {
 
 /**
  * True when the project has a REAL generated DI design — a committed design.json
- * whose `designs[]` is non-empty (i.e. it has ≥1 @DocumentDesign root). Plain
- * libs get a `{ designs: [] }` file written, which must read as "no design" so
- * the arch viz does not render them as clickable. A missing/unparseable file is
- * treated as "no design".
+ * whose `designs[]` is non-empty (i.e. it has ≥1 @DocumentDesign root).
+ *
+ * MISSING, empty-`designs[]`, and unparseable all read as "no design", and that
+ * equivalence is load-bearing rather than incidental: di-graph-generate writes NO
+ * file for a project without a design root (and reaps a stale one), so "absent"
+ * is now the normal state for every plain lib and legacy service. Repos that have
+ * not rebuilt since still carry `{ designs: [] }` files. Either way the arch viz
+ * must not render the box as clickable. See design-file-emission.spec.ts.
  */
 function hasGeneratedDesign(workspaceRoot: string, projectRoot: string): boolean {
     const designPath = path.join(workspaceRoot, projectRoot, 'design.json');

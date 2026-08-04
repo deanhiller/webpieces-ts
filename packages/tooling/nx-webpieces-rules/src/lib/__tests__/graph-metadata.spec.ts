@@ -489,8 +489,27 @@ describe('enrichGraph designFile gating', () => {
         fs.rmSync(enrichTmpRoot, { recursive: true, force: true });
     });
 
-    it('leaves designFile unset for a plain lib whose design.json has an empty designs[]', () => {
-        // A plain lib still gets a design.json written, but with no roots → not clickable.
+    /**
+     * The invariant di-graph-generate relies on to STOP writing empty design files.
+     *
+     * A project with a project.json but no design.json must read exactly like one whose design.json
+     * has an empty `designs[]` — both are "no design", neither is clickable. If these two ever
+     * diverge, not writing the file stops being a no-op and the architecture viz starts lying.
+     */
+    it('treats a MISSING design.json identically to an empty one — the not-written case', () => {
+        const infos = setupWorkspace('nodesignfile', [
+            new FixtureProject('delta', '# Responsibilities — delta\n\nDoes delta things.\n', true,
+                ['framework:node'], null),
+        ]);
+        const graph: EnhancedGraph = { delta: { level: 0, dependsOn: [] } };
+
+        enrichGraph(graph, infos, enrichTmpRoot);
+
+        expect(graph['delta'].designFile).toBeUndefined();
+    });
+
+    it('leaves designFile unset for a legacy design.json whose designs[] is empty', () => {
+        // Pre-existing empty files linger until the next build reaps them, so this must keep working.
         const emptyDesign = JSON.stringify({ schemaVersion: 2, project: 'gamma', designs: [] });
         const infos = setupWorkspace('plainlib', [
             new FixtureProject('gamma', '# Responsibilities — gamma\n\nDoes gamma things.\n', true,
