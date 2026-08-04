@@ -9,6 +9,7 @@ import { PushDevCommand, PushDevOptions } from './push-dev-command';
 import { DevCopy, DevDeployRefs } from '../workflow/dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
 import { DevResolveRunner } from '../workflow/dev-resolve-runner';
+import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
 import { GitExec, GitOutcome } from '../workflow/git-exec';
 import { GitStatusParser } from '../workflow/git-status';
 
@@ -85,6 +86,10 @@ class FakeRefs extends DevDeployRefs {
     override commitsOnlyOnRemote(): number {
         return harness.aheadCount;
     }
+
+    override headSha(): string {
+        return 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+    }
 }
 
 class FakeStore extends PushDevStateStore {
@@ -119,7 +124,9 @@ class FakeRootFinder extends RepoRootFinder {
 }
 
 function command(): PushDevCommand {
-    return new PushDevCommand(new FakeRootFinder(), new FakeGitExec(), new FakeRefs(), new FakeStore(), new FakeRunner());
+    return new PushDevCommand(
+        new FakeRootFinder(), new FakeGitExec(), new FakeRefs(), new FakeStore(), new FakeRunner(),
+        new DevDeployWatchHints());
 }
 
 function options(): PushDevOptions {
@@ -174,6 +181,14 @@ describe('PushDevCommand — publishing', () => {
         await run(options());
         expect(pushArgs()).toEqual(['-C', REPO, 'push', 'origin', `HEAD:refs/heads/${MY_COPY}`]);
         expect(harness.cleanTreeCalls).toBe(1);
+    });
+
+    it('tells the AI how to watch it reach the dev server, fully substituted', async (): Promise<void> => {
+        await run(options());
+        // Both questions, in the order that keeps the answer honest: ancestry first (provably about YOUR
+        // code), run status second (about the machinery).
+        expect(harness.out).toContain('git merge-base --is-ancestor deadbeefdeadbeefdeadbeefdeadbeefdeadbeef origin/dev');
+        expect(harness.out).toContain(`gh run list --branch ${MY_COPY} --limit 5`);
     });
 
     it('force-with-leases against the sha it inspected when the copy already exists', async (): Promise<void> => {

@@ -12,6 +12,7 @@ import { GitExec } from '../workflow/git-exec';
 import { DevCopy, DevDeployRefs } from '../workflow/dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
 import { DevResolveRunner } from '../workflow/dev-resolve-runner';
+import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -60,6 +61,7 @@ export class PushDevCommand {
         private readonly refs: DevDeployRefs,
         private readonly store: PushDevStateStore,
         private readonly runner: DevResolveRunner,
+        private readonly watchHints: DevDeployWatchHints,
     ) {}
 
     async run(opts: PushDevOptions): Promise<void> {
@@ -153,12 +155,15 @@ export class PushDevCommand {
             ['-C', repoRoot, 'push', ...this.pushSafety(targetRef, remoteSha, opts.force),
                 'origin', `HEAD:refs/heads/${targetRef}`],
             `Failed to publish the dev copy ${targetRef}`);
+        // Read AFTER the push, so the sha in the watch hints is provably the one that is now published.
+        const published = this.refs.headSha(repoRoot);
         process.stdout.write(
             '\n' + SEP + `✅ Published ${targetRef}\n` + SEP + '\n'
             + `\`${branch}\` is now in the pool your CI composes \`${cfg.devBranch}\` from — it will be picked up on\n`
             + 'the next composition run. No PR was opened and nothing landed on main.\n\n'
             + `  ${WP_PUSH_DEV} --list      ← what else is in the pool\n`
-            + `  ${WP_PUSH_DEV} --remove    ← take this branch back out\n`);
+            + `  ${WP_PUSH_DEV} --remove    ← take this branch back out\n`
+            + this.watchHints.render(cfg, targetRef, published));
     }
 
     /**

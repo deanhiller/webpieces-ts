@@ -4,6 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { GitExec } from './git-exec';
 import { DevDeployRefs } from './dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from './push-dev-state';
+import { DevDeployWatchHints } from './dev-deploy-watch-hints';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -23,6 +24,7 @@ export class DevResolveRunner {
         private readonly gitExec: GitExec,
         private readonly refs: DevDeployRefs,
         private readonly store: PushDevStateStore,
+        private readonly watchHints: DevDeployWatchHints,
     ) {}
 
     /**
@@ -138,6 +140,9 @@ export class DevResolveRunner {
         this.gitExec.runGitChecked(
             ['-C', repoRoot, 'push', '--force', 'origin', `${state.tmpBranch}:refs/heads/${state.targetRef}`],
             `Failed to publish the dev copy ${state.targetRef}`);
+        // Captured BEFORE the tmp branch is deleted — it is the composed sha the watch hints are about,
+        // and after the checkout below HEAD is the feature branch, which is a different commit entirely.
+        const published = this.refs.headSha(repoRoot, state.tmpBranch);
         this.gitExec.runGitChecked(['-C', repoRoot, 'checkout', state.originalBranch],
             `Failed to return to ${state.originalBranch}`);
         this.gitExec.tryGit(['-C', repoRoot, 'branch', '-D', state.tmpBranch], repoRoot);
@@ -146,7 +151,8 @@ export class DevResolveRunner {
             '\n' + SEP + `✅ Published ${state.targetRef} with the resolutions\n` + SEP + '\n'
             + `You are back on \`${state.originalBranch}\`, which was never modified — verify with:\n`
             + `  git log --oneline ${state.originalBranch}\n`
-            + 'Your CI will pick the copy up on its next composition run.\n');
+            + 'Your CI will pick the copy up on its next composition run.\n'
+            + this.watchHints.render(this.refs.config(repoRoot), state.targetRef, published));
     }
 
     /** Conflicted (unmerged-in-index) paths. Empty once every one has been resolved and `git add`ed. */

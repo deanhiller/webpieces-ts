@@ -145,6 +145,14 @@
                     "level": 3
                 },
                 {
+                    "id": "DevDeployWatchHints",
+                    "className": "DevDeployWatchHints",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-watch-hints.ts",
+                    "level": 3
+                },
+                {
                     "id": "DevResolveRunner",
                     "className": "DevResolveRunner",
                     "kind": "class",
@@ -755,6 +763,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
                     "paramName": "refs",
                     "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "DevResolveRunner",
+                    "to": "DevDeployWatchHints",
+                    "injection": "type",
+                    "token": "DevDeployWatchHints",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-watch-hints.ts#DevDeployWatchHints",
+                    "paramName": "watchHints",
+                    "paramType": "DevDeployWatchHints"
                 },
                 {
                     "from": "DevResolveRunner",
@@ -1484,6 +1501,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
                     "paramName": "refs",
                     "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "DevDeployWatchHints",
+                    "injection": "type",
+                    "token": "DevDeployWatchHints",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-watch-hints.ts#DevDeployWatchHints",
+                    "paramName": "watchHints",
+                    "paramType": "DevDeployWatchHints"
                 },
                 {
                     "from": "PushDevCommand",

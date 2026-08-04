@@ -3,11 +3,12 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DotWebpieces, RepoRootFinder, toError } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, DotWebpieces, RepoRootFinder, toError } from '@webpieces/rules-config';
 
 import { DevResolveRunner } from './dev-resolve-runner';
 import { DevDeployRefs } from './dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from './push-dev-state';
+import { DevDeployWatchHints } from './dev-deploy-watch-hints';
 import { GitExec, GitOutcome } from './git-exec';
 import { GitStatusParser } from './git-status';
 
@@ -74,6 +75,14 @@ class FakeRefs extends DevDeployRefs {
     override fetchCopies(): void {
         // Which refs get fetched is DevDeployRefs' business; the sequencing under test is unaffected.
     }
+
+    override headSha(): string {
+        return 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+    }
+
+    override config(): DevDeployConfig {
+        return new DevDeployConfig('dev-include', 'dev');
+    }
 }
 
 class FakeStore extends PushDevStateStore {
@@ -94,7 +103,7 @@ class FakeStore extends PushDevStateStore {
 }
 
 function runner(): DevResolveRunner {
-    return new DevResolveRunner(new FakeGitExec(), new FakeRefs(), new FakeStore());
+    return new DevResolveRunner(new FakeGitExec(), new FakeRefs(), new FakeStore(), new DevDeployWatchHints());
 }
 
 function state(queue: string[]): PushDevState {
@@ -148,6 +157,9 @@ describe('DevResolveRunner — the clean path needs no stage ②', () => {
         expect(harness.runs).toContainEqual(['-C', REPO, 'checkout', FEATURE]);
         expect(harness.cleared).toBe(1);
         expect(harness.stateOnDisk).toBeNull();
+        // The resolve path publishes too, so it owes the same watch hints the plain path prints.
+        expect(harness.out).toContain('git merge-base --is-ancestor');
+        expect(harness.out).toContain('gh run list --branch dev --limit 5');
     });
 
     it('parks on the throwaway branch, and never writes to the feature branch', (): void => {
