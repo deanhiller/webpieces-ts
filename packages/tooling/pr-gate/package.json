@@ -5,20 +5,19 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-finish-upsert-pr": "./bin/wp-finish-upsert-pr.js",
-        "wp-start-upsert-pr": "./bin/wp-start-upsert-pr.js",
-        "wp-start-update": "./bin/wp-start-update.js",
-        "wp-finish-update": "./bin/wp-finish-update.js",
-        "wp-cleanup": "./bin/wp-cleanup.js",
-        "wp-land-pr": "./bin/wp-land-pr.js",
-        "wp-check-pr": "./bin/wp-check-pr.js",
-        "wp-review-upsert-pr": "./bin/wp-review-upsert-pr.js",
-        "wp-push-dev": "./bin/wp-push-dev.js",
-        "wp-finish-push-dev": "./bin/wp-finish-push-dev.js"
+        "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
+        "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
+        "wp-start-update": "./src/scripts/wp-start-update.js",
+        "wp-finish-update": "./src/scripts/wp-finish-update.js",
+        "wp-cleanup": "./src/scripts/wp-cleanup.js",
+        "wp-land-pr": "./src/scripts/wp-land-pr.js",
+        "wp-check-pr": "./src/scripts/wp-check-pr.js",
+        "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
+        "wp-push-dev": "./src/scripts/wp-push-dev.js",
+        "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js"
     },
     "files": [
-        "src/**/*",
-        "bin/**/*"
+        "src/**/*"
     ],
     "author": "Dean Hiller",
     "license": "Apache-2.0",
