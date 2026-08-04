@@ -117,6 +117,18 @@ export class DevDeployRefs {
         return copies.sort((a: DevCopy, b: DevCopy): number => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
     }
 
+    /**
+     * The sha of a local ref (default HEAD).
+     *
+     * Read AFTER a push so the watch hints quote the sha that is provably published. Quoting the copy
+     * REF instead would be a moving target — it advances the next time anybody publishes — and the whole
+     * value of the "did my code land in dev" check is that it is a claim about one specific commit.
+     */
+    headSha(repoRoot: string, ref = 'HEAD'): string {
+        return this.gitExec.gitQuery(['-C', repoRoot, 'rev-parse', ref], repoRoot,
+            `Failed to read the sha of ${ref} (git rev-parse).`);
+    }
+
     /** The remote sha of one copy, or '' when that copy does not exist yet. */
     remoteSha(repoRoot: string, ref: string): string {
         const out = this.gitExec.gitQuery(['ls-remote', '--heads', 'origin', ref], repoRoot,

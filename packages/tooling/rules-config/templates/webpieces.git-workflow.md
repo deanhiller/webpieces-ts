@@ -219,6 +219,32 @@ must **never** acquire another developer's commits — landing that PR would shi
 production. Conflict resolutions therefore live on the throwaway copy, never on your branch. After any
 command here, `git log <your-branch>` shows it did not move.
 
+### Is it deployed yet? — two questions, in this order
+
+`wp-push-dev` prints both, **fully substituted with your sha and refs**, so you can paste them straight
+in. Nothing here is blocked: they are read-only git queries plus `gh run list|watch|view`.
+
+1. **Did YOUR code land in the composed branch?** Pure git, works whatever the CI is:
+   ```bash
+   git fetch origin dev
+   git merge-base --is-ancestor <the sha wp-push-dev printed> origin/dev && echo IN || echo "not yet"
+   ```
+   `dev` is rebuilt from `origin/main` plus every copy on each run, so **ancestry is inclusion**. If it
+   says "not yet", the composition simply has not run since you published — re-check, do not re-push.
+
+2. **Did the CI/CD run finish?** GitHub Actions, if that is where this repo's dev deploy lives:
+   ```bash
+   gh run list --branch dev-include/<your-branch> --limit 5   # the run your push triggered, if any
+   gh run list --branch dev --limit 5                         # the composition / deploy run
+   gh run watch <run-id>                                      # follow one to completion
+   ```
+   **Empty output is an answer, not a failure** — it means this repo deploys from somewhere other than
+   Actions. Ask the human where, and do not guess.
+
+**A green run on `dev` is NOT proof your change deployed.** That branch carries everyone's copies and the
+composition may have excluded yours. Question 1 is the one that answers for *your* code; question 2 only
+tells you the machinery finished. Answer them in that order, and report both.
+
 ### When two branches conflict in the composition
 
 CI will name the branch you conflict with. Compose locally, so what you resolve is what CI will build:

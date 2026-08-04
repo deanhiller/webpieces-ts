@@ -29,6 +29,7 @@ graph TD
     CleanupCommand["CleanupCommand"]
     Dashboard["Dashboard"]
     DevDeployRefs["DevDeployRefs"]
+    DevDeployWatchHints["DevDeployWatchHints"]
     DevResolveRunner["DevResolveRunner"]
     DiffBasisResolver["DiffBasisResolver"]
     DiffMaterializer["DiffMaterializer"]
@@ -102,6 +103,7 @@ graph TD
     CleanupCommand --> WorktreeCleanupSection
     DevDeployRefs --> GitExec
     DevResolveRunner --> DevDeployRefs
+    DevResolveRunner --> DevDeployWatchHints
     DevResolveRunner --> GitExec
     DevResolveRunner --> PushDevStateStore
     DiffBasisResolver --> ForkPoint
@@ -183,6 +185,7 @@ graph TD
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
     PushDevCommand --> DevDeployRefs
+    PushDevCommand --> DevDeployWatchHints
     PushDevCommand --> DevResolveRunner
     PushDevCommand --> GitExec
     PushDevCommand --> PushDevStateStore
