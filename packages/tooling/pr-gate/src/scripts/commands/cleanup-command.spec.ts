@@ -14,6 +14,7 @@ import {
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,
+    CLASSIFICATION_NO_COMMITS,
     CLASSIFICATION_IN_USE,
     CLASSIFICATION_MERGED_PR,
     CLASSIFICATION_CURRENT,
@@ -282,17 +283,20 @@ describe('wp-cleanup worktree prompt', () => {
         expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path)).toEqual(['/work/a']);
     });
 
-    // Same posture as the branch prompt: no terminal means no consent, and it says so.
-    it('removes no worktree when there is no TTY', async () => {
+    // Same posture as the branch prompt: unattended takes the redundant ones and spares NEVER PROPOSED.
+    it('removes the redundant worktrees but not the never-proposed one when there is no TTY', async () => {
         Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
-        harness.worktrees = [new DeletableWorktree(
-            '/work/a', 'dean/a', 'PR #1 CLOSED UNMERGED', 1, false, CLASSIFICATION_SUPERSEDED)];
+        harness.worktrees = [
+            new DeletableWorktree('/work/a', 'dean/a', 'PR #1 CLOSED UNMERGED', 1, false, CLASSIFICATION_SUPERSEDED),
+            new DeletableWorktree('/work/b', 'dean/b', 'never had a PR', 0, false, CLASSIFICATION_NEVER_PROPOSED),
+        ];
         harness.answer = 'all';
 
         const out = await run();
 
-        expect(harness.worktreeTargets).toEqual([]);
-        expect(out).toContain('Not a terminal');
+        expect(harness.worktreeTargets.map((tree: DeletableWorktree): string => tree.path)).toEqual(['/work/a']);
+        expect(out).toContain('Not a terminal, so no prompt');
+        expect(out).toContain('dean/b');
         Object.defineProperty(process.stdin, 'isTTY', { value: REAL_TTY, configurable: true });
     });
 });
@@ -344,19 +348,31 @@ describe('wp-cleanup prompt — asking is the point, but silence is never a yes'
     });
 
     /**
-     * A prompt nobody can see must never be read as consent. This is the one place in the tooling where
-     * a deletion is not backed by a proof, so a non-interactive shell answers NONE and says so.
+     * The AGENT path, and the whole point of this command being runnable by one.
+     *
+     * A non-interactive shell used to answer NONE — so an agent told to clean up ran wp-cleanup,
+     * deleted nothing, stayed blocked at the branch cap, and had nothing left to do but hand a human
+     * a table of branches to adjudicate. Now it takes the redundant groups itself (archived and
+     * recoverable) and leaves exactly ONE group for a human: NEVER PROPOSED.
      */
-    it('deletes nothing and does not prompt when there is no TTY', async () => {
+    it('takes the redundant branches unattended and spares never-proposed when there is no TTY', async () => {
         Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
-        harness.spared = [spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r')];
+        harness.spared = [
+            spared('a/one', CLASSIFICATION_SUPERSEDED, 1, 'r'),
+            spared('b/two', CLASSIFICATION_CONTENT_IN_MAIN, 1, 'r'),
+            spared('c/three', CLASSIFICATION_NO_COMMITS, 0, 'r'),
+            spared('d/four', CLASSIFICATION_NEVER_PROPOSED, 3, 'r'),
+        ];
         harness.answer = 'all';
 
         const out = await run();
 
+        // No prompt was issued — the picks are made from the classifications, not from an answer.
         expect(harness.prompts).toEqual([]);
-        expect(harness.approved).toEqual([]);
-        expect(out).toContain('Not a terminal');
+        expect(harness.approved.map((entry: DeletableBranch): string => entry.branch))
+            .toEqual(['a/one', 'b/two', 'c/three']);
+        expect(out).toContain('Not a terminal, so no prompt');
+        expect(out).toContain('d/four');
         Object.defineProperty(process.stdin, 'isTTY', { value: REAL_TTY, configurable: true });
     });
 });

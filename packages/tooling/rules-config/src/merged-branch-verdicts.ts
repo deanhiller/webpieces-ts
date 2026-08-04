@@ -28,18 +28,21 @@ export class MergedBranch {
  * Reporting all three identically is why nobody ever decided, and why the pile grew to 6 branches
  * against a cap of 5. A token lets wp-cleanup GROUP them and ask a question that can be answered.
  */
-// Dead by proof — these are auto-deletable. BOTH proofs are a MERGED PR; there is no other.
+// Dead by proof — these are auto-deletable. Two proofs qualify: a MERGED PR, or a LIVE SIBLING REF
+// that provably holds the same work (see CLASSIFICATION_BACKUP_OF_LIVE).
 export const CLASSIFICATION_MERGED_PR = 'merged-pr';
 export const CLASSIFICATION_BACKUP_OF_MERGED = 'backup-of-merged';
 /**
  * A `<feature>PreMerge<N>` / `<feature>Squash` snapshot whose BASE branch is still alive — its PR is
  * open, or it simply has not been proposed yet.
  *
- * Spared, because the base has not landed and the snapshot is still the pre-merge state someone may
- * need to fall back to. But it is emphatically NOT the orphan case: a snapshot is a copy of its base
- * BY CONSTRUCTION, so while the base exists this branch cannot be "the only copy in existence".
- * Reporting it as one is why these were never answered and piled up against maxLocalBranches — the
- * question named a risk that could not be real, so the safe answer was always "keep".
+ * AUTO-DELETABLE. A snapshot is a copy of its base BY CONSTRUCTION, so while the base exists this
+ * branch cannot be "the only copy in existence" — that is a proof, not a judgement call, and it is
+ * why this is reaped rather than asked about. It used to be the FIRST promptable group ("the easiest
+ * yes in the list"), which is precisely the tell: a question whose only honest answer is yes should
+ * never have been a question. `wp-start-upsert-pr` mints one of these on every run, so leaving them
+ * to a human meant the branch cap filled with copies and the cap's own remedy became "ask the human
+ * to adjudicate six branches" — the toil this whole story exists to remove.
  */
 export const CLASSIFICATION_BACKUP_OF_LIVE = 'backup-of-live';
 /**
@@ -82,9 +85,9 @@ export const CLASSIFICATION_DETACHED = 'detached-worktree';
 // Spared classifications a human can meaningfully rule on, most-safe first. wp-cleanup prompts in
 // exactly this order so the easy yeses come before the ones that need thought.
 export const PROMPTABLE_CLASSIFICATIONS: readonly string[] = [
-    // FIRST — the easiest yes in the list. The base branch is right there holding the same work, so
-    // "is this the only copy?" has a provable no rather than a judgement call.
-    CLASSIFICATION_BACKUP_OF_LIVE,
+    // CLASSIFICATION_BACKUP_OF_LIVE is deliberately NOT here — it is auto-reaped now. Anything that
+    // reaches this list is a real judgement call; if a group's answer is always yes, it belongs in
+    // the deletable set instead of on a human's plate.
     CLASSIFICATION_SUPERSEDED,
     CLASSIFICATION_CONTENT_IN_MAIN,
     CLASSIFICATION_NEVER_PROPOSED,

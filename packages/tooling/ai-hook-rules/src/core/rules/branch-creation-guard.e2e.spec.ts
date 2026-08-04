@@ -116,7 +116,7 @@ describe('branch-creation-guard against real git', () => {
 
         expect(violations.length).toBe(1);
         expect(violations[0].message).toContain('6 linked worktrees');
-        expect(violations[0].message).toContain('None of them are dead');
+        expect(violations[0].message).toContain('pnpm wp-cleanup');
 
         // The whole remedy, read exactly as an agent reads it. Not one destructive git command in it.
         const hint = rule.fixHint;
@@ -157,10 +157,12 @@ describe('branch-creation-guard against real git — the merged half', () => {
         const violations = rule.check(ctx(`git worktree add ${path.join(root, 'wt7')} -b dean/next origin/main`));
 
         expect(violations.length).toBe(1);
-        expect(violations[0].message).toContain('1 of them are dead');
+        expect(violations[0].message).toContain('pnpm wp-cleanup');
 
+        // The dead worktree is NOT named here — the remedy is the command, and wp-cleanup names what
+        // it removes from fresh verdicts as it removes it.
         const flat = rule.fixHint.fixOptions.map((o: { text: string }): string => o.text).join('\n');
-        expect(flat).toContain(wt1);
+        expect(flat).not.toContain(wt1);
         expect(flat).toContain('pnpm wp-cleanup');
         expect(flat).not.toContain('git worktree remove');
     }, 60_000);
