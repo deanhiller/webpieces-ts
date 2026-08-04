@@ -6,7 +6,7 @@
     "main": "./src/index.js",
     "executors": "./executors.json",
     "bin": {
-        "wp-design-visualize": "./bin/wp-design-visualize.js"
+        "wp-design-visualize": "./src/scripts/wp-design-visualize.js"
     },
     "exports": {
         ".": "./src/index.js",
@@ -18,14 +18,11 @@
         "src/**/*",
         "templates/**/*",
         "executors.json",
-        "README.md",
-        "bin/**/*"
+        "README.md"
     ],
     "dependencies": {
-        "@webpieces/ai-hook-rules": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
-        "@webpieces/pr-gate": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
         "madge": "8.0.0"
     },

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { healShim, findShimRoot, RECOVERY_CMD } from './shim';
 import { toError } from '../core/to-error';
 

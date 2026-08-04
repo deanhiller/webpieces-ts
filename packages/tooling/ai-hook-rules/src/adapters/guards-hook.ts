@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Claude Code PreToolUse adapter for the GIT/PR/BRANCH GUARDS hook (matcher Bash).
 // File-edit payloads pass through untouched — code-style validation is the separate rules hook.
 import { runMain } from './hook-core';

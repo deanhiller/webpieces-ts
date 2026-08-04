@@ -5,10 +5,10 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "bin": {
-        "wp-ai-rules-hook": "./bin/wp-ai-rules-hook.js",
-        "wp-ai-guards-hook": "./bin/wp-ai-guards-hook.js",
-        "wp-install-ai-hooks": "./bin/wp-install-ai-hooks.js",
-        "wp-upgrade-shim": "./bin/wp-upgrade-shim.js"
+        "wp-ai-rules-hook": "./src/adapters/rules-hook.js",
+        "wp-ai-guards-hook": "./src/adapters/guards-hook.js",
+        "wp-install-ai-hooks": "./src/bin/install-entry.js",
+        "wp-upgrade-shim": "./src/bin/upgrade-shim.js"
     },
     "exports": {
         ".": "./src/index.js",
@@ -19,7 +19,6 @@
     },
     "files": [
         "src/**/*",
-        "bin/**/*",
         "templates/**/*",
         "openclaw.plugin.json",
         "README.md"

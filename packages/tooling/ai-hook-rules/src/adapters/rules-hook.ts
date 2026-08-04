@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Claude Code PreToolUse adapter for the CODE-STYLE RULES hook (matcher Write|Edit|MultiEdit).
 // Bash payloads pass through untouched — branch/PR/merge protection is the separate guards hook.
 import { runMain } from './hook-core';
