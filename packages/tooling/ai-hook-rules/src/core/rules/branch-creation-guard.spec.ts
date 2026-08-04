@@ -350,6 +350,9 @@ describe('branch-creation-guard cap fail-open and escapes', () => {
         expect(flat).toContain('maxLocalBranches');
         expect(flat).toContain('turnOffRuleUntilEpoch');
         expect(flat).toContain('explicit yes');
+        // Short is not the same as vague. A bare "ask" has no object, and the reader is an agent that
+        // can satisfy it by asking itself — so the human stays named.
+        expect(flat).toContain('ASK THE HUMAN');
     });
 
     it('defaults the cap to 5 when unconfigured', () => {

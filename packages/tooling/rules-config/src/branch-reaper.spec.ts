@@ -10,6 +10,9 @@ const world = vi.hoisted(() => ({
     commitsAhead: {} as Record<string, number>,
     // Branch → SHA that `git rev-parse <branch>` resolves to.
     shas: {} as Record<string, string>,
+    // Branches that `git rev-parse` REFUSES to resolve — i.e. a concurrent reaper already deleted
+    // them between the verdict and this reap. The real git says "unknown revision"; so does this.
+    missingBranches: [] as string[],
     // Branches whose `git branch -D` fails, mapped to git's stderr.
     deleteFails: {} as Record<string, string>,
     // Every `git branch -D` invocation, as the list of branch names it was given.
@@ -49,6 +52,12 @@ vi.mock('child_process', () => ({
             // `rev-parse --verify --quiet refs/tags/<tag>` is the archiver's tag-collision probe. No tag
             // in this fake world ever pre-exists, so it always misses.
             if (args[1] === '--verify') return { status: 1, stdout: '', stderr: '' };
+            if (world.missingBranches.includes(String(args[1]))) {
+                return {
+                    status: 128, stdout: '',
+                    stderr: `fatal: ambiguous argument '${String(args[1])}': unknown revision`,
+                };
+            }
             // Every branch resolves to SOMETHING (a real repo's would). Tests that care about the exact
             // value set world.shas; the rest just need the archive step to find a tip to tag.
             return { status: 0, stdout: world.shas[String(args[1])] ?? `sha-${String(args[1])}`, stderr: '' };
@@ -101,6 +110,7 @@ beforeEach(() => {
     world.currentBranch = 'main';
     world.commitsAhead = {};
     world.shas = {};
+    world.missingBranches = [];
     world.deleteFails = {};
     world.deletes = [];
     world.tags = [];
@@ -209,6 +219,50 @@ describe('archive-before-delete (Part 1)', () => {
         expect(world.deletes).toEqual([]);
         expect(result.reaped.length).toBe(0);
         expect(result.failed[0].error).toContain('could not archive it first');
+    });
+
+    /**
+     * THE CONCURRENT-REAP RACE, observed 2026-08-04 in branch-mutations.log:
+     *
+     *   14:30:58.207  auto-reap   REAP  dean/… outcome=deleted (PR #586 merged) archiveTag=archive/…
+     *   14:30:58.539  wp-cleanup  REAP  dean/… outcome=SKIPPED (could not archive it first: unknown revision)
+     *
+     * The detached refresher's auto-reap and wp-cleanup both act on their own fresh verdicts, and the
+     * hooks start the refresher on the same commands a human runs wp-cleanup from, so they race BY
+     * DESIGN. The loser then archived nothing (no ref to tag), refused to delete (correctly — see the
+     * test above), and reported "⚠️ could not be deleted" about a branch that was deleted, archived
+     * and logged 300ms earlier. That warning sent a human looking for branches that did not exist.
+     */
+    it('reports a branch a concurrent reaper already took as ALREADY GONE, not as a failure', () => {
+        world.mergedPrs = [{ number: 586, headRefName: 'dean/merged' }];
+        world.localBranches = ['main', 'dean/merged'];
+        // Present when the verdict was computed, gone by the time the reap reaches it.
+        world.missingBranches = ['dean/merged'];
+
+        const result = reaper.reap('/repo', 'wp-cleanup');
+
+        expect(result.failed).toEqual([]);
+        expect(result.reaped).toEqual([]);
+        expect(result.alreadyGone.map((entry: ReapedBranch): string => entry.branch)).toEqual(['dean/merged']);
+        expect(result.alreadyGone[0].alreadyGone).toBe(true);
+        // Nothing was attempted against a ref that is not there.
+        expect(world.tags).toEqual([]);
+        expect(world.deletes).toEqual([]);
+        // Still audited — a mutation nobody logs is a mutation nobody can reconstruct.
+        expect(world.logLines.join('\n')).toContain('ALREADY GONE');
+    });
+
+    // The same outcome on the human-answered path: a yes at the prompt, and someone else got there
+    // first. Also not a failure.
+    it('reports an already-gone approved branch the same way', () => {
+        world.missingBranches = ['dean/approved'];
+
+        const result = reaper.reapApproved('/repo', 'wp-cleanup', [
+            new DeletableBranch('dean/approved', 'human said yes', 0)]);
+
+        expect(result.failed).toEqual([]);
+        expect(result.alreadyGone.map((entry: ReapedBranch): string => entry.branch)).toEqual(['dean/approved']);
+        expect(world.deletes).toEqual([]);
     });
 
     // 'keep' turns the reap into a pure report: nothing tagged, nothing deleted, everything visible.

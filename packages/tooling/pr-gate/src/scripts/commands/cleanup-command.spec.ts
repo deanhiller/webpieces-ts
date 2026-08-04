@@ -33,6 +33,8 @@ import { WorktreeCleanupSection } from './worktree-cleanup';
 class Harness {
     spared: DeletableBranch[] = [];
     reaped: ReapedBranch[] = [];
+    // Branches a CONCURRENT reaper took before this pass reached them (the auto-reap race).
+    alreadyGone: ReapedBranch[] = [];
     answer = '';
     approved: DeletableBranch[] = [];
     prompts: string[] = [];
@@ -59,7 +61,7 @@ class FakeReaper extends BranchReaper {
             .map((entry: DeletableBranch): ReapedBranch =>
                 new ReapedBranch(entry.branch, 'sha1234567', 'PR merged (its worktree was just removed)',
                     entry.pr, true, ''))];
-        return new ReapResult(reaped, [], spared);
+        return new ReapResult(reaped, [], spared, harness.alreadyGone);
     }
 
     reapApproved(_repoRoot: string, _verb: 'wp-cleanup', approved: DeletableBranch[]): ReapResult {
@@ -137,6 +139,7 @@ const REAL_TTY = process.stdin.isTTY;
 beforeEach(() => {
     harness.spared = [];
     harness.reaped = [];
+    harness.alreadyGone = [];
     harness.answer = '';
     harness.approved = [];
     harness.prompts = [];
@@ -210,6 +213,28 @@ describe('wp-cleanup classification report (Part 5)', () => {
         expect(out).toContain('restore: git checkout -b dean/merged archive/2026-07-30/dean/merged');
         // The audit-log pointer is printed even on success — an undo nobody can find is not an undo.
         expect(out).toContain('branch-mutations.log');
+    });
+
+    /**
+     * The auto-reap race, as the human sees it. wp-cleanup and the detached refresher's auto-reap
+     * both act on their own fresh verdicts and are started by the same commands, so they race by
+     * design. When the refresher wins, this pass finds nothing to archive or delete — and used to
+     * report that under "⚠️ N branch(es) could not be deleted", which reads as work left undone
+     * about branches that no longer exist. It is an outcome, not a warning.
+     */
+    it('reports concurrently-reaped branches as already gone, not as failures', async () => {
+        const gone = new ReapedBranch('dean/merged', '', 'PR #586 merged', 586, false, 'already gone');
+        gone.alreadyGone = true;
+        harness.alreadyGone = [gone];
+
+        const out = await run();
+
+        expect(out).toContain('already gone');
+        expect(out).toContain('dean/merged');
+        expect(out).not.toContain('could not be deleted');
+        expect(out).not.toContain('⚠️');
+        // And it is NOT the "nothing to clean up" case either — something did happen to that branch.
+        expect(out).not.toContain('Nothing to clean up');
     });
 });
 

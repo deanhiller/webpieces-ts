@@ -145,12 +145,25 @@ export class CleanupCommand {
     }
 
     private report(result: ReapResult): string {
-        if (result.reaped.length === 0 && result.failed.length === 0) {
+        const gone = result.alreadyGone.length;
+        if (result.reaped.length === 0 && result.failed.length === 0 && gone === 0) {
             return '\n✅ Nothing to clean up — no local branch is provably dead.\n';
         }
 
         let out = '\n' + SEP + `🧹 Cleaned up ${String(result.reaped.length)} dead local branch(es)\n` + SEP + '\n';
         for (const entry of result.reaped) out += this.reapedLine(entry);
+
+        // Stated, not warned about. These branches ARE gone — the detached refresher's auto-reap
+        // deleted and archived them moments before this pass reached them, which it is entitled to do
+        // (it acts on its own fresh verdicts, and the hooks start it on the same commands you run
+        // wp-cleanup from). Before this line they came out under "⚠️ N branch(es) could not be
+        // deleted", which reads as work left undone and sends a human hunting for branches that no
+        // longer exist.
+        if (gone > 0) {
+            const names = result.alreadyGone.map((entry: ReapedBranch): string => entry.branch).join(', ');
+            out += `\nℹ️  ${String(gone)} branch(es) were already gone — a concurrent auto-reap deleted and\n`
+                + `   archived them first, so there was nothing left to do: ${names}\n`;
+        }
 
         if (result.failed.length > 0) {
             out += `\n⚠️  ${String(result.failed.length)} branch(es) could not be deleted:\n`;
