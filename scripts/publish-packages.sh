@@ -107,6 +107,54 @@ for dir in "${ORDER[@]}"; do
     fi
 done
 
+# 3. HOIST publishConfig.bin -> bin, in the DIST manifest only.
+#
+# THE BUG THIS FIXES (0.4.575 shipped with NO bins at all — every wp-* command gone).
+# Source manifests deliberately declare no top-level `bin`: pnpm chmods every bin target while it
+# links a workspace: sibling from its SOURCE dir, where src/**/*.js does not exist until tsc runs, so
+# a top-level bin there means 28 `WARN Failed to create bin ... ENOENT ... chmod` per install. Moving
+# them to publishConfig.bin removes that hazard (see CLAUDE.md, "No bin shims").
+#
+# `pnpm pack` and `pnpm publish` hoist publishConfig.bin into bin automatically, which is what the
+# change was verified against. THIS SCRIPT PUBLISHES WITH `npm publish`, AND NPM DOES NOT — it treats
+# publishConfig.bin as an unknown key and leaves it there, so the published manifest had no `bin` and
+# consumers installed a package with no executables. Verifying with the wrong package manager is the
+# whole lesson: what ships is whatever `npm publish dist/<dir>` puts on the registry.
+#
+# Doing it HERE, on dist, is the fix rather than a workaround: the ENOENT hazard is a property of the
+# SOURCE tree (pnpm never links from dist), so the published manifest can carry an ordinary `bin` with
+# no downside. Idempotent — a manifest that already has `bin` is left alone.
+for dir in "${ORDER[@]}"; do
+    manifest="dist/$dir/package.json"
+    [ -f "$manifest" ] || continue
+    [ "$(jq -r 'if (.publishConfig.bin // empty) then "yes" else "no" end' "$manifest")" = "yes" ] || continue
+
+    tmp="$(mktemp)"
+    jq '.bin = (.bin // .publishConfig.bin) | del(.publishConfig.bin)' "$manifest" > "$tmp"
+    mv "$tmp" "$manifest"
+
+    n="$(jq -r '(.bin // {}) | length' "$manifest")"
+    if [ "$n" -eq 0 ]; then
+        echo "  ❌ $manifest declared publishConfig.bin but the hoist produced no bin entries"
+        failed=1
+    else
+        echo "  🔧 hoisted $n bin(s) into $manifest"
+    fi
+done
+
+# 4. FAIL CLOSED on a package that ships no executables when its SOURCE says it should. This is the
+#    assertion 0.4.575 did not have: the release completed successfully and the breakage was only
+#    visible to whoever installed it next.
+for dir in "${ORDER[@]}"; do
+    src_bins="$(jq -r '((.bin // {}) + (.publishConfig.bin // {})) | length' "$dir/package.json" 2>/dev/null || echo 0)"
+    [ "$src_bins" -gt 0 ] || continue
+    dist_bins="$(jq -r '(.bin // {}) | length' "dist/$dir/package.json" 2>/dev/null || echo 0)"
+    if [ "$dist_bins" -ne "$src_bins" ]; then
+        echo "  ❌ $dir declares $src_bins bin(s) but dist/$dir/package.json would publish $dist_bins"
+        failed=1
+    fi
+done
+
 if [ "$failed" -ne 0 ]; then
     echo ""
     echo "Refusing to publish. Fix ORDER/SKIP in $0 so npm and the git tag cannot disagree."

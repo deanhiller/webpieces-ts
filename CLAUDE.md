@@ -368,10 +368,20 @@ sibling is linked from its SOURCE directory, where `src/` holds only `.ts` until
 `WARN Failed to create bin ... ENOENT ... chmod` — 28 of them on this workspace, noise indistinguishable
 from a real bin-link failure.
 
-`publishConfig.bin` removes the hazard instead of working around it: **pnpm hoists it into `bin` when it
-packs**, so the tarball has exactly the bins consumers need while the source manifest declares none — and
-a `bin` that does not exist during install is a `bin` pnpm never tries to chmod. Verified by packing all
-four tooling packages: 17 bins, all present in the tarballs, `pnpm install` silent.
+`publishConfig.bin` removes the hazard instead of working around it: the source manifest declares no
+`bin`, so there is nothing for pnpm to chmod, and the published manifest gets one anyway.
+
+**THE HOIST IS DONE BY `scripts/publish-packages.sh`, NOT by the package manager.** `pnpm pack` and
+`pnpm publish` hoist `publishConfig.bin` into `bin` on their own — but **CI publishes with
+`npm publish dist/<dir>`, and npm does NOT**. It treats `publishConfig.bin` as an unknown key and leaves
+it there. Verifying the move with `pnpm pack` therefore proved nothing about the release, and **0.4.575
+shipped with no `bin` at all in any of the four packages** — every `wp-*` command gone. So the script
+hoists it into the DIST manifest before publishing (the ENOENT hazard is a property of the SOURCE tree —
+pnpm never links from `dist` — so the published manifest can carry an ordinary `bin` with no downside),
+and then FAILS THE RELEASE if any package whose source declares bins would publish a different number.
+
+The general rule that incident bought: **verify a packaging change against the artifact the RELEASE
+pipeline produces, not the one your local package manager produces.**
 
 That matters because the two earlier cures were both worse than the disease, and the second one shipped
 a live incident:
