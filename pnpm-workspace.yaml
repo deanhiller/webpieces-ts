@@ -27,4 +27,4 @@ packages:
 #
 # Bumping the release the repo is built with is therefore a ONE-LINE edit, right here.
 catalog:
-  '@webpieces/nx-webpieces-rules': 0.4.562
+  '@webpieces/nx-webpieces-rules': 0.4.576
