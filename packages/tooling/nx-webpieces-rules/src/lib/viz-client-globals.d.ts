@@ -1,0 +1,32 @@
+/*
+ * Ambient globals shared by the two browser-side visualizer scripts (graph-visualizer.client.ts and
+ * runtime-visualizer.client.ts).
+ *
+ * They live HERE, in one .d.ts, rather than in each script, because both scripts are global SCRIPTS —
+ * they have no import or export, which is precisely what makes tsc emit them as plain browser code with
+ * no CommonJS wrapper. Two scripts in one program share a global scope, so declaring `__DOT__` in both
+ * is a redeclaration error. One shared declaration file is the fix, and it costs nothing at runtime:
+ * a .d.ts emits no JavaScript.
+ */
+
+/**
+ * The Graphviz DOT for the page, as a JSON-encoded string.
+ *
+ * It is a PLACEHOLDER, not a real binding: graph-visualizer.ts / runtime-visualizer.ts read the
+ * compiled script and `split('__DOT__').join(JSON.stringify(dot))` before inlining it into the HTML, so
+ * by the time a browser sees this identifier it has been replaced by a string literal.
+ */
+declare const __DOT__: string;
+
+/** The @viz-js/viz v3 UMD global the generated page loads from a CDN before this script runs. */
+declare const Viz: VizGlobal;
+
+interface VizGlobal {
+    /** v3 resolves the WASM-backed renderer here; v2's `new Viz()` no longer exists. */
+    instance(): Promise<VizInstance>;
+}
+
+interface VizInstance {
+    /** SYNCHRONOUS in v3 — v2's returned a promise, which is why callers use it directly in then(). */
+    renderSVGElement(dot: string): SVGSVGElement;
+}

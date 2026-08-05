@@ -8,7 +8,7 @@
  *
  * Each card carries `data-node="<shortName>"` matching the graph box's title, so
  * the page script can filter the list to just the locked box's chain (see
- * graph-visualizer.client.js). The summary paragraph is the `shortDescription`
+ * graph-visualizer.client.ts). The summary paragraph is the `shortDescription`
  * already on each graph entry; the expanded body is the rendered markdown file.
  */
 

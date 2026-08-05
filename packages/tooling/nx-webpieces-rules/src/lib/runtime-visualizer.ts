@@ -46,6 +46,7 @@ import type {
     RuntimeTrigger,
 } from './runtime-graph';
 import { dotValue, recordValue, assertValidDot } from './dot-syntax';
+import { CLIENT_DOT_PLACEHOLDER, readCompiledClient } from './graph-visualizer';
 import {
     LEVEL_COLORS,
     QUEUE_FILL,
@@ -544,11 +545,11 @@ export function generateRuntimeDot(
  * otherwise have, since rendering happens in the browser.
  */
 function generateRuntimeHtml(dot: string, title: string): string {
-    // The browser half lives in a plain .js asset (matching graph-visualizer.client.js) rather than
+    // The browser half lives in runtime-visualizer.client.ts (matching graph-visualizer.client.ts) rather than
     // in a template literal here: it renders with @viz-js/viz v3 AND redraws every queue node as a
     // true horizontal cylinder, which is more logic than belongs inline in a .ts string.
-    const clientJs = fs.readFileSync(path.join(__dirname, 'runtime-visualizer.client.js'), 'utf-8');
-    const script = clientJs.split('__DOT__').join(JSON.stringify(dot));
+    const script = readCompiledClient('runtime-visualizer.client.js')
+        .split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot));
     return `<!DOCTYPE html>
 <html>
 <head>

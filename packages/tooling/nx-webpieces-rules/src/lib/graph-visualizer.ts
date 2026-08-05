@@ -52,9 +52,45 @@ export class VisualizationPaths {
     }
 }
 
+/**
+ * The token the client scripts carry where the DOT belongs. It must appear EXACTLY ONCE in a compiled
+ * client — the inliner is a blind split/join, so a second occurrence (in a comment, say) would be
+ * replaced by the entire DOT too, bloating every generated page.
+ */
+export const CLIENT_DOT_PLACEHOLDER = '__' + 'DOT' + '__';
+
+/**
+ * Read a compiled browser client sitting beside this file.
+ *
+ * It is generated from the matching `.client.ts` by tsc, so it exists in `dist` and in the published
+ * tarball but NOT in a source checkout. The error says that outright rather than surfacing a bare
+ * ENOENT, because "the build has not run" and "the file is missing" look identical otherwise.
+ */
+// webpieces-disable no-function-outside-class -- module-level resolver for the default injected into GraphVisualizer/generateRuntimeHtml; making it a class would need a container in a module both of them load eagerly
+export function readCompiledClient(name: string): string {
+    const file = path.join(__dirname, name);
+    if (!fs.existsSync(file)) {
+        throw new Error(
+            `${name} not found beside ${__dirname}. It is COMPILED from ${name.replace(/\.js$/, '.ts')} `
+            + 'by tsc, so it only exists after a build — run the package build, or inject the text.');
+    }
+    return fs.readFileSync(file, 'utf-8');
+}
+
 export class GraphVisualizer {
     private readonly names = new GraphNames();
     private readonly responsibilities = new ResponsibilitiesRenderer();
+
+    /**
+     * How to obtain the browser client's text. Injected so HTML generation does not depend on BUILD
+     * ORDER: the default reads the compiled sibling, which exists in the tarball and in dist but NOT in
+     * a source checkout (the source there is .client.ts). A unit test running from source supplies the
+     * text itself rather than requiring the package to have been built first.
+     */
+    constructor(
+        private readonly clientJs: () => string =
+        (): string => readCompiledClient('graph-visualizer.client.js'),
+    ) {}
 
     /**
      * A project tagged `drawOnGraph:false` is hidden from the rendered graph —
@@ -513,15 +549,15 @@ export class GraphVisualizer {
     }
 
     /**
-     * The page script. The browser code lives in graph-visualizer.client.js (a
-     * plain .js asset, NOT a TS template literal) so its dim/highlight/lock
-     * functions can be ordinary browser functions — the TS lint rules that scan
-     * .ts template strings would otherwise forbid them, and browser JS cannot
-     * carry TS return annotations. We inline it and substitute the DOT.
+     * The page script. The browser code lives in graph-visualizer.client.ts — real, linted TypeScript
+     * that tsc compiles in place, so what this inlines is its COMPILED .js sitting beside this file.
+     *
+     * The substitution is a blind split/join, which is why the placeholder token must appear EXACTLY
+     * ONCE in the client (never in one of its comments): every literal occurrence would otherwise be
+     * replaced by the whole DOT.
      */
     private script(dot: string): string {
-        const clientJs = fs.readFileSync(path.join(__dirname, 'graph-visualizer.client.js'), 'utf-8');
-        return clientJs.split('__DOT__').join(JSON.stringify(dot));
+        return this.clientJs().split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot));
     }
 
     /**

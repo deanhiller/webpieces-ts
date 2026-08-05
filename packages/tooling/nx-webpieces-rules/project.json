@@ -12,7 +12,9 @@
         },
         "build": {
             "executor": "@nx/js:tsc",
-            "outputs": ["{options.outputPath}"],
+            "outputs": [
+                "{options.outputPath}"
+            ],
             "options": {
                 "outputPath": "dist/packages/tooling/nx-webpieces-rules",
                 "main": "packages/tooling/nx-webpieces-rules/src/index.ts",
@@ -32,11 +34,6 @@
                         "output": "src/executors"
                     },
                     {
-                        "input": "packages/tooling/nx-webpieces-rules/src/lib",
-                        "glob": "**/*.client.js",
-                        "output": "src/lib"
-                    },
-                    {
                         "input": "packages/tooling/nx-webpieces-rules/bin",
                         "glob": "**/*",
                         "output": "bin"
@@ -45,5 +42,9 @@
             }
         }
     },
-    "tags": ["type:tooling", "framework:node", "role:bundle"]
+    "tags": [
+        "type:tooling",
+        "framework:node",
+        "role:bundle"
+    ]
 }

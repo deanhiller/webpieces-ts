@@ -5,6 +5,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as ts from 'typescript';
 import type { EnhancedGraph } from '../graph-sorter';
 import { GraphVisualizer } from '../graph-visualizer';
 
@@ -14,7 +17,14 @@ const GRAPH: EnhancedGraph = {
     'http-client': { level: 2, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
 };
 
-const viz = new GraphVisualizer();
+// The browser client is COMPILED from graph-visualizer.client.ts, so it does not exist in a source
+// checkout — reading it here would make this spec depend on the package having been built first.
+// Transpiling the .ts is both build-order-independent AND closer to the truth: the assertions below
+// then run against the very source that ships, not against a stand-in.
+const CLIENT_TS = path.join(__dirname, '..', 'graph-visualizer.client.ts');
+const clientJs = (): string => ts.transpileModule(
+    fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const viz = new GraphVisualizer(clientJs);
 
 describe('generateDot', () => {
     it('colors each node by the first env in its set (fill) and shapes the border by role', () => {
@@ -193,8 +203,11 @@ describe('generateHTML', () => {
 
     it('wires up hover-highlight so connections bolden on box hover', () => {
         const html = viz.generateHTML(viz.generateDot(GRAPH));
-        // The post-render hook and its mouse handlers must be present.
-        expect(html).toContain('wireHoverHighlight');
+        // The post-render wiring and its mouse handlers must be present. The logic is a CLASS now
+        // (it was loose functions while the client was an unlinted .js asset), so this asserts the
+        // class and its entry point rather than the old free function.
+        expect(html).toContain('GraphHighlighter');
+        expect(html).toContain('wireHover');
         expect(html).toContain('mouseenter');
         expect(html).toContain('mouseleave');
         // The hover-highlight CSS classes the script toggles.

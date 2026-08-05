@@ -42,7 +42,7 @@ export const QUEUE_LABEL_PREFIX = ' |';
 
 /**
  * Marker class stamped on every queue node. Graphviz copies `class` straight into the rendered
- * `<g class="node wp_queue">`, which is how runtime-visualizer.client.js finds these nodes and
+ * `<g class="node wp_queue">`, which is how runtime-visualizer.client.ts finds these nodes and
  * redraws them as true horizontal cylinders in the browser.
  *
  * A CLASS rather than an id prefix, because queue-kind EXTERNAL systems are queues too and share the
@@ -82,7 +82,7 @@ class LegendSwatches {
     readonly service =
         '<svg width="46" height="26"><rect x="1" y="3" width="44" height="20" rx="7" fill="#E8F5E9" stroke="#333"/></svg>';
     /**
-     * A cylinder on its side — the SAME geometry runtime-visualizer.client.js draws on the real
+     * A cylinder on its side — the SAME geometry runtime-visualizer.client.ts draws on the real
      * node, so the legend cannot drift from the picture it explains.
      */
     readonly queue =
