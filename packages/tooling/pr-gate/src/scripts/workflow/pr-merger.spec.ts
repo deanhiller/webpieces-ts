@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MERGE_MODE_AUTO, MERGE_MODE_NONE } from '@webpieces/rules-config';
 import {
-    PrMerger, MergeOutcome, GhResult, PrMergeState,
+    PrMerger, MergeIntent, MergeOutcome, GhResult, PrMergeState,
     MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
     MERGE_RESULT_BEHIND_CLEAN, MERGE_RESULT_BEHIND_CONFLICTING, MERGE_RESULT_BEHIND_UNKNOWN, MERGE_RESULT_FAILED,
 } from './pr-merger';
@@ -65,12 +65,20 @@ const BEHIND_CONFLICTING = new PrMergeState('CONFLICTING', 'BEHIND', 'OPEN');
 // GitHub's ordinary reply in the seconds after a force-push — it computes mergeability asynchronously.
 const BEHIND_UNKNOWN = new PrMergeState('UNKNOWN', 'BEHIND', 'OPEN');
 
-const mergeState = (statuses: number[], autoAllowed: boolean, mode: string, state: PrMergeState): [MergeOutcome, string[][]] => {
+const mergeIntent = (statuses: number[], autoAllowed: boolean, intent: MergeIntent, state: PrMergeState): [MergeOutcome, string[][]] => {
     spyStdout();
     const merger = new FakePrMerger(statuses, autoAllowed, state);
-    const outcome = merger.merge('dean/feature', 'My PR title (#7)', '/tmp/body.md', mode);
+    const outcome = merger.merge('dean/feature', 'My PR title (#7)', '/tmp/body.md', intent);
     return [outcome, merger.calls];
 };
+
+// The POLICY-driven caller (wp-finish-upsert-pr): `mode` is the config value and nothing else.
+const mergeState = (statuses: number[], autoAllowed: boolean, mode: string, state: PrMergeState): [MergeOutcome, string[][]] =>
+    mergeIntent(statuses, autoAllowed, new MergeIntent(mode, false), state);
+
+// The COMMANDED caller (wp-land-pr): the merge happens whatever `mode` says.
+const land = (statuses: number[], autoAllowed: boolean, mode: string): [MergeOutcome, string[][]] =>
+    mergeIntent(statuses, autoAllowed, new MergeIntent(mode, true), CLEAN);
 
 const mergeIn = (statuses: number[], autoAllowed: boolean, mode: string): [MergeOutcome, string[][]] =>
     mergeState(statuses, autoAllowed, mode, CLEAN);
@@ -132,6 +140,39 @@ describe('direct merge fails and auto-merge is NOT allowed', () => {
         expect(outcome.message).toContain('allow_auto_merge');
         expect(calls).toHaveLength(1);
         expect(flat(calls).some((c: string): boolean => c.includes('--auto'))).toBe(false);
+    });
+
+    it('IS a config mismatch when the AUTO was read from config, and names both remedies', () => {
+        const [outcome] = merge([1], false);
+        expect(outcome.message).toContain('CONFIG MISMATCH');
+        expect(outcome.message).toContain('pr-gate.mergeMode is AUTO');
+    });
+
+    // The wp-land-pr bug: `AUTO` used to be passed as a VERB ("merge it"), and the message then asserted
+    // it as a config value — on a repo whose mergeMode is NONE, prescribing remedies already in place.
+    it('is NOT a config mismatch when wp-land-pr commanded the merge on a NONE repo', () => {
+        const [outcome, calls] = land([1], false, MERGE_MODE_NONE);
+        expect(outcome.result).toBe(MERGE_RESULT_FAILED);
+        expect(outcome.message).toContain('did NOT merge');
+        expect(outcome.message).toContain('allow_auto_merge');
+        // Nothing is misconfigured — so no mismatch claim, and no assertion about mergeMode's value.
+        expect(outcome.message).not.toContain('CONFIG MISMATCH');
+        expect(outcome.message).not.toContain('mergeMode');
+        expect(outcome.message).toContain('wp-land-pr');
+        expect(flat(calls).some((c: string): boolean => c.includes('--auto'))).toBe(false);
+    });
+});
+
+describe('a COMMANDED merge — `wp-land-pr` means "merge it", not "config says AUTO"', () => {
+    it('merges on a NONE repo, which is the whole point of the command', () => {
+        const [outcome, calls] = land([0], false, MERGE_MODE_NONE);
+        expect(outcome.merged).toBe(true);
+        expect(outcome.result).toBe(MERGE_RESULT_MERGED);
+        expect(flat(calls)).toEqual(['pr merge dean/feature --squash --subject My PR title (#7) --body-file /tmp/body.md']);
+    });
+
+    it('merges even when the config value is missing entirely', () => {
+        expect(land([0], false, '')[0].merged).toBe(true);
     });
 });
 

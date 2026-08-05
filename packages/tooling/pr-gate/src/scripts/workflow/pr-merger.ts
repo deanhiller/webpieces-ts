@@ -123,6 +123,38 @@ export class PrMergeState {
 }
 
 /**
+ * WHY this run is allowed to merge — the config value, kept separate from the caller's intent.
+ *
+ * Those two used to be one `mergeMode: string` parameter, and `wp-land-pr` passed a literal
+ * `MERGE_MODE_AUTO` through it to mean "merge it" rather than "config says AUTO". PrMerger could not
+ * tell the two apart, so on a `mergeMode: "NONE"` repo it reported a CONFIG MISMATCH naming a value
+ * nobody had set, and prescribed remedies that were already in place. Keeping the real `mergeMode`
+ * alongside a `commanded` flag means no message ever has to assert a config value the code did not read.
+ */
+export class MergeIntent {
+    /** pr-gate.mergeMode EXACTLY as read from webpieces.config.json — '' when it could not be read. */
+    mergeMode: string;
+    /**
+     * TRUE when running the command IS the intent to merge (`wp-land-pr`), so the merge happens whatever
+     * the config says. FALSE for the policy-driven caller (`wp-finish-upsert-pr`), where only an
+     * explicit AUTO merges.
+     */
+    commanded: boolean;
+
+    constructor(mergeMode: string, commanded: boolean) {
+        this.mergeMode = mergeMode;
+        this.commanded = commanded;
+    }
+
+    // The gate: a commanded run always proceeds; otherwise only an explicit AUTO does. Anything else
+    // (including a repo on a published rules-config that predates the field) is treated as NONE —
+    // when the policy is unreadable, do NOT touch main.
+    shouldMerge(): boolean {
+        return this.commanded || this.mergeMode === MERGE_MODE_AUTO;
+    }
+}
+
+/**
  * Lands — or queues — the squash merge with an EXPLICIT subject/body, on BOTH kinds of repo:
  *
  * - auto-merge ALLOWED (`allow_auto_merge: true`): a PR whose checks are still running falls back to
@@ -135,7 +167,8 @@ export class PrMergeState {
  * WHICH of those a repo gets is not guessed — `pr-gate.mergeMode` is REQUIRED config. AUTO means the
  * tooling lands PRs; NONE means it only posts them and a person merges. No mode can force a queue the
  * repo has turned off, so AUTO on a repo with allow_auto_merge=false is a CONFIG error, reported as
- * one rather than papered over.
+ * one rather than papered over — but ONLY when the AUTO was read from config. A commanded merge
+ * (`wp-land-pr`) on a NONE repo is not a mismatch at all; see MergeIntent.
  *
  * Every `gh` status is checked. Nothing here is allowed to fail silently.
  */
@@ -144,14 +177,14 @@ export class PrMerger {
     /**
      * @param subject       the squash-commit subject, normally `<PR title> (#N)`
      * @param mergeBodyFile file holding the squash-commit body (risk/flags/PR link)
-     * @param mergeMode     pr-gate.mergeMode from webpieces.config.json — AUTO or NONE. Anything else
-     *                      (including a repo still on a published rules-config that predates the field)
-     *                      is treated as NONE: when the policy is unreadable, do NOT touch main.
+     * @param intent        the real pr-gate.mergeMode PLUS whether this caller commands the merge
+     *                      regardless of it (see MergeIntent).
      */
-    merge(baseBranch: string, subject: string, mergeBodyFile: string, mergeMode: string): MergeOutcome {
+    merge(baseBranch: string, subject: string, mergeBodyFile: string, intent: MergeIntent): MergeOutcome {
         // Anything that is not an explicit AUTO leaves the PR alone. The PR itself is already
         // posted/updated by this point, which is the whole job in this mode.
-        if (mergeMode !== MERGE_MODE_AUTO) {
+        if (!intent.shouldMerge()) {
+            const mergeMode = intent.mergeMode;
             return new MergeOutcome(false, false,
                 `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so the PR is left for a human to merge.\n` +
                 `      Subject GitHub will use is its own (squash_merge_commit_title), NOT: "${subject}"`,
@@ -178,7 +211,7 @@ export class PrMerger {
         // only on the failure path, so a run whose direct merge succeeded costs no extra API call.
         const state = this.prMergeState(baseBranch);
         this.announceDirectFailure(direct.output, state);
-        return this.fallBackToAutoMerge(baseBranch, subject, mergeBodyFile, state);
+        return this.fallBackToAutoMerge(baseBranch, subject, mergeBodyFile, state, intent);
     }
 
     /**
@@ -188,17 +221,10 @@ export class PrMerger {
      * is NOT success either, and reporting it as such is precisely the bug this whole file guards.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private fallBackToAutoMerge(baseBranch: string, subject: string, mergeBodyFile: string, state: PrMergeState): MergeOutcome {
+    private fallBackToAutoMerge(baseBranch: string, subject: string, mergeBodyFile: string, state: PrMergeState, intent: MergeIntent): MergeOutcome {
         if (!this.autoMergeAllowed()) {
             if (state.isBehind()) return this.behindOutcome(state, false);
-            return new MergeOutcome(false, false,
-                '⚠️  did NOT merge, and queued NOTHING — CONFIG MISMATCH: pr-gate.mergeMode is AUTO, but\n' +
-                '      this repo has allow_auto_merge=false, so there is no queue to fall back to and the\n' +
-                '      PR is not mergeable yet. `gh pr merge --auto` cannot override a repo that says no.\n' +
-                '      Fix it at ONE of the two ends: turn on "Allow auto-merge" in the repo settings, or\n' +
-                '      set commands.pr-gate.mergeMode to "NONE" (and set that repo\'s\n' +
-                '      squash_merge_commit_title to PR_TITLE so a human merge still gets a real subject).',
-                MERGE_RESULT_FAILED);
+            return new MergeOutcome(false, false, this.noQueueMessage(intent), MERGE_RESULT_FAILED);
         }
 
         process.stdout.write('   … retrying with --auto (the auto-merge queue)\n');
@@ -218,6 +244,33 @@ export class PrMerger {
         return new MergeOutcome(false, true,
             `enabled auto-merge — it will squash-merge as "${subject}" when the checks pass`,
             MERGE_RESULT_AUTO_QUEUED);
+    }
+
+    /**
+     * "Not mergeable yet, and this repo has no queue to park it in" — in the words that are TRUE for the
+     * caller we actually have.
+     *
+     * A COMMANDED run (`wp-land-pr`) is not a misconfiguration at all: nobody set mergeMode to AUTO, the
+     * user asked for a merge by hand, and the checks simply are not green yet. Telling that reader to
+     * "set mergeMode to NONE" named a value they had already set and sent them investigating a mismatch
+     * that did not exist. Nothing is owed here but a re-run.
+     *
+     * A POLICY-driven run (`wp-finish-upsert-pr`) only reaches here with a config that really does say
+     * AUTO on a repo that forbids the queue — the genuine mismatch, where both remedies are real.
+     */
+    private noQueueMessage(intent: MergeIntent): string {
+        if (intent.commanded) {
+            return '⚠️  did NOT merge, and queued NOTHING — the PR is not mergeable yet (checks still\n' +
+                '      running, or a required review outstanding), and this repo has allow_auto_merge=false,\n' +
+                '      so there was no queue to fall back to. NOTHING is misconfigured and nothing needs\n' +
+                '      changing — re-run `pnpm wp-land-pr` once the PR is green and it will land.';
+        }
+        return '⚠️  did NOT merge, and queued NOTHING — CONFIG MISMATCH: pr-gate.mergeMode is AUTO, but\n' +
+            '      this repo has allow_auto_merge=false, so there is no queue to fall back to and the\n' +
+            '      PR is not mergeable yet. `gh pr merge --auto` cannot override a repo that says no.\n' +
+            '      Fix it at ONE of the two ends: turn on "Allow auto-merge" in the repo settings, or\n' +
+            '      set commands.pr-gate.mergeMode to "NONE" (and set that repo\'s\n' +
+            '      squash_merge_commit_title to PR_TITLE so a human merge still gets a real subject).';
     }
 
     /**

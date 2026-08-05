@@ -10,7 +10,7 @@ import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { LandedWorktreeReaper, WorktreeReapHandoff } from '../workflow/landed-worktree-reaper';
 import { ArchiveRecord, MergeInfoIndex } from '../workflow/merge-info-index';
-import { PrMerger } from '../workflow/pr-merger';
+import { MergeIntent, PrMerger } from '../workflow/pr-merger';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -72,14 +72,20 @@ export class LandPrCommand {
         }
 
         process.stdout.write('\n' + SEP + `🚀 Landing PR #${ref.number}\n` + SEP + '\n');
-        // Reuse the SAME merge logic wp-finish-upsert-pr uses, so a PR lands identically whichever
-        // command lands it — including the auto-merge fallback when the checks are still running.
-        // MERGE_MODE_AUTO is passed explicitly: running this command IS the intent to merge, so it is
-        // not gated on pr-gate.mergeMode (a NONE repo runs this precisely to land one PR by hand).
-        const outcome = this.prMerger.merge(base, `${ref.title} (#${ref.number})`, mergeBodyFile, MERGE_MODE_AUTO);
-
         const config = loadAndValidate(repoRoot).prGate;
         const policy = config.mergeMode;
+        // Reuse the SAME merge logic wp-finish-upsert-pr uses, so a PR lands identically whichever
+        // command lands it — including the auto-merge fallback when the checks are still running.
+        //
+        // `commanded: true` — running THIS command IS the intent to merge, so it is not gated on
+        // pr-gate.mergeMode (a NONE repo runs this precisely to land one PR by hand). The real `policy`
+        // travels alongside it rather than being replaced by a literal AUTO, so PrMerger's diagnostics
+        // never assert a config value nobody set — that is exactly what used to print a CONFIG MISMATCH
+        // about `mergeMode: AUTO` two lines above this command printing `mergeMode is NONE`.
+        const outcome = this.prMerger.merge(
+            base, `${ref.title} (#${ref.number})`, mergeBodyFile, new MergeIntent(policy ?? '', true),
+        );
+
         const archived = outcome.merged
             ? this.archiveAndPromote(repoRoot, base, ref, config.landPr.branchRetention)
             : '';
