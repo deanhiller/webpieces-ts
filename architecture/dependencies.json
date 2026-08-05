@@ -387,8 +387,10 @@
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "dependsOn": [
+                "ai-hook-rules",
                 "code-rules",
-                "eslint-rules"
+                "eslint-rules",
+                "pr-gate"
             ]
         },
         "pr-gate": {

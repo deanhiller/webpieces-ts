@@ -61,7 +61,7 @@ export const SHIM_LOG_VERDICTS = [
  * the shim cannot classify S / C / Y, which the BINARY detects (and logs through its own streams), so
  * a `-` here is a statement about this layer only, not a claim that nothing was wrong.
  */
-export const SHIM_LOG_FAULTS = ['D', 'X', 'K', '-'] as const;
+export const SHIM_LOG_FAULTS = ['D', 'X', 'U', 'K', '-'] as const;
 
 /**
  * Shell fragment: derive WHERE this call's log belongs — the sh TWIN of `DotWebpieces.local()` +

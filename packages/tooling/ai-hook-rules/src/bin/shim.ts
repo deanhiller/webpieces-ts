@@ -7,6 +7,7 @@ import { toError } from '../core/to-error';
 import {
     L0_ALLOW_ERE_SH, RECOVERY_CMD, INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD,
     INSTALL_HOOKS_ALLOW_JS, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_JS,
+    ADD_HOOK_PKG_CMD, HOOK_PKG,
 } from './l0-allowlist';
 import { WP_LOG_SH } from './shim-audit-log';
 
@@ -97,9 +98,18 @@ const VERSION_DRIFT_GUARD_SH = `# --- webpieces version-drift guard (pure sh —
 # so the old scraper matched nothing and the guard was BLIND to it — DRIFT_PKG stayed empty and the
 # stale bin ran (the 2026-07 "0.3.369 vs 0.4.405" incident). Resolve those specs through the top-level
 # \`catalogs:\` block of pnpm-lock.yaml (catalog -> pkg -> resolved version) before comparing.
+#
+# THE SAME PASS ANSWERS FAULT U (2026-08-05). Scraping root package.json is also the only way to learn
+# whether @webpieces/ai-hook-rules is DECLARED at all, and that is the difference between "not installed
+# yet" (X, cured by pnpm install) and "nothing asks for it" (U, where pnpm install is a guaranteed
+# no-op). WP_PIN carries the first EXACT @webpieces pin found, so U's deny can prescribe the version the
+# rest of the repo is already on rather than an unpinned add. Both are set BEFORE the range/catalog
+# \`continue\`s, so a repo pinning the package by range still counts as having declared it.
 DRIFT_PKG=""
 DRIFT_DECLARED=""
 DRIFT_INSTALLED=""
+WP_HOOK_PKG_DECLARED=""
+WP_PIN=""
 if [ -f "$ROOT/package.json" ]; then
   # Only when a @webpieces dep actually uses a "catalog:" spec do we scan the (possibly huge) lockfile —
   # a cheap grep keeps the common, catalog-free repo from paying that cost on every tool call. One awk
@@ -122,6 +132,9 @@ if [ -f "$ROOT/package.json" ]; then
   fi
   while IFS=' ' read -r WP_NAME WP_DECL; do
     [ -n "$WP_NAME" ] || continue
+    # Fault U's input: the package is DECLARED (in any spec shape, in any dependency block of the root
+    # manifest). Recorded before every \`continue\` below, so a range or catalog spec still counts.
+    [ "$WP_NAME" = "ai-hook-rules" ] && WP_HOOK_PKG_DECLARED=1
     # Resolve the declared spec to an EXACT version, or skip it: ranges (^ ~ workspace:*) never drift,
     # and a catalog spec we cannot resolve is best-effort skipped rather than guessed.
     case "$WP_DECL" in
@@ -132,6 +145,8 @@ if [ -f "$ROOT/package.json" ]; then
       [0-9]*) : ;;
       *) continue ;;
     esac
+    # The release the rest of this repo is on — what fault U's cure should pin to.
+    [ -n "$WP_PIN" ] || WP_PIN="$WP_DECL"
     WP_MANIFEST="$ROOT/node_modules/@webpieces/$WP_NAME/package.json"
     [ -f "$WP_MANIFEST" ] || continue
     WP_INST="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$WP_MANIFEST" | head -n1)"
@@ -219,12 +234,14 @@ WP_CWD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"
 //
 // NOTE the documented asymmetry: here the bin is never executed, so an allowed Read is TERMINAL and
 // read-stale-guard does not run. In JS the same entry falls through and it does. See isAllowed().
-const TRIAGE_SH = `# WHICH of the six guards/L0-tooling.md faults fired, in the doc's own letters. Only the three sh-side
+const TRIAGE_SH = `# WHICH of the guards/L0-tooling.md faults fired, in the doc's own letters. Only the four sh-side
 # codes can be decided here; S/C/Y live in the binary, which never got to run on this path.
 WP_FAULT=X                                            # X — bin missing (fresh clone, new worktree)
+[ -z "\$WP_HOOK_PKG_DECLARED" ] && WP_FAULT=U          # U — X, but nothing declares the package: install is a no-op
 [ -n "\$DRIFT_PKG" ] && WP_FAULT=D                     # D — version drift; D and K are mutually exclusive
 [ -n "\$BROKEN_BIN" ] && WP_FAULT=K                    # K — bin present but CRASHED (corrupt node_modules)
 DENY_LABEL="DENY"
+[ -z "\$WP_HOOK_PKG_DECLARED" ] && DENY_LABEL="DENY-UNDECLARED"  # nothing in package.json asks for the package
 [ -n "\$DRIFT_PKG" ] && DENY_LABEL="DENY-STALE"        # version drift, not a missing bin
 [ -n "\$BROKEN_BIN" ] && DENY_LABEL="DENY-BROKEN"      # bin present but CRASHED (corrupt node_modules)
 # THE L0 ALLOWLIST, entry order identical to isAllowed(). No fault is consulted: a cure that cannot
@@ -332,7 +349,19 @@ else
   if [ -f "\$ROOT/.git" ]; then
     WORKTREE_NOTE=" NOTE: \$ROOT is a LINKED WORKTREE - git does not copy node_modules into a new worktree, so this is expected on a fresh one. Run it HERE, in this worktree, not in the primary clone."
   fi
-  REASON="❌ @webpieces/ai-hook-rules is declared in package.json but is not installed (\${BIN_NAME} not found). Run EXACTLY: 'pnpm install'.\${WORKTREE_NOTE} ${NO_CHAINING_RULE} (If you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json.)"
+  if [ -z "\$WP_HOOK_PKG_DECLARED" ]; then
+    # FAULT U — the one shape where the X message is not merely unhelpful but actively WRONG. It asserted
+    # "declared in package.json" without ever checking, and prescribed the one command that provably
+    # cannot help: with nothing asking for the package, \`pnpm install\` reports "Lockfile is up to date"
+    # and converges to the identical broken tree, forever. So say what is actually true, say out loud
+    # that the install is a no-op (an agent that has already run it needs to be told to STOP), and
+    # prescribe the add — which is allowlist entry ADD_HOOK_PKG, so it is reachable while this block is up.
+    WP_ADD_CMD="${ADD_HOOK_PKG_CMD}"
+    [ -n "\$WP_PIN" ] && WP_ADD_CMD="\${WP_ADD_CMD}@\$WP_PIN"
+    REASON="❌ ${HOOK_PKG} is NOT declared in package.json anywhere, and is not installed (\${BIN_NAME} not found) - yet .claude/settings.json still runs its hooks, so every tool call is blocked. Do NOT run 'pnpm install': nothing asks for this package, so it is a NO-OP and repeating it converges to this same state. It normally arrives with @webpieces/nx-webpieces-rules, the umbrella that bundles the whole toolchain - so the durable fix is to upgrade that. To unblock yourself right now, declare it directly. Run EXACTLY: '\$WP_ADD_CMD'. ${NO_CHAINING_RULE} (If you removed ${HOOK_PKG} on purpose, delete its hooks from .claude/settings.json instead.)"
+  else
+    REASON="❌ ${HOOK_PKG} is declared in package.json but is not installed (\${BIN_NAME} not found). Run EXACTLY: 'pnpm install'.\${WORKTREE_NOTE} ${NO_CHAINING_RULE} (If you removed ${HOOK_PKG} on purpose, delete its hooks from .claude/settings.json.)"
+  fi
 fi`;
 
 export function renderShim(): string {

@@ -5,9 +5,6 @@
     "type": "commonjs",
     "main": "./src/index.js",
     "executors": "./executors.json",
-    "bin": {
-        "wp-design-visualize": "./src/scripts/wp-design-visualize.js"
-    },
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
@@ -21,8 +18,10 @@
         "README.md"
     ],
     "dependencies": {
+        "@webpieces/ai-hook-rules": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
+        "@webpieces/pr-gate": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
         "madge": "8.0.0"
     },
@@ -37,6 +36,9 @@
         "directory": "packages/tooling/nx-webpieces-rules"
     },
     "publishConfig": {
+        "bin": {
+            "wp-design-visualize": "./src/scripts/wp-design-visualize.js"
+        },
         "access": "public"
     }
 }

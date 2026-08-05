@@ -4,12 +4,6 @@
     "description": "Pluggable write-time validation framework for AI coding agents (@webpieces/ai-hook-rules). Claude Code PreToolUse + openclaw before_tool_call adapters share one rule engine.",
     "type": "commonjs",
     "main": "./src/index.js",
-    "bin": {
-        "wp-ai-rules-hook": "./src/adapters/rules-hook.js",
-        "wp-ai-guards-hook": "./src/adapters/guards-hook.js",
-        "wp-install-ai-hooks": "./src/bin/install-entry.js",
-        "wp-upgrade-shim": "./src/bin/upgrade-shim.js"
-    },
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
@@ -34,6 +28,12 @@
         "@webpieces/rules-config": "workspace:*"
     },
     "publishConfig": {
-        "access": "public"
+        "access": "public",
+        "bin": {
+            "wp-ai-rules-hook": "./src/adapters/rules-hook.js",
+            "wp-ai-guards-hook": "./src/adapters/guards-hook.js",
+            "wp-install-ai-hooks": "./src/bin/install-entry.js",
+            "wp-upgrade-shim": "./src/bin/upgrade-shim.js"
+        }
     }
 }

@@ -7,3 +7,24 @@ packages:
   - 'packages/tooling/*'
   - 'libraries/apis/*'
   - 'apps/app-example/*'
+
+# THE PREVIOUS @webpieces RELEASE THIS REPO IS BUILT WITH.
+#
+# Two different things are called "@webpieces" here and they must not be confused:
+#
+#   BUILDING the tooling  — packages/tooling/* depend on each OTHER with `workspace:*`, i.e. the LOCAL
+#                           source in this checkout. That is the build graph, and it is why
+#                           nx-webpieces-rules is drawn above its five children in architecture/.
+#
+#   RUNNING the tooling   — this repo is validated BY the tooling, and it uses the PREVIOUS published
+#                           release for that (nx executors, the wp-* bins, the hooks, the eslint
+#                           plugin). See CLAUDE.md, "Published vs local source".
+#
+# Only the second one belongs in a catalog, and only ONE entry is needed: nx-webpieces-rules is the
+# umbrella, so installing it brings ai-hook-rules, code-rules, eslint-rules, pr-gate and rules-config
+# with it. Listing those five here as well would be five more versions to keep in step for no gain —
+# the umbrella already pins them, in lockstep, by construction.
+#
+# Bumping the release the repo is built with is therefore a ONE-LINE edit, right here.
+catalog:
+  '@webpieces/nx-webpieces-rules': 0.4.562

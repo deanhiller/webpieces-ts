@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, NO_CHAINING_RULE, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
+import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, NO_CHAINING_RULE, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
 const kit = new ShimTestkit();
@@ -525,6 +525,7 @@ describe('output-capture tail on every fail-closed escape hatch (ERE ↔ JS twin
         ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
         ['install-hooks', INSTALL_HOOKS_CMD, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_ALLOW_ERE],
         ['orientation', 'pwd', ORIENT_ALLOW_JS, ORIENT_ALLOW_ERE],
+        ['add-hook-pkg', ADD_HOOK_PKG_CMD, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE],
     ];
 
     for (const [name, base, js, ere] of hatches) {
@@ -554,6 +555,7 @@ describe('leading `cd <path> &&` on every fail-closed escape hatch (ERE ↔ JS t
         ['restore-shim', RESTORE_SHIM_CMD, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE],
         ['install-hooks', INSTALL_HOOKS_CMD, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_ALLOW_ERE],
         ['orientation', 'pwd', ORIENT_ALLOW_JS, ORIENT_ALLOW_ERE],
+        ['add-hook-pkg', ADD_HOOK_PKG_CMD, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE],
     ];
 
     for (const [name, base, js, ere] of hatches) {

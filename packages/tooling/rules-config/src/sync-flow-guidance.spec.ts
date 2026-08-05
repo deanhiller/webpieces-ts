@@ -63,14 +63,25 @@ function stripDocLinks(line: string): string {
 
 // The bins are the source of truth — read them out of pr-gate's package.json, then scan every tracked
 // .ts/.md for `wp-`-prefixed commands that are not among them.
+//
+// READ BOTH FIELDS. Every tooling package now declares its executables in `publishConfig.bin` (pnpm
+// hoists that into `bin` when it packs) so that no `bin` target exists during install and pnpm has
+// nothing to chmod — see CLAUDE.md, "No bin shims". A reader that looked only at `bin` would silently
+// see ZERO bins and pass every scan below while protecting nothing.
+// webpieces-disable no-any-unknown -- package.json shape is narrowed by the reads below
+type BinManifest = { bin?: Record<string, string>; publishConfig?: { bin?: Record<string, string> } };
+
+// webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
+function declaredBins(manifestPath: string): string[] {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as BinManifest;
+    return [...Object.keys(parsed.bin ?? {}), ...Object.keys(parsed.publishConfig?.bin ?? {})];
+}
 describe('no doc or message names a wp-* command that does not exist', () => {
     const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 
     function knownStartFinishBins(): Set<string> {
         const pkg = path.join(repoRoot, 'packages/tooling/pr-gate/package.json');
-        // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
-        const parsed = JSON.parse(fs.readFileSync(pkg, 'utf8')) as { bin?: Record<string, string> };
-        const bins = Object.keys(parsed.bin ?? {})
+        const bins = declaredBins(pkg)
             .filter((b: string): boolean => b.startsWith('wp-start-') || b.startsWith('wp-finish-'));
         // If this ever drops below the flow bins, the scan below has stopped protecting anything.
         // `wp-finish-push-dev` is the dev-deploy flow's stage ② — the third flow's finish half. (Its
@@ -158,9 +169,7 @@ function allWpBins(repoRoot: string): Set<string> {
     ];
     const bins = new Set<string>();
     for (const rel of pkgs) {
-        // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
-        const parsed = JSON.parse(fs.readFileSync(path.join(repoRoot, rel), 'utf8')) as { bin?: Record<string, string> };
-        for (const name of Object.keys(parsed.bin ?? {})) bins.add(name);
+        for (const name of declaredBins(path.join(repoRoot, rel))) bins.add(name);
     }
     return bins;
 }
@@ -186,10 +195,7 @@ function bareRunInstructions(repoRoot: string, bins: Set<string>): string[] {
 
 // webpieces-disable no-function-outside-class -- test helper, beside the specs that use it
 function prGateBins(repoRoot: string): string[] {
-    const pkg = path.join(repoRoot, 'packages/tooling/pr-gate/package.json');
-    // webpieces-disable no-any-unknown -- package.json shape is narrowed on the next line
-    const parsed = JSON.parse(fs.readFileSync(pkg, 'utf8')) as { bin?: Record<string, string> };
-    return Object.keys(parsed.bin ?? {});
+    return declaredBins(path.join(repoRoot, 'packages/tooling/pr-gate/package.json'));
 }
 
 /**

@@ -53,7 +53,7 @@
         "@types/node": "24.9.2",
         "@typescript-eslint/eslint-plugin": "8.48.0",
         "@typescript-eslint/parser": "8.48.0",
-        "@webpieces/nx-webpieces-rules": "0.4.562",
+        "@webpieces/nx-webpieces-rules": "catalog:",
         "@webpieces/pr-gate": "0.4.562",
         "eslint": "9.39.1",
         "madge": "8.0.0",

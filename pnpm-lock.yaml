@@ -4,6 +4,12 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@webpieces/nx-webpieces-rules':
+      specifier: 0.4.562
+      version: 0.4.562
+
 importers:
 
   .:
@@ -118,7 +124,7 @@ importers:
         specifier: 8.48.0
         version: 8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@webpieces/nx-webpieces-rules':
-        specifier: 0.4.562
+        specifier: 'catalog:'
         version: 0.4.562(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@webpieces/pr-gate':
         specifier: 0.4.562
@@ -422,12 +428,18 @@ importers:
       '@nx/devkit':
         specifier: '>=18.0.0'
         version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17)))
+      '@webpieces/ai-hook-rules':
+        specifier: workspace:*
+        version: link:../ai-hook-rules
       '@webpieces/code-rules':
         specifier: workspace:*
         version: link:../code-rules
       '@webpieces/eslint-rules':
         specifier: workspace:*
         version: link:../eslint-rules
+      '@webpieces/pr-gate':
+        specifier: workspace:*
+        version: link:../pr-gate
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config

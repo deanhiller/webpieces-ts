@@ -4,10 +4,6 @@
     "description": "Standalone code validation rules extracted from architecture-validators, no Nx dependency required",
     "type": "commonjs",
     "main": "./src/index.js",
-    "bin": {
-        "wp-validate-code": "./bin/wp-validate-code.js",
-        "wp-ci": "./bin/wp-ci.js"
-    },
     "files": [
         "src/**/*",
         "bin/**/*"
@@ -26,6 +22,10 @@
         "reflect-metadata": "0.2.2"
     },
     "publishConfig": {
+        "bin": {
+            "wp-validate-code": "./src/cli.js",
+            "wp-ci": "./src/wp-ci.js"
+        },
         "access": "public"
     }
 }
