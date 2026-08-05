@@ -140,9 +140,7 @@
         },
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
-            "allowedPaths": [
-                "packages/tooling/nx-webpieces-rules/src/lib/*.client.js"
-            ],
+            "allowedPaths": [],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
