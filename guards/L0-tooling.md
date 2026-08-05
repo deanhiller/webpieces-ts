@@ -14,12 +14,13 @@ with a config file the validator could not check.
 L0 blocks work while `node_modules`, the committed shim, or `webpieces.config.json` are in a state
 that makes every other guard untrustworthy.
 
-## The six faults
+## The faults
 
 | code | fault | detected + enforced in |
 |---|---|---|
 | `D` | version drift — root package.json pin != installed version | POSIX `sh`, before the bin runs |
 | `X` | guard bin missing (fresh clone, new worktree, package removed) | POSIX `sh`, before the bin runs |
+| `U` | guard bin missing AND `@webpieces/ai-hook-rules` is not declared in `package.json` | POSIX `sh`, before the bin runs |
 | `K` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | POSIX `sh`, before the bin runs |
 | `S` | committed `.claude/webpieces/ai-hook.sh` != `renderShim()` | the guard bin, in JS |
 | `C` | `webpieces.config.json` missing | the guard bin, in JS |
@@ -52,7 +53,7 @@ The tool is not a dimension either: "any Read" is an allowlist ENTRY, not a tool
 
 ## The allowlist
 
-ONE list, consulted identically by all six faults. A cure that cannot help a given fault also cannot
+ONE list, consulted identically by every fault. A cure that cannot help a given fault also cannot
 hurt it, and gating each entry on a fault is what produced four real defects.
 
 | # | allowed | outcome |
@@ -169,12 +170,13 @@ this table adds the symptom and the incident, not a second set of commands.
 | 2 | same message, but **X < Y** — the *pin* is the stale side (your checkout is behind origin) | `D`; on **main** | BLOCK | Option 1 (preferred): `git pull origin main`, then `pnpm install`<br>Option 2: check out the commit you want, branch from it, then `pnpm install` ← pick this when you deliberately want to stay on the OLD code; the downgrade is the point<br>Do NOT: a *bare* `pnpm install` on main — it clears the block but downgrades you |
 | 3 | same message, **X < Y**, on a **feature branch** | `D`; your branch pins its own version | BLOCK | Option 1 (preferred): `pnpm install` ← aligns node_modules to YOUR branch's pin, which is usually what you want<br>Option 2: `pnpm install` FIRST (that re-arms the guards), THEN `pnpm wp-start-update` ← pick this when you actually want main's newer @webpieces<br>Do NOT: run `pnpm wp-start-update` while the block is up — it is not on the allowlist and does not need to be |
 | 4 | `…-hook not found` / `is declared in package.json but is not installed` | `X`; fresh clone before install, **or a new `git worktree`** — git copies no `node_modules`, so this is the common way to land here with a perfectly healthy repo | BLOCK | Option 1 (preferred): `pnpm install` ← run it **HERE**, in this worktree; installing in the primary clone does nothing for this tree |
+| 4b | `…-hook not found` / `is NOT declared in package.json anywhere`, and `pnpm install` reports **"Lockfile is up to date"** and changes nothing | `U`; the package used to arrive as a TRANSITIVE dependency of another `@webpieces` package (and a hoisting node-linker put its bins in the root `.bin`). That edge was pruned as unused, so the package left the tree entirely | BLOCK | Option 1 (preferred): `pnpm add -D @webpieces/ai-hook-rules@<the version your other @webpieces deps are pinned to>` ← the deny infers that pin for you and prints the exact line<br>Do NOT: run `pnpm install` again — with nothing asking for the package it is a **no-op**, and repeating it converges to the same broken tree (2026-08-05: four identical installs, then the block was handed back to the human) |
 | 5 | `installed but CRASHED (Cannot find module …)`, often with a count of orphaned pnpm staging dirs | `K`; corrupt / partially-written `node_modules` (an install that was killed) | BLOCK | Option 1 (preferred): `rm -rf node_modules && pnpm install` ← a *bare* install SKIPS the corrupt package: pnpm sees the right version on disk and considers it installed<br>Do NOT: `pnpm install` on its own |
 | 6 | `.claude/webpieces/ai-hook.sh no longer matches the ai-hook.sh rendered by the INSTALLED @webpieces` | `S`; **normal:** an upgrade brought new shim logic. **abnormal:** reverted / hand-edited / tampered | BLOCK | Option 1 (preferred): `pnpm exec wp-upgrade-shim` ← the SURGICAL tool: it regenerates the shim and touches nothing else — no config, no settings.json — and imports only fs/path, so it runs on a broken tree (needs 0.4.408+)<br>Option 2: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` ← pick this when the installed release is older than 0.4.408, where `wp-upgrade-shim` does not exist yet (that gap caused a real "command not found" deadlock, 2026-07-21); Claude Code's own permission prompt may ask you to confirm the overwrite, and that prompt is NOT this guard<br>Do NOT: `pnpm exec wp-install-ai-hooks` — this fault is shim-only, and the installer also migrates your config and wires both hooks, prompting twice, which hangs a non-interactive agent |
 | 7 | **any** complaint about `webpieces.config.json`: `not found` (`C`), `is out of sync` (`Y`), an N-error validation banner, or a parse error | `C`/`Y`/validation/syntax — one class, not four | BLOCK | Option 1 (preferred): edit `webpieces.config.json` so the reported errors go away — see "The config-validation invariant" above; that section is the authority and this row does not re-derive it<br>Do NOT: `pnpm install` (cannot help), and do NOT delete an unknown key on sight |
 | 8 | nothing — no fault | — | → L1 | — |
 | 9 | your cure is allowed through while everything else is denied | any fault, call on the allowlist | PASS or ALLOW | this is row 2 of the matrix, and it is what keeps recovery reachable — run the cure yourself |
-| 10 | Reads succeed while `D`/`X`/`K` blocks Bash | the bin never ran, so PASS degenerates to a **terminal allow** | ALLOW_FAIL_OPEN | nothing to do — but note reads are UNGUARDED during those three (see "Two known gaps") |
+| 10 | Reads succeed while `D`/`X`/`U`/`K` blocks Bash | the bin never ran, so PASS degenerates to a **terminal allow** | ALLOW_FAIL_OPEN | nothing to do — but note reads are UNGUARDED during those four (see "Two known gaps") |
 | 11 | you are blocked in a **linked worktree** and `pnpm install` keeps succeeding without clearing it | any fault, measured against `$CLAUDE_PROJECT_DIR` (the **primary clone**) while you stand somewhere else | BLOCK, then ALLOW once you look | Option 1 (preferred): `pwd` ← allowlist entry 9; then compare it with the path the deny names. Fix the tree you are actually IN with `cd <that path> && pnpm install`.<br>Also allowed: `git worktree list`, `git rev-parse --show-toplevel`<br>Do NOT: re-run the same bare `pnpm install` a second time — it already succeeded, in the wrong tree (2026-08-03: five identical installs, then the block was handed back to the human) |
 
 Row 7 is the collapse: `C`, `Y`, a validation banner and a syntax error look like four problems and
@@ -243,7 +245,7 @@ call** — every call, not only the broken ones — so what it actually did can 
 tables instead of inferred:
 
 ```
-<iso-ts>  <bin-name>  <tool>  tree=<name|primary>  fault=<D|X|K|->  <VERDICT>  <command>
+<iso-ts>  <bin-name>  <tool>  tree=<name|primary>  fault=<D|X|U|K|->  <VERDICT>  <command>
 ```
 
 | verdict | means | maps to |
@@ -254,10 +256,11 @@ tables instead of inferred:
 | `ALLOW-CONFIG` | allowlist entry 2 | PASS — terminal here |
 | `ALLOW-CURE` | an allowlist cure entry | ALLOW |
 | `DENY` | fault `X`, not on the allowlist | 4 `BLOCK_AI_CURE` |
+| `DENY-UNDECLARED` | fault `U`, not on the allowlist | 4 `BLOCK_AI_CURE` |
 | `DENY-STALE` | fault `D`, not on the allowlist | 4 `BLOCK_AI_CURE` |
 | `DENY-BROKEN` | fault `K`, not on the allowlist | 4 `BLOCK_AI_CURE` |
 
-`fault=` carries this document's own letters, and only `D`/`X`/`K` can appear: `S`/`C`/`Y` are decided
+`fault=` carries this document's own letters, and only `D`/`X`/`U`/`K` can appear: `S`/`C`/`Y` are decided
 inside the binary — which, on a `fault=-` line, is exactly what ran — and it keeps its own streams
 (`logs/guard-invocations.log`, `logs/guard-sync-decisions.log`, both of which now carry their call's
 verdict). So `fault=-` is a statement about the **sh layer only**, never a claim that nothing was wrong.

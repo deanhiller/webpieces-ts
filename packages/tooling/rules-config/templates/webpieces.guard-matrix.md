@@ -6,7 +6,7 @@ the array the guard actually consults, not a description of it.
 
 L0 is the OUTERMOST guard layer. It blocks work while `node_modules`, the committed shim, or
 `webpieces.config.json` are in a state that makes every other guard untrustworthy. If you are
-reading this, one of the six faults below fired and named this file.
+reading this, one of the faults below fired and named this file.
 
 ## The faults
 
@@ -14,12 +14,13 @@ reading this, one of the six faults below fired and named this file.
 |---|---|---|---|
 | `D` | version drift — root package.json pin != installed version | sh, before the bin runs | sh |
 | `X` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
+| `U` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
 | `K` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
 | `S` | committed .claude/webpieces/ai-hook.sh != renderShim() | the guard bin | JS |
 | `C` | webpieces.config.json missing | the guard bin | JS |
 | `Y` | a loaded rule has no webpieces.config.json key | the guard bin | JS |
 
-First match wins. `D`/`X`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the
+First match wins. `D`/`X`/`U`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the
 guard bin runs — a stale, missing or broken validator cannot be trusted to validate itself.
 
 ## The fix, per fault
@@ -36,6 +37,10 @@ the option you pick EXACTLY as written and run nothing else on that line.
 ### `X` — guard bin missing (fresh clone / new worktree / package removed)
 
 - **Option 1 (preferred)**: `pnpm install`  ← pick this when this fault fires at all — nothing is installed in THIS tree, and a new git worktree copies no node_modules
+
+### `U` — guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json
+
+- **Option 1 (preferred)**: `pnpm add -D @webpieces/ai-hook-rules`  ← pick this when this fault fires at all — package.json asks for nothing, so pnpm install reports "Lockfile is up to date" and leaves the tree exactly as broken as it found it
 
 ### `K` — guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)
 
@@ -69,7 +74,7 @@ The tool is not a dimension either: "any Read" is an allowlist ENTRY, not a tool
 
 ## The allowlist
 
-ONE list, consulted identically by all six faults. A cure that cannot help a given fault also
+ONE list, consulted identically by every fault. A cure that cannot help a given fault also
 cannot hurt it, and gating each entry on a fault is what produced four real defects (a stale
 shim that denied `pnpm install` and `git pull`; faults that denied every Read; a config fault
 that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm install`).
@@ -84,7 +89,8 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 6 | pnpm exec wp-upgrade-shim | ALLOW |
 | 7 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
 | 8 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 9 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 9 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
+| 10 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a
@@ -100,7 +106,7 @@ a DIFFERENT command and it is rejected again — that is not the guard refusing 
 ## Known asymmetry
 
 Under `S`/`C`/`Y` the guard bin IS running, so a PASS really does fall through to the downstream
-guards. Under `D`/`X`/`K` the bin is never executed, so there is nothing to fall through to and a
+guards. Under `D`/`X`/`U`/`K` the bin is never executed, so there is nothing to fall through to and a
 PASS degenerates into a terminal allow — reads are unguarded during those three faults.
 
 ## Widening L0

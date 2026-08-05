@@ -15,6 +15,9 @@ import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSec
 
 const kit = new ShimTestkit();
 const mktmp = (): string => kit.mktmp();
+// A root that DECLARES @webpieces/ai-hook-rules but has nothing installed — fault X. A bare mktmp()
+// root declares nothing and is fault U, whose message deliberately says the opposite about `pnpm install`.
+const declaredRoot = (): string => kit.stageDeclaredRoot();
 const runShim = kit.runShim.bind(kit);
 const bashPayload = kit.bashPayload.bind(kit);
 const denied = (out: { stdout: string }): boolean => out.stdout.includes('"permissionDecision":"deny"');
@@ -284,7 +287,7 @@ describe('renderShim (runtime behavior via /bin/sh)', () => {
     });
 
     it('fails closed by DENYING via the PreToolUse JSON protocol (exit 0, reason on stdout) when the bin is absent', () => {
-        const root = mktmp(); // no node_modules/.bin here
+        const root = declaredRoot(); // declared in package.json, but no node_modules/.bin here
         const out = runShim(root, 'wp-ai-guards-hook', '{"tool":"Bash"}');
         // Deny via JSON + exit 0 (NOT exit 2): permissionDecision "deny" still blocks the tool, and
         // its reason is surfaced to the user in the terminal UI + to the model — an exit-2 stderr line
@@ -480,7 +483,7 @@ describe('renderShim passthrough (healthy bin — the shim must stay transparent
 describe('renderShim fallback — audit log', () => {
     it('records every fail-open/closed decision to <root>/.webpieces/logs/ai-hook-shim.log', () => {
         // runShim writes the shim at <root>/.claude/webpieces/ai-hook.sh, so its ROOT resolves to root.
-        const root = mktmp();
+        const root = declaredRoot();
         runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm install')); // allowed
         runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm build')); // denied
         const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
@@ -518,7 +521,7 @@ describe('renderShim fallback — tool-conditional deny visibility', () => {
     const ESC = String.fromCharCode(0x1b);
 
     it('Bash deny carries an ANSI-red systemMessage (valid JSON after ${BIN_NAME} sub)', () => {
-        const out = runShim(mktmp(), 'wp-ai-guards-hook', bashPayload('pnpm build'));
+        const out = runShim(declaredRoot(), 'wp-ai-guards-hook', bashPayload('pnpm build'));
         expect(out.status).toBe(0);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         const decision = JSON.parse(out.stdout) as {

@@ -2,55 +2,61 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Repo-wide packaging invariant, stated CONDITIONALLY — because the condition is what everyone kept
- * getting wrong.
+ * THE PACKAGING INVARIANT THAT MAKES BIN SHIMS IMPOSSIBLE.
  *
- * The hazard: pnpm `chmod`s each `bin` target while it links a package. A workspace sibling is linked
- * from its SOURCE directory, and the source here is TypeScript — the compiled `.js` under `src/` exists
- * only in the published tarball, where tsc compiled in place. So a `bin` pointing at a compiled path,
- * in a package that some sibling declares as a `workspace:` dependency, makes EVERY `pnpm install`
- * print `WARN Failed to create bin ... ENOENT ... chmod`. Enough of those hide a real bin-link failure.
+ * The hazard, first: pnpm `chmod`s every `bin` target while it links a package. A `workspace:` sibling
+ * is linked from its SOURCE directory, and the source here is TypeScript — the compiled `.js` under
+ * `src/` exists only in the published tarball, where tsc compiled in place. So a `bin` pointing at
+ * compiled output, in a package some sibling declares `workspace:`, makes EVERY `pnpm install` print
+ * `WARN Failed to create bin … ENOENT … chmod`. Measured on this workspace: 28 of them.
  *
- * The old fix was a plain-JS shim under `bin/` for EVERY tooling package, and the old version of this
- * test enforced that unconditionally. That was wrong in the expensive direction: this repo consumes the
- * PREVIOUS RELEASE of its own tooling (root pins `@webpieces/pr-gate` at a published version, and
- * `node_modules/.bin/wp-*` resolves into that tarball), so the source-link hazard only ever applied to
- * the handful of packages a sibling actually links. Fourteen of seventeen shims existed to satisfy
- * `workspace:*` lines that were never imported — phantom dependencies — and each shim was a `.js` file
- * that had to be allow-listed out of `no-js-files` and could carry none of the repo's TypeScript rules.
+ * That hazard was fought twice, and both cures were worse than the disease:
  *
- * So the rule is now keyed on the real condition:
- *   - a package SOME sibling declares as `workspace:` → its bins must exist in git, i.e. be JS shims
- *   - every other package                            → its bins SHOULD point at the compiled TS
+ *   1. A committed plain-JS shim per bin. Seventeen `.js` files exempted from `no-js-files` and
+ *      carrying none of the TypeScript rules this repo enforces.
+ *   2. Dropping the `workspace:` dependency instead. That is what removed `@webpieces/ai-hook-rules`
+ *      and `@webpieces/pr-gate` from the umbrella (they were read as phantom — nothing imports them),
+ *      which deleted them from every consumer's tree on the next release and took `wp-ai-guards-hook`
+ *      with them. See umbrella-bundles-all.spec.ts.
  *
- * That keeps the ENOENT protection exactly where the hazard is, and it self-heals: adding a
- * `workspace:` dep on a package whose bins point into `src/` turns this test red and names both cures.
+ * THE CURE IS TO MOVE THE `bin` OUT OF THE SOURCE MANIFEST. pnpm hoists `publishConfig.bin` into `bin`
+ * when it packs, so the TARBALL has exactly the bins consumers need, while the source manifest declares
+ * none — and a `bin` that does not exist during install is a `bin` pnpm never tries to chmod. Verified
+ * by packing: `publishConfig.bin` in source, top-level `bin` in the tarball.
+ *
+ * So both constraints hold at once, with no trade:
+ *   - tooling packages depend on each other with `workspace:*` → built against local source, and the
+ *     architecture graph draws nx-webpieces-rules above its children,
+ *   - `pnpm install` is silent, and there are NO shims to allow-list anywhere.
  */
 
-/** One `bin` entry of one workspace package, resolved to an absolute path. Data-only. */
+/** Roots that hold workspace packages (mirrors pnpm-workspace.yaml). */
+const PACKAGE_ROOTS = ['packages', 'apps', 'libraries'];
+const MAX_DEPTH = 3;
+
+/** One declared bin of one workspace package, resolved to an absolute path. Data-only. */
 class BinTarget {
     constructor(
         public readonly packageName: string,
         public readonly binName: string,
         public readonly declaredPath: string,
         public readonly absolutePath: string,
+        /** True when it sits in the source manifest's `bin` rather than `publishConfig.bin`. */
+        public readonly topLevel: boolean,
     ) {}
 
     describeSelf(): string {
-        return `${this.packageName} -> bin["${this.binName}"] = ${this.declaredPath}`;
+        const field = this.topLevel ? 'bin' : 'publishConfig.bin';
+        return `${this.packageName} -> ${field}["${this.binName}"] = ${this.declaredPath}`;
     }
 
-    /** True when the declared path reaches into `src/`, i.e. it is compiled output, not a committed shim. */
+    /** True when the declared path reaches into `src/`, i.e. compiled output rather than a shim. */
     pointsIntoSrc(): boolean {
         return /(^|\/)src\//.test(this.declaredPath.replace(/^\.\//, ''));
     }
 }
 
-/** Roots that hold workspace packages (mirrors pnpm-workspace.yaml). */
-const PACKAGE_ROOTS = ['packages', 'apps', 'libraries'];
-const MAX_DEPTH = 3;
-
-/** Scans every workspace manifest once, and answers the two questions the assertions below ask of it. */
+/** Scans every workspace manifest once and answers the questions the assertions below ask of it. */
 class WorkspaceBinScan {
     private readonly manifests: string[];
 
@@ -60,41 +66,48 @@ class WorkspaceBinScan {
         for (const root of PACKAGE_ROOTS) this.collect(path.join(repoRoot, root), 0);
     }
 
-    /** Every `bin` entry declared anywhere in the workspace. */
+    /** Every bin declared anywhere in the workspace, from either field. */
     binTargets(): BinTarget[] {
         const targets: BinTarget[] = [];
         for (const manifestPath of this.manifests) {
             const pkg = this.read(manifestPath);
-            const bin = pkg['bin'];
-            if (bin === undefined || bin === null || typeof bin !== 'object') continue;
-            const pkgDir = path.dirname(manifestPath);
-            for (const binName of Object.keys(bin)) {
-                const declaredPath = String((bin as Record<string, unknown>)[binName]);
-                targets.push(new BinTarget(
-                    String(pkg['name']), binName, declaredPath, path.resolve(pkgDir, declaredPath)));
-            }
+            const publishConfig = this.asObject(pkg['publishConfig']);
+            targets.push(...this.targetsIn(pkg, manifestPath, this.asObject(pkg['bin']), true));
+            targets.push(...this.targetsIn(pkg, manifestPath, this.asObject(publishConfig['bin']), false));
         }
         return targets;
     }
 
-    /**
-     * The package NAMES that some other workspace package declares with a `workspace:` specifier — i.e.
-     * exactly the packages pnpm links from their source directory, and therefore the only ones the
-     * ENOENT-chmod hazard can touch.
-     */
+    /** The names some other workspace package declares with a `workspace:` specifier. */
     sourceLinkedPackages(): Set<string> {
         const linked = new Set<string>();
         for (const manifestPath of this.manifests) {
             const pkg = this.read(manifestPath);
             for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
-                const deps = pkg[field];
-                if (deps === undefined || deps === null || typeof deps !== 'object') continue;
-                for (const [name, spec] of Object.entries(deps as Record<string, unknown>)) {
-                    if (typeof spec === 'string' && spec.startsWith('workspace:')) linked.add(name);
+                const deps = this.asObject(pkg[field]);
+                for (const name of Object.keys(deps)) {
+                    if (String(deps[name]).startsWith('workspace:')) linked.add(name);
                 }
             }
         }
         return linked;
+    }
+
+    private targetsIn(
+        pkg: Record<string, unknown>, manifestPath: string,
+        bin: Record<string, unknown>, topLevel: boolean,
+    ): BinTarget[] {
+        const pkgDir = path.dirname(manifestPath);
+        return Object.keys(bin).map((binName: string): BinTarget => {
+            const declaredPath = String(bin[binName]);
+            return new BinTarget(String(pkg['name']), binName, declaredPath,
+                path.resolve(pkgDir, declaredPath), topLevel);
+        });
+    }
+
+    // webpieces-disable no-any-unknown -- opaque package.json; every field is narrowed at its use site
+    private asObject(value: unknown): Record<string, unknown> {
+        return (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {};
     }
 
     // webpieces-disable no-any-unknown -- opaque package.json; every field is narrowed at its use site
@@ -127,8 +140,6 @@ class WorkspaceBinScan {
 describe('workspace bin targets', () => {
     const scan = new WorkspaceBinScan(__dirname);
     const targets = scan.binTargets();
-    const sourceLinked = scan.sourceLinkedPackages();
-    const linkedTargets = (): BinTarget[] => targets.filter((t: BinTarget) => sourceLinked.has(t.packageName));
 
     it('finds the tooling bins (sanity check that the scan actually scanned)', () => {
         expect(targets.length).toBeGreaterThan(0);
@@ -137,39 +148,42 @@ describe('workspace bin targets', () => {
         expect(names).toContain('wp-ci');
     });
 
-    // The scan is only meaningful if it can actually tell the two groups apart. code-rules is genuinely
-    // imported by nx-webpieces-rules, so it must be in the linked set; pr-gate is consumed as a published
-    // release only, so it must not be.
-    it('distinguishes source-linked packages from released-only ones', () => {
-        expect(sourceLinked.has('@webpieces/code-rules')).toBe(true);
-        expect(sourceLinked.has('@webpieces/pr-gate')).toBe(false);
+    /**
+     * THE invariant, and it needs no per-package condition: a bin declared in `publishConfig.bin` is
+     * invisible to the installer, so the ENOENT-chmod hazard cannot exist no matter which packages are
+     * `workspace:`-linked. That is what lets the tooling keep its workspace edges for free.
+     */
+    it('declares every bin in publishConfig.bin, never in the source manifest`s bin', () => {
+        const topLevel = targets.filter((t: BinTarget) => t.topLevel).map((t: BinTarget) => t.describeSelf());
+        expect(topLevel, 'move it to publishConfig.bin — pnpm hoists it into bin when it packs').toEqual([]);
     });
 
     /**
-     * THE invariant. Scoped to source-linked packages: those are linked from a TypeScript source dir that
-     * holds no compiled output, so their bin targets must be committed shims or `pnpm install` warns.
+     * The other half: a bin must point at COMPILED TYPESCRIPT, never at a committed `.js` shim. Together
+     * with the assertion above this is what makes shims structurally impossible rather than merely
+     * discouraged — there is no longer any install-time pressure that would justify one.
      */
-    it('every bin of a source-linked package exists in git pre-build (no ENOENT chmod on pnpm install)', () => {
-        const missing = linkedTargets()
-            .filter((t: BinTarget) => !fs.existsSync(t.absolutePath))
-            .map((t: BinTarget) => t.describeSelf());
-        expect(missing).toEqual([]);
+    it('points every bin at compiled TypeScript under src/, never at a committed shim', () => {
+        const shimmed = targets.filter((t: BinTarget) => !t.pointsIntoSrc()).map((t: BinTarget) => t.describeSelf());
+        expect(shimmed, 'shims are gone for good — see this file`s header').toEqual([]);
     });
 
-    it('no bin of a source-linked package points into src/ — that path is empty until the tarball', () => {
-        const intoSrc = linkedTargets().filter((t: BinTarget) => t.pointsIntoSrc()).map((t: BinTarget) => t.describeSelf());
-        expect(intoSrc).toEqual([]);
+    // Anchored at the package root on purpose: `src/bin/…` is ordinary TypeScript source (ai-hook-rules
+    // keeps its entry points there), while a TOP-LEVEL `bin/` is the shim directory this repo deleted.
+    it('no package ships a top-level bin/ directory of committed shims', () => {
+        const withShimDir = targets
+            .filter((t: BinTarget) => /^bin\//.test(t.declaredPath.replace(/^\.\//, '')))
+            .map((t: BinTarget) => t.describeSelf());
+        expect(withShimDir).toEqual([]);
     });
 
-    /**
-     * The other direction, and the reason 15 shims could be deleted: a package nobody links from source has
-     * no hazard to protect against, so a JS shim there is pure overhead — an extra file outside TypeScript,
-     * exempted from every rule the repo enforces. Point the bin at the compiled entry instead.
-     */
-    it('a package nobody source-links points its bins at compiled TypeScript, not a committed shim', () => {
-        const shimmed = targets
-            .filter((t: BinTarget) => !sourceLinked.has(t.packageName) && !t.pointsIntoSrc())
-            .map((t: BinTarget) => t.describeSelf());
-        expect(shimmed).toEqual([]);
+    // The tooling is built against local source, which is what puts nx-webpieces-rules above its five
+    // children in architecture/dependencies.json. If this goes empty, those edges went with it.
+    it('keeps the tooling packages source-linked, so the build and the graph use local code', () => {
+        const linked = scan.sourceLinkedPackages();
+        for (const name of ['@webpieces/ai-hook-rules', '@webpieces/code-rules',
+            '@webpieces/eslint-rules', '@webpieces/pr-gate', '@webpieces/rules-config']) {
+            expect(linked, `${name} must stay a workspace: dep of the umbrella`).toContain(name);
+        }
     });
 });

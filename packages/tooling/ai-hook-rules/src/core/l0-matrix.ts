@@ -1,7 +1,7 @@
 import { CONFIG_FILENAME, writeTemplate } from '@webpieces/rules-config';
 
 import {
-    INSTALL_HOOKS_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
+    ADD_HOOK_PKG_CMD, HOOK_PKG, INSTALL_HOOKS_CMD, L0AllowEntry, L0Call, L0_ALLOWLIST, RECOVERY_CMD,
     RESTORE_SHIM_CMD, UPGRADE_SHIM_CMD, renderShim, shimStaleDenyReason,
 } from '../bin/shim';
 import { toError } from './to-error';
@@ -10,8 +10,8 @@ import { toError } from './to-error';
 // L0 — the TOOLING-INTEGRITY layer, as data.
 //
 // L0 is the outermost guard: it blocks work while node_modules, the committed shim, or
-// webpieces.config.json are in a state that makes every OTHER guard untrustworthy. It has SIX faults
-// and — drawn as a decision matrix — NO genuine second dimension:
+// webpieces.config.json are in a state that makes every OTHER guard untrustworthy. Its faults are
+// enumerated in L0_FAULTS below and — drawn as a decision matrix — have NO genuine second dimension:
 //
 //     fault present AND call not on the allowlist  ->  BLOCK(messageFor(fault))
 //
@@ -73,7 +73,7 @@ export class L0Fault {
         readonly cures: readonly L0Cure[],
         /**
          * The artifact carrying this fault's deny text. For S/C/Y that is the deny string itself; for
-         * D/X/K the text is built in POSIX sh inside the rendered shim, so it is the rendered shim —
+         * D/X/U/K the text is built in POSIX sh inside the rendered shim, so it is the rendered shim —
          * the same bytes the consumer runs, which is what the mention assertion needs to search.
          */
         readonly denyText: string,
@@ -128,7 +128,7 @@ function bashCure(command: string, preferred: boolean, discriminator: string): L
 }
 
 /**
- * THE six L0 faults, in first-match-wins order. D/X/K are decided in POSIX sh BEFORE the bin runs (a
+ * THE L0 faults, in first-match-wins order. D/X/U/K are decided in POSIX sh BEFORE the bin runs (a
  * stale, missing or broken validator cannot be trusted to validate itself); S/C/Y are decided inside
  * the bin, in JS. One model, two enforcement points.
  */
@@ -151,6 +151,16 @@ export const L0_FAULTS: readonly L0Fault[] = [
         [bashCure('pnpm install', true,
             'this fault fires at all — nothing is installed in THIS tree, and a new git worktree '
             + 'copies no node_modules')],
+        renderShim()),
+    // U is X with the ONE input that inverts X's cure, which is why it is a separate fault and not a
+    // sentence inside X's message: when nothing declares the package, `pnpm install` is not a weaker fix,
+    // it is a PROVABLE no-op, and an agent that trusts the X text will run it until it gives up. See the
+    // ADD_HOOK_PKG entry in l0-allowlist.ts for the incident.
+    new L0Fault('U', `guard bin missing AND ${HOOK_PKG} is not declared in package.json`,
+        'sh, before the bin runs', 'sh',
+        [bashCure(ADD_HOOK_PKG_CMD, true,
+            'this fault fires at all — package.json asks for nothing, so pnpm install reports '
+            + '"Lockfile is up to date" and leaves the tree exactly as broken as it found it')],
         renderShim()),
     new L0Fault('K', 'guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)',
         'sh, before the bin runs', 'sh',
@@ -226,7 +236,7 @@ export function renderGuardMatrixDoc(): string {
         '',
         'L0 is the OUTERMOST guard layer. It blocks work while `node_modules`, the committed shim, or',
         '`webpieces.config.json` are in a state that makes every other guard untrustworthy. If you are',
-        'reading this, one of the six faults below fired and named this file.',
+        'reading this, one of the faults below fired and named this file.',
         '',
         '## The faults',
         '',
@@ -234,7 +244,7 @@ export function renderGuardMatrixDoc(): string {
         '|---|---|---|---|',
         ...L0_FAULTS.map((f: L0Fault): string => `| \`${f.code}\` | ${f.name} | ${f.detectedBy} | ${f.enforcedIn} |`),
         '',
-        'First match wins. `D`/`X`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the',
+        'First match wins. `D`/`X`/`U`/`K` are decided in POSIX `sh` inside the committed shim, BEFORE the',
         'guard bin runs — a stale, missing or broken validator cannot be trusted to validate itself.',
         '',
         '## The fix, per fault',
@@ -270,7 +280,7 @@ function renderMatrixAndAllowlist(): string[] {
         '',
         '## The allowlist',
         '',
-        'ONE list, consulted identically by all six faults. A cure that cannot help a given fault also',
+        'ONE list, consulted identically by every fault. A cure that cannot help a given fault also',
         'cannot hurt it, and gating each entry on a fault is what produced four real defects (a stale',
         'shim that denied `pnpm install` and `git pull`; faults that denied every Read; a config fault',
         'that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm install`).',
@@ -293,7 +303,7 @@ function renderMatrixAndAllowlist(): string[] {
         '## Known asymmetry',
         '',
         'Under `S`/`C`/`Y` the guard bin IS running, so a PASS really does fall through to the downstream',
-        'guards. Under `D`/`X`/`K` the bin is never executed, so there is nothing to fall through to and a',
+        'guards. Under `D`/`X`/`U`/`K` the bin is never executed, so there is nothing to fall through to and a',
         'PASS degenerates into a terminal allow — reads are unguarded during those three faults.',
         '',
         '## Widening L0',
@@ -328,5 +338,5 @@ export function writeGuardMatrixDoc(workspaceRoot: string): string {
 // webpieces-disable no-function-outside-class -- sibling of writeGuardMatrixDoc in this module
 export function guardMatrixPointer(docPath: string): string {
     if (docPath === '') return '';
-    return ` The full L0 guard matrix - all six faults and everything that is allowed through - is at ${docPath}; READ it if you are unsure why this call was blocked.`;
+    return ` The full L0 guard matrix - every fault and everything that is allowed through - is at ${docPath}; READ it if you are unsure why this call was blocked.`;
 }

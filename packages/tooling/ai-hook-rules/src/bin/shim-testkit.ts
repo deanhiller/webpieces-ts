@@ -99,6 +99,21 @@ export class ShimTestkit {
     }
 
     /**
+     * A repo root that DECLARES @webpieces/ai-hook-rules but has nothing installed — fault X, the
+     * ordinary fresh-clone / new-worktree case whose cure really is `pnpm install`.
+     *
+     * A bare mktmp() root is NOT this case, and that distinction is the whole point of fault U: with no
+     * package.json at all, nothing asks for the package and `pnpm install` is a no-op. Every X spec must
+     * stage the declaration explicitly, or it silently asserts against the U message instead.
+     */
+    stageDeclaredRoot(declared: string = '0.4.574'): string {
+        const root = this.mktmp();
+        fs.writeFileSync(path.join(root, 'package.json'),
+            JSON.stringify({ devDependencies: { '@webpieces/ai-hook-rules': declared } }, null, 2) + '\n');
+        return root;
+    }
+
+    /**
      * A throwaway repo root that OWNS a committed shim at shimPath(root) with the given contents
      * (null = no shim at all, i.e. a fresh clone / global install). Shared by the two spec files that
      * exercise the committed-shim self-guard, so "a root with a shim in it" has one definition.

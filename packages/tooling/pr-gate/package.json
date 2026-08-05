@@ -4,18 +4,6 @@
     "description": "Gated PR system: 3-point squash-merge, merge validation gate, and red/yellow/green PR dashboard. Standalone scripts, no Nx dependency required.",
     "type": "commonjs",
     "main": "./src/index.js",
-    "bin": {
-        "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
-        "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
-        "wp-start-update": "./src/scripts/wp-start-update.js",
-        "wp-finish-update": "./src/scripts/wp-finish-update.js",
-        "wp-cleanup": "./src/scripts/wp-cleanup.js",
-        "wp-land-pr": "./src/scripts/wp-land-pr.js",
-        "wp-check-pr": "./src/scripts/wp-check-pr.js",
-        "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
-        "wp-push-dev": "./src/scripts/wp-push-dev.js",
-        "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js"
-    },
     "files": [
         "src/**/*"
     ],
@@ -33,6 +21,18 @@
         "reflect-metadata": "0.2.2"
     },
     "publishConfig": {
+        "bin": {
+            "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
+            "wp-start-upsert-pr": "./src/scripts/wp-start-upsert-pr.js",
+            "wp-start-update": "./src/scripts/wp-start-update.js",
+            "wp-finish-update": "./src/scripts/wp-finish-update.js",
+            "wp-cleanup": "./src/scripts/wp-cleanup.js",
+            "wp-land-pr": "./src/scripts/wp-land-pr.js",
+            "wp-check-pr": "./src/scripts/wp-check-pr.js",
+            "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
+            "wp-push-dev": "./src/scripts/wp-push-dev.js",
+            "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js"
+        },
         "access": "public"
     }
 }

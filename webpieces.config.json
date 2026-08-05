@@ -1,5 +1,5 @@
 {
-    "upgradePolicyWhy": "THIS FILE IS NEVER RELEASED BACKWARDS-COMPATIBLE, AND THAT IS DELIBERATE. webpieces validates it on startup, so when a key moves or is renamed the loader REJECTS the old shape and hands you an error naming the destination ('X moved to Y'). Apply that edit and re-run — the error IS the migration. Every reader of this file is an AI agent, so upgrades are seamless without webpieces shipping a compatibility layer for every old shape. Never add a fallback that accepts both shapes: two accepted shapes means two code paths forever, and an accepted shape is NEVER migrated, so the dead one lives here indefinitely. You cannot get stuck — editing this file is always allowed even while it is invalid, and `pnpm install` is always allowed (a validator lagging this file by a release is the most common failure; install first, do NOT start by deleting keys). `pnpm wp-install-ai-hooks --sync` performs the mechanical migrations. Any key ending in 'Why' is a rationale note like this one; unknown keys are rejected, so name notes '<key>Why'. Full policy: .webpieces/instruct-ai/webpieces.config-policy.md",
+    "upgradePolicyWhy": "THIS FILE IS NEVER RELEASED BACKWARDS-COMPATIBLE, AND THAT IS DELIBERATE. webpieces validates it on startup, so when a key moves or is renamed the loader REJECTS the old shape and hands you an error naming the destination ('X moved to Y'). Apply that edit and re-run \u2014 the error IS the migration. Every reader of this file is an AI agent, so upgrades are seamless without webpieces shipping a compatibility layer for every old shape. Never add a fallback that accepts both shapes: two accepted shapes means two code paths forever, and an accepted shape is NEVER migrated, so the dead one lives here indefinitely. You cannot get stuck \u2014 editing this file is always allowed even while it is invalid, and `pnpm install` is always allowed (a validator lagging this file by a release is the most common failure; install first, do NOT start by deleting keys). `pnpm wp-install-ai-hooks --sync` performs the mechanical migrations. Any key ending in 'Why' is a rationale note like this one; unknown keys are rejected, so name notes '<key>Why'. Full policy: .webpieces/instruct-ai/webpieces.config-policy.md",
     "rules": {
         "max-method-lines": {
             "limit": 80,
@@ -141,8 +141,7 @@
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
             "allowedPaths": [
-                "packages/tooling/nx-webpieces-rules/src/lib/*.client.js",
-                "packages/tooling/code-rules/bin/*.js"
+                "packages/tooling/nx-webpieces-rules/src/lib/*.client.js"
             ],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
@@ -278,9 +277,9 @@
             "mode": "ON",
             "buildCommandWhy": "--base is the FORK POINT via $(git merge-base origin/main HEAD), NOT origin/main: basing on origin/main marks projects from other people's already-merged PRs as 'affected' (your branch still has their pre-merge versions), wasting rebuilds. The fork point scopes affected to only your branch's work. The $(...) resolves because the gate runs with shell:true.",
             "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
-            "mergeModeWhy": "AUTO because this repo has allow_auto_merge=true and WANTS wp-finish-upsert-pr to land PRs: only the --subject/--body-file it passes can put the PR title + the compact risk/flags body in main's history. A UI merge cannot — it is limited to squash_merge_commit_title/message, and this repo's squash_merge_commit_message is COMMIT_MESSAGES, so a hand merge would land the branch's raw commit messages instead. Repos whose policy is 'a human clicks merge' set NONE (and must set squash_merge_commit_title=PR_TITLE, or commits land as 'Squash merge of <branch>').",
+            "mergeModeWhy": "AUTO because this repo has allow_auto_merge=true and WANTS wp-finish-upsert-pr to land PRs: only the --subject/--body-file it passes can put the PR title + the compact risk/flags body in main's history. A UI merge cannot \u2014 it is limited to squash_merge_commit_title/message, and this repo's squash_merge_commit_message is COMMIT_MESSAGES, so a hand merge would land the branch's raw commit messages instead. Repos whose policy is 'a human clicks merge' set NONE (and must set squash_merge_commit_title=PR_TITLE, or commits land as 'Squash merge of <branch>').",
             "mergeMode": "AUTO",
-            "gatesWhy": "warningColor (REQUIRED on every gate) = the dashboard color shown WHEN a gate's patterns match a changed file (green is implicit when nothing matches; warningColor is purely visual and never blocks the PR — only the build gate can). disabled:true gates are kept-in-file examples (JSON has no comments) other projects flip to false and tune; they are skipped on this repo.",
+            "gatesWhy": "warningColor (REQUIRED on every gate) = the dashboard color shown WHEN a gate's patterns match a changed file (green is implicit when nothing matches; warningColor is purely visual and never blocks the PR \u2014 only the build gate can). disabled:true gates are kept-in-file examples (JSON has no comments) other projects flip to false and tune; they are skipped on this repo.",
             "gates": [
                 {
                     "name": "API Changed",
@@ -367,7 +366,7 @@
                 }
             ]
         },
-        "guardHintsWhy": "The command strings the bash guards print in their fix hints — each name binds to exactly one guard (prCreationOrPush -> pr-creation-or-push-guard, mergeInProgress -> merge-in-progress-guard). Rename a gated command here and every guard message follows. These were the flat commands.upsertPr / commands.mergeComplete keys, which are now RETIRED.",
+        "guardHintsWhy": "The command strings the bash guards print in their fix hints \u2014 each name binds to exactly one guard (prCreationOrPush -> pr-creation-or-push-guard, mergeInProgress -> merge-in-progress-guard). Rename a gated command here and every guard message follows. These were the flat commands.upsertPr / commands.mergeComplete keys, which are now RETIRED.",
         "guardHints": {
             "prCreationOrPush": "pnpm wp-start-upsert-pr",
             "mergeInProgress": "pnpm wp-finish-upsert-pr"
@@ -388,9 +387,9 @@
                 "\\bnew\\s+Request\\s*\\(",
                 "from\\s+['\"](node-fetch|got|undici)['\"]"
             ],
-            "mainMessage": "Raw HTTP (fetch/axios/XMLHttpRequest/…) bypasses contract-first development — the client and server stop sharing the same API contract/types. Generate a type-safe client from the contract instead:",
+            "mainMessage": "Raw HTTP (fetch/axios/XMLHttpRequest/\u2026) bypasses contract-first development \u2014 the client and server stop sharing the same API contract/types. Generate a type-safe client from the contract instead:",
             "options": [
-                "PREFERRED: generate a client from the API you want to call — server-side, inject ClientHttpFactory from '@webpieces/http-client-node' and call factory.createRpcClient(SomeApi, new ClientConfig('some-svc')); in a browser, use ClientHttpBrowserFactory from '@webpieces/http-client-browser'. Then: await client.someMethod(req);",
+                "PREFERRED: generate a client from the API you want to call \u2014 server-side, inject ClientHttpFactory from '@webpieces/http-client-node' and call factory.createRpcClient(SomeApi, new ClientConfig('some-svc')); in a browser, use ClientHttpBrowserFactory from '@webpieces/http-client-browser'. Then: await client.someMethod(req);",
                 "Reuse an existing API contract already defined in your repo (under libraries/apis/**) and generate its client the same way.",
                 "For a truly external service, create a NEW API contract (a decorated abstract class) AND a NEW implementation that calls fetch behind that contract, under an allowlisted dir (libraries/apis-external/**). The contract stays the shared surface; fetch is an impl detail."
             ],

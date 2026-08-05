@@ -243,9 +243,17 @@ describe('L0 audit log — the fault field matches guards/L0-tooling.md', () => 
     });
 
     it('classifies a MISSING bin as fault X (verdict DENY)', () => {
-        const root = kit.mktmp();   // no node_modules/.bin at all
+        // DECLARED but not installed — the fresh-clone case. The declaration is what separates X from U,
+        // so it has to be staged rather than assumed: a bare mktmp() root is fault U.
+        const root = kit.stageDeclaredRoot();   // package.json asks for it; no node_modules/.bin at all
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(logOf(root)).toContain('\tfault=X\tDENY\tpnpm build');
+    });
+
+    it('classifies a MISSING bin that nothing DECLARES as fault U (verdict DENY-UNDECLARED)', () => {
+        const root = kit.mktmp();   // no package.json at all → nothing asks for the package
+        kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
+        expect(logOf(root)).toContain('\tfault=U\tDENY-UNDECLARED\tpnpm build');
     });
 
     it('classifies a CRASHED bin as fault K (verdict DENY-BROKEN)', () => {
@@ -262,7 +270,7 @@ describe('L0 audit log — the fault field matches guards/L0-tooling.md', () => 
     });
 
     it('logs an allowed Read and an allowed config edit while the guards are down', () => {
-        const root = kit.mktmp();
+        const root = kit.stageDeclaredRoot();
         kit.runShim(root, 'wp-ai-guards-hook', kit.readPayload('/x/README.md'));
         kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', '/x/webpieces.config.json'));
         const log = logOf(root);
@@ -324,7 +332,7 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
     });
 
     it('still DENIES (fails closed) when the guards are down and the log cannot be written', () => {
-        const root = kit.mktmp();            // no bin → fault X
+        const root = kit.stageDeclaredRoot();  // declared but no bin → fault X
         fs.writeFileSync(path.join(root, '.webpieces'), 'not a directory\n');
         const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.isDenied()).toBe(true);
@@ -377,7 +385,7 @@ describe('the log vocabulary is the matrix vocabulary', () => {
     it('emits exactly the sh-side fault codes L0_FAULTS declares, plus `-` for no fault', () => {
         const shSide = L0_FAULTS.filter((fault: L0Fault): boolean => fault.enforcedIn === 'sh')
             .map((fault: L0Fault): string => fault.code);
-        expect(shSide).toEqual(['D', 'X', 'K']);
+        expect(shSide).toEqual(['D', 'X', 'U', 'K']);
         expect([...SHIM_LOG_FAULTS]).toEqual([...shSide, '-']);
     });
 

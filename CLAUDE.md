@@ -357,34 +357,61 @@ Almost everything else runs the **published** copy:
 - If a validator rejects config keys that look correct, the fix is **`pnpm install`** (the validator is
   stale), not deleting the keys.
 
-### No bin shims — `bin` points at compiled TypeScript
+### No bin shims — every `bin` lives in `publishConfig.bin`
 
-**RULE: a `bin` entry points at its compiled `.ts` entry point (`./src/**/<entry>.js`). A committed
-plain-JS shim under `bin/` is allowed ONLY for a package another workspace package genuinely imports.**
+**RULE: a package declares its executables in `publishConfig.bin`, pointing at compiled TypeScript
+(`./src/**/<entry>.js`). NEVER a top-level `bin`, and NEVER a committed `.js` shim.**
 
-The goal is that the base commands are TypeScript, so every rule this repo enforces applies to them. A
-`.js` shim is code that must be allow-listed out of `no-js-files` and carries none of them.
+The hazard this defuses: pnpm `chmod`s every `bin` target while it links a package, and a `workspace:`
+sibling is linked from its SOURCE directory, where `src/` holds only `.ts` until tsc runs. A top-level
+`bin` pointing at compiled output therefore makes every `pnpm install` print
+`WARN Failed to create bin ... ENOENT ... chmod` — 28 of them on this workspace, noise indistinguishable
+from a real bin-link failure.
 
-The hazard a shim addresses is narrow and workspace-only. pnpm `chmod`s each `bin` target while linking a
-package; a `workspace:` sibling is linked from its **source** dir, where `src/` holds only `.ts` until the
-build runs. A `bin` pointing at compiled output *there* makes every `pnpm install` print
-`WARN Failed to create bin ... ENOENT ... chmod`. It never affects consumers: they install the tarball,
-where tsc compiled in place, so the target exists. Put `#!/usr/bin/env node` as the first line of the
-`.ts` entry — tsc preserves it — and the compiled file is directly executable.
+`publishConfig.bin` removes the hazard instead of working around it: **pnpm hoists it into `bin` when it
+packs**, so the tarball has exactly the bins consumers need while the source manifest declares none — and
+a `bin` that does not exist during install is a `bin` pnpm never tries to chmod. Verified by packing all
+four tooling packages: 17 bins, all present in the tarballs, `pnpm install` silent.
 
-So the shim question is decided by ONE fact: **does another workspace package declare this one with a
-`workspace:` specifier?** Only then does the pre-build window exist.
+That matters because the two earlier cures were both worse than the disease, and the second one shipped
+a live incident:
 
-- **Before adding a `workspace:` dep between tooling packages, confirm a real `import`/`require`.** A
-  mention in a comment is not a use. Phantom deps manufacture shims for nothing: `nx-webpieces-rules`
-  declared `ai-hook-rules` and `pr-gate` while importing neither, and those two lines are why **15 of 17**
-  shims existed (PR #585 deleted them).
-- `bin-targets-exist.spec.ts` (nx-webpieces-rules) enforces both directions and needs no maintenance: a
-  source-linked package's bins must exist in git, and a package nobody links must NOT carry a shim. Adding
-  a `workspace:` dep on a package whose bins point into `src/` turns it red and names both cures.
-- `code-rules` keeps its two shims — `nx-webpieces-rules` imports it for real, so the hazard is real there.
-- `setupDebugging.md` is a HISTORICAL journal of an abandoned postinstall approach. Its Attempt 5 shim
-  advice is superseded by this section; read it for the pnpm-v10 lessons, not for policy.
+- **A committed `.js` shim per bin.** Seventeen files exempt from `no-js-files`, carrying none of the
+  TypeScript rules this repo enforces.
+- **Deleting the `workspace:` dependency instead** (PR #585). `@webpieces/ai-hook-rules` and
+  `@webpieces/pr-gate` are not imported by `nx-webpieces-rules` — they are BUNDLED by it — so they read
+  as phantom deps and were removed. One release later they were gone from every consumer's tree,
+  `wp-ai-guards-hook` vanished from `node_modules/.bin`, and the L0 shim blocked every tool call while
+  prescribing a `pnpm install` that could not possibly help (fault `U`).
+
+`bin-targets-exist.spec.ts` and `umbrella-bundles-all.spec.ts` (nx-webpieces-rules) enforce both halves
+and need no maintenance. `setupDebugging.md` is a HISTORICAL journal of an abandoned postinstall
+approach; its shim advice is superseded by this section.
+
+### The umbrella: consumers depend on ONE package
+
+**RULE: `packages/tooling/*` depend on each other with `workspace:*`. The ROOT manifest depends on the
+PREVIOUS RELEASE of `@webpieces/nx-webpieces-rules` alone, via the one `catalog:` entry in
+`pnpm-workspace.yaml`.**
+
+These are two different things and conflating them is what caused the incident above:
+
+| | specifier | why |
+|---|---|---|
+| BUILDING the tooling | `workspace:*` between `packages/tooling/*` | built against local source; this is also what draws `nx-webpieces-rules` above its five children in `architecture/dependencies.json` — nx only draws workspace→workspace edges |
+| RUNNING the tooling on this repo | `catalog:` in the ROOT manifest | the repo is validated by the previous published release (see "Published vs local source") |
+
+`nx-webpieces-rules` is tagged `role:bundle`: it aggregates `ai-hook-rules`, `code-rules`,
+`eslint-rules`, `pr-gate` and `rules-config`, so **one** dependency line delivers every `wp-*` bin, every
+eslint rule and every nx executor. A consumer repo should never name the children directly.
+
+So the catalog needs exactly one entry — the umbrella pins its children in lockstep, by construction, and
+listing them separately is five more versions to keep in step plus an invitation to the partial bump the
+L0 drift guard exists to catch. **Bumping the release the repo is built with is a one-line edit in
+`pnpm-workspace.yaml`.**
+
+A dependency nothing imports is not automatically phantom. For a `role:bundle` package the
+`dependencies` block IS the product.
 
 ### webpieces.config.json is NEVER released backwards-compatible
 

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { CONFIG_FILENAME } from '@webpieces/rules-config';
 
 // ---------------------------------------------------------------------------
-// THE L0 ALLOWLIST — the vocabulary (six named cure patterns, each an ERE+JS twin pair), the ONE union
+// THE L0 ALLOWLIST — the vocabulary (the named cure patterns, each an ERE+JS twin pair), the ONE union
 // every L0 fault consults, and isAllowed(), the single question sh and JS both ask.
 //
 // Split out of ./shim.ts purely for size (the shim module also renders the shim body). shim.ts
@@ -150,7 +150,7 @@ export const RECOVERY_CMD = 'rm -rf node_modules && pnpm install';
 // message had to spend a sentence telling the reader NOT to use the thing the allowlist permits —
 // because redirect-how-to-merge-main blocks `git merge` in every form the moment the guards come back.
 // Main is merged only through the 3-point fork merge (`wp-start-*`). With one global allowlist that
-// hole would widen from one fault to all six, so the entry goes rather than the gating.
+// hole would widen from one fault to every fault, so the entry goes rather than the gating.
 //
 // The deadlock this entry exists for, hit 2026-07-17:
 //
@@ -258,6 +258,48 @@ const INSTALL_HOOKS_BODY_JS =
 export const INSTALL_HOOKS_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + INSTALL_HOOKS_BODY_JS + CAPTURE_TAIL_JS_SRC);
 
+// THE MISSING-DEPENDENCY cure — the 2026-08-05 "pnpm install converges to the same broken state" deadlock.
+//
+// @webpieces/ai-hook-rules reaches a consumer repo through its BINS (wp-ai-guards-hook, named in
+// .claude/settings.json), never through an import. For many releases it ALSO arrived as a transitive
+// dependency of @webpieces/nx-webpieces-rules, and a repo on a hoisting node-linker got its bins in
+// node_modules/.bin for free — so no consumer ever declared it. When that dependency edge was pruned as
+// unused (correctly: nothing imports it), the package left the tree on the very next install and every
+// wp-ai-* bin went with it.
+//
+// The shim then blocked every call and prescribed `pnpm install`, which is a NO-OP here: nothing in
+// package.json asks for the package, so the install reports "Lockfile is up to date" and changes
+// nothing. The reporter ran it four times, was denied every other command, and handed the block back to
+// the human. The ONLY cure is to declare the dependency — so the command that declares it has to be on
+// this list, or fault U is a guaranteed deadlock rather than a fixable one.
+//
+// Kept as tight as every other hatch: the subcommand is `add` and nothing else (never `remove`, never
+// `update`), the package is the LITERAL @webpieces/ai-hook-rules with an optional `@<version>`, and the
+// only other tokens accepted are a short `-D`-shaped flag or the same `--word[=value]` token
+// INSTALLER_BODY_ERE already allows. So no OTHER package can be installed through this entry and no
+// shell operator can ride along: `pnpm add -D @webpieces/ai-hook-rules && rm -rf /` still FAILS CLOSED.
+// Keep in sync with ADD_HOOK_PKG_ALLOW_JS below (locked by a unit test).
+const ADD_FLAG_ERE = '(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*)';
+const ADD_HOOK_PKG_BODY_ERE =
+    '(pnpm|npm)[[:space:]]+add([[:space:]]+' + ADD_FLAG_ERE + ')*[[:space:]]+@webpieces/ai-hook-rules'
+    + '(@[A-Za-z0-9._+-]+)?([[:space:]]+' + ADD_FLAG_ERE + ')*';
+export const ADD_HOOK_PKG_ALLOW_ERE =
+    CD_PREFIX_ERE_ANCHORED + ADD_HOOK_PKG_BODY_ERE + CAPTURE_TAIL_ERE;
+
+// JS-regex twin of ADD_HOOK_PKG_ALLOW_ERE (POSIX `[[:space:]]` → `\s`). A unit test asserts they agree.
+const ADD_FLAG_JS = '(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._\\/@:-]*)';
+const ADD_HOOK_PKG_BODY_JS =
+    '(pnpm|npm)\\s+add(\\s+' + ADD_FLAG_JS + ')*\\s+@webpieces\\/ai-hook-rules'
+    + '(@[A-Za-z0-9._+-]+)?(\\s+' + ADD_FLAG_JS + ')*';
+export const ADD_HOOK_PKG_ALLOW_JS =
+    new RegExp(CD_PREFIX_JS_ANCHORED + ADD_HOOK_PKG_BODY_JS + CAPTURE_TAIL_JS_SRC);
+
+/** The package every wp-ai-* bin ships in — the one name fault U is about. */
+export const HOOK_PKG = '@webpieces/ai-hook-rules';
+
+/** The version-less spelling of the fault-U cure; the deny appends `@<pin>` when it can infer one. */
+export const ADD_HOOK_PKG_CMD = `pnpm add -D ${HOOK_PKG}`;
+
 // READ-ONLY ORIENTATION — the 2026-08-03 "where am I standing?" deadlock.
 //
 // Every entry above is a CURE. None of them tells you WHICH TREE you are in, and that is the one thing
@@ -314,10 +356,11 @@ export const INSTALL_HOOKS_TARGET_CMD = 'pnpm wp-install-ai-hooks --target=proje
 // THE L0 ALLOWLIST — one list, consulted identically by every tooling-integrity fault.
 //
 // L0 is the outermost layer: it blocks work while node_modules, the committed shim, or
-// webpieces.config.json are in a state that makes every OTHER guard untrustworthy. Its six faults are
+// webpieces.config.json are in a state that makes every OTHER guard untrustworthy. Its seven faults are
 //   D  version drift        (sh, before the bin runs)   S  committed shim != renderShim()  (bin)
 //   X  bin missing          (sh)                        C  webpieces.config.json missing   (bin)
 //   K  bin present, crashed (sh)                        Y  a loaded rule has no config key (bin)
+//   U  bin missing AND the package is not declared (sh) — X's cure is a no-op here, hence its own fault
 //
 // Drawn as a decision matrix, L0 has NO genuine second dimension. Every branch reduces to
 //   fault present AND call not on the allowlist  ->  BLOCK(messageFor(fault))
@@ -331,7 +374,7 @@ export const INSTALL_HOOKS_TARGET_CMD = 'pnpm wp-install-ai-hooks --target=proje
 //   - under C/Y, `rm -rf node_modules && pnpm install` was denied while a bare `pnpm install` passed.
 // All four disappear by consulting ONE list. See webpieces.guard-matrix.md for the rendered table.
 //
-// Composed from the BODY of each cure above so there is exactly one copy of every pattern: the six
+// Composed from the BODY of each cure above so there is exactly one copy of every pattern: the
 // named exports stay the vocabulary (and keep their own tests), this union is the decision.
 //
 // L0_ALLOWLIST is that list as DATA — the one array isAllowed(), the rendered shim's grep and the
@@ -405,6 +448,16 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', true, INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
         new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
         [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
+    // The fault-U cure. `@<version>` is pinned as an extra sample because the deny INFERS a pin from the
+    // repo's other @webpieces pins and prescribes the versioned spelling — the exact shape that must not
+    // become untypable under a later tightening.
+    new L0AllowEntry(`${ADD_HOOK_PKG_CMD} (an @version and extra flags allowed)`, 'allow', true, ADD_HOOK_PKG_BODY_ERE, ADD_HOOK_PKG_BODY_JS,
+        new L0Call('Bash', ADD_HOOK_PKG_CMD, ''),
+        [
+            new L0Call('Bash', `${ADD_HOOK_PKG_CMD}@0.4.574`, ''),
+            new L0Call('Bash', `pnpm add -D -w ${HOOK_PKG}@0.4.574`, ''),
+            new L0Call('Bash', `npm add --save-dev ${HOOK_PKG}`, ''),
+        ]),
     // NOT a cure (`cure: false`): it repairs nothing, so it must not bypass the L1 guards on a healthy
     // tree — `git status` from a subdirectory still meets force-to-root. It is on the L0 list because
     // while a fault is UP you have to be able to see where you are standing.

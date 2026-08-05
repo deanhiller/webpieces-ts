@@ -48,9 +48,9 @@ describe('L0 matrix — every (fault, call) yields exactly ONE outcome, and the 
         ...NOT_ALLOWED,
     ];
 
-    it('has six faults with unique codes', () => {
-        expect(L0_FAULTS).toHaveLength(6);
-        expect(new Set(L0_FAULTS.map((f: L0Fault): string => f.code)).size).toBe(6);
+    it('has seven faults with unique codes', () => {
+        expect(L0_FAULTS).toHaveLength(7);
+        expect(new Set(L0_FAULTS.map((f: L0Fault): string => f.code)).size).toBe(7);
     });
 
     it('answers each call with exactly one of pass | allow | null, the same answer under every fault', () => {
