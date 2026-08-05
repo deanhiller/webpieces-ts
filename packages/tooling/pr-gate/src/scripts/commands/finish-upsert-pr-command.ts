@@ -19,7 +19,7 @@ import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
 import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
-import { PrMerger, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
+import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
@@ -568,7 +568,8 @@ export class FinishUpsertPrCommand {
         // REQUIRED config — no default here on purpose. A missing value (an older published
         // rules-config that has no such field) reaches PrMerger as '' and is treated as "do not merge".
         const mergeMode = loadAndValidate(repoRoot).prGate.mergeMode ?? '';
-        const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile, mergeMode);
+        // `false`: this caller is POLICY-driven — only a config that really says AUTO merges here.
+        const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile, new MergeIntent(mergeMode, false));
         return new UpsertResult(ref.number !== '' ? ref.number : num, ref.url, outcome);
     }
 
