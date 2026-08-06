@@ -5,11 +5,11 @@ import { ContextTuple, HttpUnauthorizedError, HttpForbiddenError, JwtRequirement
 
 /**
  * CompanyJwtHook - the company's user-JWT mechanism, bound to the framework {@link JwtHook} so every
- * company service inherits working @AuthJwt / @Auth auth. Written ONCE at the company layer:
+ * company service inherits working @AuthJwt auth. Written ONCE at the company layer:
  *
  *  - parseJwt: verify a user JWT with `jsonwebtoken` (secret from JWT_SECRET) → userId(`sub`) +
  *    roles(`roles` claim) + the USER_ID context entry. Minting a JWT is a login-controller concern.
- *  - authorizeJwt: default roles any-of (via super) PLUS the company rule that @Auth({ inOrg: true })
+ *  - authorizeJwt: default roles any-of (via super) PLUS the company rule that an `inOrg: true`
  *    requires an orgId claim.
  *
  * OIDC is NOT wired here — the framework {@link DefaultOidcVerifier} handles service-to-service OIDC
@@ -31,8 +31,8 @@ export class CompanyJwtHook extends JwtHook {
     }
 
     /**
-     * AUTHORIZATION: the company policy over the endpoint's @Auth/@AuthJwt requirement. Default
-     * roles any-of (via super), PLUS this company's custom rule: @Auth({ inOrg: true }) requires the
+     * AUTHORIZATION: the company policy over the endpoint's @AuthJwt requirement. Default
+     * roles any-of (via super), PLUS this company's custom rule: `inOrg: true` requires the
      * JWT to carry an orgId claim. This is the pluggable seam — apps enforce their own rules here
      * without touching the framework.
      */

@@ -19,7 +19,7 @@ export class SharedSecrets {
 
 /**
  * AuthValues - what {@link JwtHook.parseJwt} returns: the authenticated user's id + roles (used
- * by the framework to stamp a principal and enforce @AuthJwt(...roles)) plus any extra context
+ * by the framework to stamp a principal and enforce @AuthJwt({roles: [...]})) plus any extra context
  * entries the app wants set (orgId, tenant, ...). The framework sets `entries` into RequestContext
  * via {@link RequestContext.putHeader}. Data-only structure (a class, per the guidelines).
  */

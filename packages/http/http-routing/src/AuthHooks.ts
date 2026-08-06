@@ -1,30 +1,33 @@
-import { JwtRequirement, HttpForbiddenError } from '@webpieces/core-util';
+import { JwtRequirement, rolesRequired, HttpForbiddenError } from '@webpieces/core-util';
 import { AuthValues } from './AuthConfig';
 
 /**
  * JwtHook - the OPTIONAL user-JWT mechanism. Its DI token is the {@link JWT_HOOK} Symbol injected via
  * `@inject(JWT_HOOK)` (a Symbol, because the app container uses autobind; rebindable in tests). Bind one
- * to turn on `@AuthJwt(...)` endpoints. When NO JwtHook is bound, the framework
+ * to turn on `@AuthJwt({...})` endpoints. When NO JwtHook is bound, the framework
  * {@link AuthFilter} treats every jwt endpoint as "not enabled" and fails fast (401) — there is no
  * default JWT verification because it needs an app secret + payload shape the framework can't guess.
  *
  *  - `parseJwt`     — AUTHENTICATION: decode/verify a user JWT into {@link AuthValues}, or throw. The
  *                     app owns the strategy (HS256 secret, RS256 + JWKS, a provider SDK, ...).
  *  - `authorizeJwt` — AUTHORIZATION: check the authenticated user against the endpoint's
- *                     {@link JwtRequirement}. The DEFAULT enforces `roles` (any-of; empty = any
- *                     authenticated user); override for app-defined requirements carried by
- *                     `@Auth({...})` — e.g. `if (requirement['inOrg'] && !values.claims['orgId']) ...`.
+ *                     {@link JwtRequirement}. The DEFAULT enforces the roles any-of; override for
+ *                     app-defined requirements carried by the SAME decorator, e.g.
+ *                     `@AuthJwt({allRolesAllowed: true, inOrg: true})` →
+ *                     `if (requirement['inOrg'] && !values.claims['orgId']) ...`.
  */
 export abstract class JwtHook {
     /** Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw. */
     abstract parseJwt(token: string): AuthValues;
 
     /**
-     * DEFAULT authorization: enforce `roles` (any-of; empty = any authenticated user). Override to
-     * enforce app-defined requirements. Throw HttpForbiddenError to deny; return to allow.
+     * DEFAULT authorization: enforce the endpoint's roles (any-of). Override to enforce app-defined
+     * requirements. Throw HttpForbiddenError to deny; return to allow.
      */
     authorizeJwt(values: AuthValues, requirement: JwtRequirement): void {
-        const roles = requirement.roles ?? [];
+        // rolesRequired is the ONE reader of the JwtRoles union: [] means the endpoint typed
+        // `allRolesAllowed: true`, never "the field was missing" — that state no longer compiles.
+        const roles = rolesRequired(requirement);
         if (roles.length > 0 && !roles.some((role: string) => values.roles.includes(role))) {
             throw new HttpForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
         }

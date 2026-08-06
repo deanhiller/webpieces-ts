@@ -4,7 +4,7 @@ export {
     Endpoint,
     Public,
     AuthJwt,
-    AuthJwtAllRolesAllowed,
+    rolesRequired,
     AuthOidc,
     AuthSharedSecret,
     Rpc,

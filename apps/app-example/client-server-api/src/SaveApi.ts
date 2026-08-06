@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, AuthJwtAllRolesAllowed } from '@webpieces/core-util';
+import { ApiPath, Endpoint, AuthJwt } from '@webpieces/core-util';
 
 // ============================================================
 // Request DTOs
@@ -96,7 +96,7 @@ export interface SaveResponse {
  *
  * Using abstract methods means TypeScript enforces implementation at compile time.
  */
-@AuthJwtAllRolesAllowed()
+@AuthJwt({ allRolesAllowed: true })
 @ApiPath('/search')
 export abstract class SaveApi {
     @Endpoint('/item', 'rpc')
