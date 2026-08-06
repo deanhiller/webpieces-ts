@@ -13,6 +13,7 @@ import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { L0_ALLOW_JS, L0_CURE_ALLOW_JS } from '../bin/shim';
+import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC } from './l0-fault-codes';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
@@ -75,7 +76,9 @@ function maybeRefreshMainSync(rules: readonly Rule[], workspaceRoot: string): vo
 function configMissingBlock(cwd: string, command: string = ''): BlockedResult | null {
     if (command !== '' && l0FaultAllows(command)) return null;
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    return new BlockedResult(CONFIG_MISSING_REPORT + guardMatrixPointer(writeGuardMatrixDoc(root)));
+    // Stamped with its L0 letter so the block is greppable as fault C wherever it is recorded — the
+    // adapter carries it to the audit line rather than re-deriving it from the report text.
+    return new BlockedResult(CONFIG_MISSING_REPORT + guardMatrixPointer(writeGuardMatrixDoc(root)), L0_FAULT_CONFIG_MISSING);
 }
 
 export function run(
@@ -241,7 +244,7 @@ function l0FaultAllows(command: string): boolean {
 // may start somewhere unexpected), while a `cd` OUT of it is reset by the harness (so a separate
 // `cd <worktree>` call buys nothing). One self-contained line is correct either way.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult | null {
+function gitFromSubdirBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const targetAtRoot = path.resolve(tree.effectiveCwd) === path.resolve(tree.root);
     if (!isGitOrGhCommand(command) || targetAtRoot) return null;
     const report =
@@ -253,7 +256,7 @@ function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult
         `     ${atRoot(tree.root, command)}\n` +
         `   A leading \`cd <path> &&\` is ACCEPTED by the guards — it cannot change what the command\n` +
         `   does to the repo. (The webpieces guards evaluate the repo's git state at its root.)`;
-    logGuardDecision(tree.root, new GuardDecision('force-to-root', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'git/gh from subdir'));
+    logGuardDecision(tree.root, new GuardDecision('force-to-root', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'git/gh from subdir'), agent);
     return new BlockedResult(report);
 }
 
@@ -262,9 +265,9 @@ function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult
 // worktree because each worktree checks out its own webpieces.config.json. This runs BEFORE
 // loadAndValidate, which is why it resolves the root itself rather than using workspaceRoot.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function logL0CureBypass(command: string, cwd: string): void {
+function logL0CureBypass(command: string, cwd: string, agent: AgentIdentity): void {
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)'));
+    logGuardDecision(root, new GuardDecision('-', 'Bash', command, branchForLog(root), 'ALLOW', 'L0 cure bypass (always allowed)'), agent);
 }
 
 /**
@@ -306,7 +309,7 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
 function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const report = new CoordinatorWorktreeGuard().block(command, tree, agent);
     if (report === null) return null;
-    logGuardDecision(tree.root, new GuardDecision('coordinator-in-worktree', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'coordinator working inside a linked worktree'));
+    logGuardDecision(tree.root, new GuardDecision('coordinator-in-worktree', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'coordinator working inside a linked worktree'), agent);
     return new BlockedResult(report);
 }
 
@@ -315,9 +318,9 @@ function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent:
 // as one step here rather than as two near-identical stanzas in runBashInternal.
 // webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
-    return misplacedCdBlock(command, tree)
+    return misplacedCdBlock(command, tree, agent)
         ?? coordinatorInWorktreeBlock(command, tree, agent)
-        ?? gitFromSubdirBlock(command, tree);
+        ?? gitFromSubdirBlock(command, tree, agent);
 }
 
 /**
@@ -335,7 +338,7 @@ function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdent
  * in — so their remedies would be steering from a location the command does not actually run in.
  */
 // webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock(); the whole runner is module-scope functions
-function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult | null {
+function misplacedCdBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const reason = new EffectiveTreeResolver().misplacedCd(command);
     if (reason === null) return null;
     const report =
@@ -348,14 +351,14 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
         `   Fix Option 2: drop the \`cd\` — ${tree.root} is where the command is judged anyway.\n` +
         `   Fix Option 3: split it — run the work in one call, the \`cd\` in another (a \`cd\` alone still\n` +
         `                 moves nothing the guards judge; see EffectiveTree on why cwd cannot be assumed).`;
-    logGuardDecision(tree.root, new GuardDecision('cd-must-be-first', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'cd not leading/literal'));
+    logGuardDecision(tree.root, new GuardDecision('cd-must-be-first', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'cd not leading/literal'), agent);
     return new BlockedResult(report);
 }
 
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
 function runBashInternal(command: string, cwd: string, mode: HookMode, agent: AgentIdentity): BlockedResult | null {
     if (isL0CureCommand(command)) {
-        logL0CureBypass(command, cwd);
+        logL0CureBypass(command, cwd, agent);
         return null;
     }
 
@@ -377,7 +380,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
     // Intentional, not a silent hole. A LINKED WORKTREE of this repo is deliberately NOT foreign — it
     // is the same project, so the guards run against THAT tree's branch and cache.
     if (tree.kind === 'foreign') {
-        logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'foreign git repo (out of scope)'));
+        logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW', 'foreign git repo (out of scope)'), agent);
         return null;
     }
 
@@ -413,13 +416,13 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
         // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
         // logged below.
         if (/\b(?:git|gh)\b/.test(command)) {
-            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block'));
+            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block'), agent);
         }
         return null;
     }
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
-    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'));
+    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'), agent);
     const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }
@@ -513,7 +516,8 @@ function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): 
         lines.push('');
     }
 
-    return new BlockedResult(lines.join('\n'));
+    // Fault Y, stamped for the audit trail — see configMissingBlock for why the producer names it.
+    return new BlockedResult(lines.join('\n'), L0_FAULT_CONFIG_OUT_OF_SYNC);
 }
 
 // N-legs pattern: each rule runs independently so one rule can never abort the others. A rule may

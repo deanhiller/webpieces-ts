@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { dotWebpieces, RepoRootFinder, HOOKS_STATE_DIR } from '@webpieces/rules-config';
 
+import { AgentIdentity, UNKNOWN_AGENT } from './coordinator-worktree';
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 
 // The rejection log SPLITS across the two state dirs on purpose: the `.log` index goes to `logs/`
@@ -15,11 +16,16 @@ const MAX_AGE_DAYS = 7;
 
 const RULE_NAME_RE = /^\[([^\]]+)\] \(/gm;
 
+// `agent` decides which stream this rejection joins — a subagent sharing the coordinator's tree gets
+// `logs/agents/<agentId>/hook-rejection.log`, the coordinator keeps today's path. It defaults to the
+// UNKNOWN sentinel, which resolves to the coordinator path: a caller that cannot tell who it is must
+// not be guessed into a namespace (see UNKNOWN_AGENT / DotWebpieces.agentLogs).
 export function logRejection(
     toolKind: ToolKind,
     input: NormalizedToolInput,
     result: BlockedResult,
     cwd: string,
+    agent: AgentIdentity = UNKNOWN_AGENT,
 ): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -34,7 +40,10 @@ export function logRejection(
         // LOCAL scope — a rejection is this worktree's event, and a per-worktree log has exactly one
         // writer, so its appends and its daily detail files cannot collide with another agent's.
         const hooksDir = dotWebpieces.localFile(root, HOOKS_STATE_DIR);
-        const logsDir = dotWebpieces.logs(root);
+        // Per-agent within the tree, so two subagents in one checkout cannot interleave. Only the
+        // `.log` INDEX moves: the dated detail files are uniquely named (writeInfo-<epochMs>.md) and
+        // are not appended to, so they have no interleaving problem to solve and stay in one place.
+        const logsDir = dotWebpieces.agentLogs(root, agent.logNamespace);
         const dayDir = path.join(hooksDir, dateStr);
         fs.mkdirSync(dayDir, { recursive: true });
         fs.mkdirSync(logsDir, { recursive: true });
@@ -53,7 +62,11 @@ export function logRejection(
         const logPath = path.join(logsDir, LOG_FILE);
         rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
 
-        const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\n`;
+        // APPEND-ONLY, and the appended fields are spelled exactly as the other two audit streams spell
+        // them (`fault=` in the L0 sh log and in guard-invocations.log, `agent=` in both JS streams).
+        // A fault-S storm previously landed here as two lines attributed to whatever rule the report
+        // happened to cite, with nothing anywhere identifying L0 as the cause.
+        const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\tfault=${result.fault}\tagent=${agent.logLabel}\n`;
         fs.appendFileSync(logPath, logLine);
 
         rotateOldDays(hooksDir, MAX_AGE_DAYS);

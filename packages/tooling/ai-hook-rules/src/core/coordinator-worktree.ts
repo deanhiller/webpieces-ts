@@ -17,11 +17,30 @@ export class AgentIdentity {
     /** Empty when the hook fired in the coordinator. */
     readonly agentType: string;
     readonly coordinator: boolean;
+    /**
+     * WHERE this caller's audit lines belong — the `agents/<id>` namespace under the tree's log
+     * directory, or '' meaning "the coordinator's plain log paths, exactly as they have always been".
+     *
+     * Empty for the coordinator (its paths must not move) AND for the UNKNOWN sentinel (a caller that
+     * cannot tell who it is must not be guessed into a namespace, the same fail-open UNKNOWN_AGENT
+     * already applies to the block decision). Sanitising it into a safe path segment is dotWebpieces'
+     * job, not this class's — see agentDirName.
+     */
+    readonly logNamespace: string;
+    /**
+     * WHO the audit line says made the call — `coordinator`, the subagent's id, or `unknown` for a
+     * caller that cannot tell. Distinct from {@link logNamespace} on purpose: the sentinel and the
+     * coordinator share a log DIRECTORY (nothing may move the coordinator's paths) but they are not the
+     * same claim, and a log that conflated them would be asserting something it does not know.
+     */
+    readonly logLabel: string;
 
-    constructor(agentId: string, agentType: string) {
+    constructor(agentId: string, agentType: string, identified: boolean = true) {
         this.agentId = agentId;
         this.agentType = agentType;
         this.coordinator = agentId === '' && agentType === '';
+        this.logNamespace = this.coordinator || !identified ? '' : agentId;
+        this.logLabel = this.coordinator ? 'coordinator' : agentId;
     }
 }
 
@@ -30,8 +49,11 @@ export class AgentIdentity {
  * existing runBash() call site. It reads as NOT the coordinator on purpose: only the Claude Code
  * adapter parses the payload that carries the answer, and a caller who does not know must never be
  * GUESSED into a block. Fail open; the one caller that knows passes the real identity.
+ *
+ * `identified: false` carries that same "we do not know" into the LOG destination, where the fail-open
+ * answer is the opposite shape: not a namespace of its own, but the coordinator's existing paths.
  */
-export const UNKNOWN_AGENT = new AgentIdentity('unknown', 'unknown');
+export const UNKNOWN_AGENT = new AgentIdentity('unknown', 'unknown', false);
 
 /**
  * L1: the COORDINATOR must not work inside a linked worktree — it must delegate that work to a

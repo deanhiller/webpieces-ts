@@ -1,5 +1,7 @@
 import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 
+import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
+
 // ---------------------------------------------------------------------------
 // THE L0 AUDIT LOG, in POSIX sh — the shim half of `.webpieces/**/logs/ai-hook-shim.log`.
 //
@@ -57,11 +59,13 @@ export const SHIM_LOG_VERDICTS = [
 ] as const;
 
 /**
- * The sh-side L0 fault codes, exactly as guards/L0-tooling.md names them. `-` means "no sh-side fault" —
- * the shim cannot classify S / C / Y, which the BINARY detects (and logs through its own streams), so
- * a `-` here is a statement about this layer only, not a claim that nothing was wrong.
+ * The sh-side L0 fault codes, IMPORTED from the one codebook (../core/l0-fault-codes) rather than
+ * retyped here — the letters in this file and the letters in `L0_FAULTS` have to be the same letters or
+ * the log cannot be reconciled against the matrix. `-` means "no sh-side fault": the shim cannot
+ * classify S / C / Y, which the BINARY detects and stamps onto its OWN streams with the same `fault=`
+ * field, so a `-` here is a statement about this layer only, never a claim that nothing was wrong.
  */
-export const SHIM_LOG_FAULTS = ['D', 'X', 'U', 'K', '-'] as const;
+export const SHIM_LOG_FAULTS = [...L0_SH_FAULT_CODES, L0_FAULT_NONE] as const;
 
 /**
  * Shell fragment: derive WHERE this call's log belongs — the sh TWIN of `DotWebpieces.local()` +

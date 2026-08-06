@@ -22,6 +22,33 @@ export const LOGS_STATE_DIR = 'logs';
 // each consumer) so the hooks/logs split has exactly one definition.
 export const HOOKS_STATE_DIR = 'hooks';
 
+// The per-SUBAGENT namespace inside a tree's log directory: `<logs>/agents/<agentId>/<same filenames>`.
+// The coordinator keeps writing straight to `<logs>/`, exactly as it always has — see agentLogs().
+export const AGENTS_STATE_DIR = 'agents';
+
+// What may appear in a log directory name derived from a payload value. Everything else — `/`, `\`,
+// `.`, NUL, spaces — is replaced, so `..` becomes `__` and no agent id can name a directory outside
+// `<logs>/agents/`. Length-capped for the filesystems that still care.
+const UNSAFE_AGENT_CHARS = /[^A-Za-z0-9_-]/g;
+const AGENT_DIR_NAME_MAX = 64;
+
+/**
+ * Make an agent id safe to use as ONE path segment — the sanitiser every per-agent path goes through.
+ *
+ * `agent_id` arrives in the Claude Code PreToolUse payload, i.e. it is INPUT, and interpolating input
+ * into a filesystem path unchecked is how a log writer starts writing outside its log directory. This
+ * is deliberately a whitelist, not a blacklist of traversal spellings: `..`, `../..`, an absolute path,
+ * a NUL byte and a 400-character id all collapse to a single harmless segment.
+ *
+ * Returns '' only for an empty id, which every caller reads as "no per-agent namespace — use the plain
+ * directory". Everything else keeps its length (capped) and stays exactly one segment: a hostile id is
+ * neutralised into a directory name, never rejected into somebody else's stream.
+ */
+// webpieces-disable no-function-outside-class -- pure path-safety primitive for DotWebpieces.agentLogs() below; module-scope beside the constants it uses, and needed by callers that hold no instance
+export function agentDirName(agentId: string): string {
+    return agentId.replace(UNSAFE_AGENT_CHARS, '_').slice(0, AGENT_DIR_NAME_MAX);
+}
+
 // git prints the shared git dir as `<primary>/.git` for a conventional clone. Anything else (a bare
 // repo, `--separate-git-dir`) is a layout we decline to derive a working tree from.
 const GIT_DIR_NAME = '.git';
@@ -182,6 +209,35 @@ export class DotWebpieces {
     /** A path beneath the log directory — `dotWebpieces.logsFile(root, 'guard-invocations.log')`. */
     logsFile(startDir: string, ...segments: string[]): string {
         return path.join(this.logs(startDir), ...segments);
+    }
+
+    /**
+     * The log directory for ONE AGENT — `<logs()>/agents/<agentId>` — or `logs()` itself when there is
+     * no agent to separate.
+     *
+     * ─── The bug ───────────────────────────────────────────────────────────────────────────────────
+     * A subagent WITHOUT worktree isolation shares the coordinator's tree, and the hook is wired as
+     * `sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh"` with `$CLAUDE_PROJECT_DIR` fixed at
+     * session start. So one coordinator plus several such subagents all appended to the SAME
+     * `.webpieces/logs/guard-invocations.log`, and once the lines were interleaved nothing in them said
+     * which agent wrote which — the streams could not be untangled after the fact. (A WORKTREE-isolated
+     * subagent was already separated: its logs resolve under `worktrees/<name>/logs/` via local().)
+     *
+     * ─── Why the coordinator keeps the plain path ──────────────────────────────────────────────────
+     * `agentId` is EMPTY exactly when the hook fired in the coordinator (the payload carries
+     * agent_id/agent_type only inside a subagent — see AgentIdentity), so the coordinator's paths are
+     * unchanged, byte for byte. Every human habit and every bit of tooling that greps
+     * `.webpieces/logs/*.log` keeps working, and the new directory only ever appears when there is
+     * genuinely a second writer. Callers that CANNOT know who they are (library consumers, the openclaw
+     * adapter) pass '' and are treated as the coordinator rather than guessed into a namespace.
+     *
+     * The filenames inside are the SAME filenames, so rotation (`*.1.log`) works unchanged in there.
+     */
+    agentLogs(startDir: string, agentId: string): string {
+        const logs = this.logs(startDir);
+        const name = agentDirName(agentId);
+        // Never interpolate a payload value into a path unchecked — agentDirName is the whitelist.
+        return name === '' ? logs : path.join(logs, AGENTS_STATE_DIR, name);
     }
 
     /** True when `startDir` sits in a LINKED worktree rather than the primary clone. */
