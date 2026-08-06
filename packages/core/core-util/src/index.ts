@@ -40,8 +40,7 @@ export {
     // Auth mode decorators (clean service-to-service + user JWT model)
     Public,
     AuthJwt,
-    AuthJwtAllRolesAllowed,
-    Auth,
+    rolesRequired,
     MISSING_AUTH_DECORATOR_FIX,
     AuthOidc,
     AuthSharedSecret,
@@ -72,7 +71,7 @@ export {
     RouteMetadata,
     METADATA_KEYS,
 } from './http/decorators';
-export type { AuthMode, ApiKind, EndpointKind, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
+export type { AuthMode, ApiKind, EndpointKind, JwtRoles, JwtRequirement, EndpointOptions, ExternalEndpointOptions } from './http/decorators';
 // WHO calls an `external` endpoint — the caller declaration @Endpoint(..., 'external', {calledBy})
 // requires, and the reader for it.
 export { EXTERNAL_SYSTEM_KINDS, DEFAULT_CALLER_KIND, ExternalCaller, isExternalSystemKind, getEndpointCaller } from './http/external-caller';

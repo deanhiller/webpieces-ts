@@ -58,7 +58,6 @@ export {
     Endpoint,
     Public,
     AuthJwt,
-    AuthJwtAllRolesAllowed,
     AuthOidc,
     AuthSharedSecret,
     Rpc,

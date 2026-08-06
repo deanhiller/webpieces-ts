@@ -108,7 +108,7 @@ RequestContext.put(PRINCIPAL_KEY, values); // '__webpieces_principal__'
 
 - `DefaultJwtHook.ts` — HS256 shared-secret user JWTs; maps `sub → userId`, `roles` claim → roles.
 - `CompanyJwtHook.ts` (example app) — puts the `USER_ID` context entry explicitly and adds an
-  `@Auth({ inOrg: true })` rule requiring an `orgId` claim:
+  `@AuthJwt({ allRolesAllowed: true, inOrg: true })` rule requiring an `orgId` claim:
   ```ts
   return new AuthValues(userId, roles, [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)], claims);
   ```

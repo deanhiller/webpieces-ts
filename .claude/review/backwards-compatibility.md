@@ -24,7 +24,7 @@ The compile error is not the cost of the change, it is the delivery mechanism fo
 The live example this checklist was created from is
 [#589](https://github.com/deanhiller/webpieces-ts/issues/589): an agent wrote
 `@Authentication(new AuthenticationConfig(true))` — the widest possible grant — onto an **admin**
-contract, and then asserted in a comment that the framework had no role support. `@AuthJwt('admin')`
+contract, and then asserted in a comment that the framework had no role support. `@AuthJwt({roles:['admin']})`
 was two hundred lines above the file it was editing. Keeping `AuthenticationConfig` as `@deprecated`
 would have fixed the documentation and left the silent over-permissioning fully available.
 
@@ -63,10 +63,14 @@ thing.** Any of these:
 🔴 unless the OLD spelling is deleted in the same diff. The verdict text must name both spellings and
 the deletion that is missing.
 
-The one legitimate case is two spellings that are genuinely **different decisions** — `@AuthJwt('admin')`
-and `@AuthJwtAllRolesAllowed()` are not a shim pair, they are an enumerated set and a deliberately-named
-wide case. The test is: can a caller pick wrong and get the same behaviour either way? If yes, it is a
-shim.
+The test is: can a caller pick either one and get the same behaviour? If yes, it is a shim. Two
+spellings that encode genuinely **different decisions** are fine — `@AuthJwt({roles:['admin']})` and
+`@AuthJwt({allRolesAllowed:true})` are one API with two branches, not two APIs.
+
+The stronger move, when the language allows it, is to make the union itself unsatisfiable in the bad
+cases so there is exactly ONE spelling per decision — see `JwtRoles` in `core-util/src/http/decorators.ts`,
+where `allRolesAllowed:false` alongside `roles` does not compile precisely because it would be a second
+spelling of a decision that already has one.
 
 ### 2. `@deprecated` used instead of deletion
 
@@ -99,14 +103,28 @@ editing `webpieces.config.json` is always permitted even while the config is inv
 
 A validation that exists only because the signature admits a contradictory combination is a signal the
 signature is wrong. `@Authentication` needed a runtime `throw` for `authenticated: false` + roles;
-`@Public()` and `@AuthJwt(...)` cannot express it at all. Prefer the version where the error is
+`@Public()` and `@AuthJwt({...})` cannot express it at all. Prefer the version where the error is
 unrepresentable. 🟡 when the throw is defensible, 🔴 when the union or the arity could have carried it.
+
+**Ask specifically whether a discriminated union could have replaced the throw.** `JwtRoles` is the worked
+example: two mutually-exclusive branches, `roles?: never` on the wide one, and a non-empty tuple
+`readonly [string, ...string[]]` on the narrow one, so every contradictory or under-specified combination
+is a compile error and the runtime validation is DELETED rather than kept as a backstop. A test that pins
+this uses `@ts-expect-error` per bad case — tsc reports an unused directive (TS2578) if one ever starts
+compiling, so the guarantee is regression-tested rather than asserted in a comment.
+
+**Check WHERE those assertions live: a `@ts-expect-error` inside a `.spec.ts` is inert in this repo.**
+`tsconfig.lib.json` excludes `**/*.spec.ts` and vitest transpiles with esbuild, which strips types without
+checking them — so the suite goes green whether or not the guarded line really errors. 🟡 a compile-time
+claim pinned only in a spec, and say it must move to a compiled file (the worked example is
+`core-util/src/http/AuthJwtCompileAssertions.ts`).
 
 ### 5. A widening that is an ABSENCE rather than a token
 
 An empty array, an omitted argument, or a falsy default that means "allow everything" is the same class
 of defect: the permissive path becomes the shortest thing to type and it is not greppable. The wide
-case must be its own named token — `@AuthJwtAllRolesAllowed()`, not `@AuthJwt()`.
+case must be its own named token — `@AuthJwt({allRolesAllowed: true})`, never an omitted field.
+Greppability is the test: `grep -rn allRolesAllowed` must list every wide endpoint.
 
 ### 6. An error message that teaches the removed API
 

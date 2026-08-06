@@ -116,27 +116,52 @@ export class RouteMetadata {
 }
 
 /**
- * The service-to-service / user auth mode of an endpoint. Discriminated union so
- * a filter can `switch (mode.kind)` and get the data it needs, exhaustively.
+ * The role decision for a JWT endpoint, as a union the COMPILER enforces — one spelling per decision,
+ * every broken combination a compile error:
+ *
+ * ```typescript
+ * @AuthJwt({ roles: ['admin'] })            // ✅ role-gated (any-of)
+ * @AuthJwt({ allRolesAllowed: true })       // ✅ every authenticated user, said out loud
+ * @AuthJwt({})                              // ❌ pick a branch
+ * @AuthJwt({ roles: [] })                   // ❌ needs at least one role
+ * ```
+ *
+ * `allRolesAllowed` exists ONLY on the wide branch (the dangerous half must be a greppable token, and
+ * the narrow branch rejects it as a redundant second spelling); `roles` is a NON-EMPTY tuple so
+ * "declared roles, passed none" — the old optional `string[]`'s silent widest grant — cannot be written.
+ * All six bad cases are pinned in `AuthJwtCompileAssertions.ts` — a COMPILED file, not a spec: tsc
+ * fails the build (TS2578) if any starts compiling. A spec cannot do this (see that file's header).
+ *
+ * WHY a type rather than the runtime `throw` this replaced: `.claude/review/backwards-compatibility.md`
+ * shim shapes #4 and #5. Not restated here — three copies of one rationale is three things to drift.
+ */
+export type JwtRoles =
+    | { allRolesAllowed: true; roles?: never }
+    | { roles: readonly [string, ...string[]]; allRolesAllowed?: never };
+
+/**
+ * JwtRequirement - the {@link JwtRoles} decision PLUS any app-defined authorization fields, e.g.
+ * `@AuthJwt({ allRolesAllowed: true, inOrg: true })`. The framework authenticates (JwtHook.parseJwt)
+ * and enforces the roles any-of; the app overrides JwtHook.authorizeJwt to enforce its own fields.
+ *
+ * This was a SECOND decorator (`@Auth`) whose `roles` was optional — so `@Auth({})` reached the exact
+ * widest grant that {@link JwtRoles} exists to make un-typeable. Folding it in leaves one decorator per
+ * credential kind and closes that route by construction.
+ */
+// webpieces-disable no-any-unknown -- app-defined authorization fields (inOrg, tenant, ...)
+export type JwtRequirement = JwtRoles & { [field: string]: unknown };
+
+/**
+ * The service-to-service / user auth mode of an endpoint. Discriminated union so a filter can
+ * `switch (mode.kind)` and get the data it needs, exhaustively.
  *
  * - `public`        → no auth check
- * - `jwt`           → user-facing JWT (optionally role-gated), validated by the app AuthFilter
+ * - `jwt`           → user JWT; `requirement` carries the compiler-enforced role decision
+ *                     ({@link JwtRoles}) plus any app-defined authorization fields
  * - `oidc`          → Google OIDC service-to-service (Cloud Tasks delivery / cross-service RPC);
- *                     `callers` is the allow-list of caller service accounts ('self' = this service's SA)
+ *                     `callers` is the allow-list of caller SAs ('self' = this service's SA)
  * - `shared-secret` → constant-time compare of a header against the secret bound for `secretKey`
  */
-/**
- * JwtRequirement - the endpoint's JWT authorization requirement, OPAQUE to the framework. The
- * default JwtHook.authorizeJwt enforces `roles` (any-of; empty = any authenticated user); apps
- * add their OWN fields (inOrg, tenant, feature, ...) via @Auth({...}) and override authorizeJwt to
- * enforce them. This is the pluggable seam: the framework authenticates, the app authorizes.
- */
-export interface JwtRequirement {
-    roles?: string[];
-    // webpieces-disable no-any-unknown -- app-defined authorization fields (inOrg, tenant, ...)
-    [field: string]: unknown;
-}
-
 export type AuthMode =
     | { kind: 'public' }
     | { kind: 'jwt'; requirement: JwtRequirement }
@@ -145,7 +170,7 @@ export type AuthMode =
 
 /**
  * Auth metadata attached to a class or method via one of the auth decorators
- * (@Public / @AuthJwt / @AuthJwtAllRolesAllowed / @Auth / @AuthOidc / @AuthSharedSecret).
+ * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret) — one per credential kind.
  *
  * Carries a discriminated {@link AuthMode} and nothing else. It USED to also expose
  * `authenticated`/`roles` getters "for back-compat with readers that only understand the user-JWT
@@ -168,7 +193,7 @@ export class AuthMeta {
  *
  * Usage:
  * ```typescript
- * @AuthJwt('admin')
+ * @AuthJwt({ roles: ['admin'] })
  * @ApiPath('/api/save')
  * abstract class SaveApi {
  *   @Endpoint('/item', 'rpc')
@@ -336,40 +361,31 @@ export function Public(): ClassDecorator & MethodDecorator {
 }
 
 /**
- * @AuthJwt(...roles) - user-facing JWT auth, role-gated. The app-level AuthFilter validates the
- * token, then JwtHook.authorizeJwt enforces the roles any-of.
+ * @AuthJwt(requirement) - THE user-facing JWT decorator, covering the whole user-JWT axis: the
+ * compiler-enforced role decision ({@link JwtRoles}) plus app-defined fields ({@link JwtRequirement}).
  *
- * AT LEAST ONE ROLE IS REQUIRED, by the signature. `@AuthJwt()` used to compile and produced
- * `roles: []`, which authorizeJwt treats as "any authenticated user" — so the WIDEST grant in the
- * system was also the shortest thing to type, and an absence of arguments was doing the widening.
- * The wide case now has to name itself: {@link AuthJwtAllRolesAllowed}. That makes it greppable and
- * makes forgetting the roles a compile error instead of a silent open endpoint.
+ * ```typescript
+ * @AuthJwt({ roles: ['admin', 'editor'] })          // any-of
+ * @AuthJwt({ allRolesAllowed: true, inOrg: true })  // wide + an app rule enforced by authorizeJwt
+ * ```
+ *
+ * It absorbed the former `@Auth(requirement)` — same argument, same AuthMode, so two spellings of one
+ * decision. One decorator per credential kind now: `@Public` / `@AuthJwt` / `@AuthOidc` /
+ * `@AuthSharedSecret`.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthJwt(firstRole: string, ...moreRoles: string[]): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'jwt', requirement: { roles: [firstRole, ...moreRoles] } });
-}
-
-/**
- * @AuthJwtAllRolesAllowed() - user-facing JWT auth with NO role restriction: every authenticated
- * user gets in. Deliberately a distinct, greppable token rather than `@AuthJwt()` with the roles
- * left off, so "any logged-in user is allowed here" is a decision someone typed on purpose and an
- * auditor can find with one grep.
- */
-// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function AuthJwtAllRolesAllowed(): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'jwt', requirement: { roles: [] } });
-}
-
-/**
- * @Auth(requirement) - user-facing JWT auth with an APP-DEFINED authorization requirement beyond
- * roles, e.g. `@Auth({ inOrg: true })` or `@Auth({ roles: ['admin'], tenantScoped: true })`. The
- * framework authenticates the JWT (JwtHook.parseJwt), then hands `requirement` + the parsed
- * values to JwtHook.authorizeJwt — which the app overrides to enforce its own policy. This is
- * how clients plug in their own JWT security without touching the framework.
- */
-export function Auth(requirement: JwtRequirement): ClassDecorator & MethodDecorator {
+export function AuthJwt(requirement: JwtRequirement): ClassDecorator & MethodDecorator {
     return defineAuthMode({ kind: 'jwt', requirement });
+}
+
+/**
+ * The roles an endpoint accepts, or [] when it accepts every authenticated user. The ONE reader of
+ * the {@link JwtRoles} union, so no caller has to re-derive "does absent mean wide?" — a question
+ * whose two plausible answers is how the widest grant kept hiding behind an absent field.
+ */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getAuthMode
+export function rolesRequired(requirement: JwtRequirement): readonly string[] {
+    return requirement.allRolesAllowed === true ? [] : requirement.roles;
 }
 
 /**
@@ -508,17 +524,14 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
 }
 
 /**
- * The ONE prescription for "this endpoint declares no auth". Exported and shared because there are
- * two places that raise it — here and http-routing's ApiRoutingFactory — and they had drifted into
- * teaching two different menus, one of which omitted @AuthJwtAllRolesAllowed() and @Auth({...}). A
- * message that teaches an incomplete API is the same defect as an API with two spellings: whichever
- * menu the caller happens to hit becomes the API they believe exists.
- *
- * It leads with the ROLE-GATED member on purpose. The safe-by-default reading order matters more than
- * alphabetical: the first thing offered should not be the widest grant.
+ * The ONE prescription for "this endpoint declares no auth", shared by the two places that raise it
+ * (here and http-routing's ApiRoutingFactory) because they had drifted into teaching different menus.
+ * A message teaching an incomplete API is the same defect as an API with two spellings: whichever menu
+ * the caller hits becomes the API they believe exists. It leads with the ROLE-GATED member on purpose —
+ * the first thing offered should not be the widest grant.
  */
 export const MISSING_AUTH_DECORATOR_FIX =
-    'Add one of @AuthJwt(...roles) / @AuthJwtAllRolesAllowed() / @Auth({...}) / @Public() / ' +
+    "Add one of @AuthJwt({roles: ['admin']}) / @AuthJwt({allRolesAllowed: true}) / @Public() / " +
     '@AuthOidc(...callers) / @AuthSharedSecret(key) to the class or method.';
 
 /**
@@ -678,8 +691,8 @@ export function validateNoConflictingDecorators(apiClass: Function, methodName: 
         const location = methodName ? `method '${methodName}' of ${targetName}` : `class ${targetName}`;
         throw new Error(
             `Conflicting auth decorator on ${location}. ` +
-            `Only one of @Public() / @AuthJwt(...) / @AuthJwtAllRolesAllowed() / @Auth({...}) / ` +
-            `@AuthOidc(...) / @AuthSharedSecret(...) is allowed per target.`
+            `Only one of @Public() / @AuthJwt({...}) / @AuthOidc(...) / @AuthSharedSecret(...) ` +
+            `is allowed per target.`
         );
     }
 }

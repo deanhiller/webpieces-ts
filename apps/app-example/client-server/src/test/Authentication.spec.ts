@@ -108,20 +108,20 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
         expect(res.userId).toBe('user-42'); // proves parseJwt → USER_ID context entry landed
     });
 
-    it('allows ANY logged-in user on a no-role endpoint (@AuthJwtAllRolesAllowed())', async () => {
+    it('allows ANY logged-in user on a no-role endpoint (@AuthJwt({allRolesAllowed: true}))', async () => {
         const token = sign({ sub: 'user-99', roles: [] }); // authenticated, but zero roles
         const res = await withAuthHeader(`Bearer ${token}`, () => api.userOp({}));
         expect(res.ok).toBe(true);
         expect(res.userId).toBe('user-99');
     });
 
-    it('@Auth({inOrg:true}): a logged-in user WITH an org claim passes (pluggable authZ)', async () => {
+    it('inOrg app field: a logged-in user WITH an org claim passes (pluggable authZ)', async () => {
         const token = sign({ sub: 'user-11', orgId: 'org-1' });
         const res = await withAuthHeader(`Bearer ${token}`, () => api.orgOp({}));
         expect(res.ok).toBe(true);
     });
 
-    it('@Auth({inOrg:true}): a logged-in user WITHOUT an org claim is denied (403)', async () => {
+    it('inOrg app field: a logged-in user WITHOUT an org claim is denied (403)', async () => {
         const token = sign({ sub: 'user-12' }); // authenticated, but no orgId claim
         await expect(
             withAuthHeader(`Bearer ${token}`, () => api.orgOp({})),

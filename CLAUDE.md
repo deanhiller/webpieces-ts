@@ -117,6 +117,31 @@ routeBuilder.addRoute(
 );
 ```
 
+#### The one carve-out: DECORATOR arguments that encode a compiler-enforced choice
+
+A decorator argument may be an object literal typed by a **discriminated union**, when the union is what
+makes an invalid combination fail to compile:
+
+```typescript
+@AuthJwt({ roles: ['admin'] })         // ✅ role-gated
+@AuthJwt({ allRolesAllowed: true })    // ✅ every authenticated user, said out loud
+@AuthJwt({})                           // ❌ compile error — pick a branch
+@AuthJwt({ roles: [] })                // ❌ compile error — needs at least one role
+```
+
+This is not a loophole for skipping a class, and it does not apply to configs, definitions, or DTOs —
+those still take a class. It exists because **a class cannot express this guarantee.** A class is one
+shape: to cover both branches you would need either two classes (which is the "two spellings" shim the
+compatibility policy rejects) or one class plus a runtime `throw` (which is shim shape #4 — a throw
+standing in for a type that cannot express the bad state). The union is the only form where the invariant
+is enforced at the moment the line is written, and that moment is the only one that changes what an agent
+writes.
+
+The test for whether the carve-out applies: **delete the union and ask what enforces the rule instead.**
+If the answer is "a runtime check" or "a code review", use the union. If the answer is "nothing was being
+enforced, it is just a bag of fields", use a class. `@Endpoint(..., { calledBy })` and
+`JwtRequirement`'s app-defined fields are the existing precedent.
+
 ### 4. Type Safety
 
 - Use `unknown` instead of `any` for better type safety
@@ -445,7 +470,7 @@ error is not the cost of the change; it IS the delivery mechanism for it.
 
 Issue #589 is the live proof: an agent wrote `@Authentication(new AuthenticationConfig(true))` — the widest
 possible grant — onto an **admin** contract, then asserted in a comment that the framework had no role
-support. `@AuthJwt('admin')` was two hundred lines above the file it was editing. Deprecating
+support. `@AuthJwt({roles: ['admin']})` was two hundred lines above the file it was editing. Deprecating
 `AuthenticationConfig` would have fixed the docs and left the silent over-permissioning fully available.
 Deleting it turned every such call site into a compile error.
 
@@ -455,17 +480,25 @@ Deleting it turned every such call site into a compile error.
 1. **Two spellings of one thing** — a new API added while the old one stays exported; an overload or an
    optional parameter that exists only to keep old call sites compiling; a second config key meaning what an
    existing one means; a class kept as an alias of its replacement. The test for whether a pair is a shim:
-   *can a caller pick either one and get the same behaviour?* If yes it is a shim. `@AuthJwt('admin')` vs
-   `@AuthJwtAllRolesAllowed()` passes that test — they are different decisions, and the second exists
-   precisely so the wide one has to be typed on purpose.
+   *can a caller pick either one and get the same behaviour?* If yes it is a shim. Better still, make the
+   TYPE unsatisfiable in the bad cases so there is exactly one spelling per decision — `JwtRoles` does
+   this: `@AuthJwt({roles:['admin'], allRolesAllowed:false})` does not compile, precisely because it would
+   be a second spelling of a decision that already has one.
 2. **`@deprecated` instead of deletion** — any new `@deprecated` on a surface. Delete it and let callers fail.
 3. **A config fallback accepting the old shape** — the section below.
 4. **A runtime `throw` standing in for a type that cannot express the bad state** — the throw is evidence the
-   signature is wrong. `@Authentication` needed one for `authenticated: false` + roles; `@Public()` and
-   `@AuthJwt(...)` cannot express that state at all.
+   signature is wrong. Always ask whether a discriminated union could delete it. `JwtRoles` is the worked
+   example: `roles?: never` on the wide branch and a non-empty tuple `readonly [string, ...string[]]` on the
+   narrow one make every contradictory or under-specified combination a COMPILE error, so the validation is
+   deleted rather than kept as a backstop. Pin it with one `@ts-expect-error` per bad case — tsc fails the
+   build with TS2578 if any ever starts compiling. **Put those in a COMPILED file, never a `.spec.ts`:**
+   `tsconfig.lib.json` excludes specs and vitest strips types with esbuild, so a `@ts-expect-error` in a spec
+   is inert and the suite passes either way. See `core-util/src/http/AuthJwtCompileAssertions.ts`.
 5. **A widening that is an ABSENCE rather than a token** — an empty array / omitted argument / falsy default
    that means "allow everything" makes the permissive path the shortest thing to type and impossible to grep.
-   Name it.
+   Name it: `@AuthJwt({allRolesAllowed: true})`, so `grep -rn allRolesAllowed` lists every wide endpoint.
+   Close the side doors too — the first cut of this closed `@AuthJwt` and left `@Auth({})` reaching the
+   identical grant, which is why `@Auth` was folded into `@AuthJwt`. One decorator per credential kind.
 6. **An error message or doc that teaches the removed API** — the framework's own "you forgot authorization"
    error used to hand the caller `@Authentication(new AuthenticationConfig(...))`, which is a plausible route
    by which that footgun spread. Every message, docstring, `README.md` and `responsibilities.md` naming a

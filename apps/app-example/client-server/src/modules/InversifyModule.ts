@@ -54,7 +54,7 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
     bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
 
-    // User JWT mechanism: the framework AuthFilter injects JwtHook for @AuthJwt / @Auth endpoints.
+    // User JWT mechanism: the framework AuthFilter injects JwtHook for @AuthJwt endpoints.
     // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
     bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
 

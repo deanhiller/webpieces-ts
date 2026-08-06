@@ -7,7 +7,6 @@ import {
     Queue,
     Public,
     AuthJwt,
-    AuthJwtAllRolesAllowed,
     AuthOidc,
     AuthSharedSecret,
     getApiKind,
@@ -15,6 +14,7 @@ import {
     getEndpointKinds,
     getQueueName,
     getAuthMode,
+    rolesRequired,
     MISSING_AUTH_DECORATOR_FIX,
     assertApiKind,
     assertPubSubConventions,
@@ -113,7 +113,7 @@ describe('auth modes', () => {
     });
 
     it('maps @Public and @AuthJwt to the right modes', () => {
-        @AuthJwt('admin')
+        @AuthJwt({ roles: ['admin'] })
         @ApiPath('/x')
         abstract class JwtApi {
             @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
@@ -128,14 +128,12 @@ describe('auth modes', () => {
     });
 
     /**
-     * The wide grant must be spelled out. `@AuthJwt()` no longer compiles (firstRole is required), so
-     * this is the DECORATOR-LEVEL route to `roles: []` and the one an auditor greps for. It is not the
-     * only expressible route — `@Auth({})` reaches the same mode, because JwtRequirement.roles is
-     * optional by design (apps carry their OWN fields there, e.g. @Auth({inOrg: true})). @Auth is a
-     * different decision, not a second spelling of this one.
+     * `allRolesAllowed: true` is the ONE way to say "every authenticated user", and `rolesRequired`
+     * is the ONE reader of it. There is no longer any expressible route to a wide grant through an
+     * ABSENT field — see the compile-level block below, which is where that is actually enforced.
      */
-    it('@AuthJwtAllRolesAllowed() is the named wide grant (roles: [])', () => {
-        @AuthJwtAllRolesAllowed()
+    it('allRolesAllowed:true is the named wide grant, and rolesRequired reads it as []', () => {
+        @AuthJwt({ allRolesAllowed: true })
         @ApiPath('/wide')
         abstract class WideApi {
             @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
@@ -143,8 +141,47 @@ describe('auth modes', () => {
         const mode = getAuthMode(WideApi, 'a');
         expect(mode?.kind).toBe('jwt');
         if (mode?.kind === 'jwt') {
-            expect(mode.requirement.roles).toEqual([]);
+            expect(rolesRequired(mode.requirement)).toEqual([]);
         }
+    });
+
+    it('carries app-defined fields alongside the role decision', () => {
+        @AuthJwt({ allRolesAllowed: true, inOrg: true })
+        @ApiPath('/org')
+        abstract class OrgApi {
+            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+            @AuthJwt({ roles: ['admin'], tenantScoped: true })
+            @Endpoint('/b', 'rpc') b(_r: object): Promise<object> { throw new Error('x'); }
+        }
+        const wide = getAuthMode(OrgApi, 'a');
+        if (wide?.kind === 'jwt') {
+            expect(wide.requirement['inOrg']).toBe(true);
+            expect(rolesRequired(wide.requirement)).toEqual([]);
+        }
+        const gated = getAuthMode(OrgApi, 'b');
+        if (gated?.kind === 'jwt') {
+            expect(gated.requirement['tenantScoped']).toBe(true);
+            expect(rolesRequired(gated.requirement)).toEqual(['admin']);
+        }
+    });
+
+    /**
+     * The compile-time half of this design — that every broken role decision FAILS TO COMPILE — cannot
+     * be asserted here: tsconfig.lib.json EXCLUDES spec files, and vitest strips types with esbuild
+     * without checking them, so a `@ts-expect-error` in this file would be inert (verified: a guarded
+     * line made deliberately valid kept the whole suite AND `nx run core-util:ci` green).
+     *
+     * It lives in `../AuthJwtCompileAssertions.ts`, a non-spec file the type-checker actually compiles.
+     */
+    it('reads the wide grant back as [] (the runtime half; compile half is in AuthJwtCompileAssertions)', () => {
+        @AuthJwt({ allRolesAllowed: true })
+        @ApiPath('/wide2')
+        abstract class WideApi2 {
+            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+        }
+        const mode = getAuthMode(WideApi2, 'a');
+        if (mode?.kind !== 'jwt') throw new Error('expected jwt');
+        expect(rolesRequired(mode.requirement)).toEqual([]);
     });
 
     /**
@@ -160,7 +197,7 @@ describe('auth modes', () => {
         expect(() => assertEveryEndpointHasAuthMode(NakedApi)).toThrow(MISSING_AUTH_DECORATOR_FIX);
         expect(() => assertEveryEndpointHasAuthMode(NakedApi)).not.toThrow(/@Authentication/);
         // The menu must be COMPLETE — an incomplete one becomes the API the caller believes exists.
-        for (const member of ['@AuthJwt(...roles)', '@AuthJwtAllRolesAllowed()', '@Auth({...})',
+        for (const member of ["@AuthJwt({roles: ['admin']})", '@AuthJwt({allRolesAllowed: true})',
             '@Public()', '@AuthOidc(...callers)', '@AuthSharedSecret(key)']) {
             expect(MISSING_AUTH_DECORATOR_FIX).toContain(member);
         }
@@ -170,7 +207,7 @@ describe('auth modes', () => {
     it('rejects two auth decorators on one target without naming @Authentication', () => {
         expect(() => {
             @Public()
-            @AuthJwt('admin')
+            @AuthJwt({ roles: ['admin'] })
             @ApiPath('/dup')
             abstract class DupApi {
                 @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
