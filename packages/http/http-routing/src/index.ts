@@ -2,10 +2,9 @@
 export {
     ApiPath,
     Endpoint,
-    Authentication,
-    AuthenticationConfig,
     Public,
     AuthJwt,
+    AuthJwtAllRolesAllowed,
     AuthOidc,
     AuthSharedSecret,
     Rpc,

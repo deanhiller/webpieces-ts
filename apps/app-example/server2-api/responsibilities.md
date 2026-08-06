@@ -4,7 +4,7 @@ Shared API contract for server2: the `Server2Api` abstract class (fetchValue) pl
 
 ## In Scope
 
-- `Server2Api` abstract class with `@ApiPath`/`@Endpoint`/`@Authentication`
+- `Server2Api` abstract class with `@ApiPath`/`@Endpoint`/`@Public`
 - `FetchValueRequest`/`FetchValueResponse` DTOs shared across the hop
 - The contract that makes client-server → server2 a real HTTP call
 

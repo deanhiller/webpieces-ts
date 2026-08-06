@@ -7,6 +7,7 @@ import {
     Queue,
     Public,
     AuthJwt,
+    AuthJwtAllRolesAllowed,
     AuthOidc,
     AuthSharedSecret,
     getApiKind,
@@ -14,6 +15,7 @@ import {
     getEndpointKinds,
     getQueueName,
     getAuthMode,
+    MISSING_AUTH_DECORATOR_FIX,
     assertApiKind,
     assertPubSubConventions,
     assertEveryEndpointHasAuthMode,
@@ -123,5 +125,57 @@ describe('auth modes', () => {
             expect(aMode.requirement.roles).toEqual(['admin']);
         }
         expect(getAuthMode(JwtApi, 'b')?.kind).toBe('public');
+    });
+
+    /**
+     * The wide grant must be spelled out. `@AuthJwt()` no longer compiles (firstRole is required), so
+     * this is the DECORATOR-LEVEL route to `roles: []` and the one an auditor greps for. It is not the
+     * only expressible route — `@Auth({})` reaches the same mode, because JwtRequirement.roles is
+     * optional by design (apps carry their OWN fields there, e.g. @Auth({inOrg: true})). @Auth is a
+     * different decision, not a second spelling of this one.
+     */
+    it('@AuthJwtAllRolesAllowed() is the named wide grant (roles: [])', () => {
+        @AuthJwtAllRolesAllowed()
+        @ApiPath('/wide')
+        abstract class WideApi {
+            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+        }
+        const mode = getAuthMode(WideApi, 'a');
+        expect(mode?.kind).toBe('jwt');
+        if (mode?.kind === 'jwt') {
+            expect(mode.requirement.roles).toEqual([]);
+        }
+    });
+
+    /**
+     * The missing-auth error must TEACH the live decorators. It used to prescribe
+     * `@Authentication(new AuthenticationConfig(...))` — the removed footgun — so the framework's own
+     * "you forgot authorization" message was the thing propagating it.
+     */
+    it('the missing-auth error names the live decorators, never @Authentication', () => {
+        @ApiPath('/naked')
+        abstract class NakedApi {
+            @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+        }
+        expect(() => assertEveryEndpointHasAuthMode(NakedApi)).toThrow(MISSING_AUTH_DECORATOR_FIX);
+        expect(() => assertEveryEndpointHasAuthMode(NakedApi)).not.toThrow(/@Authentication/);
+        // The menu must be COMPLETE — an incomplete one becomes the API the caller believes exists.
+        for (const member of ['@AuthJwt(...roles)', '@AuthJwtAllRolesAllowed()', '@Auth({...})',
+            '@Public()', '@AuthOidc(...callers)', '@AuthSharedSecret(key)']) {
+            expect(MISSING_AUTH_DECORATOR_FIX).toContain(member);
+        }
+    });
+
+    /** Two auth decorators on one target is a wiring error, and the message lists the whole family. */
+    it('rejects two auth decorators on one target without naming @Authentication', () => {
+        expect(() => {
+            @Public()
+            @AuthJwt('admin')
+            @ApiPath('/dup')
+            abstract class DupApi {
+                @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
+            }
+            return DupApi;
+        }).toThrow(/Conflicting auth decorator on class DupApi/);
     });
 });

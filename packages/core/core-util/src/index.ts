@@ -37,12 +37,12 @@ export { LogChunker, LogChunkerImpl, LogChunkInfo, MAX_GCP_LOG_BYTES, GCP_LOG_BU
 export {
     ApiPath,
     Endpoint,
-    Authentication,
-    AuthenticationConfig,
     // Auth mode decorators (clean service-to-service + user JWT model)
     Public,
     AuthJwt,
+    AuthJwtAllRolesAllowed,
     Auth,
+    MISSING_AUTH_DECORATOR_FIX,
     AuthOidc,
     AuthSharedSecret,
     // API kind (RPC vs PubSub/Cloud Tasks) + queue naming
