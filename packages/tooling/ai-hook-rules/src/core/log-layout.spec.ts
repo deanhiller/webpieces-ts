@@ -10,6 +10,12 @@ import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
 import { logRejection } from './rejection-log';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 
+// Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
+// production does, so the layout is regression-tested on the REAL path rather than a fallback.
+import { LogStream } from './log-stream';
+function streamName(base: string): string { return new LogStream().fileName(base); }
+
+
 /**
  * ONE directory for logs — asserted over EVERY writer at once, not writer by writer.
  *
@@ -58,11 +64,11 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         exerciseEveryWriter(root);
 
         const logs = filesIn(path.join(root, '.webpieces', LOGS_STATE_DIR));
-        for (const expected of ['guard-invocations.log', 'guard-sync-decisions.log', 'guard-async-work.log', 'hook-rejection.log']) {
+        for (const expected of [streamName('guard-invocations.log'), streamName('guard-sync-decisions.log'), streamName('guard-async-work.log'), streamName('hook-rejection.log')]) {
             expect(logs, `missing ${expected}`).toContain(expected);
         }
         // The refresher's raw stdout/stderr capture is a .log too, so it moved with the rest.
-        expect(syncStderrLogPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, 'guard-async-work.stderr.log'));
+        expect(syncStderrLogPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName('guard-async-work.stderr.log')));
     });
 
     it('keeps the NON-log rejection details in hooks/, and keeps the index pointing at them', () => {
@@ -75,7 +81,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
 
         // The index moved to logs/ while the detail stayed in hooks/, so the pointer has to be
         // relative to the STATE DIR — a bare `<date>/<file>` would no longer resolve.
-        const index = fs.readFileSync(path.join(root, '.webpieces', LOGS_STATE_DIR, 'hook-rejection.log'), 'utf8');
+        const index = fs.readFileSync(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName('hook-rejection.log')), 'utf8');
         expect(index).toContain(`\t${HOOKS_STATE_DIR}/${dated[0]}/writeInfo-`);
         expect(fs.existsSync(path.join(root, '.webpieces', index.trim().split('\t')[4]))).toBe(true);
     });

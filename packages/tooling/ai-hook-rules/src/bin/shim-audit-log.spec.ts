@@ -123,8 +123,13 @@ function bashPayloadFrom(cwd: string, command: string): string {
     return JSON.stringify({ tool_name: 'Bash', cwd, tool_input: { command } });
 }
 
+// The log name now carries the stream prefix (<session|unknown>-<agent|coordinator>-<binName>-),
+// so specs LOCATE the stream rather than hard-coding a name. Finding exactly one file also asserts
+// the split did not accidentally fan a single writer across several.
 function readLog(logDir: string): string {
-    return fs.readFileSync(path.join(logDir, SHIM_LOG_FILE), 'utf8');
+    const hits = fs.readdirSync(logDir).filter((n: string): boolean => n.endsWith(SHIM_LOG_FILE));
+    if (hits.length !== 1) throw new Error(`expected 1 ${SHIM_LOG_FILE}, found ${hits.length}: ${hits.join()}`);
+    return fs.readFileSync(path.join(logDir, hits[0]), 'utf8');
 }
 
 // Give `root` a guard bin that behaves however the test needs: exit 0 (allow), 2 (block), or 1 (crash).
@@ -290,11 +295,15 @@ describe('L0 audit log rotation — 512 KB into a .1.log sibling', () => {
         installBin(root, 0);
         const logDir = path.join(root, '.webpieces', 'logs');
         fs.mkdirSync(logDir, { recursive: true });
-        fs.writeFileSync(path.join(logDir, SHIM_LOG_FILE), 'x'.repeat(SHIM_LOG_MAX_BYTES + 10));
+        // Seed the stream the shim will actually write to — the name carries the prefix now.
+        const stream = `unknown-coordinator-wp-ai-guards-hook-${SHIM_LOG_FILE}`;
+        fs.writeFileSync(path.join(logDir, stream), 'x'.repeat(SHIM_LOG_MAX_BYTES + 10));
 
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
 
-        expect(fs.existsSync(path.join(logDir, SHIM_LOG_FILE_PREV))).toBe(true);
+        // The sibling gets the identical prefix, so rotation stays within one stream.
+        const prev = `unknown-coordinator-wp-ai-guards-hook-${SHIM_LOG_FILE_PREV}`;
+        expect(fs.existsSync(path.join(logDir, prev))).toBe(true);
         const live = readLog(logDir);
         expect(live).toContain('PASS-BIN-ALLOW');
         expect(live.length).toBeLessThan(SHIM_LOG_MAX_BYTES); // the old bytes went to the sibling

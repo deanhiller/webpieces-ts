@@ -82,7 +82,16 @@ export class BranchMutationLog {
      * PIPE_BUF, which is 512 bytes on macOS, and a REAP_WORKTREE line carrying
      * `recover=git worktree add -b <branch> <absolute-path> <tag>` exceeds that — concurrent appenders
      * from seven worktrees would interleave into an unrecoverable audit trail, which is the one thing
-     * this file exists not to be. Per-worktree it has exactly ONE writer and cannot tear.
+     * this file exists not to be. Per-worktree, THIS log has one writer and cannot tear.
+     *
+     * That last claim is narrower than it looks, so do not generalise it (2026-08-06). It holds here
+     * because the wp-* bins write this file one command at a time. It does NOT hold for the ai-hook
+     * logs in the same directory: Claude Code runs every matching PreToolUse hook IN PARALLEL, and
+     * several agents and sessions can share one tree, so a per-worktree name there had several
+     * concurrent writers. Those names now carry a `<sessionId>-<agentId|coordinator>-<hook>-` prefix
+     * (ai-hook-rules' LogStream). This file keeps a bare name deliberately — LogStream lives in
+     * ai-hook-rules, which DEPENDS on rules-config, so the import direction forbids reusing it here.
+     * If this log ever gains a second concurrent writer, it needs its own stream identity first.
      *
      * Nothing is lost by keeping it local: under the `worktrees/<name>/` layout the log lives in the
      * PRIMARY clone, so it survives `git worktree remove`, and the whole history is one glob —

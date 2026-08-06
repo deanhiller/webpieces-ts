@@ -95,12 +95,17 @@ fi
 # forward stdin to the bin itself — and it needs the payload again on the fail-closed path below.
 PAYLOAD="$(cat)"
 CMD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+CMD_LOG="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"\\]*\).*/\1/p')"
+[ -n "$CMD_LOG" ] || CMD_LOG="$CMD"
 TOOL="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+WP_SID="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
+WP_AID="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"agent_id"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
 FILE="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
 WP_CWD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p')"
 [ -n "$WP_CWD" ] || WP_CWD="$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree
 # Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
-# tab-separated line per invocation into this TREE's own logs/ai-hook-shim.log (gitignored), so the
+# tab-separated line per invocation into this TREE's own
+# logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log (gitignored), so the
 # observed behaviour can be diffed against the matrix in guards/L0-tooling.md. NEVER breaks or blocks the
 # hook: every write is swallowed, and nothing ever goes to stdout (stdout is the PreToolUse decision
 # channel — a stray byte there would corrupt allow/deny).
@@ -133,17 +138,29 @@ wp_resolve_log_dir() {
     WP_LOG_DIR="$_wp_primary/.webpieces/worktrees/$WP_TREE/logs"
   fi
 }
+wp_clean() {                 # one path segment from an UNTRUSTED payload id — twin of LogStream's segment()
+  printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_' | sed -e 's/\.\{2,\}/_/g' -e 's/^\.\{1,\}/_/' | cut -c1-64
+}
 wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
   {
     [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
     mkdir -p "$WP_LOG_DIR" 2>/dev/null || return 0
-    _wp_f="$WP_LOG_DIR/ai-hook-shim.log"
+    # Same flat scheme as LogStream.fileName(): <session>-<agent|coordinator>-<hook>-<base>. $BIN_NAME
+    # IS the hook discriminator here (wp-ai-guards-hook vs wp-ai-rules-hook), and Claude Code runs those
+    # two IN PARALLEL on every file edit — without this prefix they append to ONE file and tear above
+    # PIPE_BUF. An empty session id renders 'unknown' — this has no bare-name branch, matching
+    # LogStream.fileName(), which has none either.
+    # ALWAYS prefixed - a missing session_id renders as 'unknown', never as the shared bare name.
+    # Gating this on a non-empty id would drop both parallel hooks back onto one file, which is the
+    # torn-append case this exists to remove. Twin of LogStream.fileName(), which has no bare branch.
+    _wp_pfx="$(wp_clean "${WP_SID:-unknown}")-$(wp_clean "${WP_AID:-coordinator}")-$BIN_NAME-"
+    _wp_f="$WP_LOG_DIR/${_wp_pfx}ai-hook-shim.log"
     # Rotate at the SAME 512 KB into the SAME .1.log sibling as every JS-side webpieces log. This runs
     # on every tool call, so it is one wc and no more; a size we cannot read counts as 0 (no rotation).
     _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
     case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
-    [ "$_wp_sz" -gt 524288 ] && mv -f "$_wp_f" "$WP_LOG_DIR/ai-hook-shim.1.log" 2>/dev/null
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD" >> "$_wp_f"
+    [ "$_wp_sz" -gt 524288 ] && mv -f "$_wp_f" "$WP_LOG_DIR/${_wp_pfx}ai-hook-shim.1.log" 2>/dev/null
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }
 BROKEN_BIN=""

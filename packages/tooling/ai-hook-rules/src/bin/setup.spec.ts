@@ -13,6 +13,17 @@ import {
 import { ShimTestkit } from './shim-testkit';
 import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSectionPlacement } from '@webpieces/rules-config';
 
+// The sh audit log now carries the same stream prefix as the JS side
+// (<session|unknown>-<agent|coordinator>-<binName>-ai-hook-shim.log), so specs LOCATE the stream
+// rather than hard-coding a name — which also proves exactly one stream file was written.
+function shimLogPath(root: string): string {
+    const dir = path.join(root, '.webpieces', 'logs');
+    const hits = fs.readdirSync(dir).filter((n: string): boolean => n.endsWith('ai-hook-shim.log'));
+    if (hits.length !== 1) throw new Error(`expected 1 shim log, found ${hits.length}: ${hits.join()}`);
+    return path.join(dir, hits[0]);
+}
+
+
 const kit = new ShimTestkit();
 const mktmp = (): string => kit.mktmp();
 // A root that DECLARES @webpieces/ai-hook-rules but has nothing installed — fault X. A bare mktmp()
@@ -414,7 +425,7 @@ describe('renderShim broken-bin guard (corrupt node_modules → MODULE_NOT_FOUND
     it('logs a DENY-BROKEN audit line (distinct from DENY / DENY-STALE)', () => {
         const root = rootWithCrashingBin();
         runShim(root, 'wp-ai-guards-hook', bashPayload('git push'));
-        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
+        const log = fs.readFileSync(shimLogPath(root), 'utf8');
         expect(log).toContain('DENY-BROKEN');
     });
 });
@@ -486,7 +497,7 @@ describe('renderShim fallback — audit log', () => {
         const root = declaredRoot();
         runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm install')); // allowed
         runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm build')); // denied
-        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
+        const log = fs.readFileSync(shimLogPath(root), 'utf8');
         expect(log).toContain('ALLOW-CURE\tpnpm install');
         expect(log).toContain('DENY\tpnpm build');
     });
@@ -506,7 +517,7 @@ describe('renderShim fallback — audit log', () => {
         const root = mktmp();
         expect(runShim(root, 'wp-ai-guards-hook', kit.readPayload(path.join(root, 'src/anything.ts'))).status).toBe(0);
         expect(runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', path.join(root, 'webpieces.config.json'))).status).toBe(0);
-        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
+        const log = fs.readFileSync(shimLogPath(root), 'utf8');
         expect(log).toContain('ALLOW-READ');
         expect(log).toContain('ALLOW-CONFIG');
         // ...while a real WRITE to anything else still fails closed.

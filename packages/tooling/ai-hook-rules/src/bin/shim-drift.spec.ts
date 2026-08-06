@@ -5,6 +5,17 @@ import * as path from 'path';
 import { UPGRADE_SHIM_CMD, INSTALLER_ALLOW_ERE, INSTALLER_ALLOW_JS, RECOVERY_ALLOW_ERE, RECOVERY_ALLOW_JS, SYNC_ALLOW_ERE, SYNC_ALLOW_JS, UPGRADE_SHIM_ALLOW_ERE, UPGRADE_SHIM_ALLOW_JS, RESTORE_SHIM_ALLOW_ERE, RESTORE_SHIM_ALLOW_JS, RESTORE_SHIM_CMD, INSTALL_HOOKS_ALLOW_ERE, INSTALL_HOOKS_ALLOW_JS, INSTALL_HOOKS_CMD, INSTALL_HOOKS_TARGET_CMD, ORIENT_ALLOW_ERE, ORIENT_ALLOW_JS, ADD_HOOK_PKG_ALLOW_ERE, ADD_HOOK_PKG_ALLOW_JS, ADD_HOOK_PKG_CMD, NO_CHAINING_RULE, renderShim, committedShimStale, isShimCureCommand, shimStaleDenyReason } from './shim';
 import { ShimTestkit } from './shim-testkit';
 
+// The sh audit log now carries the same stream prefix as the JS side
+// (<session|unknown>-<agent|coordinator>-<binName>-ai-hook-shim.log), so specs LOCATE the stream
+// rather than hard-coding a name — which also proves exactly one stream file was written.
+function shimLogPath(root: string): string {
+    const dir = path.join(root, '.webpieces', 'logs');
+    const hits = fs.readdirSync(dir).filter((n: string): boolean => n.endsWith('ai-hook-shim.log'));
+    if (hits.length !== 1) throw new Error(`expected 1 shim log, found ${hits.length}: ${hits.join()}`);
+    return path.join(dir, hits[0]);
+}
+
+
 const kit = new ShimTestkit();
 
 /**
@@ -118,7 +129,7 @@ describe('version-drift guard — DETECTING the drift and explaining it', () => 
     it('logs a DENY-STALE audit line (distinct from a missing-bin DENY) on drift', () => {
         const root = kit.stageDriftRoot('0.3.272', '0.3.270');
         kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
-        const log = fs.readFileSync(path.join(root, '.webpieces', 'logs', 'ai-hook-shim.log'), 'utf8');
+        const log = fs.readFileSync(shimLogPath(root), 'utf8');
         expect(log).toContain('DENY-STALE\tpnpm build');
     });
 });

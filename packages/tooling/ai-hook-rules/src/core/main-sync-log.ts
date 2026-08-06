@@ -4,6 +4,7 @@ import * as path from 'path';
 import { dotWebpieces } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
+import { logStream } from './log-stream';
 
 // The ASYNC log — observability for the detached background refresher (sync-main.ts) that writes
 // main-sync-status.json. Its companion is the SYNC log (sync-decisions.log, decision-log.ts) which
@@ -11,7 +12,9 @@ import { toError } from './to-error';
 // exited, with stdio discarded, so when it fails to update the cache there is normally no trace.
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
-// mid-run (START with no FINISH), or threw. Writes to `.webpieces/logs/guard-async-work.log` (see
+// mid-run (START with no FINISH), or threw. Writes to
+// `.webpieces/logs/<stream>guard-async-work.log`, where <stream> is LogStream's
+// `<sessionId>-<agentId|coordinator>-<hook>-` prefix (see
 // LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside the non-log state in `hooks/`).
 const LOG_FILE = 'guard-async-work.log';
 const LOG_FILE_PREV = 'guard-async-work.1.log';
@@ -37,7 +40,8 @@ export class SyncLogEvent {
 }
 
 /**
- * Append one tab-separated line per refresher event to `.webpieces/logs/guard-async-work.log`. `root` is
+ * Append one tab-separated line per refresher event to
+ * `.webpieces/logs/<stream>guard-async-work.log` (see LogStream for the prefix). `root` is
  * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */
@@ -50,8 +54,8 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
         const logsDir = dotWebpieces.logs(root);
         fs.mkdirSync(logsDir, { recursive: true });
 
-        const logPath = path.join(logsDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
+        const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
+        rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
 
         const line = [
             `[${timestamp}]`,
@@ -72,7 +76,7 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
 // captured instead of vanishing into /dev/null. Callers must ensure the log dir exists first
 // (logSyncEvent's mkdir, called for SPAWN_ATTEMPT, does that).
 export function syncStderrLogPath(root: string): string {
-    return dotWebpieces.logsFile(root, STDERR_FILE);
+    return dotWebpieces.logsFile(root, logStream.fileName(STDERR_FILE));
 }
 
 // Collapse newlines/tabs and cap length so one event is always one log line.

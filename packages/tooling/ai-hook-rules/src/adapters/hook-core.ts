@@ -12,6 +12,7 @@ import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
 import { committedShimStale, governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
+import { logStream } from '../core/log-stream';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -39,6 +40,7 @@ interface ClaudeCodePayload {
     cwd?: string;
     // Present ONLY when the hook fires inside a SUBAGENT. Absent = the coordinator (the main agent
     // loop) — there is no positive coordinator field to read. See AgentIdentity.
+    session_id?: string;
     agent_id?: string;
     agent_type?: string;
 }
@@ -289,6 +291,10 @@ export async function runMain(mode: HookMode): Promise<void> {
         if (!payload) { emitAllow(); }
         toolName = payload.tool_name;
 
+        // BEFORE enforceCommittedShim(), which can itself write a BLOCK line. See LogStream for why
+        // all three of session/agent/hook are needed to keep concurrent writers off one file.
+        logStream.identify(payload.session_id ?? '', payload.agent_id ?? '', mode);
+
         // Prefer the payload cwd (the AI's actual working dir, follows a persisted `cd`) over
         // process.cwd(); they match today, but the payload is the authoritative signal and stays
         // correct if the hook is ever invoked from a fixed dir (e.g. via $CLAUDE_PROJECT_DIR).
@@ -335,15 +341,23 @@ export async function runMain(mode: HookMode): Promise<void> {
         handleFileTool(payload, cwd, mode);
     } catch (err: unknown) {
         const error = toError(err);
-        // An escaped RuleFailError (a rule that threw past the runner's per-rule catch) or an
-        // InformAiError (bad config/stdin) both carry an AI-readable message; anything else is an
-        // unexpected bug. All three deny (fail closed) and surface their reason to the AI.
-        if (error instanceof RuleFailError) {
-            emitDeny(error.aiMessage, toolName, 'rule-crash');
-        } else if (error instanceof InformAiError) {
-            emitDeny(error.message, toolName, 'bad-config-or-stdin');
-        } else {
-            emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, toolName, 'hook-crash');
-        }
+        denyForCrash(error, toolName);
     }
+}
+
+/**
+ * The fail-closed boundary for anything that escaped the hook body. An escaped RuleFailError (a rule
+ * that threw past the runner's per-rule catch) or an InformAiError (bad config/stdin) both carry an
+ * AI-readable message; anything else is an unexpected bug. All three DENY and surface their reason,
+ * because a hook that crashed established nothing and must never be read as an allow.
+ */
+// webpieces-disable no-function-outside-class -- sibling of the module-scope hook entry points in this adapter; a lone class for one terminal boundary would break the file's shape
+function denyForCrash(error: Error, toolName: string): never {
+    if (error instanceof RuleFailError) {
+        emitDeny(error.aiMessage, toolName, 'rule-crash');
+    }
+    if (error instanceof InformAiError) {
+        emitDeny(error.message, toolName, 'bad-config-or-stdin');
+    }
+    emitDeny(`[ai-hooks] hook crashed unexpectedly — failing closed: ${error.message}`, toolName, 'hook-crash');
 }

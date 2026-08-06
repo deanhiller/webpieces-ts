@@ -1,7 +1,12 @@
 import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 
 // ---------------------------------------------------------------------------
-// THE L0 AUDIT LOG, in POSIX sh — the shim half of `.webpieces/**/logs/ai-hook-shim.log`.
+// THE L0 AUDIT LOG, in POSIX sh — the shim half of
+// `.webpieces/**/logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log`. The stream prefix is
+// the sh twin of ai-hook-rules' LogStream.fileName(): wp-ai-guards-hook and wp-ai-rules-hook are run
+// IN PARALLEL by Claude Code on every file edit, so an unsplit name means two writers, one file, and
+// torn appends above PIPE_BUF. A payload with no session_id renders 'unknown', never a bare name —
+// there is no un-prefixed spelling on either side.
 //
 // Split out of ./shim.ts (which renders the shim body) purely so both stay readable; shim.ts splices
 // these fragments in verbatim and re-exports the constants. Like l0-allowlist.ts, this module must
@@ -132,16 +137,28 @@ export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
 export const WP_LOG_SH = `WP_TREE=""
 WP_LOG_DIR=""
 ${RESOLVE_LOG_DIR_SH}
+wp_clean() {                 # one path segment from an UNTRUSTED payload id — twin of LogStream's segment()
+  printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_' | sed -e 's/\\.\\{2,\\}/_/g' -e 's/^\\.\\{1,\\}/_/' | cut -c1-64
+}
 wp_log() {                   # $1 = L0 fault code (D|X|K|-), $2 = verdict label
   {
     [ -n "$WP_LOG_DIR" ] || wp_resolve_log_dir
     mkdir -p "$WP_LOG_DIR" 2>/dev/null || return 0
-    _wp_f="$WP_LOG_DIR/${SHIM_LOG_FILE}"
+    # Same flat scheme as LogStream.fileName(): <session>-<agent|coordinator>-<hook>-<base>. $BIN_NAME
+    # IS the hook discriminator here (wp-ai-guards-hook vs wp-ai-rules-hook), and Claude Code runs those
+    # two IN PARALLEL on every file edit — without this prefix they append to ONE file and tear above
+    # PIPE_BUF. An empty session id renders 'unknown' — this has no bare-name branch, matching
+    # LogStream.fileName(), which has none either.
+    # ALWAYS prefixed - a missing session_id renders as 'unknown', never as the shared bare name.
+    # Gating this on a non-empty id would drop both parallel hooks back onto one file, which is the
+    # torn-append case this exists to remove. Twin of LogStream.fileName(), which has no bare branch.
+    _wp_pfx="$(wp_clean "\${WP_SID:-unknown}")-$(wp_clean "\${WP_AID:-coordinator}")-$BIN_NAME-"
+    _wp_f="$WP_LOG_DIR/\${_wp_pfx}${SHIM_LOG_FILE}"
     # Rotate at the SAME 512 KB into the SAME .1.log sibling as every JS-side webpieces log. This runs
     # on every tool call, so it is one wc and no more; a size we cannot read counts as 0 (no rotation).
     _wp_sz="$(wc -c < "$_wp_f" 2>/dev/null | tr -d ' ')"
     case "$_wp_sz" in ''|*[!0-9]*) _wp_sz=0 ;; esac
-    [ "$_wp_sz" -gt ${String(SHIM_LOG_MAX_BYTES)} ] && mv -f "$_wp_f" "$WP_LOG_DIR/${SHIM_LOG_FILE_PREV}" 2>/dev/null
-    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD" >> "$_wp_f"
+    [ "$_wp_sz" -gt ${String(SHIM_LOG_MAX_BYTES)} ] && mv -f "$_wp_f" "$WP_LOG_DIR/\${_wp_pfx}${SHIM_LOG_FILE_PREV}" 2>/dev/null
+    printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" "$BIN_NAME" "$TOOL" "tree=$WP_TREE" "fault=$1" "$2" "$CMD_LOG" >> "$_wp_f"
   } 2>/dev/null || true
 }`;

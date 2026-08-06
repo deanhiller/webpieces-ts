@@ -4,6 +4,7 @@ import * as path from 'path';
 import { dotWebpieces, RepoRootFinder, HOOKS_STATE_DIR } from '@webpieces/rules-config';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
+import { logStream } from './log-stream';
 
 // The rejection log SPLITS across the two state dirs on purpose: the `.log` index goes to `logs/`
 // with every other webpieces log, while the dated `hooks/<YYYY-MM-DD>/writeInfo-*.md` DETAIL files
@@ -50,8 +51,8 @@ export function logRejection(
         const detail = buildDetailContent(timestamp, toolKind, relativePath, ruleNames, result.report, input);
         fs.writeFileSync(path.join(dayDir, detailFileName), detail);
 
-        const logPath = path.join(logsDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
+        const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
+        rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
 
         const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\n`;
         fs.appendFileSync(logPath, logLine);

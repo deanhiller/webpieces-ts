@@ -7,6 +7,12 @@ import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PRO
 
 import { InvocationLog, logGuardDecision, GuardDecision } from './decision-log';
 
+// Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
+// production does, so the layout is regression-tested on the REAL path rather than a fallback.
+import { LogStream } from './log-stream';
+function streamName(base: string): string { return new LogStream().fileName(base); }
+
+
 function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-guardinv-'));
 }
@@ -19,8 +25,8 @@ function logOne(root: string, tool: string, target: string, verdict: 'ALLOW' | '
     log.finish(verdict, rule);
 }
 
-const LOG_REL = '.webpieces/logs/guard-invocations.log';
-const DECISION_LOG_REL = '.webpieces/logs/guard-sync-decisions.log';
+const LOG_REL = `.webpieces/logs/${streamName('guard-invocations.log')}`;
+const DECISION_LOG_REL = `.webpieces/logs/${streamName('guard-sync-decisions.log')}`;
 
 // The temp dirs are not git repos and have no webpieces.config.json, so resolveRepoRoot falls back to
 // the passed dir (the temp root) and branchForLog returns 'unknown' — exactly the fail-open behavior
@@ -84,10 +90,10 @@ describe('InvocationLog', () => {
         const root = tmpRoot();
         const logsDir = path.join(root, '.webpieces/logs');
         fs.mkdirSync(logsDir, { recursive: true });
-        fs.writeFileSync(path.join(logsDir, 'guard-invocations.log'), 'x'.repeat(512 * 1024 + 10));
+        fs.writeFileSync(path.join(logsDir, streamName('guard-invocations.log')), 'x'.repeat(512 * 1024 + 10));
         logOne(root, 'Bash', 'ls');
-        expect(fs.existsSync(path.join(logsDir, 'guard-invocations.1.log'))).toBe(true);
-        expect(fs.readFileSync(path.join(logsDir, 'guard-invocations.log'), 'utf8')).toContain('\tBash\t');
+        expect(fs.existsSync(path.join(logsDir, streamName('guard-invocations.1.log')))).toBe(true);
+        expect(fs.readFileSync(path.join(logsDir, streamName('guard-invocations.log')), 'utf8')).toContain('\tBash\t');
     });
 
     // The read-only fast path (hook-core.ts) logs a Read via this same class, so the file the AI

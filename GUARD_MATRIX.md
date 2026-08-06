@@ -85,6 +85,25 @@ Branch identity comes from one `git rev-parse` and is always establishable. Cach
 Order a table so the cache's fail-opens sit in front of a cache-free fact and the fail-open leaks onto
 the fact. See L2's row 5 and the divider above it — that ordering is load-bearing.
 
+### L-1: the layer below L0 — the hook must LAUNCH
+
+Every layer above assumes the hook process ran at all. If it does not, the harness allows the call and
+tells nobody. From the [hooks reference](https://code.claude.com/docs/en/hooks.md): exit `2` is the
+blocking channel (stderr becomes the block reason), exit `0` carries the JSON decision, and **any other
+exit is a "non-blocking error. Execution continues; the action proceeds"** — including
+*"File missing or not executable: Error logged; tool proceeds."*
+
+> **A hook that fails to launch is a silent ALLOW — not a block, not an error the AI sees.**
+
+Nothing in this repo produces that state deliberately. A bad hook **path** produces it every time, which
+is why the entry point in `.claude/settings.json` is `$CLAUDE_PROJECT_DIR`-absolute, and why the shim
+runs the binary as a CHILD and maps any `rc` outside `{0,2}` onto fault K rather than `exec`ing it
+(`ai-hook.sh:94-95, 151-177`) — `exec` on a missing target exits 127 and therefore allows.
+
+Full treatment, including the proposal to move the real guards to relative per-tree hooks while keeping
+one absolute hook for exactly this reason: [decisions/0003](decisions/0003-three-hooks-per-tree-governance.md) §4,
+and [decisions/0001](decisions/0001-tree-identity-and-governance.md) §2.6.
+
 ## The global allowlist
 
 One list, consulted **before every layer**: commands that are inert (cannot read repo content, cannot
