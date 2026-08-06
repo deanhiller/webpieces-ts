@@ -380,16 +380,43 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
     it('appends the exempt trees when excludePaths.guards is non-empty', () => {
         writeGuardConfig(outer, ['repositories/**', 'tools/**']);
         const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
-        expect(report).toContain('cd into it first');
+        expect(report).toContain('LITERAL');
         expect(report).toContain('repositories/**');
         expect(report).toContain('tools/**');
+    });
+
+    // The whole point of the reworded hint: "cd into it first" alone describes a remedy the agent may
+    // already have performed. The precondition — literal, at the front of the same command — is what
+    // it could not otherwise discover.
+    it('states the precondition (literal cd at the front), not just the remedy', () => {
+        writeGuardConfig(outer, ['repositories/**']);
+        const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('leading run of literal');
+        expect(report).toContain('VAR=');
+        expect(report).toContain('cd "$DIR"');
+    });
+
+    it('names the near-miss when the command DID cd but unresolvably (VAR= prefix + variable target)', () => {
+        writeGuardConfig(outer, ['repositories/**']);
+        const report = (runBash(`WT=${outer}/repositories/x; cd "$WT"; git push origin HEAD`, outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('DOES contain a `cd`');
+        expect(report).toContain('assignment precedes it');
+        expect(report).toContain('not a literal path');
+    });
+
+    it('stays silent about a near-miss when the cd was literal and leading (nothing to explain)', () => {
+        writeGuardConfig(outer, ['repositories/**']);
+        // `cd .` keeps the effective cwd at the root, so the PUSH guard (not force-to-root) is what
+        // fires and the hint is emitted — the near-miss line is the only thing under test.
+        const report = (runBash('cd . && git push origin HEAD', outer, 'guards') as BlockedResult).report;
+        expect(report).not.toContain('DOES contain a `cd`');
     });
 
     it('omits the hint when no trees are exempt (no noise for repos without exemptions)', () => {
         writeGuardConfig(outer, []);
         const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
-        expect(report).toContain('gated flow');           // still the push block
-        expect(report).not.toContain('cd into it first');  // but no exempt-tree hint
+        expect(report).toContain('gated flow');   // still the push block
+        expect(report).not.toContain('LITERAL');  // but no exempt-tree hint
     });
 });
 

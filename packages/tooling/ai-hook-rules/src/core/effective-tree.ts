@@ -122,6 +122,57 @@ export class EffectiveTreeResolver {
         return effective;
     }
 
+    /**
+     * WHY a `cd` the agent wrote did not move the effective cwd — or null when there is nothing to
+     * explain. Pure diagnosis for the block MESSAGE; it changes no verdict and relaxes nothing.
+     *
+     * The two shapes below both degrade to "judge against the governed root" (the safe direction) and
+     * both look, from the agent's side, exactly like a `cd` that was ignored. A guard that then says
+     * "cd into it first" is describing a remedy the agent has ALREADY performed, so it cannot discover
+     * the real cause: in the session that motivated this, the agent concluded the exemption was broken
+     * and wrote a persistent memory entry asserting `cd` must be its own Bash call. Neither is true.
+     * Naming the precondition here is what makes the hint self-correcting.
+     *
+     *   `cd "$DIR" && git push`  — the target is not a literal path. `path.resolve(cwd, '$DIR')` is a
+     *                              directory that does not exist, not the tree that was meant.
+     *   `D=/x; cd "$D"; git push` — a bare `VAR=value` segment tokenizes to NO words (CommandScanner
+     *                              strips assignments as command prefixes), so the leading run ends
+     *                              before the `cd` is ever reached.
+     *
+     * Deliberately narrow: a `cd` after a REAL command (`git fetch && cd /x && git push`) is NOT
+     * reported, because there the resolver's refusal is the intended anti-smuggling behaviour and
+     * "put the cd at the front" would be wrong advice. Expanding `$VAR` in effectiveCwd() is the fix
+     * NOT taken — it would put shell-variable semantics inside the resolver that the `… && cd
+     * <exempt-tree>` scope-escape check depends on.
+     */
+    unresolvedCd(command: string): string | null {
+        let stillLeading = true;
+        let afterAssignmentOnly = false;
+        let variableTarget = false;
+
+        for (const segment of this.scanner.commandSegments(command)) {
+            const words = this.shell.effectiveWords(segment);
+            const isCd = words[0] === 'cd' || words[0] === 'pushd';
+            if (!isCd) {
+                // An assignment-only segment yields no words at all; anything else is a real command,
+                // and a `cd` after one is out of scope for this diagnosis (see header).
+                if (words.length > 0) return this.phrase(afterAssignmentOnly, variableTarget);
+                stillLeading = false;
+                continue;
+            }
+            if (!stillLeading) afterAssignmentOnly = true;
+            if (words[1] !== undefined && VARIABLE_TARGET.test(words[1])) variableTarget = true;
+        }
+        return this.phrase(afterAssignmentOnly, variableTarget);
+    }
+
+    private phrase(afterAssignmentOnly: boolean, variableTarget: boolean): string | null {
+        const reasons: string[] = [];
+        if (afterAssignmentOnly) reasons.push('a `VAR=…` assignment precedes it, which ends the scan');
+        if (variableTarget) reasons.push('its target is not a literal path (a `$VAR`, `~` or `$(…)` the guard cannot expand)');
+        return reasons.length === 0 ? null : reasons.join(', and ');
+    }
+
     private classify(effectiveCwd: string, governedRoot: string): TreeClassification {
         // Fast path — no `cd`, or a `cd` within the governed tree. No worktree enumeration needed, and
         // the nested-clone check keeps its exact previous behaviour.
@@ -160,6 +211,11 @@ export class EffectiveTreeResolver {
         return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
     }
 }
+
+// A `cd` target that is not a literal path: `$DIR`, `${DIR}`, `~`, or a `$(…)`/backtick substitution.
+// `~` is here because path.resolve() does not expand it either — the shell does, and the hook never
+// sees a shell.
+const VARIABLE_TARGET = /[$`]|^~/;
 
 /** Data-only carrier for the two values classify() decides together. */
 class TreeClassification {

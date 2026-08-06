@@ -100,6 +100,37 @@ describe('EffectiveTreeResolver — which tree does this command act on?', () =>
 
 });
 
+// The resolver stays strict; only the DIAGNOSIS is new. Every case below already resolved to the
+// governed root before this — the question is whether the message can say WHY.
+describe('EffectiveTreeResolver.unresolvedCd — naming the `cd` that did not count', () => {
+
+    it('`VAR=…; cd "$VAR"; …` — the shape that reads as a guard malfunction — is named on both counts', () => {
+        const reason = resolver().unresolvedCd(`WT=${worktree}; cd "$WT"; git push`);
+        expect(reason).toContain('assignment precedes it');
+        expect(reason).toContain('not a literal path');
+        // …and the resolver itself is unchanged: still judged from the shell cwd.
+        expect(resolver().effectiveCwd(`WT=${worktree}; cd "$WT"; git push`, primary)).toBe(primary);
+    });
+
+    it('a leading `cd` with a variable target is named even though it WAS reached', () => {
+        expect(resolver().unresolvedCd('cd "$WT" && git push')).toContain('not a literal path');
+        expect(resolver().unresolvedCd('cd ~/repo && git push')).toContain('not a literal path');
+    });
+
+    it('a literal leading `cd` has nothing to explain', () => {
+        expect(resolver().unresolvedCd(`cd ${worktree} && git push`)).toBeNull();
+        expect(resolver().unresolvedCd('git push')).toBeNull();
+    });
+
+    it('a `cd` AFTER a real command is silent — there "put it in front" would be wrong advice', () => {
+        // This is the anti-smuggling case: `… && cd <exempt-tree>` must not exempt the whole line, and
+        // the resolver refusing it is intended behaviour, not a near-miss to coach the agent out of.
+        expect(resolver().unresolvedCd(`git push && cd ${worktree}`)).toBeNull();
+        expect(resolver().unresolvedCd('git push && cd "$WT"')).toBeNull();
+    });
+
+});
+
 describe('EffectiveTreeResolver — the trees it must NOT claim, and what it hands the guards', () => {
     it('a nested clone under the governed root is still FOREIGN (no regression)', () => {
         const tree = resolver().resolve(`cd ${nestedClone} && git push`, primary, primary);
