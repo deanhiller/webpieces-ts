@@ -386,7 +386,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
     logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'));
-    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
+    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths, command);
     return new BlockedResult(report);
 }
 
@@ -405,12 +405,31 @@ function commandLabel(command: string): string {
 // governed by its own repo, not this one). Scoped to pr-creation-or-push-guard — for the other guards
 // "cd into an exempt tree" is not the remedy — and emitted only when such trees are actually configured,
 // so a repo without exemptions never sees the noise.
+//
+// The hint MUST state the precondition, not just the remedy. "cd into it first" is true only for a
+// LITERAL cd at the FRONT of the same command; `D=…; cd "$D"; git push` lands in the identical
+// directory and still blocks (see EffectiveTreeResolver.unresolvedCd for why, and why the resolver is
+// deliberately not taught to expand `$D`). An agent that had already cd'd read the old wording as
+// evidence the exemption was broken and reasoned itself into two wrong conclusions it later had to
+// retract. Where the near-miss is detectable we say so outright, which turns the misdirect into a
+// self-correcting hint.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly string[]): string {
+function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly string[], command: string): string {
     if (exemptGuards.length === 0) return '';
     if (!groups.some((g: RuleGroup): boolean => g.ruleName === 'pr-creation-or-push-guard')) return '';
-    return `\n\nℹ️  Working in a nested repo under one of these exempt trees? cd into it first and run git/gh `
-        + `normally there — the webpieces guards do NOT govern them (each is its own repo): ${exemptGuards.join(', ')}.`;
+
+    const unresolved = new EffectiveTreeResolver().unresolvedCd(command);
+    const nearMiss = unresolved === null ? ''
+        : `\n⚠️  This command DOES contain a \`cd\`, but the guard could not resolve it: ${unresolved}. `
+            + `It was therefore judged against this repo. Re-run it as one command with a literal path in front.`;
+
+    return `\n\nℹ️  Working in a nested repo under one of these exempt trees (${exemptGuards.join(', ')})? `
+        + `Put a LITERAL \`cd\` at the FRONT of the SAME command — \`cd /abs/path/to/repo && git push\` — and git/gh `
+        + `run normally there: the webpieces guards do NOT govern them (each is its own repo).`
+        + `\n   The guard resolves only a leading run of literal \`cd\`/\`pushd\`. A \`VAR=…\` assignment before the `
+        + `\`cd\`, or a variable target like \`cd "$DIR"\`, cannot be resolved, and the command is then judged `
+        + `against this repo instead.`
+        + nearMiss;
 }
 
 // The set of rule names explicitly present in webpieces.config.json (every key except rulesDir).
