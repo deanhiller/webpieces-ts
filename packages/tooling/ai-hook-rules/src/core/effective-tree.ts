@@ -133,43 +133,52 @@ export class EffectiveTreeResolver {
      * and wrote a persistent memory entry asserting `cd` must be its own Bash call. Neither is true.
      * Naming the precondition here is what makes the hint self-correcting.
      *
-     *   `cd "$DIR" && git push`  — the target is not a literal path. `path.resolve(cwd, '$DIR')` is a
-     *                              directory that does not exist, not the tree that was meant.
-     *   `D=/x; cd "$D"; git push` — a bare `VAR=value` segment tokenizes to NO words (CommandScanner
-     *                              strips assignments as command prefixes), so the leading run ends
-     *                              before the `cd` is ever reached.
+     *   `cd "$DIR" && git push`      — the target is not a literal path. `path.resolve(cwd, '$DIR')` is
+     *                                  a directory that does not exist, not the tree that was meant.
+     *   `D=/x; cd "$D"; git push`    — a bare `VAR=value` segment tokenizes to NO words (CommandScanner
+     *                                  strips assignments as command prefixes), so the leading run ends
+     *                                  before the `cd` is ever reached.
+     *   `git fetch && cd /x && git push` — the leading run ended at `git fetch`. Bash really does run
+     *                                  the push inside /x; the guard judges it from the shell cwd. Same
+     *                                  false positive as the two above, just wearing a different shape.
      *
-     * Deliberately narrow: a `cd` after a REAL command (`git fetch && cd /x && git push`) is NOT
-     * reported, because there the resolver's refusal is the intended anti-smuggling behaviour and
-     * "put the cd at the front" would be wrong advice. Expanding `$VAR` in effectiveCwd() is the fix
-     * NOT taken — it would put shell-variable semantics inside the resolver that the `… && cd
-     * <exempt-tree>` scope-escape check depends on.
+     * ONE thing is silent: a `cd` with NO work after it (`git push && cd /x`). Nothing ran in the new
+     * directory, so the verdict on what DID run is simply correct, and "put the cd in front" would
+     * change what the command does rather than where it is judged.
+     *
+     * The rule the message must land, in every one of these: only `cd <literal path> && <work>`
+     * relocates the verdict. Everything else fails CLOSED — judged from the shell cwd — which is why
+     * an unresolvable `cd` is a message defect and never a hole. Expanding `$VAR` here, or resuming the
+     * scan after a real command, are both the fix NOT taken: the resolver decides ONE location for the
+     * whole line, so a `cd` that is allowed to count retroactively is exactly the `… && cd <exempt-tree>`
+     * scope escape.
      */
     unresolvedCd(command: string): string | null {
-        let stillLeading = true;
-        let afterAssignmentOnly = false;
-        let variableTarget = false;
+        const segments = this.scanner.commandSegments(command).map(
+            (segment: string): readonly string[] => this.shell.effectiveWords(segment));
 
-        for (const segment of this.scanner.commandSegments(command)) {
-            const words = this.shell.effectiveWords(segment);
-            const isCd = words[0] === 'cd' || words[0] === 'pushd';
-            if (!isCd) {
-                // An assignment-only segment yields no words at all; anything else is a real command,
-                // and a `cd` after one is out of scope for this diagnosis (see header).
-                if (words.length > 0) return this.phrase(afterAssignmentOnly, variableTarget);
-                stillLeading = false;
-                continue;
-            }
-            if (!stillLeading) afterAssignmentOnly = true;
-            if (words[1] !== undefined && VARIABLE_TARGET.test(words[1])) variableTarget = true;
-        }
-        return this.phrase(afterAssignmentOnly, variableTarget);
-    }
+        // The leading run effectiveCwd() actually consumed — a `cd` at or after this index did not count.
+        let consumed = 0;
+        while (consumed < segments.length && isCd(segments[consumed])) consumed++;
 
-    private phrase(afterAssignmentOnly: boolean, variableTarget: boolean): string | null {
         const reasons: string[] = [];
-        if (afterAssignmentOnly) reasons.push('a `VAR=…` assignment precedes it, which ends the scan');
-        if (variableTarget) reasons.push('its target is not a literal path (a `$VAR`, `~` or `$(…)` the guard cannot expand)');
+        const add = (reason: string): void => { if (!reasons.includes(reason)) reasons.push(reason); };
+
+        for (let i = 0; i < segments.length; i++) {
+            if (!isCd(segments[i])) continue;
+            // A `cd` with nothing left to run after it changed nothing — see the header.
+            if (!segments.slice(i + 1).some(isRealCommand)) continue;
+
+            if (i >= consumed) {
+                add(segments.slice(0, i).some(isRealCommand)
+                    ? 'another command precedes it, and only a `cd` at the FRONT of the line counts'
+                    : 'a `VAR=…` assignment precedes it, which ends the scan');
+            }
+            const target = segments[i][1];
+            if (target !== undefined && VARIABLE_TARGET.test(target)) {
+                add('its target is not a literal path (a `$VAR`, `~` or `$(…)` the guard cannot expand)');
+            }
+        }
         return reasons.length === 0 ? null : reasons.join(', and ');
     }
 
@@ -210,6 +219,18 @@ export class EffectiveTreeResolver {
         const relative = path.relative(path.resolve(root), path.resolve(dir));
         return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
     }
+}
+
+// The two segment shapes unresolvedCd() sorts by. A segment with NO words at all is a bare `VAR=value`
+// assignment (CommandScanner strips assignments as command prefixes), which is neither.
+// webpieces-disable no-function-outside-class -- pure predicates over one segment's words, siblings of the module-scope helpers below
+function isCd(words: readonly string[]): boolean {
+    return words[0] === 'cd' || words[0] === 'pushd';
+}
+
+// webpieces-disable no-function-outside-class -- sibling of isCd()
+function isRealCommand(words: readonly string[]): boolean {
+    return words.length > 0 && !isCd(words);
 }
 
 // A `cd` target that is not a literal path: `$DIR`, `${DIR}`, `~`, or a `$(…)`/backtick substitution.

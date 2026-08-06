@@ -119,12 +119,20 @@ describe('EffectiveTreeResolver.unresolvedCd — naming the `cd` that did not co
 
     it('a literal leading `cd` has nothing to explain', () => {
         expect(resolver().unresolvedCd(`cd ${worktree} && git push`)).toBeNull();
+        expect(resolver().unresolvedCd(`cd /a && cd ${worktree} && git push`)).toBeNull();
         expect(resolver().unresolvedCd('git push')).toBeNull();
     });
 
-    it('a `cd` AFTER a real command is silent — there "put it in front" would be wrong advice', () => {
-        // This is the anti-smuggling case: `… && cd <exempt-tree>` must not exempt the whole line, and
-        // the resolver refusing it is intended behaviour, not a near-miss to coach the agent out of.
+    it('a MID-LINE `cd` with work after it is named — bash runs that work there, the guard does not', () => {
+        // `git fetch && cd /x && git push` really does push from /x, so blocking it is the same false
+        // positive as the VAR= case. Silence here left the agent with no way to see why.
+        const reason = resolver().unresolvedCd(`git fetch && cd ${worktree} && git push`);
+        expect(reason).toContain('only a `cd` at the FRONT');
+    });
+
+    it('a TRAILING `cd` stays silent — nothing ran there, so there is nothing to explain', () => {
+        // Also the anti-smuggling shape: `… && cd <exempt-tree>` must never exempt the line that already
+        // ran, and telling the agent to move this `cd` forward would change what the command DOES.
         expect(resolver().unresolvedCd(`git push && cd ${worktree}`)).toBeNull();
         expect(resolver().unresolvedCd('git push && cd "$WT"')).toBeNull();
     });
