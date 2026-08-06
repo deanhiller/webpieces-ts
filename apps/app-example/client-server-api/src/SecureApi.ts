@@ -11,9 +11,11 @@ export interface SecureResponse {
 
 /**
  * SecureApi - endpoints exercising each non-public AuthMode, for Authentication.spec.ts:
- *  - adminOp    → @AuthJwt('admin')      (role-gated user JWT)
- *  - internalOp → @AuthSharedSecret(...)  (internal shared-secret)
- *  - serviceOp  → @AuthOidc()             (service-to-service OIDC, trust-the-edge)
+ *  - userOp     → @AuthJwtAllRolesAllowed() (any authenticated user — the NAMED wide grant)
+ *  - adminOp    → @AuthJwt('admin')         (role-gated user JWT)
+ *  - orgOp      → @Auth({ inOrg: true })    (app-defined authorization, enforced by authorizeJwt)
+ *  - internalOp → @AuthSharedSecret(...)    (internal shared-secret)
+ *  - serviceOp  → @AuthOidc()               (service-to-service OIDC, trust-the-edge)
  */
 @ApiPath('/secure')
 export abstract class SecureApi {
