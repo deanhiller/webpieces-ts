@@ -123,37 +123,39 @@ export class EffectiveTreeResolver {
     }
 
     /**
-     * WHY a `cd` the agent wrote did not move the effective cwd — or null when there is nothing to
-     * explain. Pure diagnosis for the block MESSAGE; it changes no verdict and relaxes nothing.
+     * Is this command's location UNAMBIGUOUS — or should it be rejected outright? Returns the reason a
+     * `cd` in it cannot be resolved, or null when there is nothing wrong.
      *
-     * The two shapes below both degrade to "judge against the governed root" (the safe direction) and
-     * both look, from the agent's side, exactly like a `cd` that was ignored. A guard that then says
-     * "cd into it first" is describing a remedy the agent has ALREADY performed, so it cannot discover
-     * the real cause: in the session that motivated this, the agent concluded the exemption was broken
-     * and wrote a persistent memory entry asserting `cd` must be its own Bash call. Neither is true.
-     * Naming the precondition here is what makes the hint self-correcting.
+     * `cd <literal path> && <work>` is the ONE shape that moves where a command is judged, because it
+     * is the one shape effectiveCwd() can resolve. Everything else fell back to the shell cwd, which
+     * is SAFE (fails closed, nothing smuggled) but silent, and silent is what cost the time:
      *
-     *   `cd "$DIR" && git push`      — the target is not a literal path. `path.resolve(cwd, '$DIR')` is
-     *                                  a directory that does not exist, not the tree that was meant.
-     *   `D=/x; cd "$D"; git push`    — a bare `VAR=value` segment tokenizes to NO words (CommandScanner
-     *                                  strips assignments as command prefixes), so the leading run ends
-     *                                  before the `cd` is ever reached.
-     *   `git fetch && cd /x && git push` — the leading run ended at `git fetch`. Bash really does run
-     *                                  the push inside /x; the guard judges it from the shell cwd. Same
-     *                                  false positive as the two above, just wearing a different shape.
+     *   `cd "$DIR" && git push`          — `path.resolve(cwd, '$DIR')` is a directory that does not
+     *                                      exist, not the tree that was meant.
+     *   `D=/x; cd "$D"; git push`        — a bare `VAR=value` segment tokenizes to NO words, so the
+     *                                      leading run ends before the `cd` is reached.
+     *   `git fetch && cd /x && git push` — bash really does run the push in /x; the guard judged it
+     *                                      from the shell cwd and blocked it.
+     *   `git push && cd /x`              — the push already ran at the root, whatever the trailing
+     *                                      `cd` says.
      *
-     * ONE thing is silent: a `cd` with NO work after it (`git push && cd /x`). Nothing ran in the new
-     * directory, so the verdict on what DID run is simply correct, and "put the cd in front" would
-     * change what the command does rather than where it is judged.
+     * Naming these in the block MESSAGE (the previous two PRs) helped, but left the agent to notice a
+     * paragraph on an otherwise-normal block. Rejecting is the simpler contract and the one the human
+     * asked for: ONE legal shape, everything else refused with the fix spelled out. No verdict changes
+     * — every command this rejects was already being judged from the shell cwd — so this trades a
+     * silent misdirect for a loud one-line rule, and deletes the near-miss taxonomy entirely.
      *
-     * The rule the message must land, in every one of these: only `cd <literal path> && <work>`
-     * relocates the verdict. Everything else fails CLOSED — judged from the shell cwd — which is why
-     * an unresolvable `cd` is a message defect and never a hole. Expanding `$VAR` here, or resuming the
-     * scan after a real command, are both the fix NOT taken: the resolver decides ONE location for the
-     * whole line, so a `cd` that is allowed to count retroactively is exactly the `… && cd <exempt-tree>`
-     * scope escape.
+     * Expanding `$VAR` here is still the fix NOT taken. The resolver decides ONE location for a whole
+     * line, so a `cd` that counts retroactively is exactly the `… && cd <exempt-tree>` scope escape.
+     *
+     * A command containing a HEREDOC (`<<`) is exempt: CommandScanner does not model heredoc bodies,
+     * so a commit message or doc that merely CONTAINS `cd /x && …` tokenizes as if it were code, and
+     * rejecting that would block ordinary writing. Skipping the rejection cannot open a hole — the
+     * location still falls back to the shell cwd exactly as before.
      */
-    unresolvedCd(command: string): string | null {
+    misplacedCd(command: string): string | null {
+        if (HEREDOC.test(command)) return null;
+
         const segments = this.scanner.commandSegments(command).map(
             (segment: string): readonly string[] => this.shell.effectiveWords(segment));
 
@@ -161,25 +163,19 @@ export class EffectiveTreeResolver {
         let consumed = 0;
         while (consumed < segments.length && isCd(segments[consumed])) consumed++;
 
-        const reasons: string[] = [];
-        const add = (reason: string): void => { if (!reasons.includes(reason)) reasons.push(reason); };
-
         for (let i = 0; i < segments.length; i++) {
             if (!isCd(segments[i])) continue;
-            // A `cd` with nothing left to run after it changed nothing — see the header.
-            if (!segments.slice(i + 1).some(isRealCommand)) continue;
-
             if (i >= consumed) {
-                add(segments.slice(0, i).some(isRealCommand)
-                    ? 'another command precedes it, and only a `cd` at the FRONT of the line counts'
-                    : 'a `VAR=…` assignment precedes it, which ends the scan');
+                return segments.slice(0, i).some(isRealCommand)
+                    ? 'it comes after another command — a `cd` only counts at the FRONT of the line'
+                    : 'a `VAR=…` assignment precedes it, which ends the scan';
             }
             const target = segments[i][1];
             if (target !== undefined && VARIABLE_TARGET.test(target)) {
-                add('its target is not a literal path (a `$VAR`, `~` or `$(…)` the guard cannot expand)');
+                return 'its target is not a literal path (a `$VAR`, `~` or `$(…)` the guard cannot expand)';
             }
         }
-        return reasons.length === 0 ? null : reasons.join(', and ');
+        return null;
     }
 
     private classify(effectiveCwd: string, governedRoot: string): TreeClassification {
@@ -232,6 +228,10 @@ function isCd(words: readonly string[]): boolean {
 function isRealCommand(words: readonly string[]): boolean {
     return words.length > 0 && !isCd(words);
 }
+
+// `<<EOF` / `<<'EOF'` / `<<-EOF`. NOT `<` or `<<<` alone — a herestring has no multi-line body, so it
+// cannot carry prose that tokenizes as commands.
+const HEREDOC = /<<-?\s*['"]?[A-Za-z_]/;
 
 // A `cd` target that is not a literal path: `$DIR`, `${DIR}`, `~`, or a `$(…)`/backtick substitution.
 // `~` is here because path.resolve() does not expand it either — the shell does, and the hook never

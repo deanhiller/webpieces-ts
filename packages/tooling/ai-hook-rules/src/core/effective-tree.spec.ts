@@ -100,41 +100,46 @@ describe('EffectiveTreeResolver — which tree does this command act on?', () =>
 
 });
 
-// The resolver stays strict; only the DIAGNOSIS is new. Every case below already resolved to the
-// governed root before this — the question is whether the message can say WHY.
-describe('EffectiveTreeResolver.unresolvedCd — naming the `cd` that did not count', () => {
+// ONE legal shape: `cd <literal path> && <work>`. The resolver is unchanged — every command rejected
+// below was ALREADY judged from the shell cwd — so this is a silent misdirect becoming a loud rule.
+describe('EffectiveTreeResolver.misplacedCd — the one legal shape, everything else refused', () => {
 
-    it('`VAR=…; cd "$VAR"; …` — the shape that reads as a guard malfunction — is named on both counts', () => {
-        const reason = resolver().unresolvedCd(`WT=${worktree}; cd "$WT"; git push`);
-        expect(reason).toContain('assignment precedes it');
-        expect(reason).toContain('not a literal path');
-        // …and the resolver itself is unchanged: still judged from the shell cwd.
+    it('`VAR=…; cd "$VAR"; …` — the shape that reads as a guard malfunction — is rejected', () => {
+        expect(resolver().misplacedCd(`WT=${worktree}; cd "$WT"; git push`)).toContain('assignment precedes it');
+        // …and the resolver still judges it from the shell cwd, exactly as before: no verdict moved.
         expect(resolver().effectiveCwd(`WT=${worktree}; cd "$WT"; git push`, primary)).toBe(primary);
     });
 
-    it('a leading `cd` with a variable target is named even though it WAS reached', () => {
-        expect(resolver().unresolvedCd('cd "$WT" && git push')).toContain('not a literal path');
-        expect(resolver().unresolvedCd('cd ~/repo && git push')).toContain('not a literal path');
+    it('a non-literal target is rejected wherever it sits, leading run or not', () => {
+        expect(resolver().misplacedCd('cd "$WT" && git push')).toContain('not a literal path');
+        expect(resolver().misplacedCd('cd ~/repo && git push')).toContain('not a literal path');
+        expect(resolver().misplacedCd('cd $(git rev-parse --show-toplevel) && git push')).not.toBeNull();
     });
 
-    it('a literal leading `cd` has nothing to explain', () => {
-        expect(resolver().unresolvedCd(`cd ${worktree} && git push`)).toBeNull();
-        expect(resolver().unresolvedCd(`cd /a && cd ${worktree} && git push`)).toBeNull();
-        expect(resolver().unresolvedCd('git push')).toBeNull();
+    it('a MID-LINE `cd` is rejected — bash runs the rest there, the guard does not', () => {
+        expect(resolver().misplacedCd(`git fetch && cd ${worktree} && git push`)).toContain('at the FRONT');
     });
 
-    it('a MID-LINE `cd` with work after it is named — bash runs that work there, the guard does not', () => {
-        // `git fetch && cd /x && git push` really does push from /x, so blocking it is the same false
-        // positive as the VAR= case. Silence here left the agent with no way to see why.
-        const reason = resolver().unresolvedCd(`git fetch && cd ${worktree} && git push`);
-        expect(reason).toContain('only a `cd` at the FRONT');
+    it('a TRAILING `cd` is rejected too — same rule, no carve-out to remember', () => {
+        // It is harmless (the work already ran at the root) but it is also the `… && cd <exempt-tree>`
+        // scope-escape shape, and one rule with no exceptions is the point.
+        expect(resolver().misplacedCd(`git push && cd ${worktree}`)).toContain('at the FRONT');
     });
 
-    it('a TRAILING `cd` stays silent — nothing ran there, so there is nothing to explain', () => {
-        // Also the anti-smuggling shape: `… && cd <exempt-tree>` must never exempt the line that already
-        // ran, and telling the agent to move this `cd` forward would change what the command DOES.
-        expect(resolver().unresolvedCd(`git push && cd ${worktree}`)).toBeNull();
-        expect(resolver().unresolvedCd('git push && cd "$WT"')).toBeNull();
+    it('the legal shape passes: a leading run of literal `cd`s, or no `cd` at all', () => {
+        expect(resolver().misplacedCd(`cd ${worktree} && git push`)).toBeNull();
+        expect(resolver().misplacedCd(`cd /a && cd ${worktree} && git push`)).toBeNull();
+        expect(resolver().misplacedCd('git push')).toBeNull();
+        expect(resolver().misplacedCd('pnpm build && pnpm test')).toBeNull();
+    });
+
+    it('a HEREDOC is exempt — prose that merely CONTAINS a `cd` is not code', () => {
+        // A commit message or doc body tokenizes like a command; rejecting it would block writing about
+        // the very rule this implements. Skipping the rejection opens nothing: the location still falls
+        // back to the shell cwd.
+        const command = `git commit -F - <<'EOF'\nFix: use git fetch && cd /x && git push\nEOF`;
+        expect(resolver().misplacedCd(command)).toBeNull();
+        expect(resolver().effectiveCwd(command, primary)).toBe(primary);
     });
 
 });

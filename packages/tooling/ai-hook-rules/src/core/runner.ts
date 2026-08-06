@@ -315,7 +315,41 @@ function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent:
 // as one step here rather than as two near-identical stanzas in runBashInternal.
 // webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
-    return coordinatorInWorktreeBlock(command, tree, agent) ?? gitFromSubdirBlock(command, tree);
+    return misplacedCdBlock(command, tree)
+        ?? coordinatorInWorktreeBlock(command, tree, agent)
+        ?? gitFromSubdirBlock(command, tree);
+}
+
+/**
+ * ONE legal shape for relocating a command: `cd <literal path> && <work>`. Anything else — a `cd` after
+ * another command or after a `VAR=…` assignment, or a `cd "$DIR"` the guard cannot expand — is refused
+ * here instead of being silently judged from the shell cwd.
+ *
+ * This changes no verdict: every command it refuses was ALREADY judged from the shell cwd, so nothing
+ * it blocks was previously being allowed on the strength of its `cd`. What changes is that the agent
+ * finds out. Two PRs of increasingly precise near-miss wording (#596, #597) still left the fact in a
+ * paragraph appended to an unrelated block; the rule is simpler stated as a rule.
+ *
+ * FIRST in the L1 chain deliberately. coordinator-in-worktree and force-to-root both reason from the
+ * resolved tree, and if the `cd` did not resolve, that tree is not the one the agent thinks they are
+ * in — so their remedies would be steering from a location the command does not actually run in.
+ */
+// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock(); the whole runner is module-scope functions
+function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult | null {
+    const reason = new EffectiveTreeResolver().misplacedCd(command);
+    if (reason === null) return null;
+    const report =
+        `❌ A \`cd\` must come FIRST in the command, with a LITERAL path.\n` +
+        `   Why this one was rejected: ${reason}.\n` +
+        `   \`cd <literal path> && <work>\` is the ONE shape that moves where webpieces judges a command.\n` +
+        `   Any other \`cd\` cannot be resolved, so the command would be judged against ${tree.root}\n` +
+        `   — not where you think it runs. That used to happen silently; this block is that silence, spoken.\n` +
+        `   Fix Option 1: put the \`cd\` first, literal path, SAME command:  cd /abs/path && <the rest>\n` +
+        `   Fix Option 2: drop the \`cd\` — ${tree.root} is where the command is judged anyway.\n` +
+        `   Fix Option 3: split it — run the work in one call, the \`cd\` in another (a \`cd\` alone still\n` +
+        `                 moves nothing the guards judge; see EffectiveTree on why cwd cannot be assumed).`;
+    logGuardDecision(tree.root, new GuardDecision('cd-must-be-first', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'cd not leading/literal'));
+    return new BlockedResult(report);
 }
 
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
@@ -386,7 +420,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
     logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'));
-    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths, command);
+    const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }
 
@@ -408,29 +442,21 @@ function commandLabel(command: string): string {
 //
 // The hint MUST state the precondition, not just the remedy. "cd into it first" is true only for a
 // LITERAL cd at the FRONT of the same command; `D=…; cd "$D"; git push` lands in the identical
-// directory and still blocks (see EffectiveTreeResolver.unresolvedCd for why, and why the resolver is
-// deliberately not taught to expand `$D`). An agent that had already cd'd read the old wording as
-// evidence the exemption was broken and reasoned itself into two wrong conclusions it later had to
-// retract. Where the near-miss is detectable we say so outright, which turns the misdirect into a
-// self-correcting hint.
+// directory and does NOT relocate the verdict. That used to be silent, then a near-miss paragraph
+// appended here; it is now misplacedCdBlock, which refuses the command outright — so by the time this
+// footer is reached, any `cd` in the command is already known to be leading and literal. The wording
+// still states the shape, because this is where an agent LEARNS it, before writing the next command.
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly string[], command: string): string {
+function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly string[]): string {
     if (exemptGuards.length === 0) return '';
     if (!groups.some((g: RuleGroup): boolean => g.ruleName === 'pr-creation-or-push-guard')) return '';
-
-    const unresolved = new EffectiveTreeResolver().unresolvedCd(command);
-    const nearMiss = unresolved === null ? ''
-        : `\n⚠️  This command DOES contain a \`cd\`, but the guard could not resolve it: ${unresolved}. `
-            + `It was therefore judged against this repo. Re-run it as one command with a literal path in front.`;
 
     return `\n\nℹ️  Working in a nested repo under one of these exempt trees (${exemptGuards.join(', ')})? `
         + `Put a LITERAL \`cd\` at the FRONT of the SAME command — \`cd /abs/path/to/repo && git push\` — and git/gh `
         + `run normally there: the webpieces guards do NOT govern them (each is its own repo).`
-        + `\n   The guard resolves only a leading run of literal \`cd\`/\`pushd\`, so \`cd <literal path> && <work>\` `
-        + `is the ONE shape that moves where the command is judged. Anything ahead of the \`cd\` ends the scan — a `
-        + `\`VAR=…\` assignment, or another command as in \`git fetch && cd /x && git push\` — and so does a `
-        + `non-literal target like \`cd "$DIR"\`. In every one of those the command is judged against this repo instead.`
-        + nearMiss;
+        + `\n   \`cd <literal path> && <work>\` is the ONE shape that moves where a command is judged. A \`cd\` `
+        + `anywhere else in the line, or a non-literal target like \`cd "$DIR"\`, is refused outright rather than `
+        + `judged from somewhere you did not intend.`;
 }
 
 // The set of rule names explicitly present in webpieces.config.json (every key except rulesDir).
