@@ -189,17 +189,22 @@ describe('auth modes', () => {
      * `@Authentication(new AuthenticationConfig(...))` — the removed footgun — so the framework's own
      * "you forgot authorization" message was the thing propagating it.
      */
-    it('the missing-auth error names the live decorators, never @Authentication', () => {
+    it('the missing-auth error names only LIVE decorators, never a removed one', () => {
         @ApiPath('/naked')
         abstract class NakedApi {
             @Endpoint('/a', 'rpc') a(_r: object): Promise<object> { throw new Error('x'); }
         }
         expect(() => assertEveryEndpointHasAuthMode(NakedApi)).toThrow(MISSING_AUTH_DECORATOR_FIX);
-        expect(() => assertEveryEndpointHasAuthMode(NakedApi)).not.toThrow(/@Authentication/);
         // The menu must be COMPLETE — an incomplete one becomes the API the caller believes exists.
         for (const member of ["@AuthJwt({roles: ['admin']})", '@AuthJwt({allRolesAllowed: true})',
             '@Public()', '@AuthOidc(...callers)', '@AuthSharedSecret(key)']) {
             expect(MISSING_AUTH_DECORATOR_FIX).toContain(member);
+        }
+        // ...and must name NO removed spelling. One list, so retiring a decorator means adding it here
+        // rather than remembering that this guard existed — the @Authentication-only version of this
+        // assertion would not have caught @AuthJwtAllRolesAllowed or @Auth creeping back in.
+        for (const removed of ['@Authentication', 'AuthenticationConfig', '@AuthJwtAllRolesAllowed', '@Auth(']) {
+            expect(MISSING_AUTH_DECORATOR_FIX).not.toContain(removed);
         }
     });
 
