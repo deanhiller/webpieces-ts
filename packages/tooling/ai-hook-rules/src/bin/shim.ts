@@ -49,7 +49,7 @@ export function shimPath(projectRoot: string): string {
 // HOW EVERY DENY MUST SPELL ITS CURE (added 2026-07-23, from a live audit-log post-mortem).
 //
 // The guards were right, the message was right, and the assistant STILL handed the block back to the
-// human — because of one appended clause. From .webpieces/logs/ai-hook-shim.log in a consumer repo:
+// human — because of one appended clause. From .webpieces/logs/<stream>ai-hook-shim.log in a consumer repo:
 //
 //   DENY-SHIM-STALE  cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh && git status --short
 //
@@ -218,8 +218,27 @@ fi`;
 // It deliberately does NOT change what the drift guard MEASURES — that stays anchored to $ROOT, the
 // tree the shim FILE lives in. Where a call is logged and what a call is judged against are separate
 // questions and are kept separate here.
+// TWO command variables, and the split is a SECURITY boundary — do not collapse them.
+//
+// $CMD is the DECISION input (the L0 allowlist greps it). Its pattern requires the CLOSING quote, so a
+// JSON payload that escapes an embedded quote as \\" yields the EMPTY STRING for the whole command.
+// That looks like a bug and is in fact the safe direction: an empty command matches no allowlist entry,
+// so a quoted command falls through to the deny. FAIL CLOSED. Keep it that way.
+//
+// $CMD_LOG is the AUDIT input and must never reach a decision. It drops the closing quote from the
+// pattern so it captures the command PREFIX instead of nothing.
+//
+// WHY THEY CANNOT BE ONE VARIABLE: every L0 allowlist ERE is anchored `^…[[:space:]]*$`, and trailing
+// whitespace is tolerated — so `pnpm install "; rm -rf /"` would prefix-capture to `pnpm install `,
+// which MATCHES, and the injection after the quote would ride through allowlisted. Measured 2026-08-06:
+// 3,908 of 4,917 shim audit lines (79.5%) recorded an empty command, i.e. four out of five audit
+// entries were blind. Fixing the LOG is worth doing; fixing the DECISION the same way is a hole.
 const PARSE_PAYLOAD_SH = `CMD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+CMD_LOG="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\).*/\\1/p')"
+[ -n "\$CMD_LOG" ] || CMD_LOG="\$CMD"
 TOOL="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+WP_SID="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
+WP_AID="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"agent_id"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 FILE="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 WP_CWD="\$(printf '%s' "\$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\)".*/\\1/p')"
 [ -n "\$WP_CWD" ] || WP_CWD="\$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree`;
@@ -387,7 +406,8 @@ ${VERSION_DRIFT_GUARD_SH}
 PAYLOAD="$(cat)"
 ${PARSE_PAYLOAD_SH}
 # Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
-# tab-separated line per invocation into this TREE's own logs/ai-hook-shim.log (gitignored), so the
+# tab-separated line per invocation into this TREE's own
+# logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log (gitignored), so the
 # observed behaviour can be diffed against the matrix in guards/L0-tooling.md. NEVER breaks or blocks the
 # hook: every write is swallowed, and nothing ever goes to stdout (stdout is the PreToolUse decision
 # channel — a stray byte there would corrupt allow/deny).

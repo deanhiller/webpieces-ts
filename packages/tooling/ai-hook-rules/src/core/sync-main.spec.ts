@@ -7,6 +7,12 @@ import { MainSyncLock, MainSyncStatusService } from '@webpieces/rules-config';
 
 import { refreshMainSync } from './sync-main';
 
+// Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
+// production does, so the layout is regression-tested on the REAL path rather than a fallback.
+import { LogStream } from './log-stream';
+function streamName(base: string): string { return new LogStream().fileName(base); }
+
+
 /**
  * SINGLE-FLIGHT IS UNCHANGED by the move to a branch-keyed map.
  *
@@ -19,7 +25,7 @@ let root: string;
 const service = new MainSyncStatusService();
 
 function asyncLog(): string {
-    const logPath = path.join(root, '.webpieces', 'logs', 'guard-async-work.log');
+    const logPath = path.join(root, '.webpieces', 'logs', streamName('guard-async-work.log'));
     return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
 }
 

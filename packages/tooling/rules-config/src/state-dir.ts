@@ -15,7 +15,11 @@ export const WORKTREE_STATE_DIR = 'worktrees';
 // each worktree namespace alike. It used to be `hooks/`, which also holds NON-log state (the dated
 // `hooks/<YYYY-MM-DD>/writeInfo-*.md` rejection details), while the L0 sh shim wrote to `logs/`. Two
 // directories, one of them mixed — so "where are the logs?" had two answers and neither was complete.
-// Every writer now goes through dotWebpieces.logs()/logsFile(), so the layout cannot drift apart again.
+// Every writer resolves its DIRECTORY through dotWebpieces.logs()/logsFile(), so the layout cannot
+// drift apart again. The FILENAME is a separate question: ai-hook-rules' LogStream prefixes it with
+// <sessionId>-<agentId|coordinator>-<hook>- so that concurrent writers (Claude Code runs all matching
+// PreToolUse hooks IN PARALLEL, and subagents/windows share a tree) never append to one file. This dir
+// is still the one home for all of them.
 export const LOGS_STATE_DIR = 'logs';
 
 // Non-log hook state: the dated rejection-detail directories. Named here (rather than re-spelled in

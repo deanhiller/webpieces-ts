@@ -1,0 +1,33 @@
+# decisions/
+
+Long-form records of the **hard, cross-cutting problems** in this tooling — the ones that took
+measurement to understand and that we will otherwise re-derive (wrongly) every six months.
+
+## What belongs here, and what does not
+
+| | goes in | example |
+|---|---|---|
+| **`guards/L*.md`** | the DECISION TABLE the engine consults — rows, dimensions, actions, cures | "K=`w` + A=`c` → BLOCK_AI_CURE" |
+| **`decisions/`** | WHY the model is shaped that way — the measurements, the edge cases, the options rejected | "why a nested worktree resolves `node_modules` differently from a sibling one" |
+| **`backlog/`** | one incident or one feature, filed and eventually closed | "bug: feature-branch-guard judges a subagent verdict write against the primary" |
+
+A `backlog/bug-*.md` describes **one** failure. A `decisions/` doc describes the **axis** several
+failures share, and survives after each of them is fixed.
+
+## Rules
+
+1. **Measure, don't assert.** Every claim about git, Node resolution or the harness carries the
+   command that produced it, so the next reader can re-run it instead of trusting it. Several
+   entries here exist *because* a plausible assertion turned out to be false.
+2. **Record what was rejected, and why.** The rejected option is the one that gets re-proposed.
+3. **Date the measurements.** Behaviour changes; a measured table with no date is a liability.
+4. **Cross-link.** Point at the `guards/L*.md` row, the `backlog/` incident, and the source file
+   that implements the decision. Code comments should point back here by path.
+
+## Index
+
+| # | doc | axis | status |
+|---|---|---|---|
+| 0001 | [tree-identity-and-governance.md](0001-tree-identity-and-governance.md) | Which tree governs a tool call — and which release, which state dir, which log file follow from that | decisions D1-D6 taken; D7 withdrawn |
+| 0002 | [the-shim-cannot-follow-the-tree.md](0002-the-shim-cannot-follow-the-tree.md) | The committed hook entry point is always the primary's, so a worktree can never be governed by its own release | problem statement; solved by 0003 |
+| 0003 | [three-hooks-per-tree-governance.md](0003-three-hooks-per-tree-governance.md) | One absolute fail-closed hook + two **relative** hooks, so each tree runs its own shim | **PROPOSED — premise confirmed, 1 unknown** |

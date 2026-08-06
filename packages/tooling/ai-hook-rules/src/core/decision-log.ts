@@ -5,12 +5,13 @@ import * as path from 'path';
 import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
+import { logStream } from './log-stream';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
 // the ASYNC log (guard-async-work.log, written by the detached refresher in main-sync-log.ts). This
 // one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
-// traceable to a stale or missing async write. Writes to `.webpieces/logs/guard-sync-decisions.log`
+// traceable to a stale or missing async write. Writes to `.webpieces/logs/<stream>guard-sync-decisions.log`
 // (see LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside `hooks/`'s non-log state).
 const LOG_FILE = 'guard-sync-decisions.log';
 const LOG_FILE_PREV = 'guard-sync-decisions.1.log';
@@ -48,7 +49,10 @@ export class GuardDecision {
 }
 
 /**
- * Append one tab-separated line per decision to `.webpieces/logs/guard-sync-decisions.log`. `root` is
+ * Append one tab-separated line per decision to `.webpieces/logs/<stream>guard-sync-decisions.log`,
+ * where <stream> is LogStream's `<sessionId>-<agentId|coordinator>-<hook>-` prefix (empty when the
+ * caller never identified renders as `unknown-coordinator-hook-` — there is no un-prefixed name).
+ * `root` is
  * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or a
  * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
  * logged from a subdir never scatters a stray `.webpieces`). Swallows all errors — logging must never
@@ -63,8 +67,8 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
         const logsDir = dotWebpieces.logs(root);
         fs.mkdirSync(logsDir, { recursive: true });
 
-        const logPath = path.join(logsDir, LOG_FILE);
-        rotateLogFile(logPath, path.join(logsDir, LOG_FILE_PREV));
+        const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
+        rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
 
         const line = [
             `[${timestamp}]`,
@@ -109,7 +113,8 @@ export class GuardInvocation {
 }
 
 /**
- * The per-INVOCATION stream — `.webpieces/logs/guard-invocations.log`, one line for EVERY guards-hook
+ * The per-INVOCATION stream — `.webpieces/logs/<stream>guard-invocations.log` (see LogStream for the
+ * `<stream>` prefix), one line for EVERY guards-hook
  * call (allow or block, bash or file), unlike guard-sync-decisions.log which records only the calls a
  * rule actually judged. It captures the tool, the command/file, the live git branch, the async-written
  * main-sync-status.json snapshot (branch / merged / fork-point / conflict), and — since this class
@@ -165,8 +170,8 @@ export class InvocationLog {
         try {
             const logsDir = dotWebpieces.logs(invocation.root);
             fs.mkdirSync(logsDir, { recursive: true });
-            const logPath = path.join(logsDir, INVOCATION_LOG_FILE);
-            rotateLogFile(logPath, path.join(logsDir, INVOCATION_LOG_FILE_PREV));
+            const logPath = path.join(logsDir, logStream.fileName(INVOCATION_LOG_FILE));
+            rotateLogFile(logPath, path.join(logsDir, logStream.fileName(INVOCATION_LOG_FILE_PREV)));
 
             const line = [
                 `[${invocation.timestamp}]`,

@@ -262,8 +262,9 @@ tables instead of inferred:
 
 `fault=` carries this document's own letters, and only `D`/`X`/`U`/`K` can appear: `S`/`C`/`Y` are decided
 inside the binary — which, on a `fault=-` line, is exactly what ran — and it keeps its own streams
-(`logs/guard-invocations.log`, `logs/guard-sync-decisions.log`, both of which now carry their call's
-verdict). So `fault=-` is a statement about the **sh layer only**, never a claim that nothing was wrong.
+(`logs/<session>-<agent|coordinator>-<hook>-guard-invocations.log` and the matching
+`…-guard-sync-decisions.log`, both of which now carry their call's verdict; the stream prefix keeps the
+two hooks Claude Code runs in PARALLEL out of one file). So `fault=-` is a statement about the **sh layer only**, never a claim that nothing was wrong.
 
 `PASS-BIN-*` is the line that used to be missing. `wp_log` fired only on the fail-closed path, so a
 healthy call recorded nothing and an absent line meant either "fine" or "the shim never ran" — the two
@@ -271,7 +272,8 @@ answers a reader most needs to tell apart.
 
 `tree=` is git's own name for the worktree the CALL was made in (`primary` in the primary clone),
 derived from the payload's `cwd`. The line lands in **that tree's** log —
-`<primary>/.webpieces/worktrees/<name>/logs/ai-hook-shim.log`, or `<primary>/.webpieces/logs/` from
+`<primary>/.webpieces/worktrees/<name>/logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log`,
+or `<primary>/.webpieces/logs/` from
 the primary clone. Centralized under the primary on purpose: removing a worktree must not take its
 audit trail with it. Note the interaction with the trap in the worked example above — the shim runs
 from `$CLAUDE_PROJECT_DIR`, so `tree=` can name a worktree whose faults are being MEASURED against a

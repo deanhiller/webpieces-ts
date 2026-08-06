@@ -4,11 +4,17 @@ import * as os from 'os';
 import * as path from 'path';
 import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
 
+// Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
+// production does, so the layout is regression-tested on the REAL path rather than a fallback.
+import { LogStream } from './log-stream';
+function streamName(base: string): string { return new LogStream().fileName(base); }
+
+
 function tmpRoot(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'wp-synclog-'));
 }
 
-const LOG_REL = '.webpieces/logs/guard-async-work.log';
+const LOG_REL = `.webpieces/logs/${streamName('guard-async-work.log')}`;
 
 describe('main-sync-log', () => {
     it('appends one tab-separated line with phase, pid, branch and detail', () => {
@@ -25,10 +31,10 @@ describe('main-sync-log', () => {
         const root = tmpRoot();
         const logsDir = path.join(root, '.webpieces/logs');
         fs.mkdirSync(logsDir, { recursive: true });
-        fs.writeFileSync(path.join(logsDir, 'guard-async-work.log'), 'x'.repeat(512 * 1024 + 10));
+        fs.writeFileSync(path.join(logsDir, streamName('guard-async-work.log')), 'x'.repeat(512 * 1024 + 10));
         logSyncEvent(root, new SyncLogEvent('FINISH', 1, 'main', 'ok'));
-        expect(fs.existsSync(path.join(logsDir, 'guard-async-work.1.log'))).toBe(true);
-        expect(fs.readFileSync(path.join(logsDir, 'guard-async-work.log'), 'utf8')).toContain('\tFINISH\t');
+        expect(fs.existsSync(path.join(logsDir, streamName('guard-async-work.1.log')))).toBe(true);
+        expect(fs.readFileSync(path.join(logsDir, streamName('guard-async-work.log')), 'utf8')).toContain('\tFINISH\t');
     });
 
     it('collapses newlines/tabs in detail so one event is always one line', () => {
@@ -40,6 +46,6 @@ describe('main-sync-log', () => {
     });
 
     it('syncStderrLogPath points inside .webpieces/logs', () => {
-        expect(syncStderrLogPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', 'guard-async-work.stderr.log'));
+        expect(syncStderrLogPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', streamName('guard-async-work.stderr.log')));
     });
 });

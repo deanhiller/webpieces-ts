@@ -5,7 +5,13 @@ import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest } from './main-sync-refresh';
 
-const LOG_REL = '.webpieces/logs/guard-async-work.log';
+// Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
+// production does, so the layout is regression-tested on the REAL path, not a fallback.
+import { LogStream } from './log-stream';
+function streamName(base: string): string { return new LogStream().fileName(base); }
+
+
+const LOG_REL = `.webpieces/logs/${streamName('guard-async-work.log')}`;
 
 function spawnAttempts(root: string): number {
     const logPath = path.join(root, LOG_REL);
