@@ -14,6 +14,7 @@ import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { L0_ALLOW_JS, L0_CURE_ALLOW_JS } from '../bin/shim';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
+import { L1Classification, firstMatchingL1Row } from './l1-rows';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
     Rule, Violation, RuleGroup, RuleFailError, InformAiError,
@@ -310,14 +311,51 @@ function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent:
     return new BlockedResult(report);
 }
 
-// The structural L1 blocks, in order: coordinator-in-worktree (row 3), then force-to-root (row 5).
-// Neither is a configurable rule — they are decided from the resolved tree and the caller, so they run
-// as one step here rather than as two near-identical stanzas in runBashInternal.
+// Where the command lands in L1's five dimensions (K/A/R/G/P). The ONE place the runner's view of the
+// world is translated into the matrix's vocabulary — see L1Classification.forEnforcement for why
+// TreeKind 'outside' currently classifies as `p`.
+// webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
+function l1Classify(command: string, tree: EffectiveTree, agent: AgentIdentity): L1Classification {
+    return L1Classification.forEnforcement(
+        tree.kind,
+        agent.coordinator,
+        new ReadOnlyInspectionScan().isReadOnlyInspection(command),
+        isGitOrGhCommand(command),
+        path.resolve(tree.effectiveCwd) === path.resolve(tree.root),
+    );
+}
+
+// The structural L1 blocks, in order: the misplaced-`cd` PRE-STAGE, then coordinator-in-worktree
+// (row 3), then force-to-root (row 5). None is a configurable rule — they are decided from the command
+// text, the resolved tree and the caller, so they run as one step here rather than as three
+// near-identical stanzas in runBashInternal.
+//
+// For the two TREE-BASED blocks the ORDER and the CHOICE are not written here: they come from L1_ROWS
+// (l1-rows.ts), the same array guards/L1-location.md is rendered from. Classify, take the first
+// matching row, dispatch on its blockId — so a row deleted from the array is a block that stops firing,
+// and the doc cannot describe a table the guard does not consult. The two report builders below still
+// own their own predicates and their deny strings; l1-matrix.spec.ts asserts the row lookup and those
+// predicates agree.
+//
+// misplacedCdBlock is deliberately OUTSIDE that lookup, and runs ahead of it, for the reason its own
+// docblock gives: it decides from command TEXT, before a tree has been resolved, and the other two
+// reason FROM the resolved tree. Classifying it would mean asking L1_ROWS a question whose answer the
+// classification itself depends on. It is the same shape as L2's `bareCheckoutOfMain` pre-stage.
+//
+// KNOWN GAP, stated rather than discovered later: that makes it an L1 block with NO row in L1_ROWS, so
+// guards/L1-location.md does not describe it — the exact drift this table exists to prevent, arriving
+// while the table was being built. It needs a row (its "state" would be a command shape, the way L2
+// row 2 carries one), which changes the rendered doc and so belongs in its own change, not in a merge
+// resolution.
 // webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
-    return misplacedCdBlock(command, tree)
-        ?? coordinatorInWorktreeBlock(command, tree, agent)
-        ?? gitFromSubdirBlock(command, tree);
+    const misplacedCd = misplacedCdBlock(command, tree);
+    if (misplacedCd !== null) return misplacedCd;
+
+    const row = firstMatchingL1Row(l1Classify(command, tree, agent));
+    if (row.blockId === null) return null; // exempt (row 1) or hand down to L2 (rows 2, 4, 6)
+    if (row.blockId === 'coordinator-in-worktree') return coordinatorInWorktreeBlock(command, tree, agent);
+    return gitFromSubdirBlock(command, tree);
 }
 
 /**
