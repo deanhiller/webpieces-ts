@@ -30,7 +30,7 @@ function createMockFetchResponse(value: string): FetchValueResponse {
 }
 
 /**
- * SaveApi has @Authentication(authenticated=true). The AuthFilter reads the credential off the
+ * SaveApi has @AuthJwtAllRolesAllowed(). The AuthFilter reads the credential off the
  * inbound HttpRequest — never from RequestContext, where it would become a transferred key and ride
  * onto every outbound call — so tests publish an HttpRequest carrying `Authorization: Bearer ...`,
  * exactly as a transport would.
@@ -118,7 +118,7 @@ describe('SaveApi with mocked Server2Api', () => {
 });
 
 /**
- * PublicApi has @Authentication(authenticated=false), so no auth header needed.
+ * PublicApi has @Public(), so no auth header needed.
  */
 describe('PublicApi', () => {
     let publicApi: PublicApi;

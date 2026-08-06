@@ -277,6 +277,20 @@
             "buildCommand": "pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)",
             "mergeModeWhy": "AUTO because this repo has allow_auto_merge=true and WANTS wp-finish-upsert-pr to land PRs: only the --subject/--body-file it passes can put the PR title + the compact risk/flags body in main's history. A UI merge cannot — it is limited to squash_merge_commit_title/message, and this repo's squash_merge_commit_message is COMMIT_MESSAGES, so a hand merge would land the branch's raw commit messages instead. Repos whose policy is 'a human clicks merge' set NONE (and must set squash_merge_commit_title=PR_TITLE, or commits land as 'Squash merge of <branch>').",
             "mergeMode": "AUTO",
+            "checklistsWhy": "backwards-compat-reviewer enforces this repo's INVERTED compatibility policy: a changed webpieces surface must make the OLD spelling stop compiling, with the error naming the new one. It is required because every consumer of these surfaces is a coding agent, and an agent picks whatever typechecks — a @deprecated tag is not part of the type, so a soft landing freezes callers instead of migrating them (issue #589: an agent wrote the widest auth grant onto an admin contract and asserted the framework had no role support). Patterns are deliberately COARSE — every framework package, every API contract, and the config itself — because the reviewer makes the content-level judgment by reading the diff.",
+            "checklists": [
+                {
+                    "subagent": "backwards-compat-reviewer",
+                    "doc": ".claude/review/backwards-compatibility.md",
+                    "patterns": [
+                        "packages/**",
+                        "libraries/apis/**",
+                        "**/*Api.ts",
+                        "webpieces.config.json"
+                    ],
+                    "required": true
+                }
+            ],
             "gatesWhy": "warningColor (REQUIRED on every gate) = the dashboard color shown WHEN a gate's patterns match a changed file (green is implicit when nothing matches; warningColor is purely visual and never blocks the PR — only the build gate can). disabled:true gates are kept-in-file examples (JSON has no comments) other projects flip to false and tune; they are skipped on this repo.",
             "gates": [
                 {

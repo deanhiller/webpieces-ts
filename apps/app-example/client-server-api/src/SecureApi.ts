@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, AuthJwt, Auth, AuthOidc, AuthSharedSecret } from '@webpieces/core-util';
+import { ApiPath, Endpoint, AuthJwt, AuthJwtAllRolesAllowed, Auth, AuthOidc, AuthSharedSecret } from '@webpieces/core-util';
 
 export interface SecureRequest {
     note?: string;
@@ -17,9 +17,9 @@ export interface SecureResponse {
  */
 @ApiPath('/secure')
 export abstract class SecureApi {
-    /** Requires ANY logged-in user — a valid JWT with no particular role (@AuthJwt() = no roles). */
+    /** Requires ANY logged-in user — a valid JWT, no particular role (@AuthJwtAllRolesAllowed()). */
     @Endpoint('/user', 'rpc')
-    @AuthJwt()
+    @AuthJwtAllRolesAllowed()
     userOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method userOp() must be implemented by subclass');
     }

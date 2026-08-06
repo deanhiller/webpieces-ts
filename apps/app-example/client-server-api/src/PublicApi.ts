@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, Authentication, AuthenticationConfig } from '@webpieces/core-util';
+import { ApiPath, Endpoint, Public } from '@webpieces/core-util';
 
 // ============================================================
 // Request DTOs
@@ -34,7 +34,7 @@ export interface PublicInfoResponse {
  * A simple public API that doesn't require authentication.
  * Used to demonstrate a second API endpoint for testing.
  */
-@Authentication(new AuthenticationConfig(false))
+@Public()
 @ApiPath('/public')
 export abstract class PublicApi {
     @Endpoint('/info', 'rpc')

@@ -1,5 +1,5 @@
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
-import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, getMaskSpec, RouteMetadata, AuthMeta } from '@webpieces/core-util';
+import { isApiPath, getApiPath, getEndpoints, getAuthMeta, isFormPost, getMaskSpec, RouteMetadata, AuthMeta, MISSING_AUTH_DECORATOR_FIX } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
 
@@ -85,8 +85,8 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
             const authMeta = getAuthMeta(this.apiMetaClass, methodName);
             if (!authMeta) {
                 throw new Error(
-                    `Endpoint '${methodName}' in ${apiName} has no @Authentication decorator. ` +
-                    `Add @Authentication(new AuthenticationConfig(...)) to the class or method.`,
+                    `Endpoint '${methodName}' in ${apiName} has no auth decorator. ` +
+                    MISSING_AUTH_DECORATOR_FIX,
                 );
             }
 

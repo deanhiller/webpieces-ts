@@ -423,6 +423,65 @@ L0 drift guard exists to catch. **Bumping the release the repo is built with is 
 A dependency nothing imports is not automatically phantom. For a `role:bundle` package the
 `dependencies` block IS the product.
 
+### NO webpieces surface is released backwards-compatible
+
+**RULE: when a webpieces surface changes, the OLD spelling must STOP COMPILING, and the compile error must
+name the new spelling. No deprecation period, no overload, no fallback, no alias — on any surface.**
+
+The config section below is the oldest instance of this rule, not a special case. It applies identically to
+decorators and API contracts (`core-util/src/http/decorators.ts`, `libraries/apis/**`, every `*Api.ts`), the
+http surfaces (`http-api`, `http-routing`, `http-server`, `http-filters`, `http-client*`), the cloud
+surfaces (`cloudtasks-client` queue/enqueue/delivery, `gcp-identity`), `core-context` / `core-util` /
+`core-mock`, the logging adapters, all of `packages/tooling/**`, and **every `src/index.ts` barrel** — a
+barrel is the surface, so an export left behind after the implementation is deleted is the same defect one
+level out.
+
+**Why this repo inverts the normal rule: an agent picks whatever typechecks.** `@deprecated` is a
+human-facing signal — strikethrough in an editor, a lint warning someone might read. It is not part of the
+type, so it is invisible at the moment an agent decides what to write. The consequence is not "slower
+migration", it is **no migration**: an accepted shape is never migrated. And the upgrade side is the cheap
+side now — a mechanical rewrite across a repo is exactly what agents do reliably in one pass. So the compile
+error is not the cost of the change; it IS the delivery mechanism for it.
+
+Issue #589 is the live proof: an agent wrote `@Authentication(new AuthenticationConfig(true))` — the widest
+possible grant — onto an **admin** contract, then asserted in a comment that the framework had no role
+support. `@AuthJwt('admin')` was two hundred lines above the file it was editing. Deprecating
+`AuthenticationConfig` would have fixed the docs and left the silent over-permissioning fully available.
+Deleting it turned every such call site into a compile error.
+
+**The six shim shapes that are an automatic reject** (full detail, with what to grep, in
+`.claude/review/backwards-compatibility.md`):
+
+1. **Two spellings of one thing** — a new API added while the old one stays exported; an overload or an
+   optional parameter that exists only to keep old call sites compiling; a second config key meaning what an
+   existing one means; a class kept as an alias of its replacement. The test for whether a pair is a shim:
+   *can a caller pick either one and get the same behaviour?* If yes it is a shim. `@AuthJwt('admin')` vs
+   `@AuthJwtAllRolesAllowed()` passes that test — they are different decisions, and the second exists
+   precisely so the wide one has to be typed on purpose.
+2. **`@deprecated` instead of deletion** — any new `@deprecated` on a surface. Delete it and let callers fail.
+3. **A config fallback accepting the old shape** — the section below.
+4. **A runtime `throw` standing in for a type that cannot express the bad state** — the throw is evidence the
+   signature is wrong. `@Authentication` needed one for `authenticated: false` + roles; `@Public()` and
+   `@AuthJwt(...)` cannot express that state at all.
+5. **A widening that is an ABSENCE rather than a token** — an empty array / omitted argument / falsy default
+   that means "allow everything" makes the permissive path the shortest thing to type and impossible to grep.
+   Name it.
+6. **An error message or doc that teaches the removed API** — the framework's own "you forgot authorization"
+   error used to hand the caller `@Authentication(new AuthenticationConfig(...))`, which is a plausible route
+   by which that footgun spread. Every message, docstring, `README.md` and `responsibilities.md` naming a
+   removed symbol is updated in the SAME diff.
+
+**Enforcement:** `backwards-compat-reviewer` is a REQUIRED review checklist
+(`commands.pr-gate.checklists` in `webpieces.config.json`) on every PR touching `packages/**`,
+`libraries/apis/**`, any `*Api.ts`, or the config. A red verdict from it blocks the PR, and its `output`
+names the file, the old spelling, and the deletion that should have replaced it. Do not argue a shim past it
+on the grounds that it is temporary — that is the argument that kept this repo's own config on dead shapes
+for releases.
+
+Deleting a surface is only DONE when: the definition is gone, every barrel export is gone, every call site is
+migrated (grep the old symbol over `packages apps libraries`), every message/doc that named it is updated,
+and a test asserts the NEW error text and that the old symbol is not named.
+
 ### webpieces.config.json is NEVER released backwards-compatible
 
 **RULE: when a config key moves, is renamed, or is deleted, the loader REJECTS the old shape with an error
@@ -519,3 +578,6 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
 6. ❌ Not documenting differences from Java version
 7. ❌ Stopping at a green build and asking "want me to open a PR?" instead of posting it (see "Finishing a Feature")
 8. ❌ Asking "can I clean up these merged branches?" instead of just running `pnpm wp-cleanup`
+9. ❌ Keeping the old spelling of a changed surface — as `@deprecated`, as an overload, as a config fallback,
+   or just left exported "so existing code compiles" (see "NO webpieces surface is released
+   backwards-compatible"). Delete it; the compile error is how callers get migrated.

@@ -1,4 +1,4 @@
-import { ApiPath, Endpoint, Authentication, AuthenticationConfig } from '@webpieces/core-util';
+import { ApiPath, Endpoint, Public } from '@webpieces/core-util';
 
 /**
  * Request to server2.
@@ -28,7 +28,7 @@ export interface FetchValueResponse {
  *    correlation id, tenant, ...) as headers
  * 3. Tests: rebind to a mock/simulator - no HTTP at all
  */
-@Authentication(new AuthenticationConfig(false))
+@Public()
 @ApiPath('/server2')
 export abstract class Server2Api {
     @Endpoint('/fetchValue', 'rpc')

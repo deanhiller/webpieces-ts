@@ -145,27 +145,20 @@ export type AuthMode =
 
 /**
  * Auth metadata attached to a class or method via one of the auth decorators
- * (@Public / @AuthJwt / @AuthOidc / @AuthSharedSecret) or the legacy @Authentication.
+ * (@Public / @AuthJwt / @AuthJwtAllRolesAllowed / @Auth / @AuthOidc / @AuthSharedSecret).
  *
- * Carries a discriminated {@link AuthMode}. The `authenticated`/`roles` getters are
- * kept for back-compat with readers that only understand the user-JWT model
- * (e.g. the example AuthFilter).
+ * Carries a discriminated {@link AuthMode} and nothing else. It USED to also expose
+ * `authenticated`/`roles` getters "for back-compat with readers that only understand the user-JWT
+ * model" — deleted, because nothing read them: every reader (AuthFilter, BrowserProxyClient,
+ * ProxyClient) switches on `mode.kind`, which is the whole point of the discriminated union. A
+ * flattened view of a union is a second spelling of it, and the flattened one silently answers
+ * `authenticated: true` for oidc and shared-secret too.
  */
 export class AuthMeta {
     mode: AuthMode;
 
     constructor(mode: AuthMode) {
         this.mode = mode;
-    }
-
-    /** True for every non-public mode (jwt, oidc, shared-secret). */
-    get authenticated(): boolean {
-        return this.mode.kind !== 'public';
-    }
-
-    /** JWT roles, or empty for non-jwt modes (back-compat convenience over the requirement). */
-    get roles(): string[] {
-        return this.mode.kind === 'jwt' ? (this.mode.requirement.roles ?? []) : [];
     }
 }
 
@@ -175,7 +168,7 @@ export class AuthMeta {
  *
  * Usage:
  * ```typescript
- * @Authentication({authenticated: true})
+ * @AuthJwt('admin')
  * @ApiPath('/api/save')
  * abstract class SaveApi {
  *   @Endpoint('/item', 'rpc')
@@ -313,45 +306,6 @@ export function getMaskSpec(apiClass: Function, methodName: string): MaskSpec | 
 }
 
 /**
- * Authentication config passed to @Authentication() decorator.
- */
-export class AuthenticationConfig {
-    authenticated: boolean;
-    roles?: string[];
-
-    constructor(authenticated: boolean, roles?: string[]) {
-        this.authenticated = authenticated;
-        this.roles = roles;
-    }
-}
-
-/**
- * @Authentication(config) - Class or method decorator for auth requirements.
- *
- * Single decorator replaces @Public/@Authenticated/@Roles:
- * - @Authentication({authenticated: false}) → public, no auth check
- * - @Authentication({authenticated: true}) → requires authentication
- * - @Authentication({authenticated: true, roles: ['admin']}) → requires auth + roles
- *
- * Class-level is required. Methods can override class-level.
- * Throws if authenticated=false but roles are specified (contradictory).
- */
-export function Authentication(config: AuthenticationConfig): ClassDecorator & MethodDecorator {
-    // Validate: can't be public with roles
-    if (!config.authenticated && config.roles && config.roles.length > 0) {
-        throw new Error(
-            `Invalid @Authentication config: authenticated=false but roles=${JSON.stringify(config.roles)}. ` +
-            `Cannot require roles on a public endpoint. Set authenticated=true or remove roles.`
-        );
-    }
-
-    const mode: AuthMode = config.authenticated
-        ? { kind: 'jwt', requirement: { roles: config.roles ?? [] } }
-        : { kind: 'public' };
-    return defineAuthMode(mode);
-}
-
-/**
  * Shared implementation for every auth decorator: stores an {@link AuthMeta} for
  * the given {@link AuthMode} at class- or method-level, rejecting a second auth
  * decorator on the same target.
@@ -382,11 +336,29 @@ export function Public(): ClassDecorator & MethodDecorator {
 }
 
 /**
- * @AuthJwt(...roles) - user-facing JWT auth, optionally role-gated. The app-level
- * AuthFilter validates the token; roles=[] means "any authenticated user".
+ * @AuthJwt(...roles) - user-facing JWT auth, role-gated. The app-level AuthFilter validates the
+ * token, then JwtHook.authorizeJwt enforces the roles any-of.
+ *
+ * AT LEAST ONE ROLE IS REQUIRED, by the signature. `@AuthJwt()` used to compile and produced
+ * `roles: []`, which authorizeJwt treats as "any authenticated user" — so the WIDEST grant in the
+ * system was also the shortest thing to type, and an absence of arguments was doing the widening.
+ * The wide case now has to name itself: {@link AuthJwtAllRolesAllowed}. That makes it greppable and
+ * makes forgetting the roles a compile error instead of a silent open endpoint.
  */
-export function AuthJwt(...roles: string[]): ClassDecorator & MethodDecorator {
-    return defineAuthMode({ kind: 'jwt', requirement: { roles } });
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function AuthJwt(firstRole: string, ...moreRoles: string[]): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'jwt', requirement: { roles: [firstRole, ...moreRoles] } });
+}
+
+/**
+ * @AuthJwtAllRolesAllowed() - user-facing JWT auth with NO role restriction: every authenticated
+ * user gets in. Deliberately a distinct, greppable token rather than `@AuthJwt()` with the roles
+ * left off, so "any logged-in user is allowed here" is a decision someone typed on purpose and an
+ * auditor can find with one grep.
+ */
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function AuthJwtAllRolesAllowed(): ClassDecorator & MethodDecorator {
+    return defineAuthMode({ kind: 'jwt', requirement: { roles: [] } });
 }
 
 /**
@@ -536,10 +508,24 @@ export function getAuthMode(apiClass: Function, methodName?: string): AuthMode |
 }
 
 /**
+ * The ONE prescription for "this endpoint declares no auth". Exported and shared because there are
+ * two places that raise it — here and http-routing's ApiRoutingFactory — and they had drifted into
+ * teaching two different menus, one of which omitted @AuthJwtAllRolesAllowed() and @Auth({...}). A
+ * message that teaches an incomplete API is the same defect as an API with two spellings: whichever
+ * menu the caller happens to hit becomes the API they believe exists.
+ *
+ * It leads with the ROLE-GATED member on purpose. The safe-by-default reading order matters more than
+ * alphabetical: the first thing offered should not be the widest grant.
+ */
+export const MISSING_AUTH_DECORATOR_FIX =
+    'Add one of @AuthJwt(...roles) / @AuthJwtAllRolesAllowed() / @Auth({...}) / @Public() / ' +
+    '@AuthOidc(...callers) / @AuthSharedSecret(key) to the class or method.';
+
+/**
  * Fail-fast at wiring time if any endpoint lacks an auth mode. Both the server
  * (ApiRoutingFactory) and the task/rpc clients call this so a missing auth
  * decorator is a startup error, never a silent open endpoint.
- * @throws Error naming the first endpoint with no @Authentication/@Public/@Auth* decorator.
+ * @throws Error naming the first endpoint with no auth decorator, via {@link MISSING_AUTH_DECORATOR_FIX}.
  */
 export function assertEveryEndpointHasAuthMode(apiClass: Function): void {
     const apiName = apiClass.name || 'Unknown';
@@ -548,8 +534,7 @@ export function assertEveryEndpointHasAuthMode(apiClass: Function): void {
         if (!getAuthMeta(apiClass, methodName)) {
             throw new Error(
                 `Endpoint '${methodName}' in ${apiName} has no auth decorator. ` +
-                `Add @Public(), @AuthJwt(...), @AuthOidc(...) or @AuthSharedSecret(...) ` +
-                `to the class or method.`,
+                MISSING_AUTH_DECORATOR_FIX,
             );
         }
     }
@@ -681,7 +666,7 @@ export function getQueueName(apiClass: Function, methodName: string): string {
 
 /**
  * Validate that a class/method doesn't have conflicting auth decorators.
- * @throws Error if multiple @Authentication decorators are found on the same target.
+ * @throws Error if multiple auth decorators are found on the same target.
  */
 export function validateNoConflictingDecorators(apiClass: Function, methodName: string | undefined): void {
     const existing = methodName
@@ -692,8 +677,9 @@ export function validateNoConflictingDecorators(apiClass: Function, methodName: 
         const targetName = apiClass.name || 'Unknown';
         const location = methodName ? `method '${methodName}' of ${targetName}` : `class ${targetName}`;
         throw new Error(
-            `Conflicting @Authentication on ${location}. ` +
-            `Only one @Authentication() decorator allowed per target.`
+            `Conflicting auth decorator on ${location}. ` +
+            `Only one of @Public() / @AuthJwt(...) / @AuthJwtAllRolesAllowed() / @Auth({...}) / ` +
+            `@AuthOidc(...) / @AuthSharedSecret(...) is allowed per target.`
         );
     }
 }

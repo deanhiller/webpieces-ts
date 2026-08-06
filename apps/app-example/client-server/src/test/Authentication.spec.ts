@@ -108,7 +108,7 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
         expect(res.userId).toBe('user-42'); // proves parseJwt → USER_ID context entry landed
     });
 
-    it('allows ANY logged-in user on a no-role endpoint (@AuthJwt() with no roles)', async () => {
+    it('allows ANY logged-in user on a no-role endpoint (@AuthJwtAllRolesAllowed())', async () => {
         const token = sign({ sub: 'user-99', roles: [] }); // authenticated, but zero roles
         const res = await withAuthHeader(`Bearer ${token}`, () => api.userOp({}));
         expect(res.ok).toBe(true);
