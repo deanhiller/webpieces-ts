@@ -260,10 +260,32 @@ tables instead of inferred:
 | `DENY-STALE` | fault `D`, not on the allowlist | 4 `BLOCK_AI_CURE` |
 | `DENY-BROKEN` | fault `K`, not on the allowlist | 4 `BLOCK_AI_CURE` |
 
-`fault=` carries this document's own letters, and only `D`/`X`/`U`/`K` can appear: `S`/`C`/`Y` are decided
-inside the binary — which, on a `fault=-` line, is exactly what ran — and it keeps its own streams
-(`logs/guard-invocations.log`, `logs/guard-sync-decisions.log`, both of which now carry their call's
-verdict). So `fault=-` is a statement about the **sh layer only**, never a claim that nothing was wrong.
+`fault=` carries this document's own letters, and in THIS file only `D`/`X`/`U`/`K` can appear: `S`/`C`/`Y`
+are decided inside the binary — which, on a `fault=-` line, is exactly what ran. So `fault=-` here is a
+statement about the **sh layer only**, never a claim that nothing was wrong.
+
+**The other three carry the same stamp, in the binary's own streams.** `logs/guard-invocations.log`,
+`logs/guard-sync-decisions.log` and `logs/hook-rejection.log` each append a `fault=` field with the
+SAME vocabulary — the letters come from `core/l0-fault-codes.ts`, which is also where the shim's
+`WP_FAULT=` letters and `SHIM_LOG_FAULTS` come from, so there is one codebook and no retyping. The
+JS-side faults live in the JS streams rather than in `ai-hook-shim.log` because that file is written by
+`sh`, which cannot classify them; a second writer would mean duplicating its rotation and tree
+resolution. What is shared is the FIELD, which is what a reader actually needs:
+`grep 'fault=S' .webpieces/**/logs/*.log` spans the whole trail, and `cut` + `uniq -c` over any one
+stream can be diffed against `L0_FAULTS` (`audit-fault-stamp.spec.ts` drives that partition from the
+array, so an eighth fault with no emitter fails the build).
+
+Fault `S` used to leave **nothing at all**: `enforceCommittedShim` runs before `invocationLog.begin()`,
+so the terminal boundary had no pending line to flush, and an `S` storm that blocked ~20 consecutive
+tool calls was invisible except as two rejection lines attributed to a downstream rule. It now writes
+its own `BLOCK` line to `guard-sync-decisions.log`, stamped `fault=S`.
+
+**Per-agent streams.** A subagent with worktree isolation was already separated (`worktrees/<name>/logs/`);
+one WITHOUT it shares the coordinator's tree and used to append to the coordinator's own files. The JS
+streams now split on the payload's `agent_id` — `logs/agents/<agentId>/<same filenames>`, sanitised
+through `agentDirName` so a payload value can never name a path outside `logs/agents/`. The coordinator
+keeps today's paths unchanged, and so does any caller that cannot tell who it is (library consumers,
+the openclaw adapter — `UNKNOWN_AGENT`). Every line also carries `agent=<id|coordinator|unknown>`.
 
 `PASS-BIN-*` is the line that used to be missing. `wp_log` fired only on the fail-closed path, so a
 healthy call recorded nothing and an absent line meant either "fine" or "the shim never ran" — the two
@@ -290,4 +312,6 @@ it never blocks or fails a hook (an unwritable log directory leaves the outcome 
 | `S` enforcement | `ai-hook-rules/src/adapters/hook-core.ts` | `enforceCommittedShim`, `shimStaleRecoveryDecision` |
 | `D`/`X`/`K` enforcement | `ai-hook-rules/templates/ai-hook.sh` | the pre-binary `sh` block |
 | the audit log | `ai-hook-rules/src/bin/shim-audit-log.ts` | `WP_LOG_SH`, `SHIM_LOG_VERDICTS`, `SHIM_LOG_FAULTS`, `RESOLVE_LOG_DIR_SH` |
-| where any log goes | `rules-config/src/state-dir.ts` | `LOGS_STATE_DIR`, `DotWebpieces.logs()` |
+| the fault codebook | `ai-hook-rules/src/core/l0-fault-codes.ts` | `L0_SH_FAULT_CODES`, `L0_JS_FAULT_CODES`, `L0_FAULT_NONE` |
+| the JS-side `fault=` stamp | `ai-hook-rules/src/core/decision-log.ts` | `GuardDecision.fault`, `InvocationLog.finish` |
+| where any log goes | `rules-config/src/state-dir.ts` | `LOGS_STATE_DIR`, `DotWebpieces.logs()`, `DotWebpieces.agentLogs()`, `agentDirName` |

@@ -3,6 +3,7 @@
 import { RuleOptions } from '@webpieces/rules-config';
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError, RuleFailError } from '@webpieces/rules-config';
 import { FixHint } from './fix-hint';
+import { L0_FAULT_NONE } from './l0-fault-codes';
 
 // 'Read' is a first-class member because read-stale-guard is a file-scoped guard that runs on the
 // Read fast path. It is deliberately NOT in HANDLED_FILE_TOOLS (hook-core), so normalizeToolKind()
@@ -246,9 +247,20 @@ export class RuleGroup {
 
 export class BlockedResult {
     readonly report: string;
+    /**
+     * The L0 fault this block IS, in the codebook's own letter (see core/l0-fault-codes.ts), or `-` for
+     * an ordinary rule block.
+     *
+     * It rides on the result rather than being re-derived from the report text because the block is
+     * decided deep in the runner (fault C in configMissingBlock, fault Y in checkConfigSync) and
+     * STAMPED by the adapter at the terminal boundary, several frames up. Scraping the report for a
+     * fault would be a second answer to a question the producer already knows.
+     */
+    readonly fault: string;
 
-    constructor(report: string) {
+    constructor(report: string, fault: string = L0_FAULT_NONE) {
         this.report = report;
+        this.fault = fault;
     }
 }
 

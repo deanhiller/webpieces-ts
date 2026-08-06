@@ -4,6 +4,8 @@ import * as path from 'path';
 
 import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 
+import { AgentIdentity, UNKNOWN_AGENT } from './coordinator-worktree';
+import { L0_FAULT_NONE } from './l0-fault-codes';
 import { toError } from './to-error';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
@@ -35,8 +37,16 @@ export class GuardDecision {
     verdict: Verdict;
     reason: string;
     cache: string;
+    /**
+     * The L0 fault this decision IS, in the codebook's letter (core/l0-fault-codes.ts), or `-` for an
+     * ordinary rule decision. The `sh` shim has always stamped `fault=` on its own stream; the three
+     * JS-side faults (S/C/Y) reached this one with no label at all, so `grep fault=S` found nothing
+     * even while an S storm was blocking every call.
+     */
+    fault: string;
 
-    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-') {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    constructor(rule: string, tool: string, target: string, branch: string, verdict: Verdict, reason: string, cache: string = '-', fault: string = L0_FAULT_NONE) {
         this.rule = rule;
         this.tool = tool;
         this.target = target;
@@ -44,6 +54,7 @@ export class GuardDecision {
         this.verdict = verdict;
         this.reason = reason;
         this.cache = cache;
+        this.fault = fault;
     }
 }
 
@@ -53,14 +64,18 @@ export class GuardDecision {
  * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
  * logged from a subdir never scatters a stray `.webpieces`). Swallows all errors — logging must never
  * block or fail a hook.
+ *
+ * `agent` selects WHICH stream: a subagent sharing the coordinator's tree gets
+ * `logs/agents/<agentId>/`, the coordinator keeps `logs/` unchanged. See DotWebpieces.agentLogs.
  */
-export function logGuardDecision(root: string, decision: GuardDecision): void {
+// webpieces-disable no-function-outside-class -- the module-scope writer this log has always been, beside branchForLog/oneLine/rotateLogFile; it must stay callable from a tree too broken to build a DI container
+export function logGuardDecision(root: string, decision: GuardDecision, agent: AgentIdentity = UNKNOWN_AGENT): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const timestamp = new Date().toISOString();
-        // LOCAL scope: a guard decision belongs to the tree it judged, and a per-worktree log has one
-        // writer, so appends cannot interleave with another agent's.
-        const logsDir = dotWebpieces.logs(root);
+        // LOCAL scope, and per-AGENT within it: a guard decision belongs to the tree it judged, and one
+        // writer per (tree, agent) is what makes the appends untangleable.
+        const logsDir = dotWebpieces.agentLogs(root, agent.logNamespace);
         fs.mkdirSync(logsDir, { recursive: true });
 
         const logPath = path.join(logsDir, LOG_FILE);
@@ -84,6 +99,10 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
             // derivation as the L0 shim log's `tree=` (shim-audit-log.ts), so one grep spans both
             // streams: L0 carries tree without projectDir, L1 now carries both.
             `tree=${dotWebpieces.worktreeName(root) || 'primary'}`,
+            // The two APPEND-ONLY audit fields, same spelling as the invocation line and as the L0 shim
+            // log's `fault=`: which L0 fault this was (or `-`), and who made the call.
+            `fault=${decision.fault}`,
+            `agent=${agent.logLabel}`,
         ].join('\t') + '\n';
         fs.appendFileSync(logPath, line);
     } catch (err: unknown) {
@@ -97,6 +116,7 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
  * Data-only (per CLAUDE.md: classes for data, explicit construction).
  */
 export class GuardInvocation {
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
         public readonly root: string,
         public readonly timestamp: string,
@@ -105,6 +125,12 @@ export class GuardInvocation {
         public readonly branch: string,
         public readonly sync: string,
         public readonly projectDir: string,
+        /**
+         * WHO made this call. Captured at begin() rather than passed to finish(), because the terminal
+         * boundary that flushes the line (emitAllow/emitDeny) has no payload in reach — and because the
+         * identity is a property of the invocation, not of its outcome.
+         */
+        public readonly agent: AgentIdentity = UNKNOWN_AGENT,
     ) {}
 }
 
@@ -133,7 +159,7 @@ export class InvocationLog {
      * Capture the context of one invocation. `cwd` is the AI's working dir; the repo root that owns
      * `.webpieces` is resolved from it. Writes NOTHING — {@link finish} does that.
      */
-    begin(cwd: string, tool: string, target: string): void {
+    begin(cwd: string, tool: string, target: string, agent: AgentIdentity = UNKNOWN_AGENT): void {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const root = new RepoRootFinder().resolveRepoRoot(cwd);
@@ -141,7 +167,7 @@ export class InvocationLog {
             // The cache is branch-keyed, so the entry to log is the one for the branch we are standing
             // on. 'unknown' (branchForLog's failure value) simply misses and logs 'sync=none'.
             const sync = summarizeSyncStatus(readMainSyncStatus(root, branch));
-            this.pending = new GuardInvocation(root, new Date().toISOString(), tool, oneLine(target), branch, sync, claudeEnv.projectDirForLog());
+            this.pending = new GuardInvocation(root, new Date().toISOString(), tool, oneLine(target), branch, sync, claudeEnv.projectDirForLog(), agent);
         } catch (err: unknown) {
             const error = toError(err);
             void error;
@@ -153,17 +179,20 @@ export class InvocationLog {
      * 'rules' hook, or a terminal boundary reached before begin()), and it clears the pending entry so
      * a second emit cannot double-log.
      *
-     * `rule` is the rule that blocked, or '-' when there is none. FIELD ORDER IS APPEND-ONLY: the five
+     * `rule` is the rule that blocked, or '-' when there is none; `fault` is the L0 fault code when this
+     * call ended on one (S/C/Y — the JS-side faults), else '-'. FIELD ORDER IS APPEND-ONLY: the five
      * original fields keep their positions (cleanup automation mines this file), and `verdict=` /
-     * `rule=` are added at the end.
+     * `rule=` / … / `fault=` / `agent=` are added at the end.
      */
-    finish(verdict: Verdict, rule: string): void {
+    finish(verdict: Verdict, rule: string, fault: string = L0_FAULT_NONE): void {
         const invocation = this.pending;
         this.pending = null;
         if (invocation === null) return;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const logsDir = dotWebpieces.logs(invocation.root);
+            // Per-agent within the tree: a subagent that shares the coordinator's checkout gets its own
+            // file instead of interleaving into the coordinator's. See DotWebpieces.agentLogs.
+            const logsDir = dotWebpieces.agentLogs(invocation.root, invocation.agent.logNamespace);
             fs.mkdirSync(logsDir, { recursive: true });
             const logPath = path.join(logsDir, INVOCATION_LOG_FILE);
             rotateLogFile(logPath, path.join(logsDir, INVOCATION_LOG_FILE_PREV));
@@ -185,6 +214,11 @@ export class InvocationLog {
                 // projectDir reads as healthy at a glance and `tree=<worktree>` beside a projectDir
                 // pointing at the primary is the straddle, without diffing two absolute paths.
                 `tree=${dotWebpieces.worktreeName(invocation.root) || 'primary'}`,
+                // WHICH L0 fault ended this call, in the same letters and the same field name the L0 sh
+                // shim uses (ai-hook-shim.log) — so ONE grep spans the whole trail — and WHO made it,
+                // which stays on the line even after the per-agent split so a merged read still says.
+                `fault=${fault}`,
+                `agent=${invocation.agent.logLabel}`,
             ].join('\t') + '\n';
             fs.appendFileSync(logPath, line);
         } catch (err: unknown) {
