@@ -426,9 +426,10 @@ function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly st
     return `\n\nℹ️  Working in a nested repo under one of these exempt trees (${exemptGuards.join(', ')})? `
         + `Put a LITERAL \`cd\` at the FRONT of the SAME command — \`cd /abs/path/to/repo && git push\` — and git/gh `
         + `run normally there: the webpieces guards do NOT govern them (each is its own repo).`
-        + `\n   The guard resolves only a leading run of literal \`cd\`/\`pushd\`. A \`VAR=…\` assignment before the `
-        + `\`cd\`, or a variable target like \`cd "$DIR"\`, cannot be resolved, and the command is then judged `
-        + `against this repo instead.`
+        + `\n   The guard resolves only a leading run of literal \`cd\`/\`pushd\`, so \`cd <literal path> && <work>\` `
+        + `is the ONE shape that moves where the command is judged. Anything ahead of the \`cd\` ends the scan — a `
+        + `\`VAR=…\` assignment, or another command as in \`git fetch && cd /x && git push\` — and so does a `
+        + `non-literal target like \`cd "$DIR"\`. In every one of those the command is judged against this repo instead.`
         + nearMiss;
 }
 

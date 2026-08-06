@@ -392,7 +392,9 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
         writeGuardConfig(outer, ['repositories/**']);
         const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
         expect(report).toContain('leading run of literal');
+        expect(report).toContain('cd <literal path> && <work>');  // the one shape that relocates the verdict
         expect(report).toContain('VAR=');
+        expect(report).toContain('git fetch && cd /x && git push');
         expect(report).toContain('cd "$DIR"');
     });
 
@@ -402,6 +404,13 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
         expect(report).toContain('DOES contain a `cd`');
         expect(report).toContain('assignment precedes it');
         expect(report).toContain('not a literal path');
+    });
+
+    it('names the near-miss when the cd sits MID-LINE, after another command', () => {
+        writeGuardConfig(outer, ['repositories/**']);
+        const report = (runBash(`git fetch origin && cd ${outer}/repositories/x && git push origin HEAD`, outer, 'guards') as BlockedResult).report;
+        expect(report).toContain('DOES contain a `cd`');
+        expect(report).toContain('only a `cd` at the FRONT');
     });
 
     it('stays silent about a near-miss when the cd was literal and leading (nothing to explain)', () => {
