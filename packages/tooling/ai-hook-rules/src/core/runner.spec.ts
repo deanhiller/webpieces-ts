@@ -310,8 +310,18 @@ describe('runBash — trailing-cd does not bypass the guards (defect A)', () => 
     afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
 
     it('`git push && cd repositories/plain` → BLOCK (push ran at root before the cd)', () => {
+        // Still blocked, and now blocked EARLIER: misplacedCdBlock refuses the shape before the push
+        // guard is reached, so the report is the cd rule rather than the gated-flow redirect. The
+        // property under test is unchanged — a trailing cd buys no exemption for what already ran.
         const result = runBash('git push origin HEAD && cd repositories/plain', outer, 'guards');
         expect(result).toBeInstanceOf(BlockedResult);
+        expect((result as BlockedResult).report).toContain('must come FIRST');
+    });
+
+    it('the same push WITHOUT the trailing cd still gets the gated-flow redirect', () => {
+        // Keeps the original assertion alive on the shape that can still reach the push guard, so a
+        // regression in that redirect cannot hide behind the cd rule firing first.
+        const result = runBash('git push origin HEAD', outer, 'guards');
         expect((result as BlockedResult).report).toContain('gated flow');
     });
 });
@@ -385,40 +395,12 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
         expect(report).toContain('tools/**');
     });
 
-    // The whole point of the reworded hint: "cd into it first" alone describes a remedy the agent may
-    // already have performed. The precondition — literal, at the front of the same command — is what
-    // it could not otherwise discover.
-    it('states the precondition (literal cd at the front), not just the remedy', () => {
+    // The hint teaches the shape for the NEXT command; misplacedCdBlock enforces it on this one.
+    it('states the one legal shape, not just the remedy', () => {
         writeGuardConfig(outer, ['repositories/**']);
         const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
-        expect(report).toContain('leading run of literal');
-        expect(report).toContain('cd <literal path> && <work>');  // the one shape that relocates the verdict
-        expect(report).toContain('VAR=');
-        expect(report).toContain('git fetch && cd /x && git push');
+        expect(report).toContain('cd <literal path> && <work>');
         expect(report).toContain('cd "$DIR"');
-    });
-
-    it('names the near-miss when the command DID cd but unresolvably (VAR= prefix + variable target)', () => {
-        writeGuardConfig(outer, ['repositories/**']);
-        const report = (runBash(`WT=${outer}/repositories/x; cd "$WT"; git push origin HEAD`, outer, 'guards') as BlockedResult).report;
-        expect(report).toContain('DOES contain a `cd`');
-        expect(report).toContain('assignment precedes it');
-        expect(report).toContain('not a literal path');
-    });
-
-    it('names the near-miss when the cd sits MID-LINE, after another command', () => {
-        writeGuardConfig(outer, ['repositories/**']);
-        const report = (runBash(`git fetch origin && cd ${outer}/repositories/x && git push origin HEAD`, outer, 'guards') as BlockedResult).report;
-        expect(report).toContain('DOES contain a `cd`');
-        expect(report).toContain('only a `cd` at the FRONT');
-    });
-
-    it('stays silent about a near-miss when the cd was literal and leading (nothing to explain)', () => {
-        writeGuardConfig(outer, ['repositories/**']);
-        // `cd .` keeps the effective cwd at the root, so the PUSH guard (not force-to-root) is what
-        // fires and the hint is emitted — the near-miss line is the only thing under test.
-        const report = (runBash('cd . && git push origin HEAD', outer, 'guards') as BlockedResult).report;
-        expect(report).not.toContain('DOES contain a `cd`');
     });
 
     it('omits the hint when no trees are exempt (no noise for repos without exemptions)', () => {
@@ -426,6 +408,52 @@ describe('runBash — push/PR block surfaces the exempt-tree hint (defect B)', (
         const report = (runBash('git push origin HEAD', outer, 'guards') as BlockedResult).report;
         expect(report).toContain('gated flow');   // still the push block
         expect(report).not.toContain('LITERAL');  // but no exempt-tree hint
+    });
+});
+
+// ONE legal shape for relocating a command. Every command rejected here was already being JUDGED from
+// the shell cwd — the rejection replaces a silent misdirect, it does not tighten any verdict.
+describe('runBash — a `cd` must come first, with a literal path (misplacedCdBlock)', () => {
+    let outer: string;
+
+    beforeAll(() => {
+        outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-cd-')));
+        initRepo(outer);
+        writeGuardConfig(outer, ['repositories/**']);
+    });
+
+    afterAll(() => { fs.rmSync(outer, { recursive: true, force: true }); });
+
+    const REJECTED: readonly string[] = [
+        'WT=/tmp/x; cd "$WT"; git push origin HEAD',   // assignment ends the scan
+        'git fetch origin && cd /tmp/x && git push',   // bash pushes in /tmp/x; the guard judged the root
+        'git push origin HEAD && cd /tmp/x',           // trailing — harmless, and the scope-escape shape
+        'cd "$WT" && git push origin HEAD',            // leading but not literal
+        'ls && cd sub && pnpm build',                  // not git at all: the rule is about LOCATION
+    ];
+
+    it.each(REJECTED)('rejects: %s', (command: string) => {
+        const result = runBash(command, outer, 'guards');
+        expect(result).toBeInstanceOf(BlockedResult);
+        expect((result as BlockedResult).report).toContain('must come FIRST');
+    });
+
+    const ALLOWED: readonly string[] = [
+        'git status',                                  // no cd
+        'cd . && git status',                          // leading literal
+        `cd ${nodePath.join('/tmp', 'a')} && cd . && git status`,  // a leading RUN is still one shape
+        'pnpm build && pnpm test',                     // no cd anywhere
+    ];
+
+    it.each(ALLOWED)('does not reject: %s', (command: string) => {
+        const result = runBash(command, outer, 'guards');
+        if (result !== null) expect((result as BlockedResult).report).not.toContain('must come FIRST');
+    });
+
+    it('exempts a heredoc — a commit message about `cd` is prose, not a command', () => {
+        const command = `git commit -F - <<'EOF'\nUse git fetch && cd /x && git push\nEOF`;
+        const result = runBash(command, outer, 'guards');
+        if (result !== null) expect((result as BlockedResult).report).not.toContain('must come FIRST');
     });
 });
 
