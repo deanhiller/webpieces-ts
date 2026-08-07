@@ -576,12 +576,16 @@ non-green flags, a 4-sentence summary, the build-command footer — and uses it 
 description and the `--body-file` it merges with. The full dashboard and each reviewer's output go into
 the PR's 1st and 2nd comments, so they never reach `git log`.
 
-That makes every landing route agree, provided the repo carries two settings:
-`squash_merge_commit_title: PR_TITLE` and `squash_merge_commit_message: PR_BODY`. With those, clicking
-Merge in the GitHub UI, a bare `gh pr merge`, `pnpm wp-land-pr`, and stage ③'s own auto-merge all write
-identical bytes. **Prefer `pnpm wp-land-pr` from the CLI** — it also archives the pre-squash tip and reaps
-the landed worktree — but the UI button is no longer wrong, which is the point: correctness stopped
-depending on anyone remembering a command.
+That makes every landing route agree — the GitHub Merge button, a bare `gh pr merge`, `pnpm wp-land-pr`,
+and stage ③'s own auto-merge all write identical bytes. **Nothing here is yours to configure or remember.**
+It depends on two GitHub repo settings (`squash_merge_commit_title: PR_TITLE`,
+`squash_merge_commit_message: PR_BODY`), and stage ③ verifies and REPAIRS them itself on every run —
+see `SquashSettingsEnforcer`. Those live on GitHub's servers, not on disk, so no config key can express
+them and no validator can see them; that is exactly why the tooling sets them instead of a doc asking you
+to. Without repo-admin rights it prints the one `gh api` command to forward to an owner.
+
+**Prefer `pnpm wp-land-pr` from the CLI** — it also archives the pre-squash tip and reaps the landed
+worktree — but the UI button is not wrong, which is the point.
 
 Once the PR merges, clean up. Pick the form for the tree you are in — `git checkout main` fatals in a
 linked worktree (`main is already checked out at <primary clone>`), so the two forms are not

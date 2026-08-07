@@ -21,6 +21,7 @@ import { MergeBodyFiler, MergeBodyRequest } from '../workflow/merge-body-filer';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
 import { ProvenanceEnforcer, ProvenanceReport } from '../workflow/provenance-enforcer';
 import { PrCommentRequest, PrCommentUpserter } from '../workflow/pr-comment-upserter';
+import { SquashSettingsEnforcer } from '../workflow/squash-settings-enforcer';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import {
     Dashboard, DashboardInput, ChecklistRow, DETAIL_COMMENT_MARKER,
@@ -138,6 +139,9 @@ export class FinishUpsertPrCommand {
         private readonly mergeBodyFiler: MergeBodyFiler,
         // ONE marker-keyed upsert, shared by both PR comments (the full dashboard and the checklist).
         private readonly commentUpserter: PrCommentUpserter,
+        // Pins the two GitHub repo settings that decide whether a UI merge writes the body we just
+        // rendered. Server-side, so no config can express them — see SquashSettingsEnforcer.
+        private readonly squashSettings: SquashSettingsEnforcer,
     ) {}
 
     async run(): Promise<void> {
@@ -546,6 +550,12 @@ export class FinishUpsertPrCommand {
         // comment must not turn a finished run into a failed one.
         this.postDetailComment(repoRoot, result.prNumber, input);
         this.postChecklistComment(repoRoot, result.prNumber, sources.scan, sources.review, sources.provenance);
+
+        // Having just written the description AS the commit body, make sure GitHub will actually use it.
+        // Here rather than anywhere earlier because it is about what happens to the artifact we just
+        // published, and it must run on EVERY repo — including mergeMode=NONE ones that never reach
+        // PrMerger, which are exactly the repos where a UI merge decides what main's history says.
+        this.squashSettings.ensure();
         return result;
     }
 

@@ -77,6 +77,7 @@ graph TD
     ReviewerInstructionsService["ReviewerInstructionsService"]
     ReviewerVerdictGate["ReviewerVerdictGate"]
     RunUpdate["RunUpdate"]
+    SquashSettingsEnforcer["SquashSettingsEnforcer"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
     StateDirMigrator["StateDirMigrator"]
@@ -145,6 +146,7 @@ graph TD
     FinishUpsertPrCommand --> ReviewJsonService
     FinishUpsertPrCommand --> ReviewStageReceiptService
     FinishUpsertPrCommand --> ReviewerVerdictGate
+    FinishUpsertPrCommand --> SquashSettingsEnforcer
     ForkPoint --> AiBranchName
     ForkPoint --> MergeState
     ForkPoint --> RepoRootFinder

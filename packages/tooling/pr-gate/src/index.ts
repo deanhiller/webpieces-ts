@@ -22,5 +22,10 @@ export {
     CHECKLIST_COMMENT_MARKER,
 } from './dashboard/checklist-comment-renderer';
 export { PrCommentUpserter, PrCommentRequest, PrCommentResult } from './scripts/workflow/pr-comment-upserter';
+// Pins the two server-side GitHub settings the git-log body depends on. Exported because a consumer may
+// want to assert them in its own CI — they are the one part of this design no config can express.
+export {
+    SquashSettingsEnforcer, SquashSettings, SQUASH_TITLE_REQUIRED, SQUASH_MESSAGE_REQUIRED,
+} from './scripts/workflow/squash-settings-enforcer';
 export { ChecklistDetector, TriggeredChecklist } from './scripts/workflow/checklist-detector';
 export { PrGateApp } from './scripts/pr-gate-app';

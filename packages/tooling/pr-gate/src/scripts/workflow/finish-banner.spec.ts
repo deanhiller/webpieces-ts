@@ -62,12 +62,16 @@ describe('mergeMode NONE — a human merges', () => {
      * opposite, because the PR description was then the long dashboard; it is now the compact git-log
      * body, so PR_BODY copies the right thing.
      */
-    it('confirms a UI merge is correct and names the two settings it needs', () => {
+    it('confirms a UI merge is correct, and that the two settings are already handled', () => {
         const out = render(HUMAN);
         expect(out).toContain('squash_merge_commit_title=PR_TITLE');
         expect(out).toContain('squash_merge_commit_message=PR_BODY');
         expect(out).toContain('pnpm wp-land-pr'); // offered as the CLI alternative, not a correction
         expect(out).not.toContain('ENTIRE dashboard');
+        // The settings are pinned by SquashSettingsEnforcer, so the banner must not hand the reader a
+        // setup step it already performed.
+        expect(out).toContain('nothing for you to configure');
+        expect(out).not.toContain('as long as this repo has');
         // Still the "nothing is owed" shape — no STOP/DO-NOT-report escalation on a policy outcome.
         expect(out).toContain('You can stop here.');
         expect(out).not.toContain('DO NOT report this PR as done');
