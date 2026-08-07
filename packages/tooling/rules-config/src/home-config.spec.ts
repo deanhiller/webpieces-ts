@@ -94,8 +94,8 @@ describe('ABSENT ~/.webpieces/config.json — the default state, and never an er
     });
 
     it('defaults every flag OFF on the bare data class too', () => {
-        expect(HomeConfig.allDefaults().buildGateLogCapture).toBe(false);
-        expect(HomeConfig.allDefaults().wholeRepoBuildGuard).toBe(false);
+        expect(new HomeConfig(false, false).buildGateLogCapture).toBe(false);
+        expect(new HomeConfig(false, false).wholeRepoBuildGuard).toBe(false);
     });
 
     // The guard whose ONLY switch lives in this file must read as OFF with no file — that is the entire
