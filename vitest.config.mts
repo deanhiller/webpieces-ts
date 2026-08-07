@@ -85,8 +85,18 @@ export default defineConfig({
         // (2.6ms from plain node), so a spec doing ~50 git calls is spawn-bound, and on a loaded machine
         // these integration tests were measured at 15-24s. 15s was not catching hangs, it was failing
         // honest work. 45s still catches a genuine hang while leaving room for a busy CI box.
+        //
+        // DO NOT RAISE THIS AGAIN for a slow suite. It has already moved once (15s → 45s) and it governs
+        // the 400+ runtime/app tests that should fail fast. The `packages/tooling/**` suites — which are
+        // spawn-bound integration tests and are the ONLY ones that have ever needed more — get 120s from
+        // vitest.setup.mts instead, scoped by path. That file carries the measurements, the reason pool
+        // tuning is not the answer, and how to recognise the failure (it reports at FILE level, and which
+        // tests blow up moves between runs).
         testTimeout: 45_000,
         hookTimeout: 45_000,
+        // Runs once PER TEST FILE, which is what lets it hand the tooling suites a longer budget without
+        // touching everyone else's.
+        setupFiles: [path.resolve(__dirname, 'vitest.setup.mts')],
         /**
          * NO `reporters` override and NO pool tuning here — both were tried against this repo's
          * `[vitest-worker]: Timeout calling "onTaskUpdate"` failures (a run reported FAILED while

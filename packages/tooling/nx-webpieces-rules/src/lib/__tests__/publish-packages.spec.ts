@@ -26,6 +26,13 @@ import * as path from 'path';
  * could not talk to the registry. The fake also refuses any argv that is not `publish`.
  */
 
+/**
+ * SLOW BY NATURE: each `it()` runs the real publish script over ~28 package directories, so it is ~28
+ * `npm publish` spawns into the fake shim plus a `pnpm pack` each. It gets 120s rather than the 45s
+ * global from vitest.setup.mts, which grants that to every `packages/tooling/**` suite and records the
+ * measurements — this file's worst observation was 93,477ms for a test that takes 956ms idle.
+ */
+
 /** How the fake npm should behave for one package. Data-only. */
 class PublishPlan {
     constructor(

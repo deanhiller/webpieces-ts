@@ -134,7 +134,7 @@ describe('AtomicFile under a genuinely concurrent reader', () => {
         const result = await reader.result();
         expect(result.reads + result.missing).toBeGreaterThan(0);
         expect(result.failures).toBeGreaterThan(0);
-    }, 60000);
+    });
 
     it('writeJsonAtomic is NEVER caught torn — same reader, same volume, zero failures', async () => {
         const atomic = new AtomicFile();
@@ -154,7 +154,7 @@ describe('AtomicFile under a genuinely concurrent reader', () => {
         expect(result.failures).toBe(0);
         // rename() also means the destination never disappears, so the reader never sees ENOENT either.
         expect(result.missing).toBe(0);
-    }, 60000);
+    });
 
 });
 
