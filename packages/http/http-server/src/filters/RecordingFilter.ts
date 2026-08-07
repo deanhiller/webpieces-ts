@@ -55,7 +55,7 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
 
         const recorder = new TestCaseRecorderImpl();
-        RequestContext.putHeader(RecorderKeys.RECORDER, recorder);
+        RequestContext.putUntrusted(RecorderKeys.RECORDER, recorder);
 
         const serverEndpoint = this.buildServerEndpoint(meta);
 
@@ -69,7 +69,7 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             serverEndpoint.failureResponse = new RecordedError(error.name, error.message);
             throw err;
         } finally {
-            RequestContext.remove(RecorderKeys.RECORDER.name);
+            RequestContext.removeKey(RecorderKeys.RECORDER);
             recorder.spitOutTestCase(serverEndpoint, this.config.recordingDir);
         }
     }
@@ -79,7 +79,7 @@ export class RecordingFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             return true;
         }
         // ContextFilter (priority 2000) already transferred the header into context
-        return RequestContext.hasHeader(WebpiecesCoreHeaders.RECORDING);
+        return RequestContext.hasKey(WebpiecesCoreHeaders.RECORDING);
     }
 
     private buildServerEndpoint(meta: MethodMeta): RecordedEndpoint {

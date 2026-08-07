@@ -1,4 +1,4 @@
-import { ApiCallContext, AnyContextKey } from '@webpieces/core-util';
+import { ApiCallContext, AnyUntrustedContextKey } from '@webpieces/core-util';
 import { RequestContext } from './RequestContext';
 
 /**
@@ -22,11 +22,11 @@ export class RequestContextApiCallContext implements ApiCallContext {
     }
 
     // webpieces-disable no-any-unknown -- a context value is heterogeneous (the api struct here; strings elsewhere)
-    set(contextKey: AnyContextKey, value: unknown): void {
-        RequestContext.putHeader(contextKey, value);
+    set(contextKey: AnyUntrustedContextKey, value: unknown): void {
+        RequestContext.putUntrusted(contextKey, value);
     }
 
-    remove(contextKey: AnyContextKey): void {
-        RequestContext.removeHeader(contextKey);
+    remove(contextKey: AnyUntrustedContextKey): void {
+        RequestContext.removeKey(contextKey);
     }
 }

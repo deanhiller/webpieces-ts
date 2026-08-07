@@ -60,7 +60,7 @@ class CapturingTaskInvoker extends TaskInvoker {
     }
 }
 
-const TENANT = new ContextKey<string>('tenantId', 'x-tenant-id');
+const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 
 let invoker: CapturingTaskInvoker;
 let emailTasks: EmailApi;
@@ -114,8 +114,8 @@ describe('TaskProxyClient enqueue', () => {
 
     it("propagates context headers, and cannot leak the caller's credential", async () => {
         await RequestContext.run(async () => {
-            RequestContext.putHeader(TENANT, 'tenant-42');
-            RequestContext.putHeader(WebpiecesCoreHeaders.REQUEST_ID, 'req-abc');
+            RequestContext.putUntrusted(TENANT, 'tenant-42');
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.REQUEST_ID, 'req-abc');
 
             await scheduler.addToQueue(() => emailTasks.sendEmail(new SendEmailRequest('a@b.com')));
         });

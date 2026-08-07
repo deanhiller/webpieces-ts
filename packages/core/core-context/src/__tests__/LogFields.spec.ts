@@ -11,9 +11,9 @@ import { RequestContext } from '../RequestContext';
  * startup, background job) says which build emitted it.
  */
 describe('RequestContext log-field builders', () => {
-    const api = new ContextKey<object>('api', undefined, /*isSecured*/ false, /*isLogged*/ true); // object-valued (an AnyContextKey)
-    const reqId = new ContextKey<string>('requestId', 'x-request-id');
-    const secret = new ContextKey<string>('authorization', 'authorization', /*isSecured*/ true);
+    const api = ContextKey.untrusted<object>('api', undefined, /*maskInLogs*/ false, /*isLogged*/ true); // object-valued (an AnyContextKey)
+    const reqId = ContextKey.untrusted<string>('requestId', 'x-request-id');
+    const secret = ContextKey.untrusted<string>('authorization', 'authorization', /*maskInLogs*/ true);
 
     afterEach(() => {
         ServiceInfo.clear();
@@ -24,8 +24,8 @@ describe('RequestContext log-field builders', () => {
         const apiValue = { side: 'client', type: 'request' };
 
         RequestContext.run(() => {
-            RequestContext.putHeader(api, apiValue);
-            RequestContext.putHeader(reqId, 'abc');
+            RequestContext.putUntrusted(api, apiValue);
+            RequestContext.putUntrusted(reqId, 'abc');
 
             const structured = RequestContext.buildStructuredLogFields();
             expect(structured.get('api')).toEqual(apiValue); // object survives → nests into jsonPayload.api
@@ -41,7 +41,7 @@ describe('RequestContext log-field builders', () => {
         HeaderRegistry.configure([secret], /*platformHeaders*/ false);
 
         RequestContext.run(() => {
-            RequestContext.putHeader(secret, 'abcdefghijklmnop'); // len>15 → abc...nop
+            RequestContext.putUntrusted(secret, 'abcdefghijklmnop'); // len>15 → abc...nop
             expect(RequestContext.buildStructuredLogFields().get('authorization')).toBe('abc...nop');
             expect(RequestContext.buildLogFields().get('authorization')).toBe('abc...nop');
         });
@@ -51,7 +51,7 @@ describe('RequestContext log-field builders', () => {
         HeaderRegistry.configure([reqId], /*platformHeaders*/ false);
 
         RequestContext.run(() => {
-            RequestContext.putHeader(reqId, 'abc');
+            RequestContext.putUntrusted(reqId, 'abc');
 
             // Before setInfo: logging still works, version simply omitted.
             expect(RequestContext.buildStructuredLogFields().has('version')).toBe(false);
@@ -65,7 +65,7 @@ describe('RequestContext log-field builders', () => {
         HeaderRegistry.configure(WebpiecesCoreHeaders.ALL_HEADERS, /*platformHeaders*/ false);
 
         RequestContext.run(() => {
-            RequestContext.putHeader(WebpiecesCoreHeaders.CLIENT_VERSION, 'caller-v9');
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.CLIENT_VERSION, 'caller-v9');
             expect(RequestContext.buildLogFields().get('clientVersion')).toBe('caller-v9');
         });
     });
@@ -75,7 +75,7 @@ describe('RequestContext log-field builders', () => {
 // RequestContext, so startup and background-job lines say which service/build emitted them — the flat
 // builder stays empty out of context. Both facts are treated identically (backend-symmetrical).
 describe('buildStructuredLogFields — svcName + version outside RequestContext.run', () => {
-    const reqId = new ContextKey<string>('requestId', 'x-request-id');
+    const reqId = ContextKey.untrusted<string>('requestId', 'x-request-id');
 
     afterEach(() => {
         ServiceInfo.clear();

@@ -33,7 +33,7 @@ export function recordable<T extends object>(apiName: string, impl: T): T {
 
             // webpieces-disable no-any-unknown -- api method args/returns are type-erased in the proxy
             return async (...args: unknown[]): Promise<unknown> => {
-                const recorder = RequestContext.getHeader(RecorderKeys.RECORDER) as TestCaseRecorder | undefined;
+                const recorder = RequestContext.getUntrusted(RecorderKeys.RECORDER);
                 if (!recorder) {
                     return await original.apply(target, args);
                 }

@@ -56,7 +56,7 @@ abstract class SharedSecretApi {
     }
 }
 
-const TENANT = new ContextKey<string>('tenantId', 'x-tenant-id');
+const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 
 let factory: ClientHttpBrowserFactory;
 

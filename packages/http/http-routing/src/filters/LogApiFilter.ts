@@ -59,10 +59,10 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // gets them as separate jsonPayload.controller / jsonPayload.method; the local console formatters
         // render them together as a compact [Controller.method] bracket. They clear with the request scope.
         if (rm.controllerClassName) {
-            RequestContext.putHeader(WebpiecesCoreHeaders.CONTROLLER, rm.controllerClassName);
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.CONTROLLER, rm.controllerClassName);
         }
         if (rm.methodName) {
-            RequestContext.putHeader(WebpiecesCoreHeaders.METHOD, rm.methodName);
+            RequestContext.putUntrusted(WebpiecesCoreHeaders.METHOD, rm.methodName);
         }
 
         const info = new ApiMethodInfo(

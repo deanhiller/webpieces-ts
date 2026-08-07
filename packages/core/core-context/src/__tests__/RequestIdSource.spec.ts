@@ -26,8 +26,8 @@ function fillFrom(inboundHeaders: Map<string, string[]>, read: () => string | un
     return result;
 }
 
-const requestId = (): string | undefined => RequestContext.getHeader<string>(WebpiecesCoreHeaders.REQUEST_ID);
-const source = (): string | undefined => RequestContext.getHeader<string>(WebpiecesCoreHeaders.REQUEST_ID_SOURCE);
+const requestId = (): string | undefined => RequestContext.getUntrusted<string>(WebpiecesCoreHeaders.REQUEST_ID);
+const source = (): string | undefined => RequestContext.getUntrusted<string>(WebpiecesCoreHeaders.REQUEST_ID_SOURCE);
 
 /**
  * requestIdSource records WHICH service minted the request id — the one thing the id alone cannot

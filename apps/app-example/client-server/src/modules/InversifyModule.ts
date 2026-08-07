@@ -24,7 +24,7 @@ export class AppHeaders {
      * Type of client making the request.
      * Examples: 'web', 'mobile-ios', 'mobile-android', 'cli'
      */
-    static readonly CLIENT_TYPE = new ContextKey<string>('clientType', 'x-client-type');
+    static readonly CLIENT_TYPE = ContextKey.untrusted<string>('clientType', 'x-client-type');
 
     /**
      * All app context keys — a `static readonly` CONSTANT (compile-time data), not a method, so it
