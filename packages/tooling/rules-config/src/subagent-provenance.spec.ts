@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -111,6 +112,142 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
     it('SKIPPED without a session id', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
         expect(svc.verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_SKIPPED);
+    });
+});
+
+/**
+ * ONE shared primary clone for the whole block, and one linked worktree per case off it.
+ *
+ * Deliberately shared rather than a fresh clone per test. Each `git init` + config + commit is five
+ * process spawns, and this file's cases all need a real repo; building one per test put ~60 git
+ * processes on the box and pushed the (already slow, timing-sensitive) main-sync integration specs
+ * running alongside it past their 45s timeout — a red build-all caused entirely by test setup cost.
+ * Sharing is safe here because no case mutates the clone: every one gets its own worktree on its own
+ * branch, which is what `git worktree` is for.
+ */
+let sharedClone = '';
+
+function clone(): string {
+    if (sharedClone === '') sharedClone = cloneOnBranch('main');
+    return sharedClone;
+}
+
+// A real git repo (a PRIMARY CLONE) on `branch`. Real rather than mocked because the whole point of the
+// fix is that we ask GIT, not the transcript.
+function cloneOnBranch(branch: string): string {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-repo-'));
+    git(repo, 'init', '-q', '-b', branch);
+    git(repo, 'config', 'user.email', 't@t.t');
+    git(repo, 'config', 'user.name', 'T');
+    fs.writeFileSync(path.join(repo, 'f.txt'), 'x');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-qm', 'init');
+    return repo;
+}
+
+// A LINKED WORKTREE of the shared clone, on a new branch — the shape a reviewer subagent actually runs
+// in, and the only cwd shape the fix will derive a branch from.
+function worktreeOn(branch: string): string {
+    const wt = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-wt-')), 'tree');
+    git(clone(), 'worktree', 'add', '-q', '-b', branch, wt);
+    return wt;
+}
+
+function git(cwd: string, ...args: string[]): void {
+    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+}
+
+// One agent whose record-0 carries an explicit `gitBranch` AND an explicit `cwd` — the two fields the
+// harness writes and which were observed to CONTRADICT each other.
+function harnessWithCwd(sessionId: string, agentType: string, gitBranch: string, cwd: string): string {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-cwd-'));
+    const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType, spawnDepth: 2 }));
+    fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'), JSON.stringify({ isSidechain: true, gitBranch, cwd }) + '\n');
+    return home;
+}
+
+// eslint-disable-next-line @typescript-eslint/max-params
+function statusFor(sessionId: string, agentType: string, gitBranch: string, cwd: string, target: string): string {
+    process.env['HOME'] = harnessWithCwd(sessionId, agentType, gitBranch, cwd);
+    process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
+    return new SubagentProvenanceService().verifyDistinct([agentType], target).status;
+}
+
+describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch contradicts it', () => {
+    it('credits a reviewer whose gitBranch is WRONG but whose own worktree is on the target branch', () => {
+        // The live defect: the harness stamped an unrelated worktree's scaffold branch onto a reviewer
+        // that really did run in a worktree on dean/one-2406-…, and wp-finish refused the PR four times.
+        const target = 'dean/one-2406-mealco-api-auth-observe-header-constant';
+        expect(statusFor('sess-c1', 'morpheus-wrapper-linear-required', 'worktree-agent-a54887200e40eb956', worktreeOn(target), target))
+            .toBe(PROVENANCE_OK);
+    });
+
+    it('BLOCKS a stale reviewer whose cwd is the PRIMARY CLONE, even though the clone now sits on the target', () => {
+        // THE FALSE-ACCEPT an unguarded cwd fallback opens. The reviewer ran in the clone while it was on
+        // dean/old-work; the clone was later checked out to dean/feat; finish now runs on dean/feat. Asking
+        // git would answer dean/feat — because the CLONE moved, not because this reviewer saw dean/feat.
+        // A primary clone is never pinned, so it is never an oracle: BLOCK. Its own clone (not the shared
+        // one) precisely because this case is the one that MUTATES what branch the clone is on.
+        const moved = cloneOnBranch('dean/old-work');
+        git(moved, 'checkout', '-q', '-b', 'dean/feat');
+        expect(statusFor('sess-c2', 'morpheus-reviewer', 'dean/old-work', moved, 'dean/feat'))
+            .toBe(PROVENANCE_MISSING);
+    });
+
+    it('still BLOCKS when gitBranch is wrong AND the worktree is on a different branch', () => {
+        expect(statusFor('sess-c3', 'morpheus-reviewer', 'worktree-agent-aaaa', worktreeOn('dean/some-other-work'), 'dean/feat'))
+            .toBe(PROVENANCE_MISSING);
+    });
+
+    it('still BLOCKS when gitBranch is wrong and the cwd worktree was reaped', () => {
+        const gone = path.join(os.tmpdir(), 'wp-reaped-worktree-that-does-not-exist');
+        expect(statusFor('sess-c4', 'morpheus-reviewer', 'worktree-agent-aaaa', gone, 'dean/feat'))
+            .toBe(PROVENANCE_MISSING);
+    });
+
+    it('still BLOCKS when gitBranch is wrong and the cwd is not a git repo at all', () => {
+        const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-not-a-repo-'));
+        expect(statusFor('sess-c5', 'morpheus-reviewer', 'worktree-agent-aaaa', notARepo, 'dean/feat'))
+            .toBe(PROVENANCE_MISSING);
+    });
+
+    it('still BLOCKS when gitBranch is wrong and record-0 carries no cwd to fall back on', () => {
+        const home = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-nocwd-'));
+        const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-c6', 'subagents');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'r', spawnDepth: 1 }));
+        fs.writeFileSync(path.join(dir, 'agent-abc.jsonl'), JSON.stringify({ isSidechain: true, gitBranch: 'wrong' }) + '\n');
+        process.env['HOME'] = home;
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-c6';
+        expect(new SubagentProvenanceService().verifyDistinct(['r'], 'dean/feat').status).toBe(PROVENANCE_MISSING);
+    });
+
+    it('does not consult git when gitBranch already agrees — even a primary-clone cwd still short-circuits', () => {
+        expect(statusFor('sess-c7', 'morpheus-reviewer', 'dean/feat', clone(), 'dean/feat')).toBe(PROVENANCE_OK);
+    });
+
+    it('still tolerates a leftover wpN suffix on the branch derived from a worktree cwd', () => {
+        expect(statusFor('sess-c8', 'morpheus-reviewer', 'worktree-agent-aaaa', worktreeOn('dean/feat-wp2'), 'dean/feat'))
+            .toBe(PROVENANCE_OK);
+    });
+
+    it('credits a SLASH-form branch through the cwd path — the comparison never sees a dash-sanitized name', () => {
+        // The dash-form (dean-one-2406-…) is the on-disk pr-review DIR name only, and provenance.json now
+        // calls it `featureSlug` for that reason. What reaches verifyDistinct is `git branch --show-current`,
+        // i.e. slash-form, and so is what a worktree cwd resolves to. No normalization is missing.
+        const wt = worktreeOn('dean/one-2406-mealco-api-auth');
+        expect(statusFor('sess-c9', 'morpheus-reviewer', 'main', wt, 'dean/one-2406-mealco-api-auth')).toBe(PROVENANCE_OK);
+        // …and the dash-form spelling is NOT accepted, confirming no sanitized name is silently matched.
+        expect(statusFor('sess-c10', 'morpheus-reviewer', 'main', wt, 'dean-one-2406-mealco-api-auth')).toBe(PROVENANCE_MISSING);
+    });
+
+    it('does not credit a detached HEAD, which rev-parse prints as the literal "HEAD"', () => {
+        const wt = worktreeOn('dean/feat-detached');
+        git(wt, 'checkout', '-q', '--detach', 'HEAD');
+        expect(statusFor('sess-c11', 'morpheus-reviewer', 'worktree-agent-aaaa', wt, 'HEAD')).toBe(PROVENANCE_MISSING);
     });
 });
 

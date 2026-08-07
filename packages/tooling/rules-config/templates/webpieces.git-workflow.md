@@ -185,7 +185,7 @@ flow are not interchangeable.
    `pnpm wp-finish-update`, and no longer `pnpm wp-finish-upsert-pr`).
 4. **`pnpm wp-review-upsert-pr`** — STAGE ②, and the one that verifies before anyone reviews. It validates
    and commits any in-progress 3-point merge, asserts a clean tree, runs the **build gate**, extracts this
-   branch's diff to `.webpieces/pr-review/<branch>/diff/`, writes a per-reviewer instructions file, and
+   branch's diff to `.webpieces/pr-review/<featureSlug>/diff/`, writes a per-reviewer instructions file, and
    prints exactly what to spawn plus the `review.json` schema. It CAN fail — and when it does, no reviewer
    has been spawned yet, so a broken branch costs no review effort.
 5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `review.json` (its `title`

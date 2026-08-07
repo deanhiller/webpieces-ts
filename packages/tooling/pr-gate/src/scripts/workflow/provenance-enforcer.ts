@@ -112,8 +112,13 @@ export class ProvenanceEnforcer {
     }
 
     /**
-     * Write this round's audit record: `.webpieces/pr-review/<branch>/provenance.json`, linking each verdict
-     * to the transcript of the subagent that produced it.
+     * Write this round's audit record: `.webpieces/pr-review/<featureSlug>/provenance.json`, linking each
+     * verdict to the transcript of the subagent that produced it.
+     *
+     * `<featureSlug>`, not `<branch>`: the dir is named by `AiBranchName.getFeatureName()`, which
+     * dash-sanitizes the branch. Calling it `<branch>` is what led a bug reporter to conclude the gate
+     * must be comparing a dash-form name against a slash-form git branch — see
+     * ProvenanceWriteRequest.featureSlug, whose field carried the same mislabel.
      *
      * A SEPARATE file rather than a field inside review.json / review-<id>.json, for two reasons. The
      * reviewer cannot supply this itself — a subagent's environment exposes the PARENT session id and no

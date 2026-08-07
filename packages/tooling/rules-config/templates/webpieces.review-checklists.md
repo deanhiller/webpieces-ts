@@ -66,7 +66,7 @@ pnpm wp-review-upsert-pr
 
 It validates and commits any in-progress 3-point merge, runs the build gate, then **extracts this branch's
 diff to disk** and writes one instructions file per reviewer under
-`.webpieces/pr-review/<branch>/instructions/`. It prints a copy-paste spawn block per reviewer whose prompt
+`.webpieces/pr-review/<featureSlug>/instructions/`. It prints a copy-paste spawn block per reviewer whose prompt
 is a POINTER to that file and nothing else.
 
 That indirection is the design. Everything volatile — the diff, the matched files, the verdict schema, the
@@ -95,7 +95,7 @@ Where patterns DO apply, matching is deliberately **coarse** — the reviewer su
 content-level judgment by reading the actual diff.
 
 The changed files + the exact base sha the gate uses are in
-`.webpieces/pr-review/<branch>/pr-context.json`:
+`.webpieces/pr-review/<featureSlug>/pr-context.json`:
 
 ```json
 { "base": "<merge-base sha>", "head": "<HEAD sha>", "changedFiles": ["path/a.ts", "db/003.sql", ...] }
@@ -110,7 +110,7 @@ For each matched **required** checklist — and each **optional** one the human 
    `git diff <base> HEAD -- <file>` (base is in `pr-context.json`) — and decide whether the change
    satisfies the checklist. (A path-coarse checklist like "new API/queues" simply reports
    `"status": "green"` when the diffs add no new route/queue.)
-3. Have it **write its verdict** to `.webpieces/pr-review/<branch>/review-<id>.json` (one file per
+3. Have it **write its verdict** to `.webpieces/pr-review/<featureSlug>/review-<id>.json` (one file per
    checklist, so concurrent reviewers never clobber each other). `<id>` is the subagent name.
 
 **How to ask about the optional ones.** `wp-review-upsert-pr` prints them as their own step, listing each
@@ -188,7 +188,7 @@ only then opens/updates the PR.
 
 ## `provenance.json` (the tooling writes this; you never do)
 
-`wp-finish-upsert-pr` writes `.webpieces/pr-review/<branch>/provenance.json` — the audit record of **how
+`wp-finish-upsert-pr` writes `.webpieces/pr-review/<featureSlug>/provenance.json` — the audit record of **how
 the review was done**, as opposed to what it concluded. Per reviewer it links the verdict to the
 transcript of the subagent that produced it, plus what that reviewer was *offered* (its instructions file,
 the diff dir, its checklist doc) against what it demonstrably *read*, and its tool-call counts.

@@ -114,7 +114,7 @@ describe('ReviewProvenanceService.write', () => {
         const transcript = path.join(prDir, 'agent-abc.jsonl');
         fs.writeFileSync(transcript, '{}');
 
-        const request = new ProvenanceWriteRequest(prDir, 'dean/feat', 'deadbeef', 'ok');
+        const request = new ProvenanceWriteRequest(prDir, 'dean-feat', 'deadbeef', 'ok');
         request.offered = new OfferedContext(`${prDir}/diff`, `${prDir}/instructions`);
         request.reviewers = [new ReviewerTranscript(
             new ReviewerEvidence('envvars-reviewer', 'abc', true, false, 26, 14, transcript),
@@ -127,7 +127,10 @@ describe('ReviewProvenanceService.write', () => {
         const parsed = readProvenance(prDir);
         expect(parsed['sessionId']).toBe('sess-w');
         expect(parsed['mainTranscript']).toMatch(/sess-w\.jsonl$/);
-        expect(parsed['branch']).toBe('dean/feat');
+        // `featureSlug`, NOT `branch`: it holds the dash-sanitized pr-review dir name, and calling it
+        // `branch` sent a bug reporter hunting a slash-vs-dash normalization defect that does not exist.
+        expect(parsed['featureSlug']).toBe('dean-feat');
+        expect(parsed['branch']).toBeUndefined();
         expect(parsed['headSha']).toBe('deadbeef');
         expect(parsed['provenanceStatus']).toBe('ok');
         expect(parsed['transcriptRetentionDays']).toBe(14);
@@ -153,7 +156,7 @@ describe('ReviewProvenanceService.write', () => {
         process.env['HOME'] = fakeHome('sess-gone');
         delete process.env['CLAUDE_CODE_SESSION_ID'];
         const prDir = tmpPrDir();
-        const request = new ProvenanceWriteRequest(prDir, 'dean/feat', '', 'skipped');
+        const request = new ProvenanceWriteRequest(prDir, 'dean-feat', '', 'skipped');
         request.reviewers = [new ReviewerTranscript(
             new ReviewerEvidence('r', 'a1'), new ReviewerPaths('', '', ''))];
 
@@ -180,7 +183,7 @@ describe('ReviewProvenanceService.archive', () => {
         process.env['HOME'] = fakeHome('sess-a');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-a';
         const prDir = tmpPrDir();
-        svc.write(new ProvenanceWriteRequest(prDir, 'dean/feat', 'sha', 'ok'));
+        svc.write(new ProvenanceWriteRequest(prDir, 'dean-feat', 'sha', 'ok'));
 
         const archived = svc.archive(prDir);
         expect(archived).toBe(path.join(prDir, 'old-provenance.json'));
