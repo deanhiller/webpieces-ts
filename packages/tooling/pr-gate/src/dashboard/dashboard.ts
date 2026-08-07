@@ -455,11 +455,20 @@ export class Dashboard {
     }
 
     // The squash-merge COMMIT body that lands in main's history (subject is the PR title, passed to
-    // `gh pr merge --subject`). Deliberately compact — unlike the full PR-body dashboard: the risk score
-    // (always), every NON-green flag (green rows omitted — a commit log should surface only what stands
-    // out), the summary capped at 4 sentences, and a quick link back to the PR for the full dashboard.
+    // `gh pr merge --subject`). Deliberately compact — unlike the full PR-body dashboard: the PR link
+    // FIRST, then the risk score (always), every NON-green flag (green rows omitted — a commit log
+    // should surface only what stands out), and the summary capped at 4 sentences.
+    //
+    // The link leads because `git log` reads subject-then-body top-down, and the ONE thing a reader of
+    // main's history wants from a squash commit is the way back to the full dashboard. It used to be the
+    // last line, below a summary that `git log --oneline`-adjacent tools and pagers routinely cut off,
+    // which put the only navigable thing in the commit in the one place most likely to be unread.
     renderCommitBody(input: DashboardInput, prUrl: string): string {
         const lines: string[] = [];
+        if (prUrl !== '') {
+            lines.push(prUrl);
+            lines.push('');
+        }
         lines.push(
             `Risk: ${this.riskBar(input.review.riskScore)} ${input.review.riskScore}/100 ${input.review.riskEmoji} (${input.review.riskLevel})`,
         );
@@ -475,10 +484,6 @@ export class Dashboard {
         if (summary !== '') {
             lines.push('');
             lines.push(summary);
-        }
-        if (prUrl !== '') {
-            lines.push('');
-            lines.push(`PR: ${prUrl}`);
         }
         return lines.join('\n');
     }

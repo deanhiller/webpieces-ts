@@ -290,7 +290,7 @@ describe('renderDashboard', () => {
 });
 
 describe('renderCommitBody', () => {
-    it('always includes the risk score, omits green rows, and appends the PR link', () => {
+    it('leads with the PR link, then the risk score, omitting green rows', () => {
         const input = new DashboardInput(
             'My PR',
             computeGateResults([], []),
@@ -308,11 +308,16 @@ describe('renderCommitBody', () => {
         );
         const body = renderCommitBody(input, 'https://github.com/o/r/pull/42');
 
-        expect(body).toContain('Risk: ');
+        // ORDER is the point, not mere presence: the link is the FIRST line of the body, so `git log`
+        // shows it directly under the subject. Assert with startsWith + index comparison — a `toContain`
+        // pair would have passed just as happily with the link back at the bottom.
+        expect(body.startsWith('https://github.com/o/r/pull/42\n')).toBe(true);
+        expect(body.indexOf('https://github.com/o/r/pull/42')).toBeLessThan(body.indexOf('Risk: '));
         expect(body).toContain('20/100 🟢 (green)');
         expect(body).toContain('Flags: 🟢 all green');
         expect(body).toContain('One thing. Two thing. Three thing.');
-        expect(body).toContain('PR: https://github.com/o/r/pull/42');
+        // The old `PR: <url>` label is gone — the bare URL leads instead.
+        expect(body).not.toContain('PR: ');
     });
 
     it('lists every non-green flag (build, gates, violations, disables)', () => {
@@ -345,7 +350,9 @@ describe('renderCommitBody', () => {
         expect(body).toContain('- API Changed: 🟡 1 file(s)');
         expect(body).toContain('- Webpieces Disables Added: 🟡 1 line(s) — no-any-unknown');
         expect(body).toContain('- ESLint Disables Added: 🟡 1 line(s)');
-        expect(body).not.toContain('PR: ');
+        // No URL to lead with → the body starts at the risk line, with no stray blank first line.
+        expect(body.startsWith('Risk: ')).toBe(true);
+        expect(body).not.toContain('https://');
     });
 
     it('caps the summary at 4 sentences', () => {

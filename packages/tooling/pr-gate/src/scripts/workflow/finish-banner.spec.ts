@@ -49,6 +49,21 @@ describe('mergeMode NONE — a human merges', () => {
         expect(out).toContain('✅ PR finished');
         expect(out).not.toContain('NOT FINISHED');
     });
+
+    /**
+     * The banner's ONLY chance to say how the merge should happen. A UI click takes its commit body from
+     * squash_merge_commit_message, so on a PR_BODY repo every squash commit on main carries the full
+     * dashboard — two consumer repos ran that way for months because this banner said "you can stop
+     * here" and named no alternative. It still says stop; it now also names `wp-land-pr`.
+     */
+    it('names wp-land-pr as the way to land the gated body, without turning into a chore', () => {
+        const out = render(HUMAN);
+        expect(out).toContain('pnpm wp-land-pr');
+        expect(out).toContain('squash_merge_commit_message');
+        // Still the "nothing is owed" shape — no STOP/DO-NOT-report escalation on a policy outcome.
+        expect(out).toContain('You can stop here.');
+        expect(out).not.toContain('DO NOT report this PR as done');
+    });
 });
 
 describe('BEHIND — not done, but not the author\'s failure either', () => {

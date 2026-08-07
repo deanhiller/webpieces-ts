@@ -185,9 +185,16 @@ export class PrMerger {
         // posted/updated by this point, which is the whole job in this mode.
         if (!intent.shouldMerge()) {
             const mergeMode = intent.mergeMode;
+            // Name BOTH halves a UI merge substitutes. The subject warning has always been here; the
+            // BODY was the half that actually mattered and went unsaid, and two consumer repos on
+            // mergeMode=NONE ended up with the full dashboard in every squash commit on main because
+            // nothing on this path ever mentioned `wp-land-pr`.
             return new MergeOutcome(false, false,
                 `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so the PR is left for a human to merge.\n` +
-                `      Subject GitHub will use is its own (squash_merge_commit_title), NOT: "${subject}"`,
+                `      A UI merge substitutes BOTH halves of the commit message: the subject comes from\n` +
+                `      squash_merge_commit_title (NOT: "${subject}") and the body from\n` +
+                `      squash_merge_commit_message, which on PR_BODY is the whole dashboard. Land it with\n` +
+                `      \`pnpm wp-land-pr\` instead to write the gated body.`,
                 MERGE_RESULT_LEFT_TO_HUMAN);
         }
 
