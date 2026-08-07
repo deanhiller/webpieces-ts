@@ -257,11 +257,14 @@ export class Dashboard {
      * the point, and `pr-body-is-merge-body.spec.ts` pins it.
      *
      * ─── The shape, and why each part earns its line ────────────────────────────────────────────────
-     * The URL leads, labelled `(for git log)` so nobody deletes it as redundant while reading the PR on
-     * GitHub — on the page it is obviously the page you are on; in `git log` it is the only way back.
-     * Then the risk score (always). Then ONLY the non-green flags: a commit log should surface what
-     * stands out, and the green rows are in the 1st comment. The last bullet is always the pointer to
-     * that comment, so a reader of main's history is never left thinking this is all there was. Then the
+     * The URL leads, BARE — no caption. It used to carry `(for git log)`, which was aimed at a reader on
+     * the PR page (where the link is redundant, being the page you are already on) and was meant to stop
+     * them deleting it. But this string is also the squash-commit body, so that caption landed verbatim in
+     * `main`'s history on every commit, forever, to serve one transient reading. In `git log` a bare URL
+     * is self-evidently the way back and needs no explanation. The permanent surface wins.
+     * Then the risk score (always). Then ONLY the non-green flags, under a heading that SAYS the full list
+     * is in the 1st comment — a `git log` reader has no page to glance at, so the heading has to carry
+     * that itself rather than leaving "why is this list short?" to the pointer bullet alone. Then the
      * summary capped at 4 sentences, then the footer naming the build command that vouched for it.
      *
      * The hidden gate-token marker is appended AFTER this by the caller, so it is the very last line of
@@ -272,7 +275,7 @@ export class Dashboard {
     renderPrBody(input: DashboardInput, prUrl: string): string {
         const lines: string[] = [];
         if (prUrl !== '') {
-            lines.push(`${prUrl} (for git log)`);
+            lines.push(prUrl);
             lines.push('');
         }
         lines.push(
@@ -280,7 +283,9 @@ export class Dashboard {
         );
         lines.push('');
         const flags = this.nonGreenFlags(input);
-        lines.push(flags.length === 0 ? 'Flags: 🟢 all green' : 'Flags (non-green):');
+        lines.push(flags.length === 0
+            ? 'Flags: 🟢 all green'
+            : 'Non-green Flags (full list in first comment to avoid large git logs)');
         for (const flag of flags) lines.push(`- ${flag}`);
         // ALWAYS the last bullet, green case included. Without it the compact body reads as the whole
         // record, and the reader never learns that every green row, the full summary and each reviewer's

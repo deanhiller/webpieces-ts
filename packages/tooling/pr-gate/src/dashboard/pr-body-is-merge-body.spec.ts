@@ -84,6 +84,6 @@ describe('the PR description IS the squash-merge commit body', () => {
      * dashboard, the reviewer output and the full summary are all in comments this text cannot reach.
      */
     it('leads with the PR link, which is the only navigation a squash commit has', () => {
-        expect(dash.renderPrBody(input(), URL).startsWith(`${URL} (for git log)`)).toBe(true);
+        expect(dash.renderPrBody(input(), URL).startsWith(`${URL}\n`)).toBe(true);
     });
 });
