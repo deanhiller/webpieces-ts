@@ -106,14 +106,21 @@ export class LogStream {
     }
 
     /**
-     * This caller's name for `base` — `<sessionId>-<agentId|coordinator>-<hook>-<base>`, ALWAYS.
+     * This WRITER's file name within a stream directory —
+     * `<sessionId>-<agentId|coordinator>-<hook><suffix>`, ALWAYS.
      *
-     * Takes the WHOLE filename (`guard-invocations.log`, and separately `guard-invocations.1.log`) so
-     * the rotation sibling gets the identical prefix and rotation keeps working untouched.
+     * The three identity dimensions stay in the FILE while the stream moves to the DIRECTORY
+     * ({@link StreamDir}), because they are what makes one writer per file true and the stream is not:
+     * `wp-ai-guards-hook` and `wp-ai-rules-hook` are separate processes that Claude Code launches in
+     * PARALLEL on the same tool call, so dropping `hook` here would put two concurrent appenders on
+     * one path — the exact tearing this class exists to remove, reintroduced by a rename.
+     *
+     * `suffix` carries the extension so the rotation sibling gets the identical writer key: pass
+     * `.log`, and separately `.1.log`.
      */
-    fileName(base: string): string {
+    writerFile(suffix: string): string {
         const agent = segment(this.agentId === '' ? 'coordinator' : this.agentId);
-        return `${segment(this.sessionId)}-${agent}-${segment(this.hook)}-${base}`;
+        return `${segment(this.sessionId)}-${agent}-${segment(this.hook)}${suffix}`;
     }
 }
 

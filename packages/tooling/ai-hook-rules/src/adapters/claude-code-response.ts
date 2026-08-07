@@ -64,7 +64,11 @@ export function denyJson(reason: string, toolName: string): string {
 // what makes `grep 'fault=S'` span the whole audit trail rather than only its sh half.
 // webpieces-disable no-function-outside-class -- the Claude Code PreToolUse protocol boundary; module-scope beside denyJson/emitAllow by design, and it must stay callable from a tree too broken to build a DI container.
 export function emitDeny(reason: string, toolName: string, rule: string = '-', fault: string = L0_FAULT_NONE): never {
-    invocationLog.finish('BLOCK', rule, fault);
+    // BLOCK_AI_CURE: every deny that reaches this boundary prints a cure the agent can act on — the
+    // L0 faults name a command on the allowlist, and the L1/L2 guards print theirs. A deny needing a
+    // HUMAN would have to say so at its own site; none does today, and inventing one here would be
+    // guessing at the boundary rather than at the decision.
+    invocationLog.finish('BLOCK_AI_CURE', rule, fault);
     process.stdout.write(denyJson(reason, toolName) + '\n');
     // webpieces-disable no-process-exit-outside-main -- hook exit-code IS the Claude Code PreToolUse protocol (exit 0 + JSON = the contract); designated terminal boundary.
     process.exit(0);

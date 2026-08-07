@@ -9,7 +9,21 @@ import { spawnerIdentity } from './sync-main';
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
 // production does, so the layout is regression-tested on the REAL path, not a fallback.
 import { LogStream, StreamIdentity } from './log-stream';
-function streamName(base: string): string { return new LogStream().fileName(base); }
+import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
+// spec still names one logical stream and the path it checks is the real one production builds.
+const STREAM_OF: Record<string, string> = {
+    'guard-invocations': CALLS_STREAM,
+    'guard-sync-decisions': L2_DECISIONS_STREAM,
+    'guard-async-work': ASYNC_REFRESH_STREAM,
+    'hook-rejection': REJECTIONS_STREAM,
+};
+function streamName(base: string): string {
+    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
+    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
+    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
+    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+}
 
 
 const LOG_REL = `.webpieces/logs/${streamName('guard-async-work.log')}`;
@@ -76,14 +90,14 @@ describe('the detached refresher inherits its spawner`s stream identity', () => 
         const child = new LogStream();
         child.identify(spawnerIdentity(['/usr/bin/node', ...refresherArgv('/x.js', '/repo', 30, parent.identity())]));
 
-        expect(child.fileName('guard-async-work.log')).toBe(parent.fileName('guard-async-work.log'));
-        expect(child.fileName('guard-async-work.log')).not.toContain('unknown-coordinator-hook-');
+        expect(child.writerFile('.log')).toBe(parent.writerFile('.log'));
+        expect(child.writerFile('.log')).not.toContain('unknown-coordinator-hook');
     });
 
     it('still prefixes when the spawner never identified — a distinct stream, never a bare name', () => {
         const argv = refresherArgv('/x.js', '/repo', 30, new LogStream().identity());
         const child = new LogStream();
         child.identify(spawnerIdentity(['/usr/bin/node', ...argv]));
-        expect(child.fileName('guard-async-work.log')).toBe('unknown-coordinator-hook-guard-async-work.log');
+        expect(child.writerFile('.log')).toBe('unknown-coordinator-hook.log');
     });
 });

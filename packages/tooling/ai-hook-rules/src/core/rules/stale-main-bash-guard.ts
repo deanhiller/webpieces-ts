@@ -13,7 +13,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict } from '../decision-log';
 import { CommandScanner } from '../command-scan';
 import { StaleMainMessage } from './stale-main-message';
 import { ContentReadScan } from './content-read-scan';
@@ -264,7 +264,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
     }
 
     private block(ctx: BashContext, branch: string, reason: string, message: string, cache: string): readonly Violation[] {
-        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
+        this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
         return [new V(1, this.truncate(ctx.command), message)];
     }
 
@@ -273,7 +273,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<StaleMainBashGuardConfi
         return s.length <= MAX ? s : s.slice(0, MAX) + '…';
     }
 
-    private logDecision(ctx: BashContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
+    private logDecision(ctx: BashContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
             new GuardDecision('stale-main-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache),

@@ -132,11 +132,14 @@ function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): vo
     const agent = agentIdentityOf(payload);
     const result = runBash(command, cwd, mode, agent);
     if (!result) { emitAllow(); }
-    // Persist the block + WHY. File-tool denies go to hook-rejection.log via logRejection, but a Bash
-    // deny had no audit trail — record it in guard-sync-decisions.log so "blocked and why" is complete
-    // for Bash too. `.webpieces` lives at the repo root, resolved from cwd. Best-effort; never blocks.
-    const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', command ?? '', branchForLog(root), 'BLOCK', result.report, '-', result.fault));
+    // NO DECISION LINE HERE. This used to write a generic `bash-guard` line because a Bash deny once
+    // had no audit trail at all — but every layer now records its own: L1 into `L1-location/` with its
+    // row, L2's guards into `L2-decisions/` with their rule and cache, and emitDeny below stamps the
+    // call-level outcome onto `calls/`. So this was the THIRD line for one block, and the worst of the
+    // three: it re-resolved the root from `cwd` via RepoRootFinder, which is not necessarily the tree
+    // the guard actually judged, so a `cd`-relocated command scattered one block across two different
+    // `.webpieces` directories.
+    //
     // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
     // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
     emitDeny(result.report, 'Bash', blockingRule(result.report, 'bash-guard'), result.fault);
@@ -285,7 +288,7 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const target = payload.tool_input.command ?? payload.tool_input.file_path ?? '';
     logGuardDecision(
         root,
-        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE),
+        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK_AI_CURE', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE),
     );
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same

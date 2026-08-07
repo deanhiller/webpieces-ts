@@ -11,20 +11,24 @@ import { logRejection } from './rejection-log';
 import { run } from './runner';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 import { SHIM_LOG_FAULTS, renderShim } from '../bin/shim';
+import { L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';
 
 function tmpRoot(): string {
     return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wp-faultstamp-')));
 }
 
-const INVOCATION_LOG = 'guard-invocations.log';
-const DECISION_LOG = 'guard-sync-decisions.log';
-const REJECTION_LOG = 'hook-rejection.log';
+// The three STREAM DIRECTORIES this fault stamp must reach. `fault=` spans them all — that is the
+// property under test — so they are named by stream, not by a historical flat filename.
+const INVOCATION_LOG = CALLS_STREAM;
+const DECISION_LOG = L2_DECISIONS_STREAM;
+const REJECTION_LOG = REJECTIONS_STREAM;
 
 // The filename LogStream actually writes — it prefixes every log with
 // <session>-<agent|coordinator>-<hook>-, which is how concurrent writers stay out of one file.
 function readLog(root: string, name: string): string {
-    const dir = path.join(root, '.webpieces', 'logs');
-    return fs.readFileSync(path.join(dir, new LogStream().fileName(name)), 'utf8');
+    // `name` selects the STREAM DIRECTORY now; the file inside it is this writer's key.
+    const dir = path.join(root, '.webpieces', 'logs', name);
+    return fs.readFileSync(path.join(dir, new LogStream().writerFile('.log')), 'utf8');
 }
 
 /**

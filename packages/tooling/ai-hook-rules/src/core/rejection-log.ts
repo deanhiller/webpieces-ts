@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
+import { REJECTIONS_STREAM } from './log-streams';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';
 import { logStream } from './log-stream';
@@ -28,9 +29,6 @@ import { toError } from './to-error';
  * stream directory left empty. Every delete is `force: true` and failures are swallowed, so concurrent
  * agents racing the same week-old files is harmless.
  */
-const LOG_BASE = 'hook-rejection';
-const LOG_FILE = `${LOG_BASE}.log`;
-const LOG_FILE_PREV = `${LOG_BASE}.1.log`;
 const DETAIL_PREFIX = 'writeInfo-';
 const DETAIL_SUFFIX = '.md';
 const DETAIL_RE = /^writeInfo-(\d+)\.md$/;
@@ -56,8 +54,10 @@ export function logRejection(
 
         // LOCAL scope — a rejection is this worktree's event. WHICH writer's event is answered by the
         // stream prefix, on the index AND on its detail directory, so neither can collide.
-        const logsDir = dotWebpieces.logs(root);
-        const detailDirName = logStream.fileName(LOG_BASE);
+        const logsDir = dotWebpieces.logsFile(root, REJECTIONS_STREAM);
+        // The detail directory is the writer key with NO extension, sitting beside the `.log` that
+        // indexes it — so index and details share one owner, one level down inside the stream dir.
+        const detailDirName = logStream.writerFile('');
         const detailDir = path.join(logsDir, detailDirName);
         fs.mkdirSync(detailDir, { recursive: true });
 
@@ -71,8 +71,8 @@ export function logRejection(
         const detail = buildDetailContent(timestamp, toolKind, relativePath, ruleNames, result.report, input);
         fs.writeFileSync(path.join(detailDir, detailFileName), detail);
 
-        const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
-        rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
+        const logPath = path.join(logsDir, logStream.writerFile('.log'));
+        rotateLogFile(logPath, path.join(logsDir, logStream.writerFile('.1.log')));
 
         // APPEND-ONLY, and `fault=` is spelled exactly as the L0 sh log spells it. A fault-S storm
         // previously landed here as a couple of lines attributed to whatever rule the report happened

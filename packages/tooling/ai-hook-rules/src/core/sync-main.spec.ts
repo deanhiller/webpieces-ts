@@ -10,7 +10,21 @@ import { refreshMainSync } from './sync-main';
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
-function streamName(base: string): string { return new LogStream().fileName(base); }
+import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
+// spec still names one logical stream and the path it checks is the real one production builds.
+const STREAM_OF: Record<string, string> = {
+    'guard-invocations': CALLS_STREAM,
+    'guard-sync-decisions': L2_DECISIONS_STREAM,
+    'guard-async-work': ASYNC_REFRESH_STREAM,
+    'hook-rejection': REJECTIONS_STREAM,
+};
+function streamName(base: string): string {
+    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
+    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
+    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
+    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+}
 
 
 /**

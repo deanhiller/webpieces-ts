@@ -22,12 +22,11 @@ export const WORKTREE_STATE_DIR = 'worktrees';
 // reads or writes it.
 //
 // Every writer resolves its DIRECTORY through dotWebpieces.logs()/logsFile(), so the layout cannot
-// drift apart again. The FILENAME is a separate question: ai-hook-rules' LogStream prefixes it with
-// <sessionId>-<agentId|coordinator>-<hook>- so that concurrent writers (Claude Code runs all matching
-// PreToolUse hooks IN PARALLEL, and subagents/windows share a tree) never append to one file. The
-// rejection details sit in a DIRECTORY carrying that identical prefix, beside the log that points at
-// them, which gives them the same one-writer-per-name property.
+// drift apart again. The FILENAME is a separate question: ai-hook-rules' LogStream names it
+// <sessionId>-<agentId|coordinator>-<hook>.log so that concurrent writers (Claude Code runs all
+// matching PreToolUse hooks IN PARALLEL, and subagents/windows share a tree) never append to one file.
 export const LOGS_STATE_DIR = 'logs';
+
 
 // git prints the shared git dir as `<primary>/.git` for a conventional clone. Anything else (a bare
 // repo, `--separate-git-dir`) is a layout we decline to derive a working tree from.

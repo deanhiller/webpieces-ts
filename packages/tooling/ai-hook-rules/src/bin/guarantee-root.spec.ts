@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { LMINUS1_CD_STREAM } from '../core/log-streams';
+
 import {
     renderGuaranteeRoot,
     guaranteeRootPath,
@@ -233,14 +235,15 @@ describe('the cd audit log', () => {
             input: payload, encoding: 'utf8',
             env: { ...process.env, CLAUDE_PROJECT_DIR: projOf() },
         });
-        // Flat, same scheme as LogStream.fileName(): <session>-<agent|coordinator>-guarantee-root-<base>
+        // The LAYER is the directory, the WRITER is the file — same key as LogStream.writerFile():
+        // logs/L-1-cd/<session>-<agent|coordinator>-guarantee-root.log
         const who = agentId === '' ? 'coordinator' : agentId;
-        const file = path.join(projOf(), '.webpieces', 'logs',
-            `${sessionId}-${who}-guarantee-root-cd-audit.log`);
+        const file = path.join(projOf(), '.webpieces', 'logs', LMINUS1_CD_STREAM,
+            `${sessionId}-${who}-guarantee-root.log`);
         return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n') : [];
     }
 
-    it('records a DENY in <session>-<agent>-guarantee-root-cd-audit.log', () => {
+    it('records a DENY in L-1-cd/<session>-<agent>-guarantee-root.log', () => {
         const lines = auditLines(`cd ${path.join(projOf(), 'tools')} && ls`, 'sess-1', 'agent-1');
         expect(lines[lines.length - 1]).toContain('DENY');
         expect(lines[lines.length - 1]).toContain(path.join(projOf(), 'tools'));
@@ -262,10 +265,10 @@ describe('the cd audit log', () => {
     it('keeps two sessions in separate files', () => {
         auditLines(`cd ${projOf()} && ls`, 'sess-A', 'agent-x');
         auditLines(`cd ${projOf()} && ls`, 'sess-B', 'agent-x');
-        const logs = path.join(projOf(), '.webpieces', 'logs');
+        const logs = path.join(projOf(), '.webpieces', 'logs', LMINUS1_CD_STREAM);
         const names = fs.readdirSync(logs).filter((n: string): boolean => n.includes('guarantee-root'));
-        expect(names).toContain('sess-A-agent-x-guarantee-root-cd-audit.log');
-        expect(names).toContain('sess-B-agent-x-guarantee-root-cd-audit.log');
+        expect(names).toContain('sess-A-agent-x-guarantee-root.log');
+        expect(names).toContain('sess-B-agent-x-guarantee-root.log');
     });
 
     it('cannot be walked out of the logs directory by a hostile session id', () => {
@@ -277,7 +280,7 @@ describe('the cd audit log', () => {
             input: payload, encoding: 'utf8',
             env: { ...process.env, CLAUDE_PROJECT_DIR: projOf() },
         });
-        const logs = path.join(projOf(), '.webpieces', 'logs');
+        const logs = path.join(projOf(), '.webpieces', 'logs', LMINUS1_CD_STREAM);
         for (const entry of fs.readdirSync(logs)) expect(entry).not.toContain('..');
     });
 });

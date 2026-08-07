@@ -15,7 +15,7 @@ import { FileRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict } from '../decision-log';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
 
@@ -112,11 +112,11 @@ export class FeatureBranchGuardRule extends FileRuleBase<FeatureBranchGuardConfi
     }
 
     private block(ctx: FileContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
-        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
+        this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
         return [new V(1, ctx.relativePath, message)];
     }
 
-    private logDecision(ctx: FileContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
+    private logDecision(ctx: FileContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
             new GuardDecision('feature-branch-guard', ctx.tool, ctx.relativePath, branch ?? 'unknown', verdict, reason, cache),

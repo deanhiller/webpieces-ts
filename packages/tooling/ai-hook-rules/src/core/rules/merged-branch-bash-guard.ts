@@ -13,7 +13,7 @@ import { BashRuleBase } from '../rule-base';
 import { FixHint, Option } from '../fix-hint';
 import { toError } from '../to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
-import { logGuardDecision, GuardDecision } from '../decision-log';
+import { logGuardDecision, GuardDecision, Verdict } from '../decision-log';
 import { CommandScanner, CommandSegment } from '../command-scan';
 import { MergedBranchMessage } from './merged-branch-message';
 import { TreeRecovery } from './tree-recovery';
@@ -185,7 +185,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
     }
 
     private block(ctx: BashContext, branch: string, reason: string, message: string, cache: string = '-'): readonly Violation[] {
-        this.logDecision(ctx, branch, 'BLOCK', reason, cache);
+        this.logDecision(ctx, branch, 'BLOCK_AI_CURE', reason, cache);
         return [new V(1, this.truncate(ctx.command), message)];
     }
 
@@ -194,7 +194,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<MergedBranchBashGuar
         return s.length <= MAX ? s : s.slice(0, MAX) + '…';
     }
 
-    private logDecision(ctx: BashContext, branch: string | null, verdict: 'ALLOW' | 'BLOCK', reason: string, cache: string): void {
+    private logDecision(ctx: BashContext, branch: string | null, verdict: Verdict, reason: string, cache: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
             new GuardDecision('merged-branch-bash-guard', 'Bash', ctx.command, branch ?? 'unknown', verdict, reason, cache),

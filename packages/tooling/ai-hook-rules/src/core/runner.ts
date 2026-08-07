@@ -8,14 +8,14 @@ import { EffectiveTree, EffectiveTreeResolver, atRoot } from './effective-tree';
 import { loadRules, loadMatchRules, globMatches } from './load-rules';
 import { MatchRule } from './rules/match-rule';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
-import { logGuardDecision, GuardDecision, branchForLog } from './decision-log';
+import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict } from './decision-log';
 import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { L0_ALLOW_JS, L0_CURE_ALLOW_JS } from '../bin/shim';
-import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC } from './l0-fault-codes';
+import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC, L0_FAULT_NONE } from './l0-fault-codes';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
-import { L1Classification, firstMatchingL1Row } from './l1-rows';
+import { L1Classification, firstMatchingL1Row, L1_PRESTAGE_ROW } from './l1-rows';
 import {
     ToolKind, NormalizedToolInput, BlockedResult, HookMode,
     Rule, Violation, RuleGroup, RuleFailError, InformAiError,
@@ -267,7 +267,6 @@ function gitFromSubdirBlock(command: string, tree: EffectiveTree): BlockedResult
         `     ${atRoot(tree.root, command)}\n` +
         `   A leading \`cd <path> &&\` is ACCEPTED by the guards — it cannot change what the command\n` +
         `   does to the repo. (The webpieces guards evaluate the repo's git state at its root.)`;
-    logGuardDecision(tree.root, new GuardDecision('force-to-root', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'git/gh from subdir'));
     return new BlockedResult(report);
 }
 
@@ -320,7 +319,6 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
 function coordinatorInWorktreeBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const report = new CoordinatorWorktreeGuard().block(command, tree, agent);
     if (report === null) return null;
-    logGuardDecision(tree.root, new GuardDecision('coordinator-in-worktree', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'coordinator working inside a linked worktree'));
     return new BlockedResult(report);
 }
 
@@ -355,20 +353,47 @@ function l1Classify(command: string, tree: EffectiveTree, agent: AgentIdentity):
 // reason FROM the resolved tree. Classifying it would mean asking L1_ROWS a question whose answer the
 // classification itself depends on. It is the same shape as L2's `bareCheckoutOfMain` pre-stage.
 //
-// KNOWN GAP, stated rather than discovered later: that makes it an L1 block with NO row in L1_ROWS, so
-// guards/L1-location.md does not describe it — the exact drift this table exists to prevent, arriving
-// while the table was being built. It needs a row (its "state" would be a command shape, the way L2
-// row 2 carries one), which changes the rendered doc and so belongs in its own change, not in a merge
-// resolution.
+// It is therefore ROW 0 — "pre-stage, decided from command text" — rather than a row among 1-6. That
+// keeps it IN the table (the drift this table exists to prevent) without pretending it is classified
+// over the same five dimensions, which is the thing that cannot be true. `L1_PRESTAGE_ROW` is the
+// number the doc prints and the number `row=` logs, so the two still join.
+//
+// THIS FUNCTION IS THE ONE PLACE L1 REPORTS. It is the only scope holding the classification, the
+// matched row, the resolved tree and the agent at once — so logging here, BEFORE the early return,
+// is what finally records the outcomes that were previously invisible: the exempt row and the three
+// hand-downs wrote nothing at all, which is why "L1 had no objection" could not be observed and
+// "show me every L1 decision" had no answer. The three block helpers no longer log for themselves.
 // webpieces-disable no-function-outside-class -- sibling of gitFromSubdirBlock() and the other module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function l1LocationBlock(command: string, tree: EffectiveTree, agent: AgentIdentity): BlockedResult | null {
     const misplacedCd = misplacedCdBlock(command, tree);
-    if (misplacedCd !== null) return misplacedCd;
+    if (misplacedCd !== null) {
+        logL1(tree, command, 'BLOCK_AI_CURE', L1_PRESTAGE_ROW, 'cd-must-be-first', 'cd not leading/literal');
+        return misplacedCd;
+    }
 
     const row = firstMatchingL1Row(l1Classify(command, tree, agent));
-    if (row.blockId === null) return null; // exempt (row 1) or hand down to L2 (rows 2, 4, 6)
+    const rowNum = String(row.num);
+    if (row.blockId === null) {
+        // ALLOW_EXEMPT stops here; ALLOW means "no objection, handed down to L2". Recording the
+        // difference is the point — see Verdict. Neither is a claim that the call actually ran: the
+        // parallel L-1 hook may still have denied it.
+        logL1(tree, command, row.action.kind === 'exempt' ? 'ALLOW_EXEMPT' : 'ALLOW', rowNum, '-', row.why);
+        return null;
+    }
+    logL1(tree, command, 'BLOCK_AI_CURE', rowNum, row.blockId, row.why);
     if (row.blockId === 'coordinator-in-worktree') return coordinatorInWorktreeBlock(command, tree, agent);
     return gitFromSubdirBlock(command, tree);
+}
+
+// One L1 line, into L1's OWN stream. `row` is the number the generated doc prints, so a reader who
+// sees `row=5` can open guards/L1-location.md at row 5 and read the state, the cure and the use cases
+// that row is supposed to cover.
+// eslint-disable-next-line @typescript-eslint/max-params -- the six fields of one log line, and a class here would break this file's shape
+// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions
+function logL1(tree: EffectiveTree, command: string, verdict: Verdict, row: string, rule: string, why: string): void {
+    logL1Decision(tree.root, new GuardDecision(
+        rule, 'Bash', command, branchForLog(tree.root), verdict, why, '-', L0_FAULT_NONE, new MatrixRef('L1', row),
+    ));
 }
 
 /**
@@ -399,7 +424,6 @@ function misplacedCdBlock(command: string, tree: EffectiveTree): BlockedResult |
         `   Fix Option 2: drop the \`cd\` — ${tree.root} is where the command is judged anyway.\n` +
         `   Fix Option 3: split it — run the work in one call, the \`cd\` in another (a \`cd\` alone still\n` +
         `                 moves nothing the guards judge; see EffectiveTree on why cwd cannot be assumed).`;
-    logGuardDecision(tree.root, new GuardDecision('cd-must-be-first', 'Bash', command, branchForLog(tree.root), 'BLOCK', 'cd not leading/literal'));
     return new BlockedResult(report);
 }
 
@@ -470,7 +494,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, agent: Ag
     }
 
     const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
-    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK', 'bash-guard block'));
+    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block'));
     const report = formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
     return new BlockedResult(report);
 }

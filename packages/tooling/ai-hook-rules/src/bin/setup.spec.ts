@@ -10,13 +10,15 @@ import {
 } from './shim';
 import { ShimTestkit } from './shim-testkit';
 import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSectionPlacement } from '@webpieces/rules-config';
+import { L0_SHIM_STREAM } from '../core/log-streams';
 
 // The sh audit log now carries the same stream prefix as the JS side
 // (<session|unknown>-<agent|coordinator>-<binName>-ai-hook-shim.log), so specs LOCATE the stream
 // rather than hard-coding a name — which also proves exactly one stream file was written.
 function shimLogPath(root: string): string {
-    const dir = path.join(root, '.webpieces', 'logs');
-    const hits = fs.readdirSync(dir).filter((n: string): boolean => n.endsWith('ai-hook-shim.log'));
+    // The LAYER is the directory now: L0's shim writes into `logs/L0-shim/<writer>.log`.
+    const dir = path.join(root, '.webpieces', 'logs', L0_SHIM_STREAM);
+    const hits = fs.readdirSync(dir).filter((n: string): boolean => n.endsWith('.log') && !n.endsWith('.1.log'));
     if (hits.length !== 1) throw new Error(`expected 1 shim log, found ${hits.length}: ${hits.join()}`);
     return path.join(dir, hits[0]);
 }

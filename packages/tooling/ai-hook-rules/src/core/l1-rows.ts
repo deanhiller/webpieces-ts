@@ -44,6 +44,20 @@ export type L1ActionKind = 'exempt' | 'down' | 'block';
 export type L1BlockId = 'coordinator-in-worktree' | 'force-to-root';
 
 /**
+ * The row number for L1's PRE-STAGE — `misplacedCdBlock`, which decides from command TEXT before a
+ * tree has been resolved, and therefore cannot be classified over the five dimensions rows 1-6 use
+ * (asking L1_ROWS to classify it would need the very resolution its answer determines).
+ *
+ * ZERO rather than a seventh row, deliberately. It has to appear in the table — an L1 block the
+ * generated doc did not describe is precisely the drift the table exists to prevent, and it was
+ * carrying a `KNOWN GAP` comment saying so. But numbering it 7 would assert it sits in the same
+ * first-match scan as the others, which is the one thing that is not true about it. Row 0 says
+ * "decided before the scan" in the number itself, and it is the number `row=` logs, so a log line
+ * still joins to the doc.
+ */
+export const L1_PRESTAGE_ROW = '0';
+
+/**
  * One point in the five-dimensional space L1 classifies over. Data-only → a class, per CLAUDE.md.
  *
  * The dimensions are exactly the doc's legend: K (tree kind of the resolved target), A (coordinator or

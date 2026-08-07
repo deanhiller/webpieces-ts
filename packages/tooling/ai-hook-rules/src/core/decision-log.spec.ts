@@ -5,12 +5,26 @@ import * as path from 'path';
 
 import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET } from '@webpieces/rules-config';
 
-import { InvocationLog, logGuardDecision, GuardDecision } from './decision-log';
+import { InvocationLog, logGuardDecision, GuardDecision, Verdict } from './decision-log';
 
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
 import { LogStream } from './log-stream';
-function streamName(base: string): string { return new LogStream().fileName(base); }
+import { L2_DECISIONS_STREAM, CALLS_STREAM, ASYNC_REFRESH_STREAM, REJECTIONS_STREAM } from './log-streams';
+// The layer-first layout: a base name maps to its STREAM DIRECTORY plus this writer's file, so a
+// spec still names one logical stream and the path it checks is the real one production builds.
+const STREAM_OF: Record<string, string> = {
+    'guard-invocations': CALLS_STREAM,
+    'guard-sync-decisions': L2_DECISIONS_STREAM,
+    'guard-async-work': ASYNC_REFRESH_STREAM,
+    'hook-rejection': REJECTIONS_STREAM,
+};
+function streamName(base: string): string {
+    const rot = base.endsWith('.1.log') ? '.1.log' : (base.endsWith('.log') ? '.log' : '');
+    // `.stderr` no longer names a stream of its own — the child's raw stdio goes to the SAME file.
+    const stem = base.replace(/(\.1)?\.log$/, '').replace(/\.stderr$/, '');
+    return path.join(STREAM_OF[stem], new LogStream().writerFile(rot));
+}
 
 
 function tmpRoot(): string {
@@ -19,7 +33,7 @@ function tmpRoot(): string {
 
 // One invocation, begin-to-end, the way the hook does it: capture on entry, flush at the terminal
 // boundary. Every assertion below reads the file that flush produced.
-function logOne(root: string, tool: string, target: string, verdict: 'ALLOW' | 'BLOCK' = 'ALLOW', rule: string = '-'): void {
+function logOne(root: string, tool: string, target: string, verdict: Verdict = 'ALLOW', rule: string = '-'): void {
     const log = new InvocationLog();
     log.begin(root, tool, target);
     log.finish(verdict, rule);
@@ -89,7 +103,8 @@ describe('InvocationLog', () => {
     it('rotates to guard-invocations.1.log once the log exceeds the size cap', () => {
         const root = tmpRoot();
         const logsDir = path.join(root, '.webpieces/logs');
-        fs.mkdirSync(logsDir, { recursive: true });
+        // streamName() already carries the stream segment, so only the DIRECTORY needs creating here.
+        fs.mkdirSync(path.join(logsDir, CALLS_STREAM), { recursive: true });
         fs.writeFileSync(path.join(logsDir, streamName('guard-invocations.log')), 'x'.repeat(512 * 1024 + 10));
         logOne(root, 'Bash', 'ls');
         expect(fs.existsSync(path.join(logsDir, streamName('guard-invocations.1.log')))).toBe(true);
@@ -113,19 +128,19 @@ describe('InvocationLog', () => {
  * lock the outcome onto the invocation stream itself.
  */
 describe('InvocationLog — the outcome lives on the invocation line', () => {
-    it('stamps an allowed call verdict=ALLOW with no blocking rule', () => {
+    it('stamps an allowed call guards=ALLOW with no blocking rule', () => {
         const root = tmpRoot();
         logOne(root, 'Bash', 'ls');
         const content = fs.readFileSync(path.join(root, LOG_REL), 'utf8');
-        expect(content).toContain('\tverdict=ALLOW\t');
+        expect(content).toContain('\tguards=ALLOW\t');
         expect(content).toContain('\trule=-\t');
     });
 
-    it('stamps a blocked call verdict=BLOCK AND names the rule that blocked it', () => {
+    it('stamps a blocked call guards=BLOCK_AI_CURE AND names the rule that blocked it', () => {
         const root = tmpRoot();
-        logOne(root, 'Bash', 'gh pr create -t x', 'BLOCK', 'redirect-how-to-create-pr');
+        logOne(root, 'Bash', 'gh pr create -t x', 'BLOCK_AI_CURE', 'redirect-how-to-create-pr');
         const content = fs.readFileSync(path.join(root, LOG_REL), 'utf8');
-        expect(content).toContain('\tverdict=BLOCK\t');
+        expect(content).toContain('\tguards=BLOCK_AI_CURE\t');
         expect(content).toContain('\trule=redirect-how-to-create-pr\t');
     });
 
@@ -139,7 +154,7 @@ describe('InvocationLog — the outcome lives on the invocation line', () => {
         expect(fields[2]).toBe('ls');
         expect(fields[3].startsWith('branch=')).toBe(true);
         expect(fields[4].startsWith('sync=')).toBe(true);
-        expect(fields[5]).toBe('verdict=ALLOW');
+        expect(fields[5]).toBe('guards=ALLOW');
         expect(fields[6]).toBe('rule=-');
     });
 
@@ -152,7 +167,7 @@ describe('InvocationLog — the outcome lives on the invocation line', () => {
         log.begin(root, 'Bash', 'ls');
         expect(fs.existsSync(path.join(root, LOG_REL))).toBe(false);
         log.finish('ALLOW', '-');
-        log.finish('BLOCK', 'x');   // a second terminal boundary must add nothing
+        log.finish('BLOCK_AI_CURE', 'x');   // a second terminal boundary must add nothing
         expect(fs.readFileSync(path.join(root, LOG_REL), 'utf8').trim().split('\n').length).toBe(1);
     });
 });
@@ -208,10 +223,10 @@ describe('logGuardDecision', () => {
         const root = tmpRoot();
         logGuardDecision(
             root,
-            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK', 'use pnpm wp-start-upsert-pr instead'),
+            new GuardDecision('bash-guard', 'Bash', 'gh pr create -t x', 'dean/foo', 'BLOCK_AI_CURE', 'use pnpm wp-start-upsert-pr instead'),
         );
         const content = fs.readFileSync(path.join(root, DECISION_LOG_REL), 'utf8');
-        expect(content).toContain('\tBLOCK\t');
+        expect(content).toContain('\tBLOCK_AI_CURE\t');
         expect(content).toContain('\tBash\t');
         expect(content).toContain('gh pr create');
         expect(content).toContain('use pnpm wp-start-upsert-pr instead');
