@@ -251,9 +251,10 @@ export class Dashboard {
      *
      * Making the DESCRIPTION the compact form inverts it: `PR_BODY` now yields exactly the right commit,
      * so the UI button, a bare `gh pr merge`, `wp-land-pr` and finish's own auto-merge all converge on
-     * identical bytes. The consumer requirement is two repo settings — `squash_merge_commit_title:
-     * PR_TITLE` and `squash_merge_commit_message: PR_BODY` — not a config key and not a command anyone
-     * has to remember. That convergence is the point, and `pr-body-is-merge-body.spec.ts` pins it.
+     * identical bytes. It rests on two GitHub repo settings — `squash_merge_commit_title: PR_TITLE` and
+     * `squash_merge_commit_message: PR_BODY` — which are NOT a consumer's job: they are server-side, so no
+     * config key can express them, and SquashSettingsEnforcer pins them on every run. That convergence is
+     * the point, and `pr-body-is-merge-body.spec.ts` pins it.
      *
      * ─── The shape, and why each part earns its line ────────────────────────────────────────────────
      * The URL leads, labelled `(for git log)` so nobody deletes it as redundant while reading the PR on

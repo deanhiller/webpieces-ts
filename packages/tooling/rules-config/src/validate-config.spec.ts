@@ -379,6 +379,9 @@ describe('validatePrGateSection — mergeMode (required policy)', () => {
         expect(bad.some(e => e.includes('"mergeMode" = "DETECT" is not valid'))).toBe(true);
         expect(bad.some(e => e.includes('allow_auto_merge'))).toBe(true);
         expect(bad.some(e => e.includes('squash_merge_commit_title'))).toBe(true);
+        // NONE must not read as "and now go configure two repo settings" — SquashSettingsEnforcer pins
+        // them, and this help text claimed the compact body was "impossible" on NONE for one release.
+        expect(bad.some(e => e.includes('impossible'))).toBe(false);
     });
 
     it('does NOT require mergeMode when the whole gate is OFF', () => {
