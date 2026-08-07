@@ -1,5 +1,15 @@
 // Context management with AsyncLocalStorage
 export { RequestContext } from './RequestContext';
+// The OPAQUE snapshot type that copyContext() produces and restoreContext()/runWithContext() accept.
+//
+// `export type`, NOT `export` — deliberately. Consumers need to NAME it (a field, a queue entry, a
+// parameter) and nothing more. A VALUE export would hand them the class object, and with it the static
+// `capture(...)`, whose capability token a cast can supply even though this barrel never exports the
+// token's type: `CapturedContext.capture(null as never, new Map([['userId','victim']]))` would compile
+// and forge a proven identity — the exact hole this whole change closes. A type-only export removes the
+// class object from the package surface, so there is no factory to reach and copyContext() really is
+// the only producer. (ContextCaptureAuthority is not exported here in any form.)
+export type { CapturedContext } from './CapturedContext';
 // SERVER impl of the core-util ApiCallContext seam, bound to RequestContext. Importing it here runs
 // its install() side effect, so LogApiCall (core-util, browser-safe) stamps the real RequestContext on
 // a Node server without importing it. A browser never loads core-context → keeps the no-op.
