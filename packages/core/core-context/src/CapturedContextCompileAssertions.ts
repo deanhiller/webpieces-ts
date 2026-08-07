@@ -1,4 +1,4 @@
-import { CapturedContext, ContextCaptureAuthority } from './CapturedContext';
+import { CapturedContext, ContextCaptureAuthority, RestorableContext } from './CapturedContext';
 import { RequestContext } from './RequestContext';
 
 /**
@@ -56,9 +56,62 @@ export class CapturedContextCompileAssertions {
         CapturedContext.capture(new Map([['userId', 'victim']]));
     }
 
+    /**
+     * THE new hole this pair closes: a BARE capture must not run. If it did, `runWithContext(snapshot,
+     * fn)` would sit next to `runWithContext(snapshot.withTrusted(), fn)` as a second spelling whose
+     * shorter form silently carries a user identity — a widening that is an absence rather than a
+     * token, and ungreppable. The capture is inert until it states its intent.
+     */
+    cannotRunABareCapture(): void {
+        const captured: CapturedContext = RequestContext.copyContext();
+        // @ts-expect-error - runWithContext takes a RestorableContext: say withTrusted() or withoutTrusted()
+        RequestContext.runWithContext(captured, () => undefined);
+    }
+
+    /** Same, through the in-place door. */
+    cannotRestoreABareCapture(): void {
+        const captured: CapturedContext = RequestContext.copyContext();
+        // @ts-expect-error - restoreContext takes a RestorableContext: say withTrusted() or withoutTrusted()
+        RequestContext.restoreContext(captured);
+    }
+
+    /**
+     * And the intent is stated by NARROWING, never by a flag on the run call. A `keepTrusted: boolean`
+     * would make the wide intent as easy to type as the narrow one and impossible to grep; this line
+     * fails the build the day such a parameter appears.
+     */
+    cannotStateTheIntentViaAFlagOnTheRunCall(): void {
+        const captured: RestorableContext = RequestContext.copyContext().withTrusted();
+        // @ts-expect-error - there is no third parameter; narrow the snapshot instead
+        RequestContext.runWithContext(captured, () => undefined, false);
+    }
+
+    /** Nor can a narrowed snapshot be minted directly — same private constructor, same token. */
+    cannotConstructARestorableContextDirectly(): void {
+        // @ts-expect-error - the constructor is private; withTrusted()/withoutTrusted() are the producers
+        const forged = new RestorableContext(new Map([['userId', 'victim']]));
+        void forged;
+    }
+
+    /** Nor through its factory, which demands the same unobtainable authority. */
+    cannotMintARestorableContextWithoutAnAuthority(): void {
+        // @ts-expect-error - of() requires a ContextCaptureAuthority as its first argument
+        RestorableContext.of(new Map([['userId', 'victim']]));
+    }
+
+    /** POSITIVE: both narrowings produce the ONE type both consumers take. */
+    bothNarrowingsFeedBothConsumers(): void {
+        const captured: CapturedContext = RequestContext.copyContext();
+        const wide: RestorableContext = captured.withTrusted();
+        const dropped: RestorableContext = captured.withoutTrusted();
+        RequestContext.runWithContext(wide, () => {
+            RequestContext.restoreContext(dropped);
+        });
+    }
+
     /** POSITIVE: the real round trip must keep compiling — restoring a proven value IS the point. */
     theRealRoundTripCompiles(): void {
-        const captured: CapturedContext = RequestContext.copyContext();
+        const captured: RestorableContext = RequestContext.copyContext().withTrusted();
         RequestContext.runWithContext(captured, () => {
             RequestContext.restoreContext(captured);
         });
