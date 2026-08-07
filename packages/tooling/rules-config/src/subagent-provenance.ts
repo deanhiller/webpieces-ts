@@ -1,8 +1,10 @@
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { injectable, bindingScopeValues } from 'inversify';
 import { toError } from './to-error';
+import { dotWebpieces } from './state-dir';
 
 // Outcome of a provenance check.
 export const PROVENANCE_OK = 'ok';           // a matching reviewer subagent demonstrably ran on this branch
@@ -132,6 +134,10 @@ export class EvidenceRequest {
  */
 @injectable(bindingScopeValues.Singleton)
 export class SubagentProvenanceService {
+    // cwd → the branch it is PINNED to ('' when it is not a linked worktree, or is unresolvable).
+    // See branchOfCwd for why it is cached and pinnedBranch for what "pinned" buys.
+    private readonly branchByCwd = new Map<string, string>();
+
     // Verify a subagent of `expectedAgentType` ran on `branch`. Absent CLAUDE_CODE_SESSION_ID (plain
     // terminal / CI) returns SKIPPED — the feature must not break non-Claude-Code consumers.
     verify(expectedAgentType: string, branch: string): ProvenanceResult {
@@ -347,9 +353,46 @@ export class SubagentProvenanceService {
         return metaFile.replace(/^agent-/, '').replace(/\.meta\.json$/, '');
     }
 
-    // Cross-check the sibling transcript's record 0: isSidechain true (a real subagent, not the main
-    // loop) and, when recorded, the same branch. Lenient on branch drift (a leftover …wpN suffix from a
-    // mid-flight branch rename) and on a missing jsonl (meta already matched — accept, best-effort).
+    /**
+     * Cross-check the sibling transcript's record 0: isSidechain true (a real subagent, not the main
+     * loop) and the same branch. Lenient on branch drift (a leftover …wpN suffix from a mid-flight
+     * branch rename) and on a missing jsonl (meta already matched — accept, best-effort).
+     *
+     * WHEN `gitBranch` DISAGREES, A PINNED `cwd` DECIDES. Record 0 carries both fields, and the harness
+     * can write a `gitBranch` that CONTRADICTS the record's own `cwd`: a reviewer subagent spawned into
+     * a worktree on `dean/one-2406-…` was stamped `worktree-agent-a54887200e40eb956` — an unrelated,
+     * still-live worktree's scaffold branch — deterministically, on four consecutive attempts, blocking
+     * a PR whose required reviewer genuinely ran and genuinely passed. `stripWp` cannot bridge that, so
+     * the reviewer was never credited and `wp-finish-upsert-pr` refused a legitimately-reviewed PR with
+     * no in-flow recovery. A sweep of 961 record-0s on one machine found the mis-stamp is the MAJORITY
+     * case among subagents in dedicated worktrees, so trusting `gitBranch` alone can never be correct.
+     *
+     * ─── Why ONLY a linked worktree, and never the primary clone ──────────────────────────────────
+     * "Ask git what branch the cwd is on" is correct only when that cwd CANNOT have moved since the
+     * reviewer ran. A LINKED WORKTREE is 1:1 with the agent that owns it and nothing re-checks it out;
+     * the PRIMARY CLONE gets checked out constantly. Falling back on a primary-clone cwd would credit a
+     * STALE reviewer, and by construction rather than by accident:
+     *
+     *   1. a reviewer runs in the primary clone while it is on branch A
+     *   2. the clone is later checked out to branch B
+     *   3. `wp-finish-upsert-pr` runs on B — `gitBranch` (stamped A) mismatches
+     *   4. `git -C <clone>` now answers B, because the CLONE moved → the reviewer is credited for B
+     *
+     * It reviewed A. Every past reviewer run in that clone would be credited for whatever branch is
+     * checked out at finish time — which in a repo with a required reviewer on every PR is not an
+     * exotic sequence, it is the normal one. So the fallback is gated on `dotWebpieces.isLinkedWorktree`
+     * (git's own `--git-dir != --git-common-dir` test, reused rather than re-derived), and a primary
+     * clone falls through to a refusal exactly as it does today.
+     *
+     * That gate keeps the anti-forgery property intact: `cwd` is harness-written in the same record by
+     * the same writer as `gitBranch`, so it carries the same weight — and inside a pinned worktree it is
+     * the field that is CORRECT. There is deliberately no config flag and no second comparison mode:
+     * ONE rule, with `gitBranch` only ever a cheap way to skip the subprocess when it already agrees.
+     *
+     * An UNRESOLVABLE cwd does not credit either. A reaped worktree, a deleted directory, a non-repo
+     * path or a detached HEAD yields '' and falls through to a refusal. Leniency here is bounded by
+     * "git can still prove it", never by "we could not check, so assume yes".
+     */
     private sidechainOnBranch(dir: string, agentId: string, branch: string): boolean {
         const jsonl = path.join(dir, `agent-${agentId}.jsonl`);
         if (!fs.existsSync(jsonl)) return true;
@@ -359,8 +402,44 @@ export class SubagentProvenanceService {
         if (!rec) return true;
         if (rec['isSidechain'] !== true) return false;
         const gitBranch = rec['gitBranch'];
+        // Not recorded at all → accept, as before: nothing to contradict and nothing to verify against.
         if (typeof gitBranch !== 'string' || gitBranch === '') return true;
-        return this.stripWp(gitBranch) === this.stripWp(branch);
+        const want = this.stripWp(branch);
+        if (this.stripWp(gitBranch) === want) return true;
+        return want !== '' && this.stripWp(this.branchOfCwd(rec['cwd'])) === want;
+    }
+
+    /**
+     * The branch record-0's own `cwd` is PINNED to, '' when that cannot be established or is not pinned.
+     *
+     * Cached per cwd because `findMatchingAgentId` walks every subagent of every session on the machine
+     * and several of them share a worktree — one `git` process per RECORD would put dozens of spawns on
+     * the path that opens a PR.
+     */
+    // webpieces-disable no-any-unknown -- one opaque record field, type-guarded on the next line
+    private branchOfCwd(cwd: unknown): string {
+        if (typeof cwd !== 'string' || cwd === '') return '';
+        const cached = this.branchByCwd.get(cwd);
+        if (cached !== undefined) return cached;
+        const resolved = this.pinnedBranch(cwd);
+        this.branchByCwd.set(cwd, resolved);
+        return resolved;
+    }
+
+    /**
+     * The branch of `cwd` when — and only when — `cwd` is a LINKED WORKTREE. '' otherwise.
+     *
+     * '' for the primary clone (it moves; see sidechainOnBranch for the false-accept that closes), for a
+     * reaped or deleted directory, for a non-repo path, when git is unavailable, and for a detached HEAD,
+     * which `--abbrev-ref` prints as the literal `HEAD` and which names no branch.
+     */
+    private pinnedBranch(cwd: string): string {
+        if (!fs.existsSync(cwd)) return '';
+        if (!dotWebpieces.isLinkedWorktree(cwd)) return '';
+        const result = spawnSync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' });
+        if (result.status !== 0) return '';
+        const printed = (result.stdout ?? '').trim();
+        return printed === 'HEAD' ? '' : printed;
     }
 
     private stripWp(branch: string): string {

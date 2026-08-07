@@ -16,7 +16,7 @@ export const VERDICT_YELLOW = 'yellow';
 export const VERDICT_RED = 'red';
 export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_RED] as const;
 
-// The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<branch>/review-<id>.json`, one per
+// The verdict a reviewer SUBAGENT writes into `.webpieces/pr-review/<featureSlug>/review-<id>.json`, one per
 // matched checklist. One file per checklist so N concurrent reviewer subagents never clobber a shared
 // file. It records the OUTCOME:
 //   status:'green'                  → PASS
@@ -173,7 +173,7 @@ export class ChecklistVerdict {
     }
 }
 
-// The PR's diff context, written by wp-start-upsert-pr into `.webpieces/pr-review/<branch>/pr-context.json`
+// The PR's diff context, written by wp-start-upsert-pr into `.webpieces/pr-review/<featureSlug>/pr-context.json`
 // so a reviewer subagent knows the exact 3-point base the gate used and the full changed-file set — then
 // reads any file's actual diff with `git diff <base> HEAD -- <file>`. This is what lets a checklist match
 // coarsely by path (in the config) while the subagent makes the fine, content-level judgment. Data-only.

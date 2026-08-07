@@ -102,16 +102,27 @@ export class OfferedContext {
  */
 export class ProvenanceWriteRequest {
     prDir: string;
-    branch: string;
+    /**
+     * The dash-sanitized FEATURE SLUG, not a git branch — `AiBranchName.getFeatureName()`, which is
+     * `baseBranchName(branch).replace(/\//g, '-')`. It names the on-disk `pr-review/<slug>/` dir.
+     *
+     * It was called `branch`, and that mislabel cost a real investigation: a bug report against the
+     * provenance gate reasoned from `provenance.json`'s dash-form `branch` that `sidechainOnBranch` must
+     * be comparing a dash-form name against a slash-form git branch, and went looking for a missing
+     * normalization. There is none — both sides of that comparison are slash-form
+     * (`git branch --show-current`) and this field never reaches it. A field called `branch` that never
+     * holds a branch is what sent the reader down that path; the name is now what it holds.
+     */
+    featureSlug: string;
     headSha: string;
     provenanceStatus: string; // PROVENANCE_OK | PROVENANCE_MISSING | PROVENANCE_SKIPPED
     offered: OfferedContext = new OfferedContext('', '');
     reviewers: ReviewerTranscript[] = [];
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(prDir: string, branch: string, headSha: string, provenanceStatus: string) {
+    constructor(prDir: string, featureSlug: string, headSha: string, provenanceStatus: string) {
         this.prDir = prDir;
-        this.branch = branch;
+        this.featureSlug = featureSlug;
         this.headSha = headSha;
         this.provenanceStatus = provenanceStatus;
     }
@@ -127,7 +138,9 @@ export class ReviewProvenance {
     _WHAT_THIS_IS = WHAT_THIS_IS;
     sessionId: string;
     mainTranscript: string;
-    branch: string;
+    // The JSON key too: a reader of provenance.json sees `featureSlug`, matching the `pr-review/<slug>/`
+    // dir it sits in. See ProvenanceWriteRequest.featureSlug for why the old `branch` key was a defect.
+    featureSlug: string;
     headSha: string;
     stampedAt: string;
     transcriptRetentionDays: number;
@@ -139,7 +152,7 @@ export class ReviewProvenance {
     constructor(request: ProvenanceWriteRequest) {
         this.sessionId = '';
         this.mainTranscript = '';
-        this.branch = request.branch;
+        this.featureSlug = request.featureSlug;
         this.headSha = request.headSha;
         this.stampedAt = '';
         this.transcriptRetentionDays = DEFAULT_RETENTION_DAYS;
