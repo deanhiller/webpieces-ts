@@ -54,7 +54,11 @@ export function logRejection(
         const logPath = path.join(logsDir, logStream.fileName(LOG_FILE));
         rotateLogFile(logPath, path.join(logsDir, logStream.fileName(LOG_FILE_PREV)));
 
-        const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\n`;
+        // APPEND-ONLY, and `fault=` is spelled exactly as the L0 sh log spells it. A fault-S storm
+        // previously landed here as a couple of lines attributed to whatever rule the report happened
+        // to cite, with nothing anywhere identifying L0 as the cause. (WHO made the call is answered by
+        // the filename, which logStream prefixes with session/agent/hook — not by a column here.)
+        const logLine = `[${timestamp}]\t${toolKind}\t${relativePath}\t[${ruleNames.join(',')}]\t${detailRelPath}\tfault=${result.fault}\n`;
         fs.appendFileSync(logPath, logLine);
 
         rotateOldDays(hooksDir, MAX_AGE_DAYS);

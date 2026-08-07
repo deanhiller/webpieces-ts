@@ -11,7 +11,9 @@ anyone could find anything in it.
 > L0's fault table and allowlist are **generated** from the arrays the guard actually consults, and a
 > unit test byte-locks the rendered file, so that copy cannot drift.
 >
-> **Every other layer file is hand-written TODAY and is being converted to the same mechanism.** Each
+> L1's table, its use cases and their cures are generated and byte-locked the same way, from `L1_ROWS`.
+>
+> **Every remaining layer file is hand-written TODAY and is being converted to the same mechanism.** Each
 > layer becomes an ordered array of row objects in code — tools, state, action, cure, and the use cases
 > that exercise the row — the doc is rendered from that array, and a test locks the two together. The
 > array is the thing the guard consults, so the doc cannot describe a guard the code does not implement.
@@ -26,9 +28,13 @@ anyone could find anything in it.
 | layer | source of truth | doc |
 |---|---|---|
 | L0 | `L0_FAULTS` + `L0_ALLOWLIST` | **generated, byte-locked** |
-| L1 | — | hand-written; conversion planned next |
+| L1 | `L1_ROWS` | **generated, byte-locked** — regenerate with `pnpm guards:generate` |
 | L2 | — | hand-written; conversion rides with the guard collapse |
 | L3, L4 | — | stubs |
+
+For a converted layer the split is: **row data** lives in the array, **prose** lives as literal lines
+inside the renderer, and there is no third place. The byte-lock spec fails on any hand edit, and
+`pnpm guards:generate` rewrites the file from the array — never hand-edit a generated doc.
 
 **How the generated files reach this repo's root, despite the one-release lag.** The runtime copy in
 `.webpieces/instruct-ai/` comes from the PUBLISHED package and is therefore one release behind — fine

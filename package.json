@@ -12,6 +12,7 @@
         "arch:visualize": "pnpm nx run architecture:visualize",
         "arch:visualize-runtime": "pnpm nx run architecture:visualize-runtime",
         "design:visualize": "wp-design-visualize",
+        "guards:generate": "node -r @swc-node/register scripts/generate-guard-docs.ts",
         "clean": "rm -rf dist coverage .nx",
         "format": "prettier --write .",
         "format:check": "prettier --check ."

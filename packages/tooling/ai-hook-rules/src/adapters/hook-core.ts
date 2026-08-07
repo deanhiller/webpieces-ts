@@ -14,6 +14,7 @@ import { governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVe
 import { managedSurfaceDrift } from '../bin/hook-registration';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream } from '../core/log-stream';
+import { L0_FAULT_SHIM_STALE } from '../core/l0-fault-codes';
 
 // Which category of rules this hook invocation runs. The hook is split into two independently
 // installable PreToolUse hooks; each runs ONE category (the runner filters by it), and both can
@@ -128,16 +129,17 @@ function blockingRule(report: string, fallback: string): string {
 function handleBash(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
     const command = payload.tool_input.command;
     if (!command || command.trim() === '') { emitAllow(); }
-    const result = runBash(command, cwd, mode, agentIdentityOf(payload));
+    const agent = agentIdentityOf(payload);
+    const result = runBash(command, cwd, mode, agent);
     if (!result) { emitAllow(); }
     // Persist the block + WHY. File-tool denies go to hook-rejection.log via logRejection, but a Bash
     // deny had no audit trail — record it in guard-sync-decisions.log so "blocked and why" is complete
     // for Bash too. `.webpieces` lives at the repo root, resolved from cwd. Best-effort; never blocks.
     const root = new RepoRootFinder().resolveRepoRoot(cwd);
-    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', command ?? '', branchForLog(root), 'BLOCK', result.report));
+    logGuardDecision(root, new GuardDecision('bash-guard', 'Bash', command ?? '', branchForLog(root), 'BLOCK', result.report, '-', result.fault));
     // Bash deny → pass 'Bash' so denyJson adds the ANSI-red systemMessage (the only field a Bash deny
     // shows the human; permissionDecisionReason is invisible on Bash). See claude-code-response.ts.
-    emitDeny(result.report, 'Bash', blockingRule(result.report, 'bash-guard'));
+    emitDeny(result.report, 'Bash', blockingRule(result.report, 'bash-guard'), result.fault);
 }
 
 /**
@@ -162,7 +164,7 @@ function handleRead(filePath: string, cwd: string, mode: HookMode): void {
     }
     if (!result) return;
     logRejection('Read', new NormalizedToolInput(filePath, []), result, cwd);
-    emitDeny(result.report, 'Read', blockingRule(result.report, 'read-guard'));
+    emitDeny(result.report, 'Read', blockingRule(result.report, 'read-guard'), result.fault);
 }
 
 function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode): void {
@@ -199,7 +201,7 @@ function handleFileTool(payload: ClaudeCodePayload, cwd: string, mode: HookMode)
     logRejection(toolKind, input, result, cwd);
     // File-tool deny → pass the Write/Edit/MultiEdit kind so denyJson omits systemMessage (the reason
     // already renders red natively for these tools). See claude-code-response.ts.
-    emitDeny(result.report, toolKind, blockingRule(result.report, 'file-guard'));
+    emitDeny(result.report, toolKind, blockingRule(result.report, 'file-guard'), result.fault);
 }
 
 // What a stale committed shim lets through — now a thin adapter over the ONE L0 allowlist (isAllowed in
@@ -274,10 +276,21 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     if (decision === 'allow-cure') emitAllow();
     // Drop the L0 matrix doc where the AI can read it and point the deny at it — a Read is entry 1 of
     // the same allowlist, so the pointer is always followable. Best-effort: no doc → no pointer.
-    const docPath = writeGuardMatrixDoc(new RepoRootFinder().resolveRepoRoot(cwd));
+    const root = new RepoRootFinder().resolveRepoRoot(cwd);
+    const docPath = writeGuardMatrixDoc(root);
+    // WRITE THE AUDIT LINE HERE. This block happens BEFORE invocationLog.begin() — it has to, since a
+    // stale shim invalidates everything downstream — so emitDeny's flush finds nothing pending and an
+    // `S` storm left NO trace at all: the one fault most likely to block twenty consecutive tool calls
+    // was the one fault the trail could not show. A decision line is the fix that costs no reordering.
+    const target = payload.tool_input.command ?? payload.tool_input.file_path ?? '';
+    logGuardDecision(
+        root,
+        new GuardDecision('committed-shim-stale', payload.tool_name, target, branchForLog(root), 'BLOCK', 'L0 fault S (committed shim != renderShim)', '-', L0_FAULT_SHIM_STALE),
+    );
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
-    // says WHAT stopped the call, not merely that something did.
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale');
+    // says WHAT stopped the call, not merely that something did, and stamped as `fault=S` so the same
+    // grep finds it here as in the sh half's ai-hook-shim.log.
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale', L0_FAULT_SHIM_STALE);
 }
 
 /**

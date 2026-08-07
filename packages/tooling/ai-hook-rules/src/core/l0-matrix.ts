@@ -6,6 +6,10 @@ import {
 } from '../bin/shim';
 import { GUARANTEE_ROOT_MARKER } from '../bin/guarantee-root';
 import { REGISTRATION_SURFACE } from '../bin/hook-registration';
+import {
+    L0_FAULT_BIN_BROKEN, L0_FAULT_BIN_MISSING, L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC,
+    L0_FAULT_DRIFT, L0_FAULT_SHIM_STALE, L0_FAULT_UNDECLARED,
+} from './l0-fault-codes';
 import { toError } from './to-error';
 
 // ---------------------------------------------------------------------------
@@ -135,7 +139,7 @@ function bashCure(command: string, preferred: boolean, discriminator: string): L
  * the bin, in JS. One model, two enforcement points.
  */
 export const L0_FAULTS: readonly L0Fault[] = [
-    new L0Fault('D', 'version drift — root package.json pin != installed version',
+    new L0Fault(L0_FAULT_DRIFT, 'version drift — root package.json pin != installed version',
         'sh, before the bin runs', 'sh',
         [
             // `pnpm install` clears D in BOTH directions — it makes installed == pin by definition — so
@@ -148,7 +152,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
                 'node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so '
                 + 'pull first and install second; a bare install would downgrade you'),
         ], renderShim()),
-    new L0Fault('X', 'guard bin missing (fresh clone / new worktree / package removed)',
+    new L0Fault(L0_FAULT_BIN_MISSING, 'guard bin missing (fresh clone / new worktree / package removed)',
         'sh, before the bin runs', 'sh',
         [bashCure('pnpm install', true,
             'this fault fires at all — nothing is installed in THIS tree, and a new git worktree '
@@ -158,13 +162,13 @@ export const L0_FAULTS: readonly L0Fault[] = [
     // sentence inside X's message: when nothing declares the package, `pnpm install` is not a weaker fix,
     // it is a PROVABLE no-op, and an agent that trusts the X text will run it until it gives up. See the
     // ADD_HOOK_PKG entry in l0-allowlist.ts for the incident.
-    new L0Fault('U', `guard bin missing AND ${HOOK_PKG} is not declared in package.json`,
+    new L0Fault(L0_FAULT_UNDECLARED, `guard bin missing AND ${HOOK_PKG} is not declared in package.json`,
         'sh, before the bin runs', 'sh',
         [bashCure(ADD_HOOK_PKG_CMD, true,
             'this fault fires at all — package.json asks for nothing, so pnpm install reports '
             + '"Lockfile is up to date" and leaves the tree exactly as broken as it found it')],
         renderShim()),
-    new L0Fault('K', 'guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)',
+    new L0Fault(L0_FAULT_BIN_BROKEN, 'guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)',
         'sh, before the bin runs', 'sh',
         [bashCure(RECOVERY_CMD, true,
             'this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees '
@@ -174,7 +178,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
     // .claude/settings.json entries that register them. They only work as a set — a settings file left
     // on the old two-absolute-hook form disables the L-1 hook and re-pins every worktree to the
     // primary's release — and nothing validated the registration at all before it joined this fault.
-    new L0Fault('S', 'a webpieces-managed hook file or the .claude/settings.json registration does not match this release',
+    new L0Fault(L0_FAULT_SHIM_STALE, 'a webpieces-managed hook file or the .claude/settings.json registration does not match this release',
         'the guard bin', 'JS',
         [
             // wp-upgrade-shim leads because it is now the ONLY cure that repairs all three, and it is
@@ -193,7 +197,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
                 + '@webpieces afterwards and run Option 1 to finish'),
         ],
         shimStaleDenyReason('', '', [SHIM_MARKER, GUARANTEE_ROOT_MARKER, REGISTRATION_SURFACE])),
-    new L0Fault('C', `${CONFIG_FILENAME} missing`,
+    new L0Fault(L0_FAULT_CONFIG_MISSING, `${CONFIG_FILENAME} missing`,
         'the guard bin', 'JS',
         [
             CONFIG_WRITE_CURE,
@@ -201,7 +205,7 @@ export const L0_FAULTS: readonly L0Fault[] = [
             bashCure(INSTALL_HOOKS_CMD, false,
                 'you are at an INTERACTIVE terminal and can answer its two hook-target prompts'),
         ], CONFIG_MISSING_REPORT),
-    new L0Fault('Y', `a loaded rule has no ${CONFIG_FILENAME} key`,
+    new L0Fault(L0_FAULT_CONFIG_OUT_OF_SYNC, `a loaded rule has no ${CONFIG_FILENAME} key`,
         'the guard bin', 'JS',
         [CONFIG_WRITE_CURE], CONFIG_OUT_OF_SYNC_HEADER),
 ];
