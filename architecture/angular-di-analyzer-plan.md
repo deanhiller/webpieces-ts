@@ -98,6 +98,6 @@ pnpm nx run angular-site:di-graph-generate      # angular-site/design.json + des
 pnpm wp-design-visualize angular-site           # AppComponent tree: SaveApi, PublicApi, EnvironmentConfig; ClientConfig factory → EnvironmentConfig + MutableContextStore
 pnpm nx run <an-inversify-project>:di-graph-generate   # confirm B0: boxes show declared types (FirestoreConfig, FsLogger), edges show param names
 pnpm nx run-many --target=di-graph-generate           # regenerate all; commit updated design.* (the PR gate refuses to review an uncommitted regeneration)
-pnpm run build-all
+pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)
 ```
 Add unit tests for `angular-roots` (bootstrap + route resolution), `angular-providers` (useClass/useValue/useFactory+deps/@Injectable), the field-`inject()` walk, and a regression test locking the B0 param-type labeling.

@@ -323,31 +323,65 @@ export class MyRoutes implements Routes {
 
 ## Build Verification (CRITICAL)
 
-**RULE: Always run `pnpm run build-all` after making code changes.**
-
-This command runs:
-- TypeScript compilation for all packages
-- ESLint checks (including custom rules like max-file-lines, no-unmanaged-exceptions)
-- Circular dependency checks
+**RULE: verify with the AFFECTED build. Never build the whole monorepo.**
 
 ```bash
-pnpm run build-all
+pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)
 ```
 
-**Why this is critical:**
-- Catches type errors across package boundaries
-- Verifies ESLint rules pass (file size limits, exception handling patterns, etc.)
-- Ensures no circular dependencies were introduced
-- The monorepo has interdependent packages - changes in one may break others
+That is not "a faster build-all" — it is **the command the PR gate itself runs**
+(`commands.pr-gate.buildCommand` in `webpieces.config.json`). That is the whole argument: a green
+result locally is evidence about the gate, because it is the same command over the same scope. A
+whole-workspace build is a *different, wider* command whose green tells you nothing extra — it only
+also compiles projects your change cannot reach.
 
-**Do NOT:**
-- Skip this step after code changes
-- Assume changes are safe without verification
-- Commit code that doesn't pass build-all
+Tighter loops, for while you are actually writing code:
 
-**A green `build-all` is NOT the finish line.** You run `build-all` many times while developing; none
-of those greens mean the work is ready for review. When the feature is actually complete, proceed to
-"Finishing a Feature" — do not stop at a green build.
+```bash
+pnpm exec vitest run <path>          # one spec file or one directory — the inner loop
+pnpm nx run <project>:test           # one project's tests
+pnpm nx run <project>:ci             # one project, full gate
+pnpm nx run-many -t ci -p a b        # a couple of projects, named explicitly
+```
+
+`pnpm run build-all` (and `nx run-many` with no `-p`, `nx affected` with no `--base`, and a bare
+`pnpm exec vitest run`) is **blocked for the AI by `whole-repo-build-guard`**, which prints the
+affected command in its place. The `build-all` script stays in `package.json` on purpose — a human
+running it once is fine; an agent running it in a loop is the problem.
+
+### Does `affected` cover the workspace-global validators?
+
+**Yes — verified, not assumed.** The architecture / dependency-graph / nx-wiring / versions-locked /
+runtime-architecture validators all hang off `architecture:validate-complete`, and **every project's
+`ci` target `dependsOn` it** (see `createCiTarget` in the nx plugin). So the moment *any* project is
+affected, one `nx affected --target=ci` run schedules the whole `architecture:validate-*` set. A
+tooling-only change on this branch scheduled 47 tasks across 7 projects, including all eleven
+`architecture:*` validators. There is no class of check that only a whole-workspace run reaches.
+
+The one thing that is genuinely repo-wide and does NOT ride on a project's `ci` is the
+"regenerated design files are committed" check — and that runs in `pnpm wp-review-upsert-pr`, so the
+gated flow covers it for you.
+
+### What actually makes builds slow (it is not the target list)
+
+Do not expect `affected` to be fast just because it is narrower — measured honestly:
+
+- For a change in a **base** package (`core-util`, `core-context`), `affected` can select **nearly
+  everything**: on one measured `core-util` change it selected the identical 20 projects / 104 tasks
+  the whole-workspace build did. Nothing sits below it in the graph, so nothing prunes. The pruning
+  win is real for **leaf** projects and roughly zero for base ones.
+- The long builds people blamed on scope were **cold nx cache** and **CPU contention between agents
+  running full sweeps at the same time** — measured at ~3.2x total test time under contention, with
+  individual suites 3x slower than the same suite minutes later on an idle box. A narrower target
+  list does not fix either.
+
+Practical consequence: a full `pnpm exec vitest run packages apps` sweep is expensive under
+contention. Run it **once**, before you post the PR — not after every edit. During the edit loop, run
+the one spec file you are changing.
+
+**A green build is NOT the finish line.** None of those greens mean the work is ready for review.
+When the feature is actually complete, proceed to "Finishing a Feature" — do not stop at a green
+build.
 
 ### Published vs local source (the one-release lag)
 
@@ -375,7 +409,7 @@ Almost everything else runs the **published** copy:
 - **Do not add a new `webpieces.config.json` key in the same PR that adds the rule.** The published
   validator does not know the key, rejects it as an unknown rule, and that blocks every Bash/Edit —
   a deadlocked session. Ship the source, publish, then a follow-up PR adds the live config entry.
-- **A green `build-all` does not prove your plugin change took effect.** If
+- **A green build does not prove your plugin change took effect.** If
   `validate-architecture-unchanged` stays green after you changed graph-producing code, the likely
   reason is that the executors ran the OLD published plugin — not that your change was a no-op. Look at
   `node_modules/@webpieces/<pkg>` before concluding anything.
@@ -553,7 +587,7 @@ agents writing to a file nothing reads. Name the tool; let the tool print the de
 
 **RULE: Finishing a feature MEANS posting the PR. They are the same step, not two.**
 
-When the code is written, tests pass, and `build-all` is green, your **very next action is to post the
+When the code is written, tests pass, and the affected build is green, your **very next action is to post the
 PR** — do NOT end your turn with "want me to open a PR?" That question is already answered: **yes,
 always.** Commit your work (the tooling never commits for you), then run the gated flow:
 
@@ -630,3 +664,6 @@ Otherwise, stopping after a green build without posting the PR is a bug — not 
 9. ❌ Keeping the old spelling of a changed surface — as `@deprecated`, as an overload, as a config fallback,
    or just left exported "so existing code compiles" (see "NO webpieces surface is released
    backwards-compatible"). Delete it; the compile error is how callers get migrated.
+10. ❌ Building the whole monorepo (`pnpm run build-all`, `nx run-many` with no `-p`, `nx affected` with no
+   `--base`, a bare `pnpm exec vitest run`). Run the affected build, or one project, or one spec file
+   (see "Build Verification"). `whole-repo-build-guard` blocks these and names the command to run instead.

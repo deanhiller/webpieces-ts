@@ -20,6 +20,7 @@ export const HOOK_GUARD_NAMES: readonly string[] = [
     'read-stale-guard',
     'merged-branch-bash-guard',
     'stale-main-bash-guard',
+    'whole-repo-build-guard',
 ];
 
 const HOOK_GUARD_SET: ReadonlySet<string> = new Set(HOOK_GUARD_NAMES);

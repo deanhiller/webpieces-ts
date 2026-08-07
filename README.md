@@ -34,13 +34,18 @@ npm install
 ### Run Tests
 
 ```bash
-npm test
+pnpm exec vitest run <path>            # one spec file or directory — what you want while iterating
+pnpm nx run <project>:test             # one project
 ```
+
+A bare `pnpm test` runs every spec in the workspace. That is a once-before-the-PR command, not an
+inner-loop one, and it is blocked for AI agents (see CLAUDE.md, "Build Verification").
 
 ### Build
 
 ```bash
-npm run build
+pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)   # affected projects only
+pnpm nx run <project>:build                                             # one project
 ```
 
 ## Architecture

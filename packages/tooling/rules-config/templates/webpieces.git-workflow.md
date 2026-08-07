@@ -6,11 +6,12 @@ Read this before running any `pnpm wp-start-update` / `pnpm wp-finish-update` /
 
 ## ⛔ START HERE — finishing a feature MEANS posting the PR
 
-**A feature is NOT done when the build is green. It is done when the PR is up.** A green
-`build-all` / passing tests is the *middle* of the job, not the end — the AI runs `build-all` many
-times while developing, and none of those greens mean "ready to review."
+**A feature is NOT done when the build is green. It is done when the PR is up.** A green build /
+passing tests is the *middle* of the job, not the end — the AI builds many times while developing, and
+none of those greens mean "ready to review." (Build the AFFECTED projects, never the whole workspace:
+`pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)`.)
 
-When you believe the work is complete — code written, tests passing, `build-all` green — your **very
+When you believe the work is complete — code written, tests passing, the affected build green — your **very
 next action is to post the PR**, not to stop and ask. Do NOT end your turn with "want me to open a PR?"
 That question is already answered: **yes, always.** Run the flow:
 

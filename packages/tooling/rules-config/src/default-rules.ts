@@ -76,6 +76,10 @@ export const defaultRules: Record<string, Record<string, unknown>> = {
     'merge-in-progress-guard': { mode: 'ON' },
     'pr-merge-guard': { mode: 'ON' },
     'redirect-how-to-merge-main': { mode: 'ON' },
+    // Ships ON: building the whole monorepo is never the right inner-loop move, and the guard's
+    // refusal hands over the affected-scoped command read from commands.pr-gate.buildCommand, so a
+    // repo that has a gate at all already has the replacement command configured.
+    'whole-repo-build-guard': { mode: 'ON' },
     // Phase 1 ships OFF on purpose. This guard blocks Read, the highest-blast-radius tool there is,
     // so it is opted into per-repo (webpieces.config.json → hookGuards) only AFTER the release
     // carrying it is published and installed. Flipping it ON here would arm it for every consumer

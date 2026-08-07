@@ -472,6 +472,26 @@ export class RedirectHowToMergeMainConfig extends BaseRuleConfig {
     };
 }
 
+/**
+ * Blocks a Bash command that would build the WHOLE monorepo (`pnpm run build-all`, an unnarrowed
+ * `nx run-many`, `nx affected` with no `--base`, a bare `vitest run`), and names the affected-scoped
+ * command to run instead.
+ *
+ * `affectedBuildCommand` is normally left unset: load-config fills it from
+ * `commands.pr-gate.buildCommand`, so the refusal quotes whatever THIS repo's gate actually runs and
+ * follows it when that changes. Set it only to point the message somewhere else.
+ */
+export class WholeRepoBuildGuardConfig extends BaseRuleConfig {
+    declare mode?: OnOffMode;
+    affectedBuildCommand?: string;
+
+    static readonly SCHEMA: SchemaShape<WholeRepoBuildGuardConfig> = {
+        mode: new FieldDef('string', ON_OFF_MODES),
+        affectedBuildCommand: FieldDef.optional('string'),
+        ...BASE_RULE_SCHEMA,
+    };
+}
+
 export class NoFileImportCyclesConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
     ignoreTypeOnly?: boolean;

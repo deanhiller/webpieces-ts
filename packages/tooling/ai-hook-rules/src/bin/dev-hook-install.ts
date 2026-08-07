@@ -26,7 +26,7 @@ function wireLocalRulesConfig(cwd: string, distRulesConfigPath: string): void {
     // Node's require() resolution walks up from the requiring file and finds this
     // node_modules entry before reaching the workspace root's stale published package.
     // This directory is NOT wiped by any individual package build (each build only
-    // cleans its own output subfolder), so it survives pnpm run build-all.
+    // cleans its own output subfolder), so it survives a full workspace build too.
     const overrideDir = join(cwd, 'dist', 'packages', 'tooling', 'node_modules', '@webpieces');
     const overrideLink = join(overrideDir, 'rules-config');
     mkdirSync(overrideDir, { recursive: true });
@@ -47,14 +47,14 @@ export async function runDevHookInstall(): Promise<void> {
 
     if (!existsSync(rulesHookPath) || !existsSync(guardsHookPath)) {
         console.error(`[dev-hook-install] Local build not found at: ${adaptersDir}`);
-        console.error('  Run `pnpm run build-all` first.');
+        console.error('  Run `pnpm nx run ai-hook-rules:build` first.');
         throw new CliExitError(1, '');
     }
 
     const distRulesConfigPath = join(cwd, 'dist', 'packages', 'tooling', 'rules-config');
     if (!existsSync(distRulesConfigPath)) {
         console.error(`[dev-hook-install] Local rules-config build not found at: ${distRulesConfigPath}`);
-        console.error('  Run `pnpm run build-all` first.');
+        console.error('  Run `pnpm nx run rules-config:build` first.');
         throw new CliExitError(1, '');
     }
 
