@@ -4,6 +4,12 @@
     "sourceRoot": "packages/cloud/gcp-identity/src",
     "projectType": "library",
     "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/cloud/gcp-identity/"
+            }
+        },
         "build": {
             "executor": "@nx/js:tsc",
             "outputs": ["{options.outputPath}"],

@@ -2,6 +2,7 @@ import {
     AnyContextKey,
     AnyTrustedContextKey,
     AnyUntrustedContextKey,
+    DestinationTrust,
     HeaderRegistry,
     RecorderKeys,
     ServiceInfo,
@@ -33,22 +34,32 @@ import { RequestContext } from './RequestContext';
 @provideFrameworkSingleton()
 export class RequestContextHeaders {
     /**
-     * EVERY transferred key with a non-empty value, under its wire name. Nothing is rewritten.
+     * Every transferred key with a non-empty value THAT THIS DESTINATION MAY RECEIVE, under its wire
+     * name. Nothing is rewritten.
      *
      * That includes `x-request-id`, which propagates unchanged: one id correlates the whole call
      * tree, so the callee keeps ours rather than minting its own. ({@link fillFromRequest} only
      * generates an id when the inbound request carries none.)
      *
+     * TRUSTED keys are the exception, and `destination` is why this method takes an argument at all.
+     * The callee's `AuthFilter` admits an inbound `x-user-id` only on a route that authenticated its
+     * CALLER, so shipping one to a `@Public` / `@AuthJwt` endpoint builds a request the callee is
+     * obliged to 401. {@link DestinationTrust} answers that from the destination endpoint's own
+     * AuthMode — there is no "send everything" default to fall into. Untrusted keys always travel.
+     *
      * Values are RAW (unmasked) — this map goes on the wire, not in logs.
      *
      * @throws Error when called outside `RequestContext.run(...)` — see the class doc.
      */
-    buildOutboundHeaders(): Map<string, string> {
+    buildOutboundHeaders(destination: DestinationTrust): Map<string, string> {
         this.requireActiveContext();
 
         const headers = new Map<string, string>();
         // getTransferredKeys() is precomputed at configure() time.
         for (const key of HeaderRegistry.get().getTransferredKeys()) {
+            if (!destination.allows(key)) {
+                continue;
+            }
             // getTransferredKeys() is AnyContextKey[] — mixed in both value type and trust — so this
             // reads through getAny (serialization to the wire, not a trust decision) and narrows with
             // the typeof-string guard; every transferred value is a wire string.

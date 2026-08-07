@@ -2,6 +2,7 @@ import { inject, optional } from 'inversify';
 import {
     AuthMeta,
     ClientRegistry,
+    DestinationTrust,
     RecordedEndpoint,
     RecordedError,
     RouteMetadata,
@@ -57,9 +58,16 @@ export class NodeProxyClient extends ProxyClient {
         return ClientRegistry.resolve(this.config.svcName);
     }
 
-    /** Straight from the RequestContext. Throws when there is no active request scope. */
-    protected override outboundHeaders(): Map<string, string> {
-        return this.headers.buildOutboundHeaders();
+    /**
+     * Straight from the RequestContext. Throws when there is no active request scope.
+     *
+     * `destination` rides through unchanged: this is the ONE client that can legitimately propagate a
+     * verified identity, and it does so exactly when the callee will authenticate us (@AuthOidc /
+     * @AuthSharedSecret). Calling a peer's @Public or @AuthJwt endpoint now omits `x-user-id` and
+     * friends instead of shipping headers that endpoint's AuthFilter is obliged to reject.
+     */
+    protected override outboundContextHeaders(destination: DestinationTrust): Map<string, string> {
+        return this.headers.buildOutboundHeaders(destination);
     }
 
     /**

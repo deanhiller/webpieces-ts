@@ -1,5 +1,6 @@
 import { ContextKey } from '../ContextKey';
 import { ContextReader } from './ContextReader';
+import { DestinationTrust } from './DestinationTrust';
 import { HeaderRegistry } from './HeaderRegistry';
 import { ServiceInfo } from './ServiceInfo';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
@@ -36,19 +37,34 @@ export class ContextMgr {
 
     /**
      * Build the headers to send on an outbound request: every transferred key (httpHeader set)
-     * with a non-empty value, emitted under its `httpHeader` wire name.
+     * with a non-empty value THAT THIS DESTINATION MAY RECEIVE, emitted under its `httpHeader`
+     * wire name.
      *
      * NO request-id chaining. A browser ORIGINATES a trace — it has no inbound request to point
      * back at. If the app puts an `x-request-id` on the store it goes out as-is, and the server's
      * inbound transfer adopts it as hop 1's own id. Chaining is a server concern; see
      * RequestContextHeaders.
      *
+     * `destination` gates TRUSTED keys exactly as it does on the server side (see
+     * {@link DestinationTrust}). In practice a browser never reaches the permissive branch — twice
+     * over: `BrowserProxyClient.assertEndpointSupported` refuses to bind an `@AuthOidc` /
+     * `@AuthSharedSecret` contract at all, so every browser destination is `@AuthJwt` or `@Public`.
+     * The rule is applied here anyway rather than argued away, because the OTHER guarantee people
+     * reach for — "`MutableContextStore.set` only accepts an untrusted key, so a browser store
+     * cannot HOLD a trusted value" — is true of that store and NOT of the seam: {@link ContextMgr}
+     * takes any app-supplied {@link ContextReader}, whose `read` is handed an `AnyContextKey`. One
+     * enforced rule in both builders beats a browser-only exemption resting on an implementation
+     * detail of one implementation.
+     *
      * Values are RAW (unmasked) — this map goes on the wire, not in logs.
      */
-    buildOutboundHeaders(): Map<string, string> {
+    buildOutboundHeaders(destination: DestinationTrust): Map<string, string> {
         const outbound = new Map<string, string>();
 
         for (const key of HeaderRegistry.get().getTransferredKeys()) {
+            if (!destination.allows(key)) {
+                continue;
+            }
             const value = this.contextReader.read(key);
             if (value !== undefined && value !== null && value !== '') {
                 outbound.set(key.httpHeader!, value);

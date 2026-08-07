@@ -28,7 +28,8 @@ metadata simultaneously. Both the client proxies and the server router read the 
 
 `packages/http/http-client-node/src/NodeProxyClient.ts` extends the shared
 `packages/http/http-client-core/src/ProxyClient.ts`. It marshals the call over `fetch`, attaches
-propagated context as headers (`buildOutboundHeaders()`, see
+propagated context as headers (`buildOutboundHeaders(destination)` — trusted keys ride only to an
+endpoint that authenticates its caller, see
 [`context-propagation.md`](./context-propagation.md)), and attaches per-hop credentials separately
 so they never leak. The server side is `packages/http/http-server/src/ExpressWrapper.ts` +
 `WebpiecesMiddleware.ts`, which run the request through the full filter chain.

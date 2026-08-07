@@ -1,4 +1,4 @@
-import { AuthMeta, ContextMgr, ClientRegistry, RouteMetadata } from '@webpieces/core-util';
+import { AuthMeta, ContextMgr, ClientRegistry, DestinationTrust, RouteMetadata } from '@webpieces/core-util';
 import { ApiPrototype, ProxyClient, RequestOutcome } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { RequestLifecycleListener } from './RequestLifecycleListener';
@@ -44,8 +44,15 @@ export class BrowserProxyClient extends ProxyClient {
         return (await ClientRegistry.tryResolve(this.config.svcName)) ?? '';
     }
 
-    protected override outboundHeaders(): Map<string, string> {
-        return this.contextMgr.buildOutboundHeaders();
+    /**
+     * `destination` is always the un-verifying kind here — {@link assertEndpointSupported} below
+     * refuses to bind an @AuthOidc / @AuthSharedSecret contract, so every browser destination is
+     * @AuthJwt or @Public — which means a browser never puts a trusted context key on the wire. It is
+     * still threaded rather than short-circuited: the rule lives in ContextMgr, one place, for both
+     * environments.
+     */
+    protected override outboundContextHeaders(destination: DestinationTrust): Map<string, string> {
+        return this.contextMgr.buildOutboundHeaders(destination);
     }
 
     /**
