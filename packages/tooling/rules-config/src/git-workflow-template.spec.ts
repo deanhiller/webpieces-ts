@@ -20,30 +20,39 @@ describe('webpieces.git-workflow.md — the landing route it teaches', () => {
     });
 
     /**
-     * The REASON has to travel with the command. "Use wp-land-pr" alone is a rule to be forgotten;
-     * naming the mechanism — the repo setting a UI merge substitutes the body from — is what makes the
-     * consequence checkable by whoever reads it next.
+     * The MECHANISM has to travel with the command, because it is what a reader can check. Both repo
+     * settings must be named: with `PR_TITLE` + `PR_BODY` set, every landing route writes identical
+     * history, and with either one wrong the commit silently gets the wrong subject or the wrong body.
+     *
+     * This replaced an assertion that the doc explains why a UI merge CANNOT produce the gated body.
+     * That was true only while the PR description held the long dashboard; the description is now the
+     * compact git-log body, so `PR_BODY` copies exactly the right text and the UI button is correct.
      */
-    it('explains WHY a UI merge or bare gh pr merge cannot produce the gated commit body', () => {
+    it('names both squash_merge_commit_* settings the good history depends on', () => {
         const doc = loadTemplate(DOC);
-        expect(doc).toContain('squash_merge_commit_message');
-        expect(doc).toContain('--body-file');
+        expect(doc).toContain('squash_merge_commit_title: PR_TITLE');
+        expect(doc).toContain('squash_merge_commit_message: PR_BODY');
     });
 
     /**
-     * No bare `gh pr merge` prescription anywhere. Every mention must carry the flags that make it the
-     * real thing (`--subject`/`--body-file`) or be explicitly framed as the route NOT to take — which is
-     * exactly what pr-merge-guard enforces at the tool-call layer.
+     * The doc must state the invariant, not just the command — that the PR DESCRIPTION is the commit body.
+     * An agent that has memorised only the land command will put long-form content in the description
+     * and pollute history without ever touching a merge command.
      */
-    it('never prescribes a bare gh pr merge that pr-merge-guard would block', () => {
+    it('states that the PR description is what lands in git log', () => {
         const doc = loadTemplate(DOC);
-        const offenders = doc
-            .split('\n')
-            .filter((line: string): boolean => line.includes('gh pr merge'))
-            .filter((line: string): boolean =>
-                !line.includes('--body-file')
-                && !line.includes('--subject')
-                && !line.includes('INSTEAD of'));
-        expect(offenders).toEqual([]);
+        expect(doc).toContain('PR DESCRIPTION');
+        expect(doc).toContain('git log');
+    });
+
+    /**
+     * The doc must not teach that a UI merge or a bare `gh pr merge` corrupts the commit message — that
+     * was the pre-swap truth, and leaving it in place would be a doc that contradicts the code (the shim
+     * shape the compatibility policy calls out: an instruction that teaches a removed behaviour).
+     */
+    it('no longer claims a UI merge pastes the dashboard into history', () => {
+        const doc = loadTemplate(DOC);
+        expect(doc).not.toContain('ENTIRE dashboard');
+        expect(doc).not.toContain('pastes');
     });
 });

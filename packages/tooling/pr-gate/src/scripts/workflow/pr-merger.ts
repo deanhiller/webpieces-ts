@@ -185,16 +185,21 @@ export class PrMerger {
         // posted/updated by this point, which is the whole job in this mode.
         if (!intent.shouldMerge()) {
             const mergeMode = intent.mergeMode;
-            // Name BOTH halves a UI merge substitutes. The subject warning has always been here; the
-            // BODY was the half that actually mattered and went unsaid, and two consumer repos on
-            // mergeMode=NONE ended up with the full dashboard in every squash commit on main because
-            // nothing on this path ever mentioned `wp-land-pr`.
+            // What a UI merge produces, in terms of the repo's OWN two settings.
+            //
+            // This message said the opposite one release ago: "a UI merge pastes the whole dashboard into
+            // git log, land it with wp-land-pr instead". That was true while the PR description held the
+            // long dashboard. It is now the compact git-log body (see Dashboard.renderPrBody), so
+            // `squash_merge_commit_message: PR_BODY` copies exactly the right text and a UI merge is
+            // CORRECT — provided both settings are right. Naming them is the useful thing to say; telling
+            // a mergeMode=NONE repo to stop using the UI is not, since using it is the whole policy.
             return new MergeOutcome(false, false,
                 `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so the PR is left for a human to merge.\n` +
-                `      A UI merge substitutes BOTH halves of the commit message: the subject comes from\n` +
-                `      squash_merge_commit_title (NOT: "${subject}") and the body from\n` +
-                `      squash_merge_commit_message, which on PR_BODY is the whole dashboard. Land it with\n` +
-                `      \`pnpm wp-land-pr\` instead to write the gated body.`,
+                `      A UI merge takes the commit message from this repo's own settings, and both must be\n` +
+                `      set for main's history to read well: squash_merge_commit_title=PR_TITLE (else the\n` +
+                `      subject is not "${subject}") and squash_merge_commit_message=PR_BODY (which copies\n` +
+                `      the gated description verbatim — that IS the commit body this flow rendered).\n` +
+                `      \`pnpm wp-land-pr\` lands the same bytes from the CLI if you would rather not click.`,
                 MERGE_RESULT_LEFT_TO_HUMAN);
         }
 

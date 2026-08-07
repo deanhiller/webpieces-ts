@@ -3,11 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     loadAndValidate, prDirFor, reviewJsonPath, ReviewJson, RequiredChecklist, ChecklistVerdict,
-    writeTemplate, RepoRootFinder, ReviewJsonService,
-    GateTokenService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
-    ProvenanceResult, ReviewerEvidence, EvidenceRequest, PrGateConfig,
-    ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext,
-    ReviewerInstructionsService,
+    writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService,
     InformAiError, toError,
 } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -23,25 +19,56 @@ import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../wor
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
 import { MergeBodyFiler, MergeBodyRequest } from '../workflow/merge-body-filer';
 import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
+import { ProvenanceEnforcer, ProvenanceReport } from '../workflow/provenance-enforcer';
+import { PrCommentRequest, PrCommentUpserter } from '../workflow/pr-comment-upserter';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import {
-    Dashboard, DashboardInput, ChecklistRow, CHECKLIST_COMMENT_MARKER,
+    Dashboard, DashboardInput, ChecklistRow, DETAIL_COMMENT_MARKER,
 } from '../../dashboard/dashboard';
+import {
+    ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER,
+} from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * The provenance outcome: whether each reviewer was VERIFIED to have run (the integrity check, which
- * blocks) plus what each one actually read (the quality signal, which is published). Data-only.
+ * The three inputs the PR COMMENTS are rendered from, bundled so `publishAll` takes one parameter for
+ * them instead of three it only forwards. Data-only, per CLAUDE.md.
  */
-class ProvenanceReport {
-    verified: boolean;
-    evidence: ReviewerEvidence[];
+class PrCommentSources {
+    scan: ChecklistScan;
+    review: ReviewJson;
+    provenance: ProvenanceReport;
 
-    constructor(verified: boolean, evidence: ReviewerEvidence[]) {
-        this.verified = verified;
-        this.evidence = evidence;
+    constructor(scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport) {
+        this.scan = scan;
+        this.review = review;
+        this.provenance = provenance;
+    }
+}
+
+/**
+ * Everything the PR upsert needs. Data-only, per CLAUDE.md — it replaced a 5-positional-parameter method
+ * once `tokenSuffix` had to travel too, so the body can be re-rendered with the PR's own URL after
+ * `gh pr create` returns it (see the INVARIANT comment in upsertPr).
+ */
+class PrUpsertRequest {
+    repoRoot = '';
+    baseBranch = '';
+    title = '';
+    /** The description as first published — rendered with whatever URL was known at the time. */
+    body = '';
+    /**
+     * The hidden gate-token marker exactly as appended to `body`, so a re-render can reproduce the same
+     * bytes. Kept separate from `body` because Dashboard renders the human/git-log half and must not know
+     * about HMACs.
+     */
+    tokenSuffix = '';
+    input: DashboardInput;
+
+    constructor(input: DashboardInput) {
+        this.input = input;
     }
 }
 
@@ -93,13 +120,14 @@ export class FinishUpsertPrCommand {
         private readonly prMerger: PrMerger,
         private readonly publisher: GatedPrPublisher,
         private readonly dashboard: Dashboard,
+        // The 2nd PR comment. Its own class because it is its own surface — see ChecklistCommentRenderer.
+        private readonly checklistComment: ChecklistCommentRenderer,
         private readonly checklistScanner: ChecklistScanner,
         private readonly verdictGate: ReviewerVerdictGate,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly gateTokenService: GateTokenService,
-        private readonly provenance: SubagentProvenanceService,
-        private readonly provenanceRecord: ReviewProvenanceService,
-        private readonly reviewerInstructions: ReviewerInstructionsService,
+        // Owns the reviewer-provenance integrity check and its audit record — see ProvenanceEnforcer.
+        private readonly provenanceEnforcer: ProvenanceEnforcer,
         // NOTE: ChecklistInstructionsService is deliberately NOT injected here any more. Its "You MUST run
         // these N reviewer subagent(s)" block is now rendered by ReviewerVerdictGate and ONLY for checklists
         // that genuinely never ran, so no other code path in this command can print it at a refusal.
@@ -108,6 +136,8 @@ export class FinishUpsertPrCommand {
         // The MACHINE-GLOBAL home for the one artifact whose scope is bigger than this tree: the gated
         // squash-commit body, which `wp-land-pr` must find from any tree (see MergeBodyFiler).
         private readonly mergeBodyFiler: MergeBodyFiler,
+        // ONE marker-keyed upsert, shared by both PR comments (the full dashboard and the checklist).
+        private readonly commentUpserter: PrCommentUpserter,
     ) {}
 
     async run(): Promise<void> {
@@ -147,7 +177,7 @@ export class FinishUpsertPrCommand {
         //     artifacts) that such a subagent actually ran on this branch — the coding agent may not
         //     self-certify. Absent CLAUDE_CODE_SESSION_ID this skips with a warning (CI / plain terminal).
         const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const provenance = this.enforceProvenance(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
+        const provenance = this.provenanceEnforcer.enforce(verdicted, currentBranch, repoRoot, loadAndValidate(repoRoot).prGate);
 
         // 2b. The build gate validates the WORKING TREE but we push HEAD — so they MUST be identical.
         this.gitExec.assertCleanTree(repoRoot);
@@ -159,18 +189,7 @@ export class FinishUpsertPrCommand {
         process.stdout.write('\n' + SEP + '📋 Dashboard + PR\n' + SEP + '\n');
         const title = this.prTitleFrom(review);
         const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted);
-        // Append the hidden HMAC gate token bound to the LOCAL HEAD sha — computed BEFORE the push, because
-        // GatedPrPublisher writes the body first so CI's `synchronize` read can never see a stale token. A
-        // valid token in the PR body is proof this gated flow ran + passed on this exact commit, which CI
-        // (`wp-check-pr`) recomputes. We reach here only after the build gate + every BLOCK checklist
-        // passed, so minting is legitimate. Nothing about HMAC(salt, HEAD) needs the remote to have it.
-        const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
-        const headSha = this.gitOut(['rev-parse', 'HEAD']);
-        const body = this.dashboard.renderDashboard(input) + this.gateTokenBody(gateSalt, headSha);
-        const result = this.upsertPr(repoRoot, base, body, title, input);
-        // Publish each reviewer's full output as ONE combined PR comment (idempotent, opt-out-aware). Never
-        // fatal — the PR is already up by now, so a comment failure only warns.
-        this.postChecklistComment(repoRoot, result.prNumber, scan, review, provenance);
+        const result = this.publishAll(repoRoot, base, input, new PrCommentSources(scan, review, provenance));
         this.archiveConsumedReview(repoRoot, featureName, result);
 
         // The closing recap + the clickable-link directive, BOTH derived from the real merge outcome.
@@ -294,7 +313,7 @@ export class FinishUpsertPrCommand {
             if (archived !== '') process.stdout.write(`   archived this run's review.json → ${archived} (audit only) ✓\n`);
             // Beside it, so an archived review keeps the transcript links belonging to the round that
             // produced it — a review whose provenance was overwritten by the NEXT round audits nothing.
-            this.provenanceRecord.archive(prDirFor(repoRoot, featureName));
+            this.provenanceEnforcer.archiveRecord(prDirFor(repoRoot, featureName));
         } catch (err: unknown) {
             const error = toError(err);
             process.stderr.write(`⚠️  Could not archive review.json (non-fatal — the PR is already up): ${error.message}\n`);
@@ -326,7 +345,12 @@ export class FinishUpsertPrCommand {
         const gateResults = this.dashboard.computeGateResults(config.gates, changedFiles);
         const disables = this.dashboard.countAddedDisables(patch);
         const rows = this.checklistRows(required, review);
-        return new DashboardInput(title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows);
+        // buildCommand travels into the dashboard so the PR-body footer can NAME the command that vouched
+        // for this commit. The footer used to assert "build ran via nx affected" on every repo, which was
+        // simply false wherever buildCommand is not nx.
+        return new DashboardInput(
+            title, gateResults, disables, buildPassed, forkPoint, featureHead, mainHead, review, rows,
+            config.buildCommand);
     }
 
     /**
@@ -394,109 +418,6 @@ export class FinishUpsertPrCommand {
         return marker === '' ? '' : `\n\n${marker}\n`;
     }
 
-    // Enforce that EACH matched checklist was reviewed by its OWN named subagent, as a DISTINCT run —
-    // the coding agent may not self-certify, and one reviewer may not stand in for several. A verified set
-    // passes silently; no session id warns but passes; any missing reviewer throws so the PR does not open.
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private enforceProvenance(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
-        const errors: string[] = [];
-        const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
-        const subagents = required.map((r: RequiredChecklist): string => r.subagent.trim()).filter((s: string): boolean => s !== '');
-        // verifyDistinct short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
-        // checklists still gets a provenance record naming the session and the main agent's own transcript.
-        const result = this.provenance.verifyDistinct(subagents, branch);
-        report.verified = result.status === PROVENANCE_OK;
-        if (result.status === PROVENANCE_MISSING) {
-            errors.push(result.detail);
-        } else if (result.status === PROVENANCE_SKIPPED) {
-            process.stderr.write(`⚠️  ${result.detail}\n`);
-        }
-        report.evidence = this.gatherEvidence(repoRoot, required, result, branch);
-        errors.push(...this.evidenceErrors(report.evidence, config));
-        // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
-        // that only ever appeared on success could not answer what the reviewers did the time it was refused.
-        this.writeProvenanceRecord(repoRoot, required, result, report.evidence);
-        if (errors.length > 0) {
-            throw new InformAiError(
-                `${errors.length} checklist(s) require an independent reviewer subagent that did not run — fix, then re-run pnpm wp-finish-upsert-pr:\n\n` +
-                errors.map((e: string): string => `  • ${e}`).join('\n') +
-                `\n\nSpawn the named reviewer subagent to review the checklist on THIS branch, then re-run.`,
-            );
-        }
-        return report;
-    }
-
-    /**
-     * What each credited reviewer actually read. Purely observational here — {@link evidenceErrors} decides
-     * whether any of it blocks, and by default none of it does.
-     */
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private gatherEvidence(repoRoot: string, required: readonly RequiredChecklist[], result: ProvenanceResult, branch: string): ReviewerEvidence[] {
-        const docPaths: Record<string, string> = {};
-        for (const req of required) {
-            if (req.subagent.trim() !== '') docPaths[req.subagent] = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
-        }
-        const diffDir = path.join(prDirFor(repoRoot, this.aiBranchName.getFeatureName()), 'diff');
-        return this.provenance.evidenceFor(new EvidenceRequest(branch, result.agentIds, diffDir, docPaths));
-    }
-
-    /**
-     * Write this round's audit record: `.webpieces/pr-review/<branch>/provenance.json`, linking each verdict
-     * to the transcript of the subagent that produced it.
-     *
-     * A SEPARATE file rather than a field inside review.json / review-<id>.json, for two reasons. The
-     * reviewer cannot supply this itself — a subagent's environment exposes the PARENT session id and no
-     * agent id, so a self-reported transcript link would be invented — and keeping the AI-authored files
-     * byte-untouched means nothing in the record can be mistaken for something a reviewer claimed about
-     * itself. Every path here is derived by the tooling from the harness's own artifacts.
-     *
-     * Never fatal: an unwritable record is a lost audit trail, not a reason to refuse a PR.
-     */
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private writeProvenanceRecord(repoRoot: string, required: readonly RequiredChecklist[], result: ProvenanceResult, evidence: readonly ReviewerEvidence[]): void {
-        const featureName = this.aiBranchName.getFeatureName();
-        const prDir = prDirFor(repoRoot, featureName);
-        const request = new ProvenanceWriteRequest(prDir, featureName, this.gitOut(['rev-parse', 'HEAD']), result.status);
-        request.offered = new OfferedContext(
-            path.join(prDir, 'diff'), this.reviewerInstructions.instructionsDirFor(repoRoot, featureName));
-        request.reviewers = evidence.map((e: ReviewerEvidence): ReviewerTranscript =>
-            new ReviewerTranscript(e, this.reviewerPathsFor(repoRoot, featureName, required, e.agentType)));
-        const written = this.provenanceRecord.write(request);
-        if (written !== '') process.stdout.write(`   transcript provenance → ${written}\n`);
-    }
-
-    // Where ONE reviewer's verdict, instructions and checklist doc live. Keyed by agentType, which IS the
-    // checklist id: ChecklistDefinition sets `id = subagent`, so the two never diverge.
-    // eslint-disable-next-line @typescript-eslint/max-params
-    private reviewerPathsFor(repoRoot: string, featureName: string, required: readonly RequiredChecklist[], agentType: string): ReviewerPaths {
-        const req = required.find((r: RequiredChecklist): boolean => r.subagent.trim() === agentType);
-        const doc = req !== undefined && req.doc.trim() !== '' ? path.resolve(repoRoot, req.doc) : '';
-        return new ReviewerPaths(
-            this.reviewJsonService.checklistResultPath(reviewJsonPath(repoRoot, featureName), req?.id ?? agentType),
-            this.reviewerInstructions.pathFor(repoRoot, featureName, agentType),
-            doc,
-        );
-    }
-
-    /**
-     * WARN (default) or REFUSE (opt-in) on a reviewer that wrote a verdict without opening the diff.
-     *
-     * Default-warn because the signal is derived from undocumented Claude Code transcript internals: if the
-     * format shifts, a blocking check wedges every PR in every consumer repo with no self-service recovery.
-     * `requireDiffEvidence` lets a repo that has watched the warning promote it deliberately.
-     */
-    private evidenceErrors(evidence: readonly ReviewerEvidence[], config: PrGateConfig): string[] {
-        const blind = evidence.filter((e: ReviewerEvidence): boolean => !e.readDiff);
-        if (blind.length === 0) return [];
-        const names = blind.map((e: ReviewerEvidence): string => e.agentType).join(', ');
-        if (!config.requireDiffEvidence) {
-            process.stderr.write(
-                `\n⚠️  ${blind.length} reviewer(s) wrote a verdict with no record of opening the extracted diff: ${names}\n` +
-                '   Published on the PR as a note. Not blocking — set pr-gate.requireDiffEvidence:true to make it one.\n');
-            return [];
-        }
-        return [`these reviewers wrote a verdict without opening the diff (pr-gate.requireDiffEvidence is on): ${names}`];
-    }
 
     /**
      * Publish the roster + every reviewer's full `output` as ONE combined PR comment, idempotently (find the
@@ -506,50 +427,36 @@ export class FinishUpsertPrCommand {
      * Posted on EVERY run of a repo that defines checklists — including one where nothing matched, because
      * "all five were evaluated and none applied" is the good news the old comment could not deliver. The
      * guard is `scan.defined.length`, deliberately NOT the number of rows that ran: a repo with no
-     * checklists configured must still see no comment at all (see ChecklistNotice / renderDashboard).
+     * checklists configured must still see no comment at all (see ChecklistCommentRenderer).
      */
-    // eslint-disable-next-line @typescript-eslint/max-params
     // eslint-disable-next-line @typescript-eslint/max-params
     private postChecklistComment(repoRoot: string, prNumber: string, scan: ChecklistScan, review: ReviewJson, provenance: ProvenanceReport): void {
         if (prNumber === '' || scan.defined.length === 0) return;
         if (!loadAndValidate(repoRoot).prGate.checklistComments) return;
-        const body = this.dashboard.renderChecklistComment(
+        const request = new PrCommentRequest();
+        request.prNumber = prNumber;
+        request.marker = CHECKLIST_COMMENT_MARKER;
+        request.body = this.checklistComment.render(
             this.commentRows(scan, review, provenance), provenance.verified, scan.roster.baseResolved);
-        const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
-        fs.mkdirSync(prDir, { recursive: true });
-        const payload = path.join(prDir, 'checklist-comment.json');
-        fs.writeFileSync(payload, JSON.stringify({ body }));
-        const commentId = this.findChecklistCommentId(prNumber);
-        const args = commentId !== ''
-            ? ['api', '--method', 'PATCH', `repos/{owner}/{repo}/issues/comments/${commentId}`, '--input', payload]
-            : ['api', '--method', 'POST', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--input', payload];
-        const res = spawnSync('gh', args, { encoding: 'utf8' });
-        if (res.status !== 0) {
-            process.stderr.write('⚠️  Could not post the checklist review comment (non-fatal — the PR is already up).\n');
-        } else {
-            process.stdout.write(`   ${commentId !== '' ? 'updated' : 'posted'} the checklist review comment ✓\n`);
-        }
-    }
-
-    // The id of THIS tool's existing checklist comment on the PR (by the hidden marker), or '' if none.
-    private findChecklistCommentId(prNumber: string): string {
-        const res = spawnSync('gh', [
-            'api', '--paginate', `repos/{owner}/{repo}/issues/${prNumber}/comments`,
-            '--jq', `.[] | select(.body | contains("${CHECKLIST_COMMENT_MARKER}")) | .id`,
-        ], { encoding: 'utf8' });
-        if (res.status !== 0) return '';
-        return (res.stdout ?? '').trim().split('\n')[0] ?? '';
+        request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        request.payloadName = 'checklist-comment.json';
+        request.label = 'checklist review comment';
+        this.commentUpserter.upsert(request);
     }
 
     // The PR, the remote branch, and the local branch all share the one stable feature name. Look up /
     // create / merge against `baseBranch` (baseBranchName tolerates a leftover `…wpN` mid-transition).
     // GatedPrPublisher owns the edit/push/create half and its ORDERING — the gated body goes up before
     // the push, so CI's `synchronize` read cannot see the previous run's token.
-    private upsertPr(repoRoot: string, baseBranch: string, body: string, title: string, input: DashboardInput): UpsertResult {
+    private upsertPr(request: PrUpsertRequest): UpsertResult {
+        const repoRoot = request.repoRoot;
+        const baseBranch = request.baseBranch;
+        const title = request.title;
+        const input = request.input;
         const prDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
         fs.mkdirSync(prDir, { recursive: true });
         const bodyFile = path.join(prDir, 'pr-body.md');
-        fs.writeFileSync(bodyFile, body + '\n');
+        fs.writeFileSync(bodyFile, request.body + '\n');
 
         const published = this.publisher.publish(baseBranch, title, bodyFile);
         if (published.createFailed) {
@@ -565,6 +472,25 @@ export class FinishUpsertPrCommand {
         // subject GitHub would inherit from the single squash commit on the branch.
         const ref = this.prRef(baseBranch);
         const subject = ref.number !== '' ? `${title} (#${ref.number})` : title;
+
+        /*
+         * THE INVARIANT: the merge body IS the PR description, byte for byte.
+         *
+         * That is what makes every landing route agree — the GitHub Merge button and a bare `gh pr merge`
+         * copy the description via `squash_merge_commit_message: PR_BODY`, while `wp-land-pr` and finish's
+         * own auto-merge pass these bytes with `--body-file`. If the two strings could differ, which route
+         * landed the commit would change what history says, which is precisely the bug this whole change
+         * exists to remove. `pr-body-is-merge-body.spec.ts` pins it.
+         *
+         * The one wrinkle is the self-link. A brand-new PR has no URL until `gh pr create` returns, so the
+         * body published a moment ago was rendered with `prUrl: ''`. Re-render now that the URL is known
+         * and push the corrected description back, so the two strings match and the commit carries its own
+         * link. Only the CREATE path pays that extra edit: on every later run the URL was already known
+         * before publishing, `finalBody` matches what went up, and nothing is re-sent.
+         */
+        const finalBody = this.dashboard.renderPrBody(input, ref.url) + request.tokenSuffix;
+        if (finalBody !== request.body) this.backfillPrBody(ref.number, bodyFile, finalBody);
+
         // MACHINE-GLOBAL, keyed by the PR's identity, so `wp-land-pr` finds it from ANY tree — see
         // MergeBodyFiler for the incident that moved it out of this worktree's pr-review/ dir.
         const bodyRequest = new MergeBodyRequest();
@@ -573,7 +499,7 @@ export class FinishUpsertPrCommand {
         bodyRequest.feature = this.aiBranchName.getFeatureName();
         bodyRequest.prNumber = ref.number;
         bodyRequest.prUrl = ref.url;
-        bodyRequest.body = this.dashboard.renderCommitBody(input, ref.url) + '\n';
+        bodyRequest.body = finalBody + '\n';
         const mergeBodyFile = this.mergeBodyFiler.file(bodyRequest);
         // PrMerger owns the direct-merge / auto-merge-fallback decision AND checks every gh status, so a
         // merge that did not happen is reported as such instead of being swallowed (see pr-merger.ts).
@@ -583,6 +509,97 @@ export class FinishUpsertPrCommand {
         // `false`: this caller is POLICY-driven — only a config that really says AUTO merges here.
         const outcome = this.prMerger.merge(baseBranch, subject, mergeBodyFile, new MergeIntent(mergeMode, false));
         return new UpsertResult(ref.number !== '' ? ref.number : num, ref.url, outcome);
+    }
+
+    /**
+     * Everything the gated flow PUBLISHES, in the one order that is safe — the three surfaces plus the
+     * merge, as a single unit.
+     *
+     *   1. the PR DESCRIPTION = the compact git-log body (+ the hidden gate token), written before the
+     *      push so CI's `synchronize` read can never see the previous run's token,
+     *   2. the 1st comment = the full dashboard,
+     *   3. the 2nd comment = each reviewer's output.
+     *
+     * The token is bound to the LOCAL HEAD sha and minted here because we only reach this line after the
+     * build gate and every BLOCK checklist passed, so minting is legitimate. Nothing about
+     * HMAC(salt, HEAD) needs the remote to have the commit yet.
+     *
+     * Extracted from `run` when the two comments made it 82 lines against a hard 80-line rule — and it
+     * earns its own name: these four steps have a REQUIRED order, and the comment explaining that order
+     * belongs with them rather than inside a method that also loads config and runs a build gate.
+     */
+    private publishAll(repoRoot: string, base: string, input: DashboardInput, sources: PrCommentSources): UpsertResult {
+        const gateSalt = loadAndValidate(repoRoot).prGate.gateSalt;
+        const headSha = this.gitOut(['rev-parse', 'HEAD']);
+        const upsert = new PrUpsertRequest(input);
+        upsert.repoRoot = repoRoot;
+        upsert.baseBranch = base;
+        upsert.title = input.title;
+        upsert.tokenSuffix = this.gateTokenBody(gateSalt, headSha);
+        // `existingPrUrl` is '' only for a brand-new PR — there is no URL to self-link to until
+        // `gh pr create` returns one, and upsertPr back-fills it the moment it does.
+        upsert.body = this.dashboard.renderPrBody(input, this.existingPrUrl(base)) + upsert.tokenSuffix;
+        const result = this.upsertPr(upsert);
+
+        // In the order the PR body's pointer promises: full dashboard 1st, reviewer output 2nd. Both are
+        // idempotent by hidden marker and both non-fatal — the PR is up by now, so a `gh` hiccup on a
+        // comment must not turn a finished run into a failed one.
+        this.postDetailComment(repoRoot, result.prNumber, input);
+        this.postChecklistComment(repoRoot, result.prNumber, sources.scan, sources.review, sources.provenance);
+        return result;
+    }
+
+    /**
+     * Re-publish the description now that the PR's own URL is known (create path only).
+     *
+     * Non-fatal on purpose. The PR exists, its body already carries a valid gate token for the pushed
+     * head, and the code is up — the ONLY thing missing is the self-link on the first line. Aborting a
+     * finished run over a cosmetic back-link would be a worse outcome than the missing link, and the very
+     * next `wp-finish-upsert-pr` writes it (by then the URL is known before publishing, so it goes up with
+     * the body). The merge body still gets the linked version regardless: it is filed from `finalBody`.
+     */
+    private backfillPrBody(prNumber: string, bodyFile: string, finalBody: string): void {
+        if (prNumber === '') return;
+        fs.writeFileSync(bodyFile, finalBody + '\n');
+        const res = spawnSync('gh', ['pr', 'edit', prNumber, '--body-file', bodyFile], { encoding: 'utf8' });
+        if (res.status !== 0) {
+            process.stderr.write(
+                '⚠️  Could not add the PR\'s own link to its description (non-fatal — the PR and the gate\n' +
+                '    token are already up). The next wp-finish-upsert-pr writes it.\n');
+            return;
+        }
+        process.stdout.write('   back-filled the PR description with its own link ✓\n');
+    }
+
+    /**
+     * The PR's web URL if one is already open for this branch, else '' — read BEFORE publishing so the
+     * description can carry its own link on the first render. Only a brand-new PR gets '' (and then
+     * {@link backfillPrBody} fixes it up after `gh pr create` returns a URL).
+     */
+    private existingPrUrl(baseBranch: string): string {
+        return this.prRef(baseBranch).url;
+    }
+
+    /**
+     * The 1st PR comment: the FULL dashboard — every row including the green ones, the whole summary, the
+     * 3-point hash points. This is what the PR description used to be, and moving it here is the entire
+     * point of the change: the description is now the git-log body, and a squash commit must not carry a
+     * risk table.
+     *
+     * Posted unconditionally (any repo, checklists or not), because the description's last bullet PROMISES
+     * a 1st comment holding the detail. A pointer to a comment that does not exist is worse than no
+     * pointer. Non-fatal — the PR is already up, and the description alone is a complete, readable record.
+     */
+    private postDetailComment(repoRoot: string, prNumber: string, input: DashboardInput): void {
+        if (prNumber === '') return;
+        const request = new PrCommentRequest();
+        request.prNumber = prNumber;
+        request.marker = DETAIL_COMMENT_MARKER;
+        request.body = DETAIL_COMMENT_MARKER + '\n' + this.dashboard.renderDetailComment(input);
+        request.payloadDir = prDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        request.payloadName = 'detail-comment.json';
+        request.label = 'full dashboard comment';
+        this.commentUpserter.upsert(request);
     }
 
     // The PR's number + web URL (for the merge subject `(#N)` and the commit-body back-link). Both ''

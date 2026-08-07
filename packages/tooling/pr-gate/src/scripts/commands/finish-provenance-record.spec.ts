@@ -6,7 +6,7 @@ import {
     PrGateConfig, RequiredChecklist, ReviewJsonService, ReviewProvenanceService,
     ReviewerInstructionsService, SubagentProvenanceService,
 } from '@webpieces/rules-config';
-import { FinishUpsertPrCommand } from './finish-upsert-pr-command';
+import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 
 /**
@@ -15,9 +15,12 @@ import { AiBranchName } from '../workflow/git-readAiBranchName';
  * exists for — "what did the reviewers actually do the time this was rejected?" — so the ORDER is the
  * feature, not an implementation detail.
  *
- * Only the collaborators `enforceProvenance` touches are real; the rest of the command (git, gh, the build
- * gate) is never reached on this path. The provenance readers themselves are covered by
- * subagent-provenance.spec.ts and review-provenance.spec.ts.
+ * Drives ProvenanceEnforcer directly. This used to construct the whole FinishUpsertPrCommand with a row of
+ * `null as never` stubs and then reach through `command as unknown as { enforceProvenance(...) }`, because
+ * the method was private on a 700-line command; extracting the class made `enforce` simply public, and the
+ * stub row — which broke every time the command gained a constructor parameter — is gone with it.
+ *
+ * The provenance readers themselves are covered by subagent-provenance.spec.ts and review-provenance.spec.ts.
  */
 
 const savedHome = process.env['HOME'];
@@ -46,31 +49,20 @@ class FixedBranchName extends AiBranchName {
     }
 }
 
-// The command with only the provenance collaborators wired; nothing else is reached on this path.
-function commandUnderTest(): FinishUpsertPrCommand {
+// Every collaborator is REAL — the class is small enough to build outright, which is the point of the split.
+function enforcerUnderTest(): ProvenanceEnforcer {
     const reviewJsonService = new ReviewJsonService();
-    const stub = null as unknown as never;
-    return new FinishUpsertPrCommand(
-        stub, new FixedBranchName(), stub, stub, stub, stub, stub, stub, stub, stub, stub,
-        reviewJsonService, stub,
+    return new ProvenanceEnforcer(
+        new FixedBranchName(),
         new SubagentProvenanceService(),
         new ReviewProvenanceService(),
         new ReviewerInstructionsService(reviewJsonService),
-        stub, stub,
+        reviewJsonService,
     );
 }
 
-// enforceProvenance is private — the guarantee is about the command's behaviour, not about a public API,
-// and exposing it purely to be tested would be a worse design than reaching for it here.
-// webpieces-disable no-any-unknown -- narrowing to the one private method under test
-type ProvenanceEntry = {
-    enforceProvenance(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): unknown;
-};
-
 function enforce(repoRoot: string, required: RequiredChecklist[]): void {
-    // webpieces-disable no-any-unknown -- see ProvenanceEntry above
-    const command = commandUnderTest() as unknown as ProvenanceEntry;
-    command.enforceProvenance(required, 'dean/feat', repoRoot, new PrGateConfig());
+    enforcerUnderTest().enforce(required, 'dean/feat', repoRoot, new PrGateConfig());
 }
 
 function provenanceIn(repoRoot: string): Record<string, unknown> {

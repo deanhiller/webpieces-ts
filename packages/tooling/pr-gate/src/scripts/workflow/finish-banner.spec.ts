@@ -56,10 +56,18 @@ describe('mergeMode NONE — a human merges', () => {
      * dashboard — two consumer repos ran that way for months because this banner said "you can stop
      * here" and named no alternative. It still says stop; it now also names `wp-land-pr`.
      */
-    it('names wp-land-pr as the way to land the gated body, without turning into a chore', () => {
+    /**
+     * On a NONE repo a UI merge is the POLICY, so the banner's job is to confirm it works and name the two
+     * settings it depends on — not to steer the reader off it. One release ago this block did the
+     * opposite, because the PR description was then the long dashboard; it is now the compact git-log
+     * body, so PR_BODY copies the right thing.
+     */
+    it('confirms a UI merge is correct and names the two settings it needs', () => {
         const out = render(HUMAN);
-        expect(out).toContain('pnpm wp-land-pr');
-        expect(out).toContain('squash_merge_commit_message');
+        expect(out).toContain('squash_merge_commit_title=PR_TITLE');
+        expect(out).toContain('squash_merge_commit_message=PR_BODY');
+        expect(out).toContain('pnpm wp-land-pr'); // offered as the CLI alternative, not a correction
+        expect(out).not.toContain('ENTIRE dashboard');
         // Still the "nothing is owed" shape — no STOP/DO-NOT-report escalation on a policy outcome.
         expect(out).toContain('You can stop here.');
         expect(out).not.toContain('DO NOT report this PR as done');
