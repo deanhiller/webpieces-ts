@@ -6,11 +6,16 @@ vi.mock('child_process', () => ({
     execSync: (): string => 'abc1234def\n',
 }));
 
-// The decision log writes to disk; silence it so these tests never touch the fs.
-vi.mock('../decision-log', () => ({
-    logGuardDecision: (): void => undefined,
-    GuardDecision: class { constructor(...args: unknown[]) { void args; } },
-}));
+// The decision log writes to disk; silence it so these tests never touch the fs. MATRIX_L2 is a real
+// value the guard passes through, so it is re-exported from the original rather than stubbed.
+type DecisionLogModule = typeof import('../decision-log');
+vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>) => {
+    const actual = await importActual();
+    return {
+        ...actual,
+        logGuardDecision: (): void => undefined,
+    };
+});
 
 import { WholeRepoBuildGuardConfig, HomeConfigService } from '@webpieces/rules-config';
 import { BashContext } from '../types';

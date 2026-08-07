@@ -7,7 +7,8 @@ import { Violation as V } from '../types';
 import { BashRuleBase } from '../rule-base';
 import { FixHint } from '../fix-hint';
 import { toError } from '../to-error';
-import { logGuardDecision, GuardDecision } from '../decision-log';
+import { L0_FAULT_NONE } from '../l0-fault-codes';
+import { logGuardDecision, GuardDecision, Verdict, MATRIX_L2 } from '../decision-log';
 import { CommandScanner } from '../command-scan';
 import { WholeRepoBuildScan, WholeRepoBuildHit } from './whole-repo-build-scan';
 
@@ -172,7 +173,9 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
     }
 
     private block(ctx: BashContext, hit: WholeRepoBuildHit, message: string): readonly Violation[] {
-        this.logDecision(ctx, 'BLOCK', hit.shape);
+        // BLOCK_AI_CURE, not BLOCK_HUMAN: the cure is one command the agent runs itself, and the
+        // refusal hands it over already resolved.
+        this.logDecision(ctx, 'BLOCK_AI_CURE', hit.shape);
         return [new V(1, this.truncate(ctx.command), message)];
     }
 
@@ -181,10 +184,10 @@ export class WholeRepoBuildGuardRule extends BashRuleBase<WholeRepoBuildGuardCon
         return s.length <= MAX ? s : s.slice(0, MAX) + '…';
     }
 
-    private logDecision(ctx: BashContext, verdict: 'ALLOW' | 'BLOCK', reason: string): void {
+    private logDecision(ctx: BashContext, verdict: Verdict, reason: string): void {
         logGuardDecision(
             ctx.workspaceRoot,
-            new GuardDecision('whole-repo-build-guard', 'Bash', ctx.command, '-', verdict, reason, '-'),
+            new GuardDecision('whole-repo-build-guard', 'Bash', ctx.command, '-', verdict, reason, '-', L0_FAULT_NONE, MATRIX_L2),
         );
     }
 }
