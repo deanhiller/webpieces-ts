@@ -13,6 +13,7 @@ import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workfl
 import { ReviewerVerdictGate } from '../workflow/reviewer-verdict-gate';
 import { GitExec } from '../workflow/git-exec';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
+import { BuildGateLog, FINISH_STAGE, REVIEW_STAGE } from '../workflow/build-gate-log';
 import { MergeState } from '../workflow/merge-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
@@ -117,6 +118,7 @@ export class FinishUpsertPrCommand {
         private readonly branchNaming: BranchNaming,
         private readonly gitExec: GitExec,
         private readonly buildAffected: BuildAffected,
+        private readonly buildLog: BuildGateLog,
         private readonly mergeState: MergeState,
         private readonly prMerger: PrMerger,
         private readonly publisher: GatedPrPublisher,
@@ -216,12 +218,30 @@ export class FinishUpsertPrCommand {
      */
     private runOrSkipBuildGate(repoRoot: string, alreadyGreen: boolean): void {
         if (alreadyGreen) {
-            process.stdout.write('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n');
+            process.stdout.write('\n🛠️  Build gate: already green for this commit (stage ② receipt) — skipping the rebuild.\n'
+                + this.skippedBuildLogNote(repoRoot));
             return;
         }
         this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
             '🛠️  Build gate (authoritative)', 'pnpm wp-finish-upsert-pr', 'Build failed — no PR created/updated.',
+            FINISH_STAGE,
         ));
+    }
+
+    /**
+     * When the gate is SKIPPED and build-log capture is on, name STAGE ②'s log — the one build that
+     * actually ran for this commit. Deliberately never names a finish-stage log: no finish build ran, and
+     * pointing at a file this command did not write would claim a build that did not happen.
+     *
+     * The path is recomputed rather than stored, and that is sound precisely BECAUSE this branch is only
+     * reached when the receipt covers the current HEAD: same worktree, same branch, same sha ⇒ the same
+     * deterministic filename stage ② wrote. Empty string whenever capture is off or the file is gone, so
+     * a user without `~/.webpieces/config.json` sees the pre-existing single line unchanged.
+     */
+    private skippedBuildLogNote(repoRoot: string): string {
+        if (!this.buildAffected.isCaptureEnabled()) return '';
+        const log = this.buildLog.existingLogFor(repoRoot, REVIEW_STAGE);
+        return log === '' ? '' : `   Stage ②'s full build output: ${log}\n`;
     }
 
     /**

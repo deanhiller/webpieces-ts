@@ -44,6 +44,14 @@ export { unknownKeyErrors, isCommentKey, validateTopLevelKeys, COMMENT_KEY_SUFFI
 // what the errors instruct, and so consumers can enumerate retirements.
 export { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, RetiredConfigKey, isRetiredKey, retiredEntry, retiredKeyError, retiredKeyErrorsIn, retiredRuleFor } from './retired-config-keys';
 export { validateChecklistDocs } from './checklist-docs-validator';
+// EXPERIMENTAL, and deliberately NOT an advertised knob. The OPTIONAL machine-local `~/.webpieces/config.json`:
+// absent (the normal state for every consumer) means all-defaults, silently; present means strictly validated,
+// with its own retirement table. `isHomeConfigPath` is what grants the file its unconditional Write/Edit PASS
+// in the hook guards, which is what keeps a rejection repairable.
+export {
+    HomeConfig, HomeConfigService, RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS,
+    HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_EXPERIMENTAL_SECTION, HOME_KEY_BUILD_GATE_LOG_CAPTURE,
+} from './home-config';
 export {
     MatchRuleConfig,
     MatchRuleViolation,

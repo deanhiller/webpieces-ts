@@ -81,6 +81,14 @@
                     "level": 2
                 },
                 {
+                    "id": "BuildGateLog",
+                    "className": "BuildGateLog",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/build-gate-log.ts",
+                    "level": 4
+                },
+                {
                     "id": "CheckPrCommand",
                     "className": "CheckPrCommand",
                     "kind": "class",
@@ -295,6 +303,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-status.ts",
                     "level": 6
+                },
+                {
+                    "id": "HomeConfigService",
+                    "className": "HomeConfigService",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/home-config.ts",
+                    "level": 4
                 },
                 {
                     "id": "LandPrCommand",
@@ -622,6 +638,24 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
                     "paramName": "mergedBranches",
                     "paramType": "MergedBranchesService"
+                },
+                {
+                    "from": "BuildAffected",
+                    "to": "BuildGateLog",
+                    "injection": "type",
+                    "token": "BuildGateLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-gate-log.ts#BuildGateLog",
+                    "paramName": "buildLog",
+                    "paramType": "BuildGateLog"
+                },
+                {
+                    "from": "BuildAffected",
+                    "to": "HomeConfigService",
+                    "injection": "type",
+                    "token": "HomeConfigService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/home-config.ts#HomeConfigService",
+                    "paramName": "homeConfig",
+                    "paramType": "HomeConfigService"
                 },
                 {
                     "from": "BuildArtifactGate",
@@ -973,6 +1007,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
                     "paramName": "buildAffected",
                     "paramType": "BuildAffected"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "BuildGateLog",
+                    "injection": "type",
+                    "token": "BuildGateLog",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-gate-log.ts#BuildGateLog",
+                    "paramName": "buildLog",
+                    "paramType": "BuildGateLog"
                 },
                 {
                     "from": "FinishUpsertPrCommand",

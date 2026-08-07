@@ -6,6 +6,7 @@ import {
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
+import { REVIEW_STAGE } from '../workflow/build-gate-log';
 import { BuildArtifactGate } from '../workflow/build-artifact-gate';
 import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
 import { DiffMaterializer } from '../workflow/diff-materializer';
@@ -137,6 +138,7 @@ export class ReviewUpsertPrCommand {
             '🛠️  Build gate',
             'pnpm wp-review-upsert-pr',
             'Build failed — NO reviewer was briefed and no diff was extracted. Fix it, then re-run.',
+            REVIEW_STAGE,
         ));
         // Repo-wide: the build must not have left anything uncommitted AND unstaged. Runs HERE, not in
         // finish, because this is the stage that ran buildCommand and is therefore holding the dirty
