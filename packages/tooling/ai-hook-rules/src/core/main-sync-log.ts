@@ -81,7 +81,8 @@ export function logSyncEvent(root: string, event: SyncLogEvent): void {
 //
 // This is THE SAME FILE logSyncEvent appends to — see the header. It is not a second stream and it
 // no longer has a name of its own.
-export function syncStderrLogPath(root: string): string {
+// webpieces-disable no-function-outside-class -- sibling of logSyncEvent in this module-scope writer; it must stay callable from a tree too broken to build a DI container
+export function refresherChildStdioPath(root: string): string {
     return dotWebpieces.logsFile(root, ASYNC_REFRESH_STREAM, logStream.writerFile('.log'));
 }
 

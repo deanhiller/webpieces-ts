@@ -40,19 +40,26 @@ export class StreamIdentity {
  * `guard-sync-decisions.log` 209/4097 (5.1%), max 625 B. So this tears TODAY, and the corrupted line
  * is exactly the long one — the `recover=` line a human needs most.
  *
- * ─── The key: three dimensions, one FLAT filename ──────────────────────────────────────────────────
- *   <local>/logs/<sessionId>-<agentId | "coordinator">-<hook>-<file>.log
+ * ─── The key: the LAYER is the directory, the WRITER is the file ──────────────────────────────────
+ *   <local>/logs/<stream>/<sessionId>-<agentId | "coordinator">-<hook>.log
  *
- *   sessionId  separates concurrent Claude Code windows   (`session_id`, on every hook payload)
- *   agentId    separates subagents within one window      (`agent_id`, subagent-only — absent = coordinator)
- *   hook       separates the PARALLEL hooks               ('guards' | 'rules' | 'guarantee-root')
+ *   stream     separates the LAYERS                        ('L-1-cd' | 'L0-shim' | 'L1-location' | …)
+ *   sessionId  separates concurrent Claude Code windows    (`session_id`, on every hook payload)
+ *   agentId    separates subagents within one window       (`agent_id`, subagent-only — absent = coordinator)
+ *   hook       separates the PARALLEL hooks                ('guards' | 'rules' | 'guarantee-root')
  *
- * One writer per FILE, by construction, so appends cannot interleave and nothing needs a lock.
+ * This class owns the FILE half. One writer per file, by construction, so appends cannot interleave
+ * and nothing needs a lock — and all three identity dimensions must stay in the filename for that to
+ * hold. `hook` especially: Claude Code runs the guards and rules hooks as separate processes IN
+ * PARALLEL on one tool call, so folding `hook` into the directory would put two concurrent appenders
+ * on one path, which is the tearing measured above.
  *
- * DELIBERATELY FLAT, not `sessions/<id>/<agent>/<hook>/<file>`. A nested tree makes the common
- * question — "show me everything that happened, in time order" — into a directory walk, when it should
- * be one glob: `ls logs/` shows every stream at once, `logs/<sid>-*` is one window, `*-<agent>-*` is one
- * subagent, `*-guards-*` is one hook. Rotation is unchanged because `.1.log` is still a suffix.
+ * Nesting by STREAM is NOT the nesting this layout rejects. What it rejects is nesting by IDENTITY
+ * (`sessions/<id>/<agent>/…`), which turns every cross-session question into a directory walk. The
+ * layer is the one axis you almost always want to slice by first, and it was previously not
+ * expressible at all: L1 had no stream, so "show me every L1 decision" had no answer. Now
+ * `ls logs/L1-location/` is that answer, and a one-level wildcard recovers the flat view —
+ * `ls -t logs/[*]/<sid>-*` is still every layer at once, in time order.
  *
  * `transcript_path` is also unique per session, but it is a filesystem PATH — long, and full of
  * separators that would have to be flattened anyway — and `session_id` is its stable identifier, so
@@ -63,7 +70,7 @@ export class StreamIdentity {
  *
  * ─── There is no un-split path ─────────────────────────────────────────────────────────────────────
  * Every name is prefixed, always. A caller that never identifies renders as
- * `unknown-coordinator-hook-<base>` — a distinct, greppable stream, NOT the shared file. Keeping a
+ * `unknown-coordinator-hook.log` — a distinct, greppable writer, NOT a shared file. Keeping a
  * bare-name fallback would have meant two reachable spellings of one filename, with the tearing one
  * reached by doing nothing; that is the widening-as-absence this whole class exists to remove, so it
  * is not offered.

@@ -5,7 +5,7 @@ import * as path from 'path';
 import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
-import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
+import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logStream, StreamIdentity } from './log-stream';
 
 // Per-process latch for the spawn below. A hook process handles exactly one tool call, so this makes
@@ -67,7 +67,7 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
 
         // Redirect the detached child's stdout+stderr to a file (not /dev/null) so an uncaught crash
         // before the child's own logging — e.g. a module-load failure — is still captured.
-        const errFd = fs.openSync(syncStderrLogPath(workspaceRoot), 'a');
+        const errFd = fs.openSync(refresherChildStdioPath(workspaceRoot), 'a');
         const child = spawn(process.execPath, refresherArgv(refresher, workspaceRoot, hangTimeoutMinutes, logStream.identity()), {
             detached: true,
             stdio: ['ignore', errFd, errFd],

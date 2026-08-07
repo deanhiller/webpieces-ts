@@ -22,9 +22,10 @@ export const WORKTREE_STATE_DIR = 'worktrees';
 // reads or writes it.
 //
 // Every writer resolves its DIRECTORY through dotWebpieces.logs()/logsFile(), so the layout cannot
-// drift apart again. The FILENAME is a separate question: ai-hook-rules' LogStream names it
-// <sessionId>-<agentId|coordinator>-<hook>.log so that concurrent writers (Claude Code runs all
-// matching PreToolUse hooks IN PARALLEL, and subagents/windows share a tree) never append to one file.
+// drift apart again. What sits INSIDE it is ai-hook-rules' business (see its log-streams.ts and
+// LogStream): one directory per LAYER, and inside that one file per WRITER, named
+// <sessionId>-<agentId|coordinator>-<hook>.log — because Claude Code runs all matching PreToolUse
+// hooks IN PARALLEL and subagents/windows share a tree, so writers must never share a file.
 export const LOGS_STATE_DIR = 'logs';
 
 

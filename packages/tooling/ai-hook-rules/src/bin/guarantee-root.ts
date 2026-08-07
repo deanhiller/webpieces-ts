@@ -137,7 +137,7 @@ const DENY_SUBDIR =
  * `git rev-parse` subprocess on EVERY Bash call, paid by the one layer whose whole guarantee is that
  * it reads no config, spawns no binary and touches no network. Trading that guarantee for tidier log
  * placement is the wrong way round: `L-1-cd/` is always at $CLAUDE_PROJECT_DIR, which is a rule a
- * reader (and `wp-logs`) can simply know.
+ * reader can simply know.
  *
  * Every write is swallowed and nothing ever reaches stdout — stdout is the PreToolUse decision channel
  * and a stray byte there would corrupt allow/deny.

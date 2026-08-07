@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
+import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 
 // Log FILENAMES now carry the stream prefix (see LogStream). Specs resolve the name the same way
 // production does, so the layout is regression-tested on the REAL path rather than a fallback.
@@ -59,7 +59,7 @@ describe('main-sync-log', () => {
         expect(content).toContain('line1 line2 line3');
     });
 
-    it('syncStderrLogPath points inside .webpieces/logs', () => {
-        expect(syncStderrLogPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', streamName('guard-async-work.stderr.log')));
+    it('refresherChildStdioPath points inside .webpieces/logs', () => {
+        expect(refresherChildStdioPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', streamName('guard-async-work.stderr.log')));
     });
 });

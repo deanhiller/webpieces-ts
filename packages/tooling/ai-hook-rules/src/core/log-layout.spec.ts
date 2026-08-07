@@ -6,7 +6,7 @@ import * as path from 'path';
 import { LOGS_STATE_DIR } from '@webpieces/rules-config';
 
 import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef } from './decision-log';
-import { logSyncEvent, SyncLogEvent, syncStderrLogPath } from './main-sync-log';
+import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logRejection } from './rejection-log';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 
@@ -102,7 +102,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         const root = tmpRoot();
         // 0 bytes on every measured run; it is written only when the child dies before its own
         // logging, which is exactly when you want it interleaved with the SPAWN_ATTEMPT above it.
-        expect(syncStderrLogPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName('guard-async-work.log')));
+        expect(refresherChildStdioPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName('guard-async-work.log')));
     });
 
     it('puts ONLY stream directories directly under logs/', () => {

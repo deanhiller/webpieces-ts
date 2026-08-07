@@ -6,7 +6,7 @@ import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/rules-config';
 
-import { renderShim, SHIM_LOG_FILE, SHIM_LOG_FILE_PREV, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, RESOLVE_LOG_DIR_SH } from './shim';
+import { renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, RESOLVE_LOG_DIR_SH } from './shim';
 import { L0_FAULTS, L0Fault } from '../core/l0-matrix';
 import { ShimTestkit } from './shim-testkit';
 import { L0_SHIM_STREAM } from '../core/log-streams';

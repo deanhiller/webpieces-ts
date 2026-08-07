@@ -129,7 +129,7 @@ WP_CWD="$(printf '%s' "$PAYLOAD" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\(
 [ -n "$WP_CWD" ] || WP_CWD="$ROOT"    # no cwd in the payload (older client, or a hand-run) → the shim's own tree
 # Best-effort AUDIT TRAIL of what L0 did with this call — every call, not just the broken ones. One
 # tab-separated line per invocation into this TREE's own
-# logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log (gitignored), so the
+# logs/L0-shim/<session>-<agent|coordinator>-<binName>.log (gitignored), so the
 # observed behaviour can be diffed against the matrix in guards/L0-tooling.md. NEVER breaks or blocks the
 # hook: every write is swallowed, and nothing ever goes to stdout (stdout is the PreToolUse decision
 # channel — a stray byte there would corrupt allow/deny).

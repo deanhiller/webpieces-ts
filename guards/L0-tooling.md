@@ -283,8 +283,8 @@ are decided inside the binary — which, on a `fault=-` line, is exactly what ra
 statement about the **sh layer only**, never a claim that nothing was wrong.
 
 **The other three carry the same stamp, in the binary's own streams.**
-`logs/<session>-<agent|coordinator>-<hook>-guard-invocations.log`, the matching
-`…-guard-sync-decisions.log` and `…-hook-rejection.log` each append a `fault=` field using the SAME
+`logs/calls/<session>-<agent|coordinator>-<hook>.log`, the matching
+`logs/L2-decisions/…` and `logs/rejections/…` each append a `fault=` field using the SAME
 letters (the stream prefix is what keeps the two hooks Claude Code runs in PARALLEL out of one file).
 The letters come from `core/l0-fault-codes.ts`, which is also where the shim's `WP_FAULT=` values and
 `SHIM_LOG_FAULTS` come from — one codebook, no retyping — and `audit-fault-stamp.spec.ts` drives the
@@ -306,7 +306,7 @@ answers a reader most needs to tell apart.
 
 `tree=` is git's own name for the worktree the CALL was made in (`primary` in the primary clone),
 derived from the payload's `cwd`. The line lands in **that tree's** log —
-`<primary>/.webpieces/worktrees/<name>/logs/<session>-<agent|coordinator>-<binName>-ai-hook-shim.log`,
+`<primary>/.webpieces/worktrees/<name>/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log`,
 or `<primary>/.webpieces/logs/` from
 the primary clone. Centralized under the primary on purpose: removing a worktree must not take its
 audit trail with it. With the guard hooks now registered RELATIVE, `tree=` and the tree being measured

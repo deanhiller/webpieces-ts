@@ -9,10 +9,11 @@ import { logStream } from './log-stream';
 import { toError } from './to-error';
 
 /**
- * The rejection index and its detail files, BOTH under `logs/`, both named by the same stream:
+ * The rejection index and its detail files, BOTH inside the `rejections/` stream directory, both
+ * named by the same writer key:
  *
- *   logs/<sid>-<agent>-<hook>-hook-rejection.log      ← the index (one line per block)
- *   logs/<sid>-<agent>-<hook>-hook-rejection/         ← its detail dir, SAME base name
+ *   logs/rejections/<sid>-<agent>-<hook>.log      ← the index (one line per block)
+ *   logs/rejections/<sid>-<agent>-<hook>/         ← its detail dir, SAME key
  *       writeInfo-<epochMs>.md
  *
  * The detail files used to be `hooks/<YYYY-MM-DD>/writeInfo-<epochMs>.md` — a directory keyed only by
@@ -64,7 +65,7 @@ export function logRejection(
         const relativePath = computeRelativePath(input.filePath, root);
         const ruleNames = extractRuleNames(result.report);
         const detailFileName = `${DETAIL_PREFIX}${epochMs}${DETAIL_SUFFIX}`;
-        // Relative to `logs/` — the index's own directory — so the pointer resolves from exactly where
+        // Relative to `rejections/` — the index's own directory — so the pointer resolves from where
         // the reader found the line, and reads as the log's own name plus a file.
         const detailRelPath = `${detailDirName}/${detailFileName}`;
 

@@ -10,11 +10,11 @@ import { toError } from './to-error';
 import { logStream } from './log-stream';
 
 // The SYNC decision log — what the synchronous hook DID on each invocation and WHY. Its companion is
-// the ASYNC log (guard-async-work.log, written by the detached refresher in main-sync-log.ts). This
+// the ASYNC log (the `async-refresh/` stream, written by the detached refresher in main-sync-log.ts). This
 // one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
-// traceable to a stale or missing async write. Writes to `.webpieces/logs/<stream>guard-sync-decisions.log`
-// (see LOGS_STATE_DIR: every webpieces log lives under `logs/`, never beside `hooks/`'s non-log state).
+// traceable to a stale or missing async write. Writes to `.webpieces/logs/L2-decisions/<writer>.log` —
+// the LAYER is the directory, the WRITER is the file (see log-streams.ts and LogStream).
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rejection-log)
 const MAX_TARGET_LEN = 160;
 
@@ -96,9 +96,9 @@ export class GuardDecision {
 }
 
 /**
- * Append one tab-separated line per decision to `.webpieces/logs/<stream>guard-sync-decisions.log`,
- * where <stream> is LogStream's `<sessionId>-<agentId|coordinator>-<hook>-` prefix (empty when the
- * caller never identified renders as `unknown-coordinator-hook-` — there is no un-prefixed name).
+ * Append one tab-separated line per L2 decision to `.webpieces/logs/L2-decisions/<writer>.log`, where
+ * <writer> is LogStream's `<sessionId>-<agentId|coordinator>-<hook>` key (a caller that never
+ * identified renders as `unknown-coordinator-hook` — there is no un-keyed name).
  * `root` is
  * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or a
  * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
@@ -196,8 +196,8 @@ export class GuardInvocation {
 }
 
 /**
- * The per-INVOCATION stream — `.webpieces/logs/<stream>guard-invocations.log` (see LogStream for the
- * `<stream>` prefix), one line for EVERY guards-hook
+ * The per-INVOCATION stream — `.webpieces/logs/calls/<writer>.log` (see LogStream for the writer
+ * key), one line for EVERY guards-hook
  * call (allow or block, bash or file), unlike guard-sync-decisions.log which records only the calls a
  * rule actually judged. It captures the tool, the command/file, the live git branch, the async-written
  * main-sync-status.json snapshot (branch / merged / fork-point / conflict), and — since this class
@@ -205,7 +205,7 @@ export class GuardInvocation {
  *
  * WHY IT IS TWO CALLS. The line used to be written the moment the hook started, so it could not carry
  * a verdict: the decision had not been made yet. Answering "what happened to this call?" therefore
- * meant joining this file against guard-sync-decisions.log BY TIMESTAMP, which is exactly the kind of
+ * meant joining this file against the L2 decision stream BY TIMESTAMP, which is exactly the kind of
  * reconstruction a log exists to make unnecessary. So {@link begin} now only CAPTURES (including the
  * git/cache reads, which must still happen while the hook is running), and {@link finish} — called
  * from the hook's single terminal boundary, emitAllow/emitDeny — writes the whole line once the
@@ -268,8 +268,8 @@ export class InvocationLog {
                 // call this one had no objection to, and neither can see the other's answer. Measured:
                 // `cd <repo>/packages && ls` was DENIED by L-1 and recorded here three times as
                 // `verdict=ALLOW`. The old field name promised an outcome it structurally cannot know;
-                // the TRUE final action is the JOIN of this stream with `L-1-cd/`, which is what
-                // `wp-logs` performs and what docs/tooling-logs.md now states.
+                // the TRUE final action is the JOIN of this stream with `L-1-cd/`, keyed by the
+                // identical writer name — which is what docs/tooling-logs.md now states.
                 `guards=${verdict}`,
                 `rule=${oneLine(rule) || '-'}`,
                 // The tree the guard ACTED in, next to what Claude Code said the project was. Both, on

@@ -32,8 +32,6 @@ import { L0_FAULT_NONE, L0_SH_FAULT_CODES } from '../core/l0-fault-codes';
 // ---------------------------------------------------------------------------
 
 /** The audit log's filename, and the sibling a rotation renames it to. Mirrors decision-log.ts. */
-export const SHIM_LOG_FILE = 'ai-hook-shim.log';
-export const SHIM_LOG_FILE_PREV = 'ai-hook-shim.1.log';
 
 /**
  * Rotation threshold, in bytes — 512 KB, the SAME number and the same `.1.log` naming as

@@ -75,10 +75,10 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
 
             const invocations = new InvocationLog();
             invocations.begin(root, 'Bash', 'pnpm build');
-            invocations.finish('BLOCK', 'some-rule', code);
+            invocations.finish('BLOCK_AI_CURE', 'some-rule', code);
             expect(readLog(root, INVOCATION_LOG), `invocation line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
-            logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK', 'why', '-', code));
+            logGuardDecision(root, new GuardDecision('some-rule', 'Bash', 'pnpm build', 'dean/x', 'BLOCK_AI_CURE', 'why', '-', code));
             expect(readLog(root, DECISION_LOG), `decision line, fault ${code}`).toContain(`\tfault=${code}\n`);
 
             const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
@@ -126,10 +126,10 @@ describe('a log failure never throws', () => {
         const invocations = new InvocationLog();
         expect(() => {
             invocations.begin(root, 'Bash', 'ls');
-            invocations.finish('BLOCK', 'r', 'C');
+            invocations.finish('BLOCK_AI_CURE', 'r', 'C');
         }).not.toThrow();
 
-        expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK', 'why', '-', 'C'))).not.toThrow();
+        expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK_AI_CURE', 'why', '-', 'C'))).not.toThrow();
 
         const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
         expect(() => logRejection('Edit', input, new BlockedResult('[r] (x)\nno', 'C'), root)).not.toThrow();
