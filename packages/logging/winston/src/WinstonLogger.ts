@@ -19,7 +19,7 @@ export const LEVEL_TO_WINSTON: Record<LogLevel, string> = {
  * (one per name, created as a winston child carrying `loggerName`). Context
  * enrichment is done by the shared winston formats (see format.ts), so this
  * wrapper only maps the 5 webpieces levels and spreads an optional Error into
- * `errName`/`errMessage`/`errStack` — matching the tested monorepo-nx behaviour.
+ * `errName`/`errMessage`/`errStack` — matching the production-tested logger's behaviour.
  */
 export class WinstonLogger implements Logger {
     constructor(private readonly winston: WinstonBase) {}

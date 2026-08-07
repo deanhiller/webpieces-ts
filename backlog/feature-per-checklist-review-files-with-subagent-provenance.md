@@ -48,7 +48,7 @@ they race on one file and the last writer wins. Nothing in the schema or the loa
 a lost ack fails closed (the PR refuses to open) so it presents as a confusing false negative.
 
 **Gap 2 — the verdict is not recorded.** `acknowledged: true` means "I walked it," not "it passed."
-A reviewer that walks `morpheus-migrations.md`, finds a `NOT NULL` added with no backfill, and writes
+A reviewer that walks `checklist-migrations.md`, finds a `NOT NULL` added with no backfill, and writes
 `acknowledged: true` is *schema-valid*. `notes[]` is free-form and, per `loadReviewJson`, is not
 validated at all — `asStringArray` (`:253-257`) silently drops non-strings and defaults to `[]`.
 There is no field that means "this checklist FAILED," so the gate cannot distinguish "reviewed, fine"
@@ -67,10 +67,10 @@ conflict-of-interest a review gate exists to remove.
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`**.
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`**.
 
-That repo's review process is a set of path-scoped checklists in `.claude/review/morpheus-*.md`,
-intended to be executed by a dedicated reviewer persona (`.claude/agents/morpheus-reviewer.md`, 213
+That repo's review process is a set of path-scoped checklists in `.claude/review/checklist-*.md`,
+intended to be executed by a dedicated reviewer persona (`.claude/agents/checklist-reviewer.md`, 213
 lines) that is separate from the coding agent. Under today's contract there is no way to express or
 verify that separation — the coding agent reads the doc, decides it is satisfied, and writes
 `acknowledged: true`.
@@ -141,7 +141,7 @@ New optional field on `ChecklistDefinition`:
 
 ```ts
 // checklist-config.ts
-subagent?: string;   // expected agentType, e.g. "morpheus-reviewer"
+subagent?: string;   // expected agentType, e.g. "checklist-reviewer"
 ```
 
 When set, `wp-finish-upsert-pr` (and `wp-check-pr`, per the companion report) additionally requires

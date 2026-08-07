@@ -2,7 +2,7 @@
 
 **Package:** `@webpieces/rules-config` (`checklist-manifest.ts`, `validate-config.ts`, `pr-gate-config.ts`)
 **Version seen:** `0.4.479` (introduced by f2e4519 — "Replace checklist array config with a single `{ doc }` manifest + distinct-subagent review" (#487))
-**Reported from:** `ctoteachings/monorepo` (consumer), 7 checklists in `.claude/review/index.md`
+**Reported from:** `acme-edu/consumer-repo` (consumer), 7 checklists in `.claude/review/index.md`
 **Severity:** Medium — nothing is silently bypassed (see "What is NOT broken"), but the configuration
 surface is invisible to every tool that reads `webpieces.config.json`, and the one invariant the
 manifest actually needs — that `subagent` names a real `.claude/agents/<name>.md` — is not validated,

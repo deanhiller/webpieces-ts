@@ -11,7 +11,7 @@ import { GitStatusEntry, GitStatusParser } from './git-status';
  * files — while `ChecklistInstructionsService` printed `git diff <base> HEAD -- <file>` to every
  * reviewer. On a dirty tree those are different ranges, and the printed command returns NOTHING: a reviewer
  * is handed a file list and a command that shows it nothing. That is not hypothetical — a reviewer subagent
- * on monorepo-nx2 ran the printed command, got empty output, and had to guess its way to `git diff HEAD`.
+ * on consumer-monorepo2 ran the printed command, got empty output, and had to guess its way to `git diff HEAD`.
  *
  * So the command is DERIVED from the same basis the file set is, and no caller writes one by hand.
  *

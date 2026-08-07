@@ -158,7 +158,7 @@ describe('wp-cleanup classification report (Part 5)', () => {
      */
     it('gives a superseded, a never-proposed and a content-in-main branch DISTINCT output', async () => {
         harness.spared = [
-            spared('feature/morpheus-gate', CLASSIFICATION_SUPERSEDED, 4, 'PR #752 was CLOSED UNMERGED and later PRs merged'),
+            spared('feature/checklist-gate', CLASSIFICATION_SUPERSEDED, 4, 'PR #752 was CLOSED UNMERGED and later PRs merged'),
             spared('dean/webpieces-0-3-322', CLASSIFICATION_NEVER_PROPOSED, 3, 'never had a PR; holds 3 unique commit(s)'),
             spared('dean/cherry-picked', CLASSIFICATION_CONTENT_IN_MAIN, 2, 'all 2 commit(s) already have an equivalent'),
         ];

@@ -17,7 +17,7 @@ repo cannot fix it from its side. #475 solved this for server→server; browser�
 
 ## Symptom
 
-In `ctoteachings/monorepo3`, `helper-portal-angular` — the HELPER portal's browser bundle — is drawn
+In `acme-edu/consumer-repo3`, `helper-portal-angular` — the HELPER portal's browser bundle — is drawn
 calling the LANG product's servers:
 
 ```
@@ -165,6 +165,6 @@ For the companion rule:
 
 ### Consuming-repo status (context)
 
-`ctoteachings/monorepo3` is on 0.4.464 with all four servers declaring `serviceName`. Server→server
+`acme-edu/consumer-repo3` is on 0.4.464 with all four servers declaring `serviceName`. Server→server
 edges are now exactly right (`helper-svr -> helper-fsdb-svr` only). The four browser→server edges above
 are the only remaining fiction in the graph, and the repo has no way to remove them.

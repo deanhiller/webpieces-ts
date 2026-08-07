@@ -29,44 +29,44 @@ function fakeHarness(sessionId: string, agentType: string, branch: string, spawn
 describe('SubagentProvenanceService', () => {
     it('skips (passes with a warning) when CLAUDE_CODE_SESSION_ID is unset', () => {
         delete process.env['CLAUDE_CODE_SESSION_ID'];
-        const res = svc.verify('morpheus-reviewer', 'dean/feat');
+        const res = svc.verify('checklist-reviewer', 'dean/feat');
         expect(res.status).toBe(PROVENANCE_SKIPPED);
     });
 
     it('verifies OK when a matching subagent ran on this branch', () => {
-        process.env['HOME'] = fakeHarness('sess-1', 'morpheus-reviewer', 'dean/feat');
+        process.env['HOME'] = fakeHarness('sess-1', 'checklist-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1';
-        expect(svc.verify('morpheus-reviewer', 'dean/feat').status).toBe(PROVENANCE_OK);
+        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_OK);
     });
 
     it('tolerates a leftover wpN branch-rename suffix', () => {
-        process.env['HOME'] = fakeHarness('sess-2', 'morpheus-reviewer', 'dean/feat');
+        process.env['HOME'] = fakeHarness('sess-2', 'checklist-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-2';
-        expect(svc.verify('morpheus-reviewer', 'dean/feat-wp3').status).toBe(PROVENANCE_OK);
+        expect(svc.verify('checklist-reviewer', 'dean/feat-wp3').status).toBe(PROVENANCE_OK);
     });
 
     it('is MISSING when no subagent of that agentType ran', () => {
         process.env['HOME'] = fakeHarness('sess-3', 'some-other-agent', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-3';
-        expect(svc.verify('morpheus-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when spawnDepth < 1 (the main loop, not a subagent)', () => {
-        process.env['HOME'] = fakeHarness('sess-4', 'morpheus-reviewer', 'dean/feat', 0);
+        process.env['HOME'] = fakeHarness('sess-4', 'checklist-reviewer', 'dean/feat', 0);
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-4';
-        expect(svc.verify('morpheus-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when isSidechain is not true', () => {
-        process.env['HOME'] = fakeHarness('sess-5', 'morpheus-reviewer', 'dean/feat', 1, false);
+        process.env['HOME'] = fakeHarness('sess-5', 'checklist-reviewer', 'dean/feat', 1, false);
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-5';
-        expect(svc.verify('morpheus-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
     });
 
     it('is MISSING when the session has no subagents dir at all', () => {
         process.env['HOME'] = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-home-empty-'));
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-none';
-        expect(svc.verify('morpheus-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
+        expect(svc.verify('checklist-reviewer', 'dean/feat').status).toBe(PROVENANCE_MISSING);
     });
 });
 
@@ -104,9 +104,9 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
 
     it('is branch-scoped: a run recorded under a DIFFERENT session still counts (review once per branch)', () => {
         // The reviewer ran in session "old-session"; we are now in a NEW session "new-session".
-        process.env['HOME'] = fakeHarnessMulti('old-session', ['morpheus-migrations'], 'dean/feat');
+        process.env['HOME'] = fakeHarnessMulti('old-session', ['checklist-migrations'], 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'new-session';
-        expect(svc.verifyDistinct(['morpheus-migrations'], 'dean/feat').status).toBe(PROVENANCE_OK);
+        expect(svc.verifyDistinct(['checklist-migrations'], 'dean/feat').status).toBe(PROVENANCE_OK);
     });
 
     it('SKIPPED without a session id', () => {
@@ -180,8 +180,8 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
     it('credits a reviewer whose gitBranch is WRONG but whose own worktree is on the target branch', () => {
         // The live defect: the harness stamped an unrelated worktree's scaffold branch onto a reviewer
         // that really did run in a worktree on dean/one-2406-…, and wp-finish refused the PR four times.
-        const target = 'dean/one-2406-mealco-api-auth-observe-header-constant';
-        expect(statusFor('sess-c1', 'morpheus-wrapper-linear-required', 'worktree-agent-a54887200e40eb956', worktreeOn(target), target))
+        const target = 'dean/one-2406-acme-api-auth-observe-header-constant';
+        expect(statusFor('sess-c1', 'ticket-key-required', 'worktree-agent-a54887200e40eb956', worktreeOn(target), target))
             .toBe(PROVENANCE_OK);
     });
 
@@ -193,24 +193,24 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
         // one) precisely because this case is the one that MUTATES what branch the clone is on.
         const moved = cloneOnBranch('dean/old-work');
         git(moved, 'checkout', '-q', '-b', 'dean/feat');
-        expect(statusFor('sess-c2', 'morpheus-reviewer', 'dean/old-work', moved, 'dean/feat'))
+        expect(statusFor('sess-c2', 'checklist-reviewer', 'dean/old-work', moved, 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
 
     it('still BLOCKS when gitBranch is wrong AND the worktree is on a different branch', () => {
-        expect(statusFor('sess-c3', 'morpheus-reviewer', 'worktree-agent-aaaa', worktreeOn('dean/some-other-work'), 'dean/feat'))
+        expect(statusFor('sess-c3', 'checklist-reviewer', 'worktree-agent-aaaa', worktreeOn('dean/some-other-work'), 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
 
     it('still BLOCKS when gitBranch is wrong and the cwd worktree was reaped', () => {
         const gone = path.join(os.tmpdir(), 'wp-reaped-worktree-that-does-not-exist');
-        expect(statusFor('sess-c4', 'morpheus-reviewer', 'worktree-agent-aaaa', gone, 'dean/feat'))
+        expect(statusFor('sess-c4', 'checklist-reviewer', 'worktree-agent-aaaa', gone, 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
 
     it('still BLOCKS when gitBranch is wrong and the cwd is not a git repo at all', () => {
         const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-not-a-repo-'));
-        expect(statusFor('sess-c5', 'morpheus-reviewer', 'worktree-agent-aaaa', notARepo, 'dean/feat'))
+        expect(statusFor('sess-c5', 'checklist-reviewer', 'worktree-agent-aaaa', notARepo, 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
 
@@ -226,11 +226,11 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
     });
 
     it('does not consult git when gitBranch already agrees — even a primary-clone cwd still short-circuits', () => {
-        expect(statusFor('sess-c7', 'morpheus-reviewer', 'dean/feat', clone(), 'dean/feat')).toBe(PROVENANCE_OK);
+        expect(statusFor('sess-c7', 'checklist-reviewer', 'dean/feat', clone(), 'dean/feat')).toBe(PROVENANCE_OK);
     });
 
     it('still tolerates a leftover wpN suffix on the branch derived from a worktree cwd', () => {
-        expect(statusFor('sess-c8', 'morpheus-reviewer', 'worktree-agent-aaaa', worktreeOn('dean/feat-wp2'), 'dean/feat'))
+        expect(statusFor('sess-c8', 'checklist-reviewer', 'worktree-agent-aaaa', worktreeOn('dean/feat-wp2'), 'dean/feat'))
             .toBe(PROVENANCE_OK);
     });
 
@@ -238,16 +238,16 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
         // The dash-form (dean-one-2406-…) is the on-disk pr-review DIR name only, and provenance.json now
         // calls it `featureSlug` for that reason. What reaches verifyDistinct is `git branch --show-current`,
         // i.e. slash-form, and so is what a worktree cwd resolves to. No normalization is missing.
-        const wt = worktreeOn('dean/one-2406-mealco-api-auth');
-        expect(statusFor('sess-c9', 'morpheus-reviewer', 'main', wt, 'dean/one-2406-mealco-api-auth')).toBe(PROVENANCE_OK);
+        const wt = worktreeOn('dean/one-2406-acme-api-auth');
+        expect(statusFor('sess-c9', 'checklist-reviewer', 'main', wt, 'dean/one-2406-acme-api-auth')).toBe(PROVENANCE_OK);
         // …and the dash-form spelling is NOT accepted, confirming no sanitized name is silently matched.
-        expect(statusFor('sess-c10', 'morpheus-reviewer', 'main', wt, 'dean-one-2406-mealco-api-auth')).toBe(PROVENANCE_MISSING);
+        expect(statusFor('sess-c10', 'checklist-reviewer', 'main', wt, 'dean-one-2406-acme-api-auth')).toBe(PROVENANCE_MISSING);
     });
 
     it('does not credit a detached HEAD, which rev-parse prints as the literal "HEAD"', () => {
         const wt = worktreeOn('dean/feat-detached');
         git(wt, 'checkout', '-q', '--detach', 'HEAD');
-        expect(statusFor('sess-c11', 'morpheus-reviewer', 'worktree-agent-aaaa', wt, 'HEAD')).toBe(PROVENANCE_MISSING);
+        expect(statusFor('sess-c11', 'checklist-reviewer', 'worktree-agent-aaaa', wt, 'HEAD')).toBe(PROVENANCE_MISSING);
     });
 });
 

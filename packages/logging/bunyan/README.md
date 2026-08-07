@@ -11,7 +11,7 @@ Two factories, both auto-enriching every line with the logged context keys regis
 - **`BunyanGcpFactory`** — GCP: streams to Cloud Logging via
   [`@google-cloud/logging-bunyan`](https://github.com/googleapis/nodejs-logging-bunyan),
   which owns the numeric-level→severity mapping and structured payload. Registered context
-  keys ride along as payload fields. This mirrors the tested-in-GCP `trytami` service.
+  keys ride along as payload fields. This mirrors a production-tested GCP service.
 
 ## Usage
 

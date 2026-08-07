@@ -29,7 +29,7 @@ describe('validateWebpiecesConfig', () => {
             'no-file-import-cycles': {
                 mode: 'RUN_EVERY_TIME',
                 ignoreTypeOnly: false,
-                excludePackages: ['@kami/entities'],
+                excludePackages: ['@db/entities'],
                 turnOffRuleUntilEpoch: 1771931925,
                 turnOffRuleWhileOnBranch: 'deanhiller/foo',
             },

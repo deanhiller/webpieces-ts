@@ -436,7 +436,7 @@ describe('a callsService MAP resolves per api-class for a client that calls seve
 
 /**
  * A target resolves against the MODULE name always, plus a declared `serviceName` alias. Both
- * adoption paths must work: monorepo-nx3 addresses `tf-ai-chat` for the `ai-chat` module, so it can
+ * adoption paths must work: consumer-monorepo3 addresses `tf-ai-chat` for the `ai-chat` module, so it can
  * either declare the prefixed name as an alias, or write the module name and let ClientRegistry's
  * deriver add the prefix at runtime.
  */

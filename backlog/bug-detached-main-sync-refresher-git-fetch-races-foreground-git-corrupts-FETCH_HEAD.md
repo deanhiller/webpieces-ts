@@ -4,12 +4,12 @@
 (`packages/tooling/ai-hook-rules/src/core/main-sync-refresh.ts` → detached `sync-main.ts`)
 **Version seen (consuming repo):** installed `@webpieces/nx-webpieces-rules` **`0.4.452`**; guard source
 read from `/Users/deanhiller/workspace/personal/webpieces-ts40` @ `main`.
-**Reporter context:** hit live **2026-07-29** in `/Users/deanhiller/workspace/onetablet/monorepo-nx1`.
+**Reporter context:** hit live **2026-07-29** in `/Users/deanhiller/workspace/acme/consumer-monorepo1`.
 On `main`, 18 commits behind origin, every attempt to run the guard's own prescribed cure
 `git pull origin main` failed with:
 
 ```
-From github.com:mealco-internal/monorepo-nx
+From github.com:acme-internal/consumer-monorepo
  * branch            main       -> FETCH_HEAD
 fatal: Cannot fast-forward to multiple branches.
 ```
@@ -17,8 +17,8 @@ fatal: Cannot fast-forward to multiple branches.
 `.git/FETCH_HEAD` contained the SAME line twice, both marked for-merge:
 
 ```
-4d9e8bd274a85a3c19d12cc2ff910eaf79bf728c		branch 'main' of github.com:mealco-internal/monorepo-nx
-4d9e8bd274a85a3c19d12cc2ff910eaf79bf728c		branch 'main' of github.com:mealco-internal/monorepo-nx
+4d9e8bd274a85a3c19d12cc2ff910eaf79bf728c		branch 'main' of github.com:acme-internal/consumer-monorepo
+4d9e8bd274a85a3c19d12cc2ff910eaf79bf728c		branch 'main' of github.com:acme-internal/consumer-monorepo
 ```
 
 `git pull` reads FETCH_HEAD, sees two `for-merge` entries, and refuses — even though both are the

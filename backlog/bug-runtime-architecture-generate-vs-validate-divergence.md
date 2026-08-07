@@ -9,7 +9,7 @@ the comparison live in this package.
 
 ## Where to reproduce (consuming monorepo)
 
-Full path: **`/Users/deanhiller/workspace/ctoteachings/monorepo1`** (an AI can read it directly).
+Full path: **`/Users/deanhiller/workspace/acme-edu/consumer-repo1`** (an AI can read it directly).
 Relevant artifacts there:
 - `architecture/runtime-dependencies.json` — the committed graph, written by `generate` (**class-name keyed**, edges/apis carry `"type": "rpc"`).
 - `webpieces.config.json` → `rules.runtime-architecture` (`servicePaths: ["services/*"]`, `apiProjectPaths: [...8 api libs...]`).
@@ -99,7 +99,7 @@ Make the unchanged-check compare like-for-like. Options, best first:
 
 ## Acceptance check
 
-In `/Users/deanhiller/workspace/ctoteachings/monorepo1`: after `architecture:generate` + commit,
+In `/Users/deanhiller/workspace/acme-edu/consumer-repo1`: after `architecture:generate` + commit,
 `architecture:validate-runtime-architecture` passes on a clean tree, and passes again with no changes
 on a second run.
 

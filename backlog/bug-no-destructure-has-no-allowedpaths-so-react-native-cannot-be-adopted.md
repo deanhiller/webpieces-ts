@@ -74,7 +74,7 @@ does not help: React's destructuring is inside component functions, not at modul
 
 ## Measurement
 
-Consuming repo: **`/Users/deanhiller/workspace/ctoteachings/monorepo3`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme-edu/consumer-repo3`** (an AI can read it directly).
 Config as shipped today:
 
 ```json

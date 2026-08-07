@@ -5,7 +5,7 @@
 **Severity:** High — **silent cleartext credential disclosure**, on by default, with no opt-out. A
 long-lived Gmail OAuth **refresh token** is currently sitting in Google Cloud Logging in a
 production project because of this. The app works perfectly while doing it; nothing warns, and no
-log level or config suppresses bodies. Found in `ctoteachings/monorepo` (helper-portal, prod).
+log level or config suppresses bodies. Found in `acme-edu/consumer-repo` (helper-portal, prod).
 
 ## Symptom
 

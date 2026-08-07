@@ -127,7 +127,7 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
  * Renders the per-reviewer instructions file that `wp-review-upsert-pr` writes to
  * `.webpieces/pr-review/<feature>/instructions/<subagent>.instructions.md`.
  *
- * WHY this file exists, measured rather than assumed: a reviewer subagent on monorepo-nx2 spent **14 of its
+ * WHY this file exists, measured rather than assumed: a reviewer subagent on consumer-monorepo2 spent **14 of its
  * 26 tool calls** rediscovering context the tooling already had — three separate greps into
  * `node_modules/@webpieces` to locate a scanner, a hunt through terraform for queue names, and a
  * re-derivation of the dependency graph. It did not over-review; it was under-supplied. Everything below is

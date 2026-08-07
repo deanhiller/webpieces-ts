@@ -1,7 +1,7 @@
 # FEATURE: `pr-gate.checklists[]` — a diff-triggered extension point for company review processes
 
 **Package:** `@webpieces/rules-config` + `@webpieces/pr-gate`
-**Requested by:** the `mealco-internal/monorepo-nx` consumer (`/Users/deanhiller/workspace/onetablet/monorepo-nx2`)
+**Requested by:** the `acme-internal/consumer-monorepo` consumer (`/Users/deanhiller/workspace/acme/consumer-monorepo2`)
 **Why it matters:** adopting the webpieces gated flow silently **disabled** that repo's existing PR-time review trigger, and webpieces currently offers no supported way to put it back.
 
 > Note: this is authored in `webpieces-ts30` because `webpieces-ts40` is busy with other work. Same
@@ -11,7 +11,7 @@
 
 The consuming repo had a company review process wired into two Claude Code hooks:
 
-- `.claude/hooks/pre-commit-review.sh` on `git commit` — maps staged paths to `.claude/review/morpheus-*.md` checklists and returns `permissionDecision: deny` with `additionalContext` naming the docs the AI must read.
+- `.claude/hooks/pre-commit-review.sh` on `git commit` — maps staged paths to `.claude/review/checklist-*.md` checklists and returns `permissionDecision: deny` with `additionalContext` naming the docs the AI must read.
 - `.claude/hooks/pr-quality-gate.sh` on `gh pr create` — the same idea at PR time.
 
 The second one is now **dead code**. `pr-creation-or-push-guard` blocks `gh pr create` outright, so the hook's trigger command never runs. Nobody removed the gate; its trigger disappeared. That is a webpieces-adoption regression, and every consumer that had a `gh pr create`-triggered gate has the same silent hole.
@@ -155,11 +155,11 @@ Inside `validatePrGateSection`, beside the existing `gates` block, following the
 "checklists": [
   { "id": "migrations", "title": "DB migrations",
     "patterns": ["**/migration*/**/*.ts", "**/migration*/**/*.sql"], "contentPatterns": [],
-    "docs": [".claude/review/morpheus-migrations.md"],
+    "docs": [".claude/review/checklist-migrations.md"],
     "severity": "BLOCK", "blockMessage": "Walk the migration checklist before opening this PR.", "disabled": false },
   { "id": "hasura", "title": "Hasura metadata",
     "patterns": ["**/hasura/metadata/**", "**/hasura/migration/**"], "contentPatterns": [],
-    "docs": [".claude/review/morpheus-hasura.md"], "severity": "BLOCK", "blockMessage": "...", "disabled": false }
+    "docs": [".claude/review/checklist-hasura.md"], "severity": "BLOCK", "blockMessage": "...", "disabled": false }
 ]
 ```
 

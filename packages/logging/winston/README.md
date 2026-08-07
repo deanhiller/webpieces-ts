@@ -10,8 +10,8 @@ Two factories, both auto-enriching every line with the logged context keys regis
   `[loggerName] [requestId=… tenantId=…] level: message {…extra}`.
 - **`WinstonGcpFactory`** — Cloud Run / GKE: flat JSON to **stdout**, scraped by the logging
   agent. A level→`severity` map is the only GCP glue (no `@google-cloud` transport);
-  registered context keys land at top-level `jsonPayload.<name>`. This mirrors the
-  tested-in-GCP logger in `onetablet/monorepo-nx1`.
+  registered context keys land at top-level `jsonPayload.<name>`. This mirrors a
+  production-tested GCP logger.
 
 ## Usage
 

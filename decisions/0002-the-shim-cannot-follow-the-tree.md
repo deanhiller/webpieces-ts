@@ -27,13 +27,13 @@ sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
 `$CLAUDE_PROJECT_DIR` is the **primary clone**, fixed at session start, for every agent — coordinator
 and subagent alike, including a subagent bound to a linked worktree.
 
-**The measurement.** Two reviewer subagents in the consuming repo `monorepo-nx1`, 2026-08-06, each
+**The measurement.** Two reviewer subagents in the consuming repo `consumer-monorepo1`, 2026-08-06, each
 bound to its own linked worktree. `root=` is resolved from the payload `cwd` and correctly tracks the
 worktree; `projectDir=` is `$CLAUDE_PROJECT_DIR` and is pinned to the primary on **every** line:
 
 ```
-root=…/monorepo-nx1/.claude/worktrees/agent-aa2d06622008c7eb5   projectDir=…/monorepo-nx1
-root=…/monorepo-nx1/.claude/worktrees/agent-ad0ce1739f5923910   projectDir=…/monorepo-nx1
+root=…/consumer-monorepo1/.claude/worktrees/agent-aa2d06622008c7eb5   projectDir=…/consumer-monorepo1
+root=…/consumer-monorepo1/.claude/worktrees/agent-ad0ce1739f5923910   projectDir=…/consumer-monorepo1
 ```
 
 The same guard, in the same minute, gave the SAME agent opposite verdicts on the SAME target file —

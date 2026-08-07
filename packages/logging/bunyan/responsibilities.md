@@ -24,4 +24,4 @@ both `LoggerFactory` impls that enrich every line with the logged `HeaderRegistr
 
 - Depends only on `@webpieces/core-util` (plus bunyan + @google-cloud/logging-bunyan).
 - `BunyanGcpFactory` sends to the Cloud Logging API and needs GCP ADC on the instance,
-  matching the tested `trytami` service.
+  matching a production-tested GCP service.

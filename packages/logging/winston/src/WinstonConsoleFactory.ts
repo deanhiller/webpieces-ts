@@ -8,7 +8,7 @@ import { bigIntSafeFormat, injectContextFormat, localPrettyFormat, severityForma
  * backend, different rendering, byte-identical to the bunyan console backend for the same record.
  *
  * PLAIN TEXT (no `format.colorize()`): the format is tuned for human reading AND `grep` (and AI
- * reading), matching trytami's deliberate "no colors" choice — ANSI escapes break greppability and
+ * reading), matching the production-tested logger's deliberate "no colors" choice — ANSI escapes break greppability and
  * bunyan's console has none, so color here would also break winston≡bunyan parity.
  *
  * `format.timestamp({format:'HH:mm:ss.SSS'})` supplies the `[time]` slot (`localPrettyFormat` reads

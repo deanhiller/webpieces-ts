@@ -32,8 +32,8 @@ signal is right there at the throw site; it just never becomes a type the caller
 
 ### Why this matters
 
-With no type, every consuming app resorts to matching **browser message text**. From trytami, now
-copied into `ctoteachings/monorepo1`'s `error-angular`:
+With no type, every consuming app resorts to matching **browser message text**. From one consumer service, now
+copied into another consumer repo's `error-angular`:
 
 ```ts
 message.includes('Failed to fetch') ||
@@ -78,7 +78,7 @@ export class OfflineError extends Error {
 Preserve the original failure as `cause` always.
 
 Also add `HttpTooManyRequestsError` (429) here while in this file — it is the one member of the
-`HttpError` ladder that never made it over from trytami, forcing apps to check `err.code === 429`
+`HttpError` ladder that never made it over from the ported service, forcing apps to check `err.code === 429`
 (the exact untyped pattern the ladder exists to avoid).
 
 ### 2. Centralised classifier: `networkReject.ts` (in `core-util`)
@@ -184,7 +184,7 @@ client), with no string matching anywhere in app code.
 ## Rollout
 
 1. Land here, publish, bump the consumer's `@webpieces/*` version.
-2. In `ctoteachings/monorepo1` `error-angular`: swap the `HttpError`-ladder's offline branch to
+2. In `acme-edu/consumer-repo1` `error-angular`: swap the `HttpError`-ladder's offline branch to
    `err instanceof OfflineError`, delete `isNetworkOfflineError()`, and switch the 429 branch from
    `err.code === 429` to `err instanceof HttpTooManyRequestsError`.
 

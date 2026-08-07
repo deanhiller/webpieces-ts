@@ -46,10 +46,10 @@ const BUNYAN_STD_FIELDS = new Set<string>([
     METHOD_FIELD,
 ]);
 
-// "HH:MM:SS.mmm" in LOCAL time — matching the winston backend (fecha 'HH:mm:ss.SSS') and the trytami
+// "HH:MM:SS.mmm" in LOCAL time — matching the winston backend (fecha 'HH:mm:ss.SSS') and the production-tested
 // format this was tuned for (`Date.toTimeString()`, also local). Parsing the ISO to a Date and reading
 // local fields (rather than splitting the UTC ISO string) is what keeps the two backends byte-identical;
-// milliseconds are zero-padded to 3 digits (trytami's raw `getMilliseconds()` rendered 5ms as ".5").
+// milliseconds are zero-padded to 3 digits (that logger's raw `getMilliseconds()` rendered 5ms as ".5").
 // webpieces-disable no-function-outside-class -- bunyan render helper; whole file is bunyan stream/render factories
 function formatTime(iso: JsonValue): string {
     if (typeof iso !== 'string') {
@@ -113,7 +113,7 @@ function buildTags(obj: BunyanRecord, fields?: string[]): string[] {
 /**
  * Render one bunyan JSON line as a human-readable, greppable console line:
  * `[LEVEL][time][Controller.method][loggerName][ctx tags]: message` plus multi-line error details.
- * Level FIRST, then time (the ordering the trytami format was tuned for). `controller`/`method` render
+ * Level FIRST, then time (the ordering the production-tested format was tuned for). `controller`/`method` render
  * as a compact bracket, `loggerName` as its own bracket, and every other injected context key becomes a
  * `key:value` tag (optionally filtered/ordered by the app `fields` allow-list).
  */
@@ -150,7 +150,7 @@ function writeConsole(line: string, fields?: string[]): void {
 /**
  * The GCP stream: delegates ALL structured-JSON formatting (numeric level → GCP
  * severity, msg→message, trace/httpRequest fields, stripping name/hostname/pid)
- * to @google-cloud/logging-bunyan, exactly as the tested trytami service does.
+ * to @google-cloud/logging-bunyan, exactly as the production-tested service does.
  * Sends to the Cloud Logging API (needs ADC on the instance).
  *
  * Records pass through a {@link ChunkingRawStream} first, because Cloud Logging caps a LogEntry at

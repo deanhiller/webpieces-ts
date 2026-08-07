@@ -255,7 +255,7 @@ describe('winston out-of-context svcName + version stamping', () => {
     });
 });
 
-describe('WinstonConsoleFactory local pretty line (trytami format)', () => {
+describe('WinstonConsoleFactory local pretty line (production-tested format)', () => {
     beforeEach(() => {
         ServiceInfo.clear();
         ServiceInfo.setInfo('test-svc', '9.9.9');

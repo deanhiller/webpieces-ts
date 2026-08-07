@@ -89,7 +89,7 @@ one field fixes today's symptom and leaves the mechanism intact.
 
 ### Consuming-repo status (context)
 
-`ctoteachings/monorepo3` is on 0.4.465 with `callsService` declared on both websites. The graph is
+`acme-edu/consumer-repo3` is on 0.4.465 with `callsService` declared on both websites. The graph is
 CORRECT — `helper-portal-angular -> helper-svr` and `lang-angular -> lang-server`, the four fictional
 edges gone — but CI cannot pass, so the change is blocked on this fix. Removing the declarations makes
 CI green again and restores the fiction, which is the choice this bug forces.

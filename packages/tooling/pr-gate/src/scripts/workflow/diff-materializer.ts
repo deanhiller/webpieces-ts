@@ -86,7 +86,7 @@ export class DiffManifest {
 /**
  * Extracts this branch's diff ONCE, to disk, so a reviewer subagent reads it instead of reconstructing it.
  *
- * The motivating measurement: a reviewer on monorepo-nx2 spent 14 of its 26 tool calls on context
+ * The motivating measurement: a reviewer on consumer-monorepo2 spent 14 of its 26 tool calls on context
  * archaeology, and the very first `git diff` it was told to run returned nothing (see {@link DiffBasis}).
  * Handing it a file it can simply open removes both failure modes — the empty range and the shell-out.
  *

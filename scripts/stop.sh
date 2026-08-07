@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Stop script for webpieces-ts server
-# Based on trytami's local-stop.sh pattern
+# Based on a production service's local-stop.sh pattern
 
 PID_FILE="/tmp/webpieces-ts-server.pid"
 

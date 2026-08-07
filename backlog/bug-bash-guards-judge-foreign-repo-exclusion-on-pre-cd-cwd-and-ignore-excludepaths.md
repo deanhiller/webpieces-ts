@@ -17,7 +17,7 @@ nested repo, so the fix hint is unactionable and the work dead-ends on a human h
 
 ## Repro
 
-In a client repo (`monorepo-nx`) whose `webpieces.config.json` contains:
+In a client repo (`consumer-monorepo`) whose `webpieces.config.json` contains:
 
 ```json
 "excludePaths": {
@@ -26,10 +26,10 @@ In a client repo (`monorepo-nx`) whose `webpieces.config.json` contains:
 }
 ```
 
-with a separate git clone at `repositories/onetablet-ai-manager`, run one Bash call:
+with a separate git clone at `repositories/acme-ai-manager`, run one Bash call:
 
 ```bash
-cd /abs/path/monorepo-nx/repositories/onetablet-ai-manager && git push -u origin feature/x
+cd /abs/path/consumer-monorepo/repositories/acme-ai-manager && git push -u origin feature/x
 ```
 
 **Expected:** allowed. It is a different git repo, and `repositories/**` is excluded for `guards`.
@@ -61,7 +61,7 @@ previous call. That is the rare case, for two reasons:
 
 1. Claude Code's Bash tool does not reliably persist cwd across calls, so agents are trained to write
    self-contained `cd X && …` commands.
-2. Client instructions actively mandate that shape. `monorepo-nx`'s `AGENTS.md` hard rule 1 is
+2. Client instructions actively mandate that shape. `consumer-monorepo`'s `AGENTS.md` hard rule 1 is
    *"Run all git operations inside the specific repo directory"*, with the literal example
    `cd repositories/fuji && git checkout -b feature/xyz && git commit … && git push origin feature/xyz`.
 

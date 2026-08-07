@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Start script for webpieces-ts server
-# Based on trytami's local-start.sh pattern
+# Based on a production service's local-start.sh pattern
 
 LOG_FILE="tmp/server.log"
 PID_FILE="/tmp/webpieces-ts-server.pid"

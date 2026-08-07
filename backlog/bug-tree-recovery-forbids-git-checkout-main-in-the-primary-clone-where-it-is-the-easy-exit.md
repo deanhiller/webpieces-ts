@@ -2,7 +2,7 @@
 
 **Package:** `@webpieces/ai-hook-rules`
 **Version seen:** `0.4.490`
-**Severity:** High — an AI agent wedged twice in one session on `mealco-internal/monorepo-nx` and needed a
+**Severity:** High — an AI agent wedged twice in one session on `acme-internal/consumer-monorepo` and needed a
 human to say "this branch is merged so you can git checkout main and delete it." The agent's escape was
 to edit `webpieces.config.json` and loosen a guard, which is the opposite of what the guard exists to do.
 

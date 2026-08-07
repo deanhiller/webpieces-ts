@@ -238,7 +238,7 @@ describe('runBash — foreign-repo boundary and excludePaths on the bash path (d
         // check (path.resolve gitRoot vs workspaceRoot) sees a spurious mismatch and allows everything.
         outer = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'wp-outer-')));
         initRepo(outer);
-        nestedClone = nodePath.join(outer, 'repositories', 'onetablet-ai-manager');
+        nestedClone = nodePath.join(outer, 'repositories', 'acme-ai-manager');
         initRepo(nestedClone);       // its OWN git repo → a different toplevel than `outer`
         plainSubdir = nodePath.join(outer, 'repositories', 'plain');
         fs.mkdirSync(plainSubdir, { recursive: true });   // NOT a git repo of its own

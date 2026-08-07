@@ -29,7 +29,7 @@ primary clone. Every guard that reasons from cwd therefore judges the wrong tree
 ## Sighting 1 — a command targeting a path outside the repo entirely
 
 ```
-ls -la /Users/deanhiller/.claude/projects/ | grep -i monorepo-nx2
+ls -la /Users/deanhiller/.claude/projects/ | grep -i consumer-monorepo2
   → [merged-branch-bash-guard] blocked: "…this branch is merged…"
 ```
 
@@ -127,11 +127,11 @@ the current harness.** It was measured directly this session, in both command sh
 
 | # | tool call | command | result |
 |---|---|---|---|
-| 1 | A | `pwd` | `…/monorepo-nx4` |
-| 2 | B | `cd docs && pwd` | `…/monorepo-nx4/docs` |
-| 3 | C | `pwd` *(fresh call, no `cd`)* | **`…/monorepo-nx4/docs`** |
-| 4 | D | `cd …/monorepo-nx4/docs` *(standalone, no `&&`)* | *(no output)* |
-| 5 | E | `pwd` *(fresh call)* | **`…/monorepo-nx4/docs`** |
+| 1 | A | `pwd` | `…/consumer-monorepo4` |
+| 2 | B | `cd docs && pwd` | `…/consumer-monorepo4/docs` |
+| 3 | C | `pwd` *(fresh call, no `cd`)* | **`…/consumer-monorepo4/docs`** |
+| 4 | D | `cd …/consumer-monorepo4/docs` *(standalone, no `&&`)* | *(no output)* |
+| 5 | E | `pwd` *(fresh call)* | **`…/consumer-monorepo4/docs`** |
 
 Rows 3 and 5 are separate tool invocations containing no `cd` at all, and both report the subdirectory.
 **`cd` persists — compound and standalone alike.** The Claude Code Bash tool documents this explicitly:
@@ -166,7 +166,7 @@ cd .../.webpieces/pr-review/feature-ONE-2252-.../ && for f in review-*.json; do 
 
 That `cd` persisted. The *next* command targeted a different repo entirely
 (`git -C /Users/deanhiller/workspace/personal/webpieces-ts50 status`) and was blocked — judged against
-`monorepo-nx4` because the shell happened to still be sitting inside it.
+`consumer-monorepo4` because the shell happened to still be sitting inside it.
 
 ## This makes the underlying bug worse, not better
 

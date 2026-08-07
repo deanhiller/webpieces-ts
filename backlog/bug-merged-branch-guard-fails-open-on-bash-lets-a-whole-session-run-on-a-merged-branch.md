@@ -14,7 +14,7 @@ redirect to `git checkout -b <new> origin/main`. Here it detected the merged sta
 
 ## Where reproduced (consuming monorepo)
 
-Full path: **`/Users/deanhiller/workspace/ctoteachings/monorepo1`** (an AI can read it directly).
+Full path: **`/Users/deanhiller/workspace/acme-edu/consumer-repo1`** (an AI can read it directly).
 Relevant artifacts there (all under `.webpieces/`):
 - `main-sync-status.json` → `{"branch":"deanhiller/contextkey-typed","branchAlreadyMerged":true,"mergedPr":"194","conflict":true,"forkPoint":"01e2e4f…","localMain":"01e2e4f…","originMain":"cae0343…"}`
 - `merged-branches.json` → lists `deanhiller/contextkey-typed` in `keep` with `"pr": 194`, reason "checked out in worktree … remove that worktree before deleting the branch".

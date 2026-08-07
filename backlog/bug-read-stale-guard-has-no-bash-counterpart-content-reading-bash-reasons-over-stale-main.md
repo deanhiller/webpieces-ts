@@ -5,7 +5,7 @@ rule at `packages/tooling/ai-hook-rules/src/core/rules/read-stale-guard.ts`)
 **Version seen (consuming repo):** installed `@webpieces/nx-webpieces-rules` **`0.4.452`** (guard source
 read from `/Users/deanhiller/workspace/personal/webpieces-ts40` @ `main`)
 **Reporter context:** hit live on **2026-07-28→29** in a consuming monorepo
-(`/Users/deanhiller/workspace/onetablet/monorepo-nx1`). An assistant (Claude Code, Opus 4.8) finished a
+(`/Users/deanhiller/workspace/acme/consumer-monorepo1`). An assistant (Claude Code, Opus 4.8) finished a
 task, ran `pnpm wp-cleanup`, `git checkout main`, and then **local `main` never got updated** (`git pull
 origin main` was failing with `fatal: Cannot fast-forward to multiple branches`, a separate FETCH_HEAD
 quirk). It then spent the rest of the session running `grep` / `ls` / `cat` / `git log -- <path>` over
@@ -55,7 +55,7 @@ line correctly for State B (its comment: *"Reading git METADATA (log/diff/show) 
 stale FILE content"*) and allowlists cures + read-only git while blocking `cat`/`grep` of tracked files.
 State A just never got the same treatment.
 
-## Evidence (live, this session — consuming repo `monorepo-nx1`)
+## Evidence (live, this session — consuming repo `consumer-monorepo1`)
 
 `.webpieces/main-sync-status.json` — pure State A (on main, behind, NOT a merged branch):
 
@@ -75,12 +75,12 @@ $ git diff --stat 779230c origin/main | tail -1
 108 files changed, 8069 insertions(+), 3692 deletions(-)
 
 $ git diff --stat 779230c origin/main -- .github/workflows/
- .github/workflows/kami-migration-check.yml | 186 +++++++++++++++++++++++++++++   # NEW upstream
+ .github/workflows/db-migration-check.yml | 186 +++++++++++++++++++++++++++++   # NEW upstream
  .github/workflows/promote-to-prod.yml      |   6 +                                 # CHANGED upstream
 ```
 
 Concrete wrong outputs I produced from stale Bash reads (no guard fired on any of them):
-- `ls .github/workflows/` returned a list **missing `kami-migration-check.yml`** (186-line workflow that
+- `ls .github/workflows/` returned a list **missing `db-migration-check.yml`** (186-line workflow that
   exists on origin/main but not in my tree) — I then discussed "the workflow set" from that incomplete list.
 - `grep`/`cat` over `.github/workflows/deploy-tf-services.yml` + `promote-to-prod.yml` to describe the
   dev→prod deploy flow — `promote-to-prod.yml` had changed upstream (+6), so I was quoting an old copy.

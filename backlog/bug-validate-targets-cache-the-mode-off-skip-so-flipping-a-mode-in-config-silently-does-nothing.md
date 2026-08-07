@@ -10,7 +10,7 @@ says it is on.
 **Source:** `packages/tooling/nx-webpieces-rules/src/validation-targets.ts` (target `inputs` omit
 `webpieces.config.json`)
 
-## Repro (observed live on monorepo-nx, upgrading 0.4.463 → 0.4.479)
+## Repro (observed live on consumer-monorepo, upgrading 0.4.463 → 0.4.479)
 
 1. New release adds `validate-no-architecture-cycles`. Declare it as `"mode": "OFF"` to get the config
    validator passing, then run `pnpm run webpieces:ci`. The target runs and prints:

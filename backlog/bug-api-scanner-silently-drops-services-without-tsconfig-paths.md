@@ -2,8 +2,8 @@
 
 > **STATUS: FIXED** (branch `dean/fix-api-scanner-dts-resolution`) — root cause confirmed exactly as
 > analyzed below. All three suggested fixes implemented; acceptance check below passes against the
-> real `monorepo-nx2`. Ships to consumers on the next tooling publish + version bump; until then the
-> `tsconfig.base` paths workaround in `monorepo-nx2` is harmless and can stay.
+> real `consumer-monorepo2`. Ships to consumers on the next tooling publish + version bump; until then the
+> `tsconfig.base` paths workaround in `consumer-monorepo2` is harmless and can stay.
 >
 > - **Fix #1 (no longer depends on `paths`)** — contracts are now indexed from workspace SOURCE in a
 >   parser-only pre-pass (`ApiSourceIndexBuilder`) before any call site is resolved. When the checker
@@ -18,7 +18,7 @@
 >   and names the call site, instead of telling devs to add wiring they already have or to delete a
 >   load-bearing dependency.
 >
-> **Acceptance result** (paths entries removed from `monorepo-nx2/tsconfig.base.json`, scanner run
+> **Acceptance result** (paths entries removed from `consumer-monorepo2/tsconfig.base.json`, scanner run
 > over the real repo — its `tsconfig.base.json` was restored afterwards, repo left clean):
 >
 > | scanner | `reports-dispatcher` |
@@ -47,7 +47,7 @@ entirely**. Sibling services in the same repo, wired identically, appear fine.
 
 ## Where to reproduce (consuming monorepo)
 
-Full path: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI can read it directly).
+Full path: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`** (an AI can read it directly).
 
 Before the fix, `pnpm nx run architecture:generate` printed `Runtime graph saved (2 services, 1
 runtime edges)` — `ai-chat` and `pg-dataaccess` only. `reports-dispatcher` was missing despite:
@@ -73,7 +73,7 @@ private apiClassInfoFor(cls: ts.ClassDeclaration): ApiClassInfo | null {
 ```
 
 When the consuming repo has **no `tsconfig.base` paths entry** for the api-lib, TypeScript resolves
-`import { ReportsDispatcherApi } from '@mealco-internal/reports-dispatcher-api'` through the
+`import { ReportsDispatcherApi } from '@acme-internal/reports-dispatcher-api'` through the
 node_modules symlink → that package's `package.json` `"types": "dist/index.d.ts"`. So
 `resolveClassDeclaration()` (`api-scanner.ts:219`) hands `apiClassInfoFor` the **declaration**, not
 the source:
@@ -111,11 +111,11 @@ With `validateApiRelations: true`, the validator *does* catch the missing relati
 actively wrong:
 
 ```
-❌ 'reports-dispatcher' (role:server) depends on api-lib '@mealco-internal/reports-dispatcher-api'
+❌ 'reports-dispatcher' (role:server) depends on api-lib '@acme-internal/reports-dispatcher-api'
    but neither IMPLEMENTS nor USES any of its APIs (ReportsDispatcherApi).
    Do ONE of:
      2. IMPLEMENT it: add a controller and register it — apiFactory.addRoutes(ReportsDispatcherApi, TheController).
-     3. If the dependency is unused, remove '@mealco-internal/reports-dispatcher-api' from 'reports-dispatcher'.
+     3. If the dependency is unused, remove '@acme-internal/reports-dispatcher-api' from 'reports-dispatcher'.
 ```
 
 The service **already does** `addRoutes(ReportsDispatcherApi, ReportsDispatcherController)`, and the
@@ -123,7 +123,7 @@ dependency is **not** unused. Every suggestion is a dead end; option 3 actively 
 correct, load-bearing dependency. A developer following this message will not find the cause — it is
 a config gap in `tsconfig.base.json`, which the message never mentions.
 
-This misdiagnosis has a documented cost in the consuming repo. `monorepo-nx2` commit `a5ccc0f`
+This misdiagnosis has a documented cost in the consuming repo. `consumer-monorepo2` commit `a5ccc0f`
 (2026-07-13) turned **both** validators off precisely because they produced "unexplained edges" that
 looked like false positives:
 
@@ -168,8 +168,8 @@ was disabled and the runtime graph silently rotted at 0 for a month.
 
 ## Acceptance check
 
-In `/Users/deanhiller/workspace/onetablet/monorepo-nx2`: **remove** the
-`@mealco-internal/reports-dispatcher-api` and `@mealco-internal/reporter-trigger-api` entries from
+In `/Users/deanhiller/workspace/acme/consumer-monorepo2`: **remove** the
+`@acme-internal/reports-dispatcher-api` and `@acme-internal/reporter-trigger-api` entries from
 `tsconfig.base.json` `paths`, then run `pnpm nx run architecture:generate`. It must **still** report
 `3 services` and emit `reports-dispatcher`'s `apiRelations` — i.e. the graph is correct with no
 paths entry at all. Failing that (if fix #1 is deferred), `generate` must at minimum **fail loudly**
@@ -179,8 +179,8 @@ naming the unresolved contract, instead of exiting 0 with a service missing.
 
 ### Consuming-repo status (context)
 
-`monorepo-nx2` is unblocked with the paths-entry workaround (`tsconfig.base.json` + regenerated
-graphs; full `ci:local` green, `validate-api-relations` re-enabled and passing). That fix is
-defensible there on its own terms — every other `@mealco-internal/*` lib already has a paths entry,
+`consumer-monorepo2` is unblocked with the paths-entry workaround (`tsconfig.base.json` + regenerated
+graphs; a full affected-CI run green, `validate-api-relations` re-enabled and passing). That fix is
+defensible there on its own terms — every other `@acme-internal/*` lib already has a paths entry,
 so these two api-libs were the outliers. But it is a **workaround for this bug**, not a fix: the
 next api-lib added without a paths entry will vanish from the graph just as silently.

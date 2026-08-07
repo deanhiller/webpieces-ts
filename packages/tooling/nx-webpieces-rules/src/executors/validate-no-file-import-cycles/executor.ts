@@ -5,7 +5,8 @@
  * TypeScript sources and fails when an import cycle is found.
  *
  * Unlike the old `nx:run-commands` target (which shelled out to a runtime
- * `npx madge` fetch — see NEEDED_CHANGES.md #1), this executor:
+ * `npx madge` fetch — undeclared, so consumers of the published plugin had no
+ * local madge and CI runners corrupted their npx cache fetching it), this executor:
  *   - invokes the madge it bundles as a dependency (deterministic, no network),
  *   - is driven by webpieces.config.json like every other webpieces rule, so it
  *     supports an on/off `mode` and a time-boxed `ignoreModifiedUntilEpoch`.
@@ -18,7 +19,7 @@
  *                                            //   (warn, don't fail). After it, fails again.
  *       "ignoreTypeOnly": true,             // ignore `import type` re-export cycles
  *                                            //   (erased at compile time, harmless at runtime)
- *       "excludePackages": ["@kami/entities"] // npm package names whose source trees madge
+ *       "excludePackages": ["@db/entities"] // npm package names whose source trees madge
  *                                            //   should NOT traverse (stops foreign cycles
  *                                            //   from leaking into this project's report)
  *   }
@@ -156,7 +157,7 @@ function resolvePackageDir(pkgName: string, workspaceRoot: string): string | nul
 
     // Fallback: resolve via tsconfig.base.json compilerOptions.paths.
     // pnpm workspace packages are not in node_modules, so require.resolve fails above;
-    // tsconfig.base.json maps e.g. "@mealco-internal/kami" → ["libraries/kami/index.ts"].
+    // tsconfig.base.json maps e.g. "@acme-internal/db" → ["libraries/db/index.ts"].
     const tsconfigPaths = readTsconfigPaths(workspaceRoot);
     const entries = tsconfigPaths?.[pkgName];
     if (!entries || entries.length === 0) {
@@ -231,7 +232,7 @@ function hasSourceFiles(dir: string): boolean {
 /**
  * Build the exclude pattern for one resolved package dir, RELATIVE to the base
  * madge is invoked with (projectRoot). madge matches excludeRegExp against ids
- * relative to that base — e.g. '../../libraries/kami/src/x.ts' — so an absolute
+ * relative to that base — e.g. '../../libraries/db/src/x.ts' — so an absolute
  * `^/abs/...` anchor can never match and silently excludes nothing. Returns the
  * relative-anchored pattern. Warns (but still returns the pattern) when the dir
  * holds no source madge would traverse, closing the resolves-but-matches-nothing

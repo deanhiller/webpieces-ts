@@ -18,7 +18,7 @@ machines and in the GHA PR gate, red in a clean per-service Docker build.
 function buildMadgeOptions(ignoreTypeOnly: boolean, excludePackages: string[], workspaceRoot: string): MadgeOptions {
     const excludeRegExp = [EXCLUDE_BUILD_DIRS, EXCLUDE_DECLARATION_FILES];
     for (const pkg of excludePackages) {
-        const dir = resolvePackageDir(pkg, workspaceRoot);   // -> /abs/path/libraries/kami
+        const dir = resolvePackageDir(pkg, workspaceRoot);   // -> /abs/path/libraries/db
         if (dir) excludeRegExp.push(`^${escapeRegex(dir)}(/|$)`);   // <-- ^/abs/... anchor
     }
 ```
@@ -35,10 +35,10 @@ const result = await madge(projectRoot, buildMadgeOptions(ignoreTypeOnly, exclud
 and madge matches `excludeRegExp` against ids **relative to that base**, e.g.
 
 ```
-../../libraries/kami/src/brand/brand.entity.ts
+../../libraries/db/src/brand/brand.entity.ts
 ```
 
-A pattern anchored `^/Users/.../libraries/kami(/|$)` can never match `../../libraries/kami/...`.
+A pattern anchored `^/Users/.../libraries/db(/|$)` can never match `../../libraries/db/...`.
 So every `excludePackages` entry is discarded with no diagnostic.
 
 **Corroborating detail in the same file:** the two built-in patterns immediately above are written
@@ -54,12 +54,12 @@ Only the `excludePackages` branch assumes absolute ids.
 ## Measurement
 
 Run against madge directly, from `services/pg-dataaccess` in the consuming repo, with
-`libraries/kami/lib` absent:
+`libraries/db/lib` absent:
 
 | `excludeRegExp` | cycles reported |
 |---|---|
 | absolute-anchored (**what webpieces builds today**) | **94** |
-| relative-anchored (`^\.\./\.\./libraries/kami(/\|$)`) | **0** |
+| relative-anchored (`^\.\./\.\./libraries/db(/\|$)`) | **0** |
 | no exclude at all | 94 |
 
 Absolute-anchored is byte-identical in effect to passing no exclusion.
@@ -67,54 +67,54 @@ Absolute-anchored is byte-identical in effect to passing no exclusion.
 ```js
 const madge = require('madge');
 const projectRoot = '<repo>/services/pg-dataaccess';
-const absDir      = '<repo>/libraries/kami';
+const absDir      = '<repo>/libraries/db';
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const base = { fileExtensions: ['ts', 'tsx'] };
 
 await madge(projectRoot, {...base, excludeRegExp: [`^${esc(absDir)}(/|$)`]});          // 94
-await madge(projectRoot, {...base, excludeRegExp: ['^\\.\\./\\.\\./libraries/kami(/|$)']}); // 0
+await madge(projectRoot, {...base, excludeRegExp: ['^\\.\\./\\.\\./libraries/db(/|$)']}); // 0
 await madge(projectRoot, base);                                                        // 94
-// sample cycle id: '../../libraries/kami/src/brand-type/brand-type.entity.ts'
+// sample cycle id: '../../libraries/db/src/brand-type/brand-type.entity.ts'
 ```
 
 ## Why it hid for so long, and how it bit
 
-Consuming repo: **`/Users/deanhiller/workspace/onetablet/monorepo-nx2`** (an AI can read it directly).
+Consuming repo: **`/Users/deanhiller/workspace/acme/consumer-monorepo2`** (an AI can read it directly).
 `webpieces.config.json` has had the exclusion configured all along:
 
 ```json
 "no-file-import-cycles": {
   "mode": "RUN_EVERY_TIME",
   "ignoreTypeOnly": false,
-  "excludePackages": ["@mealco-internal/kami"],
+  "excludePackages": ["@acme-internal/db"],
   "ignoreModifiedUntilEpoch": 1785016799
 }
 ```
 
-Because the exclusion is inert, the gate's outcome is decided by how `@mealco-internal/kami`
+Because the exclusion is inert, the gate's outcome is decided by how `@acme-internal/db`
 resolves, which depends on whether its build output exists:
 
-| `libraries/kami/lib` | Resolution | Result |
+| `libraries/db/lib` | Resolution | Result |
 |---|---|---|
 | present | `node_modules` → compiled entry → stops at the package boundary | ✅ 0 cycles |
-| absent | falls through to the `tsconfig.base.json` alias (`libraries/kami/index.ts` → `./src/*`), walks kami's TypeORM entities | ❌ 94 cycles |
+| absent | falls through to the `tsconfig.base.json` alias (`libraries/db/index.ts` → `./src/*`), walks db's TypeORM entities | ❌ 94 cycles |
 
-Those 94 are kami's inherent bidirectional ORM relations (`Brand ↔ BrandLocation ↔ Location`, …) —
+Those 94 are db's inherent bidirectional ORM relations (`Brand ↔ BrandLocation ↔ Location`, …) —
 not fixable by the consumer, which is exactly why `excludePackages` was set.
 
 Consequences observed:
 - Dev machines always pass (`lib/` is a leftover from an earlier build).
 - The GHA PR gate passes — `nx affected -t lint -t build` builds *all* affected projects, and
-  `@mealco-internal/kami:build` happened to land ~2 minutes before the cycle checks.
-- A clean Cloud Build container builds one service alone (`nx build <svc>`), nothing forces kami
-  first → **CD fails**. Hit `pg-dataaccess` and `mealco-api-auth` on dev CD.
+  `@acme-internal/db:build` happened to land ~2 minutes before the cycle checks.
+- A clean Cloud Build container builds one service alone (`nx build <svc>`), nothing forces db
+  first → **CD fails**. Hit `pg-dataaccess` and `acme-api-auth` on dev CD.
 
 It only became visible when `ignoreModifiedUntilEpoch: 1785016799` (2026-07-25 21:59:59 UTC)
 expired and the gate flipped from warn to fail — with no code change to explain it.
 
 Repo-side workaround applied (not a fix for this bug): give the validator its own `nx.json`
 `targetDefaults` entry with `dependsOn: ["^build"]` so the dependency is always compiled before
-madge runs. Tracked as ONE-2188 / monorepo-nx PR #707.
+madge runs. Tracked as ONE-2188 / consumer-monorepo PR #707.
 
 ## Suggested fix
 
@@ -132,7 +132,7 @@ function buildMadgeOptions(
     for (const pkg of excludePackages) {
         const dir = resolvePackageDir(pkg, workspaceRoot);
         if (!dir) continue;
-        // madge ids are relative to projectRoot, e.g. '../../libraries/kami/src/x.ts'
+        // madge ids are relative to projectRoot, e.g. '../../libraries/db/src/x.ts'
         const rel = path.relative(projectRoot, dir).split(path.sep).join('/');
         excludeRegExp.push(`^${escapeRegex(rel)}(/|$)`);
     }
