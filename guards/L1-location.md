@@ -28,6 +28,26 @@ L1 answers three questions, and they are genuinely separate:
    so — `Shell cwd was reset to <root>`. Neither can be assumed, which is why every remedy names the
    root explicitly instead of telling the agent to `cd` first.
 
+## Force-to-root is TWO rules, in two layers — do not collapse them
+
+Collapsing them is how the `shellAtRoot` bug happened the first time, and the two now live in different
+layers, so it is worth stating plainly:
+
+| | judged by | what it judges | for | verdict |
+|---|---|---|---|---|
+| **L-1** | `.claude/webpieces/guarantee-root.sh` (POSIX sh, before any binary) | the `cd` **destination** of the command | **Bash** | ALLOW unless the destination is inside `$CLAUDE_PROJECT_DIR` and holds no `.git` — i.e. **sticky AND unguarded** |
+| **L1** | `gitFromSubdirBlock` (`runner.ts`) | the post-`cd` `effectiveCwd` | **git / gh only** | BLOCK unless it is THE root |
+
+They ask different questions. L-1 asks *"can the relative guard hooks launch there?"* — because the
+guard hooks are registered relative, and a hook that cannot resolve exits 127, which the harness treats
+as a non-blocking error and lets the call proceed UNGUARDED. It therefore ALLOWS a `cd` into a foreign
+nested clone (its own `.git`) and a `cd` outside the project (the harness resets the cwd next call),
+neither of which L1 would tolerate for a `git` command. L1 asks *"is this git command being run from the
+one root it is meant to run from?"*, which is a narrower question about a narrower set of commands.
+
+A denied `cd` never executes — PreToolUse denies the whole tool call before the shell moves — so there
+is no bad state to recover from and L-1 needs no cure command on any allowlist.
+
 ## Preamble — resolve the target first (Bash only)
 
 `EffectiveTreeResolver.resolve()` computes `effectiveCwd`: the directory the command actually runs in,

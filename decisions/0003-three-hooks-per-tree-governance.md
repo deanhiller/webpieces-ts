@@ -1,6 +1,7 @@
 # 0003 — Three hooks: per-tree governance without a bridge
 
-**Status:** PROPOSED — core premise CONFIRMED from docs + our own logs; one unknown left
+**Status:** SHIPPED 2026-08-07 (see §4.9) — H1 exists and is wired, H2/H3 are relative, `BIN` walks up
+with a version check, and the upgrade path repairs all three managed things. Q1 (F12) remains unmeasured.
 **Raised:** 2026-08-06
 **Resolves:** [0002](0002-the-shim-cannot-follow-the-tree.md) (the shim cannot follow the tree)
 **Replaces:** 0002 Option A (the bridge/trampoline) — killed by adversarial review, see §6
@@ -464,6 +465,38 @@ coordinator, so four Claude Code windows are four writers all landing in the sam
 `session_id` is what separates them (§3.1), and it is not read anywhere in #579. Take this change's
 keying and rebase #579's other two halves (the generated L1 doc, the L0 fault stamps) on top — they are
 independent of the log layout and are worth keeping.
+
+## 4.9 SHIPPED (2026-08-07) — the flip, with H-1 and the upgrade path closed
+
+Everything §4.5 deliberately left un-wired is now wired, in one change:
+
+| # | what | where |
+|---|---|---|
+| 1 | **`BIN` walks UP** from `ROOT`, as Node's resolver does, and `BIN_ROOT` records which tree supplied it. Paired with the version check — DECLARED from `$ROOT/package.json`, INSTALLED from `$BIN_ROOT/node_modules` — so an inherited binary at a different version is **fault D** with the cure `cd <tree> && pnpm install`, never a silent straddle. Equal versions stay free, which is the common case | `shim.ts` `RESOLVE_BIN_SH` + `VERSION_DRIFT_GUARD_SH` |
+| 2 | **H2/H3 are RELATIVE** — `sh ".claude/webpieces/ai-hook.sh" <bin>` | `hook-registration.ts` `shimCommand()` |
+| 3 | **H1 is installed and registered** absolute, matcher `Bash` (the shipped `guarantee-root.sh` exits 0 immediately for every other tool, so a wider matcher would spawn a process per Write/Read to do nothing) | `setup.ts` `applyGuaranteeRoot()` |
+| 4 | **The installed surface is THREE things**, and drift, the deny text and the cure all cover all three | `hook-registration.ts` `managedSurfaceDrift()`, `shim.ts` `shimStaleDenyReason()`, `upgrade-shim.ts` |
+| 5 | 21 tests, driving the real `sh` against real payloads in real trees | `three-hook-registration.spec.ts` |
+
+**Required changes 2, 3, 8 and 9 are done; 5 and 6 were already satisfied by the shipped file; 7 needs
+nothing (a denied `cd` never executes, so there is no state to recover and no cure to allowlist).**
+
+The near-miss worth recording: **`wp-upgrade-shim` wrote exactly one file**, and the `cp` cure on the L0
+allowlist has the identical shape. Had the flip shipped without extending them, an upgrading consumer
+would have taken the new shim, KEPT the old absolute two-hook registration, never received
+`guarantee-root.sh`, and L-1 would have stayed dark — with nothing reporting it, because nothing
+validated `settings.json` (Q4). A cure that repairs one of three is worse than no cure: it reports
+success. `wp-upgrade-shim` now regenerates all three and says which; the `cp` fallback's deny text now
+states out loud that it is PARTIAL.
+
+Q4 and Q5 are answered. Q3 is answered by construction — the registration is a drift surface now, so a
+branch that merges an old two-hook settings over a new one raises fault S rather than silently winning.
+
+**Q1 (F12) is NOT settled experimentally.** The three hooks do not disagree in practice — H1 denies only
+`cd`s, H2/H3 never emit an explicit allow (`claude-code-response.ts`; the allow path prints nothing), so
+the "deny vs silence" race needs a deny and a *silence*, which is the shape the docs already describe as
+"any hook may deny". If a live measurement ever shows silence beating deny, H1 must become the only
+hook and this section is where to start reading.
 
 ## 5. Adversarial review verdict — **viable with changes**
 

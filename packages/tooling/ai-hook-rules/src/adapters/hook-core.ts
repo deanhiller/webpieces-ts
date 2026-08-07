@@ -10,7 +10,8 @@ import { RepoRootFinder } from '@webpieces/rules-config';
 import { NormalizedToolInput, NormalizedEdit, ToolKind, InformAiError, RuleFailError, HookMode, BlockedResult } from '../core/types';
 import { toError } from '../core/to-error';
 import { emitDeny, emitAllow } from './claude-code-response';
-import { committedShimStale, governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
+import { governingShimRoot, isAllowed, shimStaleDenyReason, installedShimRulesVersion } from '../bin/shim';
+import { managedSurfaceDrift } from '../bin/hook-registration';
 import { writeGuardMatrixDoc, guardMatrixPointer } from '../core/l0-matrix';
 import { logStream } from '../core/log-stream';
 
@@ -242,7 +243,8 @@ export function shimStaleRecoveryDecision(toolName: string, command: string, fil
     return 'deny';
 }
 
-// Committed-shim self-guard, moved here from the rendered shim (2026-07-24). The committed
+// MANAGED-HOOK-SURFACE self-guard, moved here from the rendered shim (2026-07-24) and widened from one
+// file to three (2026-08-07). The committed
 // .claude/webpieces/ai-hook.sh is webpieces-MANAGED and generated from renderShim(); if it no longer
 // matches, it was reverted / hand-edited / predates this binary, so its OWN fail-closed logic can't be
 // trusted. We are the CURRENT binary from node_modules — the trustworthy party — so WE decide here
@@ -260,7 +262,13 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     // `cwd` still selects where the L0 matrix doc is dropped — that is a "where does the AI read" question,
     // not part of the judgement.
     const shimRoot = governingShimRoot();
-    if (mode === 'rules' || !committedShimStale(shimRoot)) return;
+    if (mode === 'rules') return;
+    // WHICH of the three managed things moved — the shim, the L-1 hook, or the settings.json
+    // registration. Nothing validated the registration before, so a settings file left on the old
+    // two-absolute-hook form silently reverted a repo to per-PRIMARY governance and disabled L-1
+    // entirely: the one component whose whole job is failing closed, switched off with no signal.
+    const drifted = managedSurfaceDrift(shimRoot);
+    if (drifted.length === 0) return;
     const decision = shimStaleRecoveryDecision(payload.tool_name, payload.tool_input.command ?? '', payload.tool_input.file_path ?? '');
     if (decision === 'pass') return;
     if (decision === 'allow-cure') emitAllow();
@@ -269,7 +277,7 @@ function enforceCommittedShim(payload: ClaudeCodePayload, cwd: string, mode: Hoo
     const docPath = writeGuardMatrixDoc(new RepoRootFinder().resolveRepoRoot(cwd));
     // L0 fault S in GUARD_MATRIX.md's codebook — named as the blocking rule so the invocation line
     // says WHAT stopped the call, not merely that something did.
-    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '') + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale');
+    emitDeny(shimStaleDenyReason(installedShimRulesVersion(), shimRoot ?? '', drifted) + guardMatrixPointer(docPath), payload.tool_name, 'committed-shim-stale');
 }
 
 /**
