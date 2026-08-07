@@ -130,8 +130,8 @@ describe('RequestContext scope invariants', () => {
         RequestContext.run(() => {
             headers.fillFromRequest(new HttpRequest('POST', '/save', new Map()));
 
-            expect(RequestContext.getHeader<string>(WebpiecesCoreHeaders.HTTP_METHOD)).toBe('POST');
-            expect(RequestContext.getHeader<string>(WebpiecesCoreHeaders.REQUEST_PATH)).toBe('/save');
+            expect(RequestContext.getUntrusted<string>(WebpiecesCoreHeaders.HTTP_METHOD)).toBe('POST');
+            expect(RequestContext.getUntrusted<string>(WebpiecesCoreHeaders.REQUEST_PATH)).toBe('/save');
             // isLogged=true → they surface in the flat log-field map every record inherits.
             const fields = RequestContext.buildLogFields();
             expect(fields.get('httpMethod')).toBe('POST');

@@ -16,7 +16,7 @@
 The ts40 tree defined a browser-minted grouping id under a click-only name:
 
 ```ts
-static readonly CLICK_ID = new ContextKey('clickId', 'x-webpieces-clickid');
+static readonly CLICK_ID = ContextKey.untrusted<string>('clickId', 'x-webpieces-clickid');
 ```
 
 …that groups every request triggered by ONE user interaction. The per-call id is `requestId`, minted
@@ -58,7 +58,7 @@ wanted (same shape `CLICK_ID` used). `CLICK_ID`/`clickId`/`x-webpieces-clickid` 
  *   outbound hops, so the id follows the action across services.
  * - `isLogged` TRUE → emitted as a plain string on every log line of the request.
  */
-static readonly ACTION_ID = new ContextKey('actionId', 'x-webpieces-actionid');
+static readonly ACTION_ID = ContextKey.untrusted<string>('actionId', 'x-webpieces-actionid');
 ```
 
 The `getAllHeaders()` array (the `DEFAULT_HEADERS` set) now lists `WebpiecesCoreHeaders.ACTION_ID` in

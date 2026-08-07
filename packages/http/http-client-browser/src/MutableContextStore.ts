@@ -1,4 +1,4 @@
-import { ContextKey, AnyContextKey, ContextReader } from '@webpieces/core-util';
+import { AnyContextKey, AnyUntrustedContextKey, ContextReader } from '@webpieces/core-util';
 
 /**
  * MutableContextStore - the BROWSER ContextReader.
@@ -24,13 +24,18 @@ import { ContextKey, AnyContextKey, ContextReader } from '@webpieces/core-util';
 export class MutableContextStore implements ContextReader {
     private values: Map<string, string> = new Map();
 
-    /** Set (or overwrite) the current value for a context key. */
-    set(key: AnyContextKey, value: string): void {
+    /**
+     * Set (or overwrite) the current value for a context key. UNTRUSTED keys only, by type. A browser cannot PROVE anything — every value in here was typed
+     * by the app or the user — so a store that accepted a trusted key would be a forgery side door,
+     * exactly the one closed on the {@link ApiCallContext} seam. Narrowing it here makes the mistake
+     * a compile error in the browser bundle instead of a 401 at the far end of an HTTP call.
+     */
+    set(key: AnyUntrustedContextKey, value: string): void {
         this.values.set(key.name, value);
     }
 
     /** Remove the current value for a context key (e.g. on logout). */
-    remove(key: AnyContextKey): void {
+    remove(key: AnyUntrustedContextKey): void {
         this.values.delete(key.name);
     }
 

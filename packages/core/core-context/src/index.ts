@@ -32,3 +32,4 @@ export type { FrameworkScope } from './frameworkProvide';
 export { RequestContextHeaders } from './RequestContextHeaders';
 // The browser store's server counterpart, still used by the logging packages + http-server filters.
 export { RequestContextReader } from './RequestContextReader';
+export { PendingWireTrust, PendingTrustedValue } from './PendingWireTrust';

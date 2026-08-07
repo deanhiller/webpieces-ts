@@ -14,7 +14,7 @@ export const TEST_SHARED_SECRET_ROTATING = 'some-test-key-rotating';
  * TestAuthConfig - a stub {@link AuthConfig} (shared-secret STATE) for integration tests that don't
  * focus on auth. It binds a known shared secret ({@link TEST_SHARED_SECRET}); pair it with
  * {@link TestJwtHook} when the test also exercises @AuthJwt endpoints. Bound via appOverrides so a
- * putHeader/authorization token passes the framework AuthFilter without minting a real JWT.
+ * authorization token passes the framework AuthFilter without minting a real JWT.
  *
  * The AuthFilter still enforces token PRESENCE before parsing, so a no-credential call on a
  * protected route still 401s through the same chain. Auth-focused tests (Authentication.spec.ts)

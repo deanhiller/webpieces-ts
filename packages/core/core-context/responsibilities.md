@@ -6,8 +6,14 @@ AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpie
 
 - The `RequestContext` singleton wrapping Node `AsyncLocalStorage` for request-scoped storage.
 - `run()`/`runWithContext()` to establish a context at request start.
-- Key/value accessors: `put`, `get`, `remove`, `clear`, `has`, `getAll`, `isActive`.
-- Header-typed accessors (`getHeader`/`putHeader`/`hasHeader`/`getHeaders`) keyed via the `Header` abstraction.
+- Raw string accessors (`put`, `get`, `remove`, `has`) for the framework's own reserved, UNREGISTERED
+  slots; they REJECT any name belonging to a registered `ContextKey`, so they cannot be used to read or
+  forge a trusted value. Plus `clear`, `getAll`, `isActive`.
+- Trust-typed accessors (`getTrusted`/`getUntrusted`/`putTrusted`/`putUntrusted`, plus `getAny` for
+  framework serialization and `hasKey`/`removeKey`) keyed by a `ContextKey`. The verb states whether the
+  value was PROVEN or merely asserted, and the wrong kind of key does not compile.
+- `PendingWireTrust` — the holding pen for inbound wire values of TRUSTED keys, admitted or rejected by
+  `AuthFilter` once the route's auth mode says whether the caller itself was verified.
 - `copyContext()`/`setContext()` for preserving context across async hops (e.g. XPromise).
 
 ## Out of Scope

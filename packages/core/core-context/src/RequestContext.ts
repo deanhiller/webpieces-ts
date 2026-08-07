@@ -53,44 +53,105 @@ class RequestContextImpl {
     }
 
     /**
-     * Run a function with a specific context.
+     * Run a function with a specific context — the restore half of {@link copyContext}, used to carry
+     * a context across an async boundary (XPromise).
+     *
+     * FRAMEWORK-INTERNAL. Unlike the raw string accessors, this deliberately CANNOT be guarded against
+     * registered key names: a restored context legitimately contains trusted values, since restoring
+     * them is the entire purpose. So the guarantee here is narrower and worth stating plainly — the
+     * Map must be one this class produced via `copyContext()`, never one assembled by hand. Handing it
+     * a hand-built Map forges whatever it contains, and no type or check will stop you.
      */
     runWithContext<T>(context: Map<string, any>, fn: () => T): T {
         return this.storage.run(context, fn);
     }
 
     /**
-     * Read the value stored under a {@link ContextKey}. The return type is the key's OWN value type
-     * `V` — `string` for wire/log keys, `ApiCallInfo` for the api tag, `TestCaseRecorder` for the
-     * recorder — INFERRED from the key, never asserted by the caller. This is the typed public
-     * surface over the deliberately type-erased backing Map.
+     * Read a value the framework PROVED — a verified JWT claim, or a fact an app derived from a
+     * verified credential. Does not compile for an untrusted key, so a reader can never mistake a
+     * caller-asserted value for an authenticated one.
+     *
+     * This is the ONLY read that is safe to feed into an authorization decision. If you find
+     * yourself wanting `getUntrusted` for that, the fix is to make the key trusted and have an
+     * authenticator vouch for it — not to use the other verb.
+     *
+     * The return type is the key's OWN value type `V` — `string` for wire/log keys, `ApiCallInfo`
+     * for the api tag, `TestCaseRecorder` for the recorder — INFERRED from the key, never asserted
+     * by the caller. This is the typed public surface over the deliberately type-erased backing Map.
      */
-    getHeader<V>(key: ContextKey<V>): V | undefined {
-        return this.get<V>(key.name);
+    getTrusted<V>(key: ContextKey<V, 'trusted'>): V | undefined {
+        return this.readByName<V>(key.name);
     }
 
     /**
-     * Store a value under a {@link ContextKey}. `value` is type-checked against the key's value type
-     * `V`, so you cannot put a number under a `ContextKey<string>` or a raw object under a typed key.
+     * Read a value a caller merely ASSERTED — a browser-minted actionId, a recording flag, an
+     * in-process log tag. Does not compile for a trusted key: reading a proven fact through the
+     * untrusted verb would under-claim and hide, at the call site, that the value IS reliable.
+     *
+     * Treat everything this returns as attacker-controlled. It is fine for logging, tracing,
+     * routing hints and rate-limit bucketing; it is never an input to "may they do this?".
      */
-    putHeader<V>(key: ContextKey<V>, value: V): void {
-        this.put(key.name, value);
+    getUntrusted<V>(key: ContextKey<V, 'untrusted'>): V | undefined {
+        return this.readByName<V>(key.name);
+    }
+
+    /**
+     * Store a value the framework PROVED. A distinct, greppable verb precisely so that writing a
+     * trusted value is something code has to do ON PURPOSE — `grep -rn putTrusted` lists every place
+     * in the repo that claims to have proven something, which is a reviewable set.
+     *
+     * Callers are the framework `AuthFilter` (stamping {@link ContextTuple}s an app's JwtHook derived
+     * from a verified credential) and app code that has itself verified something out-of-band — the
+     * signed-webhook case: Twilio/WhatsApp proves the phone number, the app looks up the userId, and
+     * that userId is every bit as proven as a JWT claim.
+     *
+     * Does not compile for an untrusted key.
+     */
+    putTrusted<V>(key: ContextKey<V, 'trusted'>, value: V): void {
+        this.writeByName(key.name, value);
+    }
+
+    /**
+     * Store a caller-asserted value. `value` is type-checked against the key's value type `V`, so you
+     * cannot put a number under a `ContextKey<string>` or a raw object under a typed key.
+     *
+     * Does not compile for a trusted key — which is what stops the inbound-header path, the api-tag
+     * seam and ordinary app code from being side doors that forge a trusted value.
+     */
+    putUntrusted<V>(key: ContextKey<V, 'untrusted'>, value: V): void {
+        this.writeByName(key.name, value);
+    }
+
+    /**
+     * Read a key of ANY trust level and ANY value type, as `unknown`.
+     *
+     * FRAMEWORK SERIALIZATION ONLY — the log-field builders below, the outbound header builder, and
+     * the {@link ContextReader} seam. Those loop over `HeaderRegistry` key arrays that are mixed in
+     * both value type and trust, and they are not making a trust DECISION: they are copying values to
+     * a log line or to the wire.
+     *
+     * It is deliberately read-only and has no write twin. A `putAny` would re-open the exact hole the
+     * typed verbs close, because forging a trusted value is the dangerous direction; reading one
+     * without saying `getTrusted` only costs you the `unknown` return type.
+     */
+    // webpieces-disable no-any-unknown -- key-agnostic serialization read: the key array is mixed in value type, so unknown is the honest return
+    getAny(key: AnyContextKey): unknown {
+        return this.readByName<unknown>(key.name);
     }
 
     /** Clear one context key. Used by the api-tag seam's set → log → remove span (see LogApiCall). */
-    removeHeader(key: AnyContextKey): void {
-        this.remove(key.name);
+    removeKey(key: AnyContextKey): void {
+        this.storage.getStore()?.delete(key.name);
     }
 
-    hasHeader(key: AnyContextKey): boolean {
-        return this.has(key.name);
+    hasKey(key: AnyContextKey): boolean {
+        return this.storage.getStore()?.has(key.name) ?? false;
     }
 
-    /**
     /**
      * Build the masked field map for LOGGING: every logged key in the global
      * {@link HeaderRegistry} read straight from this context, secured values
-     * masked (via {@link ContextKey.maskIfSecured}), keyed by each key's `name`.
+     * masked (via {@link ContextKey.maskForLogs}), keyed by each key's `name`.
      *
      * Callers: RecordingFilter + NodeProxyClient.recordCall, which snapshot the context into a
      * test FIXTURE. The @webpieces/winston and @webpieces/bunyan backends also stamp these fields
@@ -111,11 +172,12 @@ class RequestContextImpl {
         // typeof-string check; objects ride buildStructuredLogFields instead. (Was a HeaderRegistry
         // method taking a read callback; only the server ever called it, so the seam was dead weight.)
         for (const key of HeaderRegistry.get().getLoggedKeys()) {
-            // getLoggedKeys() is AnyContextKey[] (mixed value types), so read by name and
-            // narrow with the typeof-string guard rather than asserting a value type per key.
-            const value = this.get<string>(key.name);
+            // getLoggedKeys() is AnyContextKey[] — mixed in BOTH value type and trust — so this reads
+            // through getAny (serialization, not a trust decision) and narrows with the typeof-string
+            // guard rather than asserting a value type per key.
+            const value = this.getAny(key);
             if (typeof value === 'string' && value) {
-                fields.set(key.name, key.maskIfSecured(value));
+                fields.set(key.name, key.maskForLogs(value));
             }
         }
         return fields;
@@ -167,13 +229,13 @@ class RequestContextImpl {
         // masked per key; non-string primitives are ignored rather than String()-flattened. (Inlined
         // from HeaderRegistry for the same reason as buildLogFields — only the server called it.)
         for (const key of HeaderRegistry.get().getLoggedKeys()) {
-            const value = this.getHeader(key);
+            const value = this.getAny(key);
             if (value === undefined || value === null) {
                 continue;
             }
             if (typeof value === 'string') {
                 if (value) {
-                    fields.set(key.name, key.maskIfSecured(value));
+                    fields.set(key.name, key.maskForLogs(value));
                 }
             } else if (typeof value === 'object') {
                 fields.set(key.name, value);
@@ -198,36 +260,84 @@ class RequestContextImpl {
         return this.get<HttpRequest>(HTTP_REQUEST_KEY);
     }
 
-    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
-    getHeaders(keys: AnyContextKey[]): unknown[] {
-        return keys.map(key => this.getHeader(key));
+    /**
+     * Store a value under a RAW STRING key — the escape hatch for the framework's own reserved,
+     * UNREGISTERED slots ('__webpieces_http_request__', the AuthFilter principal, the Cloud Tasks
+     * schedule frame). Those are internal plumbing, not context keys, so they have no ContextKey and
+     * no trust level.
+     *
+     * REJECTS any name that belongs to a registered {@link ContextKey}. Without that check this
+     * method is a complete bypass of the trust system — `put('userId', req.body.userId)` would forge
+     * a trusted value while never typing `putTrusted`, and an agent picks whatever compiles. The
+     * check is necessarily a RUNTIME one: the registry is populated at `configure()` time, so "is
+     * this string a registered key name" is not a fact a type can express.
+     *
+     * @throws Error when `key` is a registered ContextKey name — naming the verb to use instead.
+     */
+    // webpieces-disable no-any-unknown -- reserved-slot values are heterogeneous (HttpRequest, principal, schedule frame)
+    put(key: string, value: any): void {
+        this.rejectRegisteredName(key, 'putTrusted / putUntrusted');
+        this.writeByName(key, value);
     }
 
     /**
-     * Store a value in the current context.
+     * Retrieve a value stored under a RAW STRING key. Same reserved-slot purpose, and the same
+     * rejection, as {@link put} — reading `get('userId')` would hand back a trusted value without the
+     * call site ever saying `getTrusted`, which is exactly the ambiguity this whole change removes.
+     *
+     * @throws Error when `key` is a registered ContextKey name — naming the verb to use instead.
      */
-    put(key: string, value: any): void {
+    // webpieces-disable no-any-unknown -- reserved-slot values are heterogeneous; callers name the concrete type
+    get<T = any>(key: string): T | undefined {
+        this.rejectRegisteredName(key, 'getTrusted / getUntrusted / getAny');
+        return this.readByName<T>(key);
+    }
+
+    /**
+     * Remove a value stored under a RAW STRING key. Registered names are rejected here too: deleting
+     * a trusted key out from under a reader is a trust decision, so it goes through {@link removeKey}
+     * with the key in hand.
+     *
+     * @throws Error when `key` is a registered ContextKey name.
+     */
+    remove(key: string): void {
+        this.rejectRegisteredName(key, 'removeKey(key)');
+        this.storage.getStore()?.delete(key);
+    }
+
+    /**
+     * The guard behind the three raw-string accessors above. Silent (a no-op) until
+     * `HeaderRegistry.configure(...)` has run, which is correct rather than lax: with no registry
+     * there are no registered keys, so there is no trusted value to launder.
+     */
+    private rejectRegisteredName(name: string, useInstead: string): void {
+        if (!HeaderRegistry.isConfigured()) {
+            return;
+        }
+        const key = HeaderRegistry.get().findByName(name);
+        if (key) {
+            throw new Error(
+                `RequestContext string accessors cannot touch '${name}' — it is a registered ` +
+                `ContextKey (trust: '${key.trust}'). The raw string form hides whether the value is ` +
+                `a proven fact or something a caller asserted, so it is a bypass of the trust ` +
+                `system. Use ${useInstead} with the ContextKey itself.`,
+            );
+        }
+    }
+
+    /** The type-erased read. Every typed verb above funnels here; nothing else reads the store. */
+    private readByName<T>(name: string): T | undefined {
+        return this.storage.getStore()?.get(name);
+    }
+
+    /** The type-erased write. Every typed verb above funnels here; nothing else writes the store. */
+    // webpieces-disable no-any-unknown -- context values are heterogeneous (strings, recorder, meta objects)
+    private writeByName(name: string, value: any): void {
         const store = this.storage.getStore();
         if (!store) {
             throw new Error('No context available. Did you call Context.run() first?');
         }
-        store.set(key, value);
-    }
-
-    /**
-     * Retrieve a value from the current context.
-     */
-    get<T = any>(key: string): T | undefined {
-        const store = this.storage.getStore();
-        return store?.get(key);
-    }
-
-    /**
-     * Remove a value from the current context.
-     */
-    remove(key: string): void {
-        const store = this.storage.getStore();
-        store?.delete(key);
+        store.set(name, value);
     }
 
     /**
@@ -251,8 +361,11 @@ class RequestContextImpl {
     }
 
     /**
-     * Set the entire context from a Map.
-     * Used by XPromise to restore context.
+     * Set the entire context from a Map. Used by XPromise to restore context.
+     *
+     * Same FRAMEWORK-INTERNAL caveat as {@link runWithContext}: the Map must have come from
+     * `copyContext()`. It cannot be trust-checked, because a faithful restore has to reinstate the
+     * trusted values the original scope had proven.
      */
     setContext(context: Map<string, any>): void {
         const store = this.storage.getStore();
@@ -276,9 +389,16 @@ class RequestContextImpl {
     /**
      * Check if a key exists in the context.
      */
+    /**
+     * Presence of a value under a RAW STRING key. Guarded like its three siblings: `has('userId')`
+     * alongside `hasKey(WebpiecesCoreHeaders.USER_ID)` would be a second spelling of one question,
+     * and the string form is the one that says nothing about whether the value can be believed.
+     *
+     * @throws Error when `key` is a registered ContextKey name.
+     */
     has(key: string): boolean {
-        const store = this.storage.getStore();
-        return store?.has(key) ?? false;
+        this.rejectRegisteredName(key, 'hasKey(key)');
+        return this.storage.getStore()?.has(key) ?? false;
     }
 
     /**

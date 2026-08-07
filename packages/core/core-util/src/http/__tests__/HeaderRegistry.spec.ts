@@ -22,7 +22,7 @@ describe('HeaderRegistry.configure + queries', () => {
 
     it('configure() merges platform defaults + the provided keys', () => {
         HeaderRegistry.configure(
-            [new ContextKey<string>('clientType', 'x-client-type'), new ContextKey<string>('tenantId', 'x-tenant-id')],
+            [ContextKey.untrusted<string>('clientType', 'x-client-type'), ContextKey.untrusted<string>('tenantId', 'x-tenant-id')],
             /*platformHeaders*/ true,
         );
         const names = HeaderRegistry.get().getKeys().map(k => k.name);
@@ -33,8 +33,8 @@ describe('HeaderRegistry.configure + queries', () => {
     });
 
     it('collapses exact duplicates; findByHttpHeader is case-insensitive', () => {
-        const tenant = new ContextKey<string>('tenantId', 'x-tenant-id');
-        const dupe = new ContextKey<string>('tenantId', 'x-tenant-id');
+        const tenant = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
+        const dupe = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
         const registry = configureWith(tenant, dupe);
 
         expect(registry.getKeys()).toHaveLength(1);
@@ -42,49 +42,49 @@ describe('HeaderRegistry.configure + queries', () => {
     });
 
     it('getTransferredKeys filters to keys with an httpHeader', () => {
-        const wire = new ContextKey<string>('a', 'x-a');
-        const local = new ContextKey<string>('b'); // no httpHeader -> context-only
+        const wire = ContextKey.untrusted<string>('a', 'x-a');
+        const local = ContextKey.untrusted<string>('b'); // no httpHeader -> context-only
         const registry = configureWith(wire, local);
 
         expect(registry.getTransferredKeys()).toEqual([wire]);
     });
 
-    it('getSecuredNames and getLoggedKeys expose the right subsets', () => {
-        const auth = new ContextKey<string>('authorization', 'authorization', /*isSecured*/ true);
-        const reqId = new ContextKey<string>('requestId', 'x-request-id');
-        const hidden = new ContextKey<string>('meta', undefined, false, /*isLogged*/ false);
+    it('getMaskedNames and getLoggedKeys expose the right subsets', () => {
+        const auth = ContextKey.untrusted<string>('authorization', 'authorization', /*maskInLogs*/ true);
+        const reqId = ContextKey.untrusted<string>('requestId', 'x-request-id');
+        const hidden = ContextKey.untrusted<string>('meta', undefined, false, /*isLogged*/ false);
         const registry = configureWith(auth, reqId, hidden);
 
-        expect(registry.getSecuredNames()).toEqual(['authorization']);
+        expect(registry.getMaskedNames()).toEqual(['authorization']);
         expect(registry.getLoggedKeys()).toEqual([auth, reqId]); // hidden excluded
     });
 });
 
 describe('HeaderRegistry dedup validation', () => {
-    it('throws when two keys with the same name disagree on isSecured', () => {
-        const open = new ContextKey<string>('apiKey', 'x-api-key', false);
-        const secured = new ContextKey<string>('apiKey', 'x-api-key', true);
+    it('throws when two keys with the same name disagree on maskInLogs', () => {
+        const open = ContextKey.untrusted<string>('apiKey', 'x-api-key', false);
+        const secured = ContextKey.untrusted<string>('apiKey', 'x-api-key', true);
 
-        expect(() => configureWith(open, secured)).toThrow(/Conflicting ContextKey definitions for 'apiKey'.*isSecured/);
+        expect(() => configureWith(open, secured)).toThrow(/Conflicting ContextKey definitions for 'apiKey'.*maskInLogs/);
     });
 
     it('throws when two keys with the same name disagree on httpHeader', () => {
-        const a = new ContextKey<string>('flag', 'x-flag-a');
-        const b = new ContextKey<string>('flag', 'x-flag-b');
+        const a = ContextKey.untrusted<string>('flag', 'x-flag-a');
+        const b = ContextKey.untrusted<string>('flag', 'x-flag-b');
 
         expect(() => configureWith(a, b)).toThrow(/httpHeader/);
     });
 
     it('throws when two keys with the same name disagree on isLogged', () => {
-        const logged = new ContextKey<string>('meta', undefined, false, true);
-        const notLogged = new ContextKey<string>('meta', undefined, false, false);
+        const logged = ContextKey.untrusted<string>('meta', undefined, false, true);
+        const notLogged = ContextKey.untrusted<string>('meta', undefined, false, false);
 
         expect(() => configureWith(logged, notLogged)).toThrow(/isLogged/);
     });
 
     it('throws when two DIFFERENT keys claim the same httpHeader', () => {
-        const first = new ContextKey<string>('requestId', 'x-request-id');
-        const second = new ContextKey<string>('reqIdAlt', 'x-request-id');
+        const first = ContextKey.untrusted<string>('requestId', 'x-request-id');
+        const second = ContextKey.untrusted<string>('reqIdAlt', 'x-request-id');
 
         expect(() => configureWith(first, second)).toThrow(/Duplicate ContextKey httpHeader 'x-request-id'/);
     });
@@ -114,5 +114,15 @@ describe('WebpiecesCoreHeaders.API_CALL_INFO', () => {
         const registry = configureWith(...WebpiecesCoreHeaders.ALL_HEADERS);
         expect(registry.getTransferredKeys()).not.toContain(key);
         expect(registry.getLoggedKeys()).toContain(key);
+    });
+
+    it('throws when two keys with the same name disagree on TRUST', () => {
+        // The most dangerous of the three disagreements: whichever module loaded first would decide
+        // whether every reader of this key is authorizing on a spoofable value.
+        const proven = ContextKey.trusted<string>('userId', 'jwt claim `sub`', 'x-user-id');
+        const asserted = ContextKey.untrusted<string>('userId', 'x-user-id');
+
+        expect(() => configureWith(proven, asserted))
+            .toThrow(/Conflicting ContextKey definitions for 'userId'.*trust \('trusted' vs 'untrusted'\)/);
     });
 });

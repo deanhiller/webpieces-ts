@@ -21,7 +21,7 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  *
  * Duplicate validation (port of Java checkForDuplicates) runs at configure() time,
  * so conflicting definitions fail fast at startup:
- * - Two keys with the same `name` must agree on httpHeader/isSecured/isLogged.
+ * - Two keys with the same `name` must agree on httpHeader/trust/maskInLogs/isLogged.
  * - Two keys with the same `httpHeader` must agree on `name`.
  * - Exact duplicates collapse to one entry.
  */
@@ -47,7 +47,7 @@ export class HeaderRegistry {
         this.keys = this.checkForDuplicates(keys);
         this.transferredKeys = this.keys.filter((k: AnyContextKey) => k.httpHeader !== undefined);
         this.securedNames = this.keys
-            .filter((k: AnyContextKey) => k.isSecured)
+            .filter((k: AnyContextKey) => k.maskInLogs)
             .map((k: AnyContextKey) => k.name);
         this.loggedKeys = this.keys.filter((k: AnyContextKey) => k.isLogged);
         this.byHttpHeader = new Map(
@@ -97,8 +97,8 @@ export class HeaderRegistry {
         return this.transferredKeys;
     }
 
-    /** Names (log keys) whose values must be masked in logs. isSecured=true. */
-    getSecuredNames(): string[] {
+    /** Names (log keys) whose values must be masked in logs. maskInLogs=true. */
+    getMaskedNames(): string[] {
         return this.securedNames;
     }
 
@@ -110,6 +110,21 @@ export class HeaderRegistry {
      */
     getLoggedKeys(): AnyContextKey[] {
         return this.loggedKeys;
+    }
+
+    /**
+     * Look up a key by its CONTEXT name — the guard behind `RequestContext.get/put(name: string)`.
+     * Those raw string accessors would otherwise be a side door around the typed trust verbs
+     * (`RequestContext.get('userId')` reads a trusted value without ever saying `getTrusted`, and
+     * `put('userId', ...)` forges one without saying `putTrusted`), so they reject any name that
+     * belongs to a registered key and point the caller at the verb to use instead.
+     *
+     * Linear over the key list, which is fine: this runs only on the raw string path, and the
+     * reserved framework keys that legitimately use it ('__webpieces_*__') are a handful.
+     */
+    findByName(name: string): AnyContextKey | undefined {
+        const lower = name.toLowerCase();
+        return this.keys.find((k: AnyContextKey) => k.name.toLowerCase() === lower);
     }
 
     /** Look up a key by its HTTP header name (case-insensitive). O(1) via the precomputed map. */
@@ -152,7 +167,7 @@ export class HeaderRegistry {
     }
 
     /**
-     * Two keys sharing a `name` must agree on httpHeader/isSecured/isLogged,
+     * Two keys sharing a `name` must agree on httpHeader/trust/maskInLogs/isLogged,
      * otherwise the platform would behave differently depending on which module's
      * definition happened to load first.
      */
@@ -161,8 +176,15 @@ export class HeaderRegistry {
         if (existing.httpHeader !== duplicate.httpHeader) {
             conflicts.push(`httpHeader ('${existing.httpHeader}' vs '${duplicate.httpHeader}')`);
         }
-        if (existing.isSecured !== duplicate.isSecured) {
-            conflicts.push(`isSecured (${existing.isSecured} vs ${duplicate.isSecured})`);
+        if (existing.trust !== duplicate.trust) {
+            // The most dangerous disagreement of the three: one module says this key is a proven
+            // fact and another says it is caller-asserted. Whichever loaded first would silently
+            // decide whether every reader of that key is doing an authorization check on a
+            // spoofable value, so it fails the whole startup instead.
+            conflicts.push(`trust ('${existing.trust}' vs '${duplicate.trust}')`);
+        }
+        if (existing.maskInLogs !== duplicate.maskInLogs) {
+            conflicts.push(`maskInLogs (${existing.maskInLogs} vs ${duplicate.maskInLogs})`);
         }
         if (existing.isLogged !== duplicate.isLogged) {
             conflicts.push(`isLogged (${existing.isLogged} vs ${duplicate.isLogged})`);
