@@ -102,3 +102,26 @@ export async function runInstaller(cwd: string): Promise<number> {
         return 1;
     }
 }
+
+/**
+ * THE PROCESS ENTRY POINT — absent from every release up to and including 0.4.588, exactly as it was
+ * absent from upgrade-shim.ts. `pnpm exec wp-install-ai-hooks` loaded this module, defined
+ * `isBrokenTreeError` and `runInstaller`, and exited 0 without installing anything: the shim was never
+ * healed, `./setup` was never required, and the "broken tree" recovery notice this file exists to print
+ * could never be reached. Verified against the published 0.4.576 artifact — `node
+ * node_modules/@webpieces/ai-hook-rules/src/bin/install-entry.js` produced no output and exit 0.
+ *
+ * `runMain` from @webpieces/rules-config is deliberately NOT used: this module must load with fs+path
+ * only (see the header) so it survives the corrupt node_modules it is meant to recover from, and
+ * importing the wrapper would reintroduce the require-time crash. `main()` is the sanctioned single
+ * exit site instead, and `bin-process-entry.spec.ts` SPAWNS this file (with the lazily-required
+ * `./setup` stubbed, so the launcher is what is under test) so it cannot be dropped again silently.
+ */
+// webpieces-disable no-function-outside-class -- bin entry point: this module MUST load with only fs+path (see header). A DI-managed class would pull the container in and reintroduce the exact require-time crash being fixed.
+export async function main(): Promise<void> {
+    process.exit(await runInstaller(process.cwd()));
+}
+
+if (require.main === module) {
+    void main();
+}
